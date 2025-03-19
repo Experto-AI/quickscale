@@ -1,0 +1,58 @@
+<section class="{% if not is_htmx %}hero is-primary is-small{% endif %}">
+    <div class="{% if not is_htmx %}hero-body{% endif %}">
+        {% if not is_htmx %}<p class="title">Login</p>
+        <p class="subtitle">Access your account</p>{% endif %}
+    </div>
+</section>
+
+<section class="section">
+    <div class="container">
+        <div class="columns is-centered is-mobile">
+            <div class="column is-half">
+                {% if not is_htmx %}<h1 class="title">Login</h1>{% endif %}
+                
+                <div id="login-form">
+                    {% if messages %}
+                    <div class="messages mb-4">
+                        {% for message in messages %}
+                            <div class="notification {% if message.tags %}is-{{ message.tags }}{% endif %}">
+                                {{ message }}
+                            </div>
+                        {% endfor %}
+                    </div>
+                    {% endif %}
+                    
+                    <form method="post" hx-post="{% url 'users:login' %}" hx-target="#login-form" hx-swap="innerHTML">
+                        {% csrf_token %}
+                        
+                        <div class="field">
+                            <label class="label">Username</label>
+                            <div class="control">
+                                <input class="input" type="text" name="username" required>
+                            </div>
+                        </div>
+                        
+                        <div class="field">
+                            <label class="label">Password</label>
+                            <div class="control">
+                                <input class="input" type="password" name="password" required>
+                            </div>
+                        </div>
+                        
+                        <div class="field">
+                            <div class="control">
+                                <button class="button is-primary" type="submit">
+                                    Login
+                                </button>
+                            </div>
+                        </div>
+                    </form>
+                    
+                    <p class="mt-4">
+                        Don't have an account? <a href="{% url 'users:signup' %}">Sign up</a>
+                    </p>
+                </div>
+            </div>
+        </div>
+    </div>
+</section>

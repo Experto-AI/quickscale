@@ -1,0 +1,7 @@
+{% extends "base/base.html" %}
+
+{% block title %}Login - ${project_name}{% endblock %}
+
+{% block content %}
+    {% include 'users/login_form.html' with is_htmx=False %}
+{% endblock %}

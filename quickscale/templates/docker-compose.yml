@@ -1,0 +1,31 @@
+# Docker Compose configuration for QuickScale projects
+services:
+  # Django web application service
+  web:
+    build: .
+    command: python manage.py runserver 0.0.0.0:8000
+    # User mapping is added dynamically by build script
+    volumes:
+      - .:/app
+    ports:
+      - "8000:8000"
+    environment:
+      - DEBUG=True
+      - SECRET_KEY=${SECRET_KEY}
+      - DATABASE_URL=postgresql://${pg_user}:${pg_password}@db:5432/${pg_user}
+    depends_on:
+      - db
+  
+  # PostgreSQL database service
+  db:
+    image: postgres:15
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    environment:
+      - POSTGRES_DB=${pg_user}
+      - POSTGRES_USER=${pg_user}
+      - POSTGRES_PASSWORD=${pg_password}
+
+# Named volumes for persistent data
+volumes:
+  postgres_data:

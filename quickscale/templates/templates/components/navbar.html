@@ -1,0 +1,67 @@
+{% load static %}
+
+<nav class="navbar" role="navigation" aria-label="main navigation" x-data="{ mobileMenu: false }">
+    <div class="navbar-brand">
+        <a class="navbar-item" href="{% url 'public:index' %}">
+            ${project_name}
+        </a>
+
+        <a role="button" class="navbar-burger" aria-label="menu" aria-expanded="false"
+           @click="mobileMenu = !mobileMenu" :class="{ 'is-active': mobileMenu }">
+            <span aria-hidden="true"></span>
+            <span aria-hidden="true"></span>
+            <span aria-hidden="true"></span>
+        </a>
+    </div>
+
+    <div class="navbar-menu" :class="{ 'is-active': mobileMenu }">
+        <div class="navbar-start">
+            <a class="navbar-item" href="{% url 'public:about' %}" hx-boost="true">
+                About
+            </a>
+            <a class="navbar-item" href="{% url 'public:contact' %}" hx-boost="true">
+                Contact
+            </a>
+        </div>
+
+        <div class="navbar-end">
+            {% if user.is_authenticated %}
+                <div class="navbar-item">
+                    <span class="mr-2">Welcome, {{ user.username }}</span>
+                </div>
+                <div class="navbar-item">
+                    <div class="buttons">
+                        <a class="button is-primary is-small" href="{% url 'users:profile' %}">
+                            Profile
+                        </a>
+                        <!-- Form with CSRF token for reliable logout -->
+                        <form method="post" action="{% url 'users:logout' %}" style="display: inline;">
+                            {% csrf_token %}
+                            <button type="submit" class="button is-danger is-small">
+                                Logout
+                            </button>
+                        </form>
+                    </div>
+                </div>
+                {% if user.is_staff %}
+                <div class="navbar-item">
+                    <a class="button is-info is-small" href="{% url 'dashboard:index' %}">
+                        Dashboard
+                    </a>
+                </div>
+                {% endif %}
+            {% else %}
+                <div class="navbar-item">
+                    <div class="buttons">
+                        <a class="button is-primary" href="{% url 'users:signup' %}">
+                            <strong>Sign up</strong>
+                        </a>
+                        <a class="button is-light" href="{% url 'users:login' %}">
+                            Log in
+                        </a>
+                    </div>
+                </div>
+            {% endif %}
+        </div>
+    </div>
+</nav>

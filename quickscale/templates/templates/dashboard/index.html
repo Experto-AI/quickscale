@@ -1,0 +1,76 @@
+{% extends "base/base.html" %}
+
+{% block title %}Dashboard - ${project_name}{% endblock %}
+
+{% block content %}
+<section class="hero is-primary is-small">
+    <div class="hero-body">
+        <p class="title">Dashboard</p>
+        <p class="subtitle">Admin control panel for your application</p>
+    </div>
+</section>
+
+<section class="section">
+    <div class="container">
+        <div class="columns is-multiline is-mobile">
+            <div class="column is-one-third">
+                <div class="card">
+                    <div class="card-content">
+                        <p class="title is-4">Users</p>
+                        <p class="subtitle is-6">Manage system users</p>
+                        <div class="content">
+                            <ul>
+                                <li>View all users</li>
+                                <li>Manage permissions</li>
+                                <li>User statistics</li>
+                            </ul>
+                        </div>
+                    </div>
+                    <footer class="card-footer">
+                        <a href="#" class="card-footer-item">View</a>
+                        <a href="#" class="card-footer-item">Manage</a>
+                    </footer>
+                </div>
+            </div>
+            
+            <div class="column is-one-third">
+                <div class="card">
+                    <div class="card-content">
+                        <p class="title is-4">Settings</p>
+                        <p class="subtitle is-6">System configuration</p>
+                        <div class="content">
+                            <ul>
+                                <li>General settings</li>
+                                <li>Email configuration</li>
+                                <li>Security settings</li>
+                            </ul>
+                        </div>
+                    </div>
+                    <footer class="card-footer">
+                        <a href="#" class="card-footer-item">Configure</a>
+                    </footer>
+                </div>
+            </div>
+            
+            <div class="column is-one-third">
+                <div class="card">
+                    <div class="card-content">
+                        <p class="title is-4">Analytics</p>
+                        <p class="subtitle is-6">System statistics</p>
+                        <div class="content">
+                            <ul>
+                                <li>User activity</li>
+                                <li>System performance</li>
+                                <li>Error logs</li>
+                            </ul>
+                        </div>
+                    </div>
+                    <footer class="card-footer">
+                        <a href="#" class="card-footer-item">View Reports</a>
+                    </footer>
+                </div>
+            </div>
+        </div>
+    </div>
+</section>
+{% endblock %}

@@ -1,0 +1,43 @@
+{% extends "base/base.html" %}
+
+{% block title %}About - ${project_name}{% endblock %}
+
+{% block content %}
+<section class="hero is-primary is-small">
+    <div class="hero-body">
+        <p class="title">About ${project_name}</p>
+        <p class="subtitle">Learn more about our platform</p>
+    </div>
+</section>
+
+<section class="section">
+    <div class="container">
+        <div class="columns is-centered">
+            <div class="column is-two-thirds">
+                <div class="content">
+                    <p class="is-size-5">
+                        Welcome to ${project_name}! We are dedicated to providing high-quality software solutions 
+                        that help businesses and individuals achieve their goals.
+                    </p>
+                    
+                    <h2 class="subtitle mt-5">Our Mission</h2>
+                    <p>
+                        Our mission is to deliver innovative and reliable software solutions that empower our users 
+                        to succeed in their endeavors.
+                    </p>
+                    
+                    <h2 class="subtitle mt-5">Contact Us</h2>
+                    <p>
+                        Have questions or want to learn more? Feel free to reach out to us:
+                    </p>
+                    <ul>
+                        <li>Email: contact@example.com</li>
+                        <li>Phone: (555) 123-4567</li>
+                        <li>Address: 123 Tech Street, Innovation City</li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+    </div>
+</section>
+{% endblock %}

@@ -1,0 +1,73 @@
+{% extends "base/base.html" %}
+
+{% block title %}Contact - ${project_name}{% endblock %}
+
+{% block content %}
+<section class="hero is-primary is-small">
+    <div class="hero-body">
+        <p class="title">Contact Us</p>
+        <p class="subtitle">Get in touch with our team</p>
+    </div>
+</section>
+
+<section class="section">
+    <div class="container">
+        <div class="columns is-centered is-mobile">
+            <div class="column is-half">
+                <form method="post" hx-post="{% url 'public:contact' %}" hx-swap="outerHTML">
+                    {% csrf_token %}
+                    
+                    <div class="field">
+                        <label class="label">Name</label>
+                        <div class="control">
+                            <input class="input" type="text" name="name" required>
+                        </div>
+                    </div>
+                    
+                    <div class="field">
+                        <label class="label">Email</label>
+                        <div class="control">
+                            <input class="input" type="email" name="email" required>
+                        </div>
+                    </div>
+                    
+                    <div class="field">
+                        <label class="label">Subject</label>
+                        <div class="control">
+                            <input class="input" type="text" name="subject" required>
+                        </div>
+                    </div>
+                    
+                    <div class="field">
+                        <label class="label">Message</label>
+                        <div class="control">
+                            <textarea class="textarea" name="message" required></textarea>
+                        </div>
+                    </div>
+                    
+                    <div class="field">
+                        <div class="control">
+                            <button class="button is-primary" type="submit">
+                                Send Message
+                            </button>
+                        </div>
+                    </div>
+                </form>
+                
+                <div class="content mt-6">
+                    <h2 class="subtitle">Other Ways to Reach Us</h2>
+                    <ul>
+                        <li><strong>Email:</strong> contact@example.com</li>
+                        <li><strong>Phone:</strong> (555) 123-4567</li>
+                        <li><strong>Address:</strong> 123 Tech Street, Innovation City</li>
+                    </ul>
+                    
+                    <p class="mt-4">
+                        We aim to respond to all inquiries within 24-48 business hours.
+                    </p>
+                </div>
+            </div>
+        </div>
+    </div>
+</section>
+{% endblock %}

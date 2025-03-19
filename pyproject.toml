@@ -1,0 +1,36 @@
+[build-system]
+requires = ["setuptools>=64.0.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "quickscale"
+dynamic = ["version"]
+description = "A SaaS starter kit for Python-first developers using Django"
+requires-python = ">=3.10"
+dependencies = [
+    # Django and core dependencies
+    "django>=5.0.1",
+    "whitenoise>=6.6.0",
+    "uvicorn>=0.27.0",
+    # Database
+    "psycopg2-binary>=2.9.9",
+    "dj-database-url>=2.1.0",
+    # Environment and configuration
+    "python-dotenv>=1.0.0",
+]
+
+[project.scripts]
+quickscale = "quickscale.cli:main"
+
+[tool.setuptools]
+packages = ["quickscale"]
+include-package-data = true
+
+[tool.setuptools.dynamic]
+version = {attr = "quickscale.__version__"}
+
+[tool.setuptools.package-data]
+quickscale = [
+    "templates/**/*",
+    "scripts/**/*"
+]

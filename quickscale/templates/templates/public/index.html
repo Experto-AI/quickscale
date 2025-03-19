@@ -1,0 +1,124 @@
+{% extends "base/base.html" %}
+
+{% block title %}Welcome to ${project_name}{% endblock %}
+
+{% block content %}
+<section class="hero is-primary is-small">
+    <div class="hero-body">
+        <p class="title">
+            Welcome to ${project_name}
+        </p>
+        <p class="subtitle">
+            Your modern Django application with HTMX and Alpine.js
+        </p>
+    </div>
+</section>
+
+<section class="section">
+    <div class="container">
+        <div class="columns is-multiline">
+            <div class="column is-one-third">
+                <div class="card">
+                    <div class="card-content">
+                        <p class="title is-4">Django</p>
+                        <p class="subtitle is-6">High-level Python Web framework</p>
+                        <div class="content">
+                            Built with Django's powerful features including:
+                            <ul>
+                                <li>Authentication</li>
+                                <li>Admin interface</li>
+                                <li>Database ORM</li>
+                            </ul>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="column is-one-third">
+                <div class="card">
+                    <div class="card-content">
+                        <p class="title is-4">HTMX</p>
+                        <p class="subtitle is-6">Modern Browser Features, Directly in HTML</p>
+                        <div class="content">
+                            Enhanced with HTMX for:
+                            <ul>
+                                <li>AJAX requests</li>
+                                <li>WebSockets</li>
+                                <li>Server-Sent Events</li>
+                            </ul>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="column is-one-third">
+                <div class="card">
+                    <div class="card-content">
+                        <p class="title is-4">Alpine.js</p>
+                        <p class="subtitle is-6">Lightweight JavaScript Framework</p>
+                        <div class="content">
+                            Powered by Alpine.js for:
+                            <ul>
+                                <li>Reactive data binding</li>
+                                <li>Component behavior</li>
+                                <li>DOM manipulation</li>
+                            </ul>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="column is-one-third">
+                <div class="card">
+                    <div class="card-content">
+                        <p class="title is-4">Bulma CSS</p>
+                        <p class="subtitle is-6">Modern CSS Framework</p>
+                        <div class="content">
+                            Styled with Bulma for:
+                            <ul>
+                                <li>Responsive design</li>
+                                <li>Modern components</li>
+                                <li>Flexbox-based grid</li>
+                            </ul>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="column is-one-third">
+                <div class="card">
+                    <div class="card-content">
+                        <p class="title is-4">Docker</p>
+                        <p class="subtitle is-6">Container Platform</p>
+                        <div class="content">
+                            Containerized with Docker for:
+                            <ul>
+                                <li>Consistent environments</li>
+                                <li>Easy deployment</li>
+                                <li>Scalable infrastructure</li>
+                            </ul>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="column is-one-third">
+                <div class="card">
+                    <div class="card-content">
+                        <p class="title is-4">PostgreSQL</p>
+                        <p class="subtitle is-6">Advanced Open Source Database</p>
+                        <div class="content">
+                            Powered by PostgreSQL for:
+                            <ul>
+                                <li>Robust data storage</li>
+                                <li>ACID compliance</li>
+                                <li>Advanced queries</li>
+                            </ul>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</section>
+{% endblock %}

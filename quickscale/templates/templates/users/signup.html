@@ -1,0 +1,74 @@
+{% extends "base/base.html" %}
+
+{% block title %}Sign Up - ${project_name}{% endblock %}
+
+{% block content %}
+<section class="hero is-primary is-small">
+    <div class="hero-body">
+        <p class="title">Sign Up</p>
+        <p class="subtitle">Create your account</p>
+    </div>
+</section>
+
+<section class="section">
+    <div class="container">
+        <div class="columns is-centered is-mobile">
+            <div class="column is-half">
+                {% if messages %}
+                <div class="messages mb-4">
+                    {% for message in messages %}
+                        <div class="notification {% if message.tags %}is-{{ message.tags }}{% endif %}">
+                            {{ message }}
+                        </div>
+                    {% endfor %}
+                </div>
+                {% endif %}
+                
+                <form method="post">
+                    {% csrf_token %}
+                    
+                    <div class="field">
+                        <label class="label">Username</label>
+                        <div class="control">
+                            <input class="input" type="text" name="username" required>
+                        </div>
+                    </div>
+                    
+                    <div class="field">
+                        <label class="label">Email</label>
+                        <div class="control">
+                            <input class="input" type="email" name="email" required>
+                        </div>
+                    </div>
+                    
+                    <div class="field">
+                        <label class="label">Password</label>
+                        <div class="control">
+                            <input class="input" type="password" name="password1" required>
+                        </div>
+                    </div>
+                    
+                    <div class="field">
+                        <label class="label">Confirm Password</label>
+                        <div class="control">
+                            <input class="input" type="password" name="password2" required>
+                        </div>
+                    </div>
+                    
+                    <div class="field">
+                        <div class="control">
+                            <button class="button is-primary" type="submit">
+                                Sign Up
+                            </button>
+                        </div>
+                    </div>
+                </form>
+                
+                <p class="mt-4">
+                    Already have an account? <a href="{% url 'users:login' %}">Login</a>
+                </p>
+            </div>
+        </div>
+    </div>
+</section>
+{% endblock %}

@@ -1,0 +1,9 @@
+# Include all template files for project generation
+recursive-include quickscale/templates *
+
+# Include all script files for project management
+recursive-include quickscale/scripts *
+
+# Include documentation and license
+include LICENSE
+include README.md

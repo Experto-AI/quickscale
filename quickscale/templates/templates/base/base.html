@@ -1,0 +1,32 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% block title %}${project_name}{% endblock %}</title>
+    
+    <!-- HTMX -->
+    <script src="https://unpkg.com/htmx.org@1.9.10"></script>
+    <!-- Alpine.js -->
+    <script defer src="https://unpkg.com/alpinejs@3.13.5/dist/cdn.min.js"></script>
+    <!-- Bulma CSS -->
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bulma@0.9.4/css/bulma.min.css">
+    
+    {% block extra_head %}{% endblock %}
+</head>
+<body>
+    {% include "components/navbar.html" %}
+    
+    <main class="container">
+        {% if messages %}
+            {% include "components/messages.html" %}
+        {% endif %}
+        
+        {% block content %}{% endblock %}
+    </main>
+    
+    {% include "components/footer.html" %}
+    
+    {% block extra_js %}{% endblock %}
+</body>
+</html> 

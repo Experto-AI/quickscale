@@ -1,0 +1,13 @@
+{% if messages %}
+<div id="messages">
+    {% for message in messages %}
+        <div class="notification {% if message.tags %}is-{{ message.tags }}{% endif %}"
+             x-data="{ show: true }" 
+             x-show="show"
+             x-init="setTimeout(() => show = false, 5000)">
+            <button class="delete" @click="show = false"></button>
+            {{ message }}
+        </div>
+    {% endfor %}
+</div>
+{% endif %} 
