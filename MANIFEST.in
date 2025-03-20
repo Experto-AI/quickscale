@@ -7,3 +7,8 @@ recursive-include quickscale/scripts *
 # Include documentation and license
 include LICENSE
 include README.md
+
+# Exclude cache files
+global-exclude __pycache__
+global-exclude *.py[cod]
+global-exclude *.so

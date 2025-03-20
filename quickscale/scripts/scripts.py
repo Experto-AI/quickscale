@@ -13,8 +13,9 @@ import subprocess
 from pathlib import Path
 import secrets
 import string
+import logging
 from typing import List, Optional
-from .utils import check_project_exists
+from .utils import check_project_exists, setup_logging
 
 # Constants
 DOCKER_COMPOSE_COMMAND = "docker compose" if shutil.which("docker-compose") is None else "docker-compose"
@@ -28,38 +29,66 @@ def generate_secret_key(length: int = 50) -> str:
     alphabet = string.ascii_letters + string.digits
     return ''.join(secrets.choice(alphabet) for _ in range(length))
 
+# Check if file is binary to avoid utf-8 decoding errors
+def is_binary_file(file_path):
+    """Returns True if the file is binary, False otherwise."""
+    try:
+        with open(file_path, 'r', encoding='utf-8') as f:
+            f.read(1024)  # Try reading some content
+        return False  # If we get here, it's a text file
+    except UnicodeDecodeError:
+        return True  # UTF-8 decoding failed, it's probably binary
+
 # Process template files with variable substitution for project setup
-def copy_with_vars(src_file: Path, dest_file: Path, **variables) -> None:
+def copy_with_vars(src_file: Path, dest_file: Path, logger: logging.Logger, **variables) -> None:
     if not src_file.is_file():
         raise FileNotFoundError(f"Source file {src_file} not found!")
     
-    with open(src_file, 'r') as f:
-        content = f.read()
+    # Check if file is binary
+    if is_binary_file(src_file):
+        # Copy binary files directly without variable substitution
+        dest_file.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(src_file, dest_file)
+        os.chmod(dest_file, 0o644)
+        logger.debug(f"Copied binary file {src_file} to {dest_file}")
+        return
     
-    variables.setdefault('SECRET_KEY', generate_secret_key())
-    
-    for key, value in variables.items():
-        content = content.replace(f"${{{key}}}", str(value))
-    
-    dest_file.parent.mkdir(parents=True, exist_ok=True)
-    with open(dest_file, 'w') as f:
-        f.write(content)
-    
-    os.chmod(dest_file, 0o644)
+    # Handle text files with variable substitution
+    try:
+        with open(src_file, 'r', encoding='utf-8') as f:
+            content = f.read()
+        
+        variables.setdefault('SECRET_KEY', generate_secret_key())
+        
+        for key, value in variables.items():
+            content = content.replace(f"${{{key}}}", str(value))
+        
+        dest_file.parent.mkdir(parents=True, exist_ok=True)
+        with open(dest_file, 'w', encoding='utf-8') as f:
+            f.write(content)
+        
+        os.chmod(dest_file, 0o644)
+        logger.debug(f"Processed template file {src_file} to {dest_file}")
+    except UnicodeDecodeError as e:
+        logger.warning(f"Could not decode {src_file} as UTF-8, copying as binary: {e}")
+        # Fall back to binary copy in case of encoding errors
+        shutil.copy2(src_file, dest_file)
+        os.chmod(dest_file, 0o644)
 
 # Recursively copy and process template files for project structure
-def copy_files_recursive(src_dir: Path, dest_dir: Path, **variables) -> None:
+def copy_files_recursive(src_dir: Path, dest_dir: Path, logger: logging.Logger, **variables) -> None:
     dest_dir.mkdir(parents=True, exist_ok=True)
+    logger.debug(f"Copying files from {src_dir} to {dest_dir}")
     
     for src_file in src_dir.rglob('*'):
         if src_file.is_file():
             rel_path = src_file.relative_to(src_dir)
             dest_file = dest_dir / rel_path
-            copy_with_vars(src_file, dest_file, **variables)
+            copy_with_vars(src_file, dest_file, logger, **variables)
 
 # Check PostgreSQL container readiness with retries
-def wait_for_postgres(pg_user: str, max_attempts: int = 30) -> bool:
-    print("Waiting for PostgreSQL to be ready...")
+def wait_for_postgres(pg_user: str, logger: logging.Logger, max_attempts: int = 30) -> bool:
+    logger.info("Waiting for PostgreSQL to be ready...")
     
     for attempt in range(1, max_attempts + 1):
         try:
@@ -68,20 +97,21 @@ def wait_for_postgres(pg_user: str, max_attempts: int = 30) -> bool:
                 check=False, capture_output=True
             )
             if result.returncode == 0:
-                print("PostgreSQL is ready!")
+                logger.info("PostgreSQL is ready!")
                 return True
         except subprocess.SubprocessError:
             pass
         
-        print(f"Attempt {attempt} of {max_attempts}: PostgreSQL is not ready yet...")
+        logger.info(f"Attempt {attempt} of {max_attempts}: PostgreSQL is not ready yet...")
         time.sleep(2)
     
-    print("Error: PostgreSQL did not become ready in time")
+    logger.error("Error: PostgreSQL did not become ready in time")
     return False
 
 # Fix file permissions after Docker operations
-def fix_permissions(directory: Path, uid: int, gid: int) -> None:
+def fix_permissions(directory: Path, uid: int, gid: int, logger: logging.Logger) -> None:
     if directory.is_dir():
+        logger.debug(f"Fixing permissions for {directory}")
         subprocess.run(
             [DOCKER_COMPOSE_COMMAND, "run", "--rm", "--user", "root", "web", 
              "chown", "-R", f"{uid}:{gid}", f"/app/{directory}"],
@@ -89,10 +119,10 @@ def fix_permissions(directory: Path, uid: int, gid: int) -> None:
         )
 
 # Create a new Django app with predefined structure
-def create_app(app_name: str, current_uid: int, current_gid: int) -> None:
-    print(f"Creating app '{app_name}'...")
+def create_app(app_name: str, current_uid: int, current_gid: int, logger: logging.Logger) -> None:
+    logger.info(f"Creating app '{app_name}'...")
     
-    with open("docker-compose.temp.yml", "w") as f:
+    with open("docker-compose.temp.yml", "w", encoding='utf-8') as f:
         f.write(f"""services:
   web:
     build: .
@@ -105,36 +135,51 @@ def create_app(app_name: str, current_uid: int, current_gid: int) -> None:
     try:
         subprocess.run([DOCKER_COMPOSE_COMMAND, "-f", "docker-compose.temp.yml", 
                        "run", "--rm", "--remove-orphans", "web"], check=True)
+        logger.debug(f"Created Django app {app_name}")
     finally:
         os.unlink("docker-compose.temp.yml")
     
     templates_dir = Path(__file__).parent.parent / "templates"
     app_templates = templates_dir / app_name
     if app_templates.is_dir():
-        copy_files_recursive(app_templates, Path(app_name))
-        print(f"Copied {app_name} files")
+        copy_files_recursive(app_templates, Path(app_name), logger)
+        logger.info(f"Copied {app_name} template files")
     
     Path(f"templates/{app_name}").mkdir(parents=True, exist_ok=True)
+    logger.debug(f"Created templates directory for {app_name}")
 
 def build_project(project_name: str) -> str:
     """Build a new QuickScale project"""
     # Run requirements check first
     check()
     
-    current_uid, current_gid = get_current_uid_gid()
-    root_dir = Path(__file__).parent.parent
-    templates_dir = root_dir / "templates"
-    
-    # Check if project directory exists
-    if Path(project_name).exists():
+    # Check if project directory exists first, before any other operations
+    project_dir = Path(project_name)
+    if project_dir.exists():
         print(f"Error: Project directory '{project_name}' already exists.")
         print("Please remove it first if you want to create a new project.")
         sys.exit(1)
     
-    # Create project directory
-    print("Creating project directory...")
-    project_dir = Path(project_name)
-    project_dir.mkdir()
+    try:
+        # Create project directory before setting up logging
+        print("Creating project directory...")
+        project_dir.mkdir()
+    except FileExistsError:
+        print(f"Error: Project directory '{project_name}' already exists.")
+        print("Please remove it first if you want to create a new project.")
+        sys.exit(1)
+    except Exception as e:
+        print(f"Error creating project directory: {e}")
+        sys.exit(1)
+        
+    # Setup logging only after we know directory creation succeeded
+    logger = setup_logging(project_dir)
+    logger.info("Starting project build - All actions will be logged to this file for debugging purposes")
+    logger.info(f"Log file location: {project_dir}/quickscale_build_log.txt")
+    
+    current_uid, current_gid = get_current_uid_gid()
+    root_dir = Path(__file__).parent.parent
+    templates_dir = root_dir / "templates"
     
     # Store original directory to return at the end
     original_dir = os.getcwd()
@@ -142,6 +187,7 @@ def build_project(project_name: str) -> str:
     
     # Change to project directory
     os.chdir(project_dir)
+    logger.debug(f"Changed working directory to {project_dir}")
     
     # Default PostgreSQL admin information
     variables = {
@@ -152,13 +198,13 @@ def build_project(project_name: str) -> str:
     }
     
     # Copy configuration files
-    print("Copying configuration files...")
+    logger.info("Copying configuration files...")
     for file_name in ['docker-compose.yml', 'Dockerfile', '.env', '.dockerignore', 'requirements.txt']:
-        copy_with_vars(templates_dir / file_name, Path(file_name), **variables)
+        copy_with_vars(templates_dir / file_name, Path(file_name), logger, **variables)
     
-    # Create a temporary docker-compose file for initial project creation - without version attribute
-    print("Creating Django project...")
-    with open("docker-compose.temp.yml", "w") as f:
+    # Create Django project
+    logger.info("Creating Django project...")
+    with open("docker-compose.temp.yml", "w", encoding='utf-8') as f:
         f.write(f"""services:
   web:
     build: .
@@ -168,54 +214,102 @@ def build_project(project_name: str) -> str:
     user: "{current_uid}:{current_gid}"
 """)
     
-    # Run the container to create the Django project with --remove-orphans flag
     try:
         subprocess.run([DOCKER_COMPOSE_COMMAND, "-f", "docker-compose.temp.yml", 
                       "run", "--rm", "--remove-orphans", "web"], check=True)
+        logger.debug("Created Django project structure")
     finally:
-        # Clean up temporary file
         os.unlink("docker-compose.temp.yml")
     
     # Create apps
     apps = ['public', 'dashboard', 'users', 'common']
     for app in apps:
-        create_app(app, current_uid, current_gid)
+        try:
+            create_app(app, current_uid, current_gid, logger)
+        except Exception as e:
+            logger.error(f"Error creating app {app}: {e}")
+            raise
     
     # Copy core files and templates
     if (templates_dir / "core").is_dir():
-        copy_files_recursive(templates_dir / "core", Path("core"), **variables)
+        copy_files_recursive(templates_dir / "core", Path("core"), logger, **variables)
     if (templates_dir / "templates").is_dir():
-        copy_files_recursive(templates_dir / "templates", Path("templates"), **variables)
+        copy_files_recursive(templates_dir / "templates", Path("templates"), logger, **variables)
     
     # Create static directories
-    print("Creating static asset directories...")
+    logger.info("Creating static asset directories...")
     for static_dir in ['css', 'js', 'img']:
         Path(f"static/{static_dir}").mkdir(parents=True, exist_ok=True)
+        logger.debug(f"Created static directory: static/{static_dir}")
     
     # Build and start services
-    print("Building and starting services...")
+    logger.info("Building and starting services...")
     # Update docker-compose.yml to include user mapping for development
-    with open("docker-compose.yml", "r") as f:
+    with open("docker-compose.yml", "r", encoding='utf-8') as f:
         content = f.read()
-    with open("docker-compose.yml", "w") as f:
+    with open("docker-compose.yml", "w", encoding='utf-8') as f:
         content = content.replace(
             "command: python manage.py runserver 0.0.0.0:8000",
             f"command: python manage.py runserver 0.0.0.0:8000\n    user: \"{current_uid}:{current_gid}\""
         )
         f.write(content)
         
-    subprocess.run([DOCKER_COMPOSE_COMMAND, "build"], check=True)
-    subprocess.run([DOCKER_COMPOSE_COMMAND, "up", "-d"], check=True)
+    try:
+        logger.info("Building Docker containers...")
+        result = subprocess.run(
+            [DOCKER_COMPOSE_COMMAND, "build"], 
+            check=True,
+            capture_output=True,
+            text=True
+        )
+        # Log the Docker build output
+        for line in result.stdout.splitlines():
+            logger.info(f"Docker build: {line}")
+        
+        logger.info("Starting Docker containers...")
+        result = subprocess.run(
+            [DOCKER_COMPOSE_COMMAND, "up", "-d"],
+            check=True,
+            capture_output=True,
+            text=True
+        )
+        # Log the Docker startup output
+        for line in result.stdout.splitlines():
+            logger.info(f"Docker startup: {line}")
+    except subprocess.SubprocessError as e:
+        logger.error(f"Error building/starting containers: {e}")
+        if hasattr(e, 'stdout') and e.stdout:
+            logger.error("Build output:")
+            for line in e.stdout.splitlines():
+                logger.error(line)
+        if hasattr(e, 'stderr') and e.stderr:
+            logger.error("Error output:")
+            for line in e.stderr.splitlines():
+                logger.error(line)
+        raise
     
     # Wait for PostgreSQL and setup database
-    if wait_for_postgres(variables['pg_user']):
+    if wait_for_postgres(variables['pg_user'], logger):
         # Install dependencies
+        logger.info("Installing Python dependencies...")
         subprocess.run([DOCKER_COMPOSE_COMMAND, "exec", "web", "pip", "install", "-r", "requirements.txt"], check=True)
         
         # Run migrations
+        logger.info("Running database migrations...")
         for app in apps:
-            subprocess.run([DOCKER_COMPOSE_COMMAND, "exec", "web", "python", "manage.py", "makemigrations", app], check=True)
-        subprocess.run([DOCKER_COMPOSE_COMMAND, "exec", "web", "python", "manage.py", "migrate", "--noinput"], check=True)
+            try:
+                subprocess.run([DOCKER_COMPOSE_COMMAND, "exec", "web", "python", "manage.py", "makemigrations", app], check=True)
+                logger.debug(f"Created migrations for {app}")
+            except subprocess.SubprocessError as e:
+                logger.error(f"Error creating migrations for {app}: {e}")
+                raise
+                
+        try:
+            subprocess.run([DOCKER_COMPOSE_COMMAND, "exec", "web", "python", "manage.py", "migrate", "--noinput"], check=True)
+            logger.debug("Applied all migrations")
+        except subprocess.SubprocessError as e:
+            logger.error(f"Error applying migrations: {e}")
+            raise
         
         # Create users
         create_user_cmd = '''
@@ -225,31 +319,44 @@ if not User.objects.filter(username='{username}').exists():
     User.objects.create_{type}('{username}', '{email}', '{password}')
 '''
         # Create admin user
-        subprocess.run([
-            DOCKER_COMPOSE_COMMAND, "exec", "web", "python", "manage.py", "shell", "-c",
-            create_user_cmd.format(
-                type="superuser",
-                username=variables['pg_user'],
-                email=variables['pg_email'],
-                password=variables['pg_password']
-            )
-        ], check=True)
+        logger.info("Creating admin user...")
+        try:
+            subprocess.run([
+                DOCKER_COMPOSE_COMMAND, "exec", "web", "python", "manage.py", "shell", "-c",
+                create_user_cmd.format(
+                    type="superuser",
+                    username=variables['pg_user'],
+                    email=variables['pg_email'],
+                    password=variables['pg_password']
+                )
+            ], check=True)
+        except subprocess.SubprocessError as e:
+            logger.error(f"Error creating admin user: {e}")
+            raise
         
         # Create standard user
-        subprocess.run([
-            DOCKER_COMPOSE_COMMAND, "exec", "web", "python", "manage.py", "shell", "-c",
-            create_user_cmd.format(
-                type="user",
-                username="user",
-                email="user@example.com",
-                password="userpasswd"
-            )
-        ], check=True)
+        logger.info("Creating standard user...")
+        try:
+            subprocess.run([
+                DOCKER_COMPOSE_COMMAND, "exec", "web", "python", "manage.py", "shell", "-c",
+                create_user_cmd.format(
+                    type="user",
+                    username="user",
+                    email="user@example.com",
+                    password="userpasswd"
+                )
+            ], check=True)
+        except subprocess.SubprocessError as e:
+            logger.error(f"Error creating standard user: {e}")
+            raise
         
-        print(f"Project '{project_name}' created and started successfully.")
-        print("To access the application, open your web browser and go to: http://localhost:8000")
+        logger.info(f"Project '{project_name}' created and started successfully.")
+        logger.info("To access the application, open your web browser and go to: http://localhost:8000")
+        logger.info(f"Build log has been saved to {project_dir}/quickscale_build_log.txt")
+        logger.info("If you encounter any issues, please include this log file when reporting problems.")
     else:
-        print("Error: Database failed to start. Check the logs with 'quickscale logs db'")
+        logger.error("Error: Database failed to start. Check the logs with 'quickscale logs db'")
+        logger.error(f"Full build log is available at {project_dir}/quickscale_build_log.txt for troubleshooting")
         sys.exit(1)
         
     # Return the absolute path to the project directory
@@ -375,51 +482,17 @@ def destroy() -> dict:
         print("Shutting down containers and removing volumes...")
         subprocess.run([DOCKER_COMPOSE_COMMAND, "down", "-v", "--rmi", "all"], check=True)
         
-        # Clean up files
-        print("Removing project files...")
-        for item in ['.env', 'docker-compose.yml', 'Dockerfile']:
-            if os.path.exists(item):
-                os.unlink(item)
-                
-        # Move up one directory and remove the project directory
-        os.chdir("..")
-        if Path(current_dir).exists():
-            print(f"Removing project directory '{current_dir}'...")
-            shutil.rmtree(current_dir)
-        
-        print("Project successfully destroyed.")
+        print(f"Removing project directory '{current_dir}'...")
+        os.chdir('..')  # Move up one directory before removing the project
+        shutil.rmtree(current_dir)
+        print(f"Project '{current_dir}' successfully destroyed.")
         return {'success': True, 'project': current_dir}
     except subprocess.SubprocessError as e:
-        print(f"Error destroying project: {e}")
+        print(f"Error shutting down containers: {e}")
         return {'success': False, 'reason': 'subprocess_error', 'error': str(e)}
     except Exception as e:
-        print(f"Error removing project directory: {e}")
+        print(f"Error destroying project: {e}")
         return {'success': False, 'reason': 'error', 'error': str(e)}
-
-def check() -> None:
-    """Check project status and requirements"""
-    requirements = {
-        'docker': 'docker --version',
-        'docker-compose': f'{DOCKER_COMPOSE_COMMAND} --version',
-        'python': 'python --version',
-        'pip': 'pip --version'
-    }
-    
-    missing_requirements = []
-    for name, command in requirements.items():
-        try:
-            subprocess.run(command.split(), check=True, capture_output=True)
-            print(f"✅ {name} is installed")
-        except (subprocess.SubprocessError, FileNotFoundError):
-            print(f"❌ {name} is not installed")
-            missing_requirements.append(name)
-    
-    if missing_requirements:
-        print("\nError: The following requirements are missing:")
-        for req in missing_requirements:
-            print(f"  - {req}")
-        print("\nPlease install the missing requirements and try again.")
-        sys.exit(1)
 
 def clean() -> None:
     """Clean temporary files and cached data"""
@@ -483,4 +556,23 @@ def update() -> None:
         print("Project updated successfully.")
     except subprocess.SubprocessError as e:
         print(f"Error updating project: {e}")
+        sys.exit(1)
+
+def check() -> None:
+    """Check if all required tools are available"""
+    required_tools = {
+        "docker": "Docker must be installed. Visit https://docs.docker.com/get-docker/",
+        "python": "Python 3.10 or later is required. Visit https://www.python.org/downloads/"
+    }
+    
+    for tool, message in required_tools.items():
+        if shutil.which(tool) is None:
+            print(f"Error: {tool} not found. {message}")
+            sys.exit(1)
+    
+    # Check Docker is running
+    try:
+        subprocess.run(["docker", "info"], check=True, capture_output=True)
+    except subprocess.SubprocessError:
+        print("Error: Docker daemon is not running. Please start Docker and try again.")
         sys.exit(1)

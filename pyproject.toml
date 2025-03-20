@@ -6,12 +6,13 @@ build-backend = "setuptools.build_meta"
 name = "quickscale"
 dynamic = ["version"]
 description = "A SaaS starter kit for Python-first developers using Django"
-license = {text = "Apache-2.0"}
+readme = "README.md"
+license = "Apache-2.0"
 authors = [
-  {name = "Victor Rocco", email = "victor @ experto .ai"},
+  {name = "Victor Rocco", email = "victor@experto.ai"},
 ]
 maintainers = [
-  {name = "Victor Rocco", email = "victor @ experto .ai"},
+  {name = "Victor Rocco", email = "victor@experto.ai"},
 ]
 requires-python = ">=3.10"
 dependencies = [
@@ -34,8 +35,12 @@ dependencies = [
 quickscale = "quickscale.cli:main"
 
 [tool.setuptools]
-packages = ["quickscale"]
 include-package-data = true
+
+[tool.setuptools.packages.find]
+include = ["quickscale*"]
+exclude = ["*.__pycache__*"]
+namespaces = true
 
 [tool.setuptools.dynamic]
 version = {attr = "quickscale.__version__"}

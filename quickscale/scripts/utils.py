@@ -2,12 +2,56 @@
 import json
 import sys
 import os
+import logging
+import datetime
 from pathlib import Path
-from typing import Optional, Dict, Any
+from typing import Optional, Dict, Any, TextIO
 
 # Get absolute path to project root for consistent file operations
 def get_project_root() -> Path:
     return Path(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
+# Setup logging that shows output on screen while also saving to a file
+# If project_dir is provided, logs are saved to that directory, otherwise to current directory.
+def setup_logging(project_dir: Optional[Path] = None, log_level=logging.INFO) -> logging.Logger:
+    # Create logger
+    logger = logging.getLogger('quickscale')
+    logger.setLevel(log_level)
+
+    # Clear any existing handlers
+    if logger.hasHandlers():
+        logger.handlers.clear()
+
+    # Console handler for stdout
+    console_handler = logging.StreamHandler(sys.stdout)
+    console_handler.setLevel(log_level)
+    console_formatter = logging.Formatter('[%(levelname)s] %(message)s')
+    console_handler.setFormatter(console_formatter)
+    logger.addHandler(console_handler)
+
+    # File handler if project_dir is provided
+    if project_dir:
+        log_dir = project_dir
+        log_dir.mkdir(exist_ok=True)
+        log_file = log_dir / "quickscale_build_log.txt"
+
+        file_handler = logging.FileHandler(log_file, encoding='utf-8')
+        file_handler.setLevel(log_level)
+        file_formatter = logging.Formatter('[%(levelname)s] %(message)s')
+        file_handler.setFormatter(file_formatter)
+        logger.addHandler(file_handler)
+
+        # Log basic system info
+        logger.info("QuickScale build log")
+        logger.info(f"Project directory: {project_dir}")
+        try:
+            import platform
+            logger.info(f"System: {platform.system()} {platform.release()}")
+            logger.info(f"Python: {platform.python_version()}")
+        except Exception as e:
+            logger.warning(f"Could not get system information: {e}")
+
+    return logger
 
 # Load project tracking data from JSON file with error handling
 def read_tracking_file(file_path: str) -> Optional[Dict[str, Any]]:
@@ -58,10 +102,8 @@ if __name__ == "__main__":
         if len(sys.argv) < 3:
             sys.stderr.write("Usage: utils.py <action> <file_path> [param_name] [value]\n")
             sys.exit(1)
-
         action = sys.argv[1]
         file_path = sys.argv[2]
-
         if action == "read":
             if len(sys.argv) != 4:
                 sys.stderr.write("Error: Missing parameter name for read action\n")
