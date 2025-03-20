@@ -1,7 +1,7 @@
 # QuickScale - A Django SaaS Starter Kit for Python-First Developers
 
 # Single source of truth for package version
-__version__ = "0.1.1"
+__version__ = "0.1.2"
 
 try:
     from importlib.metadata import version
