@@ -90,29 +90,55 @@ This action cannot be undone. Use 'down' instead if you just want to stop servic
     check_parser = subparsers.add_parser("check", 
         help="Check project status and requirements",
         description="Verify that all required dependencies are installed and properly configured.")
+    
+    # Add analyze command
+    analyze_parser = subparsers.add_parser("analyze", 
+        help="Analyze project for scaling issues",
+        description="Analyze the current project for scaling issues and performance improvements.")
+    analyze_parser.add_argument(
+        "--verbose", 
+        action="store_true",
+        help="Show detailed analysis information")
+    
+    # Add optimize command
+    optimize_parser = subparsers.add_parser("optimize", 
+        help="Optimize project based on analysis",
+        description="Apply optimizations to improve project performance and scalability.")
+    optimize_parser.add_argument(
+        "--level", 
+        choices=["low", "medium", "high"],
+        default="medium",
+        help="Optimization level (default: medium)")
         
     shell_parser = subparsers.add_parser("shell", 
-        help="Enter an interactive bash shell in the web conta on the local development environmentiner on the local development environment",
-        description="Open an interactive bash shell in the web container for development and debug on the local development environmentging on the local development environment.")
+        help="Enter an interactive bash shell in the web container",
+        description="Open an interactive bash shell in the web container for development and debugging.")
+    shell_parser.add_argument(
+        "-c", "--cmd",
+        help="Run this command in the container instead of starting an interactive shell")
         
     django_shell_parser = subparsers.add_parser("django-shell", 
-        help="Enter the Django shell in the web conta on the local development environmentiner on the local development environment",
-        description="Open an interactive Python shell with Django context loaded for development and debug on the local development environmentging on the local development environment.")
+        help="Enter the Django shell in the web container",
+        description="Open an interactive Python shell with Django context loaded for development and debugging.")
     
     # Logs command with optional service filter
     logs_parser = subparsers.add_parser("logs", 
-        help="View project  on the local development environmentlogs on the local development environment",
-        description="View logs from project serv on the local development environmentices on the local development environment. Optionally filter by specific service.",
+        help="View project logs on the local development environment",
+        description="View logs from project services on the local development environment. Optionally filter by specific service.",
         epilog="""
 Examples:
   quickscale logs     View logs from all services
   quickscale logs web View only web service logs
   quickscale logs db  View only database logs
+  quickscale logs -f  Follow logs continuously
         """)
     logs_parser.add_argument("service", 
         nargs="?", 
         choices=["web", "db"], 
         help="Optional service to view logs for (web or db)")
+    logs_parser.add_argument("-f", "--follow", 
+        action="store_true",
+        help="Follow logs continuously (warning: this will not exit automatically)")
     
     # Django management command pass-through
     manage_parser = subparsers.add_parser("manage", 
@@ -193,8 +219,15 @@ For Django management commands help, use:
         elif args.command == "check":
             command_manager.check_requirements(print_info=True)
             
+        elif args.command == "analyze":
+            command_manager.analyze_project(verbose=getattr(args, 'verbose', False))
+            
+        elif args.command == "optimize":
+            command_manager.optimize_project(level=getattr(args, 'level', 'medium'))
+            
         elif args.command == "logs":
-            command_manager.view_logs(args.service)
+            follow = getattr(args, 'follow', False)
+            command_manager.view_logs(args.service, follow=follow)
             
         elif args.command == "manage":
             # First check if project exists, consistent with other commands
@@ -217,14 +250,23 @@ For Django management commands help, use:
             command_manager.check_services_status()
             
         elif args.command == "shell":
-            command_manager.open_shell()
+            if hasattr(args, 'cmd') and args.cmd:
+                command_manager.open_shell(command=args.cmd)
+            else:
+                command_manager.open_shell()
             
         elif args.command == "django-shell":
             command_manager.open_shell(django_shell=True)
             
         elif args.command == "help":
-            if hasattr(args, 'topic') and args.topic == "manage":
-                show_manage_help()
+            if hasattr(args, 'topic') and args.topic:
+                if args.topic == "manage":
+                    show_manage_help()
+                elif args.topic in subparsers.choices:
+                    subparsers.choices[args.topic].print_help()
+                else:
+                    print(f"Unknown help topic: {args.topic}")
+                    parser.print_help()
             else:
                 parser.print_help()
                 print("\nFor Django management commands help, use:")

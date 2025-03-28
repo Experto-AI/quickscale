@@ -1,0 +1,31 @@
+version: '3.8'
+
+services:
+  web:
+    build: .
+    ports:
+      - "${port}:8000"
+    volumes:
+      - .:/app
+    environment:
+      - POSTGRES_HOST=db
+      - POSTGRES_USER=${pg_user}
+      - POSTGRES_PASSWORD=${pg_password}
+      - POSTGRES_DB=${project_name}
+    depends_on:
+      - db
+    user: "${DOCKER_UID}:${DOCKER_GID}"
+
+  db:
+    image: postgres:15
+    ports:
+      - "${pg_port}:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data/
+    environment:
+      - POSTGRES_USER=${pg_user}
+      - POSTGRES_PASSWORD=${pg_password}
+      - POSTGRES_DB=${project_name}
+
+volumes:
+  postgres_data: 

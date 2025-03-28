@@ -7,11 +7,13 @@ WORKDIR /app
 # Python optimization flags
 ENV PYTHONDONTWRITEBYTECODE 1
 ENV PYTHONUNBUFFERED 1
+ENV IN_DOCKER True
 
 # Install system dependencies and cleanup in single layer
 RUN apt-get update && apt-get install -y \
     build-essential \
     libpq-dev \
+    postgresql-client \
     && rm -rf /var/lib/apt/lists/*
 
 # Create quickscale user and group with a home directory
@@ -32,5 +34,12 @@ RUN mkdir -p /app/logs && \
     chmod 775 /app/logs && \
     chown -R quickscale:quickscale /app
 
+# Add entrypoint script
+COPY entrypoint.sh /entrypoint.sh
+RUN chmod +x /entrypoint.sh
+
 # Switch to quickscale user
 USER quickscale
+
+# Set the entrypoint
+ENTRYPOINT ["/entrypoint.sh"]

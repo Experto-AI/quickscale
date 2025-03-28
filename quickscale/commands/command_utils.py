@@ -102,8 +102,8 @@ def copy_files_recursive(
 def wait_for_postgres(
     pg_user: str,
     logger: logging.Logger,
-    max_attempts: int = 30,
-    delay: int = 2
+    max_attempts: int = 10,
+    delay: int = 1
 ) -> bool:
     """Wait for PostgreSQL to be ready with exponential backoff."""
     logger.info("Waiting for PostgreSQL...")
@@ -114,16 +114,17 @@ def wait_for_postgres(
                 [DOCKER_COMPOSE_COMMAND, "exec", "db", "pg_isready", "-U", pg_user],
                 check=False,
                 capture_output=True,
-                text=True
+                text=True,
+                timeout=5  # Add timeout to prevent hanging
             )
             if result.returncode == 0:
                 logger.info("PostgreSQL ready")
                 return True
             
-        except subprocess.SubprocessError as e:
+        except (subprocess.SubprocessError, subprocess.TimeoutExpired) as e:
             logger.debug(f"PostgreSQL check failed: {e}")
         
-        sleep_time = min(delay * (2 ** (attempt - 1)), 10)
+        sleep_time = min(delay * (2 ** (attempt - 1)), 5)  # Cap max sleep at 5 seconds
         logger.info(f"Attempt {attempt}/{max_attempts}, waiting {sleep_time}s...")
         time.sleep(sleep_time)
     
