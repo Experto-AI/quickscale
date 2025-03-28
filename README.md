@@ -270,6 +270,15 @@ Alpine.js is used for client-side interactivity and state management:
 
 ## CHANGELOG
 
+### v0.2.1 (2025-03-29)
+feat: improve database connection handling
+
+- Fixed entrypoint script copying during project creation
+- Added automatic PostgreSQL port detection and conflict resolution
+- Improved database connection retries and error handling
+- Added healthchecks for proper container orchestration
+- Enhanced environment variable passing between services
+
 ### v0.2.0 (2025-03-28)
 feat: implement CLI enhancements and AI assistant guidelines
 

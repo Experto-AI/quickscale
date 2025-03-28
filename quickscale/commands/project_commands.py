@@ -55,6 +55,11 @@ class BuildProjectCommand(Command):
         self.port = find_available_port(8000, 20)
         if self.port != 8000:
             self.logger.info(f"Port 8000 is already in use, using port {self.port} instead")
+            
+        # Find an available PostgreSQL port
+        self.pg_port = find_available_port(5432, 20)
+        if self.pg_port != 5432:
+            self.logger.info(f"Port 5432 is already in use, using port {self.pg_port} for PostgreSQL instead")
         
         self.variables = {
             'project_name': project_name,
@@ -63,6 +68,7 @@ class BuildProjectCommand(Command):
             'pg_email': 'admin@test.com',
             'SECRET_KEY': secret_key,
             'port': self.port,
+            'pg_port': self.pg_port,
         }
         
         # Environment variables for Docker Compose
@@ -73,6 +79,7 @@ class BuildProjectCommand(Command):
             'DOCKER_UID': str(self.current_uid),
             'DOCKER_GID': str(self.current_gid),
             'PORT': str(self.port),
+            'PG_PORT': str(self.pg_port),
         }
         
         return project_dir
@@ -80,8 +87,14 @@ class BuildProjectCommand(Command):
     def copy_project_files(self) -> None:
         """Copy project template files."""
         self.logger.info("Copying configuration files...")
-        for file_name in ['docker-compose.yml', 'Dockerfile', '.dockerignore', 'requirements.txt']:
+        for file_name in ['docker-compose.yml', 'Dockerfile', '.dockerignore', 'requirements.txt', 'entrypoint.sh']:
             copy_with_vars(self.templates_dir / file_name, Path(file_name), self.logger, **self.variables)
+            
+        # Make entrypoint.sh executable
+        entrypoint_path = Path('entrypoint.sh')
+        if entrypoint_path.exists():
+            os.chmod(entrypoint_path, 0o755)
+            self.logger.info("Made entrypoint.sh executable")
             
         # Create .env file with proper variable substitution
         env_template_path = self.templates_dir / '.env'
@@ -299,6 +312,13 @@ if not User.objects.filter(username='{username}').exists():
     volumes:
       - .:/app
     user: "{self.current_uid}:{self.current_gid}"
+    environment:
+      - POSTGRES_HOST=localhost
+      - POSTGRES_USER=postgres
+      - POSTGRES_PASSWORD=postgres
+      - POSTGRES_DB=postgres
+      - DISABLE_ENTRYPOINT=true
+    entrypoint: []
 """)
             compose_file = "-f docker-compose.temp.yml"
         else:

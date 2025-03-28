@@ -95,8 +95,30 @@ DATABASES = {
         'PASSWORD': os.getenv('POSTGRES_PASSWORD', '${pg_password}'),
         'HOST': os.getenv('POSTGRES_HOST', 'db'),
         'PORT': os.getenv('POSTGRES_PORT', '5432'),
+        'CONN_MAX_AGE': 60,
+        'OPTIONS': {
+            'connect_timeout': 10,
+        },
     }
 }
+
+# Connection retries for database startup
+if os.getenv('IN_DOCKER', 'False') == 'True':
+    # In Docker setup, we'll retry connection a few times to handle startup timing
+    import time
+    from django.db.utils import OperationalError
+    
+    db_conn_retries = 5
+    while db_conn_retries > 0:
+        try:
+            import django.db
+            django.db.connections['default'].cursor()
+            logging.info("Database connection successful")
+            break
+        except OperationalError as e:
+            logging.warning(f"Database connection error: {e}. Retrying in 2 seconds... ({db_conn_retries} attempts left)")
+            db_conn_retries -= 1
+            time.sleep(2)
 
 # Password Validation
 AUTH_PASSWORD_VALIDATORS = [
