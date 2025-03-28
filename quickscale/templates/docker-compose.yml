@@ -4,11 +4,12 @@ services:
   web:
     build: .
     command: python manage.py runserver 0.0.0.0:8000
-    # User mapping is added dynamically by build script
+    # User mapping to maintain file ownership
+    user: "${DOCKER_UID:-1000}:${DOCKER_GID:-1000}"
     volumes:
       - .:/app
     ports:
-      - "8000:8000"
+      - "${PORT:-8000}:8000"
     environment:
       - DEBUG=True
       - SECRET_KEY=${SECRET_KEY}

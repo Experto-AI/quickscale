@@ -1,11 +1,11 @@
-# QuickScale - A Django SaaS Starter Kit for Python-First Developers
+"""QuickScale - A Django SaaS Starter Kit for Python-First Developers."""
+from typing import Optional
 
-# Single source of truth for package version
-__version__ = "0.1.1"
+__version__: str = "0.2.0"
 
 try:
     from importlib.metadata import version
     __version__ = version("quickscale")
 except ImportError:
-    # Package is not installed
+    # Package not installed in environment
     pass
