@@ -14,9 +14,23 @@ RUN apt-get update && apt-get install -y \
     libpq-dev \
     && rm -rf /var/lib/apt/lists/*
 
+# Create quickscale user and group with a home directory
+RUN groupadd -r quickscale && useradd -r -g quickscale -d /home/quickscale -m quickscale
+
+# Set hostname
+ENV HOSTNAME=quickscale
+
 # Install Python dependencies first to leverage Docker cache
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
 # Copy project files
 COPY . .
+
+# Create logs directory with proper permissions - ensure it's writable for the quickscale user
+RUN mkdir -p /app/logs && \
+    chmod 775 /app/logs && \
+    chown -R quickscale:quickscale /app
+
+# Switch to quickscale user
+USER quickscale

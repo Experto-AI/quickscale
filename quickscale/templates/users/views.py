@@ -1,23 +1,27 @@
-from django.shortcuts import render, redirect
-from django.contrib.auth import login, logout, authenticate
-from django.contrib.auth.decorators import login_required
+"""User authentication and account management views."""
 from django.contrib import messages
-from django.http import HttpResponse
+from django.contrib.auth import authenticate, get_user_model, login, logout
+from django.contrib.auth.decorators import login_required
+from django.http import HttpRequest, HttpResponse
+from django.shortcuts import redirect, render
 from django.views.decorators.http import require_http_methods
-from django.contrib.auth import get_user_model
-from django.template.loader import render_to_string
+
+User = get_user_model()
 
 @require_http_methods(["GET", "POST"])
-def login_view(request):
+def login_view(request: HttpRequest) -> HttpResponse:
+    """Handle user login."""
     is_htmx = request.headers.get('HX-Request') == 'true'
     
     if request.method == "POST":
         username = request.POST.get('username')
         password = request.POST.get('password')
         user = authenticate(request, username=username, password=password)
+        
         if user is not None:
             login(request, user)
             messages.success(request, 'Successfully logged in!')
+            
             if is_htmx:
                 response = HttpResponse()
                 response['HX-Redirect'] = '/'
@@ -30,24 +34,23 @@ def login_view(request):
     return render(request, 'users/login.html', {'is_htmx': is_htmx})
 
 @require_http_methods(["GET", "POST"])
-def logout_view(request):
+def logout_view(request: HttpRequest) -> HttpResponse:
+    """Handle user logout."""
     is_htmx = request.headers.get('HX-Request') == 'true'
     
-    # Logout the user
     logout(request)
     messages.success(request, 'Successfully logged out!')
     
-    # Handle HTMX requests with a special response header for redirection
     if is_htmx:
         response = HttpResponse()
         response['HX-Redirect'] = '/'
         return response
-        
-    # Regular redirect for non-HTMX requests
+    
     return redirect('public:index')
 
 @require_http_methods(["GET", "POST"])
-def signup_view(request):
+def signup_view(request: HttpRequest) -> HttpResponse:
+    """Handle user registration."""
     is_htmx = request.headers.get('HX-Request') == 'true'
     
     if request.method == "POST":
@@ -56,41 +59,36 @@ def signup_view(request):
         password2 = request.POST.get('password2')
         email = request.POST.get('email')
         
-        User = get_user_model()
-        
-        # Validate passwords match
         if password1 != password2:
             messages.error(request, 'Passwords do not match.')
             return render(request, 'users/signup.html')
         
-        # Check if username already exists
         if User.objects.filter(username=username).exists():
             messages.error(request, 'Username already exists.')
             return render(request, 'users/signup.html')
-            
-        # Create new user
+        
         try:
-            user = User.objects.create_user(
+            User.objects.create_user(
                 username=username,
                 email=email,
                 password=password1
             )
             messages.success(request, 'Account created successfully!')
             
-            # Check if HTMX request and handle accordingly
             if is_htmx:
                 response = HttpResponse()
                 response['HX-Redirect'] = '/users/login/'
                 return response
             
-            # Standard full page redirect
             return redirect('users:login')
-        except Exception as e:
+            
+        except Exception:
             messages.error(request, 'Error creating account. Please try again.')
             return render(request, 'users/signup.html')
-            
+    
     return render(request, 'users/signup.html')
 
 @login_required
-def profile_view(request):
+def profile_view(request: HttpRequest) -> HttpResponse:
+    """Display user profile."""
     return render(request, 'users/profile.html')

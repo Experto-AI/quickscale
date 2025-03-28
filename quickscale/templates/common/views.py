@@ -1,4 +1,5 @@
+"""Common views shared across multiple apps."""
+from django.http import HttpRequest, HttpResponse
 from django.shortcuts import render
-from django.http import HttpResponse
 
-# Add common views here 
+# Add views below that are used by multiple apps

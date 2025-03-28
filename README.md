@@ -27,7 +27,6 @@ Ideal for **solo developers** or small teams looking to turn their ideas into pr
 - PostgreSQL (database)
 - Deployment: .env + Docker + Uvicorn
 
-
 ## PROJECT USAGE
 
 QuickScale provides a convenient command-line interface to manage your projects:
@@ -40,9 +39,9 @@ Available commands:
   logs           - View project logs (optional service parameter: web, db)
   manage         - Run Django management commands
   check          - Check project status and requirements
-  clean          - Clean temporary files and cached data
-  update         - Update project dependencies and configuration
   ps             - Show the status of running services
+  shell          - Enter an interactive bash shell in the web container
+  django-shell   - Enter the Django shell in the web container
   destroy        - Permanently destroy the current project (Warning deletes all code)
   help           - Show this help message
   version        - Show the current version of QuickScale
@@ -53,6 +52,8 @@ Examples:
 quickscale build awesome-project   # Create a new project called "awesome-project"
 quickscale up                      # Start the services
 quickscale logs web                # View logs from the web service
+quickscale shell                   # Enter an interactive bash shell in the web container
+quickscale django-shell            # Enter the Django shell in the web container
 quickscale down                    # Stop the services
 ```
 
@@ -179,6 +180,22 @@ project-name/
 
 ## APPLICATION STRUCTURE
 
+### Core Components
+1. **CLI (cli.py)**: Main entry point with command routing and argument parsing
+2. **Command System**:
+   - **command_base.py**: Base Command class for all commands
+   - **command_manager.py**: Central command registry and orchestration
+   - **command_utils.py**: Shared utilities for commands
+3. **Command Types**:
+   - **project_commands.py**: Project lifecycle (build, destroy)
+   - **service_commands.py**: Docker services (up, down, logs, ps)
+   - **development_commands.py**: Dev tools (shell, django-shell, manage)
+   - **system_commands.py**: System maintenance
+4. **Project Management**:
+   - **project_manager.py**: Project state and configuration tracking
+   - **logging_manager.py**: Centralized logging system
+   - **help_manager.py**: Help documentation system
+
 ### Django Apps
 1. **core**: Main Django project settings and URL configuration
 2. **public**: Public-facing pages (home, about, contact)
@@ -252,6 +269,14 @@ Alpine.js is used for client-side interactivity and state management:
 3. **Form validation**: Client-side validation
 
 ## CHANGELOG
+
+### v0.2.0 (2025-03-28)
+feat: implement CLI enhancements and AI assistant guidelines
+
+- Add shell and django-shell commands for interactive development
+- Refactor CLI from functional to object-oriented programming
+- Improve help messages for better user experience
+- Add guidelines for AI coding assistants (Cursor/WindSurf/GitHub Copilot)
 
 ### v0.1.0 (2025-03-19)
 - Initial release of QuickScale
