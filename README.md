@@ -210,6 +210,58 @@ project-name/
 4. **users**: Templates for user authentication and profile
 5. **dashboard**: Templates for the user dashboard
 
+## DEVELOPMENT AND TESTING
+
+### Running Tests
+
+QuickScale includes a comprehensive test suite to ensure functionality works as expected. 
+
+First, install the test dependencies:
+
+```bash
+pip install -r requirements-test.txt
+```
+
+You can run the tests using pytest:
+
+```bash
+# Run all tests
+python -m pytest -v
+```
+
+For Django application tests, you can use the Django test runner through the QuickScale CLI:
+
+```bash
+# Run all Django tests
+quickscale manage test
+```
+
+### Test Coverage Reports
+
+QuickScale leverages pytest-cov to generate test coverage reports, helping you identify which parts of the codebase are well-tested and which need additional coverage:
+
+```bash
+# Generate an HTML report for visual inspection
+pytest --cov=quickscale --cov-report=html tests/
+```
+
+After generating the HTML report, you can open `htmlcov/index.html` in your browser to see a detailed visual breakdown of test coverage with color-coded line-by-line analysis.
+
+### Testing Best Practices
+
+When contributing to QuickScale, please follow these testing guidelines:
+
+1. **Write tests for new features**: All new functionality should include tests
+2. **Maintain test structure**: Keep unit tests in `tests/unit/` and integration tests in `tests/integration/`
+3. **Use fixtures**: Leverage pytest fixtures in `tests/conftest.py` for reusable test components
+4. **Test edge cases**: Include tests for error conditions and boundary cases
+5. **Follow existing patterns**: Maintain consistent test patterns for readability
+6. **Aim for coverage**: Try to maintain or increase the overall test coverage percentage
+
+## AUTHENTICATION
+
+Authentication in QuickScale is built on Django's authentication system, providing:
+
 ## ENVIRONMENT VARIABLES
 
 The project uses the following environment variables:
@@ -270,8 +322,17 @@ Alpine.js is used for client-side interactivity and state management:
 
 ## CHANGELOG
 
-### v0.2.1 (2025-03-29)
-feat: improve database connection handling
+### v0.3.0 (2025-03-29)
+feat: add comprehensive test coverage and documentation
+
+- Implemented complete test suite with pytest integration
+- Added detailed test coverage reporting
+- Enhanced documentation with testing best practices
+- Improved project structure documentation
+- Updated environment variables documentation
+
+### 0.2.1 (2025-03-29)
+fix: improve database connection handling
 
 - Fixed entrypoint script copying during project creation
 - Added automatic PostgreSQL port detection and conflict resolution

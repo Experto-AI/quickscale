@@ -174,5 +174,9 @@ cython_debug/
 .pypirc
 
 
+# Coverage
+htmlcov/
+
+
 
 

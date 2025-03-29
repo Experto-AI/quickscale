@@ -250,12 +250,12 @@ class {config_class}(AppConfig):
         try:
             result = subprocess.run(
                 [DOCKER_COMPOSE_COMMAND, "ps", "-q", "web"],
-                check=True, capture_output=True, text=True
+                check=True, capture_output=True, text=True, timeout=10
             )
             if not result.stdout.strip():
                 self.logger.error("Web container is not running, cannot run migrations")
                 raise subprocess.SubprocessError("Web container is not running")
-        except subprocess.SubprocessError as e:
+        except (subprocess.SubprocessError, subprocess.TimeoutExpired) as e:
             self.logger.error(f"Error checking web container status: {e}")
             raise
             
@@ -264,9 +264,9 @@ class {config_class}(AppConfig):
             try:
                 subprocess.run(
                     [DOCKER_COMPOSE_COMMAND, "exec", "web", "python", "manage.py", "makemigrations", app],
-                    check=True
+                    check=True, timeout=30
                 )
-            except subprocess.SubprocessError as e:
+            except (subprocess.SubprocessError, subprocess.TimeoutExpired) as e:
                 self.logger.error(f"Error creating migrations for {app}: {e}")
                 # Continue with other apps instead of failing completely
                 continue
@@ -274,7 +274,7 @@ class {config_class}(AppConfig):
         # Run migrate for all
         subprocess.run(
             [DOCKER_COMPOSE_COMMAND, "exec", "web", "python", "manage.py", "migrate", "--noinput"],
-            check=True
+            check=True, timeout=60
         )
     
     def _create_users(self) -> None:
@@ -295,9 +295,9 @@ if not User.objects.filter(username='{username}').exists():
             subprocess.run([
                 DOCKER_COMPOSE_COMMAND, "exec", "web", "python", "manage.py", "shell", "-c",
                 create_user_cmd.format(type=user_type, username=username, email=email, password=password)
-            ], check=True)
+            ], check=True, timeout=20)
             self.logger.info(f"Created {user_type}: {username}")
-        except subprocess.SubprocessError as e:
+        except (subprocess.SubprocessError, subprocess.TimeoutExpired) as e:
             self.logger.error(f"Error creating {user_type}: {e}")
             raise
     
