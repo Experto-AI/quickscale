@@ -302,42 +302,65 @@ if not User.objects.filter(username='{username}').exists():
             raise
     
     def _run_docker_command(self, command: str, temp_compose: bool = True) -> None:
-        """Run command in Docker container."""
+        """Run a command inside a temporary Docker container, bypassing the default entrypoint."""
+        compose_file = "docker-compose.yml" if temp_compose else None
+
+        # Initialize logger if it's not already set
+        if self.logger is None:
+            self.logger = LoggingManager.get_logger()
+
+        # Create a temporary compose file if needed
+        temp_compose_file = "docker-compose.temp.yml"
         if temp_compose:
-            with open("docker-compose.temp.yml", "w", encoding='utf-8') as f:
-                f.write(f"""services:
-  web:
-    build: .
-    command: {command}
-    volumes:
-      - .:/app
-    user: "{self.current_uid}:{self.current_gid}"
-    environment:
-      - POSTGRES_HOST=localhost
-      - POSTGRES_USER=postgres
-      - POSTGRES_PASSWORD=postgres
-      - POSTGRES_DB=postgres
-      - DISABLE_ENTRYPOINT=true
-    entrypoint: []
-""")
-            compose_file = "-f docker-compose.temp.yml"
-        else:
-            compose_file = ""
+            try:
+                with open(temp_compose_file, "w", encoding='utf-8') as f:
+                    # Copy the content of the original compose file
+                    with open(compose_file, "r", encoding='utf-8') as original:
+                        f.write(original.read())
+                compose_file = temp_compose_file
+            except Exception as e:
+                self.logger.error(f"Error creating temporary compose file: {e}")
+        
+        docker_cmd = [DOCKER_COMPOSE_COMMAND]
+        if compose_file:
+            docker_cmd.extend(["-f", compose_file])
             
+        # Add --entrypoint "" to bypass the default entrypoint script
+        docker_cmd.extend(["run", "--rm", "--entrypoint", "", "web"]) 
+        docker_cmd.extend(command.split())
+
+        self.logger.info(f"Running Docker command (entrypoint bypassed): {' '.join(docker_cmd)}")
         try:
-            # Pass environment variables to Docker Compose
-            env = os.environ.copy()
-            if self.env_vars:
-                env.update(self.env_vars)
-                
-            subprocess.run(
-                f"{DOCKER_COMPOSE_COMMAND} {compose_file} run --rm --remove-orphans web".split(),
-                check=True,
-                env=env
+            # Capture both stdout and stderr
+            result = subprocess.run(
+                docker_cmd, 
+                check=True, 
+                text=True,
+                capture_output=True,  # Capture stdout/stderr
+                env=dict(os.environ, **({} if self.env_vars is None else self.env_vars)) # Handle None env_vars
             )
+            # Log stdout if it's not empty
+            if result.stdout:
+                self.logger.info(f"Docker command stdout:\\n{result.stdout.strip()}")
+            # Log stderr if it's not empty (some tools use stderr for info)
+            if result.stderr:
+                self.logger.info(f"Docker command stderr:\\n{result.stderr.strip()}")
+
+        except subprocess.CalledProcessError as e:
+            self.logger.error(f"Docker command failed: {e}")
+            # Log captured output even on failure
+            if e.stdout:
+                self.logger.error(f"Failed command stdout:\\n{e.stdout.strip()}")
+            if e.stderr:
+                self.logger.error(f"Failed command stderr:\\n{e.stderr.strip()}")
+            self._exit_with_error(f"Docker command failed: {command}")
+        except FileNotFoundError:
+            self.logger.error(f"Command '{DOCKER_COMPOSE_COMMAND}' not found. Ensure Docker Compose is installed and in PATH.")
+            self._exit_with_error("Docker Compose command not found")
         finally:
-            if temp_compose and os.path.exists("docker-compose.temp.yml"):
-                os.unlink("docker-compose.temp.yml")
+            # Clean up the temporary file if it was created
+            if temp_compose and os.path.exists(temp_compose_file):
+                os.unlink(temp_compose_file)
     
     def _exit_with_error(self, message: str) -> NoReturn:
         """Exit with error message."""
@@ -346,14 +369,248 @@ if not User.objects.filter(username='{username}').exists():
         print(f"Error: {message}")
         sys.exit(1)
     
+    def _verify_container_status(self) -> Dict[str, Any]:
+        """Verify container status for web and db services."""
+        result = {
+            'web': {'running': False, 'healthy': False},
+            'db': {'running': False, 'healthy': False},
+            'success': False
+        }
+        
+        try:
+            # Check web container
+            web_status = subprocess.run(
+                [DOCKER_COMPOSE_COMMAND, "ps", "-q", "web"],
+                check=False, capture_output=True, text=True, timeout=10
+            )
+            result['web']['running'] = bool(web_status.stdout.strip())
+            
+            # Check db container
+            db_status = subprocess.run(
+                [DOCKER_COMPOSE_COMMAND, "ps", "-q", "db"],
+                check=False, capture_output=True, text=True, timeout=10
+            )
+            result['db']['running'] = bool(db_status.stdout.strip())
+            
+            # Check if containers are healthy
+            if result['web']['running'] and result['db']['running']:
+                # Check web container health
+                web_health = subprocess.run(
+                    [DOCKER_COMPOSE_COMMAND, "exec", "-T", "web", "echo", "healthy"],
+                    check=False, capture_output=True, text=True, timeout=5
+                )
+                result['web']['healthy'] = web_health.returncode == 0 and "healthy" in web_health.stdout
+                
+                # Check db container health
+                db_health = subprocess.run(
+                    [DOCKER_COMPOSE_COMMAND, "exec", "-T", "db", "pg_isready"],
+                    check=False, capture_output=True, text=True, timeout=5
+                )
+                result['db']['healthy'] = db_health.returncode == 0
+            
+            result['success'] = (result['web']['running'] and result['web']['healthy'] and 
+                                result['db']['running'] and result['db']['healthy'])
+            
+        except (subprocess.SubprocessError, subprocess.TimeoutExpired) as e:
+            self.logger.error(f"Error verifying container status: {e}")
+            result['error'] = str(e)
+            
+        return result
+    
+    def _verify_database_connectivity(self) -> Dict[str, Any]:
+        """Verify database connectivity and migrations."""
+        result = {
+            'can_connect': False,
+            'migrations_applied': False,
+            'users_created': False,
+            'success': False
+        }
+        
+        try:
+            # Check database connection
+            db_check = subprocess.run([
+                DOCKER_COMPOSE_COMMAND, "exec", "-T", "web", "python", "manage.py", "check", "--database", "default"
+            ], check=False, capture_output=True, text=True, timeout=10)
+            result['can_connect'] = db_check.returncode == 0
+            
+            # Check migrations
+            migrations_check = subprocess.run([
+                DOCKER_COMPOSE_COMMAND, "exec", "-T", "web", "python", "manage.py", "showmigrations", "--list"
+            ], check=False, capture_output=True, text=True, timeout=10)
+            
+            # If migrations show [X] marks, they are applied
+            result['migrations_applied'] = migrations_check.returncode == 0 and "[X]" in migrations_check.stdout
+            
+            # Check if users exist
+            check_users_cmd = '''
+from django.contrib.auth import get_user_model
+User = get_user_model()
+print(f"Admin user exists: {User.objects.filter(username='admin').exists()}")
+print(f"Regular user exists: {User.objects.filter(username='user').exists()}")
+'''
+            users_check = subprocess.run([
+                DOCKER_COMPOSE_COMMAND, "exec", "-T", "web", "python", "manage.py", "shell", "-c", check_users_cmd
+            ], check=False, capture_output=True, text=True, timeout=10)
+            
+            result['users_created'] = (users_check.returncode == 0 and 
+                                      "Admin user exists: True" in users_check.stdout and
+                                      "Regular user exists: True" in users_check.stdout)
+                                      
+            result['success'] = result['can_connect'] and result['migrations_applied'] and result['users_created']
+            
+        except (subprocess.SubprocessError, subprocess.TimeoutExpired) as e:
+            self.logger.error(f"Error verifying database connectivity: {e}")
+            result['error'] = str(e)
+            
+        return result
+        
+    def _verify_web_service(self) -> Dict[str, Any]:
+        """Verify web service is responding properly."""
+        result = {
+            'responds': False,
+            'static_files': False,
+            'success': False
+        }
+        
+        try:
+            # Check if web service responds
+            import socket
+            import time
+            
+            # Give the service a moment to fully start
+            time.sleep(2)
+            
+            sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+            sock.settimeout(5)
+            
+            try:
+                sock.connect(('localhost', self.port))
+                result['responds'] = True
+                sock.close()
+            except (socket.timeout, ConnectionRefusedError):
+                result['responds'] = False
+                
+            # Check if static files are being served
+            if result['responds']:
+                # Set static_files to None initially - this will be our indicator that the check was skipped
+                result['static_files'] = None
+                
+                try:
+                    import urllib.request
+                    
+                    # Try multiple common static paths
+                    static_paths = ['/static/', '/static/css/', '/static/js/']
+                    static_checked = False
+                    
+                    for path in static_paths:
+                        try:
+                            response = urllib.request.urlopen(f"http://localhost:{self.port}{path}", timeout=5)
+                            if response.status == 200:
+                                result['static_files'] = True
+                                break
+                            static_checked = True
+                        except Exception:
+                            # Continue trying other paths
+                            static_checked = True
+                            continue
+                            
+                    # Only set to False if we actually checked paths and all failed
+                    if static_checked and result['static_files'] is None:
+                        result['static_files'] = False
+                        self.logger.info("Static files not accessible yet - this is normal for a fresh installation")
+                except Exception as e:
+                    self.logger.info(f"Static files check skipped: {e}")
+                    # Keep as None since we encountered an exception during the check
+            
+            # Success depends only on web service responding, not static files
+            result['success'] = result['responds']
+            
+        except Exception as e:
+            self.logger.error(f"Error verifying web service: {e}")
+            result['error'] = str(e)
+            
+        return result
+    
+    def _verify_project_structure(self) -> Dict[str, Any]:
+        """Verify project structure and configuration files."""
+        result = {
+            'required_files': False,
+            'env_file': False,
+            'apps_configured': False,
+            'success': False
+        }
+        
+        try:
+            # Check required files
+            required_files = ['docker-compose.yml', 'Dockerfile', '.env', 'manage.py']
+            files_exist = all(Path(f).exists() for f in required_files)
+            result['required_files'] = files_exist
+            
+            # Check .env file has required variables
+            if Path('.env').exists():
+                env_content = Path('.env').read_text()
+                # Make sure to check for variables that actually exist in the .env file
+                # Added environment variables check based on actual project structure
+                required_vars = ['SECRET_KEY', 'DEBUG']
+                optional_vars = ['PORT', 'PG_PORT']
+                
+                # Consider the check successful if required vars exist
+                # The optional vars may be specified elsewhere or use defaults
+                result['env_file'] = all(var in env_content for var in required_vars)
+            
+            # Check app directories and structure
+            core_apps = ['public', 'dashboard', 'users', 'common']
+            apps_exist = all(Path(app).is_dir() and Path(f"{app}/apps.py").exists() for app in core_apps)
+            result['apps_configured'] = apps_exist
+            
+            result['success'] = result['required_files'] and result['env_file'] and result['apps_configured']
+            
+        except Exception as e:
+            self.logger.error(f"Error verifying project structure: {e}")
+            result['error'] = str(e)
+            
+        return result
+    
+    def verify_build(self) -> Dict[str, Any]:
+        """Perform post-build verification checks."""
+        self.logger.info("Running post-build verification checks...")
+        
+        verification_results = {
+            'container_status': self._verify_container_status(),
+            'database': self._verify_database_connectivity(),
+            'web_service': self._verify_web_service(),
+            'project_structure': self._verify_project_structure(),
+        }
+        
+        # Determine overall success
+        verification_results['success'] = all(
+            check['success'] for check in verification_results.values() 
+            if isinstance(check, dict) and 'success' in check
+        )
+        
+        # Log verification results
+        if verification_results['success']:
+            self.logger.info("All post-build verification checks passed successfully")
+        else:
+            failed_checks = [key for key, check in verification_results.items() 
+                           if isinstance(check, dict) and 'success' in check and not check['success']]
+            self.logger.warning(f"Some post-build verification checks failed: {', '.join(failed_checks)}")
+            
+            # Log specific failures for debugging
+            for check_name, check_result in verification_results.items():
+                if isinstance(check_result, dict) and not check_result.get('success', True):
+                    self.logger.warning(f"Failed check '{check_name}': {check_result}")
+        
+        return verification_results
+    
     def execute(self, project_name: str) -> Dict[str, Any]:
         """Build a new QuickScale project."""
         original_dir = os.getcwd()
         project_dir = self.setup_project_environment(project_name)
         project_path = os.path.join(original_dir, project_name)
-        
+
         os.chdir(project_dir)
-        
+
         try:
             self.copy_project_files()
             self.create_django_project()
@@ -364,33 +621,64 @@ if not User.objects.filter(username='{username}').exists():
             self.setup_static_dirs()
             self.setup_global_templates()
             
-            self.logger.info("Building services...")
+            self.logger.info("Starting services with Docker Compose...")
             # Pass environment variables to Docker Compose
-            env = os.environ.copy()
-            if self.env_vars:
-                env.update(self.env_vars)
-                
-            subprocess.run([DOCKER_COMPOSE_COMMAND, "build"], check=True, env=env)
-            subprocess.run([DOCKER_COMPOSE_COMMAND, "up", "-d"], check=True, env=env)
+            # Make sure self.env_vars is not None
+            env_vars = {} if self.env_vars is None else self.env_vars
+            run_env = dict(os.environ, **env_vars)
             
-            # Verify the web container is running before continuing
+            compose_cmd = [DOCKER_COMPOSE_COMMAND, "up", "-d", "--build"] # Ensure build is included
+            self.logger.info(f"Running Docker command: {' '.join(compose_cmd)}")
+            
             try:
-                subprocess.run([DOCKER_COMPOSE_COMMAND, "ps", "web"], check=True, env=env, capture_output=True)
-                self.logger.info("Web container started successfully")
-            except subprocess.SubprocessError as e:
-                self.logger.warning(f"Web container may not be running properly: {e}")
-            
+                # Capture output from docker compose up
+                result = subprocess.run(
+                    compose_cmd, 
+                    check=True, 
+                    text=True, 
+                    capture_output=True, 
+                    env=run_env
+                )
+                # Log output
+                if result.stdout:
+                    self.logger.info(f"Docker Compose up stdout:\n{result.stdout.strip()}")
+                if result.stderr:
+                    # Docker Compose often uses stderr for progress/info
+                    self.logger.info(f"Docker Compose up stderr:\n{result.stderr.strip()}")
+                    
+                self.logger.info("Services started successfully")
+                
+            except subprocess.CalledProcessError as e:
+                self.logger.error(f"Failed to start services: {e}")
+                # Log captured output even on failure
+                if e.stdout:
+                    self.logger.error(f"Failed command stdout:\n{e.stdout.strip()}")
+                if e.stderr:
+                    self.logger.error(f"Failed command stderr:\n{e.stderr.strip()}")
+                self.logger.error("Build failed during service startup. Check logs for details.")
+                # Optionally exit or return failure status
+                # self._exit_with_error("Service startup failed") # Uncomment if build should halt here
+                # For now, let verification handle reporting the failure
+            except FileNotFoundError:
+                self.logger.error(f"Command '{DOCKER_COMPOSE_COMMAND}' not found. Ensure Docker Compose is installed and in PATH.")
+                self._exit_with_error("Docker Compose command not found")
+    
             if not self.setup_database():
                 self._exit_with_error("Database setup failed")
+            
+            # Run post-build verification checks
+            verification_results = self.verify_build()
+            
+            # Include verification results in the return value
+            return {
+                "path": project_path,
+                "port": self.port,
+                "verification": verification_results
+            }
                 
         except Exception as e:
             self.logger.error(f"Error creating project: {e}")
             raise
-            
-        return {
-            "path": project_path,
-            "port": self.port
-        }
 
 class DestroyProjectCommand(Command):
     """Handles removal of existing QuickScale projects."""

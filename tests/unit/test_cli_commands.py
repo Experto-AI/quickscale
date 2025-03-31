@@ -42,17 +42,3 @@ class TestCLICommands:
             except SystemExit as e:
                 # Handle the case where argparse exits with sys.exit()
                 assert e.code != 0
-                
-    def test_analyze_command(self):
-        """Test analyze command runs project analysis."""
-        with patch.object(sys, 'argv', ['quickscale', 'analyze']):
-            with patch.object(command_manager, 'analyze_project') as mock_analyze:
-                main()
-                mock_analyze.assert_called_once_with(verbose=False)
-                
-    def test_optimize_command(self):
-        """Test optimize command runs project optimization."""
-        with patch.object(sys, 'argv', ['quickscale', 'optimize', '--level', 'high']):
-            with patch.object(command_manager, 'optimize_project') as mock_optimize:
-                main()
-                mock_optimize.assert_called_once_with(level='high')

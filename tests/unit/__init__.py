@@ -1,0 +1,1 @@
+"""QuickScale unit tests package.""" 

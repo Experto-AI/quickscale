@@ -2,7 +2,7 @@
 import os
 import shutil
 from pathlib import Path
-from unittest.mock import patch
+from unittest.mock import patch, MagicMock
 import pytest
 
 class TestBuildIntegration:
@@ -45,4 +45,40 @@ class TestBuildIntegration:
         
         # Command should fail because directory exists
         assert not ret.success
-        assert "already exists" in ret.stdout or "already exists" in ret.stderr 
+        assert "already exists" in ret.stdout or "already exists" in ret.stderr
+
+    def test_build_static_files_check_optional(self, script_runner, tmp_path):
+        """Test build verification with static files check failing."""
+        os.chdir(tmp_path)
+
+        # Mock the urllib.request.urlopen to simulate a 404 when checking static files
+        mock_urlopen = MagicMock(side_effect=Exception("Static file not found"))
+        
+        # Setup patches for the verification process
+        with patch('quickscale.commands.project_commands.BuildProjectCommand.create_django_project'), \
+             patch('quickscale.commands.project_commands.BuildProjectCommand.setup_database', return_value=True), \
+             patch('urllib.request.urlopen', mock_urlopen), \
+             patch('socket.socket') as mock_socket, \
+             patch('subprocess.run') as mock_run:
+            
+            # Mock socket to simulate web service responding
+            mock_socket_instance = MagicMock()
+            mock_socket.return_value.__enter__.return_value = mock_socket_instance
+            
+            # Mock successful container status
+            mock_run.return_value = MagicMock(stdout="container_id\n", returncode=0)
+            
+            # Run the build command
+            ret = script_runner.run(['quickscale', 'build', 'test_verification'])
+            
+            # Verify command succeeded despite static files check failing
+            assert ret.success
+            
+            # Verify project directory was created
+            assert (tmp_path / 'test_verification').exists()
+            
+            # Verify the static files check was called but allowed to fail
+            assert mock_urlopen.call_count > 0, "Expected urlopen to be called at least once"
+            
+            # Clean up
+            shutil.rmtree(tmp_path / 'test_verification')

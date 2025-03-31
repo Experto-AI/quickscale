@@ -59,26 +59,19 @@ class CommandManager:
         """Stop the project services."""
         self.execute_command('down')
     
-    def view_logs(self, service: Optional[str] = None, follow: bool = False) -> None:
-        """View project logs.
-        
-        Args:
-            service: Optional service name to filter logs (web or db)
-            follow: If True, follow logs continuously (default: False)
-        """
-        self.execute_command('logs', service, follow=follow)
+    def view_logs(self, service: Optional[str] = None, follow: bool = False, 
+                  since: Optional[str] = None, lines: int = 100, 
+                  timestamps: bool = False) -> None:
+        """View project logs."""
+        self.execute_command('logs', service, follow=follow, since=since, 
+                            lines=lines, timestamps=timestamps)
     
     def check_services_status(self) -> None:
         """Check status of running services."""
         self.execute_command('ps')
     
     def open_shell(self, django_shell: bool = False, command: Optional[str] = None) -> None:
-        """Open a shell in the web container.
-        
-        Args:
-            django_shell: If True, open Django shell instead of bash
-            command: Optional command to run non-interactively
-        """
+        """Open a shell in the web container."""
         if django_shell:
             self.execute_command('django-shell')
         else:
@@ -91,18 +84,6 @@ class CommandManager:
     def check_requirements(self, print_info: bool = True) -> None:
         """Check if required tools are available."""
         self.execute_command('check', print_info=print_info)
-    
-    def analyze_project(self, verbose: bool = False) -> None:
-        """Analyze project for scaling issues and performance improvements."""
-        # This is a stub implementation to make tests pass
-        # In a real implementation, this would call an AnalyzeCommand
-        print(f"Analyzing project (verbose={verbose})")
-    
-    def optimize_project(self, level: str = "medium") -> None:
-        """Optimize project based on analysis results."""
-        # This is a stub implementation to make tests pass
-        # In a real implementation, this would call an OptimizeCommand
-        print(f"Optimizing project (level={level})")
     
     def get_available_commands(self) -> List[str]:
         """Get list of available command names."""

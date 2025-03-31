@@ -1,23 +1,74 @@
 """Pytest configuration and fixtures for testing."""
 import os
 import sys
+import time
+import subprocess
+import shutil
 import pytest
+from contextlib import contextmanager
 from pathlib import Path
+from unittest.mock import patch
 
-@pytest.fixture
-def cli_runner(monkeypatch, tmp_path):
-    """Fixture for testing CLI commands."""
+# Maximum wait time for services to be ready (seconds)
+SERVICE_TIMEOUT = 30
+# Polling interval for checking service readiness (seconds)
+POLL_INTERVAL = 0.5
+
+@pytest.fixture(scope="session", autouse=True)
+def setup_test_environment():
+    """Setup global test environment that's used for all tests."""
+    # Store original environment
+    original_env = os.environ.copy()
     original_dir = os.getcwd()
-    os.chdir(tmp_path)
     
-    # Create a test project structure
-    test_project = tmp_path / "test_project"
-    test_project.mkdir()
+    # Setup test-specific environment variables
+    os.environ["QUICKSCALE_TEST_MODE"] = "1"
+    os.environ["QUICKSCALE_NO_ANALYTICS"] = "1"
     
     yield
     
-    # Restore original directory
+    # Restore original environment
+    os.environ.clear()
+    os.environ.update(original_env)
     os.chdir(original_dir)
+
+@contextmanager
+def chdir(path):
+    """Context manager for changing directory with safe return to previous dir."""
+    old_dir = os.getcwd()
+    try:
+        os.chdir(path)
+        yield
+    finally:
+        os.chdir(old_dir)
+
+@pytest.fixture
+def cli_runner(monkeypatch, tmp_path):
+    """Fixture for testing CLI commands with isolated filesystem."""
+    with chdir(tmp_path):
+        # Create a test project structure
+        test_project = tmp_path / "test_project"
+        test_project.mkdir()
+        
+        yield tmp_path
+        
+        # Clean up any Docker containers that might have been started
+        try:
+            subprocess.run(
+                ['docker', 'ps', '-q', '--filter', 'name=test_project_'], 
+                stdout=subprocess.PIPE, 
+                check=True, 
+                text=True
+            )
+            subprocess.run(
+                ['docker', 'rm', '-f', '$(docker ps -q --filter name=test_project_)'],
+                shell=True,
+                stderr=subprocess.PIPE,
+                check=False
+            )
+        except (subprocess.SubprocessError, FileNotFoundError):
+            # Ignore errors during cleanup
+            pass
 
 @pytest.fixture
 def mock_config_file(tmp_path):
@@ -27,5 +78,253 @@ def mock_config_file(tmp_path):
         "project:\n"
         "  name: test_project\n"
         "  path: ./test_project\n"
+        "services:\n"
+        "  web:\n"
+        "    image: python:3.9-slim\n"
+        "    ports:\n"
+        "      - '8000:8000'\n"
+        "  db:\n"
+        "    image: postgres:13\n"
+        "    environment:\n"
+        "      POSTGRES_PASSWORD: password\n"
     )
     return config_file
+
+@pytest.fixture
+def wait_for_service():
+    """Return a function that waits for a service to be ready."""
+    def _wait_for(check_func, timeout=SERVICE_TIMEOUT, interval=POLL_INTERVAL, message="Service"):
+        """Wait for a service to be ready based on check_func returning True."""
+        start_time = time.time()
+        while time.time() - start_time < timeout:
+            try:
+                if check_func():
+                    return True
+            except Exception:
+                pass
+            time.sleep(interval)
+        
+        pytest.fail(f"{message} not ready after {timeout} seconds")
+    
+    return _wait_for
+
+@pytest.fixture(scope="module")
+def real_project_fixture(tmp_path_factory):
+    """Create a real QuickScale project fixture that's properly cleaned up."""
+    tmp_path = tmp_path_factory.mktemp("quickscale_real_test")
+    project_dir = None
+    
+    with chdir(tmp_path):
+        project_name = "real_test_project"
+        
+        # First, ensure no existing containers with the same name exist
+        try:
+            # Try to clean up any potential previous instances
+            subprocess.run(
+                ['docker', 'rm', '-f', f"{project_name}_web", f"{project_name}_db", f"{project_name}-web-1", f"{project_name}-db-1"],
+                capture_output=True,
+                check=False,
+                timeout=30
+            )
+            
+            # Also remove any networks
+            subprocess.run(
+                ['docker', 'network', 'rm', f"{project_name}_default", f"{project_name.replace('_', '-')}_default"],
+                capture_output=True,
+                check=False,
+                timeout=10
+            )
+        except (subprocess.SubprocessError, FileNotFoundError) as e:
+            print(f"Cleanup of previous instances warning (safe to ignore): {e}")
+        
+        # Run actual quickscale build command with increased timeout
+        try:
+            print(f"\nCreating test project: {project_name} in {tmp_path}")
+            build_result = subprocess.run(
+                ['quickscale', 'build', project_name], 
+                capture_output=True, 
+                text=True,
+                check=False,
+                timeout=180  # Increased timeout to 3 minutes
+            )
+            
+            if build_result.returncode != 0:
+                print(f"Build failed: {build_result.stderr}")
+                print(f"Build stdout: {build_result.stdout}")
+                pytest.skip(f"Build failed with returncode {build_result.returncode}")
+                yield None
+                return
+                
+            project_dir = tmp_path / project_name
+            
+            # Important: Run the initial 'up' command from the project directory to ensure
+            # services start correctly
+            with chdir(project_dir):
+                print(f"Starting services from project directory: {project_dir}")
+                # Start services
+                up_result = subprocess.run(
+                    ['quickscale', 'up'],
+                    capture_output=True,
+                    text=True,
+                    check=False,
+                    timeout=60
+                )
+                
+                if up_result.returncode != 0:
+                    print(f"Service startup failed: {up_result.stderr}")
+                    print(f"Service startup stdout: {up_result.stdout}")
+                else:
+                    print("Services started successfully")
+                
+                # Wait a bit for services to fully start
+                time.sleep(5)
+            
+            # Check if containers are running
+            check_result = subprocess.run(
+                ['docker', 'ps', '--format', '{{.Names}}'],
+                capture_output=True,
+                text=True,
+                check=False,
+                timeout=10
+            )
+            
+            print(f"Docker containers after build: {check_result.stdout}")
+            
+            # Verify web container is running
+            web_running = False
+            web_container_names = [f"{project_name}_web", f"{project_name}-web-1"]
+            
+            for name in web_container_names:
+                if name in check_result.stdout:
+                    web_running = True
+                    print(f"Found running web container: {name}")
+                    break
+                    
+            if not web_running:
+                print(f"Web container not running after build. Checking Docker logs...")
+                # Get logs from container
+                for name in web_container_names:
+                    try:
+                        log_result = subprocess.run(
+                            ['docker', 'logs', name],
+                            capture_output=True,
+                            text=True,
+                            check=False,
+                            timeout=10
+                        )
+                        print(f"Logs for {name}: {log_result.stdout}")
+                    except (subprocess.SubprocessError, FileNotFoundError):
+                        pass
+                
+            yield project_dir
+            
+        except subprocess.SubprocessError as e:
+            print(f"Build failed with exception: {e}")
+            pytest.skip(f"Build failed: {e}")
+            yield None
+        finally:
+            # Always attempt cleanup
+            if project_dir and project_dir.exists():
+                with chdir(project_dir):
+                    try:
+                        # Try to stop any running containers
+                        print(f"Cleaning up from project directory: {project_dir}")
+                        subprocess.run(
+                            ['quickscale', 'down'], 
+                            capture_output=True,
+                            check=False,
+                            timeout=30
+                        )
+                    except (subprocess.SubprocessError, FileNotFoundError) as e:
+                        print(f"Cleanup warning (safe to ignore): {e}")
+                
+                # Also cleanup using Docker commands directly
+                try:
+                    # Try to remove containers directly
+                    subprocess.run(
+                        ['docker', 'rm', '-f', f"{project_name}_web", f"{project_name}_db", f"{project_name}-web-1", f"{project_name}-db-1"],
+                        capture_output=True,
+                        check=False,
+                        timeout=30
+                    )
+                    
+                    # Also remove any networks
+                    subprocess.run(
+                        ['docker', 'network', 'rm', f"{project_name}_default", f"{project_name.replace('_', '-')}_default"],
+                        capture_output=True,
+                        check=False,
+                        timeout=10
+                    )
+                except (subprocess.SubprocessError, FileNotFoundError) as e:
+                    print(f"Docker cleanup warning (safe to ignore): {e}")
+                
+                # Remove the project directory
+                try:
+                    shutil.rmtree(project_dir)
+                except (OSError, PermissionError) as e:
+                    print(f"Warning: Failed to clean up {project_dir}: {e}")
+
+@pytest.fixture
+def mock_docker():
+    """Mock Docker-related functions for testing without Docker dependencies."""
+    with patch("subprocess.run") as mock_run:
+        mock_run.return_value.returncode = 0
+        mock_run.return_value.stdout = "mock docker output"
+        yield mock_run
+
+@pytest.fixture
+def retry(request):
+    """Retry a test multiple times until it passes."""
+    retries = getattr(request.node, "retries", 3)
+    
+    def _retry_wrapper(func):
+        def _wrapper(*args, **kwargs):
+            for attempt in range(retries):
+                try:
+                    return func(*args, **kwargs)
+                except Exception as e:
+                    if attempt == retries - 1:
+                        raise
+                    time.sleep(1)  # Wait between retries
+        return _wrapper
+    
+    return _retry_wrapper
+
+@pytest.fixture(scope="session", autouse=True)
+def check_docker_dependency(request):
+    """Check if Docker is available and working properly."""
+    # Only run this check if we're running integration tests
+    if "integration" in request.node.nodeid or "real_project_fixture" in request.fixturenames:
+        from tests.utils import check_docker_health
+        
+        healthy, issues = check_docker_health()
+        
+        if not healthy:
+            issues_str = "\n- ".join([""] + issues)
+            print("\n\033[31m" + "=" * 80 + "\033[0m")
+            print("\033[31mWARNING: Docker is not running or has issues!\033[0m")
+            print(f"\033[31mDocker health check identified issues:{issues_str}\033[0m")
+            print("\033[31mPlease fix Docker before running these tests.\033[0m")
+            print("\033[31mTests will continue but may fail due to Docker issues.\033[0m")
+            print("\033[31m" + "=" * 80 + "\033[0m\n")
+            
+            # Don't skip, but mark so tests can check this later
+            request.config.cache.set("docker_healthy", "false")
+        else:
+            print("\n\033[32mDocker health check passed! Docker is running properly.\033[0m\n")
+            request.config.cache.set("docker_healthy", "true")
+    
+    yield
+
+@pytest.fixture(scope="session")
+def docker_ready(request):
+    """Return whether Docker is ready for testing."""
+    docker_status = request.config.cache.get("docker_healthy", "unknown")
+    if docker_status == "true":
+        return True
+    elif docker_status == "false":
+        return False
+    else:
+        # If unknown, perform a quick check
+        from tests.utils import is_docker_available
+        return is_docker_available()

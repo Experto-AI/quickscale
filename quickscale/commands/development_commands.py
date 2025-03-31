@@ -1,12 +1,15 @@
 """Commands for development and Django shell operations."""
 import sys
 import subprocess
-from typing import List, NoReturn, Optional
+import logging
+from typing import List, NoReturn, Optional, Dict, Any
 from pathlib import Path
+
+from quickscale.utils.error_manager import ServiceError, CommandError
 from .command_base import Command
 from .project_manager import ProjectManager
 from .command_utils import DOCKER_COMPOSE_COMMAND
-from .service_commands import handle_service_error
+
 
 class ShellCommand(Command):
     """Opens an interactive shell in the web container."""
@@ -38,9 +41,18 @@ class ShellCommand(Command):
                 print("Starting bash shell...")
                 subprocess.run([DOCKER_COMPOSE_COMMAND, "exec", "web", "bash"], check=True)
         except subprocess.SubprocessError as e:
-            handle_service_error(e, "starting shell")
+            context = {"django_shell": django_shell}
+            if command:
+                context["command"] = command
+            
+            self.handle_error(
+                e, 
+                context=context,
+                recovery="Make sure Docker services are running with 'quickscale up'"
+            )
         except KeyboardInterrupt:
             print("\nExited shell.")
+
 
 class ManageCommand(Command):
     """Runs Django management commands."""
@@ -58,4 +70,8 @@ class ManageCommand(Command):
                 check=True
             )
         except subprocess.SubprocessError as e:
-            handle_service_error(e, "running manage command")
+            self.handle_error(
+                e,
+                context={"manage_args": args},
+                recovery="Make sure Docker services are running with 'quickscale up'"
+            )

@@ -276,8 +276,10 @@ def test_run_docker_command(mock_open_file, mock_run, tmp_path, monkeypatch):
                 # Test with temp compose file
                 cmd._run_docker_command("test command")
                 
-                # Verify open was called to create the temp compose file
-                mock_open_file.assert_called_once_with("docker-compose.temp.yml", "w", encoding='utf-8')
+                # Verify open was called for both reading the original file and writing the temp file
+                assert mock_open_file.call_count == 2
+                mock_open_file.assert_any_call("docker-compose.temp.yml", "w", encoding='utf-8')
+                mock_open_file.assert_any_call("docker-compose.yml", "r", encoding='utf-8')
                 
                 # Verify the file content was written
                 file_handle = mock_open_file()
@@ -564,4 +566,177 @@ def test_migration_methods(mock_build_command, tmp_path, monkeypatch):
             mock_build_command._run_migrations()
             
             # Verify subprocess.run was called multiple times
-            assert mock_subprocess_run.call_count >= 6 
+            assert mock_subprocess_run.call_count >= 6
+
+
+@pytest.fixture
+def mock_verification_command():
+    """Fixture for testing verification methods."""
+    cmd = BuildProjectCommand()
+    cmd.logger = MagicMock()
+    cmd.port = 8000
+    cmd.pg_port = 5432
+    cmd.variables = {
+        'project_name': 'test_project',
+        'pg_user': 'admin',
+        'pg_password': 'adminpasswd',
+        'pg_email': 'admin@test.com',
+    }
+    return cmd
+
+
+def test_verify_container_status(mock_verification_command, monkeypatch):
+    """Test verification of container status."""
+    with patch('subprocess.run') as mock_run:
+        # Mock successful container status and health checks for all subprocess.run calls
+        mock_responses = [
+            MagicMock(stdout="container_id\n", returncode=0),  # Web running
+            MagicMock(stdout="container_id\n", returncode=0),  # DB running
+            MagicMock(stdout="healthy\n", returncode=0),       # Web healthy
+            MagicMock(stdout="server is running", returncode=0)  # DB healthy
+        ]
+        mock_run.side_effect = mock_responses
+
+        # Execute the verification
+        result = mock_verification_command._verify_container_status()
+
+        # Verify the result
+        assert result['web']['running'] is True
+        assert result['web']['healthy'] is True
+        assert result['db']['running'] is True
+        assert result['db']['healthy'] is True
+        assert result['success'] is True
+
+
+def test_verify_container_status_failure(mock_verification_command, monkeypatch):
+    """Test verification of container status with failures."""
+    with patch('subprocess.run') as mock_run:
+        # Mock responses for different container status scenarios
+        mock_responses = [
+            MagicMock(stdout="", returncode=1),               # Web not running
+            MagicMock(stdout="container_id\n", returncode=0)  # DB running
+            # No health checks will be executed because web container is not running
+        ]
+        mock_run.side_effect = mock_responses
+
+        # Execute the verification
+        result = mock_verification_command._verify_container_status()
+
+        # Verify the result - since web is not running, we won't check health
+        assert result['web']['running'] is False
+        assert result['web']['healthy'] is False  # Should be false when not running
+        assert result['db']['running'] is True
+        assert result['db']['healthy'] is False  # Should be false since health check isn't run
+        assert result['success'] is False
+
+
+def test_verify_database_connectivity(mock_verification_command, monkeypatch):
+    """Test verification of database connectivity."""
+    with patch('subprocess.run') as mock_run:
+        # Mock successful database connectivity checks
+        mock_responses = [
+            MagicMock(returncode=0),  # Database connection successful
+            MagicMock(stdout="[X] auth.0001_initial\n[X] admin.0001_initial", returncode=0),  # Migrations applied
+            MagicMock(stdout="Admin user exists: True\nRegular user exists: True", returncode=0)  # Users created
+        ]
+        mock_run.side_effect = mock_responses
+
+        # Execute the verification
+        result = mock_verification_command._verify_database_connectivity()
+
+        # Verify the result
+        assert result['can_connect'] is True
+        assert result['migrations_applied'] is True
+        assert result['users_created'] is True
+        assert result['success'] is True
+
+
+def test_verify_database_connectivity_failure(mock_verification_command, monkeypatch):
+    """Test verification of database connectivity with failures."""
+    with patch('subprocess.run') as mock_run:
+        # Mock failed connectivity checks
+        mock_responses = [
+            MagicMock(returncode=1),  # Database connection failed
+            MagicMock(stdout="[ ] auth.0001_initial\n[ ] admin.0001_initial", returncode=0),  # Migrations not applied
+            MagicMock(stdout="Admin user exists: False\nRegular user exists: False", returncode=0)  # Users not created
+        ]
+        mock_run.side_effect = mock_responses
+
+        # Execute the verification
+        result = mock_verification_command._verify_database_connectivity()
+
+        # Verify the result
+        assert result['can_connect'] is False
+        assert result['migrations_applied'] is False
+        assert result['users_created'] is False
+        assert result['success'] is False
+
+
+def test_verify_web_service(mock_verification_command, monkeypatch):
+    """Test verification of web service."""
+    # Mock socket connection
+    mock_socket = MagicMock()
+    monkeypatch.setattr('socket.socket', lambda *args, **kwargs: mock_socket)
+
+    # Mock urllib for static file check
+    mock_response = MagicMock()
+    mock_response.status = 200
+    monkeypatch.setattr('urllib.request.urlopen', lambda *args, **kwargs: mock_response)
+    monkeypatch.setattr('time.sleep', lambda x: None)  # Skip sleep
+
+    # Execute the verification
+    result = mock_verification_command._verify_web_service()
+
+    # Verify the result
+    assert result['responds'] is True
+    assert result['static_files'] is True
+    # The success field should depend only on 'responds', not on 'static_files'
+    assert result['success'] is True
+
+
+def test_verify_web_service_failure(mock_verification_command, monkeypatch):
+    """Test verification of web service with failures."""
+    # Mock socket connection that raises ConnectionRefusedError
+    mock_socket = MagicMock()
+    mock_socket.connect.side_effect = ConnectionRefusedError()
+    monkeypatch.setattr('socket.socket', lambda *args, **kwargs: mock_socket)
+    monkeypatch.setattr('time.sleep', lambda x: None)  # Skip sleep
+
+    # Execute the verification
+    result = mock_verification_command._verify_web_service()
+
+    # Verify the result
+    assert result['responds'] is False
+    # Static files should be false because the web service doesn't respond
+    assert result['static_files'] is False
+    # Success should be false because 'responds' is false
+    assert result['success'] is False
+
+
+def test_verify_web_service_static_files_none(mock_verification_command, monkeypatch):
+    """Test verification of web service with static files check skipped."""
+    # Mock socket connection to simulate successful connection
+    mock_socket = MagicMock()
+    mock_socket_instance = MagicMock()
+    mock_socket.return_value = mock_socket_instance
+    monkeypatch.setattr('socket.socket', lambda *args, **kwargs: mock_socket)
+    
+    # Mock sock.connect to not raise an exception
+    mock_socket_instance.connect = MagicMock()
+    
+    # Mock urllib to raise an exception for static file check
+    def mock_urlopen(*args, **kwargs):
+        raise Exception("Test exception")
+        
+    monkeypatch.setattr('urllib.request.urlopen', mock_urlopen)
+    monkeypatch.setattr('time.sleep', lambda x: None)  # Skip sleep
+
+    # Execute the verification
+    result = mock_verification_command._verify_web_service()
+
+    # Verify the result
+    assert result['responds'] is True
+    # Static files should be False because the check failed with an exception
+    assert result['static_files'] is False
+    # Success should be true because 'responds' is true, even if static_files is False
+    assert result['success'] is True

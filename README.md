@@ -227,6 +227,12 @@ You can run the tests using pytest:
 ```bash
 # Run all tests
 python -m pytest -v
+
+# Run specific test modules
+python -m pytest tests/unit/test_project_commands.py -v
+
+# Run specific test functions
+python -m pytest tests/unit/test_project_commands.py::test_verify_container_status -v
 ```
 
 For Django application tests, you can use the Django test runner through the QuickScale CLI:
@@ -246,6 +252,14 @@ pytest --cov=quickscale --cov-report=html tests/
 ```
 
 After generating the HTML report, you can open `htmlcov/index.html` in your browser to see a detailed visual breakdown of test coverage with color-coded line-by-line analysis.
+
+### Test Structure
+
+The test suite is organized into two main categories:
+
+1. **Unit Tests**: Located in `tests/unit/`, these tests verify individual components in isolation, using mocks for external dependencies. They are fast and help pinpoint issues in specific functions.
+
+2. **Integration Tests**: Located in `tests/integration/`, these tests verify how components work together, including interactions with Docker and the filesystem. They provide confidence in the end-to-end functionality.
 
 ### Testing Best Practices
 
@@ -319,50 +333,4 @@ Alpine.js is used for client-side interactivity and state management:
 1. **Dropdown menus**: Navigation bar
 2. **Modal dialogs**: Confirmation dialogs
 3. **Form validation**: Client-side validation
-
-## CHANGELOG
-
-### v0.3.0 (2025-03-29)
-feat: add comprehensive test coverage and documentation
-
-- Implemented complete test suite with pytest integration
-- Added detailed test coverage reporting
-- Enhanced documentation with testing best practices
-- Improved project structure documentation
-- Updated environment variables documentation
-
-### 0.2.1 (2025-03-29)
-fix: improve database connection handling
-
-- Fixed entrypoint script copying during project creation
-- Added automatic PostgreSQL port detection and conflict resolution
-- Improved database connection retries and error handling
-- Added healthchecks for proper container orchestration
-- Enhanced environment variable passing between services
-
-### v0.2.0 (2025-03-28)
-feat: implement CLI enhancements and AI assistant guidelines
-
-- Add shell and django-shell commands for interactive development
-- Refactor CLI from functional to object-oriented programming
-- Improve help messages for better user experience
-- Add guidelines for AI coding assistants (Cursor/WindSurf/GitHub Copilot)
-
-### v0.1.0 (2025-03-19)
-- Initial release of QuickScale
-- Basic documentation for setup and usage
-- Basic project structure
-- Core Django setup
-- Basic user authentication features
-- Basic Docker and Docker Compose configuration
-- Basic PostgreSQL setup
-- Basic HTMX and Alpine.js integration
-- Basic Bulma CSS integration
-- Basic templates and components
-- Basic environment variables
-- Basic Deploy to local
-
-
-
-
 

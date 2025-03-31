@@ -2,51 +2,60 @@
 import os
 import sys
 import subprocess
+import logging
 from typing import Optional, NoReturn, List, Dict
 from pathlib import Path
 import re
+
+from quickscale.utils.error_manager import ServiceError, handle_command_error
 from .command_base import Command
 from .project_manager import ProjectManager
 from .command_utils import DOCKER_COMPOSE_COMMAND, find_available_port
 
 def handle_service_error(e: subprocess.SubprocessError, action: str) -> NoReturn:
     """Handle service operation errors uniformly."""
-    print(f"Error {action}: {e}")
-    sys.exit(1)
+    error = ServiceError(
+        f"Error {action}: {e}",
+        details=str(e),
+        recovery="Check Docker status and project configuration."
+    )
+    handle_command_error(error)
 
 class ServiceUpCommand(Command):
     """Starts project services."""
     
+    def __init__(self) -> None:
+        """Initialize with logger."""
+        super().__init__()
+        self.logger = logging.getLogger(__name__)
+    
     def _update_env_file_ports(self) -> Dict[str, int]:
-        """Update .env file with available ports if there are conflicts.
-        
-        Returns:
-            Dictionary with updated port values.
-        """
+        """Update .env file with available ports if there are conflicts."""
         updated_ports = {}
         
         # Check if .env file exists
         if not os.path.exists(".env"):
             return updated_ports
             
-        with open(".env", "r", encoding="utf-8") as f:
-            env_content = f.read()
-            
-        # Extract current port values
-        pg_port_match = re.search(r'PG_PORT=(\d+)', env_content)
-        web_port_match = re.search(r'PORT=(\d+)', env_content)
-        
-        pg_port = int(pg_port_match.group(1)) if pg_port_match else 5432
-        web_port = int(web_port_match.group(1)) if web_port_match else 8000
-        
-        # Check if ports are available
-        pg_port_available = False
-        web_port_available = False
-        
         try:
+            with open(".env", "r", encoding="utf-8") as f:
+                env_content = f.read()
+                
+            # Extract current port values
+            pg_port_match = re.search(r'PG_PORT=(\d+)', env_content)
+            web_port_match = re.search(r'PORT=(\d+)', env_content)
+            
+            pg_port = int(pg_port_match.group(1)) if pg_port_match else 5432
+            web_port = int(web_port_match.group(1)) if web_port_match else 8000
+            
+            # Check if ports are available
+            pg_port_available = False
+            web_port_available = False
+            
             # Try to find available ports
             new_pg_port = find_available_port(pg_port, 20)
             if new_pg_port != pg_port:
+                self.logger.info(f"PostgreSQL port {pg_port} is already in use, using port {new_pg_port} instead")
                 print(f"PostgreSQL port {pg_port} is already in use, using port {new_pg_port} instead")
                 pg_port = new_pg_port
                 updated_ports['PG_PORT'] = pg_port
@@ -56,6 +65,7 @@ class ServiceUpCommand(Command):
                 
             new_web_port = find_available_port(web_port, 20)
             if new_web_port != web_port:
+                self.logger.info(f"Web port {web_port} is already in use, using port {new_web_port} instead")
                 print(f"Web port {web_port} is already in use, using port {new_web_port} instead")
                 web_port = new_web_port
                 updated_ports['PORT'] = web_port
@@ -81,7 +91,12 @@ class ServiceUpCommand(Command):
             return updated_ports
             
         except Exception as e:
-            print(f"Warning: Error checking port availability: {e}")
+            self.handle_error(
+                e, 
+                context={"file": ".env"}, 
+                recovery="Check file permissions and try again.",
+                exit_on_error=False
+            )
             return {}
     
     def _update_docker_compose_ports(self, updated_ports: Dict[str, int]) -> None:
@@ -109,7 +124,12 @@ class ServiceUpCommand(Command):
                 f.write(content)
                 
         except Exception as e:
-            print(f"Warning: Error updating docker-compose.yml: {e}")
+            self.handle_error(
+                e, 
+                context={"file": "docker-compose.yml", "updated_ports": updated_ports},
+                recovery="Check file permissions and try again.",
+                exit_on_error=False
+            )
     
     def execute(self) -> None:
         """Start the project services."""
@@ -123,6 +143,7 @@ class ServiceUpCommand(Command):
             updated_ports = self._update_env_file_ports()
             self._update_docker_compose_ports(updated_ports)
         
+            self.logger.info("Starting services...")
             print("Starting services...")
             # Get environment variables for docker-compose
             env = os.environ.copy()
@@ -131,12 +152,22 @@ class ServiceUpCommand(Command):
                     env[key] = str(value)
                     
             subprocess.run([DOCKER_COMPOSE_COMMAND, "up", "-d"], check=True, env=env)
+            self.logger.info("Services started successfully.")
             print("Services started.")
         except subprocess.SubprocessError as e:
-            handle_service_error(e, "starting services")
+            self.handle_error(
+                e,
+                context={"action": "starting services"},
+                recovery="Make sure Docker is running and properly configured."
+            )
 
 class ServiceDownCommand(Command):
     """Stops project services."""
+    
+    def __init__(self) -> None:
+        """Initialize with logger."""
+        super().__init__()
+        self.logger = logging.getLogger(__name__)
     
     def execute(self) -> None:
         """Stop the project services."""
@@ -146,21 +177,38 @@ class ServiceDownCommand(Command):
             return
         
         try:
+            self.logger.info("Stopping services...")
             print("Stopping services...")
             subprocess.run([DOCKER_COMPOSE_COMMAND, "down"], check=True)
+            self.logger.info("Services stopped successfully.")
             print("Services stopped.")
         except subprocess.SubprocessError as e:
-            handle_service_error(e, "stopping services")
+            self.handle_error(
+                e,
+                context={"action": "stopping services"},
+                recovery="Check if the services are actually running with 'quickscale ps'"
+            )
+
 
 class ServiceLogsCommand(Command):
     """Shows project service logs."""
     
-    def execute(self, service: Optional[str] = None, follow: bool = False) -> None:
+    def __init__(self) -> None:
+        """Initialize with logger."""
+        super().__init__()
+        self.logger = logging.getLogger(__name__)
+    
+    def execute(self, service: Optional[str] = None, follow: bool = False, 
+                since: Optional[str] = None, lines: int = 100, 
+                timestamps: bool = False) -> None:
         """View service logs.
         
         Args:
             service: Optional service name to filter logs (web or db)
             follow: If True, follow logs continuously (default: False)
+            since: Show logs since timestamp (e.g. 2023-11-30T11:45:00) or relative time (e.g. 42m for 42 minutes)
+            lines: Number of lines to show (default: 100)
+            timestamps: If True, show timestamps (default: False)
         """
         state = ProjectManager.get_project_state()
         if not state['has_project']:
@@ -168,19 +216,41 @@ class ServiceLogsCommand(Command):
             return
         
         try:
-            cmd: List[str] = [DOCKER_COMPOSE_COMMAND, "logs", "--tail=100"]
+            cmd: List[str] = [DOCKER_COMPOSE_COMMAND, "logs", f"--tail={lines}"]
+            
             if follow:
                 cmd.append("-f")
+                
+            if since:
+                cmd.extend(["--since", since])
+                
+            if timestamps:
+                cmd.append("-t")
+                
             if service:
                 cmd.append(service)
+                self.logger.info(f"Viewing logs for {service} service...")
+            else:
+                self.logger.info("Viewing logs for all services...")
+                
             subprocess.run(cmd, check=True)
         except subprocess.SubprocessError as e:
-            handle_service_error(e, "viewing logs")
+            self.handle_error(
+                e,
+                context={"action": "viewing logs", "service": service, "follow": follow},
+                recovery="Ensure services are running with 'quickscale up'"
+            )
         except KeyboardInterrupt:
             print("\nLog viewing stopped.")
 
+
 class ServiceStatusCommand(Command):
     """Shows status of running services."""
+    
+    def __init__(self) -> None:
+        """Initialize with logger."""
+        super().__init__()
+        self.logger = logging.getLogger(__name__)
     
     def execute(self) -> None:
         """Show service status."""
@@ -190,7 +260,12 @@ class ServiceStatusCommand(Command):
             return
         
         try:
+            self.logger.info("Checking service status...")
             print("Checking service status...")
             subprocess.run(["docker", "compose", "ps"], check=True)
         except subprocess.SubprocessError as e:
-            handle_service_error(e, "checking status")
+            self.handle_error(
+                e,
+                context={"action": "checking status"},
+                recovery="Make sure Docker is running and properly configured"
+            )

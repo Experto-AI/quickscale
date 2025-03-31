@@ -97,9 +97,17 @@ This document is written for humans but also for AI coding assistants like GitHu
    ```python
    # Good
    import pandas as pd
+   pd.DataFrame(data)
+
+   import quickscale.utils.error_manager as error_manager
+   error_manager.example_function(example_parameter)
    
    # Avoid
    from pandas import DataFrame
+   DataFrame(data)
+
+   from quickscale.utils.error_manager import ServiceError, CommandError
+   ServiceError.example_function(example_parameter)
    ```
 
 5. **Efficient Code Patterns**

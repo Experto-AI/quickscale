@@ -49,11 +49,3 @@ class TestCLIIntegration:
         # Run check command
         ret = script_runner.run(['quickscale', 'check'])
         assert ret.success
-        
-        # Test analyze command
-        ret = script_runner.run(['quickscale', 'analyze'])
-        assert ret.success
-        
-        # Test optimize command
-        ret = script_runner.run(['quickscale', 'optimize', '--level', 'high'])
-        assert ret.success
