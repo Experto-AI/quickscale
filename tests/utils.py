@@ -15,6 +15,25 @@ def is_port_open(host, port):
         result = sock.connect_ex((host, port))
         return result == 0
 
+def find_available_port(start_port=8000, end_port=9000):
+    """Find an available port in the given range."""
+    for port in range(start_port, end_port):
+        if not is_port_open('127.0.0.1', port):
+            return port
+    return None
+
+def find_available_ports(count=2, start_port=8000, end_port=9000):
+    """Find multiple available ports in the given range."""
+    available_ports = []
+    current_port = start_port
+    
+    while len(available_ports) < count and current_port < end_port:
+        if not is_port_open('127.0.0.1', current_port):
+            available_ports.append(current_port)
+        current_port += 1
+        
+    return available_ports if len(available_ports) == count else None
+
 def wait_for_port(host, port, timeout=30, interval=0.5):
     """Wait for a port to be open on the given host."""
     start_time = time.time()
@@ -361,4 +380,4 @@ def check_docker_health():
         except (subprocess.SubprocessError, subprocess.TimeoutExpired):
             issues.append("Failed to clean up test container")
     
-    return len(issues) == 0, issues 
+    return len(issues) == 0, issues

@@ -37,82 +37,80 @@
 
 ## Projected Development Sprints
 
-### Sprint 1: Core CLI Improvements (v0.4.0)
-- [x] **Session 1: Enhanced Error Handling**
-  - ✓ Add comprehensive error handling to CLI commands
-  - ✓ Implement user-friendly error messages
-  - ✓ Implement tests for error handling system (85% code coverage)
+### Sprint 2: User Authentication with django-allauth (v0.5.0) 
+- [ ] **Session 1: django-allauth Integration**
+  - Add django-allauth package
+  - Configure django-allauth settings
+  - Integrate with existing user model
+  - Setup email backend configuration
 
-- [x] **Session 2: CLI `build` Command Improvements**
-  - ✓ Implement post-build verification checks for `quickscale build`
-  - ✓ Implement unit and integration testing with coverage
+- [ ] **Session 2: Authentication Flow Customization**
+  - Customize registration templates
+  - Implement email verification flow
+  - Adapt login/signup views to project styling
+  - Add social authentication providers (optional)
 
-- [x] **Session 3: Service Command Enhancements**
-  - ✓ Improved test stability and robustness
-  - ✓ Enhance `quickscale docker logs` functionality
+- [ ] **Session 3: User Profile Enhancement**
+  - Extend user profile with additional fields
+  - Create profile management views
+  - Add avatar/profile photo support
+  - Implement settings page improvements
 
-### Sprint 2: Email Verification System (v0.5.0) 
-- [ ] **Session 1: Email Backend Configuration**
-  - Configure Django email settings
-  - Add environment variables for email configuration
-  - Test basic email sending functionality
+- [ ] **Session 4: Testing and Security Review**
+  - Write tests for authentication flows
+  - Implement security best practices
+  - Review permission system
+  - Document the authentication system
 
-- [ ] **Session 2: Verification Models and Logic**
-  - Create EmailVerification model
-  - Implement token generation system
-  - Write service functions for verification workflow
+### Sprint 3: Payment Integration with dj-stripe (v0.6.0)
+- [ ] **Session 1: dj-stripe Setup**
+  - Add dj-stripe package
+  - Configure Stripe API keys and webhooks
+  - Run initial migrations
+  - Test connection to Stripe
 
-- [ ] **Session 3: Email Templates**
-  - Design email verification template
-  - Add template rendering logic
-  - Implement verification success/failure pages
+- [ ] **Session 2: Subscription Models and Management**
+  - Configure product and price models in Stripe dashboard
+  - Sync Stripe products/prices with dj-stripe
+  - Create subscription plan selection UI
+  - Implement plan change functionality
 
-- [ ] **Session 4: API Endpoints**
-  - Create endpoints for requesting verification
-  - Implement verification confirmation endpoints
-  - Write tests for the verification flow
-
-### Sprint 3: Stripe Integration Basics (v0.6.0)
-- [ ] **Session 1: Stripe Setup**
-  - Add stripe-python package
-  - Configure Stripe API keys
-  - Create basic Stripe service class
-
-- [ ] **Session 2: Payment Models**
-  - Create Subscription and Payment models
-  - Add relations to User model
-  - Implement database migrations
-
-- [ ] **Session 3: Webhook Handling**
-  - Create webhook endpoint
-  - Implement event handlers for common events
-  - Add security validation for webhooks
-
-- [ ] **Session 4: Checkout Flow**
-  - Implement session creation
+- [ ] **Session 3: Checkout Flow**
+  - Implement Stripe Checkout integration
+  - Create subscription creation flow
   - Add success/cancel handling
-  - Create payment confirmation logic
+  - Implement webhook listeners for payment events
 
-### Sprint 4: Subscription Management (v0.7.0)
-- [ ] **Session 1: Subscription Plans**
-  - Create subscription plan models
-  - Add seed data for initial plans
-  - Implement plan selection UI
+- [ ] **Session 4: Billing Portal and Management**
+  - Integrate Stripe Customer Portal
+  - Create billing history views
+  - Implement invoice retrieval and display
+  - Add subscription management UI
 
-- [ ] **Session 2: Customer Portal**
-  - Set up Stripe Customer Portal
-  - Create management views
-  - Add subscription cancellation flow
-
-- [ ] **Session 3: Usage Tracking**
+### Sprint 4: Usage Tracking and Quota Management (v0.7.0)
+- [ ] **Session 1: Usage Models**
   - Create usage tracking models
-  - Add usage logging middleware
-  - Implement basic quota enforcement
+  - Implement usage logging middleware
+  - Add relations to subscription data
+  - Design quota enforcement architecture
 
-- [ ] **Session 4: Billing History**
-  - Create invoice retrieval from Stripe
-  - Implement billing history page
-  - Add invoice PDF download functionality
+- [ ] **Session 2: Quota Enforcement**
+  - Implement quota checking middleware
+  - Create upgrade prompts for quota limits
+  - Add usage analytics dashboard
+  - Create usage projection tools
+
+- [ ] **Session 3: Alerting and Notifications**
+  - Implement quota approaching alerts
+  - Create usage reports
+  - Add admin monitoring views
+  - Implement notification preferences
+
+- [ ] **Session 4: Testing and Optimization**
+  - Performance testing for quota systems
+  - Optimize database queries
+  - Implement caching for quota checks
+  - Write comprehensive test suite
 
 ### Sprint 5: File Storage Foundation (v0.8.0)
 - [ ] **Session 1: Storage Backend**

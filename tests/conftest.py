@@ -111,6 +111,8 @@ def wait_for_service():
 @pytest.fixture(scope="module")
 def real_project_fixture(tmp_path_factory):
     """Create a real QuickScale project fixture that's properly cleaned up."""
+    from tests.utils import find_available_ports
+    
     tmp_path = tmp_path_factory.mktemp("quickscale_real_test")
     project_dir = None
     
@@ -136,6 +138,20 @@ def real_project_fixture(tmp_path_factory):
             )
         except (subprocess.SubprocessError, FileNotFoundError) as e:
             print(f"Cleanup of previous instances warning (safe to ignore): {e}")
+        
+        # Find available ports for the web and db services
+        ports = find_available_ports(count=2, start_port=8000, end_port=9000)
+        if not ports:
+            pytest.skip("Could not find available ports for test containers")
+            yield None
+            return
+            
+        web_port, db_port = ports
+        print(f"Using web port {web_port} and database port {db_port} for tests")
+        
+        # Set environment variables for port configuration
+        os.environ["PORT"] = str(web_port)
+        os.environ["PG_PORT"] = str(db_port)
         
         # Run actual quickscale build command with increased timeout
         try:
@@ -263,6 +279,12 @@ def real_project_fixture(tmp_path_factory):
                     shutil.rmtree(project_dir)
                 except (OSError, PermissionError) as e:
                     print(f"Warning: Failed to clean up {project_dir}: {e}")
+                    
+            # Clear environment variables
+            if "PORT" in os.environ:
+                del os.environ["PORT"]
+            if "PG_PORT" in os.environ:
+                del os.environ["PG_PORT"]
 
 @pytest.fixture
 def mock_docker():

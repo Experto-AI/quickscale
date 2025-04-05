@@ -31,21 +31,41 @@ check_docker() {
     return 0
 }
 
+# Function to clean up existing Docker containers
+cleanup_test_containers() {
+    echo "Checking for existing test containers..."
+    
+    # Check if any test containers are running
+    if docker ps -a | grep -E "test_project|real_test_project" > /dev/null; then
+        echo -e "\033[33mFound existing test containers. Cleaning up before running tests...\033[0m"
+        
+        # Stop and remove all containers matching our test patterns
+        docker ps -a | grep -E "test_project|real_test_project" | awk '{print $1}' | xargs -r docker stop
+        docker ps -a | grep -E "test_project|real_test_project" | awk '{print $1}' | xargs -r docker rm
+        
+        echo "Test containers have been stopped and removed."
+    else
+        echo "No existing test containers found."
+    fi
+}
+
 # Parse arguments
 COVERAGE=0
 PARALLEL=0
-INTEGRATION=0
+INTEGRATION=1
 UNIT=1
 SKIP_DOCKER_CHECK=0
+SKIP_CLEANUP=0
 
 print_usage() {
     echo "Usage: $0 [options]"
     echo "Options:"
     echo "  -c, --coverage     Run tests with coverage report"
     echo "  -p, --parallel     Run tests in parallel using pytest-xdist"
-    echo "  -i, --integration  Run integration tests"
-    echo "  -a, --all          Run all tests (unit and integration)"
+    echo "  -u, --unit         Run only unit tests"
+    echo "  -i, --integration  Run only integration tests"
     echo "  -s, --skip-docker  Skip Docker availability check"
+    echo "  -n, --no-cleanup   Skip Docker container cleanup"
     echo "  -h, --help         Show this help message"
     exit 1
 }
@@ -60,18 +80,22 @@ while [[ $# -gt 0 ]]; do
             PARALLEL=1
             shift
             ;;
+        -u|--unit)
+            UNIT=1
+            INTEGRATION=0
+            shift
+            ;;
         -i|--integration)
             INTEGRATION=1
             UNIT=0
             shift
             ;;
-        -a|--all)
-            INTEGRATION=1
-            UNIT=1
-            shift
-            ;;
         -s|--skip-docker)
             SKIP_DOCKER_CHECK=1
+            shift
+            ;;
+        -n|--no-cleanup)
+            SKIP_CLEANUP=1
             shift
             ;;
         -h|--help)
@@ -94,6 +118,11 @@ if [[ $SKIP_DOCKER_CHECK -eq 0 && $INTEGRATION -eq 1 ]]; then
         # Give the user a chance to abort
         read -p "Press Enter to continue with tests, or Ctrl+C to abort..." 
     fi
+fi
+
+# Clean up existing Docker containers if we're running integration tests
+if [[ $SKIP_CLEANUP -eq 0 && $INTEGRATION -eq 1 ]]; then
+    cleanup_test_containers
 fi
 
 # Build test command
@@ -132,4 +161,4 @@ if [[ $COVERAGE -eq 1 ]]; then
     echo "Coverage report generated in htmlcov/index.html"
 fi
 
-exit $EXIT_CODE 
+exit $EXIT_CODE
