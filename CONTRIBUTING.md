@@ -176,5 +176,3 @@ This document is written for humans but also for AI coding assistants like GitHu
 3. Update documentation if needed
 4. Review your changes for clarity and simplicity
 
-## Questions or Suggestions?
-If you have questions about these guidelines or suggestions for improvements, please open an issue for discussion.
