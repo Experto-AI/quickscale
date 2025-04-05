@@ -1,6 +1,11 @@
 # Changelog
 All notable changes to this project will be documented in this file.
 
+## v0.5.0 (2025-04-05)
+### Added
+- User Authentication with django-allauth:
+- Improved CONTRIBUTING.md for better AI coding assistant development
+
 ## v0.4.0 (2025-03-31)
 ### Added
 - Core CLI Improvements:

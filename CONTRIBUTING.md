@@ -4,34 +4,34 @@ This document outlines the coding standards and guidelines for contributing to t
 
 This document is written for humans but also for AI coding assistants like GitHub Copilot, Cursor, and WindSurf. 
 
-## Documentation sources
+## 1. Documentation sources
 
 - README.md: Refers to it for overview of the project as humans would read it
 - TECHNICAL_DOCS.md: Refers to it for technical information.
-  - Technical stack, architecture, files/folders scaffolding and design decisions. 
+  - Technical stack, architecture, project structure, application structure, commands and more. 
 - ROADMAP.md: Refers to it for planned next developments
 - CHANGELOG.md: Refers to it for past developments
 
-## Documentation Standards
+## 2. Documentation Standards
 
-### Code Documentation
-- Focus on explaining **why** rather than what
+### 2.1. Code Documentation
+#### 2.1.1. Focus on explaining **why** rather than what
    ```python
    # Using a cache here to avoid expensive recalculations on repeated calls
    result = cache.get(key) or expensive_calculation(key)
    ```
-- Use single-line comments for major code sections
+#### 2.1.2. Use single-line comments for major code sections
    ```python
    # Authentication section - handles user validation before processing
    ```
 
-- Use single-line docstrings for functions and classes
+#### 2.1.3. Use single-line docstrings for functions and classes
    ```python
    def authenticate_user():
          """Verify user credentials before allowing access."""
    ```
 
-- Document only the functionality (not arguments or returns)
+#### 2.1.4. Document only the functionality (not arguments or returns)
    ```python
    def process_payment(amount, method, customer_id):
          """Process customer payment through payment gateway."""
@@ -46,21 +46,21 @@ This document is written for humans but also for AI coding assistants like GitHu
          # """
    ```
 
-- Follow this docstring format:
+#### 2.1.5. Follow this docstring format:
    ```python
    """Short description of the function or class."""
    ```
 
-## Clean Code Principles
+## 3. Clean Code Principles
 
-### General Principles
+### 3.1. General Principles
 - Keep code clean and readable
 - Prefer Object-Oriented Programming (OOP) over procedural programming when appropriate
 - Use meaningful variable and function names that clearly describe their purpose
 - Follow consistent naming conventions throughout the codebase
 
-### SOLID Principles for AI Assistants
-1. **Single Responsibility (SRP)**
+### 3.2. SOLID Principles for AI Assistants
+#### 3.2.1. Single Responsibility (SRP)
    - A class should have only one reason to change
    - Each class/module should focus on a single responsibility
    - Apply SRP at appropriate levels - class, module, and file
@@ -68,7 +68,7 @@ This document is written for humans but also for AI coding assistants like GitHu
    - Methods that frequently change together belong in the same class
    - **Balancing principle**: Avoid over-fragmentation - SRP should help organize code, not create unnecessary complexity
 
-   #### DO: Create focused classes with single responsibilities
+   ##### 3.2.1.1. DO: Create focused classes with single responsibilities
    ```python
    class UserAuthenticator:
        """Handles only user authentication."""
@@ -86,7 +86,7 @@ This document is written for humans but also for AI coding assistants like GitHu
            # Report generation logic
    ```
 
-   #### DON'T: Create large classes with multiple responsibilities
+   ##### 3.2.1.2. DON'T: Create large classes with multiple responsibilities
    ```python
    class UserManager:
        def authenticate_user(self, username, password):
@@ -102,20 +102,20 @@ This document is written for humans but also for AI coding assistants like GitHu
            # Report generation logic
    ```
 
-   #### Finding the Right Balance Between SRP and KISS
+   ##### 3.2.1.3. Finding the Right Balance Between SRP and KISS
    When applying the Single Responsibility Principle, use these guidelines to avoid over-fragmenting:
    - If a class has fewer than 2-3 public methods, consider if it could be merged with a related class
    - Focus on business domain boundaries rather than technical separation
    - Prefer 5-10 medium-sized classes over 20+ tiny classes or 1-2 massive classes
    - Ask: "Would these functions/methods need to change for the same reason?"
 
-2. **Open/Closed (OCP)**
+#### 3.2.2. Open/Closed (OCP)
    - Code should be open for extension but closed for modification
    - Use inheritance and interfaces appropriately
    - Apply OCP pragmatically to areas likely to change, not everywhere
    - **Balancing principle**: Apply OCP selectively to parts of the system where variation is expected, not universally
 
-   #### DO: Design for extension through polymorphism
+   ##### 3.2.2.1. DO: Design for extension through polymorphism
    ```python
    class PaymentProcessor:
        """Base payment processor interface."""
@@ -140,7 +140,7 @@ This document is written for humans but also for AI coding assistants like GitHu
            # Cryptocurrency processing logic
    ```
 
-   #### DON'T: Use conditionals that require modification for new variants
+   ##### 3.2.2.2. DON'T: Use conditionals that require modification for new variants
    ```python
    class PaymentProcessor:
        def process_payment(self, payment_type, amount):
@@ -151,16 +151,16 @@ This document is written for humans but also for AI coding assistants like GitHu
            # Adding a new payment type requires modifying this class
    ```
 
-   #### AI Pitfall: Premature Abstraction
+   ##### 3.2.2.3. AI Pitfall: Premature Abstraction
    - **DON'T**: Create complex inheritance hierarchies for functionality that rarely changes
    - **DON'T**: Over-engineer with excessive abstraction layers
    - **DO**: Apply OCP to parts of the system that are likely to have variations
 
-3. **Liskov Substitution (LSP)**
+#### 3.2.3. Liskov Substitution (LSP)
    - Derived classes must be substitutable for their base classes
    - Maintain consistent behavior in inheritance hierarchies
 
-   #### DO: Design class hierarchies with consistent behavior
+   ##### 3.2.3.1 DO: Design class hierarchies with consistent behavior
    ```python
    class Shape:
        """Base shape interface."""
@@ -184,7 +184,7 @@ This document is written for humans but also for AI coding assistants like GitHu
            return self.side * self.side
    ```
 
-   #### DON'T: Violate expected behavior in subclasses
+   ##### 3.2.3.2 DON'T: Violate expected behavior in subclasses
    ```python
    class Rectangle:
        def __init__(self, width, height):
@@ -211,18 +211,18 @@ This document is written for humans but also for AI coding assistants like GitHu
            self.width = height  # Side effect!
    ```
 
-   #### AI Pitfall: Ignoring Behavioral Contracts
+   ##### 3.2.3.3 AI Pitfall: Ignoring Behavioral Contracts
    - **DON'T**: Override methods in a way that changes their expected behavior
    - **DON'T**: Add preconditions or remove postconditions in subclasses
    - **DO**: Consider using composition instead of inheritance when behavior differs significantly
 
-4. **Interface Segregation (ISP)**
+#### 3.2.4. Interface Segregation (ISP)
    - Keep interfaces small and focused
    - Don't force classes to implement unnecessary methods
    - Balance interface segregation with managing the overall number of interfaces
    - **Balancing principle**: Group related behaviors and consider merging very small interfaces to avoid excessive fragmentation
 
-   #### DO: Create minimal, focused interfaces
+   ##### 3.2.4.1 DO: Create minimal, focused interfaces
    ```python
    class Workable:
        def work(self):
@@ -251,7 +251,7 @@ This document is written for humans but also for AI coding assistants like GitHu
            # Work implementation
    ```
 
-   #### DON'T: Create large, monolithic interfaces
+   ##### 3.2.4.2 DON'T: Create large, monolithic interfaces
    ```python
    class Worker:
        def work(self):
@@ -275,18 +275,18 @@ This document is written for humans but also for AI coding assistants like GitHu
            # Empty implementation or raises error
    ```
 
-   #### Finding the Right Balance for Interface Segregation
+   ##### 3.2.4.3 Finding the Right Balance for Interface Segregation
    - Group related behaviors together in the same interface
    - If an interface has fewer than 2-3 methods, consider if it should be merged with a related interface
    - Focus on domain boundaries rather than technical separation
    - Consider the cognitive load of having many small interfaces versus fewer larger ones
 
-5. **Dependency Inversion (DIP)**
+#### 3.2.5. Dependency Inversion (DIP)
    - Depend on abstractions, not concrete implementations
    - High-level modules shouldn't depend on low-level modules
    - **Balancing principle**: Create abstractions only for components that will have multiple implementations or are likely to change
 
-   #### DO: Inject dependencies through abstractions
+   ##### 3.2.5.1 DO: Inject dependencies through abstractions
    ```python
    class NotificationService:
        """Abstract notification interface."""
@@ -310,7 +310,7 @@ This document is written for humans but also for AI coding assistants like GitHu
            self.notifier.send_notification("Password changed")
    ```
 
-   #### DON'T: Directly instantiate dependencies
+   ##### 3.2.5.2 DON'T: Directly instantiate dependencies
    ```python
    class EmailNotifier:
        def send_notification(self, message):
@@ -325,17 +325,17 @@ This document is written for humans but also for AI coding assistants like GitHu
            self.notifier.send_notification("Password changed")
    ```
 
-   #### AI Pitfall: Over-abstracting Everything
+   ##### 3.2.5.3 AI Pitfall: Over-abstracting Everything
    - **DON'T**: Create abstractions for classes that won't have multiple implementations
    - **DON'T**: Add indirection layers without clear benefits
    - **DO**: Focus on abstracting volatile components or those likely to have multiple implementations
 
-### DRY (Don't Repeat Yourself)
+### 3.3. DRY (Don't Repeat Yourself)
 
-1. **Use Existing Functionality**
+#### 3.3.1. Use Existing Functionality
    - Leverage existing libraries and project components before creating new ones
    
-   #### DO: Use existing libraries and utilities
+   ##### 3.3.1.1 DO: Use existing libraries and utilities
    ```python
    import datetime
    
@@ -344,7 +344,7 @@ This document is written for humans but also for AI coding assistants like GitHu
        return datetime.datetime.strptime(date_string, "%d/%m/%Y").strftime("%Y-%m-%d")
    ```
    
-   #### DON'T: Reinvent the wheel
+   ##### 3.3.1.2 DON'T: Reinvent the wheel
    ```python
    def format_date(date_string):
        """Format date string to YYYY-MM-DD."""
@@ -352,17 +352,17 @@ This document is written for humans but also for AI coding assistants like GitHu
        return f"{year}-{month}-{day}"  # Custom implementation when standard library has this
    ```
    
-   #### AI Pitfall: Library Unawareness
+   ##### 3.3.1.3 AI Pitfall: Library Unawareness
    - **DON'T**: Create custom implementations of standard functionality
    - **DON'T**: Miss opportunities to use built-in functions or libraries
    - **DO**: Research standard libraries before implementing solutions
 
-2. **Extract Common Patterns**
+#### 3.3.2. Extract Common Patterns
    - Identify and refactor repeated code into reusable components
    - Balance DRY with KISS - duplication is acceptable when abstraction would create more complexity
    - **Balancing principle**: DRY isn't just about identical code - it's about not duplicating knowledge or intent
    
-   #### DO: Create reusable functions for common patterns
+   ##### 3.3.2.1 DO: Create reusable functions for common patterns
    ```python
    def validate_data(data, schema):
        """Validate data against schema."""
@@ -383,7 +383,7 @@ This document is written for humans but also for AI coding assistants like GitHu
        save_to_database(transformed, table)
    ```
    
-   #### DON'T: Duplicate similar logic across functions
+   ##### 3.3.2.2 DON'T: Duplicate similar logic across functions
    ```python
    def process_user_data(user):
        # 20 lines of data validation
@@ -396,19 +396,19 @@ This document is written for humans but also for AI coding assistants like GitHu
        # 10 lines of very similar database operations
    ```
    
-   #### When to Allow Duplication (KISS > DRY)
+   ##### 3.3.2.3 When to Allow Duplication (KISS > DRY)
    - When the abstraction would be more complex than the duplication
    - When the duplicated code solves different problems that may change independently
    - When the abstraction would create unnecessary coupling between otherwise unrelated components
    - When readability and simplicity would be significantly compromised
 
-### KISS (Keep It Simple, Stupid)
+### 3.4. KISS (Keep It Simple, Stupid)
 
-1. **Prioritize Readability**
+#### 3.4.1. Prioritize Readability
    - Write code that's easy to understand at a glance
    - **Balancing principle**: Simplicity doesn't mean avoiding necessary abstractions - it means choosing the most straightforward solution for the problem
    
-   #### DO: Use clear, straightforward implementations
+   ##### 3.4.1.1 DO: Use clear, straightforward implementations
    ```python
    def calculate_total(items):
        """Calculate the total price of all items."""
@@ -418,7 +418,7 @@ This document is written for humans but also for AI coding assistants like GitHu
        return total
    ```
    
-   #### DON'T: Use overly clever or complex approaches
+   ##### 3.4.1.2 DON'T: Use overly clever or complex approaches
    ```python
    def calculate_total(items):
        """Calculate the total price of all items."""
@@ -426,16 +426,16 @@ This document is written for humans but also for AI coding assistants like GitHu
        return sum(reduce(lambda acc, x: acc + [x.price * x.quantity], items, []))
    ```
    
-   #### AI Pitfall: Showing Off
+   ##### 3.4.1.3 AI Pitfall: Showing Off
    - **DON'T**: Use advanced language features just to show language proficiency
    - **DON'T**: Write one-liners that sacrifice readability for brevity
    - **DO**: Prioritize code that's easy to read and understand for humans
    - **DO**: Use simple constructs that clearly express the intent
 
-2. **Minimize Function Complexity**
+#### 3.4.2. Minimize Function Complexity
    - Keep functions small and focused on a single task
    
-   #### DO: Break complex operations into simple functions
+   #### 3.4.2.1 DO: Break complex operations into simple functions
    ```python
    def validate_user_input(user_input):
        """Validate all aspects of user input."""
@@ -460,7 +460,7 @@ This document is written for humans but also for AI coding assistants like GitHu
        # Simple character validation
    ```
    
-   #### DON'T: Create large, multi-purpose functions
+   #### 3.4.2.2 DON'T: Create large, multi-purpose functions
    ```python
    def validate_user_input(user_input):
        """Validate user input with complex logic and side effects."""
@@ -473,16 +473,16 @@ This document is written for humans but also for AI coding assistants like GitHu
        # Logic becomes hard to follow and test
    ```
    
-   #### AI Pitfall: Function Bloat
+   #### 3.4.2.3 AI Pitfall: Function Bloat
    - **DON'T**: Create large functions that handle multiple responsibilities
    - **DON'T**: Mix validation, processing, and output formatting in one function
    - **DO**: Create small, focused functions with descriptive names
    - **DO**: Aim for functions that fit on a single screen
 
-3. **Simplify Control Flow**
+#### 3.4.3. Simplify Control Flow
    - Use straightforward control structures and early returns
    
-   #### DO: Use early returns to reduce nesting
+   ##### 3.4.3.1 DO: Use early returns to reduce nesting
    ```python
    def process_payment(payment):
        """Process a payment transaction."""
@@ -500,7 +500,7 @@ This document is written for humans but also for AI coding assistants like GitHu
        return result
    ```
    
-   #### DON'T: Create deeply nested conditions
+   ##### 3.4.3.2 DON'T: Create deeply nested conditions
    ```python
    def process_payment(payment):
        """Process a payment transaction."""
@@ -518,16 +518,16 @@ This document is written for humans but also for AI coding assistants like GitHu
            return Error("Invalid payment")
    ```
    
-   #### AI Pitfall: Control Flow Complexity
+   ##### 3.4.3.3 AI Pitfall: Control Flow Complexity
    - **DON'T**: Create deeply nested if/else structures
    - **DON'T**: Write complex conditional expressions that are hard to understand
    - **DO**: Use guard clauses and early returns to flatten nesting
    - **DO**: Break complex conditions into well-named boolean functions
 
-4. **Use Appropriate Data Structures**
+#### 3.4.4. Use Appropriate Data Structures
    - Choose the simplest data structure that meets the requirements
    
-   #### DO: Use straightforward data structures
+   #### 3.4.4.1 DO: Use straightforward data structures
    ```python
    # Simple dictionary for a user record
    user = {
@@ -542,7 +542,7 @@ This document is written for humans but also for AI coding assistants like GitHu
        send_email(user["email"])
    ```
    
-   #### DON'T: Create overly complex structures
+   #### 3.4.4.2 DON'T: Create overly complex structures
    ```python
    # Unnecessarily complex for simple data
    class UserField:
@@ -573,16 +573,16 @@ This document is written for humans but also for AI coding assistants like GitHu
        send_email(user.get("email"))
    ```
    
-   #### AI Pitfall: Data Structure Overdesign
+   #### 3.4.4.3 AI Pitfall: Data Structure Overdesign
    - **DON'T**: Create complex class hierarchies for simple data
    - **DON'T**: Use design patterns that add indirection without clear benefits
    - **DO**: Start with simple built-in data structures (dict, list, etc.)
    - **DO**: Only create custom classes when behavior needs to be encapsulated with data
 
-5. **Minimize Dependencies**
+#### 3.4.5. Minimize Dependencies
    - Reduce coupling between components
    
-   #### DO: Keep components loosely coupled
+   ##### 3.4.5.1 DO: Keep components loosely coupled
    ```python
    def generate_report(data, formatter):
        """Generate a report using the provided formatter."""
@@ -594,7 +594,7 @@ This document is written for humans but also for AI coding assistants like GitHu
    report = generate_report(data, CSVFormatter())
    ```
    
-   #### DON'T: Create tight coupling
+   ##### 3.4.5.2 DON'T: Create tight coupling
    ```python
    def generate_pdf_report(data):
        """Generate a PDF report with many dependencies."""
@@ -612,17 +612,17 @@ This document is written for humans but also for AI coding assistants like GitHu
        return pdf.save()
    ```
    
-   #### AI Pitfall: Excessive Coupling
+   ##### 3.4.5.3 AI Pitfall: Excessive Coupling
    - **DON'T**: Create hard dependencies between components that could be separated
    - **DON'T**: Access global state or system resources directly within functions
    - **DO**: Use dependency injection to make dependencies explicit
    - **DO**: Design functions that operate on their inputs rather than external state
 
-6. **Avoid Premature Optimization**
+#### 3.4.6. Avoid Premature Optimization
    - Focus on clarity first, optimize only when necessary
    - **Balancing principle**: Clarity and correctness take precedence over performance until measurements prove otherwise
    
-   #### DO: Write clear code first, then optimize if needed
+   ##### 3.4.6.1 DO: Write clear code first, then optimize if needed
    ```python
    def find_matches(items, criteria):
        """Find items matching the given criteria."""
@@ -635,7 +635,7 @@ This document is written for humans but also for AI coding assistants like GitHu
        # More complex but faster implementation
    ```
    
-   #### DON'T: Add complexity for theoretical performance gains
+   ##### 3.4.6.2 DON'T: Add complexity for theoretical performance gains
    ```python
    def find_matches(items, criteria):
        """Find items matching the given criteria with premature optimizations."""
@@ -655,14 +655,14 @@ This document is written for humans but also for AI coding assistants like GitHu
        return result
    ```
 
-### Avoid Presumptions and Silent Fallbacks
+### 3.5. Avoid Presumptions and Silent Fallbacks
 
-1. **Configuration and Settings**
+#### 3.5.1. Configuration and Settings
    - Never assume default values when configuration fails
    - Always fail explicitly rather than falling back silently
    - Do not use fallbacks
    
-   #### DO: Fail explicitly with clear error messages
+   ##### 3.5.1.1. DO: Fail explicitly with clear error messages
    ```python
    def initialize_database(config_path):
        """Initialize database connection from config."""
@@ -679,7 +679,7 @@ This document is written for humans but also for AI coding assistants like GitHu
        return connect_to_database(config['connection_string'])
    ```
    
-   #### DON'T: Use silent fallbacks or assumptions
+   ##### 3.5.1.2. DON'T: Use silent fallbacks or assumptions
    ```python
    def initialize_database(config_path):
        """Initialize database with silent fallbacks."""
@@ -696,17 +696,17 @@ This document is written for humans but also for AI coding assistants like GitHu
        return connect_to_database(config.get('connection_string', 'sqlite:///default.db'))
    ```
    
-   #### AI Pitfall: Convenient Defaults
+   ##### 3.5.1.3. AI Pitfall: Convenient Defaults
    - **DON'T**: Add silent fallbacks that mask configuration problems
    - **DON'T**: Use hardcoded default values for missing configuration
    - **DO**: Require explicit configuration for critical parameters
    - **DO**: Make failures visible and provide clear error messages
 
-2. **Input Validation**
+#### 3.5.2. Input Validation
    - Validate all inputs at system boundaries
    - Reject invalid inputs early rather than attempting to "fix" them
    
-   #### DO: Validate strictly and reject invalid inputs
+   ##### 3.5.2.1. DO: Validate strictly and reject invalid inputs
    ```python
    def process_user_data(user_data):
        """Process user data after strict validation."""
@@ -724,7 +724,7 @@ This document is written for humans but also for AI coding assistants like GitHu
        # Process valid data...
    ```
    
-   #### DON'T: Attempt to "fix" or assume missing data
+   ##### 3.5.2.2. DON'T: Attempt to "fix" or assume missing data
    ```python
    def process_user_data(user_data):
        """Process user data with assumptions and fixes."""
@@ -744,17 +744,17 @@ This document is written for humans but also for AI coding assistants like GitHu
        # Process with assumed/fixed data...
    ```
    
-   #### AI Pitfall: Being Too Helpful
+   ##### 3.5.2.3. AI Pitfall: Being Too Helpful
    - **DON'T**: Write code that attempts to guess what the user meant
    - **DON'T**: Silently substitute default values for missing requirements
    - **DO**: Validate early and strictly at system boundaries
    - **DO**: Provide clear, actionable error messages for invalid inputs
 
-3. **Error Handling**
+#### 3.5.3. Error Handling
    - Make errors visible and explicit
    - Don't swallow exceptions or convert them to default values
    
-   #### DO: Propagate meaningful errors
+   ##### 3.5.3.1. DO: Propagate meaningful errors
    ```python
    def fetch_user_data(user_id):
        """Fetch user data from API."""
@@ -771,7 +771,7 @@ This document is written for humans but also for AI coding assistants like GitHu
            raise ConnectionError(f"Connection error while fetching user {user_id}: {str(e)}")
    ```
    
-   #### DON'T: Hide errors with generic returns or defaults
+   ##### 3.5.3.2. DON'T: Hide errors with generic returns or defaults
    ```python
    def fetch_user_data(user_id):
        """Fetch user data with fallbacks."""
@@ -791,21 +791,21 @@ This document is written for humans but also for AI coding assistants like GitHu
        }
    ```
    
-   #### AI Pitfall: Overly Defensive Programming
+   ##### 3.5.3.3. AI Pitfall: Overly Defensive Programming
    - **DON'T**: Catch broad exceptions without specific handling
    - **DON'T**: Return default values when operations fail
    - **DO**: Use specific exception types that describe what went wrong
    - **DO**: Allow errors to propagate or transform them into more meaningful exceptions
 
-### Balancing Abstraction and Optimization
+### 3.6. Balancing Abstraction and Optimization
 
-1. **When to Create Abstractions**
+#### 3.6.1. When to Create Abstractions
    - Create abstractions for parts of the system likely to have multiple implementations or variations
    - Focus on abstracting volatile components that change frequently
    - Wait for patterns to emerge before creating abstractions (Rule of Three)
    - **Balancing principle**: Create abstractions to solve actual problems, not imagined future scenarios
    
-   #### DO: Create appropriate abstractions
+   ##### 3.6.1.1. DO: Create appropriate abstractions
    ```python
    # After seeing the same pattern in multiple places
    class DataValidator:
@@ -825,30 +825,30 @@ This document is written for humans but also for AI coding assistants like GitHu
            # Product-specific validation logic
    ```
 
-2. **When to Optimize**
+#### 3.6.2. When to Optimize
    - Start with clear, simple implementations
    - Measure performance to identify actual bottlenecks
    - Optimize only the critical parts that affect performance
    - Document optimizations that reduce readability
    - **Balancing principle**: Only optimize after identifying real performance issues through measurement
 
-3. **Practical Balance**
+#### 3.6.3. Practical Balance
    - Prefer simple, readable code for most situations
    - Use abstractions when they simplify the overall system
    - Optimize only when there's a measurable benefit
    - Remember that future requirements might change, making complex optimizations obsolete
 
-## Python Coding Standards
+## 4. Python Coding Standards
 
-### Code Style
-1. **Naming Conventions**
+### 4.1. Code Style
+#### 4.1.1. Naming Conventions
    - Use meaningful and descriptive names
    - Follow Python naming conventions:
      - `snake_case` for functions and variables
      - `PascalCase` for classes
      - `UPPERCASE` for constants
    
-   #### DO: Use descriptive, consistent naming
+   ##### 4.1.1.1. DO: Use descriptive, consistent naming
    ```python
    def calculate_total_price(items):
        """Calculate the total price of all items."""
@@ -863,7 +863,7 @@ This document is written for humans but also for AI coding assistants like GitHu
    MAX_RETRY_ATTEMPTS = 3
    ```
    
-   #### DON'T: Use ambiguous or inconsistent naming
+   ##### 4.1.1.2. DON'T: Use ambiguous or inconsistent naming
    ```python
    def calc(i):
        """Calculate something."""
@@ -878,15 +878,15 @@ This document is written for humans but also for AI coding assistants like GitHu
    max_retry = 3  # Should be UPPERCASE for constants
    ```
    
-   #### AI Pitfall: Naming Inconsistency
+   ##### 4.1.1.3. AI Pitfall: Naming Inconsistency
    - **DON'T**: Mix naming conventions across related code
    - **DON'T**: Create overly generic names like `data`, `manager`, `processor` without context
    - **DO**: Make names self-documenting and specific to their purpose
 
-2. **Type Hints**
+#### 4.1.2. Type Hints
    - Use type hints to improve code readability and IDE support
    
-   #### DO: Add clear, specific type hints
+   ##### 4.1.2.1. DO: Add clear, specific type hints
    ```python
    from typing import Dict, List, Optional, Union
    
@@ -900,7 +900,7 @@ This document is written for humans but also for AI coding assistants like GitHu
        # Implementation
    ```
    
-   #### DON'T: Use overly complex or omit type hints
+   ##### 4.1.2.2. DON'T: Use overly complex or omit type hints
    ```python
    # Too complex and confusing
    def process_data(data: Union[Dict[str, Union[List[Dict[str, Any]], Tuple[int, ...], Set[str]]], None]) -> Any:
@@ -911,12 +911,12 @@ This document is written for humans but also for AI coding assistants like GitHu
        # Implementation
    ```
    
-   #### AI Pitfall: Type Hint Complexity
+   ##### 4.1.2.3. AI Pitfall: Type Hint Complexity
    - **DON'T**: Create overly complex type signatures that obscure meaning
    - **DON'T**: Omit type hints entirely, especially for public APIs
    - **DO**: Use clear, meaningful type hints that help readers understand the code
 
-   #### Type Hint Usage Guidelines
+   ##### 4.1.2.4. Type Hint Usage Guidelines
    Right balance the use of type hints, so follow these guidelines:
    - **Required**: Always add type hints for:
      - Public API functions and methods
@@ -931,10 +931,10 @@ This document is written for humans but also for AI coding assistants like GitHu
    - When maintaining existing code, match the convention used in that file
    - For new code, prefer using complete type hints
 
-3. **String Formatting**
+#### 4.1.3. String Formatting
    - Use f-strings for readability and performance
    
-   #### DO: Use f-strings for string interpolation
+   ##### 4.1.3.1. DO: Use f-strings for string interpolation
    ```python
    name = "World"
    age = 42
@@ -950,7 +950,7 @@ This document is written for humans but also for AI coding assistants like GitHu
    table = f"| {'Name':<10} | {'Age':>3} |\n| {name:<10} | {age:>3} |"
    ```
    
-   #### DON'T: Use outdated string formatting methods
+   ##### 4.1.3.2. DON'T: Use outdated string formatting methods
    ```python
    # Avoid: old-style % formatting
    message = "Hello, %s! You are %d years old." % (name, age)
@@ -959,15 +959,15 @@ This document is written for humans but also for AI coding assistants like GitHu
    message = "Hello, {0}! You are {1} years old.".format(name, age)
    ```
    
-   #### AI Pitfall: Inconsistent String Formatting
+   ##### 4.1.3.3. AI Pitfall: Inconsistent String Formatting
    - **DON'T**: Mix different string formatting styles in the same codebase
    - **DON'T**: Use string concatenation for complex strings with variables
    - **DO**: Prefer f-strings for readability and performance
 
-4. **Imports**
+#### 4.1.4. Imports
    - Organize imports for clarity and to avoid namespace pollution
    
-   #### DO: Use clear, organized imports
+   ##### 4.1.4.1. DO: Use clear, organized imports
    ```python
    # Standard library imports
    import os
@@ -986,7 +986,7 @@ This document is written for humans but also for AI coding assistants like GitHu
    import matplotlib.pyplot as plt
    ```
    
-   #### DO: Use absolute imports for clarity
+   ##### 4.1.4.2. DO: Use absolute imports for clarity
    ```python
    # Given a project structure:
    # myproject/
@@ -1001,7 +1001,7 @@ This document is written for humans but also for AI coding assistants like GitHu
    from myproject.utils.helpers import validate_input
    ```
    
-   #### DON'T: Import excessively or create namespace conflicts
+   ##### 4.1.4.3. DON'T: Import excessively or create namespace conflicts
    ```python
    # Avoid importing everything
    from datetime import *  # Imports all symbols, creates namespace pollution
@@ -1010,17 +1010,17 @@ This document is written for humans but also for AI coding assistants like GitHu
    from data import process  # Where is this coming from?
    ```
    
-   #### AI Pitfall: Import Misuse
+   ##### 4.1.4.4. AI Pitfall: Import Misuse
    - **DON'T**: Use wildcard imports (`from module import *`)
    - **DON'T**: Create circular import dependencies
    - **DO**: Group and order imports logically (stdlib, third-party, local)
    - **DO**: Use meaningful aliases when appropriate
 
-### Code Organization
-1. **Function Design**
+### 4.2. Code Organization
+#### 4.2.1. Function Design
    - Keep functions small and focused on a single purpose
    
-   #### DO: Design focused, cohesive functions
+   ##### 4.2.1.1. DO: Design focused, cohesive functions
    ```python
    def validate_email(email: str) -> bool:
        """Validate email format."""
@@ -1035,7 +1035,7 @@ This document is written for humans but also for AI coding assistants like GitHu
        return True
    ```
    
-   #### DON'T: Create functions with multiple unrelated responsibilities
+   ##### 4.2.1.2. DON'T: Create functions with multiple unrelated responsibilities
    ```python
    def process_email(email: str, message: str) -> bool:
        """Validate, log, format, and send an email."""
@@ -1060,16 +1060,16 @@ This document is written for humans but also for AI coding assistants like GitHu
        return email_sender.send(email, "Subject", formatted_message)
    ```
    
-   #### AI Pitfall: Function Scope Creep
+   ##### 4.2.1.3. AI Pitfall: Function Scope Creep
    - **DON'T**: Add "just one more thing" to existing functions
    - **DON'T**: Create functions that handle multiple stages of a process
    - **DO**: Design functions that do one thing well
    - **DO**: Compose complex operations from simple function calls
 
-2. **File Structure**
+#### 4.2.2. File Structure
    - Organize code into logical files and modules
    
-   #### DO: Group related functionality in cohesive modules
+   ##### 4.2.2.1. DO: Group related functionality in cohesive modules
    ```python
    # auth/
    #   __init__.py
@@ -1084,7 +1084,7 @@ This document is written for humans but also for AI coding assistants like GitHu
    #   repository.py      # User data access
    ```
    
-   #### DON'T: Mix unrelated code in the same file
+   ##### 4.2.2.2. DON'T: Mix unrelated code in the same file
    ```python
    # helpers.py - A mix of unrelated functionality
    
@@ -1101,16 +1101,16 @@ This document is written for humans but also for AI coding assistants like GitHu
        # Database connection management
    ```
    
-   #### AI Pitfall: Disorganized Code Generation
+   ##### 4.2.2.3. AI Pitfall: Disorganized Code Generation
    - **DON'T**: Create files with mixed responsibilities
    - **DON'T**: Ignore the existing project structure when adding new code
    - **DO**: Respect the established module boundaries and naming conventions
    - **DO**: Create new modules when introducing functionality that doesn't fit existing ones
 
-3. **Error Handling**
+#### 4.2.3. Error Handling
    - Handle errors properly with exceptions and appropriate error messages
    
-   #### DO: Use exceptions for error handling
+   ##### 4.2.3.1. DO: Use exceptions for error handling
    ```python
    def get_user_data(user_id: int) -> dict:
        """Retrieve user data from the database."""
@@ -1126,7 +1126,7 @@ This document is written for humans but also for AI coding assistants like GitHu
            raise ServiceUnavailableError("Unable to retrieve user data") from e
    ```
    
-   #### DON'T: Use error codes or ignore exceptions
+   ##### 4.2.3.2. DON'T: Use error codes or ignore exceptions
    ```python
    def get_user_data(user_id: int) -> tuple:
        """Retrieve user data from the database."""
@@ -1142,16 +1142,16 @@ This document is written for humans but also for AI coding assistants like GitHu
        return user, None  # Success case
    ```
    
-   #### AI Pitfall: Untestable Code
+   ##### 4.2.3.3. AI Pitfall: Untestable Code
    - **DON'T**: Create functions with hidden dependencies or side effects
    - **DON'T**: Use global state that makes tests unpredictable
    - **DO**: Design pure functions when possible (same input → same output)
    - **DO**: Use dependency injection to make components testable
 
-4. **Comments and Docstrings**
+#### 4.2.4. Comments and Docstrings
    - Document code purpose, not mechanics
    
-   #### DO: Document the "why" not just the "what"
+   ##### 4.2.4.1. DO: Document the "why" not just the "what"
    ```python
    # Cache results to prevent recalculation on subsequent calls with the same inputs
    @lru_cache(maxsize=100)
@@ -1172,7 +1172,7 @@ This document is written for humans but also for AI coding assistants like GitHu
        return status
    ```
    
-   #### DON'T: State the obvious or explain simple mechanics
+   ##### 4.2.4.2. DON'T: State the obvious or explain simple mechanics
    ```python
    def calculate_total(items: list) -> float:
        """This function calculates the total of the items."""
@@ -1188,16 +1188,16 @@ This document is written for humans but also for AI coding assistants like GitHu
        return total
    ```
    
-   #### AI Pitfall: Comment Bloat
+   ##### 4.2.4.3. AI Pitfall: Comment Bloat
    - **DON'T**: Generate obvious comments that add no value
    - **DON'T**: Add docstrings that merely repeat the function name
    - **DO**: Explain complex algorithms, business rules, or non-obvious design choices
    - **DO**: Document API behavior concisely, focusing on what callers need to know
 
-5. **Logging**
+#### 4.2.5. Logging
    - Use proper logging instead of print statements for debugging and monitoring
    
-   #### DO: Use structured logging with appropriate levels
+   ##### 4.2.5.1. DO: Use structured logging with appropriate levels
    ```python
    import logging
    
@@ -1225,7 +1225,7 @@ This document is written for humans but also for AI coding assistants like GitHu
            return False
    ```
    
-   #### DON'T: Use print statements or inconsistent logging
+   ##### 4.2.5.2. DON'T: Use print statements or inconsistent logging
    ```python
    def process_order(order_id, user_id):
        """Process a customer order."""
@@ -1246,16 +1246,16 @@ This document is written for humans but also for AI coding assistants like GitHu
        return True
    ```
    
-   #### AI Pitfall: Debug-Only Logging
+   ##### 4.2.5.3. AI Pitfall: Debug-Only Logging
    - **DON'T**: Generate code with print statements for debugging
    - **DON'T**: Add excessive logging that impacts performance
    - **DO**: Use appropriate log levels (DEBUG, INFO, WARNING, ERROR)
    - **DO**: Include contextual information in log messages for troubleshooting
 
-6. **Efficient Code Patterns**
+#### 4.2.6. Efficient Code Patterns
    - Write clean, idiomatic Python for readability and performance
    
-   #### DO: Use Python idioms and built-ins
+   ##### 4.2.6.1. DO: Use Python idioms and built-ins
    ```python
    # List comprehension
    squares = [x*x for x in range(10)]
@@ -1281,7 +1281,7 @@ This document is written for humans but also for AI coding assistants like GitHu
    category_items = defaultdict(list)
    ```
    
-   #### DON'T: Write non-idiomatic Python
+   ##### 4.2.6.2. DON'T: Write non-idiomatic Python
    ```python
    # Instead of list comprehension
    squares = []
@@ -1310,16 +1310,16 @@ This document is written for humans but also for AI coding assistants like GitHu
            word_counts[word] = 1
    ```
    
-   #### AI Pitfall: Non-Pythonic Code
+   ##### 4.2.6.3. AI Pitfall: Non-Pythonic Code
    - **DON'T**: Write code in the style of other languages (Java, C++, etc.)
    - **DON'T**: Reinvent built-in functionality
    - **DO**: Learn and use Python's built-in functions and idioms
    - **DO**: Follow the "Pythonic" way of writing code
 
-7. **Performance Considerations**
+#### 4.2.7. Performance Considerations
    - Balance readability with performance
    
-   #### DO: Use efficient approaches for common operations
+   ##### 4.2.7.1. DO: Use efficient approaches for common operations
    ```python
    # Use sets for membership testing when order doesn't matter
    valid_categories = {"electronics", "books", "clothing"}
@@ -1338,7 +1338,7 @@ This document is written for humans but also for AI coding assistants like GitHu
    sorted_items = sorted(items, key=lambda x: x.priority)  # Efficient sorting
    ```
    
-   #### DON'T: Use inefficient patterns for critical code
+   ##### 4.2.7.2. DON'T: Use inefficient patterns for critical code
    ```python
    # Using a list for frequent membership tests
    valid_categories = ["electronics", "books", "clothing"]
@@ -1360,22 +1360,22 @@ This document is written for humans but also for AI coding assistants like GitHu
            max_value = value
    ```
    
-   #### AI Pitfall: Premature Optimization vs. Inefficient Algorithms
+   ##### 4.2.7.3. AI Pitfall: Premature Optimization vs. Inefficient Algorithms
    - **DON'T**: Optimize prematurely at the expense of readability
    - **DON'T**: Use inefficient algorithms or data structures for performance-critical code
    - **DO**: Use appropriate data structures for the task (sets for unique items, dicts for lookups)
    - **DO**: Consider memory usage for large datasets (generators vs. loading everything)
 
-## Testing
-- After a module or major block of functionality is made, write tests for your code to ensure it works as expected.
-- Run tests before submitting your code for review.
+## 5. Testing
+   - After a module or major block of functionality is made, write tests for your code to ensure it works as expected.
+   - Run tests before submitting your code for review.
 
-### Implementation-First Testing Approach
-1. **Write Implementation First**
+### 5.1. Implementation-First Testing Approach
+#### 5.1.1. Write Implementation First
    - Always implement functionality before writing tests
    - Exception: For bug fixes, it's appropriate to write a failing test first that demonstrates the bug
    
-   #### DO: Write implementation first, then add tests
+   ##### 5.1.1.1. DO: Write implementation first, then add tests
    ```python
    # First, implement the functionality
    def register_user(email, password):
@@ -1409,7 +1409,7 @@ This document is written for humans but also for AI coding assistants like GitHu
        assert "Invalid email" in result.error
    ```
    
-   #### DON'T: Write tests before implementing functionality
+   ##### 5.1.1.2. DON'T: Write tests before implementing functionality
    ```python
    # Don't write tests for non-existent functionality
    def test_user_registration():
@@ -1418,16 +1418,16 @@ This document is written for humans but also for AI coding assistants like GitHu
        # The register_user function hasn't been implemented yet
    ```
    
-   #### AI Pitfall: Test-First Generation
+   ##### 5.1.1.3. AI Pitfall: Test-First Generation
    - **DON'T**: Generate test code before implementation code
    - **DON'T**: Let tests dictate the implementation design prematurely
    - **DO**: Focus on good implementation first, then comprehensive testing
    - **DO**: Ensure tests verify both the happy path and edge cases
 
-2. **Test Organization**
+#### 5.1.2. Test Organization
    - Structure tests logically and consistently
    
-   #### DO: Organize tests clearly by functionality
+   ##### 5.1.2.1. DO: Organize tests clearly by functionality
    ```python
    # test_user_service.py
    class TestUserRegistration:
@@ -1457,7 +1457,7 @@ This document is written for humans but also for AI coding assistants like GitHu
            # Test implementation
    ```
    
-   #### DON'T: Create disorganized test files
+   ##### 5.1.2.2. DON'T: Create disorganized test files
    ```python
    # test_misc.py - Mixed and unstructured tests
    def test_user_register():
@@ -1473,16 +1473,16 @@ This document is written for humans but also for AI coding assistants like GitHu
        # Another unrelated test
    ```
    
-   #### AI Pitfall: Test Structure Inconsistency
+   ##### 5.1.2.3. AI Pitfall: Test Structure Inconsistency
    - **DON'T**: Mix unrelated test cases in the same file or class
    - **DON'T**: Create inconsistent naming patterns for test files and functions
    - **DO**: Group related tests in the same class or module
    - **DO**: Follow consistent naming patterns for test functions and classes
 
-3. **Effective Testing**
+#### 5.1.3. Effective Testing
    - Write tests that verify behavior, not implementation details
    
-   #### DO: Focus on testing behavior and contracts
+   ##### 5.1.3.1. DO: Focus on testing behavior and contracts
    ```python
    def test_order_total_calculation():
        """Test that order total is calculated correctly with various items."""
@@ -1498,7 +1498,7 @@ This document is written for humans but also for AI coding assistants like GitHu
        assert total == 35.50
    ```
    
-   #### DON'T: Test implementation details that might change
+   ##### 5.1.3.2. DON'T: Test implementation details that might change
    ```python
    def test_order_implementation_details():
        """Test that breaks if implementation changes."""
@@ -1512,16 +1512,16 @@ This document is written for humans but also for AI coding assistants like GitHu
        assert order._calculate_line_total(0) == 20.00
    ```
    
-   #### AI Pitfall: Over-Specific Testing
+   ##### 5.1.3.3. AI Pitfall: Over-Specific Testing
    - **DON'T**: Generate tests that are tightly coupled to implementation details
    - **DON'T**: Write brittle tests that break when implementation changes but behavior doesn't
    - **DO**: Focus on testing the public API and expected behavior
    - **DO**: Write tests that verify what code does, not how it does it
 
-4. **Mock Dependencies**
+#### 5.1.4. Mock Dependencies
    - Use mocks to isolate code being tested from external dependencies
    
-   #### DO: Use mocks effectively for isolation
+   ##### 5.1.4.1. DO: Use mocks effectively for isolation
    ```python
    def test_payment_processing(self):
        """Test that payments are processed correctly."""
@@ -1546,7 +1546,7 @@ This document is written for humans but also for AI coding assistants like GitHu
        )
    ```
    
-   #### DON'T: Use real dependencies in unit tests
+   ##### 5.1.4.2. DON'T: Use real dependencies in unit tests
    ```python
    def test_payment_processing_with_real_dependency():
        """Test that should be using mocks instead of real dependencies."""
@@ -1560,16 +1560,16 @@ This document is written for humans but also for AI coding assistants like GitHu
        assert result.success is True
    ```
    
-   #### AI Pitfall: Inadequate Mocking
+   ##### 5.1.4.3. AI Pitfall: Inadequate Mocking
    - **DON'T**: Generate tests that depend on external systems or services
    - **DON'T**: Create tests that are slow, flaky, or have side effects
    - **DO**: Use appropriate mocking techniques to isolate units of code
    - **DO**: Test integration with external systems separately from unit tests
 
-5. **Test Clarity**
+#### 5.1.5. Test Clarity
    - Write tests that clearly communicate intent and what's being tested
    
-   #### DO: Follow the Arrange-Act-Assert pattern
+   ##### 5.1.5.1. DO: Follow the Arrange-Act-Assert pattern
    ```python
    def test_user_password_validation():
        """Test that password validation works correctly."""
@@ -1588,7 +1588,7 @@ This document is written for humans but also for AI coding assistants like GitHu
        assert len(result.errors) == 0
    ```
    
-   #### DON'T: Write unclear tests with mixed concerns
+   ##### 5.1.5.2. DON'T: Write unclear tests with mixed concerns
    ```python
    def test_password():
        """Unclear test mixing multiple concerns."""
@@ -1603,16 +1603,16 @@ This document is written for humans but also for AI coding assistants like GitHu
        assert user.id is not None
    ```
    
-   #### AI Pitfall: Unfocused Tests
+   ##### 5.1.5.3. AI Pitfall: Unfocused Tests
    - **DON'T**: Create tests that verify multiple unrelated behaviors at once
    - **DON'T**: Mix multiple assertions without clear structure
    - **DO**: Create focused tests that verify one specific behavior
    - **DO**: Use descriptive test names that explain what's being tested
 
-6. **Test Data Management**
+#### 5.1.6. Test Data Management
    - Create and manage test data deliberately
    
-   #### DO: Use fixtures and factories for consistent test data
+   ##### 5.1.6.1. DO: Use fixtures and factories for consistent test data
    ```python
    @pytest.fixture
    def valid_user():
@@ -1646,7 +1646,7 @@ This document is written for humans but also for AI coding assistants like GitHu
        assert order.total == 35.00
    ```
    
-   #### DON'T: Use ad-hoc test data creation
+   ##### 5.1.6.2. DON'T: Use ad-hoc test data creation
    ```python
    def test_order_calculation():
        """Test with duplicated and inconsistent test data creation."""
@@ -1668,16 +1668,16 @@ This document is written for humans but also for AI coding assistants like GitHu
        assert order.total == 35.00
    ```
    
-   #### AI Pitfall: Test Data Inconsistency
+   ##### 5.1.6.3. AI Pitfall: Test Data Inconsistency
    - **DON'T**: Create redundant or inconsistent test data across test functions
    - **DON'T**: Hardcode test data that could be centralized or parameterized
    - **DO**: Use fixtures, factories, or builders for reusable test data
    - **DO**: Make test data clearly communicate its intent and purpose
 
-7. **Test Parameterization**
+#### 5.1.7. Test Parameterization
    - Use parameterized tests for multiple test cases with the same logic
    
-   #### DO: Use test parameterization for related test cases
+   ##### 5.1.7.1. DO: Use test parameterization for related test cases
    ```python
    @pytest.mark.parametrize("email,is_valid", [
        ("valid@example.com", True),
@@ -1693,7 +1693,7 @@ This document is written for humans but also for AI coding assistants like GitHu
        assert result == is_valid
    ```
    
-   #### DON'T: Duplicate test code for similar cases
+   ##### 5.1.7.2. DON'T: Duplicate test code for similar cases
    ```python
    def test_valid_email():
        validator = EmailValidator()
@@ -1710,16 +1710,16 @@ This document is written for humans but also for AI coding assistants like GitHu
    # Duplicated setup and similar assertions
    ```
    
-   #### AI Pitfall: Test Redundancy
+   ##### 5.1.7.3. AI Pitfall: Test Redundancy
    - **DON'T**: Generate duplicated test code with minor variations
    - **DON'T**: Create separate test functions when parameterization would be clearer
    - **DO**: Use parameterized tests for testing the same logic with different inputs
    - **DO**: Keep specialized test cases separate when they test different behaviors
 
-8. **Comprehensive Test Coverage**
+#### 5.1.8. Comprehensive Test Coverage
    - Write tests that cover all important code paths and edge cases, after implementation is complete
    
-   #### DO: Test all important code paths systematically
+   ##### 5.1.8.1. DO: Test all important code paths systematically
    ```python
    # Bug: calculate_discount() fails with negative discount_percent
    
@@ -1748,7 +1748,7 @@ This document is written for humans but also for AI coding assistants like GitHu
        assert result == 80  # 20% discount should be applied
    ```
    
-   #### DON'T: Test only the happy path
+   ##### 5.1.8.2. DON'T: Test only the happy path
    ```python
    # Only testing the expected/normal case
    def test_divide():
@@ -1757,27 +1757,26 @@ This document is written for humans but also for AI coding assistants like GitHu
        # Missing tests for negative numbers, division by zero, etc.
    ```
    
-   #### AI Pitfall: Insufficient Test Coverage
+   ##### 5.1.8.3. AI Pitfall: Insufficient Test Coverage
    - **DON'T**: Generate tests that only verify the happy path
    - **DON'T**: Ignore edge cases, error conditions, or special input values
    - **DO**: Test boundary conditions and error cases thoroughly
    - **DO**: Consider writing tests for each branch in conditional logic
 
+## 6. Development Workflow
 
-## Development Workflow
-
-### Branching Strategy
+### 6.1. Branching Strategy
 - Use a branching strategy that suits your team and project
 - Common strategies include:
   - **Git Flow**: Uses feature branches and a develop branch for integration
   - **GitHub Flow**: A simpler model with a main branch and feature branches
 
-### Adding New Features
-1. **Plan Before Coding**
+### 6.2. Adding New Features
+#### 6.2.1. Plan Before Coding
    - Start with a clear understanding of requirements
    - Break down large features into smaller, manageable tasks
 
-   #### DO: Plan and scope features properly
+   ##### 6.2.1.1. DO: Plan and scope features properly
    ```python
    # Example of a well-planned feature implementation
    # 1. First add the new data model
@@ -1802,7 +1801,7 @@ This document is written for humans but also for AI coding assistants like GitHu
        # Implementation using the service
    ```
 
-   #### DON'T: Start coding without clear requirements
+   ##### 6.2.1.2. DON'T: Start coding without clear requirements
    ```python
    # Adding a feature without clear planning or structure
    # Mixing concerns and adding more than required
@@ -1814,17 +1813,17 @@ This document is written for humans but also for AI coding assistants like GitHu
        # And implementing unplanned admin notification feature
    ```
 
-   #### AI Pitfall: Scope Creep
+   ##### 6.2.1.3. AI Pitfall: Scope Creep
    - **DON'T**: Add extra functionality not specified in requirements
    - **DON'T**: Implement "nice-to-have" features without explicit requests
    - **DO**: Focus strictly on the requested functionality
    - **DO**: Clarify requirements before implementing if they're ambiguous
 
-2. **Follow Project Architecture**
+#### 6.2.2. Follow Project Architecture
    - Adhere to the existing architecture patterns
    - Maintain separation of concerns
 
-   #### DO: Respect the project's architectural boundaries
+   ##### 6.2.2.1. DO: Respect the project's architectural boundaries
    ```python
    # In a project with clean architecture:
    
@@ -1850,7 +1849,7 @@ This document is written for humans but also for AI coding assistants like GitHu
        # Controller logic
    ```
 
-   #### DON'T: Violate architectural boundaries
+   ##### 6.2.2.2. DON'T: Violate architectural boundaries
    ```python
    # Breaking architectural boundaries
    @app.route('/subscriptions', methods=['POST'])
@@ -1864,17 +1863,17 @@ This document is written for humans but also for AI coding assistants like GitHu
        # Bypassing service layer entirely
    ```
 
-   #### AI Pitfall: Architectural Inconsistency
+   ##### 6.2.2.3. AI Pitfall: Architectural Inconsistency
    - **DON'T**: Generate code that bypasses established layers
    - **DON'T**: Mix responsibilities that should be separated
    - **DO**: Study and follow the existing architecture patterns
    - **DO**: Place code in the appropriate modules and layers
 
-3. **Write Clean, Testable Code**
+#### 6.2.3. Write Clean, Testable Code
    - Follow SOLID principles and clean code practices
    - Write modular code that can be tested independently
 
-   #### DO: Write modular, testable features
+   ##### 6.2.3.1. DO: Write modular, testable features
    ```python
    # Dependency injection for testability
    class PaymentProcessor:
@@ -1891,7 +1890,7 @@ This document is written for humans but also for AI coding assistants like GitHu
    result = processor.process_payment(99.99, user_payment_method)
    ```
 
-   #### DON'T: Create hard-to-test implementations
+   ##### 6.2.3.2. DON'T: Create hard-to-test implementations
    ```python
    class PaymentProcessor:
        """Processes payments with hard dependencies."""
@@ -1909,17 +1908,17 @@ This document is written for humans but also for AI coding assistants like GitHu
            return result
    ```
 
-   #### AI Pitfall: Integration-Heavy Code
+   ##### 6.2.3.3. AI Pitfall: Integration-Heavy Code
    - **DON'T**: Generate code with tight coupling to external services
    - **DON'T**: Create implementations that can't be unit tested
    - **DO**: Use dependency injection and interfaces
    - **DO**: Structure code to allow for proper unit testing
 
-4. **Include Proper Documentation**
+#### 6.2.4. Include Proper Documentation
    - Document new features according to project standards
    - Update relevant documentation
 
-   #### DO: Document new features thoroughly
+   ##### 6.2.4.1. DO: Document new features thoroughly
    ```python
    def calculate_subscription_price(base_price, user_tier, promotion_code=None):
        """
@@ -1934,7 +1933,7 @@ This document is written for humans but also for AI coding assistants like GitHu
        # Implementation
    ```
 
-   #### DON'T: Leave new features undocumented
+   ##### 6.2.4.2. DON'T: Leave new features undocumented
    ```python
    def calc_price(bp, t, pc=None):
        # Undocumented function with unclear parameters
@@ -1949,19 +1948,19 @@ This document is written for humans but also for AI coding assistants like GitHu
        # More cryptic code
    ```
 
-   #### AI Pitfall: Documentation Inconsistency
+   ##### 6.2.4.3. AI Pitfall: Documentation Inconsistency
    - **DON'T**: Skip documentation or add inconsistent docs
    - **DON'T**: Use different documentation styles than the project standard
    - **DO**: Document all public APIs and important functionality
    - **DO**: Follow the project's documentation standards
 
-### Bug Fixing
+### 6.3. Bug Fixing
 
-1. **Understand the Root Cause**
+#### 6.3.1. Understand the Root Cause
    - Diagnose the problem thoroughly before implementing a fix
    - Fix the cause, not just the symptoms
 
-   #### DO: Identify and fix the root cause
+   ##### 6.3.1.1. DO: Identify and fix the root cause
    ```python
    # A proper bug fix addressing the root cause
    
@@ -1982,7 +1981,7 @@ This document is written for humans but also for AI coding assistants like GitHu
        return OperationResult(success=True)
    ```
 
-   #### DON'T: Apply superficial fixes
+   ##### 6.3.1.2. DON'T: Apply superficial fixes
    ```python
    # Superficial fix that doesn't address the root cause
    
@@ -2000,17 +1999,17 @@ This document is written for humans but also for AI coding assistants like GitHu
        # Masks the problem instead of fixing it
    ```
 
-   #### AI Pitfall: Symptom-Based Fixes
+   ##### 6.3.1.3. AI Pitfall: Symptom-Based Fixes
    - **DON'T**: Generate fixes that only address symptoms
    - **DON'T**: Add workarounds that mask underlying issues
    - **DO**: Look for the underlying cause of bugs
    - **DO**: Consider concurrency, edge cases, and error conditions
 
-2. **Minimize Code Changes**
+#### 6.3.2. Minimize Code Changes
    - Keep fixes focused and minimal
    - Don't refactor unrelated code during bug fixes
 
-   #### DO: Make focused, minimal changes
+   ##### 6.3.2.1. DO: Make focused, minimal changes
    ```python
    # Original buggy code
    def calculate_discount(price, discount_percent):
@@ -2026,7 +2025,7 @@ This document is written for humans but also for AI coding assistants like GitHu
        return price - discount
    ```
 
-   #### DON'T: Mix bug fixes with unrelated changes
+   ##### 6.3.2.2. DON'T: Mix bug fixes with unrelated changes
    ```python
    # Original buggy code
    def calculate_discount(price, discount_percent):
@@ -2045,17 +2044,17 @@ This document is written for humans but also for AI coding assistants like GitHu
        # The original bug fix is lost in all these changes
    ```
 
-   #### AI Pitfall: Fix Scope Expansion
+   ##### 6.3.2.3. AI Pitfall: Fix Scope Expansion
    - **DON'T**: Expand the scope of fixes to include enhancements
    - **DON'T**: Refactor working code while fixing bugs
    - **DO**: Make minimal, focused changes that address only the bug
    - **DO**: Separate bug fixes from feature enhancements
 
-3. **Add Regression Tests**
+#### 6.3.3. Add Regression Tests
    - Create tests that verify the bug is fixed
    - Ensure the bug cannot reoccur
 
-   #### DO: Add specific tests for the bug
+   ##### 6.3.3.1. DO: Add specific tests for the bug
    ```python
    # Bug: calculate_discount() fails with negative discount_percent
    
@@ -2084,7 +2083,7 @@ This document is written for humans but also for AI coding assistants like GitHu
        assert result == 80  # 20% discount should be applied
    ```
 
-   #### DON'T: Fix bugs without adding tests
+   ##### 6.3.3.2. DON'T: Fix bugs without adding tests
    ```python
    # Fixed the bug but didn't add tests to verify the fix
    # and prevent regression
@@ -2098,17 +2097,17 @@ This document is written for humans but also for AI coding assistants like GitHu
    # No tests added to verify the behavior
    ```
 
-   #### AI Pitfall: Untested Fixes
+   ##### 6.3.3.3. AI Pitfall: Untested Fixes
    - **DON'T**: Make silent changes without explanation
    - **DON'T**: Fix bugs without noting the reason for changes
    - **DO**: Add comments explaining the bug and fix
    - **DO**: Update function documentation to clarify behavior
 
-4. **Document the Fix**
+#### 6.3.4. Document the Fix
    - Explain the bug and how it was fixed
    - Update documentation if the bug was in documented behavior
 
-   #### DO: Document the fix clearly
+   ##### 6.3.4.1. DO: Document the fix clearly
    ```python
    def calculate_discount(price, discount_percent):
        """Calculate the discounted price with proper handling of negative values."""
@@ -2119,7 +2118,7 @@ This document is written for humans but also for AI coding assistants like GitHu
        return price - discount
    ```
 
-   #### DON'T: Leave fixes undocumented
+   ##### 6.3.4.2. DON'T: Leave fixes undocumented
    ```python
    def calculate_discount(price, discount_percent):
        # Silently fixed to handle negative percentages
@@ -2129,337 +2128,24 @@ This document is written for humans but also for AI coding assistants like GitHu
        return price - discount
    ```
 
-   #### AI Pitfall: Undocumented Fixes
+   ##### 6.3.4.3. AI Pitfall: Undocumented Fixes
    - **DON'T**: Make silent changes without explanation
    - **DON'T**: Fix bugs without noting the reason for changes
    - **DO**: Add comments explaining the bug and fix
    - **DO**: Update function documentation to clarify behavior
 
-### Code Reviews
+## 7. Task Focus
 
-1. **Review with Purpose**
-   - Focus on correctness, clarity, and maintainability
-   - Provide constructive feedback
-
-   #### DO: Give specific, actionable feedback
-   ```python
-   # Effective code review comments:
-   
-   # "This function could fail with division by zero when count is 0.
-   # Consider adding a guard clause to handle this case."
-   
-   # "The variable name 'x' doesn't convey its purpose.
-   # Consider renaming to 'user_count' for clarity."
-   
-   # "This query isn't using an index and could be slow with large datasets.
-   # Consider adding an index on the 'email' column."
-   ```
-
-   #### DON'T: Give vague or unhelpful feedback
-   ```python
-   # Ineffective code review comments:
-   
-   # "This doesn't look right."
-   
-   # "I wouldn't do it this way."
-   
-   # "Please fix this."
-   ```
-
-   #### AI Pitfall: Generic Reviews
-   - **DON'T**: Generate generic comments that don't add value
-   - **DON'T**: Focus on style preferences over substantive issues
-   - **DO**: Look for real problems like bugs or performance issues
-   - **DO**: Suggest specific improvements with examples
-
-2. **Focus on Important Issues**
-   - Prioritize issues that impact correctness, security, and performance
-   - Don't get distracted by minor style issues
-
-   #### DO: Focus on substantive issues
-   ```python
-   # Important review findings:
-   
-   # Security issue
-   # "This SQL query is vulnerable to injection attacks.
-   # Use parameterized queries instead."
-   
-   # Correctness issue
-   # "The cached data isn't invalidated when the record is updated,
-   # which could lead to stale data being displayed."
-   
-   # Performance issue
-   # "This operation loads all records into memory before filtering.
-   # Consider filtering at the database level for better performance."
-   ```
-
-   #### DON'T: Fixate on minor issues
-   ```python
-   # Minor issues that distract from more important concerns:
-   
-   # "Line 42 is too long by 2 characters."
-   
-   # "I prefer single quotes instead of double quotes for strings."
-   
-   # "There should be two blank lines between functions, not one."
-   ```
-
-   #### AI Pitfall: Misplaced Focus
-   - **DON'T**: Generate reviews focused on trivial formatting issues
-   - **DON'T**: Miss critical issues like security vulnerabilities
-   - **DO**: Prioritize issues by their potential impact
-   - **DO**: Look for security, performance, and correctness issues first
-
-### Commit Practices
-
-1. **Write Clear Commit Messages**
-   - Use descriptive messages that explain what and why
-   - Follow a consistent format
-
-   #### DO: Write informative commit messages
-   ```
-   # Good commit messages:
-   
-   Fix race condition in user balance calculation
-   
-   - Added transaction locking to prevent concurrent modifications
-   - Added validation to ensure balance doesn't go negative
-   - Added test case to verify fix
-   
-   Closes #123
-   ```
-
-   #### DON'T: Use vague or uninformative messages
-   ```
-   # Poor commit messages:
-   
-   fix bug
-   
-   update code
-   
-   WIP
-   
-   changes
-   ```
-
-   #### AI Pitfall: Generic Commit Messages
-   - **DON'T**: Generate generic commit messages that don't convey meaning
-   - **DON'T**: Focus only on what changed without explaining why
-   - **DO**: Explain both what changed and why it was necessary
-   - **DO**: Reference issue numbers when applicable
-
-2. **Keep Commits Focused**
-   - Each commit should represent a logical change
-   - Avoid mixing unrelated changes
-
-   #### DO: Create focused, logical commits
-   ```
-   # Good commit sequence:
-   
-   1. "Add User model with basic attributes"
-   2. "Implement user authentication service"
-   3. "Add login and registration API endpoints"
-   4. "Create user profile page"
-   ```
-
-   #### DON'T: Mix unrelated changes
-   ```
-   # Poor commit with mixed concerns:
-   
-   "Add user authentication, fix CSS bug, update product pricing,
-   and refactor database connection pooling"
-   ```
-
-   #### AI Pitfall: Monolithic Changes
-   - **DON'T**: Bundle multiple logical changes into one commit
-   - **DON'T**: Mix feature additions with bug fixes and refactoring
-   - **DO**: Break changes into logical, focused commits
-   - **DO**: Make each commit independently reviewable
-
-### Continuous Integration
-
-1. **Respect CI/CD Pipelines**
-   - Ensure your changes pass all CI checks
-   - Don't break the build
-
-   #### DO: Address CI failures promptly
-   ```python
-   # Properly fixing a failing test:
-   
-   # Original failing test
-   def test_user_registration():
-       result = register_user("test@example.com", "password")
-       assert result.success is True  # Failing because validation rejects password
-   
-   # Fixed test matching the new requirements
-   def test_user_registration():
-       # Updated to use a password that meets strength requirements
-       result = register_user("test@example.com", "StrongP@ssw0rd")
-       assert result.success is True
-   ```
-
-   #### DON'T: Ignore or disable CI checks
-   ```python
-   # Disabling tests instead of fixing the underlying issue
-   
-   @pytest.mark.skip(reason="This test is failing in CI")  # Bad practice
-   def test_user_registration():
-       result = register_user("test@example.com", "password")
-       assert result.success is True
-   ```
-
-   #### AI Pitfall: CI Avoidance
-   - **DON'T**: Suggest disabling failing tests or CI checks
-   - **DON'T**: Propose workarounds that bypass quality controls
-   - **DO**: Fix the underlying issues causing CI failures
-   - **DO**: Treat CI failures as important signals for improvement
-
-2. **Maintain Test Coverage**
-   - Ensure new code has appropriate test coverage
-   - Don't let coverage decrease
-
-   #### DO: Maintain or improve test coverage
-   ```python
-   # New feature with proper test coverage
-   
-   # Feature implementation
-   def format_currency(amount, currency_code="USD"):
-       """Format amount in the specified currency."""
-       symbols = {"USD": "$", "EUR": "€", "GBP": "£"}
-       symbol = symbols.get(currency_code, currency_code)
-       return f"{symbol}{amount:.2f}"
-   
-   # Comprehensive tests
-   def test_format_currency_with_default():
-       assert format_currency(10.5) == "$10.50"
-       
-   def test_format_currency_with_euro():
-       assert format_currency(10.5, "EUR") == "€10.50"
-       
-   def test_format_currency_with_unknown_currency():
-       assert format_currency(10.5, "XYZ") == "XYZ10.50"
-   ```
-
-   #### DON'T: Add untested code
-   ```python
-   # New feature without tests
-   
-   def format_currency(amount, currency_code="USD"):
-       """Format amount in the specified currency."""
-       symbols = {"USD": "$", "EUR": "€", "GBP": "£"}
-       symbol = symbols.get(currency_code, currency_code)
-       return f"{symbol}{amount:.2f}"
-   
-   # No tests added to verify the behavior
-   ```
-
-   #### AI Pitfall: Coverage Neglect
-   - **DON'T**: Generate code without corresponding tests
-   - **DON'T**: Focus only on happy path testing
-   - **DO**: Create tests for new functionality and edge cases
-   - **DO**: Maintain or improve the project's test coverage
-
-### Deployment Considerations
-
-1. **Plan for Backward Compatibility**
-   - Consider how changes will affect existing users
-   - Avoid breaking changes in public APIs
-
-   #### DO: Maintain backward compatibility
-   ```python
-   # Adding a parameter with a default value
-   
-   # Original function
-   def send_notification(user_id, message):
-       """Send a notification to a user."""
-       # Implementation
-   
-   # Updated function with backward compatibility
-   def send_notification(user_id, message, priority="normal"):
-       """
-       Send a notification to a user.
-       
-       Args:
-           user_id: The user ID
-           message: The notification message
-           priority: The priority level (high, normal, low)
-       """
-       # New implementation with priority handling
-   ```
-
-   #### DON'T: Make breaking changes without migration path
-   ```python
-   # Breaking change without backward compatibility
-   
-   # Original function
-   def send_notification(user_id, message):
-       """Send a notification to a user."""
-       # Implementation
-   
-   # Breaking change
-   def send_notification(user_id, message, priority):
-       """Send a notification with the specified priority."""
-       # Now requires priority parameter with no default
-       # Will break existing calls
-   ```
-
-   #### AI Pitfall: Compatibility Neglect
-   - **DON'T**: Suggest breaking changes to public APIs
-   - **DON'T**: Ignore the impact of changes on existing users
-   - **DO**: Maintain backward compatibility when possible
-   - **DO**: Provide migration paths when breaking changes are necessary
-
-2. **Consider Performance Impact**
-   - Evaluate how changes might affect system performance
-   - Test with realistic data volumes
-   - Follow the "Avoid Premature Optimization" principle for most code
-   - Only optimize proactively for known performance-critical paths
-   
-   #### DO: Consider performance implications
-   ```python
-   # Performance-conscious implementation
-   
-   def get_active_users(limit=100):
-       """Get active users efficiently."""
-       # Use database indexing
-       # Limit result set size
-       # Only retrieve needed fields
-       return db.users.find(
-           {"status": "active"},
-           projection={"_id": 1, "name": 1, "email": 1}
-       ).limit(limit)
-   ```
-
-   #### DON'T: Ignore performance considerations
-   ```python
-   # Performance-unaware implementation
-   
-   def get_all_users():
-       """Get all users without consideration for dataset size."""
-       # Retrieves all users with all fields
-       # No pagination or limiting
-       # Could cause memory issues with large datasets
-       return list(db.users.find({}))
-   ```
-
-   #### AI Pitfall: Scale Blindness
-   - **DON'T**: Generate code that assumes small data volumes
-   - **DON'T**: Ignore database performance considerations
-   - **DO**: Consider how code will behave at scale
-   - **DO**: Use pagination, indexing, and query optimization
-
-## Focused Problem Solving
-
-### Maintaining Task Focus
+### 7.1. Maintaining Task Focus
 - Stay focused on the specific task requested
 - Resist the urge to refactor unrelated code
 - Make minimal changes needed to accomplish the goal
 
-1. **Scope Confinement**
+#### 7.1.1. Scope Confinement
    - Understand the exact boundaries of the requested change
    - Work within those boundaries without drifting
 
-   #### DO: Confine changes to the requested scope
+   ##### 7.1.1.1. DO: Confine changes to the requested scope
    ```python
    # Request: Fix bug where user email validation allows invalid formats
    
@@ -2475,7 +2161,7 @@ This document is written for humans but also for AI coding assistants like GitHu
        return bool(re.match(r"[^@]+@[^@]+\.[^@]+", email))
    ```
 
-   #### DON'T: Make unrelated changes while fixing issues
+   ##### 7.1.1.2. DON'T: Make unrelated changes while fixing issues
    ```python
    # Request: Fix bug where user email validation allows invalid formats
    
@@ -2499,17 +2185,17 @@ This document is written for humans but also for AI coding assistants like GitHu
        return is_valid
    ```
 
-   #### AI Pitfall: Feature Creep
+   ##### 7.1.1.3. AI Pitfall: Feature Creep
    - **DON'T**: Add "improvements" that weren't requested
    - **DON'T**: Refactor code structure beyond the task scope
    - **DO**: Ask for permission before making broader changes
    - **DO**: Focus solely on the specific task requested
 
-2. **Incremental Changes**
+#### 7.1.2. Incremental Changes
    - Make one logical change at a time
    - Keep changes small and reviewable
 
-   #### DO: Make incremental, targeted changes
+   ##### 7.1.2.1. DO: Make incremental, targeted changes
    ```python
    # Request: Add user account status check to the login function
    
@@ -2535,7 +2221,7 @@ This document is written for humans but also for AI coding assistants like GitHu
        return LoginResult(success=True, user_id=user.id)
    ```
 
-   #### DON'T: Bundle multiple changes together
+   ##### 7.1.2.2. DON'T: Bundle multiple changes together
    ```python
    # Request: Add user account status check to the login function
    
@@ -2573,17 +2259,17 @@ This document is written for humans but also for AI coding assistants like GitHu
        return LoginResult(success=True, user_id=user.id)
    ```
 
-   #### AI Pitfall: Solution Overengineering
+   ##### 7.1.2.3. AI Pitfall: Solution Overengineering
    - **DON'T**: Rewrite entire functions when a small change would suffice
    - **DON'T**: Change function signatures or return types unnecessarily
    - **DO**: Preserve existing behavior for all use cases not related to the task
    - **DO**: Maintain the same coding style and patterns as the original code
 
-3. **Preserving Interfaces**
+#### 7.1.3. Preserving Interfaces
    - Don't change function signatures unless explicitly requested
    - Maintain backward compatibility
 
-   #### DO: Preserve existing interfaces
+   ##### 7.1.3.1. DO: Preserve existing interfaces
    ```python
    # Request: Add optional timeout parameter to the fetch_data function
    
@@ -2600,7 +2286,7 @@ This document is written for humans but also for AI coding assistants like GitHu
        return response.json()
    ```
 
-   #### DON'T: Change interfaces unnecessarily
+   ##### 7.1.3.2. DON'T: Change interfaces unnecessarily
    ```python
    # Request: Add optional timeout parameter to the fetch_data function
    
@@ -2627,17 +2313,17 @@ This document is written for humans but also for AI coding assistants like GitHu
            }
    ```
 
-   #### AI Pitfall: Interface Drift
+   ##### 7.1.3.3. AI Pitfall: Interface Drift
    - **DON'T**: Change parameter names, types, or order unless requested
    - **DON'T**: Modify return types or structures without explicit instructions
    - **DO**: Use optional parameters with sensible defaults for new features
    - **DO**: Maintain backward compatibility with existing code
 
-4. **Code Style Consistency**
+#### 7.1.4. Code Style Consistency
    - Match the existing code style
    - Don't introduce new patterns unnecessarily
 
-   #### DO: Maintain consistent style
+   ##### 7.1.4.1. DO: Maintain consistent style
    ```python
    # Existing code using a specific error handling pattern
    def process_user(user_id):
@@ -2660,7 +2346,7 @@ This document is written for humans but also for AI coding assistants like GitHu
        return True
    ```
 
-   #### DON'T: Introduce inconsistent styles
+   ##### 7.1.4.2. DON'T: Introduce inconsistent styles
    ```python
    # Existing code using a specific error handling pattern
    def process_user(user_id):
@@ -2686,17 +2372,17 @@ This document is written for humans but also for AI coding assistants like GitHu
            return None  # Different return type for errors
    ```
 
-   #### AI Pitfall: Style Inconsistency
+   ##### 7.1.4.3. AI Pitfall: Style Inconsistency
    - **DON'T**: Introduce new coding styles or patterns
    - **DON'T**: Use different error handling approaches than the rest of the codebase
    - **DO**: Study the existing code style before making changes
    - **DO**: Follow established patterns for consistency
 
-5. **Targeted Bug Fixes**
+#### 7.1.5. Targeted Bug Fixes
    - Fix only the specific bug reported
    - Avoid the temptation to "improve" working code
 
-   #### DO: Target the specific bug
+   ##### 7.1.5.1. DO: Target the specific bug
    ```python
    # Bug report: Function crashes when input is None
    
@@ -2715,7 +2401,7 @@ This document is written for humans but also for AI coding assistants like GitHu
        return result
    ```
 
-   #### DON'T: Fix unrelated issues or add enhancements
+   ##### 7.1.5.2. DON'T: Fix unrelated issues or add enhancements
    ```python
    # Bug report: Function crashes when input is None
    
@@ -2743,130 +2429,130 @@ This document is written for humans but also for AI coding assistants like GitHu
        return result
    ```
 
-   #### AI Pitfall: Fix Expansion
+   ##### 7.1.5.3. AI Pitfall: Fix Expansion
    - **DON'T**: Fix "potential" bugs that haven't been reported
    - **DON'T**: Add enhancements while fixing bugs
    - **DO**: Focus on the specific issue reported
    - **DO**: Verify that the fix addresses the exact problem described
 
-## Focused AI Assistance
+## 8. Focused AI Assistance
 
 When working with AI coding assistants, keeping them focused on the exact task is crucial. Follow these guidelines to ensure AI-generated code addresses only the specific problem without adding unrelated changes.
 
-### Core Rules for Focused AI Solutions
+### 8.1. Core Rules for Focused AI Solutions
 
-1. **Request Exactness**
+#### 8.1.1. Request Exactness
    - Request only the specific code change needed
    - Be explicit about what should NOT be modified
    
-   #### DO: Make precise, bounded requests
+   ##### 8.1.1.1. DO: Make precise, bounded requests
    ```
    "Add input validation to the create_user function to check that the email 
    parameter is a valid email format. Don't modify any other parameters or 
    the function's return type."
    ```
    
-   #### DON'T: Make vague, open-ended requests
+   ##### 8.1.1.2. DON'T: Make vague, open-ended requests
    ```
    "Improve the create_user function"
    ```
 
-2. **Scope Limiting**
+#### 8.1.2. Scope Limiting
    - Explicitly limit the AI to the specific file and function
    - State which parts of the codebase should remain untouched
    
-   #### DO: Set clear boundaries
+   ##### 8.1.2.1. DO: Set clear boundaries
    ```
    "Fix the bug in utils/validation.py in the validate_password function 
    where it's not checking minimum length. Don't modify any other functions
    in the file or change any other validation rules."
    ```
    
-   #### DON'T: Allow unbounded changes
+   ##### 8.1.2.2. DON'T: Allow unbounded changes
    ```
    "Fix the password validation"
    ```
 
-3. **Single-Concern Principle**
+#### 8.1.3. Single-Concern Principle
    - Request one logical change at a time
    - Break complex tasks into sequential, focused requests
    
-   #### DO: Focus on one concern per request
+   ##### 8.1.3.1. DO: Focus on one concern per request
    ```
    "First, let's add the User class with basic properties and constructor.
    After that's done, we'll add the authentication methods in a separate step."
    ```
    
-   #### DON'T: Bundle multiple concerns
+   ##### 8.1.3.2. DON'T: Bundle multiple concerns
    ```
    "Create a User class with properties, authentication, database integration,
    and admin panel functionality"
    ```
 
-4. **Review Before Applying**
+#### 8.1.4. Review Before Applying
    - Review AI-generated changes before applying them
    - Verify that only the requested changes were made
    
-   #### DO: Carefully review code diffs
+   ##### 8.1.4.1. DO: Carefully review code diffs
    ```
    "Before committing: Check that only the requested validation logic was 
    added and no other function signatures or behaviors were changed"
    ```
 
-5. **Iterative Correction**
+#### 8.1.5. Iterative Correction
    - If the AI makes out-of-scope changes, provide specific correction
    - Explain exactly what was out of scope and why
    
-   #### DO: Give specific correction feedback
+   ##### 8.1.5.1. DO: Give specific correction feedback
    ```
    "The changes you made to the error handling in process_payment() were 
    not part of the request. Please revert those changes and only modify 
    the validation logic as originally requested."
    ```
    
-   #### DON'T: Give vague feedback
+   ##### 8.1.5.2. DON'T: Give vague feedback
    ```
    "That's not right, try again"
    ```
 
-### Preventing Common Focus Problems
+### 8.2. Preventing Common Focus Problems
 
-1. **Feature Creep Prevention**
+#### 8.2.1. Feature Creep Prevention
    - Explicitly instruct the AI not to add "nice-to-have" features
    - State that any extra functionality requires explicit approval
    
-   #### DO: Set explicit feature boundaries
+   ##### 8.2.1.1. DO: Set explicit feature boundaries
    ```
    "Add only the login functionality. Do not add registration, password 
    reset, or any other authentication features unless specifically requested."
    ```
 
-2. **Architecture Preservation**
+#### 8.2.2. Architecture Preservation
    - Instruct the AI to maintain the existing architecture
    - Require approval for architectural changes
    
-   #### DO: Emphasize architectural constraints
+   ##### 8.2.2.1. DO: Emphasize architectural constraints
    ```
    "Implement this feature following the existing repository pattern. 
    Do not introduce new architectural patterns or layers."
    ```
 
-3. **Interface Stability**
+#### 8.2.3. Interface Stability
    - Explicitly forbid changing function signatures
    - Require backward compatibility for public APIs
    
-   #### DO: Emphasize stability requirements
+   ##### 8.2.3.1. DO: Emphasize stability requirements
    ```
    "Fix the bug in the calculate_total function without changing its 
    signature or return type. All existing code calling this function 
    must continue to work without modification."
    ```
 
-4. **Style Consistency**
+#### 8.2.4. Style Consistency
    - Instruct the AI to match the existing code style
    - Forbid style changes to unrelated code
    
-   #### DO: Emphasize style constraints
+   ##### 8.2.4.1. DO: Emphasize style constraints
    ```
    "When adding this function, match the existing code style in the file.
    Do not reformat or restructure any existing code."
