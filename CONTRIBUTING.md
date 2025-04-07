@@ -2499,18 +2499,50 @@ When working with AI coding assistants, keeping them focused on the exact task i
    added and no other function signatures or behaviors were changed"
    ```
 
-#### 8.1.5. Iterative Correction
+#### 8.1.5. Scope Adherence Check
+   - The AI should self-check if its proposed changes stay within the requested scope
+   - Ensure that each part of the change directly relates to the original request
+   - After completing the task, perform an analysis of all changes made
+   - Inform the user of any potential out-of-scope modifications for their review
+   
+   ##### 8.1.5.1. DO: Explicitly check scope before submitting code
+   ```
+   "Before submitting this code change, I've verified that:
+   1. Only the requested feature (email validation) was implemented
+   2. No existing functionality was modified beyond the scope
+   3. No additional enhancements were added that weren't requested
+   4. Only the specified function was modified
+   
+   After analyzing my changes, I notice I've also modified the error handling format in the function. 
+   This wasn't explicitly requested - please confirm if this additional change is acceptable."
+   ```
+   
+   ##### 8.1.5.2. DON'T: Skip self-verification of scope
+   ```
+   # Not mentioning any scope verification before submitting changes
+   # or submitting changes without checking if they're limited to what was requested
+   ```
+   
+   ##### 8.1.5.3. AI Pitfall: Assuming Scope Compliance
+   - **DON'T**: Assume that proposed changes automatically stay within scope
+   - **DON'T**: Let implementation details drive feature expansion
+   - **DON'T**: Hide potential out-of-scope changes from the user
+   - **DO**: Explicitly verify each change against the original request
+   - **DO**: Question any addition that wasn't specifically requested
+   - **DO**: Proactively identify and disclose potential scope issues after task completion
+
+#### 8.1.6. Iterative Correction
    - If the AI makes out-of-scope changes, provide specific correction
    - Explain exactly what was out of scope and why
    
-   ##### 8.1.5.1. DO: Give specific correction feedback
+   ##### 8.1.6.1. DO: Give specific correction feedback
    ```
    "The changes you made to the error handling in process_payment() were 
    not part of the request. Please revert those changes and only modify 
    the validation logic as originally requested."
    ```
    
-   ##### 8.1.5.2. DON'T: Give vague feedback
+   ##### 8.1.6.2. DON'T: Give vague feedback
    ```
    "That's not right, try again"
    ```
