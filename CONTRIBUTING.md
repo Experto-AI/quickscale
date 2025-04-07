@@ -838,6 +838,256 @@ This document is written for humans but also for AI coding assistants like GitHu
    - Optimize only when there's a measurable benefit
    - Remember that future requirements might change, making complex optimizations obsolete
 
+### 3.7. Debugging and Root Cause Analysis
+
+Debugging should focus on finding and addressing the root cause of issues rather than implementing temporary workarounds or fallbacks.
+
+#### 3.7.1. Root Cause Analysis Approach
+   - Always pursue the fundamental source of the problem
+   - Never implement workarounds or fallbacks that mask the underlying issue
+   - Use systematic approaches to identify causes rather than addressing symptoms
+   
+   ##### 3.7.1.1. DO: Pursue the root cause systematically
+   ```python
+   # Bug: User permissions occasionally fail to update
+   
+   # Root cause investigation:
+   # 1. Reproduce the issue consistently
+   # 2. Analyze logs around the time of failure
+   # 3. Trace data flow from permission changes
+   # 4. Identify race condition in permission cache updates
+   
+   # Fix the actual cause (race condition)
+   def update_user_permissions(user_id, permissions):
+       """Update user permissions with proper locking."""
+       with permission_lock:  # Add proper locking mechanism
+           user = get_user(user_id)
+           user.permissions = permissions
+           db.save(user)
+           cache.update(f"user_perms:{user_id}", permissions)  # Cache update within lock
+   ```
+   
+   ##### 3.7.1.2. DON'T: Implement superficial workarounds
+   ```python
+   # Bug: User permissions occasionally fail to update
+   
+   # Workaround that doesn't address the root cause
+   def update_user_permissions(user_id, permissions):
+       """Update user permissions with ineffective workaround."""
+       user = get_user(user_id)
+       user.permissions = permissions
+       db.save(user)
+       
+       # Workaround: Deleting cache instead of fixing race condition
+       cache.delete(f"user_perms:{user_id}")
+       
+       # Workaround: Adding retry logic that doesn't fix underlying issue
+       for _ in range(3):
+           try:
+               cache.update(f"user_perms:{user_id}", permissions)
+               break
+           except:
+               time.sleep(0.1)
+   ```
+   
+   ##### 3.7.1.3. Problem-Solving Pitfall: Symptom Masking
+   - **DON'T**: Implement code that hides errors instead of addressing them
+   - **DON'T**: Add fallbacks that allow the system to continue with inconsistent state
+   - **DO**: Fix the fundamental flaw in the code or architecture
+   - **DO**: Document root causes thoroughly when fixed
+
+#### 3.7.2. DMAIC Approach to Debugging
+   The DMAIC methodology (Define, Measure, Analyze, Improve, Control) provides a structured approach to identifying and fixing bugs.
+   
+   ##### 3.7.2.1. Define
+   - Clearly define the problem with specific, observable symptoms
+   - Document the exact conditions under which the issue occurs
+   - Establish success criteria for the fix
+   
+   ```python
+   # Define phase documentation
+   """
+   Bug: Authentication fails for users with non-ASCII characters in usernames
+   Reproduction: 100% of login attempts fail when username contains é, ü, etc.
+   Expected: All valid usernames should authenticate regardless of character set
+   Impact: ~5% of international users cannot log in
+   Success criteria: All users with valid credentials can log in
+   """
+   ```
+   
+   ##### 3.7.2.2. Measure
+   - Gather quantitative data about the issue
+   - Create a reproducible test case
+   - Collect metrics on frequency, impact, and context
+   
+   ```python
+   # Measure phase - create a test case
+   def test_authentication_with_unicode_characters():
+       """Test authentication with non-ASCII characters in username."""
+       # Test data
+       test_users = [
+           {"username": "jöhn", "password": "secure123", "should_pass": True},
+           {"username": "maría", "password": "secure123", "should_pass": True},
+           {"username": "andré", "password": "secure123", "should_pass": True}
+       ]
+       
+       # Measure results
+       results = []
+       for user in test_users:
+           result = authenticate(user["username"], user["password"])
+           results.append({
+               "username": user["username"],
+               "expected": user["should_pass"],
+               "actual": result,
+               "passed": result == user["should_pass"]
+           })
+           
+       # Log measurements
+       logger.info(f"Authentication test results: {results}")
+       return results
+   ```
+   
+   ##### 3.7.2.3. Analyze
+   - Systematically analyze the data to identify the root cause
+   - Use debugging tools, logging, and code review
+   - Create hypotheses and test them methodically
+   
+   ```python
+   # Analyze phase - identified root cause
+   """
+   Root cause analysis:
+   
+   1. Traced authentication flow through all components
+   2. Found username is properly UTF-8 encoded in the request
+   3. Database query correctly uses parameterized queries
+   4. Found that username is being incorrectly encoded in the query builder:
+      - Line 142: username.encode('ascii', 'ignore') is stripping non-ASCII chars
+      - This causes query to look for incomplete username
+   
+   Conclusion: Incorrect encoding in query builder is the root cause
+   """
+   ```
+   
+   ##### 3.7.2.4. Improve
+   - Implement a solution that addresses the root cause
+   - Validate the solution with tests
+   - Ensure the fix doesn't introduce new issues
+   
+   ```python
+   # Improve phase - implementing the fix
+   
+   # Before (problematic code):
+   def build_auth_query(username, password_hash):
+       # Incorrect: Strips non-ASCII characters
+       ascii_username = username.encode('ascii', 'ignore').decode('ascii')
+       return f"SELECT * FROM users WHERE username = '{ascii_username}'"
+   
+   # After (fixed code):
+   def build_auth_query(username, password_hash):
+       # Fixed: Using proper parameterized queries with UTF-8 support
+       return "SELECT * FROM users WHERE username = %s", [username]
+   ```
+   
+   ##### 3.7.2.5. Control
+   - Put measures in place to prevent regression
+   - Add automated tests that verify the fix
+   - Update documentation and knowledge base
+   - Implement monitoring for similar issues
+   
+   ```python
+   # Control phase - preventing regression
+   
+   # 1. Add regression test
+   def test_unicode_username_authentication():
+       """Ensure users with Unicode characters can authenticate."""
+       result = authenticate("jöhn", "correct_password")
+       assert result is True
+   
+   # 2. Add validation to prevent similar issues
+   def validate_query_params(params):
+       """Validate that query params are properly handled for all character sets."""
+       for param in params:
+           if isinstance(param, str):
+               # Test encoding/decoding to ensure no data loss
+               encoded = param.encode('utf-8')
+               decoded = encoded.decode('utf-8')
+               assert param == decoded, f"Encoding validation failed for: {param}"
+   
+   # 3. Update documentation
+   """
+   Updated authentication documentation to specify UTF-8 support
+   Added section on proper parameter handling in queries
+   """
+   ```
+   
+   ##### 3.7.2.6. DMAIC Debugging Pitfall: Incomplete Analysis
+   - **DON'T**: Skip steps in the DMAIC process
+   - **DON'T**: Jump to solutions before fully understanding the problem
+   - **DO**: Systematically work through each phase
+   - **DO**: Document findings at each stage for future reference
+
+#### 3.7.3. Debugging Best Practices
+   - Use appropriate logging to capture relevant information
+   - Leverage automated tests to reproduce and verify fixes
+   - Document root causes and solutions for knowledge sharing
+   
+   ##### 3.7.3.1. DO: Implement systematic debugging
+   ```python
+   # Systematic debugging approach
+   
+   # 1. Add detailed logging around the issue
+   def process_transaction(transaction_id):
+       """Process a financial transaction."""
+       logger.info(f"Starting transaction {transaction_id}")
+       
+       try:
+           transaction = get_transaction(transaction_id)
+           logger.debug(f"Transaction data: {transaction}")
+           
+           # Processing steps with logging
+           result = payment_gateway.process(transaction)
+           logger.info(f"Gateway response: {result}")
+           
+           if not result.success:
+               logger.error(f"Transaction failed: {result.error_code} - {result.message}")
+               # Analyze error patterns, don't just retry blindly
+               
+           return result
+       except Exception as e:
+           logger.exception(f"Exception in transaction {transaction_id}")
+           raise  # Don't suppress the exception - let it propagate for proper handling
+   ```
+   
+   ##### 3.7.3.2. DON'T: Use ad-hoc debugging approaches
+   ```python
+   # Poor debugging approach
+   
+   def process_transaction(transaction_id):
+       """Process a financial transaction."""
+       # No logging of inputs or context
+       
+       try:
+           transaction = get_transaction(transaction_id)
+           result = payment_gateway.process(transaction)
+           
+           # Superficial error handling with no debugging info
+           if not result.success:
+               print(f"Error: {result}")  # Temporary print statement
+               return retry_transaction(transaction_id)  # Retry without understanding why
+               
+           return result
+       except:
+           # Swallow exception without logging details
+           print("Something went wrong")
+           return {"success": False}  # Return arbitrary result
+   ```
+   
+   ##### 3.7.3.3. Debugging Pitfall: Temporary Debugging Code
+   - **DON'T**: Leave debugging print statements in production code
+   - **DON'T**: Add temporary workarounds without planning proper fixes
+   - **DO**: Use structured logging with appropriate levels
+   - **DO**: Create automated tests that reproduce issues
+
 ## 4. Python Coding Standards
 
 ### 4.1. Code Style
