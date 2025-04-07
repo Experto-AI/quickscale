@@ -2,6 +2,11 @@
 
 This document contains detailed technical information about the QuickScale project, including the tech stack, project structure, development workflows, and more.
 
+This is a project generator that generates a project only once. 
+AI coding assistants must edit the templates and quickscale build associated files (root cause or source files), not project generated files (symptom generated or destination files).
+
+The most important command is `quickscale build`, which generates the project structure and files.
+
 ## TECHNICAL STACK
 - Django 5.0.1+ (backend framework)
     - Whitenoise 6.6.0+ (static files)

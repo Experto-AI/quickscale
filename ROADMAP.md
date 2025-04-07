@@ -37,30 +37,51 @@
 
 ## Projected Development Sprints
 
-### Sprint 2: User Authentication with django-allauth (v0.5.0) 
-- [ ] **Session 1: django-allauth Integration**
-  - Add django-allauth package
-  - Configure django-allauth settings
-  - Integrate with existing user model
-  - Setup email backend configuration
+### Sprint 2: Django-Allauth Integration and Migration (v0.5.0) 
+- [ ] **Session 1: Core django-allauth Integration**
+  - Evaluate django-allauth features for QuickScale project templates
+  - Integrate django-allauth into the project generator templates
+  - Configure core settings in templates (INSTALLED_APPS, AUTHENTICATION_BACKENDS)
+  - Set up site framework required by django-allauth in project templates
+  - Create URL routing templates for django-allauth endpoints
 
-- [ ] **Session 2: Authentication Flow Customization**
-  - Customize registration templates
-  - Implement email verification flow
-  - Adapt login/signup views to project styling
-  - Add social authentication providers (optional)
+- [ ] **Session 2: Email-Only Authentication System**
+  - Design auth templates for django-allauth in generated projects
+  - Create starter User model templates compatible with django-allauth
+  - Configure email-only authentication (explicitly disable social authentication)
+  - Create template generation options for auth customization
+  - Develop config files for email-specific authentication settings
 
-- [ ] **Session 3: User Profile Enhancement**
-  - Extend user profile with additional fields
-  - Create profile management views
-  - Add avatar/profile photo support
-  - Implement settings page improvements
+- [ ] **Session 3: HTMX and Frontend Integration**
+  - Design django-allauth templates that integrate with HTMX
+  - Create UX-optimized auth flows with HTMX functionality
+  - Implement Alpine.js components for client-side auth interactions
+  - Ensure Bulma CSS compatibility with django-allauth forms
+  - Create responsive design for all authentication components
 
-- [ ] **Session 4: Testing and Security Review**
-  - Write tests for authentication flows
-  - Implement security best practices
-  - Review permission system
-  - Document the authentication system
+- [ ] **Session 4: Enhanced Authentication Features**
+  - Implement email verification workflow
+  - Add password reset functionality
+  - Configure secure email delivery for authentication processes
+  - Implement password strength validation
+  - Create enhanced profile management with extended user fields
+
+- [ ] **Session 5: Template Organization and Guidelines**
+  - Create comprehensive inventory of new django-allauth templates
+  - Design template directory structure for allauth components
+  - Develop template naming conventions for generated projects
+  - Create template documentation for users customizing authentication
+  - Define styling guidelines for authentication components
+  - Prepare examples of common template customizations
+
+- [ ] **Session 6: Testing, Documentation and Deployment**
+  - Create comprehensive test suite for authentication flows
+  - Develop pre/post migration comparison tests
+  - Design fallback mechanism and rollback capability for critical paths
+  - Create step-by-step migration documentation for existing projects
+  - Document new authentication features and configuration options
+  - Develop CLI commands for migrating auth in existing projects
+  - Create troubleshooting guide for common migration issues
 
 ### Sprint 3: Payment Integration with dj-stripe (v0.6.0)
 - [ ] **Session 1: dj-stripe Setup**
