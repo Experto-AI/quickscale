@@ -1,0 +1,14 @@
+{% load i18n %}
+{% autoescape off %}
+{% blocktrans %}Hello,
+
+You are receiving this email because you or someone else has requested a password reset for your user account.
+However, we do not have any record of a user account with the email address:
+
+{{ email }}
+
+If you have not signed up for our service, you can disregard this email.
+
+If you are expecting this email and believe this is an error, please contact support.
+{% endblocktrans %}
+{% endautoescape %} 

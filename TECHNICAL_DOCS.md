@@ -16,8 +16,8 @@ The most important command is `quickscale build`, which generates the project st
     - Uvicorn 0.27.0+ (ASGI server)
 - HTMX (frontend to backend communication for CRUD operations with the simplicity of HTML)
 - Alpine.js (simple vanilla JS library for DOM manipulation)
-- Bulma CSS (simple CSS styling without JavaScript)
-- PostgreSQL (database)
+- Bulma CSS (simple CSS styling without JavaScript) - Do not mix Tailwind or another alternatives
+- PostgreSQL (database) - Do not use SQLite nor MySQL
 - Deployment: .env + Docker + Uvicorn
 
 ## DJANGO MANAGE COMMANDS
@@ -123,6 +123,26 @@ project-name/
         └── signup.html
 ```
 
+### Pre-generated Migrations
+
+QuickScale uses pre-generated migrations in its templates rather than dynamically generating them during the build process. This approach offers several advantages:
+
+1. **Reduced memory usage**: Eliminates Out-of-Memory errors during project creation, especially on systems with limited resources
+2. **Faster build process**: Skips the expensive migration generation step, making project creation faster
+3. **Consistent initial state**: Ensures all projects start with identical database schemas
+4. **Better error handling**: Reduces potential migration-related errors during project setup
+
+The pre-generated migrations are located in the migration directories of each app template:
+
+```
+quickscale/templates/users/migrations/        # User model migrations
+quickscale/templates/dashboard/migrations/    # Dashboard app migrations
+quickscale/templates/public/migrations/       # Public app migrations
+quickscale/templates/common/migrations/       # Common app migrations
+```
+
+During the build process, QuickScale copies these migration files to the new project and applies them directly instead of running the `makemigrations` command.
+
 ## APPLICATION STRUCTURE
 
 ### Core Components
@@ -219,23 +239,127 @@ When contributing to QuickScale, please follow these testing guidelines:
 
 ## AUTHENTICATION
 
-Authentication in QuickScale is built on Django's authentication system, providing:
+Authentication in QuickScale is built on django-allauth, providing an email-only authentication system.
+
+### Overview
+
+- **Email-only authentication**: No usernames, only email addresses are used for authentication
+- **Mandatory email verification**: Users must verify their email before accessing protected areas
+- **Social authentication disabled**: No social login options (Google, Facebook, etc.)
+- **Custom email templates**: Customized email templates for all authentication emails
+
+### Configuration
+
+The authentication system is configured in multiple files:
+
+1. **core/settings.py**: Main Django settings file that imports email settings
+2. **core/email_settings.py**: Dedicated file for email and django-allauth settings
+3. **users/models.py**: Custom user model for email-only authentication
+4. **users/adapters.py**: Custom adapters for django-allauth
+5. **users/forms.py**: Custom forms for django-allauth
+6. **templates/account/**: Email templates and HTML pages for authentication
+
+### Email Templates
+
+Authentication email templates are located in:
+
+```
+templates/account/email/
+```
+
+Available templates:
+- `email_confirmation_subject.txt` & `email_confirmation_message.txt`: Email verification
+- `password_reset_key_subject.txt` & `password_reset_key_message.txt`: Password reset
+- `email_confirmation_signup_subject.txt` & `email_confirmation_signup_message.txt`: New signup verification
+- `account_already_exists_subject.txt` & `account_already_exists_message.txt`: Notice for duplicate accounts
+- `unknown_account_subject.txt` & `unknown_account_message.txt`: Notice for unknown accounts
+
+### HTML Templates
+
+Authentication HTML templates are located in:
+
+```
+templates/account/
+```
+
+Key templates include:
+- `login.html`: Login page
+- `signup.html`: Registration page
+- `email_confirm.html`: Email confirmation page
+- `password_reset.html`: Password reset request page
+- `verified_email_required.html`: Notice when email verification is required
+
+### Customizing Authentication
+
+#### Adding Custom Fields
+
+To add custom fields to user registration:
+
+1. Update the `CustomUser` model in `users/models.py` to include new fields
+2. Update `CustomSignupForm` in `users/forms.py` to include the new fields
+3. Update the `save()` method in `CustomSignupForm` to save the new fields
+
+#### Changing Email Templates
+
+To customize email templates:
+
+1. Edit the text templates in `templates/account/email/`
+2. Update the `send_mail()` method in `AccountAdapter` if needed
+
+#### Changing Authentication Flow
+
+To modify the authentication flow:
+
+1. Override methods in `AccountAdapter` class in `users/adapters.py`
+2. Update the django-allauth settings in `core/email_settings.py`
+3. Customize the HTML templates in `templates/account/`
+
+### Troubleshooting
+
+#### Email Not Sending
+
+1. Check EMAIL_* settings in your .env file
+2. Verify your SMTP server is working
+3. Check email backend setting in settings.py
+4. In development, emails are sent to the console by default
+
+#### User Can't Login After Registration
+
+1. Check if email verification is required (ACCOUNT_EMAIL_VERIFICATION)
+2. Check if the verification email was sent
+3. Verify the user clicked the verification link
+4. Check for errors in the Django logs
+
+#### Customization Not Working
+
+1. Make sure you're overriding the correct template
+2. Check that your custom adapters are correctly registered in settings
+3. Review django-allauth documentation for the correct method names
+4. Clear your browser cache and Django cache
 
 ## ENVIRONMENT VARIABLES
 
 The project uses the following environment variables:
 
-| Variable            | Description               | Default                                      |
-|---------------------|---------------------------|----------------------------------------------|
-| DEBUG               | Debug mode                | True                                         |
-| SECRET_KEY          | Django secret key         | Automatically generated secure random string |
-| DATABASE_URL        | PostgreSQL connection URL | postgresql://admin:adminpasswd@db:5432/admin |
-| POSTGRES_HOST       | PostgreSQL host           | db                                           |
-| POSTGRES_DB         | PostgreSQL database name  | admin                                        |
-| POSTGRES_USER       | PostgreSQL username       | admin                                        |
-| POSTGRES_PASSWORD   | PostgreSQL password       | adminpasswd                                  |
-| EMAIL_HOST_USER     | SMTP username for emails  | -                                            |
-| EMAIL_HOST_PASSWORD | SMTP password for emails  | -                                            |
+| Variable                   | Description                         | Default                                      |
+|----------------------------|-------------------------------------|----------------------------------------------|
+| DEBUG                      | Debug mode                          | True                                         |
+| SECRET_KEY                 | Django secret key                   | Automatically generated secure random string |
+| DATABASE_URL               | PostgreSQL connection URL           | postgresql://admin:adminpasswd@db:5432/admin |
+| POSTGRES_HOST              | PostgreSQL host                     | db                                           |
+| POSTGRES_DB                | PostgreSQL database name            | admin                                        |
+| POSTGRES_USER              | PostgreSQL username                 | admin                                        |
+| POSTGRES_PASSWORD          | PostgreSQL password                 | adminpasswd                                  |
+| EMAIL_HOST                 | SMTP host for sending emails        | smtp.example.com                             |
+| EMAIL_PORT                 | SMTP port                           | 587                                          |
+| EMAIL_HOST_USER            | SMTP username                       | -                                            |
+| EMAIL_HOST_PASSWORD        | SMTP password                       | -                                            |
+| EMAIL_USE_TLS              | Use TLS for email                   | True                                         |
+| EMAIL_USE_SSL              | Use SSL for email                   | False                                        |
+| DEFAULT_FROM_EMAIL         | Default sender email                | noreply@example.com                          |
+| SERVER_EMAIL               | Server email for admin notifications | server@example.com                           |
+| ACCOUNT_EMAIL_VERIFICATION | Email verification requirement      | mandatory                                    |
+| ACCOUNT_ALLOW_REGISTRATION | Allow user registration             | True                                         |
 
 ## DOCKER CONFIGURATION
 

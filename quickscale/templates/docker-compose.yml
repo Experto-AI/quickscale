@@ -7,7 +7,7 @@ services:
     # User mapping to maintain file ownership
     user: "${DOCKER_UID:-1000}:${DOCKER_GID:-1000}"
     volumes:
-      - .:/app
+      - ./:/app
     ports:
       - "${PORT:-8000}:8000"
     environment:
@@ -22,6 +22,16 @@ services:
     depends_on:
       db:
         condition: service_healthy
+    # Memory management to prevent OOM errors during migrations
+    deploy:
+      resources:
+        limits:
+          memory: 4G
+        reservations:
+          memory: 2G
+    # Allow some swap for peak memory operations
+    mem_swappiness: 60
+    restart: unless-stopped
   
   # PostgreSQL database service
   db:
@@ -32,6 +42,9 @@ services:
       - POSTGRES_DB=${pg_user}
       - POSTGRES_USER=${pg_user}
       - POSTGRES_PASSWORD=${pg_password}
+      # Add PostgreSQL memory optimization settings
+      - POSTGRES_SHARED_BUFFERS=128MB
+      - POSTGRES_WORK_MEM=16MB
     ports:
       - "${PG_PORT:-5432}:5432"
     healthcheck:
@@ -39,6 +52,13 @@ services:
       interval: 5s
       timeout: 5s
       retries: 5
+    # Memory management for database
+    deploy:
+      resources:
+        limits:
+          memory: 384M
+        reservations:
+          memory: 256M
 
 # Named volumes for persistent data
 volumes:

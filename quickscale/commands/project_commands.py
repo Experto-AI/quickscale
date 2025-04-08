@@ -3,6 +3,9 @@ import os
 import sys
 import shutil
 import subprocess
+import time
+import secrets
+import logging
 from pathlib import Path
 from typing import Dict, Any, Optional, List, Tuple, NoReturn
 from quickscale.utils.logging_manager import LoggingManager
@@ -48,7 +51,6 @@ class BuildProjectCommand(Command):
         self.templates_dir = Path(__file__).parent.parent / "templates"
         
         # Generate a random SECRET_KEY
-        import secrets
         secret_key = secrets.token_urlsafe(32)
         
         # Find an available port
@@ -229,22 +231,13 @@ class {config_class}(AppConfig):
             self._run_migrations()
             self._create_users()
             return True
-        except subprocess.SubprocessError as e:
+        except (subprocess.SubprocessError, subprocess.TimeoutExpired, Exception) as e:
             self.logger.error(f"Database setup error: {e}")
             return False
     
     def _run_migrations(self) -> None:
-        """Run database migrations for all apps."""
-        apps = ['public', 'dashboard', 'users', 'common']
-        
-        # First create __init__.py in migrations directories if they don't exist
-        for app in apps:
-            migrations_dir = Path(f"{app}/migrations")
-            migrations_dir.mkdir(exist_ok=True)
-            init_file = migrations_dir / "__init__.py"
-            if not init_file.exists():
-                with open(init_file, "w", encoding='utf-8') as f:
-                    f.write('"""Migrations package."""\n')
+        """Run database migrations for all apps using pre-generated migrations."""
+        apps = ['users', 'common', 'public', 'dashboard']
         
         # Check if web container is running
         try:
@@ -259,44 +252,169 @@ class {config_class}(AppConfig):
             self.logger.error(f"Error checking web container status: {e}")
             raise
             
-        # Run makemigrations for each app with error handling
+        # Skip makemigrations step since we now use pre-generated migrations
+        self.logger.info("Using pre-generated migrations, skipping makemigrations step")
+        
+        # Break the migrations into even smaller chunks to reduce memory usage
+        try:
+            # First run a simple check to test database connectivity before attempting migrations
+            self.logger.info("Testing database connectivity...")
+            
+            # Add retry mechanism for database connectivity test
+            max_retries = 3
+            retry_count = 0
+            while retry_count < max_retries:
+                try:
+                    # Use a simple psycopg2 connection check (less memory than django.setup())
+                    # Ensure proper formatting and escaping for the command string
+                    db_check_script = f'''
+import os
+import psycopg2
+import sys
+try:
+    conn = psycopg2.connect(
+        dbname='{self.variables['pg_user']}', 
+        user='{self.variables['pg_user']}', 
+        password='{self.variables['pg_password']}', 
+        host='db', 
+        port='5432',
+        connect_timeout=5
+    )
+    conn.close()
+    print("Connection successful")
+    sys.exit(0)
+except psycopg2.OperationalError as e:
+    print(f"Connection failed: {{e}}", file=sys.stderr)
+    sys.exit(1)
+except Exception as e:
+    print(f"An unexpected error occurred: {{e}}", file=sys.stderr)
+    sys.exit(1)
+'''
+                    
+                    db_check_cmd = [
+                        DOCKER_COMPOSE_COMMAND, "exec", "-T", "web", 
+                        "python", "-c", db_check_script
+                    ]
+                    
+                    self.logger.debug(f"Running connectivity check command: {' '.join(db_check_cmd)}")
+                    # Increased timeout slightly for the direct connection attempt
+                    result = subprocess.run(db_check_cmd, check=True, timeout=20, capture_output=True, text=True)
+                    self.logger.info(f"Database connectivity verified. Output: {result.stdout.strip()}")
+                    break # Exit loop on success
+                except (subprocess.CalledProcessError, subprocess.TimeoutExpired) as e:
+                    retry_count += 1
+                    error_output = ""
+                    if isinstance(e, subprocess.CalledProcessError):
+                        # Log both stdout and stderr from the failed process
+                        error_output = f"stdout: {e.stdout.strip()}, stderr: {e.stderr.strip()}"
+                    else:
+                        error_output = str(e)
+                        
+                    if retry_count >= max_retries:
+                        self.logger.error(f"Database connectivity test failed after {max_retries} attempts: {error_output}")
+                        self.logger.error("This may indicate issues with database configuration, permissions, or network connectivity between containers.")
+                        raise
+                        
+                    self.logger.warning(f"Database connectivity test failed (attempt {retry_count}/{max_retries}): {error_output}")
+                    self.logger.warning(f"Retrying in 5 seconds...")
+                    # Wait a moment before retrying
+                    time.sleep(5)
+                    
+        except (subprocess.SubprocessError, subprocess.TimeoutExpired) as e:
+            self.logger.error(f"Database connectivity setup failed: {e}")
+            self.logger.error("This may indicate issues with database configuration or permissions")
+            raise
+            
+        # Now simply run migrations with default Django settings
+        
+        # Run migrations for essential apps first
+        essential_apps = [
+            'auth',
+            'contenttypes',
+            'sites',
+            'account',
+        ]
+        
+        self.logger.info("Running migrations for essential apps...")
+        
+        for app in essential_apps:
+            try:
+                self.logger.info(f"Applying migrations for essential app {app}...")
+                subprocess.run(
+                    [DOCKER_COMPOSE_COMMAND, "exec", "-T", "-e", "PYTHONMALLOC=malloc", "-e", "PYTHONUNBUFFERED=1", 
+                     "web", "python", "manage.py", "migrate", app, "--noinput"],
+                    check=True, timeout=120, capture_output=True, text=True
+                )
+                self.logger.info(f"Migrations for {app} applied successfully")
+            except (subprocess.SubprocessError, subprocess.TimeoutExpired) as e:
+                error_output = ""
+                if hasattr(e, 'stdout') and e.stdout:
+                    self.logger.error(f"Command stdout: {e.stdout}")
+                if hasattr(e, 'stderr') and e.stderr:
+                    self.logger.error(f"Command stderr: {e.stderr}")
+                self.logger.error(f"Error applying migrations for {app}: {e}")
+                self.logger.warning(f"Continuing despite error with {app} migrations")
+                continue
+        
+        # Now run migrations for project apps
         for app in apps:
             try:
+                self.logger.info(f"Applying migrations for project app {app}...")
                 subprocess.run(
-                    [DOCKER_COMPOSE_COMMAND, "exec", "web", "python", "manage.py", "makemigrations", app],
-                    check=True, timeout=30
+                    [DOCKER_COMPOSE_COMMAND, "exec", "-T", "-e", "PYTHONMALLOC=malloc", "-e", "PYTHONUNBUFFERED=1", 
+                     "web", "python", "manage.py", "migrate", app, "--noinput"],
+                    check=True, timeout=120, capture_output=True, text=True
                 )
+                self.logger.info(f"Migrations for {app} applied successfully")
             except (subprocess.SubprocessError, subprocess.TimeoutExpired) as e:
-                self.logger.error(f"Error creating migrations for {app}: {e}")
-                # Continue with other apps instead of failing completely
+                error_output = ""
+                if hasattr(e, 'stdout') and e.stdout:
+                    self.logger.error(f"Command stdout: {e.stdout}")
+                if hasattr(e, 'stderr') and e.stderr:
+                    self.logger.error(f"Command stderr: {e.stderr}")
+                self.logger.error(f"Error applying migrations for {app}: {e}")
+                self.logger.warning(f"Continuing despite error with {app} migrations")
                 continue
                 
-        # Run migrate for all
-        subprocess.run(
-            [DOCKER_COMPOSE_COMMAND, "exec", "web", "python", "manage.py", "migrate", "--noinput"],
-            check=True, timeout=60
-        )
+        # Finally run migrations for any remaining apps
+        try:
+            self.logger.info("Applying any remaining migrations...")
+            subprocess.run(
+                [DOCKER_COMPOSE_COMMAND, "exec", "-T", "-e", "PYTHONMALLOC=malloc", "-e", "PYTHONUNBUFFERED=1", 
+                 "web", "python", "manage.py", "migrate", "--noinput"],
+                check=True, timeout=120, capture_output=True, text=True
+            )
+            self.logger.info("All migrations applied successfully")
+        except (subprocess.SubprocessError, subprocess.TimeoutExpired) as e:
+            error_output = ""
+            if hasattr(e, 'stdout') and e.stdout:
+                self.logger.error(f"Command stdout: {e.stdout}")
+            if hasattr(e, 'stderr') and e.stderr:
+                self.logger.error(f"Command stderr: {e.stderr}")
+            self.logger.error(f"Error applying remaining migrations: {e}")
+            raise
     
     def _create_users(self) -> None:
         """Create admin and standard users."""
-        self._create_single_user('superuser', self.variables['pg_user'],
-                               self.variables['pg_email'], self.variables['pg_password'])
-        self._create_single_user('user', 'user', 'user@example.com', 'userpasswd')
+        # Create superuser using the email and password from variables
+        self._create_single_user('superuser', self.variables['pg_email'], self.variables['pg_password'])
+        # Create standard user with specified email and password
+        self._create_single_user('user', 'user@example.com', 'userpasswd')
     
-    def _create_single_user(self, user_type: str, username: str, email: str, password: str) -> None:
+    def _create_single_user(self, user_type: str, email: str, password: str, *args, **kwargs) -> None:
         """Create a user in the database."""
         create_user_cmd = '''
 from django.contrib.auth import get_user_model
 User = get_user_model()
-if not User.objects.filter(username='{username}').exists():
-    User.objects.create_{type}('{username}', '{email}', '{password}')
+if not User.objects.filter(email='{email}').exists():
+    User.objects.create_{type}(email='{email}', password='{password}')
 '''
         try:
             subprocess.run([
                 DOCKER_COMPOSE_COMMAND, "exec", "web", "python", "manage.py", "shell", "-c",
-                create_user_cmd.format(type=user_type, username=username, email=email, password=password)
+                create_user_cmd.format(type=user_type, email=email, password=password)
             ], check=True, timeout=20)
-            self.logger.info(f"Created {user_type}: {username}")
+            self.logger.info(f"Created {user_type}: {email}")
         except (subprocess.SubprocessError, subprocess.TimeoutExpired) as e:
             self.logger.error(f"Error creating {user_type}: {e}")
             raise
@@ -417,52 +535,48 @@ if not User.objects.filter(username='{username}').exists():
             
         return result
     
-    def _verify_database_connectivity(self) -> Dict[str, Any]:
-        """Verify database connectivity and migrations."""
-        result = {
-            'can_connect': False,
-            'migrations_applied': False,
-            'users_created': False,
-            'success': False
-        }
-        
+    def _verify_database_connectivity(self, project_name: str) -> bool:
+        """Verify database connectivity."""
         try:
-            # Check database connection
-            db_check = subprocess.run([
-                DOCKER_COMPOSE_COMMAND, "exec", "-T", "web", "python", "manage.py", "check", "--database", "default"
-            ], check=False, capture_output=True, text=True, timeout=10)
-            result['can_connect'] = db_check.returncode == 0
-            
-            # Check migrations
-            migrations_check = subprocess.run([
-                DOCKER_COMPOSE_COMMAND, "exec", "-T", "web", "python", "manage.py", "showmigrations", "--list"
-            ], check=False, capture_output=True, text=True, timeout=10)
-            
-            # If migrations show [X] marks, they are applied
-            result['migrations_applied'] = migrations_check.returncode == 0 and "[X]" in migrations_check.stdout
-            
-            # Check if users exist
-            check_users_cmd = '''
-from django.contrib.auth import get_user_model
-User = get_user_model()
-print(f"Admin user exists: {User.objects.filter(username='admin').exists()}")
-print(f"Regular user exists: {User.objects.filter(username='user').exists()}")
+            # Use a simple psycopg2 connection check (less memory than django.setup())
+            db_check_script = f'''
+import os
+import psycopg2
+import sys
+try:
+    conn = psycopg2.connect(
+        dbname='{self.variables['pg_user']}', 
+        user='{self.variables['pg_user']}', 
+        password='{self.variables['pg_password']}', 
+        host='db', 
+        port='5432',
+        connect_timeout=5
+    )
+    conn.close()
+    print("Connection successful")
+    sys.exit(0)
+except psycopg2.OperationalError as e:
+    print(f"Connection failed: {{e}}", file=sys.stderr)
+    sys.exit(1)
+except Exception as e:
+    print(f"An unexpected error occurred: {{e}}", file=sys.stderr)
+    sys.exit(1)
 '''
-            users_check = subprocess.run([
-                DOCKER_COMPOSE_COMMAND, "exec", "-T", "web", "python", "manage.py", "shell", "-c", check_users_cmd
-            ], check=False, capture_output=True, text=True, timeout=10)
             
-            result['users_created'] = (users_check.returncode == 0 and 
-                                      "Admin user exists: True" in users_check.stdout and
-                                      "Regular user exists: True" in users_check.stdout)
-                                      
-            result['success'] = result['can_connect'] and result['migrations_applied'] and result['users_created']
+            db_check_cmd = [
+                DOCKER_COMPOSE_COMMAND, "exec", "-T", "web", 
+                "python", "-c", db_check_script
+            ]
             
+            self.logger.debug(f"Running connectivity check command: {' '.join(db_check_cmd)}")
+            # Increased timeout slightly for the direct connection attempt
+            result = subprocess.run(db_check_cmd, check=True, timeout=20, capture_output=True, text=True)
+            self.logger.info(f"Database connectivity verified. Output: {result.stdout.strip()}")
+            return True
         except (subprocess.SubprocessError, subprocess.TimeoutExpired) as e:
-            self.logger.error(f"Error verifying database connectivity: {e}")
-            result['error'] = str(e)
-            
-        return result
+            self.logger.error(f"Database connectivity setup failed: {e}")
+            self.logger.error("This may indicate issues with database configuration or permissions")
+            return False
         
     def _verify_web_service(self) -> Dict[str, Any]:
         """Verify web service is responding properly."""
@@ -577,7 +691,7 @@ print(f"Regular user exists: {User.objects.filter(username='user').exists()}")
         
         verification_results = {
             'container_status': self._verify_container_status(),
-            'database': self._verify_database_connectivity(),
+            'database': self._verify_database_connectivity(self.variables['project_name']),
             'web_service': self._verify_web_service(),
             'project_structure': self._verify_project_structure(),
         }

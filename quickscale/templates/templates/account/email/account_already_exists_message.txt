@@ -1,0 +1,11 @@
+{% load i18n %}
+{% autoescape off %}
+{% blocktrans %}Hello,
+
+You are receiving this email because you or someone else tried to sign up for an account using this email address:
+
+{{ email }}
+
+However, an account using this email address already exists. In case you have forgotten about this, please use the password reset link on the login page.
+{% endblocktrans %}
+{% endautoescape %} 

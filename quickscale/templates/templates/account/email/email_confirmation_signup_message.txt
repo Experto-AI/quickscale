@@ -1,0 +1,16 @@
+{% load account %}
+{% load i18n %}
+
+{% autoescape off %}
+{% blocktrans with site_name=current_site.name site_domain=current_site.domain %}Hello from {{ site_name }}!
+
+Thank you for signing up. To activate your account, please confirm your email address by clicking the link below:
+
+{{ activate_url }}
+
+This link will expire in {{ expiry_days }} days.
+{% endblocktrans %}
+
+{% blocktrans with site_name=current_site.name site_domain=current_site.domain %}Thank you for using {{ site_name }}!
+{{ site_domain }}{% endblocktrans %}
+{% endautoescape %} 

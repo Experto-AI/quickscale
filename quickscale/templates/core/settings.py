@@ -8,6 +8,12 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
+# Import email settings
+try:
+    from .email_settings import *
+except ImportError:
+    pass  # Email settings will use defaults defined below
+
 # Core Django Settings
 BASE_DIR = Path(__file__).resolve().parent.parent
 SECRET_KEY: str = os.getenv('SECRET_KEY', 'your-secret-key-here')
@@ -40,9 +46,12 @@ INSTALLED_APPS = [
     'django.contrib.sessions',
     'django.contrib.messages',
     'django.contrib.staticfiles',
+    'django.contrib.sites',  # Required by django-allauth
     
     # Third-party apps
     'whitenoise.runserver_nostatic',
+    'allauth',               # django-allauth main app
+    'allauth.account',       # django-allauth account management
     
     # Local apps
     'public.apps.PublicConfig',
@@ -50,6 +59,9 @@ INSTALLED_APPS = [
     'users.apps.UsersConfig',
     'common.apps.CommonConfig',
 ]
+
+# django-allauth requires the sites framework
+SITE_ID = 1
 
 # Middleware Configuration
 MIDDLEWARE = [
@@ -61,6 +73,7 @@ MIDDLEWARE = [
     'django.contrib.auth.middleware.AuthenticationMiddleware',
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
+    'allauth.account.middleware.AccountMiddleware',  # Required by django-allauth
 ]
 
 # URL Configuration
@@ -146,6 +159,48 @@ MEDIA_ROOT = BASE_DIR / 'media'
 
 # Default Primary Key
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
+
+# Custom User Model
+AUTH_USER_MODEL = 'users.CustomUser'
+
+# Authentication Configuration
+AUTHENTICATION_BACKENDS = [
+    # django-allauth authentication backends
+    'allauth.account.auth_backends.AuthenticationBackend',
+    # Django's default authentication backend
+    'django.contrib.auth.backends.ModelBackend',
+]
+
+# django-allauth configuration
+ACCOUNT_AUTHENTICATION_METHOD = 'email'  # Use email for authentication
+ACCOUNT_EMAIL_REQUIRED = True            # Email is required
+ACCOUNT_UNIQUE_EMAIL = True              # Email must be unique
+ACCOUNT_USERNAME_REQUIRED = False        # Username is not required
+ACCOUNT_EMAIL_VERIFICATION = 'mandatory' # Email verification is required
+ACCOUNT_EMAIL_SUBJECT_PREFIX = '[QuickScale] '  # Email subject prefix
+ACCOUNT_ADAPTER = 'users.adapters.AccountAdapter'  # Custom adapter for account management
+ACCOUNT_DEFAULT_HTTP_PROTOCOL = 'https' if not DEBUG else 'http'  # Use HTTPS in production
+
+# Explicitly disable social authentication
+SOCIALACCOUNT_ADAPTER = 'users.adapters.SocialAccountAdapter'
+SOCIALACCOUNT_AUTO_SIGNUP = False
+
+# Custom forms for django-allauth
+ACCOUNT_FORMS = {
+    'login': 'users.forms.CustomLoginForm',
+    'signup': 'users.forms.CustomSignupForm',
+    'reset_password': 'users.forms.CustomResetPasswordForm',
+    'reset_password_from_key': 'users.forms.CustomResetPasswordKeyForm',
+    'change_password': 'users.forms.CustomChangePasswordForm',
+}
+
+# Redirect URLs after login/logout
+LOGIN_REDIRECT_URL = '/'
+LOGOUT_REDIRECT_URL = '/'
+LOGIN_URL = '/accounts/login/'
+
+# Email backend - console for development, configured for production
+EMAIL_BACKEND = 'django.core.mail.backends.console.EmailBackend' if DEBUG else 'django.core.mail.backends.smtp.EmailBackend'
 
 # Logging Configuration
 LOGGING = {
