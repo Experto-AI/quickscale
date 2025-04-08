@@ -104,7 +104,7 @@ class CustomResetPasswordForm(ResetPasswordForm):
 
 
 class CustomResetPasswordKeyForm(ResetPasswordKeyForm):
-    """Custom form for setting new password after reset."""
+    """Custom password reset key form."""
     
     def __init__(self, *args, **kwargs):
         """Initialize the form with custom styling."""
@@ -122,7 +122,7 @@ class CustomResetPasswordKeyForm(ResetPasswordKeyForm):
 
 
 class CustomChangePasswordForm(ChangePasswordForm):
-    """Custom form for changing password."""
+    """Custom password change form."""
     
     def __init__(self, *args, **kwargs):
         """Initialize the form with custom styling."""
@@ -140,4 +140,42 @@ class CustomChangePasswordForm(ChangePasswordForm):
         self.fields['password2'].widget.attrs.update({
             'placeholder': _('Confirm New Password'),
             'class': 'input',
-        }) 
+        })
+
+
+class ProfileForm(forms.ModelForm):
+    """Form for editing user profile information."""
+    
+    class Meta:
+        """Metadata for the ProfileForm."""
+        model = User
+        fields = [
+            'first_name', 'last_name', 'bio', 
+            'phone_number', 'profile_picture', 
+            'job_title', 'company', 'website', 'location',
+            'twitter', 'linkedin', 'github',
+            'email_notifications'
+        ]
+        widgets = {
+            'first_name': forms.TextInput(attrs={'class': 'input'}),
+            'last_name': forms.TextInput(attrs={'class': 'input'}),
+            'bio': forms.Textarea(attrs={'class': 'textarea', 'rows': 4}),
+            'phone_number': forms.TextInput(attrs={'class': 'input'}),
+            'job_title': forms.TextInput(attrs={'class': 'input'}),
+            'company': forms.TextInput(attrs={'class': 'input'}),
+            'website': forms.URLInput(attrs={'class': 'input'}),
+            'location': forms.TextInput(attrs={'class': 'input'}),
+            'twitter': forms.TextInput(attrs={'class': 'input', 'placeholder': '@username'}),
+            'linkedin': forms.TextInput(attrs={'class': 'input', 'placeholder': 'username'}),
+            'github': forms.TextInput(attrs={'class': 'input', 'placeholder': 'username'}),
+            'email_notifications': forms.CheckboxInput(attrs={'class': 'checkbox'}),
+        }
+        
+    def __init__(self, *args, **kwargs):
+        """Initialize the form with custom field labels."""
+        super().__init__(*args, **kwargs)
+        self.fields['bio'].label = _('About Me')
+        self.fields['email_notifications'].label = _('Receive email notifications')
+        self.fields['twitter'].help_text = _('Your Twitter/X username (without @)')
+        self.fields['linkedin'].help_text = _('Your LinkedIn profile name (from URL)')
+        self.fields['github'].help_text = _('Your GitHub username') 

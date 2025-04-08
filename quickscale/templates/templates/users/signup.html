@@ -1,93 +1,105 @@
 {% extends "base.html" %}
+{% load i18n %}
+{% load static %}
 
-{% block title %}Sign Up{% endblock %}
+{% block title %}{% trans "Sign Up" %} - ${project_name}{% endblock %}
+
+{% block extra_head %}
+    <script src="{% static 'js/password_validation.js' %}"></script>
+{% endblock %}
 
 {% block content %}
 <section class="section">
-  <div class="container">
-    <div class="columns is-centered">
-      <div class="column is-6">
-        <h1 class="title has-text-centered">Create an Account</h1>
-
-        <div class="box" id="form-container">
-          <form method="post" action="{% url 'users:signup' %}" hx-post="{% url 'users:signup' %}" hx-target="#form-container" hx-swap="outerHTML">
-            {% csrf_token %}
-            
-            <div class="field">
-              <label class="label">Username</label>
-              <div class="control has-icons-left">
-                <input class="input" type="text" name="username" placeholder="username" required>
-                <span class="icon is-small is-left">
-                  <i class="fas fa-user"></i>
-                </span>
-              </div>
-              {% if form.username.errors %}
-              <p class="help is-danger">{{ form.username.errors }}</p>
-              {% endif %}
+    <div class="container">
+        <div class="columns is-centered">
+            <div class="column is-half">
+                <h1 class="title has-text-centered">{% trans "Sign Up" %}</h1>
+                <h2 class="subtitle has-text-centered">{% trans "Create your account" %}</h2>
+                
+                <div class="box">
+                    <form method="post" action="{% url 'users:signup' %}" hx-post="{% url 'users:signup' %}" hx-target="this" hx-swap="outerHTML" x-data="passwordValidation()">
+                        {% csrf_token %}
+                        
+                        {% if form.non_field_errors %}
+                            <div class="notification is-danger">
+                                {% for error in form.non_field_errors %}
+                                    {{ error }}
+                                {% endfor %}
+                            </div>
+                        {% endif %}
+                        
+                        <div class="field">
+                            <label class="label">Username</label>
+                            <div class="control">
+                                <input type="text" name="username" class="input" id="id_username" placeholder="Username" 
+                                       required value="{{ form.username.value|default_if_none:'' }}">
+                            </div>
+                            {% if form.username.errors %}
+                                <p class="help is-danger">{{ form.username.errors.0 }}</p>
+                            {% endif %}
+                        </div>
+                        
+                        <div class="field">
+                            <label class="label">Email</label>
+                            <div class="control">
+                                <input type="email" name="email" class="input" id="id_email" placeholder="Email" 
+                                       required value="{{ form.email.value|default_if_none:'' }}">
+                            </div>
+                            {% if form.email.errors %}
+                                <p class="help is-danger">{{ form.email.errors.0 }}</p>
+                            {% endif %}
+                        </div>
+                        
+                        <div class="field">
+                            <label class="label">{{ form.password1.label }}</label>
+                            <div class="control">
+                                <input type="password" name="password1" id="id_password1" class="input" placeholder="Password" 
+                                       required x-model="password1" autocomplete="new-password">
+                            </div>
+                            <template x-if="password1.length > 0">
+                                <div>
+                                    <progress class="progress mt-2" :class="color" :value="progressValue()" max="6"></progress>
+                                    <p class="help" :class="color" x-text="feedback"></p>
+                                </div>
+                            </template>
+                            {% if form.password1.errors %}
+                                <p class="help is-danger">{{ form.password1.errors.0 }}</p>
+                            {% endif %}
+                        </div>
+                        
+                        <div class="field">
+                            <label class="label">{{ form.password2.label }}</label>
+                            <div class="control">
+                                <input type="password" name="password2" id="id_password2" class="input" placeholder="Password (again)" 
+                                       required x-model="password2" autocomplete="new-password">
+                            </div>
+                            <template x-if="password2.length > 0">
+                                <p class="help" :class="matchMessageClass()" x-text="matchMessage()"></p>
+                            </template>
+                            {% if form.password2.errors %}
+                                <p class="help is-danger">{{ form.password2.errors.0 }}</p>
+                            {% endif %}
+                        </div>
+                        
+                        {% if redirect_field_value %}
+                            <input type="hidden" name="{{ redirect_field_name }}" value="{{ redirect_field_value }}" />
+                        {% endif %}
+                        
+                        <div class="field">
+                            <div class="control">
+                                <button class="button is-primary" type="submit" :disabled="isSubmitDisabled()">
+                                    {% trans "Sign Up" %}
+                                </button>
+                            </div>
+                        </div>
+                    </form>
+                    
+                    <p class="mt-4 has-text-centered">
+                        {% trans "Already have an account?" %} <a href="{% url 'account_login' %}">{% trans "Sign in" %}</a>
+                    </p>
+                </div>
             </div>
-
-            <div class="field">
-              <label class="label">Email</label>
-              <div class="control has-icons-left">
-                <input class="input" type="email" name="email" placeholder="e.g. alex@example.com" required>
-                <span class="icon is-small is-left">
-                  <i class="fas fa-envelope"></i>
-                </span>
-              </div>
-              {% if form.email.errors %}
-              <p class="help is-danger">{{ form.email.errors }}</p>
-              {% endif %}
-            </div>
-
-            <div class="field">
-              <label class="label">Password</label>
-              <div class="control has-icons-left">
-                <input class="input" type="password" name="password1" placeholder="********" required>
-                <span class="icon is-small is-left">
-                  <i class="fas fa-lock"></i>
-                </span>
-              </div>
-              {% if form.password1.errors %}
-              <p class="help is-danger">{{ form.password1.errors }}</p>
-              {% endif %}
-            </div>
-
-            <div class="field">
-              <label class="label">Confirm Password</label>
-              <div class="control has-icons-left">
-                <input class="input" type="password" name="password2" placeholder="********" required>
-                <span class="icon is-small is-left">
-                  <i class="fas fa-lock"></i>
-                </span>
-              </div>
-              {% if form.password2.errors %}
-              <p class="help is-danger">{{ form.password2.errors }}</p>
-              {% endif %}
-            </div>
-
-            <div class="field">
-              <div class="control">
-                <button type="submit" class="button is-primary is-fullwidth">
-                  Sign Up
-                </button>
-              </div>
-            </div>
-            
-            {% if form.errors %}
-            <div class="notification is-danger">
-              <p>Please correct the errors below.</p>
-            </div>
-            {% endif %}
-          </form>
-          
-          <hr>
-          
-          <div class="has-text-centered">
-            <p>Already have an account? <a href="{% url 'users:login' %}">Log in</a></p>
-          </div>
         </div>
-      </div>
     </div>
-  </div>
 </section>
 {% endblock %}

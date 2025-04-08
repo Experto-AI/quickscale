@@ -136,9 +136,19 @@ if os.getenv('IN_DOCKER', 'False') == 'True':
 # Password Validation
 AUTH_PASSWORD_VALIDATORS = [
     {'NAME': 'django.contrib.auth.password_validation.UserAttributeSimilarityValidator'},
-    {'NAME': 'django.contrib.auth.password_validation.MinimumLengthValidator'},
+    {'NAME': 'django.contrib.auth.password_validation.MinimumLengthValidator',
+     'OPTIONS': {'min_length': 8}},
     {'NAME': 'django.contrib.auth.password_validation.CommonPasswordValidator'},
     {'NAME': 'django.contrib.auth.password_validation.NumericPasswordValidator'},
+    {'NAME': 'users.validators.PasswordStrengthValidator',
+     'OPTIONS': {
+         'min_length': 8,
+         'require_uppercase': True,
+         'require_lowercase': True,
+         'require_digit': True,
+         'require_special': True
+     }},
+    {'NAME': 'users.validators.BreachedPasswordValidator'},
 ]
 
 # Internationalization
@@ -172,10 +182,7 @@ AUTHENTICATION_BACKENDS = [
 ]
 
 # django-allauth configuration
-ACCOUNT_AUTHENTICATION_METHOD = 'email'  # Use email for authentication
-ACCOUNT_EMAIL_REQUIRED = True            # Email is required
-ACCOUNT_UNIQUE_EMAIL = True              # Email must be unique
-ACCOUNT_USERNAME_REQUIRED = False        # Username is not required
+ACCOUNT_LOGIN_METHODS = {'email'}
 ACCOUNT_EMAIL_VERIFICATION = 'mandatory' # Email verification is required
 ACCOUNT_EMAIL_SUBJECT_PREFIX = '[QuickScale] '  # Email subject prefix
 ACCOUNT_ADAPTER = 'users.adapters.AccountAdapter'  # Custom adapter for account management
@@ -260,3 +267,6 @@ LOGGING = {
         },
     },
 }
+
+# Silence system check for missing Pillow in ImageField (fields.E210)
+SILENCED_SYSTEM_CHECKS = ['fields.E210']

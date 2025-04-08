@@ -1,0 +1,78 @@
+{% load i18n %}
+
+<form method="post" action="{% url 'users:signup' %}" hx-post="{% url 'users:signup' %}" hx-target="this" hx-swap="outerHTML" x-data="passwordValidation()">
+    {% csrf_token %}
+    
+    {% if form.non_field_errors %}
+        <div class="notification is-danger">
+            {% for error in form.non_field_errors %}
+                {{ error }}
+            {% endfor %}
+        </div>
+    {% endif %}
+    
+    <div class="field">
+        <label class="label">Username</label>
+        <div class="control">
+            <input type="text" name="username" class="input" id="id_username" placeholder="Username" 
+                   required value="{{ form.username.value|default_if_none:'' }}">
+        </div>
+        {% if form.username.errors %}
+            <p class="help is-danger">{{ form.username.errors.0 }}</p>
+        {% endif %}
+    </div>
+    
+    <div class="field">
+        <label class="label">Email</label>
+        <div class="control">
+            <input type="email" name="email" class="input" id="id_email" placeholder="Email" 
+                   required value="{{ form.email.value|default_if_none:'' }}">
+        </div>
+        {% if form.email.errors %}
+            <p class="help is-danger">{{ form.email.errors.0 }}</p>
+        {% endif %}
+    </div>
+    
+    <div class="field">
+        <label class="label">{{ form.password1.label }}</label>
+        <div class="control">
+            <input type="password" name="password1" id="id_password1" class="input" placeholder="Password" 
+                   required x-model="password1" autocomplete="new-password">
+        </div>
+        <template x-if="password1.length > 0">
+            <div>
+                <progress class="progress mt-2" :class="color" :value="progressValue()" max="6"></progress>
+                <p class="help" :class="color" x-text="feedback"></p>
+            </div>
+        </template>
+        {% if form.password1.errors %}
+            <p class="help is-danger">{{ form.password1.errors.0 }}</p>
+        {% endif %}
+    </div>
+    
+    <div class="field">
+        <label class="label">{{ form.password2.label }}</label>
+        <div class="control">
+            <input type="password" name="password2" id="id_password2" class="input" placeholder="Password (again)" 
+                   required x-model="password2" autocomplete="new-password">
+        </div>
+        <template x-if="password2.length > 0">
+            <p class="help" :class="matchMessageClass()" x-text="matchMessage()"></p>
+        </template>
+        {% if form.password2.errors %}
+            <p class="help is-danger">{{ form.password2.errors.0 }}</p>
+        {% endif %}
+    </div>
+    
+    {% if redirect_field_value %}
+        <input type="hidden" name="{{ redirect_field_name }}" value="{{ redirect_field_value }}" />
+    {% endif %}
+    
+    <div class="field">
+        <div class="control">
+            <button class="button is-primary" type="submit" :disabled="isSubmitDisabled()">
+                {% trans "Sign Up" %}
+            </button>
+        </div>
+    </div>
+</form> 

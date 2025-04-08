@@ -20,23 +20,37 @@ from quickscale.utils.error_manager import (
 log_dir = os.path.expanduser("~/.quickscale")
 os.makedirs(log_dir, exist_ok=True)
 
-# Configure logging
-logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
-    handlers=[
-        logging.FileHandler(os.path.join(log_dir, "quickscale.log")),
-        logging.StreamHandler()
-    ]
-)
-# Set file handler to debug level but keep console at INFO
-for handler in logging.getLogger().handlers:
-    if isinstance(handler, logging.FileHandler):
-        handler.setLevel(logging.DEBUG)
-    else:
-        handler.setLevel(logging.INFO)
+# --- Centralized Logging Configuration --- 
 
-logger = logging.getLogger(__name__)
+# Get the specific logger for quickscale operations
+qs_logger = logging.getLogger('quickscale')
+qs_logger.setLevel(logging.INFO) # Default level for quickscale logger
+
+# Prevent messages propagating to the root logger to avoid duplicate handling
+qs_logger.propagate = False
+
+# Clear existing handlers from the quickscale logger to prevent duplicates from previous runs/imports
+if qs_logger.hasHandlers():
+    qs_logger.handlers.clear()
+
+# Create console handler with the desired simple format
+console_handler = logging.StreamHandler(sys.stdout) 
+console_handler.setLevel(logging.INFO) # Set level for console output
+console_handler.setFormatter(logging.Formatter('[%(levelname)s] %(message)s'))
+qs_logger.addHandler(console_handler)
+
+# Create file handler for detailed logs (can have a different level and format)
+file_handler = logging.FileHandler(os.path.join(log_dir, "quickscale.log"))
+file_handler.setLevel(logging.DEBUG) # Log DEBUG level and above to file
+file_handler.setFormatter(logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s'))
+qs_logger.addHandler(file_handler)
+
+# Get a logger instance specifically for this module (cli.py)
+# This logger will inherit the handlers and level from 'quickscale' logger
+logger = logging.getLogger(__name__) 
+# No need to configure this one further, it uses the parent 'quickscale' config
+
+# --- End Logging Configuration --- 
 
 
 class QuickScaleArgumentParser(argparse.ArgumentParser):

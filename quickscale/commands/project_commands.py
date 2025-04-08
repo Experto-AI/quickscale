@@ -24,7 +24,8 @@ class BuildProjectCommand(Command):
     
     def __init__(self) -> None:
         """Initialize build command state."""
-        self.logger = None
+        # Get the already configured logger
+        self.logger = LoggingManager.get_logger()
         self.current_uid = None
         self.current_gid = None
         self.templates_dir = None
@@ -33,7 +34,7 @@ class BuildProjectCommand(Command):
         self.env_vars = None
     
     def setup_project_environment(self, project_name: str) -> Path:
-        """Initialize project environment."""
+        """Initialize project environment and setup project-specific logging."""
         from .system_commands import CheckCommand
         CheckCommand().execute(print_info=True)
         
@@ -44,7 +45,10 @@ class BuildProjectCommand(Command):
         project_dir.mkdir()
         self.project_dir = project_dir
         
-        self.logger = LoggingManager.setup_logging(project_dir)
+        # Setup the project-specific file handler and log system info once
+        # The logger instance is already configured by cli.py
+        LoggingManager.setup_logging(project_dir, self.logger.level)
+        
         self.logger.info("Starting project build")
         
         self.current_uid, self.current_gid = get_current_uid_gid()
@@ -423,10 +427,6 @@ if not User.objects.filter(email='{email}').exists():
         """Run a command inside a temporary Docker container, bypassing the default entrypoint."""
         compose_file = "docker-compose.yml" if temp_compose else None
 
-        # Initialize logger if it's not already set
-        if self.logger is None:
-            self.logger = LoggingManager.get_logger()
-
         # Create a temporary compose file if needed
         temp_compose_file = "docker-compose.temp.yml"
         if temp_compose:
@@ -720,6 +720,8 @@ except Exception as e:
     def execute(self, project_name: str) -> Dict[str, Any]:
         """Build a new QuickScale project."""
         original_dir = os.getcwd()
+        
+        # Setup project environment - this also sets up logging
         project_dir = self.setup_project_environment(project_name)
         project_path = os.path.join(original_dir, project_name)
 

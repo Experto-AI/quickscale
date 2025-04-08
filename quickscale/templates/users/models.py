@@ -54,8 +54,22 @@ class CustomUser(AbstractUser):
         },
     )
     
-    # Additional fields
+    # Additional profile fields
     bio = models.TextField(_('bio'), blank=True)
+    phone_number = models.CharField(_('phone number'), max_length=20, blank=True)
+    profile_picture = models.ImageField(_('profile picture'), upload_to='profile_pictures', blank=True, null=True)
+    job_title = models.CharField(_('job title'), max_length=100, blank=True)
+    company = models.CharField(_('company'), max_length=100, blank=True)
+    website = models.URLField(_('website'), blank=True)
+    location = models.CharField(_('location'), max_length=100, blank=True)
+    
+    # Social media profiles
+    twitter = models.CharField(_('twitter'), max_length=100, blank=True, help_text=_('Twitter username'))
+    linkedin = models.CharField(_('linkedin'), max_length=100, blank=True, help_text=_('LinkedIn username'))
+    github = models.CharField(_('github'), max_length=100, blank=True, help_text=_('GitHub username'))
+    
+    # Notification preferences
+    email_notifications = models.BooleanField(_('email notifications'), default=True)
     
     # Set email as the USERNAME_FIELD
     USERNAME_FIELD = 'email'
@@ -65,4 +79,10 @@ class CustomUser(AbstractUser):
     
     def __str__(self):
         """Return string representation of the user."""
+        return self.email
+        
+    def get_full_name(self):
+        """Return the full name of the user or email if not available."""
+        if self.first_name and self.last_name:
+            return f"{self.first_name} {self.last_name}"
         return self.email 

@@ -1,15 +1,20 @@
 {% extends "account/base.html" %}
 {% load i18n %}
 {% load account %}
+{% load static %}
 
 {% block title %}{% trans "Sign Up" %} - ${project_name}{% endblock %}
 
 {% block account_title %}{% trans "Sign Up" %}{% endblock %}
 {% block account_subtitle %}{% trans "Create your account" %}{% endblock %}
 
+{% block extra_head %}
+    <script src="{% static 'js/password_validation.js' %}"></script>
+{% endblock %}
+
 {% block account_content %}
 <div class="box">
-    <form class="signup" method="post" action="{% url 'account_signup' %}" hx-post="{% url 'account_signup' %}" hx-target="this" hx-swap="outerHTML">
+    <form class="signup" method="post" action="{% url 'account_signup' %}" hx-post="{% url 'account_signup' %}" hx-target="this" hx-swap="outerHTML" x-data="passwordValidation()">
         {% csrf_token %}
         
         {% if form.non_field_errors %}
@@ -53,21 +58,29 @@
         <div class="field">
             <label class="label">{{ form.password1.label }}</label>
             <div class="control">
-                {{ form.password1 }}
+                <input type="password" name="password1" id="id_password1" class="input" placeholder="Password" 
+                       required x-model="password1" autocomplete="new-password">
             </div>
+            <template x-if="password1.length > 0">
+                <div>
+                    <progress class="progress mt-2" :class="color" :value="progressValue()" max="6"></progress>
+                    <p class="help" :class="color" x-text="feedback"></p>
+                </div>
+            </template>
             {% if form.password1.errors %}
                 <p class="help is-danger">{{ form.password1.errors.0 }}</p>
-            {% endif %}
-            {% if form.password1.help_text %}
-                <p class="help">{{ form.password1.help_text }}</p>
             {% endif %}
         </div>
         
         <div class="field">
             <label class="label">{{ form.password2.label }}</label>
             <div class="control">
-                {{ form.password2 }}
+                <input type="password" name="password2" id="id_password2" class="input" placeholder="Password (again)" 
+                       required x-model="password2" autocomplete="new-password">
             </div>
+            <template x-if="password2.length > 0">
+                <p class="help" :class="matchMessageClass()" x-text="matchMessage()"></p>
+            </template>
             {% if form.password2.errors %}
                 <p class="help is-danger">{{ form.password2.errors.0 }}</p>
             {% endif %}
@@ -79,15 +92,15 @@
         
         <div class="field">
             <div class="control">
-                <button class="button is-primary" type="submit" id="signup-button">
+                <button class="button is-primary" type="submit" :disabled="isSubmitDisabled()">
                     {% trans "Sign Up" %}
                 </button>
             </div>
         </div>
     </form>
     
-    <p class="mt-4">
-        {% trans "Already have an account?" %} <a href="{{ login_url }}">{% trans "Sign in" %}</a>
+    <p class="mt-4 has-text-centered">
+        {% trans "Already have an account?" %} <a href="{{ login_url }}">{% trans "Sign In" %}</a>
     </p>
 </div>
 {% endblock %} 

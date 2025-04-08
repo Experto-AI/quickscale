@@ -25,24 +25,6 @@ Ideal for **solo developers** or small teams looking to turn their ideas into pr
 - **Command-Line Control**: Intuitive CLI for managing your project lifecycle
 - **Starter Accounts**: Pre-configured user and admin accounts for immediate testing
 
-## STARTER PAGES
-
-- Public: 
-  - Home: Landing page
-  - Login: User authentication
-  - Register: New user registration
-  - Contact: Contact form
-  - About: Project information
-  - Navigation Bar: Site navigation
-- User Private: 
-  - Dashboard: User dashboard
-  - Profile: User profile management
-  - Settings: User settings
-- Admin Private: 
-  - Dashboard: Admin dashboard
-  - Profile: Admin profile
-  - Settings: System settings
-  - Users CRUD: User management
 
 ## PROJECT USAGE
 
@@ -50,7 +32,7 @@ QuickScale provides a convenient command-line interface to manage your projects:
 
 ```
 Available commands:
-  build          - Build a new QuickScale project
+  build          - Build a new QuickScale project - Most important command
   up             - Start the project services
   down           - Stop the project services
   logs           - View project logs (optional service parameter: web, db)
@@ -74,6 +56,25 @@ quickscale django-shell            # Enter the Django shell in the web container
 quickscale down                    # Stop the services
 ```
 
+## STARTER PAGES
+
+- Public: 
+  - Home: Landing page
+  - Login: User authentication
+  - Register: New user registration
+  - Contact: Contact form
+  - About: Project information
+  - Navigation Bar: Site navigation
+- User Private: 
+  - Dashboard: User dashboard
+  - Profile: User profile management
+  - Settings: User settings
+- Admin Private: 
+  - Dashboard: Admin dashboard
+  - Profile: Admin profile
+  - Settings: System settings
+  - Users CRUD: User management
+
 ## STARTER DATABASE
 
 - User: 
@@ -86,11 +87,14 @@ quickscale down                    # Stop the services
 
 ## DOCUMENTATION
 
-For detailed technical documentation, please refer to:
+- [User Guide](./USER_GUIDE.md) - How to use QuickScale, including setup and deployment instructions
+
 - [Technical Documentation](./TECHNICAL_DOCS.md) - Technical stack, project structure, and development details
 
-## FEATURES
+- [Contributing Guide](./CONTRIBUTING.md) - How to contribute to QuickScale. 
+  Also it is a template for AI codding assistants to generate code for the project.
+  Cursor, Windsurf and GitHub Coplitot rules are linked to this file.
 
-- **Authentication**: Powered by `django-allauth`, QuickScale provides secure email-only authentication with mandatory email verification. Social login is explicitly disabled for simplicity and security.
-- **Custom User Model**: The `CustomUser` model supports email-based login and removes the need for usernames.
+- [Roadmap](./ROADMAP.md) - Future plans and features for QuickScale
 
+- [Changelog](./CHANGELOG.md) - Release notes and version history

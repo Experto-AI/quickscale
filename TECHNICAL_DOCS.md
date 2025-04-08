@@ -411,8 +411,72 @@ HTMX is used for dynamic content loading and form submissions without full page 
 
 ## ALPINE.JS INTEGRATION
 
-Alpine.js is used for client-side interactivity and state management:
+Alpine.js is used for all client-side interactivity and state management:
 
 1. **Dropdown menus**: Navigation bar
 2. **Modal dialogs**: Confirmation dialogs
 3. **Form validation**: Client-side validation
+4. **Interactive UI components**: Password strength meters, toggles, etc.
+
+### JavaScript Implementation Standards
+
+- **Alpine.js Only**: All client-side interactions MUST be implemented using Alpine.js. Vanilla JavaScript or other frameworks (React, Vue, jQuery, etc.) are NOT permitted.
+- **Component Structure**: Complex functionality should be organized as reusable Alpine.js components.
+- **Declaration in Templates**: Alpine directives should be declared directly in HTML templates using the `x-data`, `x-bind`, `x-on`, etc. attributes.
+- **Global Component Functions**: For reusable components, define global functions that return Alpine.js component data objects.
+- **Minimal External Dependencies**: Avoid adding additional JavaScript libraries unless absolutely necessary.
+
+### JavaScript Implementation Examples
+
+**✅ DO: Use Alpine.js for interactive elements**
+```html
+<div x-data="{ open: false }">
+  <button @click="open = !open">Toggle Menu</button>
+  <div x-show="open" class="menu">
+    <!-- Menu content -->
+  </div>
+</div>
+```
+
+**❌ DON'T: Use vanilla JavaScript DOM manipulation**
+```html
+<button id="toggleButton">Toggle Menu</button>
+<div id="menu" class="menu hidden">
+  <!-- Menu content -->
+</div>
+
+<script>
+  document.getElementById('toggleButton').addEventListener('click', function() {
+    document.getElementById('menu').classList.toggle('hidden');
+  });
+</script>
+```
+
+**✅ DO: Use Alpine.js for form validation**
+```html
+<form x-data="formValidation()">
+  <input type="text" x-model="email" @blur="validateEmail()">
+  <p x-show="errors.email" x-text="errors.email" class="error"></p>
+</form>
+```
+
+**❌ DON'T: Add other frameworks like jQuery or React**
+```html
+<!-- jQuery example - NOT PERMITTED -->
+<script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+<script>
+  $(document).ready(function() {
+    // jQuery code
+  });
+</script>
+
+<!-- React example - NOT PERMITTED -->
+<div id="root"></div>
+<script src="https://unpkg.com/react@17/umd/react.development.js"></script>
+<script src="https://unpkg.com/react-dom@17/umd/react-dom.development.js"></script>
+```
+
+## FEATURES
+
+- **Authentication**: Powered by `django-allauth`, QuickScale provides secure email-only authentication with mandatory email verification. Social login is explicitly disabled for simplicity and security.
+- **Custom User Model**: The `CustomUser` model supports email-based login and removes the need for usernames.

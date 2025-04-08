@@ -10,6 +10,8 @@ services:
       - ./:/app
     ports:
       - "${PORT:-8000}:8000"
+    mem_limit: 6G  # Increase direct memory limit to 6G
+    mem_reservation: 2G  # Add direct memory reservation
     environment:
       - DEBUG=True
       - SECRET_KEY=${SECRET_KEY}
@@ -22,15 +24,6 @@ services:
     depends_on:
       db:
         condition: service_healthy
-    # Memory management to prevent OOM errors during migrations
-    deploy:
-      resources:
-        limits:
-          memory: 4G
-        reservations:
-          memory: 2G
-    # Allow some swap for peak memory operations
-    mem_swappiness: 60
     restart: unless-stopped
   
   # PostgreSQL database service
