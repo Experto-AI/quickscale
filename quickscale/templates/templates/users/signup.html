@@ -1,0 +1,93 @@
+{% extends "base.html" %}
+
+{% block title %}Sign Up{% endblock %}
+
+{% block content %}
+<section class="section">
+  <div class="container">
+    <div class="columns is-centered">
+      <div class="column is-6">
+        <h1 class="title has-text-centered">Create an Account</h1>
+
+        <div class="box" id="form-container">
+          <form method="post" action="{% url 'users:signup' %}" hx-post="{% url 'users:signup' %}" hx-target="#form-container" hx-swap="outerHTML">
+            {% csrf_token %}
+            
+            <div class="field">
+              <label class="label">Username</label>
+              <div class="control has-icons-left">
+                <input class="input" type="text" name="username" placeholder="username" required>
+                <span class="icon is-small is-left">
+                  <i class="fas fa-user"></i>
+                </span>
+              </div>
+              {% if form.username.errors %}
+              <p class="help is-danger">{{ form.username.errors }}</p>
+              {% endif %}
+            </div>
+
+            <div class="field">
+              <label class="label">Email</label>
+              <div class="control has-icons-left">
+                <input class="input" type="email" name="email" placeholder="e.g. alex@example.com" required>
+                <span class="icon is-small is-left">
+                  <i class="fas fa-envelope"></i>
+                </span>
+              </div>
+              {% if form.email.errors %}
+              <p class="help is-danger">{{ form.email.errors }}</p>
+              {% endif %}
+            </div>
+
+            <div class="field">
+              <label class="label">Password</label>
+              <div class="control has-icons-left">
+                <input class="input" type="password" name="password1" placeholder="********" required>
+                <span class="icon is-small is-left">
+                  <i class="fas fa-lock"></i>
+                </span>
+              </div>
+              {% if form.password1.errors %}
+              <p class="help is-danger">{{ form.password1.errors }}</p>
+              {% endif %}
+            </div>
+
+            <div class="field">
+              <label class="label">Confirm Password</label>
+              <div class="control has-icons-left">
+                <input class="input" type="password" name="password2" placeholder="********" required>
+                <span class="icon is-small is-left">
+                  <i class="fas fa-lock"></i>
+                </span>
+              </div>
+              {% if form.password2.errors %}
+              <p class="help is-danger">{{ form.password2.errors }}</p>
+              {% endif %}
+            </div>
+
+            <div class="field">
+              <div class="control">
+                <button type="submit" class="button is-primary is-fullwidth">
+                  Sign Up
+                </button>
+              </div>
+            </div>
+            
+            {% if form.errors %}
+            <div class="notification is-danger">
+              <p>Please correct the errors below.</p>
+            </div>
+            {% endif %}
+          </form>
+          
+          <hr>
+          
+          <div class="has-text-centered">
+            <p>Already have an account? <a href="{% url 'users:login' %}">Log in</a></p>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+{% endblock %}

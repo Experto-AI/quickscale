@@ -398,8 +398,8 @@ except Exception as e:
         """Create admin and standard users."""
         # Create superuser using the email and password from variables
         self._create_single_user('superuser', self.variables['pg_email'], self.variables['pg_password'])
-        # Create standard user with specified email and password
-        self._create_single_user('user', 'user@example.com', 'userpasswd')
+        # Create standard user with specified email and password - updated to @test.com for consistency
+        self._create_single_user('user', 'user@test.com', 'userpasswd')
     
     def _create_single_user(self, user_type: str, email: str, password: str, *args, **kwargs) -> None:
         """Create a user in the database."""

@@ -14,9 +14,10 @@ def login_view(request: HttpRequest) -> HttpResponse:
     is_htmx = request.headers.get('HX-Request') == 'true'
     
     if request.method == "POST":
-        username = request.POST.get('username')
+        email = request.POST.get('email')
         password = request.POST.get('password')
-        user = authenticate(request, username=username, password=password)
+        # For django-allauth email authentication
+        user = authenticate(request, email=email, password=password)
         
         if user is not None:
             login(request, user)
@@ -28,8 +29,12 @@ def login_view(request: HttpRequest) -> HttpResponse:
                 return response
             return redirect('public:index')
             
-        messages.error(request, 'Invalid username or password.')
-        return render(request, 'users/login_form.html', {'is_htmx': is_htmx})
+        messages.error(request, 'Invalid email or password.')
+        if is_htmx:
+            # For HTMX requests, return the entire form container with error message
+            return render(request, 'users/login_form.html', {'form': {'errors': True}, 'is_htmx': is_htmx})
+        # For non-HTMX requests, render the entire login page with error
+        return render(request, 'users/login.html', {'form': {'errors': True}, 'is_htmx': is_htmx})
     
     return render(request, 'users/login.html', {'is_htmx': is_htmx})
 

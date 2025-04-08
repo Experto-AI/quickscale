@@ -77,17 +77,20 @@ quickscale down                    # Stop the services
 ## STARTER DATABASE
 
 - User: 
-  - user: user
-  - password: userpasswd
   - email: user@test.com
+  - password: userpasswd
 
 - Administrator: 
-  - user: admin
-  - password: adminpasswd
   - email: admin@test.com
+  - password: adminpasswd
 
 ## DOCUMENTATION
 
 For detailed technical documentation, please refer to:
 - [Technical Documentation](./TECHNICAL_DOCS.md) - Technical stack, project structure, and development details
+
+## FEATURES
+
+- **Authentication**: Powered by `django-allauth`, QuickScale provides secure email-only authentication with mandatory email verification. Social login is explicitly disabled for simplicity and security.
+- **Custom User Model**: The `CustomUser` model supports email-based login and removes the need for usernames.
 

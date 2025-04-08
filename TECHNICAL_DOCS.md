@@ -13,6 +13,7 @@ The most important command is `quickscale build`, which generates the project st
     - Psycopg2-binary 2.9.9+ (PostgreSQL adapter)
     - Python-dotenv 1.0.0+ (environment variables)
     - dj-database-url 2.1.0+ (database URL configuration)
+    - django-allauth 0.52.0+ (authentication)
     - Uvicorn 0.27.0+ (ASGI server)
 - HTMX (frontend to backend communication for CRUD operations with the simplicity of HTML)
 - Alpine.js (simple vanilla JS library for DOM manipulation)
@@ -239,25 +240,40 @@ When contributing to QuickScale, please follow these testing guidelines:
 
 ## AUTHENTICATION
 
-Authentication in QuickScale is built on django-allauth, providing an email-only authentication system.
-
 ### Overview
 
 - **Email-only authentication**: No usernames, only email addresses are used for authentication
 - **Mandatory email verification**: Users must verify their email before accessing protected areas
 - **Social authentication disabled**: No social login options (Google, Facebook, etc.)
 - **Custom email templates**: Customized email templates for all authentication emails
+- **Powered by django-allauth**: The authentication system is implemented using `django-allauth` for robust and extensible functionality.
 
 ### Configuration
 
 The authentication system is configured in multiple files:
 
-1. **core/settings.py**: Main Django settings file that imports email settings
-2. **core/email_settings.py**: Dedicated file for email and django-allauth settings
+1. **core/settings.py**: Main Django settings file that imports email and `django-allauth` settings
+2. **core/email_settings.py**: Dedicated file for email and `django-allauth` settings
 3. **users/models.py**: Custom user model for email-only authentication
-4. **users/adapters.py**: Custom adapters for django-allauth
-5. **users/forms.py**: Custom forms for django-allauth
+4. **users/adapters.py**: Custom adapters for `django-allauth`
+5. **users/forms.py**: Custom forms for `django-allauth`
 6. **templates/account/**: Email templates and HTML pages for authentication
+7. **urls.py**: Routes for login, logout, and signup are handled by `django-allauth` views.
+
+### Key django-allauth Settings
+
+- `ACCOUNT_AUTHENTICATION_METHOD`: Set to `email` for email-only authentication.
+- `ACCOUNT_EMAIL_VERIFICATION`: Set to `mandatory` to enforce email verification.
+- `ACCOUNT_USERNAME_REQUIRED`: Set to `False` as usernames are not used.
+- `ACCOUNT_ADAPTER`: Custom adapter located in `users.adapters.AccountAdapter`.
+- `ACCOUNT_FORMS`: Custom forms for login, signup, and password management located in `users.forms`.
+
+### Customizations
+
+- **Custom User Model**: The `CustomUser` model in `users.models` replaces the default Django user model.
+- **Custom Adapters**: The `AccountAdapter` and `SocialAccountAdapter` in `users.adapters` handle custom logic for email-only authentication and disable social login.
+- **Custom Forms**: Forms in `users.forms` provide additional styling and validation for login, signup, and password reset.
+- **Custom Templates**: All templates under `templates/account/` are customized for the QuickScale branding and user experience.
 
 ### Email Templates
 
@@ -378,14 +394,12 @@ The project uses Docker and Docker Compose for containerization:
 ## STARTER DATABASE
 
 - User: 
-  - user: user
-  - password: userpasswd
   - email: user@test.com
+  - password: userpasswd
 
 - Administrator: 
-  - user: admin
-  - password: adminpasswd
   - email: admin@test.com
+  - password: adminpasswd
 
 ## HTMX INTEGRATION
 
@@ -401,4 +415,4 @@ Alpine.js is used for client-side interactivity and state management:
 
 1. **Dropdown menus**: Navigation bar
 2. **Modal dialogs**: Confirmation dialogs
-3. **Form validation**: Client-side validation 
+3. **Form validation**: Client-side validation
