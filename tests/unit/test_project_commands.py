@@ -67,7 +67,7 @@ def test_setup_project_environment(mock_build_command, tmp_path, monkeypatch):
     monkeypatch.setattr('quickscale.commands.system_commands.CheckCommand.execute', MagicMock())
     monkeypatch.setattr('quickscale.commands.project_commands.get_current_uid_gid', lambda: (1000, 1000))
     monkeypatch.setattr('quickscale.commands.project_commands.find_available_port', lambda start, attempts: start)
-    monkeypatch.setattr('quickscale.commands.project_commands.LoggingManager.setup_logging', lambda x: MagicMock())
+    monkeypatch.setattr('quickscale.commands.project_commands.LoggingManager.setup_logging', lambda project_dir, log_level: MagicMock())
     monkeypatch.setattr('secrets.token_urlsafe', lambda x: "mock_secret_key")
     
     # Change to temp directory and test
@@ -303,30 +303,44 @@ def test_execute_build_project(mock_run, mock_build_command, mock_templates_dir,
                     with patch.object(mock_build_command, 'setup_static_dirs') as mock_setup_static:
                         with patch.object(mock_build_command, 'setup_global_templates') as mock_setup_templates:
                             with patch.object(mock_build_command, 'setup_database', return_value=True) as mock_setup_db:
-                                with patch('os.chdir') as mock_chdir:
-                                    # Set port
-                                    mock_build_command.port = 8000
-                                    
-                                    # Execute
-                                    result = mock_build_command.execute("test_project")
-                                    
-                                    # Verify all methods were called
-                                    mock_setup.assert_called_once_with("test_project")
-                                    mock_copy.assert_called_once()
-                                    mock_create_django.assert_called_once()
-                                    assert mock_create_app.call_count == 4  # 4 apps
-                                    mock_setup_static.assert_called_once()
-                                    mock_setup_templates.assert_called_once()
-                                    mock_setup_db.assert_called_once()
-                                    
-                                    # Verify chdir was called twice (into project dir and back)
-                                    assert mock_chdir.call_count >= 1
-                                    
-                                    # Verify result
-                                    assert result is not None
-                                    assert "path" in result
-                                    assert "port" in result
-                                    assert result["port"] == 8000
+                                # Ensure self.variables is set before verify_build is potentially called
+                                mock_build_command.variables = {
+                                    'project_name': 'test_project',
+                                    'port': 8000,
+                                    'secret_key': 'test_secret',
+                                    'db_name': 'test_db',
+                                    'db_user': 'test_user',
+                                    'db_password': 'test_password',
+                                    'pg_user': 'test_user',  # Added for setup_database call
+                                    'pg_email': 'test@example.com', # Added for setup_database call
+                                    'pg_password': 'test_password'  # Added for setup_database call
+                                }
+                                with patch.object(mock_build_command, 'verify_build', return_value={}) as mock_verify_build: # Mock verify_build
+                                    with patch('os.chdir') as mock_chdir:
+                                        # Set port
+                                        mock_build_command.port = 8000
+                                        
+                                        # Execute
+                                        result = mock_build_command.execute("test_project")
+                                        
+                                        # Verify all methods were called
+                                        mock_setup.assert_called_once_with("test_project")
+                                        mock_copy.assert_called_once()
+                                        mock_create_django.assert_called_once()
+                                        assert mock_create_app.call_count == 4  # 4 apps
+                                        mock_setup_static.assert_called_once()
+                                        mock_setup_templates.assert_called_once()
+                                        mock_setup_db.assert_called_once()
+                                        
+                                        # Verify chdir was called twice (into project dir and back)
+                                        assert mock_chdir.call_count >= 1
+                                        
+                                        # Verify result
+                                        assert result is not None
+                                        assert "path" in result
+                                        assert "port" in result
+                                        assert result["port"] == 8000
+                                        mock_verify_build.assert_called_once() # Verify verify_build was called
 
 
 def test_copy_with_vars_function(tmp_path):
@@ -632,6 +646,16 @@ def test_verify_container_status_failure(mock_verification_command, monkeypatch)
 
 def test_verify_database_connectivity(mock_verification_command, monkeypatch):
     """Test verification of database connectivity."""
+    # Mock project name directly for the test
+    project_name = "test_project"
+    # Ensure all necessary variables are set for the method call
+    mock_verification_command.variables = {
+        'project_name': project_name,
+        'pg_user': 'test_user', 
+        'pg_password': 'test_password',
+        'pg_email': 'test@example.com'
+    }
+
     with patch('subprocess.run') as mock_run:
         # Mock successful database connectivity checks
         mock_responses = [
@@ -641,35 +665,47 @@ def test_verify_database_connectivity(mock_verification_command, monkeypatch):
         ]
         mock_run.side_effect = mock_responses
 
-        # Execute the verification
-        result = mock_verification_command._verify_database_connectivity()
+        # Execute the verification, passing the project_name
+        result = mock_verification_command._verify_database_connectivity(project_name)
 
-        # Verify the result
-        assert result['can_connect'] is True
-        assert result['migrations_applied'] is True
-        assert result['users_created'] is True
-        assert result['success'] is True
+        # Verify the result is True (method returns boolean)
+        assert result is True
 
 
 def test_verify_database_connectivity_failure(mock_verification_command, monkeypatch):
     """Test verification of database connectivity with failures."""
+    # Mock project name directly for the test
+    project_name = "test_project_fail"
+    # Ensure all necessary variables are set for the method call
+    mock_verification_command.variables = {
+        'project_name': project_name,
+        'pg_user': 'test_user_fail',
+        'pg_password': 'test_password_fail',
+        'pg_email': 'test_fail@example.com'
+    }
+
     with patch('subprocess.run') as mock_run:
-        # Mock failed connectivity checks
-        mock_responses = [
-            MagicMock(returncode=1),  # Database connection failed
-            MagicMock(stdout="[ ] auth.0001_initial\n[ ] admin.0001_initial", returncode=0),  # Migrations not applied
-            MagicMock(stdout="Admin user exists: False\nRegular user exists: False", returncode=0)  # Users not created
-        ]
-        mock_run.side_effect = mock_responses
+        # Mock subprocess.run to raise CalledProcessError for the db check command
+        def side_effect(*args, **kwargs):
+            command_args = args[0]
+            # Correctly check if it's the docker exec command for the python script
+            if (len(command_args) >= 7 and  # Need at least 7 elements
+                command_args[0].endswith('docker-compose') and
+                command_args[1] == 'exec' and
+                command_args[3] == 'web' and  # Service name is at index 3
+                command_args[4] == 'python' and # Command is at index 4
+                command_args[5] == '-c' and    # Script flag is at index 5
+                'psycopg2' in command_args[6]): # Script content is at index 6
+                raise subprocess.CalledProcessError(1, command_args, stderr="Connection failed")
+            # For any other subprocess calls, return a default MagicMock
+            return MagicMock(returncode=0, stdout="", stderr="")
+        mock_run.side_effect = side_effect
 
-        # Execute the verification
-        result = mock_verification_command._verify_database_connectivity()
+        # Execute the verification, passing the project_name
+        result = mock_verification_command._verify_database_connectivity(project_name)
 
-        # Verify the result
-        assert result['can_connect'] is False
-        assert result['migrations_applied'] is False
-        assert result['users_created'] is False
-        assert result['success'] is False
+        # Verify the result is False (method returns boolean)
+        assert result is False
 
 
 def test_verify_web_service(mock_verification_command, monkeypatch):

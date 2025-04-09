@@ -278,14 +278,11 @@ For Django management commands help, use:
                             elif not status.get('db', {}).get('healthy', False):
                                 failed_checks.append("Database container not healthy")
                         
-                        if 'database' in verification and not verification['database'].get('success', True):
+                        # Check if 'database' key exists and its value is a dictionary before accessing keys
+                        if 'database' in verification and isinstance(verification['database'], dict) and not verification['database'].get('success', True):
                             db = verification['database']
                             if not db.get('can_connect', True):
                                 failed_checks.append("Database connection failed")
-                            if not db.get('migrations_applied', True):
-                                failed_checks.append("Database migrations incomplete")
-                            if not db.get('users_created', True):
-                                failed_checks.append("User creation failed")
                         
                         if 'web_service' in verification and not verification['web_service'].get('success', True):
                             if not verification['web_service'].get('responds', True):

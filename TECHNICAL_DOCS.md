@@ -188,17 +188,23 @@ First, install the test dependencies:
 pip install -r requirements-test.txt
 ```
 
-You can run the tests using pytest:
+The simplest way to run tests is using the `run_tests.sh` script:
 
 ```bash
-# Run all tests
-python -m pytest -v
+# Run unit tests only (default)
+./run_tests.sh
 
-# Run specific test modules
-python -m pytest tests/unit/test_project_commands.py -v
+# Run all tests (unit and integration)
+./run_tests.sh --all
 
-# Run specific test functions
-python -m pytest tests/unit/test_project_commands.py::test_verify_container_status -v
+# Run with coverage report
+./run_tests.sh --coverage
+
+# Run tests in parallel
+./run_tests.sh --parallel
+
+# Run integration tests only
+./run_tests.sh --integration
 ```
 
 For Django application tests, you can use the Django test runner through the QuickScale CLI:

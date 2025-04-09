@@ -93,21 +93,3 @@ The test system includes several features for improving stability:
 6. **Timeout Handling**: Tests have proper timeouts to avoid hanging
 7. **Parallel Test Support**: Tests can run in parallel where appropriate
 
-## Dependencies
-
-The test suite requires these packages:
-
-```
-pytest
-pytest-timeout
-pytest-cov
-pytest-xdist
-pytest-mock
-pytest-order
-```
-
-Install with:
-
-```bash
-pip install -r requirements-dev.txt
-``` 
