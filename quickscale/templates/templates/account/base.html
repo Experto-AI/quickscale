@@ -1,0 +1,30 @@
+{% extends "base.html" %}
+
+{% block body %}
+<section class="hero is-primary is-small">
+    <div class="hero-body">
+        <p class="title">{% block account_title %}Account{% endblock %}</p>
+        <p class="subtitle">{% block account_subtitle %}Manage your account{% endblock %}</p>
+    </div>
+</section>
+
+<section class="section">
+    <div class="container">
+        <div class="columns is-centered is-mobile">
+            <div class="column is-half">
+                {% if messages %}
+                <div class="messages mb-4">
+                    {% for message in messages %}
+                        <div class="notification {% if message.tags %}is-{{ message.tags }}{% endif %}">
+                            {{ message }}
+                        </div>
+                    {% endfor %}
+                </div>
+                {% endif %}
+                
+                {% block account_content %}{% endblock %}
+            </div>
+        </div>
+    </div>
+</section>
+{% endblock %} 

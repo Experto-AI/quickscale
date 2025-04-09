@@ -8,11 +8,58 @@ import pytest
 from contextlib import contextmanager
 from pathlib import Path
 from unittest.mock import patch
+import django
+from django.test.testcases import LiveServerTestCase
 
 # Maximum wait time for services to be ready (seconds)
 SERVICE_TIMEOUT = 30
 # Polling interval for checking service readiness (seconds)
 POLL_INTERVAL = 0.5
+
+os.environ.setdefault("DJANGO_SETTINGS_MODULE", "core.settings")
+django.setup()
+
+@pytest.fixture(scope="session", autouse=True)
+def patch_django_for_bytes_path():
+    """
+    Patch Django's StaticFilesHandler and LiveServerTestCase classes to handle bytes paths correctly.
+    
+    This fixes the issue where bytes paths from WSGI are compared with string paths using startswith(),
+    resulting in a TypeError. The issue occurs specifically in Django's StaticFilesHandler._should_handle
+    method which is used by LiveServerTestCase.
+    """
+    # Import the relevant classes
+    from django.contrib.staticfiles.handlers import StaticFilesHandler
+    from django.core.handlers.wsgi import WSGIHandler, get_path_info
+    
+    # Patch 1: Fix the get_path_info function to always return a string
+    original_get_path_info = get_path_info
+    
+    def patched_get_path_info(environ):
+        """Return the path info as a string, not bytes."""
+        path = original_get_path_info(environ)
+        if isinstance(path, bytes):
+            path = path.decode('utf-8')
+        return path
+    
+    # Patch 2: Fix StaticFilesHandler._should_handle to handle bytes
+    if hasattr(StaticFilesHandler, '_should_handle'):
+        original_should_handle = StaticFilesHandler._should_handle
+        
+        def patched_should_handle(self, path):
+            """Handle both string and bytes paths."""
+            if isinstance(path, bytes):
+                path = path.decode('utf-8')
+            return original_should_handle(self, path)
+        
+        # Apply patches
+        with patch('django.core.handlers.wsgi.get_path_info', patched_get_path_info):
+            with patch.object(StaticFilesHandler, '_should_handle', patched_should_handle):
+                yield
+    else:
+        # If the method doesn't exist (Django version difference), just patch get_path_info
+        with patch('django.core.handlers.wsgi.get_path_info', patched_get_path_info):
+            yield
 
 @pytest.fixture(scope="session", autouse=True)
 def setup_test_environment():
@@ -111,6 +158,8 @@ def wait_for_service():
 @pytest.fixture(scope="module")
 def real_project_fixture(tmp_path_factory):
     """Create a real QuickScale project fixture that's properly cleaned up."""
+    from tests.utils import find_available_ports
+    
     tmp_path = tmp_path_factory.mktemp("quickscale_real_test")
     project_dir = None
     
@@ -136,6 +185,20 @@ def real_project_fixture(tmp_path_factory):
             )
         except (subprocess.SubprocessError, FileNotFoundError) as e:
             print(f"Cleanup of previous instances warning (safe to ignore): {e}")
+        
+        # Find available ports for the web and db services
+        ports = find_available_ports(count=2, start_port=8000, end_port=9000)
+        if not ports:
+            pytest.skip("Could not find available ports for test containers")
+            yield None
+            return
+            
+        web_port, db_port = ports
+        print(f"Using web port {web_port} and database port {db_port} for tests")
+        
+        # Set environment variables for port configuration
+        os.environ["PORT"] = str(web_port)
+        os.environ["PG_PORT"] = str(db_port)
         
         # Run actual quickscale build command with increased timeout
         try:
@@ -263,6 +326,12 @@ def real_project_fixture(tmp_path_factory):
                     shutil.rmtree(project_dir)
                 except (OSError, PermissionError) as e:
                     print(f"Warning: Failed to clean up {project_dir}: {e}")
+                    
+            # Clear environment variables
+            if "PORT" in os.environ:
+                del os.environ["PORT"]
+            if "PG_PORT" in os.environ:
+                del os.environ["PG_PORT"]
 
 @pytest.fixture
 def mock_docker():

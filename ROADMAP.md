@@ -6,6 +6,8 @@
    - ✅ User registration, login, session management 
    - ✅ Basic user profiles
    - ✅ Admin/user role separation
+   - ✅ Email-only authentication with django-allauth
+   - ✅ HTMX integration for auth forms
 
 2. **Core Infrastructure**:
    - ✅ Database connections (PostgreSQL)
@@ -37,121 +39,138 @@
 
 ## Projected Development Sprints
 
-### Sprint 1: Core CLI Improvements (v0.4.0)
-- [x] **Session 1: Enhanced Error Handling**
-  - ✓ Add comprehensive error handling to CLI commands
-  - ✓ Implement user-friendly error messages
-  - ✓ Implement tests for error handling system (85% code coverage)
+### Sprint 2: Django-Allauth Integration and Migration (v0.5.0) 
+- [x] **Session 1: Core django-allauth Integration**
+  - [x] Evaluate django-allauth features for QuickScale project templates
+  - [x] Integrate django-allauth into the project generator templates
+  - [x] Configure core settings in templates (INSTALLED_APPS, AUTHENTICATION_BACKENDS)
+  - [x] Set up site framework required by django-allauth in project templates
+  - [x] Create URL routing templates for django-allauth endpoints
 
-- [x] **Session 2: CLI `build` Command Improvements**
-  - ✓ Implement post-build verification checks for `quickscale build`
-  - ✓ Implement unit and integration testing with coverage
+- [x] **Session 2: Email-Only Authentication System**
+  - [x] Design auth templates for django-allauth in generated projects
+  - [x] Create starter User model templates compatible with django-allauth
+  - [x] Configure email-only authentication (explicitly disable social authentication)
+  - [x] Create template generation options for auth customization
+  - [x] Develop config files for email-specific authentication settings
 
-- [x] **Session 3: Service Command Enhancements**
-  - ✓ Improved test stability and robustness
-  - ✓ Enhance `quickscale docker logs` functionality
+- [x] **Session 3: HTMX and Frontend Integration**
+  - [x] Design django-allauth templates that integrate with HTMX
+  - [x] Create UX-optimized auth flows with HTMX functionality
+  - [x] Implement Alpine.js components for client-side auth interactions
+  - [x] Ensure Bulma CSS compatibility with django-allauth forms
+  - [x] Create responsive design for all authentication components
 
-### Sprint 2: Email Verification System (v0.5.0) 
-- [ ] **Session 1: Email Backend Configuration**
-  - Configure Django email settings
-  - Add environment variables for email configuration
-  - Test basic email sending functionality
+- [x] **Session 4: Enhanced Authentication Features**
+  - [x] Implement email verification workflow
+  - [x] Add password reset functionality
+  - [x] Configure secure email delivery for authentication processes
+  - [x] Implement password strength validation
+  - [x] Create enhanced profile management with extended user fields
 
-- [ ] **Session 2: Verification Models and Logic**
-  - Create EmailVerification model
-  - Implement token generation system
-  - Write service functions for verification workflow
+- [x] **Session 5: Template Organization and Guidelines**
+  - [x] Create comprehensive inventory of new django-allauth templates
+  - [x] Design template directory structure for allauth components
+  - [x] Develop template naming conventions for generated projects
+  - [x] Create template documentation for users customizing authentication
+  - [x] Define styling guidelines for authentication components
+  - [x] Prepare examples of common template customizations
 
-- [ ] **Session 3: Email Templates**
-  - Design email verification template
-  - Add template rendering logic
-  - Implement verification success/failure pages
+- [x] **Session 6: Testing, Documentation and Deployment**
+  - [x] Create comprehensive test suite for authentication flows
+  - [x] Unit tests for django-allauth integration
+  - [x] Integration tests for email-only authentication
+  - [x] End-to-end tests for authentication workflows
 
-- [ ] **Session 4: API Endpoints**
-  - Create endpoints for requesting verification
-  - Implement verification confirmation endpoints
-  - Write tests for the verification flow
 
-### Sprint 3: Stripe Integration Basics (v0.6.0)
-- [ ] **Session 1: Stripe Setup**
-  - Add stripe-python package
-  - Configure Stripe API keys
-  - Create basic Stripe service class
+### Sprint 3: Payment Integration with dj-stripe (v0.6.0)
+- [ ] **Session 1: dj-stripe Setup**
+  - [ ] Add dj-stripe package
+  - [ ] Configure Stripe API keys and webhooks
+  - [ ] Run initial migrations
+  - [ ] Test connection to Stripe
 
-- [ ] **Session 2: Payment Models**
-  - Create Subscription and Payment models
-  - Add relations to User model
-  - Implement database migrations
+- [ ] **Session 2: Subscription Models and Management**
+  - [ ] Configure product and price models in Stripe dashboard
+  - [ ] Sync Stripe products/prices with dj-stripe
+  - [ ] Create subscription plan selection UI
+  - [ ] Implement plan change functionality
 
-- [ ] **Session 3: Webhook Handling**
-  - Create webhook endpoint
-  - Implement event handlers for common events
-  - Add security validation for webhooks
+- [ ] **Session 3: Checkout Flow**
+  - [ ] Implement Stripe Checkout integration
+  - [ ] Create subscription creation flow
+  - [ ] Add success/cancel handling
+  - [ ] Implement webhook listeners for payment events
 
-- [ ] **Session 4: Checkout Flow**
-  - Implement session creation
-  - Add success/cancel handling
-  - Create payment confirmation logic
+- [ ] **Session 4: Billing Portal and Management**
+  - [ ] Integrate Stripe Customer Portal
+  - [ ] Create billing history views
+  - [ ] Implement invoice retrieval and display
+  - [ ] Add subscription management UI
 
-### Sprint 4: Subscription Management (v0.7.0)
-- [ ] **Session 1: Subscription Plans**
-  - Create subscription plan models
-  - Add seed data for initial plans
-  - Implement plan selection UI
+### Sprint 4: Usage Tracking and Quota Management (v0.7.0)
+- [ ] **Session 1: Usage Models**
+  - [ ] Create usage tracking models
+  - [ ] Implement usage logging middleware
+  - [ ] Add relations to subscription data
+  - [ ] Design quota enforcement architecture
 
-- [ ] **Session 2: Customer Portal**
-  - Set up Stripe Customer Portal
-  - Create management views
-  - Add subscription cancellation flow
+- [ ] **Session 2: Quota Enforcement**
+  - [ ] Implement quota checking middleware
+  - [ ] Create upgrade prompts for quota limits
+  - [ ] Add usage analytics dashboard
+  - [ ] Create usage projection tools
 
-- [ ] **Session 3: Usage Tracking**
-  - Create usage tracking models
-  - Add usage logging middleware
-  - Implement basic quota enforcement
+- [ ] **Session 3: Alerting and Notifications**
+  - [ ] Implement quota approaching alerts
+  - [ ] Create usage reports
+  - [ ] Add admin monitoring views
+  - [ ] Implement notification preferences
 
-- [ ] **Session 4: Billing History**
-  - Create invoice retrieval from Stripe
-  - Implement billing history page
-  - Add invoice PDF download functionality
+- [ ] **Session 4: Testing and Optimization**
+  - [ ] Performance testing for quota systems
+  - [ ] Optimize database queries
+  - [ ] Implement caching for quota checks
+  - [ ] Write comprehensive test suite
 
 ### Sprint 5: File Storage Foundation (v0.8.0)
 - [ ] **Session 1: Storage Backend**
-  - Configure Django storage backend
-  - Add AWS S3 or similar integration
-  - Create storage service class
+  - [ ] Configure Django storage backend
+  - [ ] Add AWS S3 or similar integration
+  - [ ] Create storage service class
 
 - [ ] **Session 2: File Models**
-  - Create File and FileProject models
-  - Add metadata fields and relations
-  - Implement database migrations
+  - [ ] Create File and FileProject models
+  - [ ] Add metadata fields and relations
+  - [ ] Implement database migrations
 
 - [ ] **Session 3: Upload Functionality**
-  - Create upload forms and views
-  - Implement client-side validation
-  - Add server-side processing
+  - [ ] Create upload forms and views
+  - [ ] Implement client-side validation
+  - [ ] Add server-side processing
 
 - [ ] **Session 4: File Management UI**
-  - Build basic file browser view
-  - Implement thumbnail generation for images
-  - Add sorting and filtering options
+  - [ ] Build basic file browser view
+  - [ ] Implement thumbnail generation for images
+  - [ ] Add sorting and filtering options
 
 ### Sprint 6: Testing and Documentation (v0.9.0)
 - [ ] **Session 1: Expanding Test Coverage**
-  - Increase code coverage to 90%+
-  - Add performance tests
-  - Setup automated test runs in CI/CD pipeline
+  - [ ] Increase code coverage to 90%+
+  - [ ] Add performance tests
+  - [ ] Setup automated test runs in CI/CD pipeline
 
 - [ ] **Session 2: Architecture Documentation**
-  - Add detailed architecture diagrams
-  - Document the command system design
-  - Create component relationship diagrams
+  - [ ] Add detailed architecture diagrams
+  - [ ] Document the command system design
+  - [ ] Create component relationship diagrams
 
 - [ ] **Session 3: Developer Guide**
-  - Improve inline code documentation
-  - Create developer onboarding guide
-  - Document extension points
+  - [ ] Improve inline code documentation
+  - [ ] Create developer onboarding guide
+  - [ ] Document extension points
 
 - [ ] **Session 4: User Documentation**
-  - Create user guides for key features
-  - Add tutorials for common tasks
-  - Improve help and support resources
+  - [ ] Create user guides for key features
+  - [ ] Add tutorials for common tasks
+  - [ ] Improve help and support resources

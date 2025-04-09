@@ -1,0 +1,262 @@
+{% load i18n %}
+
+<div class="box" id="profile-form-container">
+    <form method="post" action="{% url 'users:profile' %}" enctype="multipart/form-data" hx-post="{% url 'users:profile' %}" hx-target="#profile-form-container" hx-swap="outerHTML">
+        {% csrf_token %}
+        
+        {% if messages %}
+        <div class="messages mb-4">
+            {% for message in messages %}
+            <div class="notification is-{{ message.tags }}">
+                <button class="delete"></button>
+                {{ message }}
+            </div>
+            {% endfor %}
+        </div>
+        {% endif %}
+        
+        <div class="tabs">
+            <ul>
+                <li class="is-active"><a href="#personal-info">Personal Information</a></li>
+                <li><a href="#social">Social Media</a></li>
+                <li><a href="#preferences">Preferences</a></li>
+            </ul>
+        </div>
+        
+        <div id="personal-info" class="tab-content">
+            <div class="columns">
+                <div class="column">
+                    <div class="field">
+                        <label class="label">{{ form.first_name.label }}</label>
+                        <div class="control">
+                            {{ form.first_name }}
+                        </div>
+                        {% if form.first_name.errors %}
+                        <p class="help is-danger">{{ form.first_name.errors.0 }}</p>
+                        {% endif %}
+                    </div>
+                </div>
+                <div class="column">
+                    <div class="field">
+                        <label class="label">{{ form.last_name.label }}</label>
+                        <div class="control">
+                            {{ form.last_name }}
+                        </div>
+                        {% if form.last_name.errors %}
+                        <p class="help is-danger">{{ form.last_name.errors.0 }}</p>
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+            
+            <div class="field">
+                <label class="label">{{ form.bio.label }}</label>
+                <div class="control">
+                    {{ form.bio }}
+                </div>
+                {% if form.bio.errors %}
+                <p class="help is-danger">{{ form.bio.errors.0 }}</p>
+                {% endif %}
+            </div>
+            
+            <div class="columns">
+                <div class="column">
+                    <div class="field">
+                        <label class="label">{{ form.phone_number.label }}</label>
+                        <div class="control">
+                            {{ form.phone_number }}
+                        </div>
+                        {% if form.phone_number.errors %}
+                        <p class="help is-danger">{{ form.phone_number.errors.0 }}</p>
+                        {% endif %}
+                    </div>
+                </div>
+                <div class="column">
+                    <div class="field">
+                        <label class="label">{{ form.location.label }}</label>
+                        <div class="control">
+                            {{ form.location }}
+                        </div>
+                        {% if form.location.errors %}
+                        <p class="help is-danger">{{ form.location.errors.0 }}</p>
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+            
+            <div class="columns">
+                <div class="column">
+                    <div class="field">
+                        <label class="label">{{ form.job_title.label }}</label>
+                        <div class="control">
+                            {{ form.job_title }}
+                        </div>
+                        {% if form.job_title.errors %}
+                        <p class="help is-danger">{{ form.job_title.errors.0 }}</p>
+                        {% endif %}
+                    </div>
+                </div>
+                <div class="column">
+                    <div class="field">
+                        <label class="label">{{ form.company.label }}</label>
+                        <div class="control">
+                            {{ form.company }}
+                        </div>
+                        {% if form.company.errors %}
+                        <p class="help is-danger">{{ form.company.errors.0 }}</p>
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+            
+            <div class="field">
+                <label class="label">{{ form.website.label }}</label>
+                <div class="control">
+                    {{ form.website }}
+                </div>
+                {% if form.website.errors %}
+                <p class="help is-danger">{{ form.website.errors.0 }}</p>
+                {% endif %}
+            </div>
+            
+            <div class="field">
+                <label class="label">{{ form.profile_picture.label }}</label>
+                <div class="file has-name">
+                    <label class="file-label">
+                        {{ form.profile_picture }}
+                        <span class="file-cta">
+                            <span class="file-icon">
+                                <i class="fas fa-upload"></i>
+                            </span>
+                            <span class="file-label">
+                                Choose a file…
+                            </span>
+                        </span>
+                        <span class="file-name">
+                            {% if user.profile_picture %}
+                                {{ user.profile_picture.name }}
+                            {% else %}
+                                No file chosen
+                            {% endif %}
+                        </span>
+                    </label>
+                </div>
+                {% if form.profile_picture.errors %}
+                <p class="help is-danger">{{ form.profile_picture.errors.0 }}</p>
+                {% endif %}
+            </div>
+        </div>
+        
+        <div id="social" class="tab-content" style="display: none;">
+            <div class="field">
+                <label class="label">{{ form.twitter.label }}</label>
+                <div class="control has-icons-left">
+                    {{ form.twitter }}
+                    <span class="icon is-small is-left">
+                        <i class="fab fa-twitter"></i>
+                    </span>
+                </div>
+                <p class="help">{{ form.twitter.help_text }}</p>
+                {% if form.twitter.errors %}
+                <p class="help is-danger">{{ form.twitter.errors.0 }}</p>
+                {% endif %}
+            </div>
+            
+            <div class="field">
+                <label class="label">{{ form.linkedin.label }}</label>
+                <div class="control has-icons-left">
+                    {{ form.linkedin }}
+                    <span class="icon is-small is-left">
+                        <i class="fab fa-linkedin"></i>
+                    </span>
+                </div>
+                <p class="help">{{ form.linkedin.help_text }}</p>
+                {% if form.linkedin.errors %}
+                <p class="help is-danger">{{ form.linkedin.errors.0 }}</p>
+                {% endif %}
+            </div>
+            
+            <div class="field">
+                <label class="label">{{ form.github.label }}</label>
+                <div class="control has-icons-left">
+                    {{ form.github }}
+                    <span class="icon is-small is-left">
+                        <i class="fab fa-github"></i>
+                    </span>
+                </div>
+                <p class="help">{{ form.github.help_text }}</p>
+                {% if form.github.errors %}
+                <p class="help is-danger">{{ form.github.errors.0 }}</p>
+                {% endif %}
+            </div>
+        </div>
+        
+        <div id="preferences" class="tab-content" style="display: none;">
+            <div class="field">
+                <div class="control">
+                    <label class="checkbox">
+                        {{ form.email_notifications }}
+                        {{ form.email_notifications.label }}
+                    </label>
+                </div>
+                {% if form.email_notifications.errors %}
+                <p class="help is-danger">{{ form.email_notifications.errors.0 }}</p>
+                {% endif %}
+            </div>
+        </div>
+        
+        <div class="field mt-5">
+            <div class="control">
+                <button type="submit" class="button is-primary">
+                    Save Changes
+                </button>
+            </div>
+        </div>
+    </form>
+</div>
+
+<script>
+    // Re-attach event listeners for tabs after HTMX swap
+    document.addEventListener('htmx:afterSwap', function() {
+        // Tab switching functionality
+        const tabs = document.querySelectorAll('.tabs li');
+        const tabContents = document.querySelectorAll('.tab-content');
+        
+        tabs.forEach(tab => {
+            tab.addEventListener('click', () => {
+                // Remove is-active from all tabs
+                tabs.forEach(t => t.classList.remove('is-active'));
+                
+                // Add is-active to clicked tab
+                tab.classList.add('is-active');
+                
+                // Hide all tab contents
+                tabContents.forEach(content => {
+                    content.style.display = 'none';
+                });
+                
+                // Show the selected tab content
+                const target = tab.querySelector('a').getAttribute('href');
+                document.querySelector(target).style.display = 'block';
+            });
+        });
+        
+        // File input handling
+        const fileInput = document.querySelector('input[type=file]');
+        if (fileInput) {
+            fileInput.onchange = () => {
+                if (fileInput.files.length > 0) {
+                    const fileName = document.querySelector('.file-name');
+                    fileName.textContent = fileInput.files[0].name;
+                }
+            }
+        }
+        
+        // Close notification messages
+        document.querySelectorAll('.notification .delete').forEach(button => {
+            button.addEventListener('click', () => {
+                button.parentNode.remove();
+            });
+        });
+    });
+</script> 

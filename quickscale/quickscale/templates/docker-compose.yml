@@ -1,0 +1,18 @@
+-    environment:
+-      - DEBUG=True
+-      - SECRET_KEY=${SECRET_KEY}
+-      - DATABASE_URL=postgresql://${pg_user}:${pg_password}@db:5432/${pg_user}
+-      - POSTGRES_DB=${pg_user}
+-      - POSTGRES_USER=${pg_user}
+-      - POSTGRES_PASSWORD=${pg_password}
+-      - POSTGRES_HOST=db
+-      - IN_DOCKER=True
++    environment:
++      - DEBUG=True
++      - SECRET_KEY=${SECRET_KEY}
++      - DATABASE_URL=postgresql://${pg_user:-admin}:${pg_password:-adminpasswd}@db:5432/${pg_user:-admin}
++      - POSTGRES_DB=${pg_user:-admin}
++      - POSTGRES_USER=${pg_user:-admin}
++      - POSTGRES_PASSWORD=${pg_password:-adminpasswd}
++      - POSTGRES_HOST=db
++      - IN_DOCKER=True 

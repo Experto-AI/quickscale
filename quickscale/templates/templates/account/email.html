@@ -1,0 +1,118 @@
+{% extends "account/base.html" %}
+{% load i18n %}
+
+{% block title %}{% trans "Email Addresses" %} - ${project_name}{% endblock %}
+
+{% block account_title %}{% trans "Email Addresses" %}{% endblock %}
+{% block account_subtitle %}{% trans "Manage your email addresses" %}{% endblock %}
+
+{% block account_content %}
+<div class="box">
+    {% if user.emailaddress_set.all %}
+        <p class="mb-4">{% trans 'The following email addresses are associated with your account:' %}</p>
+        
+        <form action="{% url 'account_email' %}" method="post" hx-post="{% url 'account_email' %}" hx-target="this" hx-swap="outerHTML">
+            {% csrf_token %}
+            
+            <fieldset>
+                {% for emailaddress in user.emailaddress_set.all %}
+                <div class="field">
+                    <div class="control">
+                        <label class="radio">
+                            <input id="email_radio_{{ forloop.counter }}" type="radio" name="email" {% if emailaddress.primary or user.emailaddress_set.count == 1 %}checked="checked"{% endif %} value="{{ emailaddress.email }}"/>
+                            {{ emailaddress.email }}
+                            {% if emailaddress.verified %}
+                                <span class="tag is-success">{% trans "Verified" %}</span>
+                            {% else %}
+                                <span class="tag is-warning">{% trans "Unverified" %}</span>
+                            {% endif %}
+                            {% if emailaddress.primary %}
+                                <span class="tag is-info">{% trans "Primary" %}</span>
+                            {% endif %}
+                        </label>
+                    </div>
+                </div>
+                {% endfor %}
+            </fieldset>
+            
+            <div class="field is-grouped mt-4">
+                <div class="control">
+                    <button class="button is-info" type="submit" name="action_primary">
+                        {% trans 'Make Primary' %}
+                    </button>
+                </div>
+                <div class="control">
+                    <button class="button is-success" type="submit" name="action_send">
+                        {% trans 'Re-send Verification' %}
+                    </button>
+                </div>
+                <div class="control">
+                    <button class="button is-danger" type="submit" name="action_remove">
+                        {% trans 'Remove' %}
+                    </button>
+                </div>
+            </div>
+        </form>
+    {% else %}
+        <div class="notification is-warning">
+            {% trans 'You currently do not have any email address set up. You should add an email address so you can receive notifications, reset your password, etc.' %}
+        </div>
+    {% endif %}
+    
+    <hr>
+    
+    <h3 class="title is-5">{% trans "Add Email Address" %}</h3>
+    
+    <form method="post" action="{% url 'account_email' %}" hx-post="{% url 'account_email' %}" hx-target="this" hx-swap="outerHTML">
+        {% csrf_token %}
+        
+        {% if form.non_field_errors %}
+            <div class="notification is-danger">
+                {% for error in form.non_field_errors %}
+                    {{ error }}
+                {% endfor %}
+            </div>
+        {% endif %}
+        
+        <div class="field">
+            <label class="label">{{ form.email.label }}</label>
+            <div class="control">
+                {{ form.email }}
+            </div>
+            {% if form.email.errors %}
+                <p class="help is-danger">{{ form.email.errors.0 }}</p>
+            {% endif %}
+        </div>
+        
+        <div class="field">
+            <div class="control">
+                <button class="button is-primary" name="action_add" type="submit">
+                    {% trans "Add Email" %}
+                </button>
+            </div>
+        </div>
+    </form>
+</div>
+
+{% endblock %}
+
+{% block extra_js %}
+<script type="text/javascript">
+(function() {
+    // Handle the radio button selection - ensure one is always checked
+    var message = "{% trans 'Do you really want to remove the selected email address?' %}";
+    var actions = document.querySelectorAll('button[name^="action"]');
+    if (actions.length > 0) {
+        actions.forEach(function(button) {
+            button.addEventListener("click", function(e) {
+                if (button.name === 'action_remove') {
+                    if (!confirm(message)) {
+                        e.preventDefault();
+                    }
+                }
+            });
+        });
+    }
+})();
+</script>
+{% endblock %} 

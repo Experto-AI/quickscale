@@ -1,0 +1,76 @@
+{% extends "account/base.html" %}
+{% load i18n %}
+{% load account %}
+
+{% block title %}{% trans "Sign In" %} - ${project_name}{% endblock %}
+
+{% block account_title %}{% trans "Sign In" %}{% endblock %}
+{% block account_subtitle %}{% trans "Access your account" %}{% endblock %}
+
+{% block account_content %}
+<div class="box">
+    <form class="login" method="post" action="{% url 'account_login' %}" hx-post="{% url 'account_login' %}" hx-target="this" hx-swap="outerHTML">
+        {% csrf_token %}
+        
+        {% if form.non_field_errors %}
+            <div class="notification is-danger">
+                {% for error in form.non_field_errors %}
+                    {{ error }}
+                {% endfor %}
+            </div>
+        {% endif %}
+        
+        <div class="field">
+            <label class="label">{{ form.login.label }}</label>
+            <div class="control">
+                {{ form.login }}
+            </div>
+            {% if form.login.errors %}
+                <p class="help is-danger">{{ form.login.errors.0 }}</p>
+            {% endif %}
+        </div>
+        
+        <div class="field">
+            <label class="label">{{ form.password.label }}</label>
+            <div class="control">
+                {{ form.password }}
+            </div>
+            {% if form.password.errors %}
+                <p class="help is-danger">{{ form.password.errors.0 }}</p>
+            {% endif %}
+        </div>
+        
+        {% if form.remember %}
+            <div class="field">
+                <div class="control">
+                    <label class="checkbox">
+                        {{ form.remember }}
+                        {{ form.remember.label }}
+                    </label>
+                </div>
+            </div>
+        {% endif %}
+        
+        {% if redirect_field_value %}
+            <input type="hidden" name="{{ redirect_field_name }}" value="{{ redirect_field_value }}" />
+        {% endif %}
+        
+        <div class="field is-grouped">
+            <div class="control">
+                <button class="button is-primary" type="submit" id="login-button">
+                    {% trans "Sign In" %}
+                </button>
+            </div>
+            <div class="control">
+                <a class="button is-text" href="{% url 'account_reset_password' %}">
+                    {% trans "Forgot Password?" %}
+                </a>
+            </div>
+        </div>
+    </form>
+    
+    <p class="mt-4">
+        {% trans "Don't have an account?" %} <a href="{{ signup_url }}">{% trans "Sign up" %}</a>
+    </p>
+</div>
+{% endblock %} 

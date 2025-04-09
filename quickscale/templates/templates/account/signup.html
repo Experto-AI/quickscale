@@ -1,0 +1,106 @@
+{% extends "account/base.html" %}
+{% load i18n %}
+{% load account %}
+{% load static %}
+
+{% block title %}{% trans "Sign Up" %} - ${project_name}{% endblock %}
+
+{% block account_title %}{% trans "Sign Up" %}{% endblock %}
+{% block account_subtitle %}{% trans "Create your account" %}{% endblock %}
+
+{% block extra_head %}
+    <script src="{% static 'js/password_validation.js' %}"></script>
+{% endblock %}
+
+{% block account_content %}
+<div class="box">
+    <form class="signup" method="post" action="{% url 'account_signup' %}" hx-post="{% url 'account_signup' %}" hx-target="this" hx-swap="outerHTML" x-data="passwordValidation()">
+        {% csrf_token %}
+        
+        {% if form.non_field_errors %}
+            <div class="notification is-danger">
+                {% for error in form.non_field_errors %}
+                    {{ error }}
+                {% endfor %}
+            </div>
+        {% endif %}
+        
+        <div class="field">
+            <label class="label">{{ form.email.label }}</label>
+            <div class="control">
+                {{ form.email }}
+            </div>
+            {% if form.email.errors %}
+                <p class="help is-danger">{{ form.email.errors.0 }}</p>
+            {% endif %}
+        </div>
+        
+        <div class="field">
+            <label class="label">{{ form.first_name.label }}</label>
+            <div class="control">
+                {{ form.first_name }}
+            </div>
+            {% if form.first_name.errors %}
+                <p class="help is-danger">{{ form.first_name.errors.0 }}</p>
+            {% endif %}
+        </div>
+        
+        <div class="field">
+            <label class="label">{{ form.last_name.label }}</label>
+            <div class="control">
+                {{ form.last_name }}
+            </div>
+            {% if form.last_name.errors %}
+                <p class="help is-danger">{{ form.last_name.errors.0 }}</p>
+            {% endif %}
+        </div>
+        
+        <div class="field">
+            <label class="label">{{ form.password1.label }}</label>
+            <div class="control">
+                <input type="password" name="password1" id="id_password1" class="input" placeholder="Password" 
+                       required x-model="password1" autocomplete="new-password">
+            </div>
+            <template x-if="password1.length > 0">
+                <div>
+                    <progress class="progress mt-2" :class="color" :value="progressValue()" max="6"></progress>
+                    <p class="help" :class="color" x-text="feedback"></p>
+                </div>
+            </template>
+            {% if form.password1.errors %}
+                <p class="help is-danger">{{ form.password1.errors.0 }}</p>
+            {% endif %}
+        </div>
+        
+        <div class="field">
+            <label class="label">{{ form.password2.label }}</label>
+            <div class="control">
+                <input type="password" name="password2" id="id_password2" class="input" placeholder="Password (again)" 
+                       required x-model="password2" autocomplete="new-password">
+            </div>
+            <template x-if="password2.length > 0">
+                <p class="help" :class="matchMessageClass()" x-text="matchMessage()"></p>
+            </template>
+            {% if form.password2.errors %}
+                <p class="help is-danger">{{ form.password2.errors.0 }}</p>
+            {% endif %}
+        </div>
+        
+        {% if redirect_field_value %}
+            <input type="hidden" name="{{ redirect_field_name }}" value="{{ redirect_field_value }}" />
+        {% endif %}
+        
+        <div class="field">
+            <div class="control">
+                <button class="button is-primary" type="submit" :disabled="isSubmitDisabled()">
+                    {% trans "Sign Up" %}
+                </button>
+            </div>
+        </div>
+    </form>
+    
+    <p class="mt-4 has-text-centered">
+        {% trans "Already have an account?" %} <a href="{{ login_url }}">{% trans "Sign In" %}</a>
+    </p>
+</div>
+{% endblock %} 

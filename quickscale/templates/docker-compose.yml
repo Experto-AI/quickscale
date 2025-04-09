@@ -7,9 +7,11 @@ services:
     # User mapping to maintain file ownership
     user: "${DOCKER_UID:-1000}:${DOCKER_GID:-1000}"
     volumes:
-      - .:/app
+      - ./:/app
     ports:
       - "${PORT:-8000}:8000"
+    mem_limit: 6G  # Increase direct memory limit to 6G
+    mem_reservation: 2G  # Add direct memory reservation
     environment:
       - DEBUG=True
       - SECRET_KEY=${SECRET_KEY}
@@ -22,6 +24,7 @@ services:
     depends_on:
       db:
         condition: service_healthy
+    restart: unless-stopped
   
   # PostgreSQL database service
   db:
@@ -32,6 +35,9 @@ services:
       - POSTGRES_DB=${pg_user}
       - POSTGRES_USER=${pg_user}
       - POSTGRES_PASSWORD=${pg_password}
+      # Add PostgreSQL memory optimization settings
+      - POSTGRES_SHARED_BUFFERS=128MB
+      - POSTGRES_WORK_MEM=16MB
     ports:
       - "${PG_PORT:-5432}:5432"
     healthcheck:
@@ -39,6 +45,13 @@ services:
       interval: 5s
       timeout: 5s
       retries: 5
+    # Memory management for database
+    deploy:
+      resources:
+        limits:
+          memory: 384M
+        reservations:
+          memory: 256M
 
 # Named volumes for persistent data
 volumes:

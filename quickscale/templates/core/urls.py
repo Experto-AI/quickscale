@@ -10,4 +10,5 @@ urlpatterns = [
     path('users/', include('users.urls')),
     path('dashboard/', include('dashboard.urls')),
     path('common/', include('common.urls')),
+    path('accounts/', include('allauth.urls')),  # django-allauth URLs
 ] + static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)

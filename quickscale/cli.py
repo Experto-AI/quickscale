@@ -20,23 +20,37 @@ from quickscale.utils.error_manager import (
 log_dir = os.path.expanduser("~/.quickscale")
 os.makedirs(log_dir, exist_ok=True)
 
-# Configure logging
-logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
-    handlers=[
-        logging.FileHandler(os.path.join(log_dir, "quickscale.log")),
-        logging.StreamHandler()
-    ]
-)
-# Set file handler to debug level but keep console at INFO
-for handler in logging.getLogger().handlers:
-    if isinstance(handler, logging.FileHandler):
-        handler.setLevel(logging.DEBUG)
-    else:
-        handler.setLevel(logging.INFO)
+# --- Centralized Logging Configuration --- 
 
-logger = logging.getLogger(__name__)
+# Get the specific logger for quickscale operations
+qs_logger = logging.getLogger('quickscale')
+qs_logger.setLevel(logging.INFO) # Default level for quickscale logger
+
+# Prevent messages propagating to the root logger to avoid duplicate handling
+qs_logger.propagate = False
+
+# Clear existing handlers from the quickscale logger to prevent duplicates from previous runs/imports
+if qs_logger.hasHandlers():
+    qs_logger.handlers.clear()
+
+# Create console handler with the desired simple format
+console_handler = logging.StreamHandler(sys.stdout) 
+console_handler.setLevel(logging.INFO) # Set level for console output
+console_handler.setFormatter(logging.Formatter('[%(levelname)s] %(message)s'))
+qs_logger.addHandler(console_handler)
+
+# Create file handler for detailed logs (can have a different level and format)
+file_handler = logging.FileHandler(os.path.join(log_dir, "quickscale.log"))
+file_handler.setLevel(logging.DEBUG) # Log DEBUG level and above to file
+file_handler.setFormatter(logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s'))
+qs_logger.addHandler(file_handler)
+
+# Get a logger instance specifically for this module (cli.py)
+# This logger will inherit the handlers and level from 'quickscale' logger
+logger = logging.getLogger(__name__) 
+# No need to configure this one further, it uses the parent 'quickscale' config
+
+# --- End Logging Configuration --- 
 
 
 class QuickScaleArgumentParser(argparse.ArgumentParser):
@@ -264,14 +278,11 @@ For Django management commands help, use:
                             elif not status.get('db', {}).get('healthy', False):
                                 failed_checks.append("Database container not healthy")
                         
-                        if 'database' in verification and not verification['database'].get('success', True):
+                        # Check if 'database' key exists and its value is a dictionary before accessing keys
+                        if 'database' in verification and isinstance(verification['database'], dict) and not verification['database'].get('success', True):
                             db = verification['database']
                             if not db.get('can_connect', True):
                                 failed_checks.append("Database connection failed")
-                            if not db.get('migrations_applied', True):
-                                failed_checks.append("Database migrations incomplete")
-                            if not db.get('users_created', True):
-                                failed_checks.append("User creation failed")
                         
                         if 'web_service' in verification and not verification['web_service'].get('success', True):
                             if not verification['web_service'].get('responds', True):

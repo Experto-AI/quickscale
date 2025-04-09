@@ -1,0 +1,21 @@
+{% extends "account/base.html" %}
+{% load i18n %}
+
+{% block title %}{% trans "Verify Your Email Address" %} - ${project_name}{% endblock %}
+
+{% block account_title %}{% trans "Verify Your Email Address" %}{% endblock %}
+{% block account_subtitle %}{% trans "Email verification sent" %}{% endblock %}
+
+{% block account_content %}
+<div class="box">
+    <div class="notification is-info">
+        {% trans "We have sent an email to you for verification. Follow the link provided to finalize the signup process. If you do not see the verification email in your main inbox, check your spam folder. Please contact us if you do not receive the verification email within a few minutes." %}
+    </div>
+    
+    <p class="mt-4">
+        <a href="{% url 'account_login' %}" class="button is-light">
+            {% trans "Back to login" %}
+        </a>
+    </p>
+</div>
+{% endblock %} 

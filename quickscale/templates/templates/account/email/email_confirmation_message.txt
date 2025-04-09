@@ -1,0 +1,19 @@
+{% load account %}
+{% load i18n %}
+{% autoescape off %}
+{% blocktrans with site_name=current_site.name site_domain=current_site.domain %}Hello from {{ site_name }}!
+
+You're receiving this email because you or someone has registered an account at {{ site_name }} using this email address.
+
+To confirm this is correct, please click on the link below:
+
+{{ activate_url }}
+
+If you did not register this account, you can simply ignore this email and no further action will be required.
+
+This confirmation link will expire in 24 hours for security reasons.
+
+Thank you,
+The {{ site_name }} Team
+{% endblocktrans %}
+{% endautoescape %} 
