@@ -88,13 +88,11 @@ quickscale down                    # Stop the services
 ## DOCUMENTATION
 
 - [User Guide](./USER_GUIDE.md) - How to use QuickScale, including setup and deployment instructions
-
 - [Technical Documentation](./TECHNICAL_DOCS.md) - Technical stack, project structure, and development details
-
 - [Contributing Guide](./CONTRIBUTING.md) - How to contribute to QuickScale. 
   Also it is a template for AI codding assistants to generate code for the project.
   Cursor, Windsurf and GitHub Coplitot rules are linked to this file.
-
 - [Roadmap](./ROADMAP.md) - Future plans and features for QuickScale
-
 - [Changelog](./CHANGELOG.md) - Release notes and version history
+- [HomePage](https://github.com/Experto-AI/quickscale)
+

@@ -178,6 +178,7 @@ quickscale logs
 - [Contributing Guide](./CONTRIBUTING.md)
 - [Roadmap](./ROADMAP.md)
 - [Changelog](./CHANGELOG.md)
+- [HomePage](https://github.com/Experto-AI/quickscale)
 
 ---
 

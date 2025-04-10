@@ -11,12 +11,17 @@ from unittest.mock import patch
 import django
 from django.test.testcases import LiveServerTestCase
 
+# Add tests directory to Python path to make tests/core and tests/users importable
+tests_dir = os.path.dirname(os.path.abspath(__file__))
+if tests_dir not in sys.path:
+    sys.path.insert(0, tests_dir)
+
 # Maximum wait time for services to be ready (seconds)
 SERVICE_TIMEOUT = 30
 # Polling interval for checking service readiness (seconds)
 POLL_INTERVAL = 0.5
 
-os.environ.setdefault("DJANGO_SETTINGS_MODULE", "core.settings")
+os.environ.setdefault("DJANGO_SETTINGS_MODULE", "tests.core.settings")
 django.setup()
 
 @pytest.fixture(scope="session", autouse=True)
