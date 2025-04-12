@@ -5,6 +5,7 @@ import subprocess
 from pathlib import Path
 from unittest.mock import patch, MagicMock
 import pytest
+import random
 
 from quickscale.commands.command_utils import (
     get_current_uid_gid,
@@ -195,32 +196,34 @@ def test_wait_for_postgres_timeout(mock_run, mock_sleep):
     assert result is False
 
 
-@patch('socket.socket')
-def test_find_available_port(mock_socket):
-    """Test finding an available port."""
-    # Setup the socket mock to simulate a port being in use and then available
-    socket_instance = MagicMock()
-    mock_socket.return_value.__enter__.return_value = socket_instance
+@patch('quickscale.commands.command_utils.find_available_port')
+def test_find_available_ports(mock_find_port):
+    """Test finding multiple available ports using the find_available_port function."""
+    # Import the function
+    from quickscale.commands.command_utils import find_available_ports
     
-    # First simulate testing port 50000, which should be available
-    socket_instance.connect_ex.return_value = 1  # Non-zero means port is available
+    # Configure mock to return predictable port numbers
+    mock_find_port.side_effect = [8000, 8100, 8200]
     
-    # Test with start port
-    start_port = 50000
-    port = find_available_port(start_port, 5)
+    # Test finding 2 ports
+    ports = find_available_ports(count=2, start_port=8000, max_attempts=10)
     
-    # Verify port was returned and it's the start port (since it was available)
-    assert port == start_port
+    # Should get 2 ports from the mocked function
+    assert len(ports) == 2
+    assert ports == [8000, 8100]
+    assert mock_find_port.call_count == 2
     
-    # Now test with a port that's supposed to be in use
-    used_port = 12345
-    # First call: port is in use (return 0)
-    # Second call: next port is available (return non-zero)
-    socket_instance.connect_ex.side_effect = [0, 1]
+    # Reset mock for next test
+    mock_find_port.reset_mock()
+    mock_find_port.side_effect = [9000, 9000, 9100]  # First port repeats
     
-    # Function should find a different port (12346)
-    port = find_available_port(used_port, 5)
-    assert port == used_port + 1
+    # Test finding ports with duplicate return values
+    ports = find_available_ports(count=2, start_port=9000, max_attempts=10)
+    
+    # Should still get 2 unique ports
+    assert len(ports) == 2
+    assert ports == [9000, 9100]
+    assert mock_find_port.call_count == 3  # Called 3 times due to duplicate
 
 
 @patch('subprocess.run')
@@ -269,4 +272,37 @@ def test_fix_permissions(mock_run, tmp_path):
         # Should raise the exception
         with pytest.raises(subprocess.SubprocessError):
             fix_permissions(dir_path, 1000, 1000, logger)
-        logger.error.assert_called_once() 
+        logger.error.assert_called_once()
+
+
+@patch('socket.socket')
+def test_find_available_port(mock_socket):
+    """Test finding an available port."""
+    # Setup the socket mock to simulate a port being in use and then available
+    socket_instance = MagicMock()
+    mock_socket.return_value.__enter__.return_value = socket_instance
+    
+    # Test 1: Port is immediately available
+    start_port = 50000
+    socket_instance.bind.reset_mock()
+    socket_instance.bind.side_effect = None  # No error means port is available
+    
+    port = find_available_port(start_port, 5)
+    
+    # Verify port was returned and it's the start port (since it was available)
+    assert port == start_port
+    socket_instance.bind.assert_called_once()
+    
+    # Test 2: First port is in use, second port is available
+    used_port = 12345
+    socket_instance.bind.reset_mock()
+    socket_instance.bind.side_effect = [
+        OSError("Port in use"),  # First port (used_port) is in use
+        None  # Second port (used_port + 1) is available
+    ]
+    
+    port = find_available_port(used_port, 5)
+    
+    # Verify that we got the next available port
+    assert port == used_port + 1
+    assert socket_instance.bind.call_count == 2 

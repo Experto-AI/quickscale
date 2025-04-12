@@ -103,7 +103,7 @@ class BuildProjectCommand(Command):
             self.logger.info("Made entrypoint.sh executable")
             
         # Create .env file with proper variable substitution
-        env_template_path = self.templates_dir / '.env'
+        env_template_path = self.templates_dir / '.env.example'
         if env_template_path.exists():
             with open(env_template_path, 'r') as f:
                 env_content = f.read()

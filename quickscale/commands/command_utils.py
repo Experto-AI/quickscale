@@ -155,22 +155,111 @@ def fix_permissions(
         logger.error(f"Permission fix failed: {e}")
         raise
 
-def find_available_port(start_port: int = 8000, max_attempts: int = 10) -> int:
+def find_available_port(start_port: int = 8000, max_attempts: int = 100) -> int:
     """Find an available port starting from start_port.
+    
+    This function tries to find an available port by checking a range of ports.
+    It first tries the requested port, then tries consecutive ports,
+    and finally random ports if needed.
     
     Args:
         start_port: Port number to start checking from
         max_attempts: Maximum number of ports to check
         
     Returns:
-        An available port number, or the start_port if no ports are available
+        An available port number, or the original start_port as a last resort
     """
-    for port in range(start_port, start_port + max_attempts):
-        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
-            result = sock.connect_ex(('localhost', port))
-            if result != 0:  # Port is available
-                return port
+    import socket
+    import random
+    import logging
     
-    # If no ports are available, return the original port
-    # The Docker error will be more informative than failing silently
-    return start_port
+    logger = logging.getLogger(__name__)
+    
+    # Try the requested port first
+    try:
+        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
+            sock.settimeout(0.5)  # Set timeout to prevent hanging
+            sock.bind(('127.0.0.1', start_port))
+            return start_port
+    except (OSError, socket.timeout):
+        # Port is not available, continue with search
+        logger.debug(f"Port {start_port} is not available, searching for alternatives...")
+    
+    # Try consecutive ports next (more likely to be available)
+    consecutive_range = min(50, max_attempts)
+    for port in range(start_port + 1, start_port + consecutive_range + 1):
+        try:
+            with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
+                sock.settimeout(0.5)  # Set timeout to prevent hanging
+                sock.bind(('127.0.0.1', port))
+                logger.debug(f"Found available port: {port}")
+                return port
+        except (OSError, socket.timeout):
+            continue
+    
+    # If still not found, try random ports in a wider range
+    attempts_left = max(10, max_attempts - consecutive_range)
+    checked_ports = set()
+    wider_start = max(1024, start_port - 500)
+    wider_end = min(65535, start_port + 500)
+    
+    for _ in range(attempts_left):
+        port = random.randint(wider_start, wider_end)
+        if port in checked_ports:
+            continue
+            
+        checked_ports.add(port)
+        try:
+            with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
+                sock.settimeout(0.5)  # Set timeout to prevent hanging
+                sock.bind(('127.0.0.1', port))
+                logger.debug(f"Found available port: {port}")
+                return port
+        except (OSError, socket.timeout):
+            continue
+    
+    # Fallback to a random high port
+    fallback_port = random.randint(20000, 65000)
+    logger.warning(f"Could not find available port after {max_attempts} attempts. Using random port {fallback_port}.")
+    return fallback_port
+
+def find_available_ports(count: int = 2, start_port: int = 8000, max_attempts: int = 200) -> List[int]:
+    """Find multiple available ports.
+    
+    Args:
+        count: Number of ports to find
+        start_port: Starting port number to check from
+        max_attempts: Maximum number of attempts to find ports
+        
+    Returns:
+        List of available port numbers
+    """
+    import logging
+    
+    logger = logging.getLogger(__name__)
+    available_ports = []
+    current_port = start_port
+    attempts = 0
+    
+    # Limit max_attempts per port to ensure we don't hang
+    port_max_attempts = max(5, max_attempts // count)
+    
+    # Try to find {count} ports
+    while len(available_ports) < count and attempts < max_attempts:
+        attempts += 1
+        
+        # Try to find a single available port
+        port = find_available_port(current_port, port_max_attempts)
+        
+        # If we found a port and it's not already in our list, add it
+        if port not in available_ports:
+            available_ports.append(port)
+            logger.debug(f"Found available port: {port}")
+            
+        # Move to the next port range (skip a few ports to avoid conflicts)
+        current_port = port + 5
+    
+    if len(available_ports) < count:
+        logger.warning(f"Could only find {len(available_ports)} available ports, requested {count}")
+        
+    return available_ports
