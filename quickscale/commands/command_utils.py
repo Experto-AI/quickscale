@@ -108,6 +108,17 @@ def wait_for_postgres(
     """Wait for PostgreSQL to be ready with exponential backoff."""
     logger.info("Waiting for PostgreSQL...")
     
+    # Validate pg_user parameter
+    if not pg_user:
+        logger.error("PostgreSQL user is not specified")
+        logger.error("Set the pg_user variable in your project configuration")
+        return False
+        
+    if pg_user == "root":
+        logger.error("Cannot use 'root' as PostgreSQL user")
+        logger.error("Set a valid PostgreSQL user in your project configuration")
+        return False
+    
     for attempt in range(1, max_attempts + 1):
         try:
             result = subprocess.run(
@@ -135,7 +146,8 @@ def fix_permissions(
     directory: Path,
     uid: int,
     gid: int,
-    logger: logging.Logger
+    logger: logging.Logger,
+    pg_user: str = None
 ) -> None:
     """Fix file ownership in a directory."""
     if not directory.is_dir():
@@ -143,9 +155,21 @@ def fix_permissions(
         return
     
     logger.debug(f"Fixing ownership: {uid}:{gid}")
+    
+    # Validate pg_user parameter
+    if not pg_user:
+        logger.error("PostgreSQL user is not specified")
+        logger.error("Set the pg_user variable in your project configuration")
+        raise ValueError("PostgreSQL user not specified")
+        
+    if pg_user == "root":
+        logger.error("Cannot use 'root' as PostgreSQL user")
+        logger.error("Set a valid PostgreSQL user in your project configuration")
+        raise ValueError("Invalid PostgreSQL user: root")
+    
     try:
         subprocess.run(
-            [DOCKER_COMPOSE_COMMAND, "run", "--rm", "--user", "root", "web",
+            [DOCKER_COMPOSE_COMMAND, "run", "--rm", "--user", pg_user, "web",
              "chown", "-R", f"{uid}:{gid}", f"/app/{directory}"],
             check=True,
             capture_output=True,

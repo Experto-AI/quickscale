@@ -9,6 +9,30 @@ if [ "${DISABLE_ENTRYPOINT}" = "true" ]; then
   exit 0
 fi
 
+# Validate required environment variables
+validate_env() {
+  if [ -z "$POSTGRES_USER" ]; then
+    echo "ERROR: Required environment variable POSTGRES_USER is not set"
+    echo "Please ensure POSTGRES_USER is defined in your .env file"
+    exit 1
+  fi
+  
+  if [ -z "$POSTGRES_PASSWORD" ]; then
+    echo "ERROR: Required environment variable POSTGRES_PASSWORD is not set"
+    echo "Please ensure POSTGRES_PASSWORD is defined in your .env file"
+    exit 1
+  fi
+  
+  if [ -z "$POSTGRES_DB" ]; then
+    echo "ERROR: Required environment variable POSTGRES_DB is not set"
+    echo "Please ensure POSTGRES_DB is defined in your .env file"
+    exit 1
+  fi
+}
+
+# Validate environment before proceeding
+validate_env
+
 # Wait for PostgreSQL to start up
 echo "Waiting for PostgreSQL to start up..."
 MAX_RETRIES=10
@@ -22,6 +46,7 @@ done
 
 if [ $RETRY_COUNT -eq $MAX_RETRIES ]; then
   echo "Error: could not connect to PostgreSQL after $MAX_RETRIES attempts!"
+  echo "Please check your database configuration and ensure the database service is running."
   exit 1
 fi
 
