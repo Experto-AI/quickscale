@@ -219,6 +219,14 @@ def test_validate_app_configuration(mock_build_command, tmp_path, monkeypatch):
 
 def test_setup_static_dirs(mock_build_command, tmp_path, monkeypatch):
     """Test setup of static directories."""
+    # Set templates_dir to avoid NoneType error
+    mock_build_command.templates_dir = tmp_path / "templates"
+    mock_build_command.templates_dir.mkdir(parents=True, exist_ok=True)
+    
+    # Create static template directory
+    static_dir = mock_build_command.templates_dir / "static"
+    static_dir.mkdir(parents=True, exist_ok=True)
+    
     # Execute in temp directory
     with monkeypatch.context() as m:
         m.chdir(tmp_path)
@@ -298,6 +306,9 @@ def test_run_docker_command(mock_open_file, mock_run, tmp_path, monkeypatch):
 @patch('subprocess.run')
 def test_execute_build_project(mock_run, mock_build_command, mock_templates_dir, tmp_path, monkeypatch):
     """Test the full build project execution."""
+    # Mock validate_environment to return True
+    mock_build_command.validate_environment = MagicMock(return_value=True)
+    
     # Setup mocks for all methods
     with patch.object(mock_build_command, 'setup_project_environment', return_value=Path("test_project")) as mock_setup:
         with patch.object(mock_build_command, 'copy_project_files') as mock_copy:

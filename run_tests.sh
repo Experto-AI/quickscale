@@ -7,7 +7,9 @@ export QUICKSCALE_NO_ANALYTICS=1
 
 # Functions for checking Docker
 check_docker() {
-    echo "Checking Docker availability..."
+    if [[ $QUIET -eq 0 ]]; then
+        echo "Checking Docker availability..."
+    fi
     
     # Check if docker command exists
     if ! command -v docker &> /dev/null; then
@@ -27,25 +29,35 @@ check_docker() {
         return 1
     fi
     
-    echo "Docker is available and running."
+    if [[ $QUIET -eq 0 ]]; then
+        echo "Docker is available and running."
+    fi
     return 0
 }
 
 # Function to clean up existing Docker containers
 cleanup_test_containers() {
-    echo "Checking for existing test containers..."
+    if [[ $QUIET -eq 0 ]]; then
+        echo "Checking for existing test containers..."
+    fi
     
     # Check if any test containers are running
     if docker ps -a | grep -E "test_project|real_test_project" > /dev/null; then
-        echo -e "\033[33mFound existing test containers. Cleaning up before running tests...\033[0m"
+        if [[ $QUIET -eq 0 ]]; then
+            echo -e "\033[33mFound existing test containers. Cleaning up before running tests...\033[0m"
+        fi
         
         # Stop and remove all containers matching our test patterns
-        docker ps -a | grep -E "test_project|real_test_project" | awk '{print $1}' | xargs -r docker stop
-        docker ps -a | grep -E "test_project|real_test_project" | awk '{print $1}' | xargs -r docker rm
+        docker ps -a | grep -E "test_project|real_test_project" | awk '{print $1}' | xargs -r docker stop > /dev/null 2>&1
+        docker ps -a | grep -E "test_project|real_test_project" | awk '{print $1}' | xargs -r docker rm > /dev/null 2>&1
         
-        echo "Test containers have been stopped and removed."
+        if [[ $QUIET -eq 0 ]]; then
+            echo "Test containers have been stopped and removed."
+        fi
     else
-        echo "No existing test containers found."
+        if [[ $QUIET -eq 0 ]]; then
+            echo "No existing test containers found."
+        fi
     fi
 }
 
@@ -59,6 +71,7 @@ SKIP_CLEANUP=0
 RUN_UNIT=0
 RUN_INTEGRATION=0
 RUN_E2E=0
+QUIET=0
 
 print_usage() {
     echo "Usage: $0 [options]"
@@ -70,6 +83,7 @@ print_usage() {
     echo "  -e, --e2e          Run only end-to-end tests (slow, full system tests with Docker)"
     echo "  -s, --skip-docker  Skip Docker availability check"
     echo "  -n, --no-cleanup   Skip Docker container cleanup"
+    echo "  -q, --quiet        Run tests in quiet mode (less verbose output)"
     echo "  -h, --help         Show this help message"
     echo ""
     echo "Examples:"
@@ -78,6 +92,7 @@ print_usage() {
     echo "  $0 -u -i           # Run both unit and integration tests"
     echo "  $0 -u -i -e        # Run all tests (unit, integration, and end-to-end)"
     echo "  $0 -c -p           # Run all tests with coverage in parallel"
+    echo "  $0 -q              # Run tests in quiet mode"
     exit 1
 }
 
@@ -111,6 +126,10 @@ while [[ $# -gt 0 ]]; do
             SKIP_CLEANUP=1
             shift
             ;;
+        -q|--quiet)
+            QUIET=1
+            shift
+            ;;
         -h|--help)
             print_usage
             ;;
@@ -129,7 +148,9 @@ if [[ $SKIP_DOCKER_CHECK -eq 0 && ( $RUN_INTEGRATION -eq 1 || $RUN_E2E -eq 1 ) ]
         echo -e "\033[33mAdd --skip-docker flag to suppress this check.\033[0m"
         echo ""
         # Give the user a chance to abort
-        read -p "Press Enter to continue with tests, or Ctrl+C to abort..." 
+        if [[ $QUIET -eq 0 ]]; then
+            read -p "Press Enter to continue with tests, or Ctrl+C to abort..." 
+        fi
     fi
 fi
 
@@ -140,6 +161,16 @@ fi
 
 # Build test command
 CMD="python -m pytest"
+
+# Add quiet mode if requested
+if [[ $QUIET -eq 1 ]]; then
+    # More comprehensive quiet flags: 
+    # -q for less verbose
+    # --no-header to hide pytest header
+    # --no-summary to hide the summary
+    # -o log_cli=false to suppress logging
+    CMD="$CMD -q --no-header --no-summary -o log_cli=false"
+fi
 
 # Add coverage if requested
 if [[ $COVERAGE -eq 1 ]]; then
@@ -177,7 +208,9 @@ fi
 CMD="$CMD ${test_paths[@]}"
 
 # Show the command
-echo "Running: $CMD"
+if [[ $QUIET -eq 0 ]]; then
+    echo "Running: $CMD"
+fi
 
 # Run the tests
 $CMD
@@ -186,7 +219,7 @@ $CMD
 EXIT_CODE=$?
 
 # If coverage was generated, show the report location
-if [[ $COVERAGE -eq 1 ]]; then
+if [[ $COVERAGE -eq 1 && $QUIET -eq 0 ]]; then
     echo "Coverage report generated in htmlcov/index.html"
 fi
 

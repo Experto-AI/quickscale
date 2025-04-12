@@ -248,8 +248,83 @@ class ServiceUpCommand(Command):
                         env[key] = str(value)
                     self.logger.info(f"Using ports: Web={updated_ports.get('PORT', 'default')}, PostgreSQL={updated_ports.get('PG_PORT', 'default')}")
                         
-                result = subprocess.run([DOCKER_COMPOSE_COMMAND, "up", "-d"], check=True, env=env, capture_output=True, text=True)
-                self.logger.info("Services started successfully.")
+                # Try running docker-compose up first with check=True
+                try:
+                    result = subprocess.run([DOCKER_COMPOSE_COMMAND, "up", "--build", "-d"], check=True, env=env, capture_output=True, text=True)
+                    self.logger.info("Services started successfully.")
+                except subprocess.CalledProcessError as e:
+                    # Special handling for exit code 5, which can happen but services might still start
+                    if e.returncode == 5:
+                        self.logger.warning("Docker Compose returned exit code 5, but services might still be starting.")
+                        self.logger.debug(f"Command stderr: {e.stderr}")
+                        
+                        # Try to inspect what's happening
+                        try:
+                            # Check if the services are starting despite the error
+                            ps_result = subprocess.run([DOCKER_COMPOSE_COMMAND, "ps"], check=False, env=env, capture_output=True, text=True)
+                            if ps_result.returncode == 0 and ("db" in ps_result.stdout or "web" in ps_result.stdout):
+                                self.logger.info("Services appear to be starting despite exit code 5, proceeding.")
+                                # Continue with the operation, treating as if it succeeded
+                            else:
+                                # If no services are showing up, re-raise the error
+                                self.logger.error("No services found running after exit code 5.")
+                                raise
+                        except Exception as inspect_error:
+                            self.logger.error(f"Error inspecting service status: {inspect_error}")
+                            # Re-raise the original error
+                            raise e
+                    else:
+                        # For other error codes, re-raise the error
+                        raise
+                
+                # Add a delay to allow services to start properly
+                self.logger.info("Waiting for services to stabilize...")
+                time.sleep(10)  # Give containers time to fully start and register
+                
+                # Verify services are actually running
+                try:
+                    ps_result = subprocess.run([DOCKER_COMPOSE_COMMAND, "ps"], capture_output=True, text=True, check=True, env=env)
+                    if "db" not in ps_result.stdout:
+                        self.logger.warning("Database service not detected in running containers. Services may not be fully started.")
+                        self.logger.debug(f"Docker compose ps output: {ps_result.stdout}")
+                        
+                        # Try more direct Docker commands as a fallback
+                        self.logger.info("Attempting to check and start services directly with Docker...")
+                        
+                        # Get project name from directory name
+                        project_name = os.path.basename(os.getcwd())
+                        
+                        # Check if containers exist but are stopped
+                        docker_ps_a = subprocess.run(
+                            ["docker", "ps", "-a", "--format", "{{.Names}}", "--filter", f"name={project_name}"],
+                            capture_output=True, text=True, check=False
+                        )
+                        
+                        if docker_ps_a.returncode == 0 and "db" in docker_ps_a.stdout:
+                            self.logger.info("Found stopped database container, attempting to start it...")
+                            # Try to start the DB container directly
+                            for container in docker_ps_a.stdout.splitlines():
+                                if "db" in container:
+                                    start_result = subprocess.run(
+                                        ["docker", "start", container],
+                                        capture_output=True, text=True, check=False
+                                    )
+                                    if start_result.returncode == 0:
+                                        self.logger.info(f"Successfully started container: {container}")
+                                    else:
+                                        self.logger.warning(f"Failed to start container {container}: {start_result.stderr}")
+                        
+                        # Wait a bit for containers to start
+                        time.sleep(5)
+                        
+                        # Check again if services are running
+                        ps_retry = subprocess.run([DOCKER_COMPOSE_COMMAND, "ps"], capture_output=True, text=True, check=False, env=env)
+                        if ps_retry.returncode == 0 and "db" in ps_retry.stdout:
+                            self.logger.info("Database service is now running after direct intervention.")
+                        else:
+                            self.logger.warning("Still unable to detect running database service.")
+                except subprocess.SubprocessError as ps_err:
+                    self.logger.warning(f"Could not verify if services are running: {ps_err}")
                 
                 # Print user-friendly message with the port info if changed
                 if 'PORT' in updated_ports:
@@ -267,10 +342,27 @@ class ServiceUpCommand(Command):
                 # Log detailed error information to help debug port issues
                 self.logger.warning(f"Error starting services (attempt {retry_count}/{max_retries}): {error_output}")
                 
+                # Add more detailed debugging for exit code 5
+                exit_code = getattr(e, 'returncode', None)
+                if exit_code == 5:
+                    self.logger.warning("Docker Compose exit code 5 detected - this usually indicates service startup problems")
+                    if hasattr(e, 'stdout') and e.stdout:
+                        self.logger.debug(f"Command stdout: {e.stdout}")
+                    if hasattr(e, 'stderr') and e.stderr:
+                        self.logger.debug(f"Command stderr: {e.stderr}")
+                    
+                    # Try to get more details about the problem
+                    try:
+                        logs_result = subprocess.run([DOCKER_COMPOSE_COMMAND, "logs"], capture_output=True, text=True, env=env)
+                        self.logger.debug(f"Docker compose logs: {logs_result.stdout}")
+                    except Exception as logs_err:
+                        self.logger.debug(f"Failed to get docker logs: {logs_err}")
+                
                 # If we've reached max retries, or this isn't a port conflict, break out
                 if retry_count >= max_retries or not (
                     "port is already allocated" in error_output or 
-                    "Bind for" in error_output and "failed" in error_output):
+                    "Bind for" in error_output and "failed" in error_output or
+                    exit_code == 5):  # Also retry on exit code 5
                     break
                 
                 # Extract the conflicting port for better error messages
@@ -291,6 +383,17 @@ class ServiceUpCommand(Command):
                 context={"action": "starting services", "port_binding_error": True, "port": port},
                 recovery=f"Port {port} is already in use. Try manually specifying a different port in .env file:\n"
                         f"PORT=10000\nPG_PORT=15432"
+            )
+        elif hasattr(last_error, 'returncode') and last_error.returncode == 5:
+            # Special handling for exit code 5 (common with Docker Compose)
+            self.handle_error(
+                last_error,
+                context={"action": "starting services", "exit_code": 5},
+                recovery="Docker Compose failed to start services. This might be due to:\n"
+                        "1. Docker daemon not running properly (try restarting Docker)\n"
+                        "2. Conflicting container names (run 'docker ps -a' to check)\n"
+                        "3. Insufficient permissions (try with sudo if appropriate)\n"
+                        "4. Container startup errors (check logs with 'quickscale logs')"
             )
         else:
             # Generic Docker error

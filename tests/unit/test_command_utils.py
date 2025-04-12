@@ -239,7 +239,7 @@ def test_fix_permissions(mock_run, tmp_path):
     # Mock is_dir to return True for our test directory
     with patch.object(Path, 'is_dir', return_value=True):
         # Call function with a directory that exists
-        fix_permissions(dir_path, 1000, 1000, logger)
+        fix_permissions(dir_path, 1000, 1000, logger, pg_user="admin")
     
         # Verify run was called with correct arguments
         mock_run.assert_called_once()
@@ -257,7 +257,7 @@ def test_fix_permissions(mock_run, tmp_path):
     # Mock is_dir to return False for our nonexistent directory
     with patch.object(Path, 'is_dir', return_value=False):
         # Should log a warning but not raise an exception
-        fix_permissions(nonexistent_dir, 1000, 1000, logger)
+        fix_permissions(nonexistent_dir, 1000, 1000, logger, pg_user="admin")
         logger.warning.assert_called_once()
         mock_run.assert_not_called()
     
@@ -271,7 +271,7 @@ def test_fix_permissions(mock_run, tmp_path):
         
         # Should raise the exception
         with pytest.raises(subprocess.SubprocessError):
-            fix_permissions(dir_path, 1000, 1000, logger)
+            fix_permissions(dir_path, 1000, 1000, logger, pg_user="admin")
         logger.error.assert_called_once()
 
 

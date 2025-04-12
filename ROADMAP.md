@@ -39,6 +39,9 @@
 
 ## Projected Development Sprints
 
+- [X] execute build, check down / up
+- [ ] execute build, checks build logs and normal logs, look for error and warning for tests
+
 ### Sprint 3: Payment Integration with dj-stripe (v0.6.0)
 - [ ] **Session 1: dj-stripe Setup and Core Implementation**
   - [ ] Add dj-stripe package to requirements
