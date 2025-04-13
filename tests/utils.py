@@ -138,21 +138,86 @@ def generate_random_name(prefix="test", length=6):
     random_part = ''.join(random.choice(chars) for _ in range(length))
     return f"{prefix}_{random_part}"
 
-def create_test_project_structure(base_dir, project_name=None):
-    """Create a standard test project structure for testing."""
-    if project_name is None:
-        project_name = generate_random_name()
-    
-    project_dir = Path(base_dir) / project_name
+def create_test_project_structure(base_dir, project_name="test_project"):
+    """Create a basic project structure for testing."""
+    # Create project directory
+    project_dir = base_dir / project_name
     project_dir.mkdir(exist_ok=True)
     
-    # Create basic project files with actual content
-    (project_dir / "manage.py").write_text("""#!/usr/bin/env python
+    # Create docker-compose.yml file
+    docker_compose_content = """version: '3'
+services:
+  web:
+    build: .
+    ports:
+      - '8000:8000'
+    volumes:
+      - ./:/app
+    depends_on:
+      - db
+    restart: unless-stopped
+    # Improved container settings - lower memory but more stability
+    deploy:
+      resources:
+        limits:
+          memory: 1G
+        reservations:
+          memory: 512M
+    environment:
+      - DJANGO_SETTINGS_MODULE=core.settings
+      - DATABASE_URL=postgres://postgres:password@db:5432/postgres
+      - PYTHONUNBUFFERED=1
+  db:
+    image: postgres:13-alpine
+    # Set memory limits for database too
+    deploy:
+      resources:
+        limits:
+          memory: 1G
+        reservations:
+          memory: 256M
+    environment:
+      POSTGRES_PASSWORD: password
+      POSTGRES_USER: postgres
+      POSTGRES_DB: postgres
+"""
+    (project_dir / "docker-compose.yml").write_text(docker_compose_content)
+    
+    # Create Dockerfile
+    dockerfile_content = """FROM python:3.10-slim
+
+WORKDIR /app
+
+# Install dependencies - using netcat-openbsd instead of netcat for compatibility
+RUN apt-get update && apt-get install -y bash netcat-openbsd procps
+
+COPY requirements.txt /app/
+RUN pip install --no-cache-dir -r requirements.txt
+
+COPY . /app/
+
+CMD ["python", "manage.py", "runserver", "0.0.0.0:8000"]
+"""
+    (project_dir / "Dockerfile").write_text(dockerfile_content)
+    
+    # Create requirements.txt with Django 5.0.1 (requires Python 3.10+)
+    requirements_content = """django==5.0.1
+psycopg2-binary==2.9.9
+whitenoise==6.6.0
+python-dotenv==1.0.0
+dj-database-url==2.1.0
+django-allauth==0.52.0
+uvicorn==0.27.0
+"""
+    (project_dir / "requirements.txt").write_text(requirements_content)
+    
+    # Create manage.py
+    manage_py_content = """#!/usr/bin/env python
 import os
 import sys
 
-if __name__ == '__main__':
-    os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'core.settings')
+if __name__ == "__main__":
+    os.environ.setdefault("DJANGO_SETTINGS_MODULE", "core.settings")
     try:
         from django.core.management import execute_from_command_line
     except ImportError as exc:
@@ -160,43 +225,38 @@ if __name__ == '__main__':
             "Couldn't import Django. Are you sure it's installed?"
         ) from exc
     execute_from_command_line(sys.argv)
-""")
+"""
+    (project_dir / "manage.py").write_text(manage_py_content)
+    os.chmod(project_dir / "manage.py", 0o755)  # Make executable
     
-    # Ensure manage.py is executable
-    os.chmod(project_dir / "manage.py", 0o755)
+    # Create quickscale.yaml
+    quickscale_yaml_content = """project_name: test_project
+"""
+    (project_dir / "quickscale.yaml").write_text(quickscale_yaml_content)
     
-    # Create requirements file with all needed dependencies - use minimal dependencies
-    (project_dir / "requirements.txt").write_text("""Django==3.2.9
-psycopg2-binary==2.9.2
-gunicorn==20.1.0
-# Removing unnecessary dependencies for testing to reduce memory usage
-""")
-    
-    # Create a minimal Django project structure
+    # Create core directory with basic Django files
     core_dir = project_dir / "core"
     core_dir.mkdir(exist_ok=True)
-    
-    # Create __init__.py
     (core_dir / "__init__.py").touch()
     
-    # Create settings.py - simplified for lower memory usage
-    (core_dir / "settings.py").write_text("""
+    # Create basic settings.py file
+    settings_content = """
 import os
 
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-SECRET_KEY = 'test-key-not-for-production'
+SECRET_KEY = 'test-secret-key'
 DEBUG = True
 ALLOWED_HOSTS = ['*']
 
-# Minimal installed apps for testing
 INSTALLED_APPS = [
+    'django.contrib.admin',
     'django.contrib.auth',
     'django.contrib.contenttypes',
     'django.contrib.sessions',
     'django.contrib.messages',
+    'django.contrib.staticfiles',
 ]
 
-# Minimal middleware for testing
 MIDDLEWARE = [
     'django.middleware.security.SecurityMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
@@ -204,29 +264,11 @@ MIDDLEWARE = [
     'django.middleware.csrf.CsrfViewMiddleware',
     'django.contrib.auth.middleware.AuthenticationMiddleware',
     'django.contrib.messages.middleware.MessageMiddleware',
+    'django.middleware.clickjacking.XFrameOptionsMiddleware',
 ]
 
 ROOT_URLCONF = 'core.urls'
 
-TEMPLATES = [
-    {
-        'BACKEND': 'django.template.backends.django.DjangoTemplates',
-        'DIRS': [],
-        'APP_DIRS': True,
-        'OPTIONS': {
-            'context_processors': [
-                'django.template.context_processors.debug',
-                'django.template.context_processors.request',
-                'django.contrib.auth.context_processors.auth',
-                'django.contrib.messages.context_processors.messages',
-            ],
-        },
-    },
-]
-
-WSGI_APPLICATION = 'core.wsgi.application'
-
-# Use PostgreSQL database
 DATABASES = {
     'default': {
         'ENGINE': 'django.db.backends.postgresql',
@@ -240,225 +282,25 @@ DATABASES = {
 
 LANGUAGE_CODE = 'en-us'
 TIME_ZONE = 'UTC'
-USE_I18N = True
-USE_L10N = True
 USE_TZ = True
-
 STATIC_URL = '/static/'
-""")
+"""
+    (core_dir / "settings.py").write_text(settings_content)
     
-    # Create urls.py - simplified version
-    (core_dir / "urls.py").write_text("""
-from django.urls import path
+    # Create urls.py
+    urls_content = """from django.urls import path
 from django.http import HttpResponse
 
 def home(request):
-    return HttpResponse("Hello from the test project!")
+    return HttpResponse("<h1>Test Project Home</h1>")
 
 urlpatterns = [
     path('', home, name='home'),
 ]
-""")
-    
-    # Create wsgi.py
-    (core_dir / "wsgi.py").write_text("""
-import os
-from django.core.wsgi import get_wsgi_application
-os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'core.settings')
-application = get_wsgi_application()
-""")
-    
-    # Create asgi.py
-    (core_dir / "asgi.py").write_text("""
-import os
-from django.core.asgi import get_asgi_application
-os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'core.settings')
-application = get_asgi_application()
-""")
-    
-    # Create a robust entrypoint.sh script with improved error handling and logging
-    (project_dir / "entrypoint.sh").write_text("""#!/bin/bash
-set -e
+"""
+    (core_dir / "urls.py").write_text(urls_content)
 
-# Enable error logging
-exec > >(tee /tmp/container-startup.log) 2>&1
-echo "Container startup script running at $(date)"
-
-# Create keep-alive file to monitor startup
-touch /tmp/container-alive.txt
-
-# Print container environment for debugging
-echo "============ CONTAINER ENVIRONMENT ============"
-env | grep -v PASSWORD | sort
-echo "==============================================="
-
-# Detect available memory
-echo "Available memory:"
-free -m || echo "free command not available"
-echo "Memory limits from cgroups:"
-cat /sys/fs/cgroup/memory/memory.limit_in_bytes 2>/dev/null || echo "No cgroup memory limit found"
-
-# Function to log startup progress
-log_progress() {
-    echo "[$(date +%Y-%m-%d %H:%M:%S)] $1" >> /tmp/container-alive.txt
-    echo "$1"
-}
-
-# Function for graceful failure
-fail_gracefully() {
-    log_progress "ERROR: $1"
-    # Keep the container running for debugging
-    log_progress "Container staying alive for debugging purposes"
-    log_progress "Check /tmp/container-startup.log for details"
-    # Stay alive instead of failing
-    tail -f /dev/null
-}
-
-# Check for essential environment variables
-log_progress "Checking environment variables..."
-if [ -z "$DJANGO_SETTINGS_MODULE" ]; then
-    fail_gracefully "DJANGO_SETTINGS_MODULE environment variable not set"
-fi
-
-# Update timestamp to show liveness
-log_progress "Updating alive timestamp..."
-date > /tmp/container-alive.txt
-
-# Wait for database
-log_progress "Waiting for database to be ready..."
-for i in {1..30}; do
-    nc -z db 5432 && break
-    log_progress "Waiting for database connection (attempt $i/30)..."
-    sleep 1
-done
-
-# Verify database connection
-if ! nc -z db 5432; then
-    fail_gracefully "Could not connect to database after 30 attempts"
-fi
-
-# Update timestamp again
-date > /tmp/container-alive.txt
-
-# Run Django checks
-log_progress "Running Django system checks..."
-python manage.py check || fail_gracefully "Django system checks failed"
-
-# Start server using more reliable gunicorn instead of Django's development server
-log_progress "Starting server..."
-date > /tmp/container-alive.txt
-
-# Use exec to replace the shell with the final process
-exec gunicorn core.wsgi:application --bind 0.0.0.0:8000 --workers 1 --threads 2 --log-level debug
-""")
-    
-    # Make entrypoint.sh executable
-    os.chmod(project_dir / "entrypoint.sh", 0o755)
-    
-    # Create Docker files with proper configuration to keep container running with higher memory limits
-    (project_dir / "Dockerfile").write_text(
-        "FROM python:3.9-slim\n"
-        "WORKDIR /app\n"
-        "RUN apt-get update && apt-get install -y bash netcat procps\n"  # Added netcat and procps for diagnostics
-        "COPY requirements.txt .\n"
-        "RUN pip install -r requirements.txt\n"
-        "COPY . .\n"
-        "# Use the improved entrypoint script\n"
-        "COPY entrypoint.sh /entrypoint.sh\n"
-        "RUN chmod +x /entrypoint.sh\n"
-        "CMD [\"/entrypoint.sh\"]\n"  # Use entrypoint.sh instead of direct Django command
-        "HEALTHCHECK --interval=5s --timeout=5s --start-period=10s --retries=3 CMD cat /tmp/container-alive.txt || exit 1\n"  # Add healthcheck
-    )
-    
-    (project_dir / "docker-compose.yml").write_text(
-        "version: '3'\n"
-        "services:\n"
-        "  web:\n"
-        "    build: .\n"
-        "    ports:\n"
-        "      - '8000:8000'\n"
-        "    volumes:\n"
-        "      - ./:/app\n"  # Mount code for easy debugging
-        "    depends_on:\n"
-        "      - db\n"
-        "    restart: unless-stopped\n"
-        "    # Improved container settings - lower memory but more stability\n"
-        "    deploy:\n"
-        "      resources:\n"
-        "        limits:\n"
-        "          memory: 1G\n"  # Lower memory limit for more stability
-        "        reservations:\n"
-        "          memory: 512M\n"
-        "    environment:\n"
-        "      - DJANGO_SETTINGS_MODULE=core.settings\n"
-        "      - DATABASE_URL=postgres://postgres:password@db:5432/postgres\n"
-        "      - PYTHONUNBUFFERED=1\n"  # Ensure Python outputs are not buffered
-        "  db:\n"
-        "    image: postgres:13-alpine\n"  # Use alpine for smaller footprint
-        "    # Set memory limits for database too\n"
-        "    deploy:\n"
-        "      resources:\n"
-        "        limits:\n"
-        "          memory: 1G\n"  # Lower memory limit for more stability
-        "        reservations:\n"
-        "          memory: 256M\n"
-        "    environment:\n"
-        "      POSTGRES_PASSWORD: password\n"
-        "      POSTGRES_USER: postgres\n"
-        "      POSTGRES_DB: postgres\n"
-    )
-    
-    # Create quickscale.yaml config with improved settings
-    (project_dir / "quickscale.yaml").write_text(
-        f"project:\n"
-        f"  name: {project_name}\n"
-        f"  path: ./\n"
-        f"services:\n"
-        f"  web:\n"
-        f"    build: .\n"
-        f"    ports:\n"
-        f"      - '8000:8000'\n"
-        f"    volumes:\n"
-        f"      - ./:/app\n"
-        f"    restart: unless-stopped\n"
-        f"    healthcheck:\n"
-        f"      test: [\"CMD\", \"cat\", \"/tmp/container-alive.txt\"]\n"
-        f"      interval: 10s\n"
-        f"      timeout: 5s\n"
-        f"      retries: 3\n"
-        f"      start_period: 10s\n"
-        f"    deploy:\n"
-        f"      resources:\n"
-        f"        limits:\n"
-        f"          memory: 1G\n"
-        f"        reservations:\n"
-        f"          memory: 512M\n"
-        f"    environment:\n"
-        f"      - DJANGO_SETTINGS_MODULE=core.settings\n"
-        f"      - DATABASE_URL=postgres://postgres:password@db:5432/postgres\n"
-        f"      - PYTHONUNBUFFERED=1\n"
-        f"  db:\n"
-        f"    image: postgres:13-alpine\n"
-        f"    deploy:\n"
-        f"      resources:\n"
-        f"        limits:\n"
-        f"          memory: 1G\n"
-        f"        reservations:\n"
-        f"          memory: 256M\n"
-        f"    environment:\n"
-        f"      POSTGRES_PASSWORD: password\n"
-        f"      POSTGRES_USER: postgres\n"
-        f"      POSTGRES_DB: postgres\n"
-    )
-    
-    # Create .env file with essential environment variables
-    (project_dir / ".env").write_text(
-        "DEBUG=True\n"
-        "SECRET_KEY=test-key-not-for-production\n"
-        "DATABASE_URL=postgres://postgres:password@db:5432/postgres\n"
-        "PYTHONUNBUFFERED=1\n"
-    )
-    
+    # Return the project directory
     return project_dir
 
 @contextmanager

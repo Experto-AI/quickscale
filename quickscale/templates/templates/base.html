@@ -5,6 +5,10 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>{% block title %}${project_name}{% endblock %}</title>
     
+    <!-- Favicon -->
+    <link rel="icon" type="image/svg+xml" href="/static/favicon.svg">
+    <link rel="alternate icon" type="image/x-icon" href="/static/favicon.ico">
+    
     <!-- HTMX -->
     <script src="https://unpkg.com/htmx.org@1.9.10"></script>
     <!-- Alpine.js -->
@@ -30,7 +34,7 @@
     {% include "components/footer.html" %}
     
     <!-- Custom Scripts -->
-    <script src="/static/js/password-validation.js"></script>
+    <script src="/static/js/password_validation.js"></script>
     
     {% block extra_js %}{% endblock %}
 </body>

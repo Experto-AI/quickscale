@@ -14,11 +14,11 @@ services:
     mem_reservation: 2G  # Add direct memory reservation
     environment:
       - DEBUG=True
-      - SECRET_KEY=${SECRET_KEY}
-      - DATABASE_URL=postgresql://${pg_user}:${pg_password}@db:5432/${pg_user}
-      - POSTGRES_DB=${pg_user}
-      - POSTGRES_USER=${pg_user}
-      - POSTGRES_PASSWORD=${pg_password}
+      - SECRET_KEY=0qOlHtVMeI2uKo3SGrRd0v_WcEskR9dlLa7j3_ImEjA
+      - DATABASE_URL=postgresql://admin:adminpasswd@db:5432/admin
+      - POSTGRES_DB=admin
+      - POSTGRES_USER=admin
+      - POSTGRES_PASSWORD=adminpasswd
       - POSTGRES_HOST=db
       - IN_DOCKER=True
     depends_on:
@@ -32,16 +32,16 @@ services:
     volumes:
       - postgres_data:/var/lib/postgresql/data
     environment:
-      - POSTGRES_DB=${pg_user}
-      - POSTGRES_USER=${pg_user}
-      - POSTGRES_PASSWORD=${pg_password}
+      - POSTGRES_DB=admin
+      - POSTGRES_USER=admin
+      - POSTGRES_PASSWORD=adminpasswd
       # Add PostgreSQL memory optimization settings
       - POSTGRES_SHARED_BUFFERS=128MB
       - POSTGRES_WORK_MEM=16MB
     ports:
       - "${PG_PORT}:5432"
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${pg_user}"]
+      test: ["CMD-SHELL", "pg_isready -U admin"]
       interval: 5s
       timeout: 5s
       retries: 5
