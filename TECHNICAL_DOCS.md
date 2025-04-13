@@ -15,6 +15,7 @@ The most important command is `quickscale build`, which generates the project st
     - dj-database-url 2.1.0+ (database URL configuration)
     - django-allauth 0.52.0+ (authentication)
     - Uvicorn 0.27.0+ (ASGI server)
+    - dj-stripe 2.9.0 (with stripe 8.0.0+) for payment processing
 - HTMX (frontend to backend communication for CRUD operations with the simplicity of HTML)
 - Alpine.js (simple vanilla JS library for DOM manipulation)
 - Bulma CSS (simple CSS styling without JavaScript) - Do not mix Tailwind or another alternatives
