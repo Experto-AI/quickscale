@@ -29,13 +29,9 @@ To create a new project, use the `quickscale build` command:
    quickscale build my-awesome-project
    ```
 
-2. **Navigate to the Project Directory**:
-   ```bash
-   cd my-awesome-project
-   ```
-
-3. **Access the Application**:
+2. **Access the Application**:
    Open your browser and go to `http://localhost:8000`.
+   NOTE: It is not necessary to execute `quickscale up`
 
 ---
 
@@ -43,7 +39,12 @@ To create a new project, use the `quickscale build` command:
 
 QuickScale provides a CLI for managing your project. Below are the most common commands:
 
-### **3.1. Starting and Stopping Services**
+### **3.1. Navigate to the Project Directory**:
+   ```bash
+   cd my-awesome-project
+   ```
+
+### **3.2. Starting and Stopping Services**
 - **Start Services**:
   ```bash
   quickscale up
@@ -53,7 +54,7 @@ QuickScale provides a CLI for managing your project. Below are the most common c
   quickscale down
   ```
 
-### **3.2. Viewing Logs**
+### **3.3. Viewing Logs**
 - **View Logs for All Services**:
   ```bash
   quickscale logs
@@ -63,7 +64,7 @@ QuickScale provides a CLI for managing your project. Below are the most common c
   quickscale logs web
   ```
 
-### **3.3. Running Django Commands**
+### **3.4. Running Django Commands**
 - **Run Django Management Commands**:
   ```bash
   quickscale manage <command>
@@ -73,7 +74,7 @@ QuickScale provides a CLI for managing your project. Below are the most common c
   quickscale manage createsuperuser
   ```
 
-### **3.4. Accessing Shells**
+### **3.5. Accessing Shells**
 - **Interactive Bash Shell**:
   ```bash
   quickscale shell
@@ -83,7 +84,7 @@ QuickScale provides a CLI for managing your project. Below are the most common c
   quickscale django-shell
   ```
 
-### **3.5. Destroying a Project**
+### **3.6. Destroying a Project**
 - **Permanently Delete a Project**:
   ```bash
   quickscale destroy

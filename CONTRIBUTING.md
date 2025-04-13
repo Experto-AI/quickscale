@@ -7,8 +7,8 @@ This document is written for humans but also for AI coding assistants like GitHu
 ## 1. Documentation sources
 
 - README.md: Refers to it for overview of the project as humans would read it
-- TECHNICAL_DOCS.md: Refers to it for technical information.
-  - Technical stack, architecture, project structure, application structure, commands and more. 
+- TECHNICAL_DOCS.md: Refers to it for technical information and adherence.
+  - Technical stack, architecture, project structure, application structure, user commands and more. 
 - ROADMAP.md: Refers to it for planned next developments
 - CHANGELOG.md: Refers to it for past developments
 
@@ -1087,6 +1087,106 @@ Debugging should focus on finding and addressing the root cause of issues rather
    - **DON'T**: Add temporary workarounds without planning proper fixes
    - **DO**: Use structured logging with appropriate levels
    - **DO**: Create automated tests that reproduce issues
+
+### 3.8. Technical Stack Adherence
+
+#### 3.8.1. Mandatory Technology Stack
+   - Strictly adhere to the technical stack defined in TECHNICAL_DOCS.md
+   - Address technical stack issues directly rather than introducing alternatives or workarounds
+   - This rule applies to all environments: development, testing, and production
+
+   ##### 3.8.1.1. DO: Resolve issues within the prescribed technical stack
+   ##### 3.8.1.2. DON'T: Replace technologies with alternatives not in the technical stack
+   ##### 3.8.1.3. AI Pitfall: Technology Substitution
+   - **DON'T**: Substitute technologies in the stack with alternatives even in test environments
+   - **DON'T**: Implement temporary workarounds that deviate from the technical stack
+   - **DO**: Address root causes of technical issues within the prescribed stack
+   - **DO**: Consult TECHNICAL_DOCS.md for the definitive list of approved technologies
+
+#### 3.8.2. Bugfix Compliance
+   - Bug fixes must maintain technical stack integrity 
+   - Focus on resolving the root cause within the prescribed stack
+   - Never implement workarounds that deviate from the technical specification
+
+   ##### 3.8.2.1. DO: Fix bugs while respecting the technical stack
+   ```python
+   # Original bug: Configuration issue causing connection failures
+   
+   # Correct fix addressing the root cause within the technical stack
+   def fix_database_connection():
+       """Fix database connection by correcting configuration."""
+       # Identify and fix the actual configuration issue
+       if not os.environ.get("DATABASE_URL"):
+           raise ConfigError("DATABASE_URL is not set in environment")
+       
+       # Validate connection parameters
+       validate_db_config(os.environ.get("DATABASE_URL"))
+       
+       # Proper fix maintaining the technical stack
+       return connect_with_retry(max_retries=3)
+   ```
+
+   ##### 3.8.2.2. DON'T: Fix symptoms by deviating from the stack
+   ```python
+   # Bug: Configuration issue causing connection failures
+   
+   # Incorrect fix that changes the technical stack
+   def fix_database_connection():
+       """Fix database connection issues."""
+       try:
+           # First try with prescribed technology
+           return connect_to_database()
+       except ConnectionError:
+           # Incorrect: Falling back to alternative technology
+           logger.warning("Using alternative database as fallback")
+           return connect_to_alternative()  # Violating technical stack
+   ```
+
+   ##### 3.8.2.3. AI Pitfall: Temporary Solutions
+   - **DON'T**: Create "temporary" fixes that deviate from the technical stack
+   - **DON'T**: Suggest alternatives outside the stack even when troubleshooting
+   - **DO**: Focus bug fixes on the root cause while maintaining stack compliance
+   - **DO**: Validate that all components of your solution adhere to TECHNICAL_DOCS.md
+
+### 3.9. Architecture Adherence
+
+#### 3.9.1. Follow Project Architecture
+- Adhere to the existing architecture patterns
+- Maintain separation of concerns
+
+  ##### 3.9.1.1. DO: Respect the project's architectural boundaries
+  ```python
+  # In a project with clean architecture:
+  
+  # models/subscription.py - Data layer
+  class Subscription:
+      """Data model for a subscription."""
+      # Model definition
+  
+  # services/subscription_service.py - Service layer
+  class SubscriptionService:
+      """Business logic for subscriptions."""
+      def __init__(self, repository):
+          self.repository = repository
+          
+      def create_subscription(self, user_id, plan_id):
+          # Business logic
+  
+  # api/subscription_api.py - API layer
+  @app.route('/subscriptions', methods=['POST'])
+  def create_subscription_endpoint():
+      """API endpoint for creating subscriptions."""
+      service = SubscriptionService(SubscriptionRepository())
+      # Controller logic
+  ```
+
+  ##### 3.9.1.2. DON'T: Violate architectural boundaries
+  ##### 3.9.1.3. AI Pitfall: Architectural Inconsistency
+  - **DON'T**: Generate code that bypasses established layers
+  - **DON'T**: Mix responsibilities that should be separated
+  - **DO**: Study and follow the existing architecture patterns
+  - **DO**: Place code in the appropriate modules and layers
+  - **DO**: Consult TECHNICAL_DOCS.md for the architecture definition
 
 ## 4. Python Coding Standards
 

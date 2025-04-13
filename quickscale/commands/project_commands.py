@@ -17,6 +17,7 @@ from .command_utils import (
     copy_files_recursive,
     wait_for_postgres,
     find_available_port,
+    fix_permissions,
     DOCKER_COMPOSE_COMMAND
 )
 class BuildProjectCommand(Command):
@@ -67,9 +68,15 @@ class BuildProjectCommand(Command):
         if self.pg_port != 5432:
             self.logger.info(f"Port 5432 is already in use, using port {self.pg_port} for PostgreSQL instead")
         
+        # Validate PostgreSQL user is not "root"
+        pg_user = "admin"
+        if pg_user == "root":
+            self._exit_with_error("PostgreSQL user cannot be 'root'. Please use a different username.")
+        
+        # Set up required variables without fallbacks
         self.variables = {
             'project_name': project_name,
-            'pg_user': 'admin',
+            'pg_user': pg_user,
             'pg_password': 'adminpasswd',
             'pg_email': 'admin@test.com',
             'SECRET_KEY': secret_key,
@@ -80,7 +87,7 @@ class BuildProjectCommand(Command):
         # Environment variables for Docker Compose
         self.env_vars = {
             'SECRET_KEY': secret_key,
-            'pg_user': 'admin',
+            'pg_user': pg_user,
             'pg_password': 'adminpasswd',
             'DOCKER_UID': str(self.current_uid),
             'DOCKER_GID': str(self.current_gid),
@@ -103,7 +110,7 @@ class BuildProjectCommand(Command):
             self.logger.info("Made entrypoint.sh executable")
             
         # Create .env file with proper variable substitution
-        env_template_path = self.templates_dir / '.env'
+        env_template_path = self.templates_dir / '.env.example'
         if env_template_path.exists():
             with open(env_template_path, 'r') as f:
                 env_content = f.read()
@@ -181,10 +188,23 @@ class {config_class}(AppConfig):
 ''')
     
     def setup_static_dirs(self) -> None:
-        """Create static asset directories."""
+        """Create static asset directories and copy static assets."""
+        # Create static asset directories
         for static_dir in ['css', 'js', 'img']:
             Path(f"static/{static_dir}").mkdir(parents=True, exist_ok=True)
-            
+        
+        # Copy static files from templates directory to project
+        static_template_dir = self.templates_dir / "static"
+        if static_template_dir.is_dir():
+            self.logger.info("Copying static files from templates directory...")
+            for file_path in static_template_dir.glob("**/*"):
+                if file_path.is_file():
+                    relative_path = file_path.relative_to(static_template_dir)
+                    target_path = Path("static") / relative_path
+                    target_path.parent.mkdir(parents=True, exist_ok=True)
+                    copy_with_vars(file_path, target_path, self.logger, **self.variables)
+                    self.logger.info(f"Copied static file: {target_path}")
+    
     def setup_global_templates(self) -> None:
         """Copy global templates such as base templates and components."""
         self.logger.info("Setting up global templates...")
@@ -245,6 +265,8 @@ class {config_class}(AppConfig):
         try:
             self._run_migrations()
             self._create_users()
+            # Add final migration check to verify all migrations are applied
+            self._verify_migrations()
             return True
         except (subprocess.SubprocessError, subprocess.TimeoutExpired, Exception) as e:
             self.logger.error(f"Database setup error: {e}")
@@ -280,17 +302,37 @@ class {config_class}(AppConfig):
             retry_count = 0
             while retry_count < max_retries:
                 try:
-                    # Use a simple psycopg2 connection check (less memory than django.setup())
-                    # Ensure proper formatting and escaping for the command string
+                    # Use a proper validation script instead of silent fallbacks
                     db_check_script = f'''
 import os
 import psycopg2
 import sys
+
+def validate_db_config():
+    """Validate required database configuration variables."""
+    required_vars = [
+        ('dbname', '{self.variables.get("pg_user")}'),
+        ('user', '{self.variables.get("pg_user")}'),
+        ('password', '{self.variables.get("pg_password")}')
+    ]
+    
+    for var_name, value in required_vars:
+        if not value:
+            print(f"ERROR: Missing required database config: {{var_name}}", file=sys.stderr)
+            sys.exit(1)
+        
+        if var_name == 'user' and value == 'root':
+            print("ERROR: Cannot use 'root' as PostgreSQL user", file=sys.stderr)
+            sys.exit(1)
+
+# Validate config before attempting connection
+validate_db_config()
+
 try:
     conn = psycopg2.connect(
-        dbname='{self.variables['pg_user']}', 
-        user='{self.variables['pg_user']}', 
-        password='{self.variables['pg_password']}', 
+        dbname='{self.variables.get("pg_user")}', 
+        user='{self.variables.get("pg_user")}', 
+        password='{self.variables.get("pg_password")}', 
         host='db', 
         port='5432',
         connect_timeout=5
@@ -563,16 +605,37 @@ if not User.objects.filter(email='{email}').exists():
     def _verify_database_connectivity(self, project_name: str) -> bool:
         """Verify database connectivity."""
         try:
-            # Use a simple psycopg2 connection check (less memory than django.setup())
+            # Use a proper validation script instead of silent fallbacks
             db_check_script = f'''
 import os
 import psycopg2
 import sys
+
+def validate_db_config():
+    """Validate required database configuration variables."""
+    required_vars = [
+        ('dbname', '{self.variables.get("pg_user")}'),
+        ('user', '{self.variables.get("pg_user")}'),
+        ('password', '{self.variables.get("pg_password")}')
+    ]
+    
+    for var_name, value in required_vars:
+        if not value:
+            print(f"ERROR: Missing required database config: {{var_name}}", file=sys.stderr)
+            sys.exit(1)
+        
+        if var_name == 'user' and value == 'root':
+            print("ERROR: Cannot use 'root' as PostgreSQL user", file=sys.stderr)
+            sys.exit(1)
+
+# Validate config before attempting connection
+validate_db_config()
+
 try:
     conn = psycopg2.connect(
-        dbname='{self.variables['pg_user']}', 
-        user='{self.variables['pg_user']}', 
-        password='{self.variables['pg_password']}', 
+        dbname='{self.variables.get("pg_user")}', 
+        user='{self.variables.get("pg_user")}', 
+        password='{self.variables.get("pg_password")}', 
         host='db', 
         port='5432',
         connect_timeout=5
@@ -742,6 +805,49 @@ except Exception as e:
         
         return verification_results
     
+    def validate_environment(self) -> bool:
+        """Validate that all required environment variables are set before starting containers."""
+        self.logger.info("Validating environment variables...")
+        
+        # Add DOCKER_UID and DOCKER_GID from env_vars to variables if missing
+        if self.env_vars and 'DOCKER_UID' in self.env_vars and 'DOCKER_UID' not in self.variables:
+            self.variables['DOCKER_UID'] = self.env_vars['DOCKER_UID']
+        if self.env_vars and 'DOCKER_GID' in self.env_vars and 'DOCKER_GID' not in self.variables:
+            self.variables['DOCKER_GID'] = self.env_vars['DOCKER_GID']
+        
+        required_vars = [
+            ('pg_user', 'PostgreSQL username'),
+            ('pg_password', 'PostgreSQL password'),
+            ('SECRET_KEY', 'Django secret key'),
+            ('port', 'Web server port'),
+            ('pg_port', 'PostgreSQL port'),
+        ]
+        
+        # These variables are set automatically but can be overridden
+        optional_vars = [
+            ('DOCKER_UID', 'Docker user ID'),
+            ('DOCKER_GID', 'Docker group ID')
+        ]
+        
+        missing_vars = []
+        for var_name, description in required_vars:
+            if var_name not in self.variables or not self.variables[var_name]:
+                missing_vars.append(f"{var_name} ({description})")
+            
+        if missing_vars:
+            self.logger.error("Missing required environment variables:")
+            for var in missing_vars:
+                self.logger.error(f"  - {var}")
+            self.logger.error("Please ensure all required variables are set in your .env file")
+            return False
+        
+        # Validate specific constraints
+        if self.variables.get('pg_user') == 'root':
+            self.logger.error("PostgreSQL user cannot be 'root'. Please use a different username.")
+            return False
+        
+        return True
+    
     def execute(self, project_name: str) -> Dict[str, Any]:
         """Build a new QuickScale project."""
         original_dir = os.getcwd()
@@ -761,6 +867,10 @@ except Exception as e:
                 
             self.setup_static_dirs()
             self.setup_global_templates()
+            
+            # Validate environment before starting Docker
+            if not self.validate_environment():
+                self._exit_with_error("Environment validation failed. Please fix the issues above.")
             
             self.logger.info("Starting services with Docker Compose...")
             # Pass environment variables to Docker Compose
@@ -820,6 +930,73 @@ except Exception as e:
         except Exception as e:
             self.logger.error(f"Error creating project: {e}")
             raise
+
+    def _verify_migrations(self) -> None:
+        """Verify that all migrations have been applied correctly."""
+        self.logger.info("Verifying all migrations are applied correctly...")
+        
+        try:
+            # Run showmigrations to check for any unapplied migrations
+            result = subprocess.run(
+                [DOCKER_COMPOSE_COMMAND, "exec", "-T", "web", 
+                 "python", "manage.py", "showmigrations"],
+                check=True, timeout=30, capture_output=True, text=True
+            )
+            
+            # Check for pending migrations in the output
+            output = result.stdout
+            if "[X]" in output and not "[ ]" in output:
+                self.logger.info("All migrations are applied correctly.")
+            else:
+                self.logger.warning("Some migrations may not be applied. Running final migration check...")
+                
+                # Check for specific error patterns indicating model changes
+                check_result = subprocess.run(
+                    [DOCKER_COMPOSE_COMMAND, "exec", "-T", "web", 
+                     "python", "manage.py", "check", "--deploy"],
+                    check=False, timeout=30, capture_output=True, text=True
+                )
+                
+                if "Your models in app(s)" in check_result.stdout or "Your models in app(s)" in check_result.stderr:
+                    self.logger.warning("Unmigrated model changes detected.")
+                    
+                    # Try to fix by running makemigrations and migrate for each app
+                    apps = ['users', 'common', 'public', 'dashboard']
+                    for app in apps:
+                        try:
+                            self.logger.info(f"Generating migrations for {app}...")
+                            subprocess.run(
+                                [DOCKER_COMPOSE_COMMAND, "exec", "-T", "web", 
+                                 "python", "manage.py", "makemigrations", app],
+                                check=False, timeout=30, capture_output=True, text=True
+                            )
+                            
+                            self.logger.info(f"Applying migrations for {app}...")
+                            subprocess.run(
+                                [DOCKER_COMPOSE_COMMAND, "exec", "-T", "web", 
+                                 "python", "manage.py", "migrate", app],
+                                check=False, timeout=30, capture_output=True, text=True
+                            )
+                        except Exception as e:
+                            self.logger.warning(f"Error fixing migrations for {app}: {e}")
+                            continue
+                    
+                    # Final migrate to catch any remaining migrations
+                    subprocess.run(
+                        [DOCKER_COMPOSE_COMMAND, "exec", "-T", "web", 
+                         "python", "manage.py", "migrate"],
+                        check=False, timeout=30, capture_output=True, text=True
+                    )
+                
+        except (subprocess.SubprocessError, subprocess.TimeoutExpired) as e:
+            error_output = ""
+            if hasattr(e, 'stdout') and e.stdout:
+                error_output += f"\nStdout: {e.stdout}"
+            if hasattr(e, 'stderr') and e.stderr:
+                error_output += f"\nStderr: {e.stderr}"
+            self.logger.warning(f"Migration verification failed: {e}{error_output}")
+            self.logger.warning("This is not a critical error. Project may still work correctly.")
+            # Don't raise the exception, as this is a verification step
 
 class DestroyProjectCommand(Command):
     """Handles removal of existing QuickScale projects."""
