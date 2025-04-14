@@ -1,0 +1,1 @@
+# Django Stripe template directory 
