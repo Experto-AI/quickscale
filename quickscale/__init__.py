@@ -1,7 +1,7 @@
 """QuickScale - A Django SaaS Starter Kit for Python-First Developers."""
 from typing import Optional
 
-__version__: str = "0.5.1"
+__version__: str = "0.6.0"
 
 try:
     from importlib.metadata import version
