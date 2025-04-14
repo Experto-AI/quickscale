@@ -39,10 +39,6 @@
 
 ## Projected Development Sprints
 
-### Sprint 2:  
-- [X] **Session 1 (v0.5.1): Test e2e: quiscale down / up after quickscale build**
-- [ ] **Session 2 (v0.5.2): Test e2e: logs after quickscale build (build logs and execution logs)**
-- [ ] **Session 3 (v0.5.3): Test e2e: quickscale manage tests**
 
 ### Sprint 3: Payment Integration with dj-stripe (v0.6.0)
 - [ ] **Session 1: dj-stripe Setup and Core Implementation**
@@ -51,12 +47,12 @@
     - [x] Add dj-stripe to template requirements.txt
     - [x] Create basic test to verify package can be imported
     - [x] Update documentation with package version requirements
-  - [ ] **Step 2: Configuration Structure**
-    - [ ] Add Stripe environment variables to .env.example
-    - [ ] Add feature flag STRIPE_ENABLED=False in settings
-    - [ ] Create minimal djstripe settings module
-    - [ ] Add conditional importing in settings based on feature flag
-    - [ ] Test that app starts with feature flag off
+  - [X] **Step 2: Configuration Structure**
+    - [X] Add Stripe environment variables to .env.example
+    - [X] Add feature flag STRIPE_ENABLED=False in environment
+    - [X] Create minimal djstripe settings module
+    - [X] Add conditional importing in settings based on feature flag
+    - [X] Test that app starts with feature flag off
   - [ ] **Step 3: Basic Django Integration**
     - [ ] Add djstripe to INSTALLED_APPS (guarded by feature flag)
     - [ ] Create empty djstripe app directory structure 
@@ -468,7 +464,11 @@
     - [ ] Implement security-focused test suite
     - [ ] Test the entire payment flow
 
-### Sprint 4: Usage Tracking and Quota Management (v0.7.0)
+### Sprint 4:  
+- [ ] **Session 2 (v0.6.1): Test e2e: logs after quickscale build (build logs and execution logs)**
+- [ ] **Session 3 (v0.6.2): Test e2e: quickscale manage tests**
+
+### Sprint 5: Usage Tracking and Quota Management (v0.7.0)
 - [ ] **Session 1: Usage Models**
   - [ ] Create usage tracking models integrated with credits system
   - [ ] Implement usage logging middleware
@@ -525,7 +525,7 @@
   - [ ] Implement thumbnail generation for images
   - [ ] Add sorting and filtering options
 
-### Sprint 6: Testing and Documentation (v0.9.0)
+### Sprint 7: Testing and Documentation (v0.9.0)
 - [ ] **Session 1: Expanding Test Coverage**
   - [ ] Increase code coverage to 90%+
   - [ ] Add performance tests
