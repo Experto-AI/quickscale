@@ -53,11 +53,11 @@
     - [X] Create minimal djstripe settings module
     - [X] Add conditional importing in settings based on feature flag
     - [X] Test that app starts with feature flag off
-  - [ ] **Step 3: Basic Django Integration**
-    - [ ] Add djstripe to INSTALLED_APPS (guarded by feature flag)
-    - [ ] Create empty djstripe app directory structure 
-    - [ ] Add placeholder URLs file with commented endpoints
-    - [ ] Test Django loads with feature flag on/off
+  - [X] **Step 3: Basic Django Integration**
+    - [X] Add djstripe to INSTALLED_APPS (guarded by feature flag)
+    - [X] Create empty djstripe app directory structure 
+    - [X] Add placeholder URLs file with commented endpoints
+    - [X] Test Django loads with feature flag on/off
   - [ ] **Step 4: Database Preparation**
     - [ ] Add migration dependency check
     - [ ] Create migration plan documentation
