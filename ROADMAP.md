@@ -58,35 +58,27 @@
     - [X] Create empty djstripe app directory structure 
     - [X] Add placeholder URLs file with commented endpoints
     - [X] Test Django loads with feature flag on/off
-  - [ ] **Step 4: Database Preparation**
-    - [ ] Add migration dependency check
-    - [ ] Create migration plan documentation
-    - [ ] Add safe migration command wrapper
-    - [ ] Test migration dry-run process
-  - [ ] **Step 5: Customer Model**
-    - [ ] Create StripeCustomer model linked to CustomUser
-    - [ ] Add minimal fields (stripe_id, created)
-    - [ ] Implement one-to-one relationship
-    - [ ] Add model tests and factories
-  - [ ] **Step 6: API Connection**
-    - [ ] Implement API client wrapper
-    - [ ] Add connection test utility
-    - [ ] Create health check endpoint (admin-only)
-    - [ ] Add basic authorization for Stripe endpoints
-  - [ ] **Step 7: Webhook Foundation**
-    - [ ] Create webhook URL endpoint (disabled by default)
-    - [ ] Add signature verification middleware
-    - [ ] Implement webhook event model
-    - [ ] Add webhook processing queue structure
-  - [ ] **Step 8: Data Synchronization**
-    - [ ] Implement patterns for using Stripe as source of truth
-    - [ ] Add synchronization methods
-    - [ ] Add tests for data consistency
-  - [ ] **Step 9: Integration Tests**
-    - [ ] Create test fixtures for Stripe objects
-    - [ ] Implement end-to-end flow tests with mocks
-    - [ ] Add test documentation
-    - [ ] Create test command for stripe verification
+  - [X] **Step 4: Customer Model Implementation**
+    - [X] Create StripeCustomer model linked to CustomUser
+    - [X] Add minimal fields (stripe_id, created)
+    - [X] Generate and apply migration
+    - [X] Add basic model tests
+  - [ ] **Step 5: Stripe API Integration**
+    - [ ] Add Stripe API client configuration
+    - [ ] Implement customer creation in Stripe
+    - [ ] Link local customers with Stripe customers
+  - [ ] **Step 6: Basic Webhooks**
+    - [ ] Add simple webhook endpoint
+    - [ ] Implement webhook signature verification
+    - [ ] Handle core customer events
+  - [ ] **Step 7: Core Payment Flows**
+    - [ ] Implement subscription creation
+    - [ ] Add payment method attachment
+    - [ ] Create basic payment success/failure handling
+  - [ ] **Step 8: Testing**
+    - [ ] Add integration tests with Stripe test mode
+    - [ ] Create test fixtures for common scenarios
+    - [ ] Add documentation for testing payments
 
 - [ ] **Session 2: Subscription Models and Admin Management**
   - [ ] **Step 1: Product Model Foundation**
