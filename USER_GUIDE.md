@@ -31,6 +31,7 @@ To create a new project, use the `quickscale build` command:
 
 2. **Access the Application**:
    Open your browser and go to `http://localhost:8000`.
+
    NOTE: It is not necessary to execute `quickscale up`
 
 ---
@@ -71,7 +72,7 @@ QuickScale provides a CLI for managing your project. Below are the most common c
   ```
   Example:
   ```bash
-  quickscale manage createsuperuser
+  quickscale manage test
   ```
 
 ### **3.5. Accessing Shells**
@@ -171,7 +172,89 @@ Check logs for detailed error messages:
 quickscale logs
 ```
 
+### **7.3. Django Manage Commands**
+
+QuickScale seamlessly integrates with Django's management commands through the `quickscale manage` command. This allows you to run any Django management command within your project's Docker container.
+
+Common Django management commands:
+
+```bash
+# Database management
+quickscale manage migrate           # Run database migrations
+quickscale manage makemigrations    # Create new migrations based on model changes
+quickscale manage sqlmigrate app_name migration_name  # SQL statements for migration
+
+# Development server
+quickscale manage runserver         # Run development server (rarely needed as Docker handles this)
+
+# User management
+quickscale manage createsuperuser   # Create a Django admin superuser
+quickscale manage changepassword    # Change a user's password
+
+# Application management
+quickscale manage startapp app_name # Create a new Django app
+quickscale manage shell             # Open Django interactive shell
+quickscale manage dbshell           # Open database shell
+
+# Static files
+quickscale manage collectstatic     # Collect static files
+quickscale manage findstatic        # Find static file locations
+
+# Testing
+quickscale manage test              # Run all tests
+quickscale manage test app_name     # Run tests for specific app
+quickscale manage test app.TestClass # Run tests in a specific test class
+quickscale manage test app.TestClass.test_method # Run a specific test method
+
+# Maintenance
+quickscale manage clearsessions     # Clear expired sessions
+quickscale manage flush             # Remove all data from database
+quickscale manage dumpdata          # Export data from database
+quickscale manage loaddata          # Import data to database
+
+# Inspection
+quickscale manage check             # Check for project issues
+quickscale manage diffsettings      # Display differences between current settings and Django defaults
+quickscale manage inspectdb         # Generate models from database
+quickscale manage showmigrations    # Show migration status
+```
 ---
+
+### **7.4. Running Codebase Tests**
+
+QuickScale includes a comprehensive test suite to ensure functionality works as expected. 
+
+First, install the test dependencies:
+
+```bash
+pip install -r requirements-test.txt
+```
+
+The simplest way to run tests is using the `run_tests.sh` script:
+
+```bash
+# Run all tests (default)
+./run_tests.sh
+
+# Run unit tests
+./run_tests.sh -u
+
+# Run integration tests
+./run_tests.sh -i
+
+# Run edn to end tests
+./run_tests.sh -e
+
+# Run with coverage report
+./run_tests.sh --coverage
+```
+
+For Django application tests, you can use the Django test runner through the QuickScale CLI:
+
+```bash
+# Run all Django tests
+quickscale manage test
+```
 
 ## **8. Additional Resources**
 
