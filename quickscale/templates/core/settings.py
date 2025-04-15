@@ -60,6 +60,35 @@ INSTALLED_APPS = [
     'common.apps.CommonConfig',
 ]
 
+# Import and configure Stripe if enabled
+stripe_enabled_flag = os.getenv('STRIPE_ENABLED', 'False').lower() == 'true'
+logging.info(f"Checking STRIPE_ENABLED flag: {stripe_enabled_flag}") # DEBUG LOG
+if stripe_enabled_flag:
+    logging.info("STRIPE_ENABLED is true, attempting to configure Stripe...") # DEBUG LOG
+    try:
+        # Import settings from djstripe settings module
+        from .djstripe.settings import (
+            DJSTRIPE_USE_NATIVE_JSONFIELD,
+            DJSTRIPE_FOREIGN_KEY_TO_FIELD,
+        )
+
+        # Configure Stripe settings from environment
+        STRIPE_LIVE_MODE = False  # Always false in development/test
+        STRIPE_PUBLIC_KEY = os.getenv('STRIPE_PUBLIC_KEY', '')
+        STRIPE_SECRET_KEY = os.getenv('STRIPE_SECRET_KEY', '')
+        DJSTRIPE_WEBHOOK_SECRET = os.getenv('STRIPE_WEBHOOK_SECRET', '')
+
+        # Enable djstripe in installed apps
+        if isinstance(INSTALLED_APPS, tuple):
+            INSTALLED_APPS = list(INSTALLED_APPS) # Ensure INSTALLED_APPS is mutable
+        if 'djstripe' not in INSTALLED_APPS:
+            INSTALLED_APPS.append('djstripe')
+            logging.info("Stripe integration enabled and djstripe added to INSTALLED_APPS.") # DEBUG LOG
+    except ImportError as e:
+        logging.warning(f"Failed to import Stripe settings: {e}. Stripe integration disabled.")
+    except Exception as e:
+        logging.error(f"Failed to configure Stripe: {e}. Stripe integration disabled.")
+
 # django-allauth requires the sites framework
 SITE_ID = 1
 

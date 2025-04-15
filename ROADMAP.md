@@ -32,154 +32,270 @@
 1. **Foundation Components**:
    - ❌ Email verification system
    - ❌ Transactional email templates
-   - ❌ Payment processing (Stripe) with comprehensive security and error handling
-   - ❌ Subscription management with usage-based billing options
-   - ❌ Usage tracking and quota enforcement integrated with billing
+   - ❌ Payment processing (Stripe) with minimal integration for credit purchases
+   - ❌ Credit system for usage tracking
    - ❌ File upload/storage system with secure access controls
 
 ## Projected Development Sprints
 
-- [X] execute build, check down / up
-- [ ] execute build, checks build logs and normal logs, look for error and warning for tests
+### Sprint 3: Payment Integration (v0.6.0)
+- [x] **Session 1: dj-stripe Setup and Core Implementation**
+  - [x] **Step 1: Package Integration**
+    - [x] Add dj-stripe to pyproject.toml dependencies
+    - [x] Add dj-stripe to template requirements.txt
+    - [x] Create basic test to verify package can be imported
+    - [x] Update documentation with package version requirements
+  - [X] **Step 2: Configuration Structure**
+    - [X] Add Stripe environment variables to .env.example
+    - [X] Add feature flag STRIPE_ENABLED=False in environment
+    - [X] Create minimal djstripe settings module
+    - [X] Add conditional importing in settings based on feature flag
+    - [X] Test that app starts with feature flag off
+  - [X] **Step 3: Basic Django Integration**
+    - [X] Add djstripe to INSTALLED_APPS (guarded by feature flag)
+    - [X] Create empty djstripe app directory structure 
+    - [X] Add placeholder URLs file with commented endpoints
+    - [X] Test Django loads with feature flag on/off
+  - [X] **Step 4: Customer Model Implementation**
+    - [X] Create StripeCustomer model linked to CustomUser
+    - [X] Add minimal fields (stripe_id, created)
+    - [X] Generate and apply migration
+    - [X] Add basic model tests
+  - [X] **Step 5: Stripe API Integration**
+    - [X] Add Stripe API client configuration
+    - [X] Implement customer creation in Stripe
+    - [X] Link local customers with Stripe customers
+    - [X] Add CI compatibility with feature flags
+    - [X] Create mock responses for test environments
+    - [X] Ensure quickscale build passes with Stripe code
+    - [X] Add tests that run with STRIPE_ENABLED=False
+  - [X] **Step 6: Basic Webhooks**
+    - [X] Add simple webhook endpoint for payment events
+    - [X] Implement webhook signature verification
+    - [X] Handle core customer events
+    - [X] Add webhook test fixtures for CI
+    - [X] Implement test mode for webhook handlers
+    - [X] Ensure tests pass with and without Stripe enabled
+    - [X] Verify quickscale test command works with webhooks
 
-### Sprint 3: Payment Integration with dj-stripe (v0.6.0)
-- [ ] **Session 1: dj-stripe Setup and Core Implementation**
-  - [ ] Add dj-stripe package to requirements
-  - [ ] Configure Stripe API keys and webhooks
-  - [ ] Setup environment variables for Stripe keys
-  - [ ] Run initial migrations
-  - [ ] Test connection to Stripe
-  - [ ] Create custom StripeCustomer model linked to CustomUser
-  - [ ] Implement webhook signature verification for security
-  - [ ] Establish Stripe as the source of truth for billing data
-  - [ ] Create unit and integration tests for Stripe integration
+- [ ] **Session 2: Basic Payment Products**
+  - [X] **Step 1: Product Model**
+    - [X] Create product model for purchasable items
+    - [X] Add price configuration options
+    - [X] Implement product status (active/inactive)
+    - [X] Test product model operations
+  - [X] **Step 2: Stripe Product Integration**
+    - [X] Sync local products with Stripe products
+    - [X] Add product and price creation in Stripe
+    - [X] Implement webhook handlers for product events
+    - [X] Test Stripe product synchronization
+  - [X] **Step 3: Product Management Admin**
+    - [X] Create a simple product management dashboard that displays products from Stripe
+    - [X] Implement Stripe synchronization for product data
+    - [X] Add read-only product details and price configuration display
+    - [X] Include direct links to manage products in Stripe dashboard
+    - [X] Test admin product management with Stripe integration
 
-- [ ] **Session 2: Subscription Models and Admin Management**
-  - [ ] Configure product and price models in Stripe dashboard
-  - [ ] Sync Stripe products/prices with dj-stripe
-  - [ ] Create admin interface for viewing/managing subscription plans
-  - [ ] Build subscription plan CRUD operations for administrators
-  - [ ] Implement plan feature configuration system
-  - [ ] Add trial period configuration options
-  - [ ] Create audit logging for all subscription changes
-  - [ ] Design unified credit allocation system for subscriptions
-  - [ ] Create unit and integration tests for Stripe integration
+### Sprint 4: Testing and Development (v0.6.1) 
+- [ ] **Session 1: Test e2e**
+  - [ ] Logs after quickscale build (build logs and execution logs)
+  - [ ] Quickscale manage tests
 
-- [ ] **Session 3: Customer-facing Subscription UI**
-  - [ ] Implement Stripe's embeddable pricing table for plan comparison
-  - [ ] Create fallback custom pricing page with plan comparison
-  - [ ] Build subscription plan selection interface
-  - [ ] Implement plan upgrade/downgrade functionality
-  - [ ] Add current plan status indicators on dashboard
-  - [ ] Create subscription expiration/renewal notifications
-  - [ ] Implement "feature locked" indicators for premium features
-  - [ ] Add clear error messaging for subscription-related actions
-  - [ ] Create unit and integration tests for Stripe integration
+### Sprint 5: Checkout Process (v0.7.0)
+- [ ] **Session 1: Checkout Process**
+  - [ ] **Step 1: Checkout Page**
+    - [ ] Create purchase flow UI
+    - [ ] Add Stripe Elements integration
+    - [ ] Implement cart functionality 
+    - [ ] Test checkout page UI
+  - [ ] **Step 2: Payment Processing**
+    - [ ] Implement payment intent creation
+    - [ ] Add payment confirmation handling
+    - [ ] Create success/failure pages
+    - [ ] Test payment processing
+  - [ ] **Step 3: Order History**
+    - [ ] Create order/purchase history model
+    - [ ] Add purchase record storage
+    - [ ] Implement purchase history view
+    - [ ] Test order history functionality
 
-- [ ] **Session 4: Webhook and Event Handling Infrastructure**
-  - [ ] Implement comprehensive webhook handling system
-  - [ ] Create event processors for subscription lifecycle events (created, updated, canceled)
-  - [ ] Add handlers for payment success and failure events
-  - [ ] Implement webhook retry logic and idempotency
-  - [ ] Create webhook logging and monitoring
-  - [ ] Build webhook signature verification and security
-  - [ ] Setup webhook endpoint configuration in Stripe dashboard
-  - [ ] Implement testing framework for webhook events
-  - [ ] Create unit and integration tests for webhook handling
+### Sprint 6: Payment Management (v0.8.0)
+- [ ] **Session 1: Payment Management**
+  - [ ] **Step 1: Admin Dashboard**
+    - [ ] Create payment management interface
+    - [ ] Add transaction viewing for admins
+    - [ ] Implement basic sales reporting
+    - [ ] Test admin payment dashboard
+  - [ ] **Step 2: Error Handling**
+    - [ ] Add robust error handling for payments
+    - [ ] Create recovery flows for failed payments
+    - [ ] Implement clear user guidance
+    - [ ] Test payment error scenarios
+  - [ ] **Step 3: Security Measures**
+    - [ ] Add security for payment endpoints
+    - [ ] Create audit logging for transactions
+    - [ ] Implement basic PCI compliance measures
+    - [ ] Test security implementation
 
-- [ ] **Session 5: Checkout Flow and Payment Processing**
-  - [ ] Implement Stripe Checkout integration
-  - [ ] Create subscription creation/modification flow
-  - [ ] Add success/cancel handling and notifications
-  - [ ] Add automatic invoice generation
-  - [ ] Create receipt emails for successful payments
-  - [ ] Build comprehensive payment failure handling and retry logic
-  - [ ] Implement idempotency keys to prevent duplicate charges
-  - [ ] Create unit and integration tests for Stripe integration
 
-- [ ] **Session 6: Credits and Pay-as-you-go System**
-  - [ ] Design and implement unified credits model for both subscription and pay-as-you-go billing
-  - [ ] Create credit allocation system for subscription plans
-  - [ ] Build credit top-up purchase flow using Stripe
-  - [ ] Implement credit tracking and consumption system
-  - [ ] Create admin interface for credit management and monitoring
-  - [ ] Implement credit balance and usage display in user dashboard
-  - [ ] Add auto-reload options for credits
-  - [ ] Implement credit expiration functionality (if needed)
-  - [ ] Build credit usage history and detailed transaction logging
-  - [ ] Create unit and integration tests for credits system
+### Sprint 7: Enhanced Admin Dashboard (v0.9.0)
+- [ ] **Session 1: User Management**
+  - [ ] **Step 1: User Listing and Search**
+    - [ ] Create comprehensive user listing interface
+    - [ ] Add advanced filtering and search capabilities
+    - [ ] Implement sorting by various user attributes
+    - [ ] Add pagination for large user bases
+    - [ ] Test user listing functionality
+  - [ ] **Step 2: User Detail View**
+    - [ ] Build detailed user profile view for admins
+    - [ ] Display user activity history
+    - [ ] Show credit balance and transaction history
+    - [ ] Add file/project access information
+    - [ ] Test user detail view
+  - [ ] **Step 3: Permission Management**
+    - [ ] Create role-based permission system
+    - [ ] Build permission assignment interface
+    - [ ] Implement permission group management
+    - [ ] Add audit logging for permission changes
+    - [ ] Test permission management system
 
-- [ ] **Session 7: Feature Access Control and Enforcement**
-  - [ ] Design and implement feature gating system based on subscription plans
-  - [ ] Create middleware for checking feature access permissions
-  - [ ] Implement template helpers for conditional UI rendering based on subscription
-  - [ ] Add decorator for protecting subscription-only views and endpoints
-  - [ ] Build admin interface for managing feature flags and permissions
-  - [ ] Implement credit-based access control for usage-based features
-  - [ ] Create combined subscription/credits verification system
-  - [ ] Add graceful UI handling for accessing premium features
-  - [ ] Create unit and integration tests for feature enforcement
+- [ ] **Session 2: System Settings**
+  - [ ] **Step 1: General Settings**
+    - [ ] Create centralized settings management interface
+    - [ ] Add application configuration options
+    - [ ] Implement setting validation
+    - [ ] Add setting categories and organization
+    - [ ] Test settings management
+  - [ ] **Step 2: Email Configuration**
+    - [ ] Build email provider configuration interface
+    - [ ] Add template management for system emails
+    - [ ] Create email testing tools
+    - [ ] Implement email delivery reports
+    - [ ] Test email configuration system
+  - [ ] **Step 3: Security Settings**
+    - [ ] Create security policy configuration
+    - [ ] Add authentication options management
+    - [ ] Implement rate limiting configuration
+    - [ ] Build IP allowlist/blocklist management
+    - [ ] Test security settings implementation
 
-- [ ] **Session 8: Billing Portal and Management**
-  - [ ] Integrate Stripe Customer Portal
-  - [ ] Create detailed billing history views
-  - [ ] Implement invoice retrieval, display and download
-  - [ ] Add subscription management UI for users
-  - [ ] Build payment method management interface
-  - [ ] Create billing settings page
-  - [ ] Implement account cancellation flow
-  - [ ] Add data export functionality for billing history
-  - [ ] Build unified dashboard for subscription and credits management
-  - [ ] Create unit and integration tests for Stripe integration
+- [ ] **Session 3: Analytics Dashboard**
+  - [ ] **Step 1: User Activity Analytics**
+    - [ ] Build user activity visualization dashboard
+    - [ ] Add user engagement metrics
+    - [ ] Implement user retention analytics
+    - [ ] Create cohort analysis tools
+    - [ ] Test user analytics dashboard
+  - [ ] **Step 2: System Performance Monitoring**
+    - [ ] Create system health dashboard
+    - [ ] Add resource utilization metrics
+    - [ ] Implement performance trend visualization
+    - [ ] Build service status indicators
+    - [ ] Test performance monitoring tools
+  - [ ] **Step 3: Error Tracking and Logging**
+    - [ ] Create consolidated error log viewer
+    - [ ] Add error categorization and filtering
+    - [ ] Implement error trend analysis
+    - [ ] Build alert configuration for critical errors
+    - [ ] Test error tracking system
 
-- [ ] **Session 9: Security and Error Handling**
-  - [ ] Implement comprehensive error handling strategy for all payment scenarios
-  - [ ] Create centralized payment error logging and monitoring
-  - [ ] Ensure PCI compliance by using Stripe Elements and following best practices
-  - [ ] Implement rate limiting for payment-related endpoints
-  - [ ] Add fraud detection measures and suspicious activity alerts
-  - [ ] Create automated reconciliation process for payment verification
-  - [ ] Develop recovery procedures for failed payments
-  - [ ] Document security practices and compliance measures
-  - [ ] Create unit and integration tests for Stripe integration
+- [ ] **Session 4: Dashboard Integration and Polish**
+  - [ ] **Step 1: Navigation and Structure**
+    - [ ] Improve admin dashboard navigation
+    - [ ] Add customizable dashboard layouts
+    - [ ] Implement quick action shortcuts
+    - [ ] Create unified search across all admin areas
+    - [ ] Test dashboard navigation and structure
+  - [ ] **Step 2: Real-time Updates**
+    - [ ] Add websocket support for live updates
+    - [ ] Implement real-time notifications for admins
+    - [ ] Create real-time system status indicators
+    - [ ] Test real-time functionality
+  - [ ] **Step 3: Admin Reporting**
+    - [ ] Build comprehensive reporting system
+    - [ ] Add scheduled report generation
+    - [ ] Implement exportable reports (CSV, PDF)
+    - [ ] Create custom report builder
+    - [ ] Test reporting functionality
 
-### Sprint 4: Usage Tracking and Quota Management (v0.7.0)
-- [ ] **Session 1: Usage Models**
-  - [ ] Create usage tracking models integrated with credits system
-  - [ ] Implement usage logging middleware
-  - [ ] Add relations to subscription data
-  - [ ] Design quota enforcement architecture
-  - [ ] Ensure secure storage of usage data
+### Sprint 8: Credit System (v0.10.0)
+- [ ] **Session 1: Credit System Foundation**
+  - [ ] **Step 1: Credit Model**
+    - [ ] Create core credit data models
+    - [ ] Add credit transaction ledger
+    - [ ] Implement credit balance calculation
+    - [ ] Test credit model operations
+  - [ ] **Step 2: Admin Interface for Credits**
+    - [ ] Create credit management dashboard for admins
+    - [ ] Add manual adjustment capabilities
+    - [ ] Implement audit logging for credit changes
+    - [ ] Test admin credit management interface
+  - [ ] **Step 3: Credit Pricing Structure**
+    - [ ] Add credit packages to existing product catalog
+    - [ ] Link credits to stripe products
+    - [ ] Implement credit package configuration
+    - [ ] Test credit pricing structure
 
-- [ ] **Session 2: Quota Enforcement**
-  - [ ] Implement quota checking middleware
-  - [ ] Create upgrade prompts for quota limits
-  - [ ] Add usage analytics dashboard
-  - [ ] Create usage projection tools
-  - [ ] Implement graceful degradation when limits are reached
+- [ ] **Session 2: Credit Purchase Integration**
+  - [ ] **Step 1: Credit Purchase Flow**
+    - [ ] Extend checkout for credit purchases
+    - [ ] Implement credit allocation after payment
+    - [ ] Add purchase confirmation for credits
+    - [ ] Test credit purchase flow
+  - [ ] **Step 2: Credit Webhooks**
+    - [ ] Create webhooks for credit-related events
+    - [ ] Add automatic credit allocation on successful payment
+    - [ ] Implement failed payment handling for credits
+    - [ ] Test credit webhook functionality
 
-- [ ] **Session 3: Alerting and Notifications**
-  - [ ] Implement quota approaching alerts
-  - [ ] Create usage reports
-  - [ ] Add admin monitoring views
-  - [ ] Implement notification preferences
-  - [ ] Create automated billing alerts for unusual usage patterns
+- [ ] **Session 3: User-facing Credit System**
+  - [ ] **Step 1: User Dashboard**
+    - [ ] Add credit balance display to user dashboard
+    - [ ] Create simple usage history visualization
+    - [ ] Implement purchase button for more credits
+    - [ ] Test user dashboard integration
+  - [ ] **Step 2: Credit Tracking**
+    - [ ] Add credit usage tracking
+    - [ ] Create consumption recording
+    - [ ] Implement real-time balance updates
+    - [ ] Test credit tracking accuracy
+  - [ ] **Step 3: User Notifications**
+    - [ ] Add low balance notifications
+    - [ ] Create purchase confirmation emails
+    - [ ] Implement usage summary emails
+    - [ ] Test notification system
+  - [ ] **Step 4: Transaction History**
+    - [ ] Create detailed transaction log view
+    - [ ] Add filtering and sorting options
+    - [ ] Implement transaction categorization
+    - [ ] Test transaction history display
 
-- [ ] **Session 4: Testing and Optimization**
-  - [ ] Performance testing for quota systems
-  - [ ] Optimize database queries
-  - [ ] Implement caching for quota checks
-  - [ ] Write comprehensive test suite
-  - [ ] Create load testing scenarios for high-volume usage
+- [ ] **Session 4: Credit Usage and Error Handling**
+  - [ ] **Step 1: Credit Consumption**
+    - [ ] Create credit consumption API
+    - [ ] Add project generation credit costs
+    - [ ] Implement credit checking before operations
+    - [ ] Test credit consumption flows
+  - [ ] **Step 2: Error Handling**
+    - [ ] Add graceful handling for insufficient credits
+    - [ ] Create user-friendly error messages
+    - [ ] Implement recovery options for failed operations
+    - [ ] Test error scenarios
 
-- [ ] **Session 5: Stripe Integration for Usage-Based Billing**
-  - [ ] Implement Stripe usage record reporting
-  - [ ] Create metered billing subscription options
-  - [ ] Build automated usage-to-invoice pipeline
-  - [ ] Implement proration for plan changes
-  - [ ] Add detailed usage breakdown in customer invoices
+### Sprint 9: Usage Analytics (v0.11.0)
+- [ ] **Session 1: Enhanced Usage Tracking**
+  - [ ] Improve credit usage analytics
+  - [ ] Add detailed usage reporting
+  - [ ] Create usage visualization dashboard
+  - [ ] Implement usage trends and statistics
 
-### Sprint 5: File Storage Foundation (v0.8.0)
+- [ ] **Session 2: Usage Optimization**
+  - [ ] Add suggestions for optimizing credit usage
+  - [ ] Create cost estimation tools
+  - [ ] Implement usage efficiency metrics
+  - [ ] Add best practices recommendations
+
+### Sprint 10: File Storage Foundation (v0.12.0)
 - [ ] **Session 1: Storage Backend**
   - [ ] Configure Django storage backend
   - [ ] Add AWS S3 or similar integration
@@ -200,38 +316,111 @@
   - [ ] Implement thumbnail generation for images
   - [ ] Add sorting and filtering options
 
-### Sprint 6: Testing and Documentation (v0.9.0)
+### Sprint 11: Documentation and Final Polish (v0.13.0)
 - [ ] **Session 1: Expanding Test Coverage**
   - [ ] Increase code coverage to 90%+
   - [ ] Add performance tests
   - [ ] Setup automated test runs in CI/CD pipeline
-  - [ ] Create comprehensive test suite for payment processing
-  - [ ] Implement mock Stripe services for testing
+  - [ ] Create comprehensive test suite for all systems
+  - [ ] Implement full mock services for testing
 
 - [ ] **Session 2: Architecture Documentation**
   - [ ] Add detailed architecture diagrams
   - [ ] Document the command system design
   - [ ] Create component relationship diagrams
-  - [ ] Document payment processing flow and security measures
-  - [ ] Create data flow diagrams for billing processes
+  - [ ] Document credit system flow
+  - [ ] Create data flow diagrams for payment processes
 
 - [ ] **Session 3: Developer Guide**
   - [ ] Improve inline code documentation
   - [ ] Create developer onboarding guide
   - [ ] Document extension points
-  - [ ] Add detailed guides for payment integration
-  - [ ] Document error handling patterns for payment processing
+  - [ ] Add detailed integration guides
+  - [ ] Document error handling patterns
 
 - [ ] **Session 4: User Documentation**
   - [ ] Create user guides for key features
   - [ ] Add tutorials for common tasks
   - [ ] Improve help and support resources
-  - [ ] Create billing and subscription management guides
-  - [ ] Document payment troubleshooting procedures
+  - [ ] Create purchase and credit usage guides
+  - [ ] Document troubleshooting procedures
 
-- [ ] **Session 5: Security Documentation and Compliance**
-  - [ ] Document PCI compliance measures
-  - [ ] Create security best practices guide
-  - [ ] Document data retention and privacy policies
-  - [ ] Create incident response procedures for payment issues
-  - [ ] Document regular security audit processes
+### Sprint 12: Enhanced Admin Dashboard (v0.14.0)
+- [ ] **Session 1: User Management**
+  - [ ] **Step 1: User Listing and Search**
+    - [ ] Create comprehensive user listing interface
+    - [ ] Add advanced filtering and search capabilities
+    - [ ] Implement sorting by various user attributes
+    - [ ] Add pagination for large user bases
+    - [ ] Test user listing functionality
+  - [ ] **Step 2: User Detail View**
+    - [ ] Build detailed user profile view for admins
+    - [ ] Display user activity history
+    - [ ] Show credit balance and transaction history
+    - [ ] Add file/project access information
+    - [ ] Test user detail view
+  - [ ] **Step 3: Permission Management**
+    - [ ] Create role-based permission system
+    - [ ] Build permission assignment interface
+    - [ ] Implement permission group management
+    - [ ] Add audit logging for permission changes
+    - [ ] Test permission management system
+
+- [ ] **Session 2: System Settings**
+  - [ ] **Step 1: General Settings**
+    - [ ] Create centralized settings management interface
+    - [ ] Add application configuration options
+    - [ ] Implement setting validation
+    - [ ] Add setting categories and organization
+    - [ ] Test settings management
+  - [ ] **Step 2: Email Configuration**
+    - [ ] Build email provider configuration interface
+    - [ ] Add template management for system emails
+    - [ ] Create email testing tools
+    - [ ] Implement email delivery reports
+    - [ ] Test email configuration system
+  - [ ] **Step 3: Security Settings**
+    - [ ] Create security policy configuration
+    - [ ] Add authentication options management
+    - [ ] Implement rate limiting configuration
+    - [ ] Build IP allowlist/blocklist management
+    - [ ] Test security settings implementation
+
+- [ ] **Session 3: Analytics Dashboard**
+  - [ ] **Step 1: User Activity Analytics**
+    - [ ] Build user activity visualization dashboard
+    - [ ] Add user engagement metrics
+    - [ ] Implement user retention analytics
+    - [ ] Create cohort analysis tools
+    - [ ] Test user analytics dashboard
+  - [ ] **Step 2: System Performance Monitoring**
+    - [ ] Create system health dashboard
+    - [ ] Add resource utilization metrics
+    - [ ] Implement performance trend visualization
+    - [ ] Build service status indicators
+    - [ ] Test performance monitoring tools
+  - [ ] **Step 3: Error Tracking and Logging**
+    - [ ] Create consolidated error log viewer
+    - [ ] Add error categorization and filtering
+    - [ ] Implement error trend analysis
+    - [ ] Build alert configuration for critical errors
+    - [ ] Test error tracking system
+
+- [ ] **Session 4: Dashboard Integration and Polish**
+  - [ ] **Step 1: Navigation and Structure**
+    - [ ] Improve admin dashboard navigation
+    - [ ] Add customizable dashboard layouts
+    - [ ] Implement quick action shortcuts
+    - [ ] Create unified search across all admin areas
+    - [ ] Test dashboard navigation and structure
+  - [ ] **Step 2: Real-time Updates**
+    - [ ] Add websocket support for live updates
+    - [ ] Implement real-time notifications for admins
+    - [ ] Create real-time system status indicators
+    - [ ] Test real-time functionality
+  - [ ] **Step 3: Admin Reporting**
+    - [ ] Build comprehensive reporting system
+    - [ ] Add scheduled report generation
+    - [ ] Implement exportable reports (CSV, PDF)
+    - [ ] Create custom report builder
+    - [ ] Test reporting functionality

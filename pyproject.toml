@@ -25,6 +25,9 @@ dependencies = [
     "dj-database-url>=2.1.0",
     # Environment and configuration
     "python-dotenv>=1.0.0",
+    # Payment processing
+    "dj-stripe==2.9.0",
+    "stripe>=8.0.0",
 ]
 
 [project.urls]
