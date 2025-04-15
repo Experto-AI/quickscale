@@ -9,6 +9,8 @@ Most models will be provided by the djstripe package itself.
 from django.db import models
 from django.conf import settings
 from django.utils.translation import gettext_lazy as _
+from django.db.models.signals import post_save, pre_delete
+from django.dispatch import receiver
 
 # Placeholder for future custom models extending djstripe
 # For example:
@@ -137,4 +139,87 @@ class Product(models.Model):
         if self.currency == 'JPY':  # JPY doesn't use decimal places
             return f"{symbol}{int(self.base_price)}"
         
-        return f"{symbol}{self.base_price:.2f}" 
+        return f"{symbol}{self.base_price:.2f}"
+    
+    def sync_to_stripe(self):
+        """
+        Sync this product to Stripe.
+        
+        If the product already has a Stripe ID, it will be updated.
+        Otherwise, a new product will be created in Stripe.
+        
+        Returns:
+            bool: True if the sync was successful, False otherwise
+        """
+        from .services import ProductService
+        
+        if self.stripe_product_id:
+            return ProductService.update_in_stripe(self)
+        else:
+            return bool(ProductService.create_in_stripe(self))
+    
+    def delete_from_stripe(self):
+        """
+        Delete this product from Stripe.
+        
+        Returns:
+            bool: True if the deletion was successful, False otherwise
+        """
+        from .services import ProductService
+        return ProductService.delete_from_stripe(self)
+
+
+# Signal handlers for automatic Stripe synchronization
+@receiver(post_save, sender=Product)
+def product_post_save(sender, instance, created, **kwargs):
+    """
+    Signal handler to sync products with Stripe after saving.
+    
+    This only runs when STRIPE_ENABLED is True.
+    """
+    import os
+    if not os.getenv('STRIPE_ENABLED', 'False').lower() == 'true':
+        return
+    
+    # Delay import to avoid circular dependency
+    from .services import ProductService
+    
+    # Run in a background thread to avoid blocking the save operation
+    # In a production environment, this would use a task queue like Celery
+    import threading
+    
+    if created:
+        # Only create in Stripe for active products to avoid unnecessary API calls
+        if instance.is_active():
+            thread = threading.Thread(target=ProductService.create_in_stripe, args=(instance,))
+            thread.daemon = True
+            thread.start()
+    else:
+        # For updates, sync with Stripe
+        if instance.stripe_product_id:
+            thread = threading.Thread(target=ProductService.update_in_stripe, args=(instance,))
+            thread.daemon = True
+            thread.start()
+        elif instance.is_active():
+            # If it doesn't have a Stripe ID but is active, create it
+            thread = threading.Thread(target=ProductService.create_in_stripe, args=(instance,))
+            thread.daemon = True
+            thread.start()
+
+
+@receiver(pre_delete, sender=Product)
+def product_pre_delete(sender, instance, **kwargs):
+    """
+    Signal handler to archive products in Stripe before deletion.
+    
+    This only runs when STRIPE_ENABLED is True.
+    """
+    import os
+    if not os.getenv('STRIPE_ENABLED', 'False').lower() == 'true':
+        return
+    
+    # Only try to delete if it has a Stripe ID
+    if instance.stripe_product_id:
+        # Delay import to avoid circular dependency
+        from .services import ProductService
+        ProductService.delete_from_stripe(instance) 

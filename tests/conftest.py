@@ -402,3 +402,21 @@ def docker_ready(request):
         # If unknown, perform a quick check
         from tests.utils import is_docker_available
         return is_docker_available()
+
+@pytest.fixture
+def mock_stripe_disabled():
+    """Mock environment with Stripe disabled."""
+    with patch.dict(os.environ, {'STRIPE_ENABLED': 'false'}):
+        yield
+
+@pytest.fixture
+def mock_stripe_enabled():
+    """Mock environment with Stripe enabled."""
+    with patch.dict(os.environ, {'STRIPE_ENABLED': 'true'}):
+        yield
+
+@pytest.fixture
+def mock_stripe_unavailable():
+    """Mock the Stripe module as unavailable."""
+    with patch.dict('sys.modules', {'djstripe': None}):
+        yield
