@@ -77,83 +77,64 @@ tests/
 ## PROJECT ARCHITECTURE
 
 ```mermaid
+---
+config:
+  layout: elk
+---
 flowchart TD
-    %% Main user flow
-    user_input["User Input (CLI Commands)"] --> cli
-
-    %% Core CLI component
-    subgraph CLI["QuickScale CLI"]
-        direction TB
-        cli["cli.py<br/>Entry Point"] --> command_manager["Command<br/>Manager"]
-        cli --> project_manager["Project<br/>Manager"]
-    end
-
-    %% Connect CLI to next layer
-    user_input --> |build command| project_commands
-    cli --> command_base
-    command_manager --> command_base
-
-    %% Commands structure - vertical with expanded width
-    subgraph Commands["Command System"]
-        direction TB
+ subgraph CLI["QuickScale CLI"]
+    direction TB
+        command_manager["Command<br>Manager"]
+        cli["cli.py<br>Entry Point"]
+        project_manager["Project<br>Manager"]
+  end
+ subgraph Commands["Command System"]
+    direction TB
         command_base["Command (Base)"]
-        command_base --> project_commands["Project Commands<br/>(build, destroy)"]
-        command_base --> service_commands["Service Commands<br/>(up, down, logs, ps)"]
-        command_base --> dev_commands["Development Commands<br/>(shell, django-shell)"]
-        command_base --> system_commands["System Commands<br/>(check)"]
-    end
-
-    %% Support services - now below CLI
-    subgraph Utilities["Utility Services"]
-        direction TB
+        project_commands["Project Commands<br>(build, destroy)"]
+        service_commands["Service Commands<br>(up, down, logs, ps)"]
+        dev_commands["Development Commands<br>(shell, django-shell)"]
+        system_commands["System Commands<br>(check)"]
+  end
+ subgraph Utilities["Utility Services"]
+    direction TB
         error_manager["Error Manager"]
         logging_manager["Logging Manager"]
         help_manager["Help Manager"]
         config_manager["Config Manager"]
-    end
-
-    %% Connect Commands to Utilities
-    command_base --> error_manager
-    command_base --> logging_manager
-    cli --> help_manager
-    cli --> config_manager
-    
-    %% Project generation flow
-    subgraph Templates["Template System"]
-        direction TB
+  end
+ subgraph Templates["Template System"]
+    direction TB
         templates["Project Templates"]
-        templates --> style_templates["Style Templates<br/>(Bulma CSS)"]
-        templates --> js_templates["JS Templates<br/>(HTMX/Alpine.js)"]
-    end
-
-    %% Connect Commands to Templates
-    project_commands --> templates
-
-    %% Generated project structure
-    subgraph Generated["Generated Project"]
-        direction TB
+        style_templates["Style Templates<br>(Bulma CSS)"]
+        js_templates["JS Templates<br>(HTMX/Alpine.js)"]
+  end
+ subgraph Apps["Django Apps"]
+    direction TB
+        public_app["Public App"]
+        users_app["Users App"]
+        dashboard_app["Dashboard App"]
+        common_app["Common App"]
+  end
+ subgraph Generated["Generated Project"]
+    direction TB
         django_core["Django Core"]
-        django_core --- database["PostgreSQL"]
-        django_core --- auth["Authentication<br/>(django-allauth)"]
-        django_core --- djstripe["DjStripe<br/>(Payments)"]
-        
-        subgraph Apps["Django Apps"]
-            direction TB
-            public_app["Public App"]
-            users_app["Users App"]
-            dashboard_app["Dashboard App"]
-            common_app["Common App"]
-        end
-        
-        django_core --- Apps
-    end
-
-    %% Connect Templates to Generated Project
-    templates --> |generates| Generated
-    Generated --> |runs with| docker["Docker Services<br/>(web, db)"]
+        database["PostgreSQL"]
+        auth["Authentication<br>(django-allauth)"]
+        djstripe["DjStripe<br>(Payments)"]
+        Apps
+  end
+    user_input["User Input (CLI Commands)"] --> cli
+    cli --> command_manager & project_manager & command_base & help_manager & config_manager
+    user_input -- build command --> project_commands
+    command_manager --> command_base
+    command_base --> project_commands & service_commands & dev_commands & system_commands & error_manager & logging_manager
+    templates --> style_templates & js_templates
+    project_commands --> templates
+    django_core --- database & auth & djstripe & Apps
+    templates -- generates --> Generated
+    Generated -- runs with --> docker["Docker Services<br>(web, db)"]
     service_commands --> docker
-    
-    %% Vertical layout arrangement
     CLI --> Commands
     Commands --> Utilities
     Utilities --> Templates
@@ -204,32 +185,32 @@ sequenceDiagram
 This state diagram shows the different states of a QuickScale project and transitions triggered by commands:
 
 ```mermaid
-stateDiagram-v2
-    [*] --> NonExistent: Initial State
-    
-    NonExistent --> Created: quickscale build
-    Created --> Running: quickscale up
-    Running --> Stopped: quickscale down
-    Stopped --> Running: quickscale up
-    
-    Created --> DatabaseConfigured: DB Setup during build
-    DatabaseConfigured --> AppsInitialized: Django migrations
-    AppsInitialized --> Ready: Static files collected
-    
-    Running --> ShellAccess: quickscale shell
-    ShellAccess --> Running: exit shell
-    
-    Running --> CodeEdit: Development
-    CodeEdit --> Running: Save changes
-    
-    Stopped --> Destroyed: quickscale destroy
-    Destroyed --> [*]
-    
-    note right of NonExistent: No project directory
-    note right of Created: Files generated
-    note right of Running: Docker containers active
-    note right of Stopped: Docker containers stopped
-    note right of Destroyed: All files removed
+---
+config:
+  look: classic
+  layout: elk
+---
+stateDiagram
+  direction TB
+  [*] --> NonExistent:Initial State
+  NonExistent --> Created:quickscale build
+  Created --> Running:quickscale up
+  Running --> Stopped:quickscale down
+  Stopped --> Running:quickscale up
+  Created --> DatabaseConfigured:DB Setup during build
+  DatabaseConfigured --> AppsInitialized:Django migrations
+  AppsInitialized --> Ready:Static files collected
+  Running --> ShellAccess:quickscale shell
+  ShellAccess --> Running:exit shell
+  Running --> CodeEdit:Development
+  CodeEdit --> Running:Save changes
+  Stopped --> Destroyed:quickscale destroy
+  Destroyed --> [*]
+  note right of NonExistent : No project directory
+  note right of Created : Files generated
+  note right of Running : Docker containers active
+  note right of Stopped : Docker containers stopped
+  note right of Destroyed : All files removed
 ```
 
 ### Deployment Flow Diagram
@@ -237,54 +218,46 @@ stateDiagram-v2
 This diagram shows the deployment architecture and request flow in a generated project:
 
 ```mermaid
+---
+config:
+  layout: elk
+---
 flowchart TD
-    %% Vertical client layer
-    subgraph Client["Client"]
-        browser["Web Browser<br/>User Interface"]
-    end
-    
-    %% Host server components in vertical layout
-    subgraph Host["Host Server"]
-        direction TB
-        nginx["Nginx<br/>Reverse Proxy<br/>SSL Termination"]
-    end
-    
-    %% Docker environment in vertical layout
-    subgraph Docker["Docker Environment"]
-        direction TB
-        web["Web Container<br/>Django + Uvicorn<br/>Application Server"]
-        db["Database Container<br/>PostgreSQL<br/>Data Storage"]
-        
-        web -- "CRUD<br/>Operations" --> db
-    end
-    
-    %% External services in vertical layout
-    subgraph External["External Services"]
-        direction TB
-        smtp["SMTP Server<br/>Email Delivery<br/>(Transactional Emails)"]
-        stripe["Stripe API<br/>Payment Processing<br/>(Subscriptions & Payments)"]
-    end
-    
-    %% Vertical arrangement of main components
+ subgraph Client["Client"]
+        browser["Web Browser<br>User Interface"]
+  end
+ subgraph Host["Host Server"]
+    direction TB
+        nginx["Nginx<br>Reverse Proxy<br>SSL Termination"]
+  end
+ subgraph Docker["Docker Environment"]
+    direction TB
+        web["Web Container<br>Django + Uvicorn<br>Application Server"]
+        db["Database Container<br>PostgreSQL<br>Data Storage"]
+  end
+ subgraph External["External Services"]
+    direction TB
+        smtp["SMTP Server<br>Email Delivery<br>(Transactional Emails)"]
+        stripe["Stripe API<br>Payment Processing<br>(Subscriptions &amp; Payments)"]
+  end
+    web -- CRUD<br>Operations --> db
     Client --> Host
     Host --> Docker
     Docker --> External
-    
-    %% Request flow connections
-    browser -- "HTTPS<br/>Requests" --> nginx
-    nginx -- "Proxies to<br/>port 8000" --> web
-    web -- "Emails" --> smtp
-    web -- "Payment<br/>Processing" --> stripe
-    stripe -- "Webhooks" --> web
-    
-    %% Styling to make blocks more readable
-    classDef container fill:#e1f5fe,stroke:#01579b,stroke-width:1px;
-    classDef external fill:#fff8e1,stroke:#ff6f00,stroke-width:1px;
-    classDef client fill:#f1f8e9,stroke:#33691e,stroke-width:1px;
-    
-    class web,db container;
-    class smtp,stripe external;
-    class browser client;
+    browser -- HTTPS<br>Requests --> nginx
+    nginx -- Proxies to<br>port 8000 --> web
+    web -- Emails --> smtp
+    web -- Payment<br>Processing --> stripe
+    stripe -- Webhooks --> web
+     browser:::client
+     web:::container
+     db:::container
+     smtp:::external
+     stripe:::external
+    classDef container fill:#e1f5fe,stroke:#01579b,stroke-width:1px
+    classDef external fill:#fff8e1,stroke:#ff6f00,stroke-width:1px
+    classDef client fill:#f1f8e9,stroke:#33691e,stroke-width:1px
+
 ```
 
 ### Command Class Hierarchy
@@ -292,106 +265,89 @@ flowchart TD
 This diagram shows the inheritance relationships between QuickScale command classes:
 
 ```mermaid
+---
+config:
+  layout: dagre
+  look: classic
+---
 classDiagram
-    direction TD
-    
-    %% Base abstract command class
+direction LR
     class Command {
-        <<abstract>>
-        +logger: Logger
-        +execute()*
-        +handle_error()
-        +safe_execute()
+	    +logger: Logger
+	    +execute()*
+	    +handle_error()
+	    +safe_execute()
     }
-    
-    %% First level command categories
     class ProjectCommand {
-        +project_name: str
-        +validate_project_name()
+	    +project_name: str
+	    +validate_project_name()
     }
-    
     class ServiceCommand {
-        +check_project_exists()
+	    +check_project_exists()
     }
-    
     class DevelopmentCommand {
-        +setup_environment()
+	    +setup_environment()
     }
-    
     class SystemCommand {
-        +check_dependencies()
+	    +check_dependencies()
     }
-    
-    %% Inheritance connections for first level
+    class BuildProjectCommand {
+	    +execute(project_name)
+	    +create_project_files()
+	    +setup_docker()
+    }
+    class DestroyProjectCommand {
+	    +execute()
+	    +prompt_confirmation()
+	    +remove_project_files()
+    }
+    class ServiceUpCommand {
+	    +execute()
+	    +start_docker_services()
+    }
+    class ServiceDownCommand {
+	    +execute()
+	    +stop_docker_services()
+    }
+    class ServiceLogsCommand {
+	    +execute(service, follow, lines)
+	    +stream_docker_logs()
+    }
+    class ServiceStatusCommand {
+	    +execute()
+	    +get_service_status()
+    }
+    class ShellCommand {
+	    +execute(django_shell)
+	    +start_interactive_shell()
+    }
+    class ManageCommand {
+	    +execute(args)
+	    +run_django_command()
+    }
+    class CheckCommand {
+	    +execute()
+	    +check_requirements()
+    }
+    class UntitledClass {
+    }
+
+	<<abstract>> Command
+
     Command <|-- ProjectCommand
     Command <|-- ServiceCommand
     Command <|-- DevelopmentCommand
     Command <|-- SystemCommand
-    
-    %% Concrete project commands
-    class BuildProjectCommand {
-        +execute(project_name)
-        +create_project_files()
-        +setup_docker()
-    }
-    
-    class DestroyProjectCommand {
-        +execute()
-        +prompt_confirmation()
-        +remove_project_files()
-    }
-    
-    %% Concrete service commands
-    class ServiceUpCommand {
-        +execute()
-        +start_docker_services()
-    }
-    
-    class ServiceDownCommand {
-        +execute()
-        +stop_docker_services()
-    }
-    
-    class ServiceLogsCommand {
-        +execute(service, follow, lines)
-        +stream_docker_logs()
-    }
-    
-    class ServiceStatusCommand {
-        +execute()
-        +get_service_status()
-    }
-    
-    %% Concrete development commands
-    class ShellCommand {
-        +execute(django_shell)
-        +start_interactive_shell()
-    }
-    
-    class ManageCommand {
-        +execute(args)
-        +run_django_command()
-    }
-    
-    %% Concrete system commands
-    class CheckCommand {
-        +execute()
-        +check_requirements()
-    }
-    
-    %% Inheritance connections for concrete classes
     ProjectCommand <|-- BuildProjectCommand
     ProjectCommand <|-- DestroyProjectCommand
-    
     ServiceCommand <|-- ServiceUpCommand
     ServiceCommand <|-- ServiceDownCommand
     ServiceCommand <|-- ServiceLogsCommand
     ServiceCommand <|-- ServiceStatusCommand
-    
     DevelopmentCommand <|-- ShellCommand
     DevelopmentCommand <|-- ManageCommand
-    
     SystemCommand <|-- CheckCommand
+    ServiceCommand -- UntitledClass
 ```
 
 ### Generated Project Structure
@@ -399,120 +355,101 @@ classDiagram
 This component diagram shows the detailed structure of a generated Django project:
 
 ```mermaid
+---
+config:
+  layout: elk
+---
 flowchart TD
-    %% Main project structure in vertical layout
-    subgraph Django["Generated Django Project"]
-        direction TB
-        settings["core/settings.py<br/>Main Configuration"]
-        urls["core/urls.py<br/>URL Routing"]
-        wsgi["core/wsgi.py<br/>WSGI App"]
-        asgi["core/asgi.py<br/>ASGI App"]
-        
-        settings --> urls
-        settings --> wsgi
-        settings --> asgi
-    end
-    
-    %% Django Apps in vertical arrangement
-    subgraph Apps["Django Apps"]
-        direction TB
-        
-        subgraph Users["users/"]
-            direction TB
-            users_models["models.py<br/>CustomUser"]
-            users_forms["forms.py<br/>Auth Forms"]
-            users_adapters["adapters.py<br/>Auth Adapters"]
-            users_admin["admin.py<br/>Admin UI"]
-        end
-        
-        subgraph Common["common/"]
-            direction TB
-            common_models["models.py<br/>Shared Models"]
-            common_middleware["middleware.py<br/>Request Processing"]
-            common_utils["utils.py<br/>Shared Utilities"]
-        end
-        
-        subgraph Public["public/"]
-            direction TB
-            public_views["views.py<br/>Public Pages"]
-            public_urls["urls.py<br/>Public Routes"]
-        end
-        
-        subgraph Dashboard["dashboard/"]
-            direction TB
-            dash_views["views.py<br/>Dashboard UI"]
-            dash_urls["urls.py<br/>Dashboard Routes"]
-        end
-        
-        subgraph Payments["djstripe/"]
-            direction TB
-            payment_models["models.py<br/>Subscription Models"]
-            payment_views["views.py<br/>Payment Views"]
-            webhook["webhooks.py<br/>Stripe Webhooks"]
-        end
-    end
-    
-    %% Frontend assets in vertical arrangement
-    subgraph Frontend["Frontend Assets"]
-        direction TB
-        
-        subgraph Templates["templates/"]
-            direction TB
-            base["base.html<br/>Base Template"]
-            components["components/<br/>Reusable UI"]
-            acct_templates["account/<br/>Auth Pages"]
-            dash_templates["dashboard/<br/>Dashboard UI"]
-        end
-        
-        subgraph Static["static/"]
-            direction TB
-            css["css/<br/>Bulma Styles"]
-            js["js/<br/>Alpine + HTMX"]
-            images["images/<br/>UI Assets"]
-        end
-    end
-    
-    %% Infrastructure in vertical arrangement
-    subgraph Infrastructure["Deployment Infrastructure"]
-        direction TB
+ subgraph Django["Generated Django Project"]
+    direction TB
+        settings["core/settings.py<br>Main Configuration"]
+        urls["core/urls.py<br>URL Routing"]
+        wsgi["core/wsgi.py<br>WSGI App"]
+        asgi["core/asgi.py<br>ASGI App"]
+  end
+ subgraph Users["users/"]
+    direction TB
+        users_models["models.py<br>CustomUser"]
+        users_forms["forms.py<br>Auth Forms"]
+        users_adapters["adapters.py<br>Auth Adapters"]
+        users_admin["admin.py<br>Admin UI"]
+  end
+ subgraph Common["common/"]
+    direction TB
+        common_models["models.py<br>Shared Models"]
+        common_middleware["middleware.py<br>Request Processing"]
+        common_utils["utils.py<br>Shared Utilities"]
+  end
+ subgraph Public["public/"]
+    direction TB
+        public_views["views.py<br>Public Pages"]
+        public_urls["urls.py<br>Public Routes"]
+  end
+ subgraph Dashboard["dashboard/"]
+    direction TB
+        dash_views["views.py<br>Dashboard UI"]
+        dash_urls["urls.py<br>Dashboard Routes"]
+  end
+ subgraph Payments["djstripe/"]
+    direction TB
+        payment_models["models.py<br>Subscription Models"]
+        payment_views["views.py<br>Payment Views"]
+        webhook["webhooks.py<br>Stripe Webhooks"]
+  end
+ subgraph Apps["Django Apps"]
+    direction TB
+        Users
+        Common
+        Public
+        Dashboard
+        Payments
+  end
+ subgraph Templates["templates/"]
+    direction TB
+        base["base.html<br>Base Template"]
+        components["components/<br>Reusable UI"]
+        acct_templates["account/<br>Auth Pages"]
+        dash_templates["dashboard/<br>Dashboard UI"]
+  end
+ subgraph Static["static/"]
+    direction TB
+        css["css/<br>Bulma Styles"]
+        js["js/<br>Alpine + HTMX"]
+        images["images/<br>UI Assets"]
+  end
+ subgraph Frontend["Frontend Assets"]
+    direction TB
+        Templates
+        Static
+  end
+ subgraph Infrastructure["Deployment Infrastructure"]
+    direction TB
         dockerfile["Dockerfile"]
         compose["docker-compose.yml"]
-        env["Environment<br/>.env"]
+        env["Environment<br>.env"]
         entrypoint["entrypoint.sh"]
-        
-        dockerfile --> compose
-        env --> compose
-        entrypoint --> dockerfile
-    end
-    
-    %% Database in vertical arrangement
-    subgraph Database["PostgreSQL Database"]
-        direction TB
+  end
+ subgraph Database["PostgreSQL Database"]
+    direction TB
         users_table["users_customuser"]
         profile_table["users_profile"]
         subscription_table["djstripe_subscription"]
         customer_table["djstripe_customer"]
-        
-        users_table --> profile_table
-        users_table --> customer_table
-        customer_table --> subscription_table
-    end
-    
-    %% Vertical connections between major components
+  end
+    settings --> urls & wsgi & asgi
+    dockerfile --> compose
+    env --> compose
+    entrypoint --> dockerfile
+    users_table --> profile_table & customer_table
+    customer_table --> subscription_table
     Django --> Apps
     Apps --> Frontend
     Frontend --> Infrastructure
     Infrastructure --> Database
-    
-    %% Additional connections for clarity
-    urls --> |includes| Public
-    urls --> |includes| Dashboard
-    urls --> |includes| Payments
-    
-    Users --> |authenticates| Dashboard
-    Common --> |supports| Public
-    Common --> |supports| Dashboard
-    Payments --> |enables| Dashboard
+    urls -- includes --> Public & Dashboard & Payments
+    Users -- authenticates --> Dashboard
+    Common -- supports --> Public & Dashboard
+    Payments -- enables --> Dashboard
 ```
 
 ### Database ER Diagram

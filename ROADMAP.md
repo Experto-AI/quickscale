@@ -32,15 +32,14 @@
 1. **Foundation Components**:
    - ❌ Email verification system
    - ❌ Transactional email templates
-   - ❌ Payment processing (Stripe) with comprehensive security and error handling
-   - ❌ Subscription management with usage-based billing options
-   - ❌ Usage tracking and quota enforcement integrated with billing
+   - ❌ Payment processing (Stripe) with minimal integration for credit purchases
+   - ❌ Credit system for usage tracking
    - ❌ File upload/storage system with secure access controls
 
 ## Projected Development Sprints
 
 
-### Sprint 3: Payment Integration with dj-stripe (v0.6.0)
+### Sprint 3: Payment Integration and Credit System (v0.6.0)
 - [ ] **Session 1: dj-stripe Setup and Core Implementation**
   - [x] **Step 1: Package Integration**
     - [x] Add dj-stripe to pyproject.toml dependencies
@@ -67,436 +66,103 @@
     - [ ] Add Stripe API client configuration
     - [ ] Implement customer creation in Stripe
     - [ ] Link local customers with Stripe customers
+    - [ ] Add CI compatibility with feature flags
+    - [ ] Create mock responses for test environments
+    - [ ] Ensure quickscale build passes with Stripe code
+    - [ ] Add tests that run with STRIPE_ENABLED=False
   - [ ] **Step 6: Basic Webhooks**
-    - [ ] Add simple webhook endpoint
+    - [ ] Add simple webhook endpoint for payment events
     - [ ] Implement webhook signature verification
     - [ ] Handle core customer events
-  - [ ] **Step 7: Core Payment Flows**
-    - [ ] Implement subscription creation
-    - [ ] Add payment method attachment
-    - [ ] Create basic payment success/failure handling
-  - [ ] **Step 8: Testing**
-    - [ ] Add integration tests with Stripe test mode
-    - [ ] Create test fixtures for common scenarios
-    - [ ] Add documentation for testing payments
+    - [ ] Add webhook test fixtures for CI
+    - [ ] Implement test mode for webhook handlers
+    - [ ] Ensure tests pass with and without Stripe enabled
+    - [ ] Verify quickscale test command works with webhooks
 
-- [ ] **Session 2: Subscription Models and Admin Management**
-  - [ ] **Step 1: Product Model Foundation**
-    - [ ] Create data models for product configuration
-    - [ ] Add feature flag for subscription features
-    - [ ] Implement read-only model representation
-    - [ ] Add initial tests for product models
-  - [ ] **Step 2: Stripe Product Integration**
-    - [ ] Create Stripe product configuration utilities
-    - [ ] Implement product sync from Stripe API
-    - [ ] Add admin-only product sync command
-    - [ ] Test product synchronization with mock data
-  - [ ] **Step 3: Price Model Implementation**
-    - [ ] Create pricing model structure
-    - [ ] Add price tiers and feature limits
-    - [ ] Implement price sync from Stripe API
-    - [ ] Test price data integrity
-  - [ ] **Step 4: Admin Panel Basics**
-    - [ ] Create read-only admin views for products
-    - [ ] Add basic filtering and search
-    - [ ] Implement list and detail views
-    - [ ] Test admin panel rendering
-  - [ ] **Step 5: Admin CRUD Operations**
-    - [ ] Add product editing capabilities
-    - [ ] Implement safe update operations
-    - [ ] Add validation for Stripe sync
-    - [ ] Test admin CRUD operations
-  - [ ] **Step 6: Feature Management**
-    - [ ] Create feature definition system
-    - [ ] Add feature-to-plan mapping
-    - [ ] Implement feature limit configuration
-    - [ ] Test feature management functions
-  - [ ] **Step 7: Trial Configuration**
-    - [ ] Add trial period settings
-    - [ ] Implement trial validation logic
-    - [ ] Create trial expiration handling
-    - [ ] Test trial period functionality
-  - [ ] **Step 8: Audit Logging**
-    - [ ] Implement subscription change logging
-    - [ ] Add admin audit log viewer
-    - [ ] Create log filtering and export
-    - [ ] Test logging functionality
-  - [ ] **Step 9: Credit System Foundation**
-    - [ ] Design credit allocation models
-    - [ ] Add credit provisioning logic
-    - [ ] Implement subscription-credit relationships
-    - [ ] Test credit allocation system
-
-- [ ] **Session 3: Customer-facing Subscription UI**
-  - [ ] **Step 1: UI Framework**
-    - [ ] Create subscription component structure
-    - [ ] Add feature flag for UI visibility
-    - [ ] Implement base styling for components
-    - [ ] Test component rendering
-  - [ ] **Step 2: Pricing Display**
-    - [ ] Create pricing table component
-    - [ ] Add feature comparison logic
-    - [ ] Implement responsive design
-    - [ ] Test pricing table rendering
-  - [ ] **Step 3: Stripe Pricing Integration**
-    - [ ] Add Stripe pricing table embed option
-    - [ ] Create fallback for custom pricing
-    - [ ] Implement dynamic price fetching
-    - [ ] Test both pricing display options
-  - [ ] **Step 4: Plan Selection**
-    - [ ] Create plan selection interface
-    - [ ] Add selection validation logic
-    - [ ] Implement selection persistence
-    - [ ] Test plan selection flow
-  - [ ] **Step 5: Plan Management**
-    - [ ] Add plan upgrade/downgrade interface
-    - [ ] Create change confirmation flows
-    - [ ] Implement billing cycle handling
-    - [ ] Test plan change operations
-  - [ ] **Step 6: Dashboard Integration**
-    - [ ] Add subscription status indicators
-    - [ ] Create usage summary components
-    - [ ] Implement billing cycle visualization
-    - [ ] Test dashboard integration
-  - [ ] **Step 7: Notification System**
-    - [ ] Create subscription notification templates
-    - [ ] Add expiration/renewal notifications
-    - [ ] Implement notification preferences
-    - [ ] Test notification delivery
-  - [ ] **Step 8: Feature Access Indicators**
-    - [ ] Add UI indicators for premium features
-    - [ ] Create upgrade prompts for locked features
-    - [ ] Implement contextual feature explanations
-    - [ ] Test feature lock indicators
-  - [ ] **Step 9: Error Handling**
-    - [ ] Create subscription-specific error messages
-    - [ ] Add user-friendly error displays
-    - [ ] Implement error recovery suggestions
-    - [ ] Test error handling scenarios
-
-- [ ] **Session 4: Webhook and Event Handling Infrastructure**
-  - [ ] **Step 1: Webhook Endpoint**
-    - [ ] Create secure webhook URL endpoints
-    - [ ] Add basic request validation
-    - [ ] Implement request logging
-    - [ ] Test endpoint availability
-  - [ ] **Step 2: Security Layer**
-    - [ ] Add signature verification middleware
-    - [ ] Create timestamp validation
-    - [ ] Implement request body hash validation
-    - [ ] Test security validations
-  - [ ] **Step 3: Event Processing Foundation**
-    - [ ] Create event handler registration system
-    - [ ] Add event dispatching mechanism
-    - [ ] Implement handler priority queue
-    - [ ] Test event routing
-  - [ ] **Step 4: Subscription Event Handlers**
-    - [ ] Add handlers for subscription created
-    - [ ] Create handlers for subscription updated
-    - [ ] Implement handlers for subscription canceled
-    - [ ] Test subscription event handling
-  - [ ] **Step 5: Payment Event Handlers**
-    - [ ] Add handlers for payment success
-    - [ ] Create handlers for payment failure
-    - [ ] Implement retry and recovery logic
-    - [ ] Test payment event handling
-  - [ ] **Step 6: Webhook Reliability**
-    - [ ] Add idempotency handling
-    - [ ] Create webhook retry logic
-    - [ ] Implement event queuing system
-    - [ ] Test webhook reliability
-  - [ ] **Step 7: Monitoring and Logging**
-    - [ ] Create webhook monitoring dashboard
-    - [ ] Add detailed event logging
-    - [ ] Implement log search and filtering
-    - [ ] Test monitoring functionality
-  - [ ] **Step 8: Stripe Dashboard Configuration**
-    - [ ] Create webhook registration utilities
-    - [ ] Add webhook configuration validation
-    - [ ] Implement automatic registration checks
-    - [ ] Test Stripe dashboard integration
-  - [ ] **Step 9: Testing Framework**
-    - [ ] Create webhook event simulators
-    - [ ] Add test fixtures for all event types
-    - [ ] Implement mock Stripe responses
-    - [ ] Test the testing framework itself
-
-- [ ] **Session 5: Checkout Flow and Payment Processing**
-  - [ ] **Step 1: Checkout Foundation**
-    - [ ] Create checkout session models
-    - [ ] Add checkout session manager
-    - [ ] Implement session persistence
-    - [ ] Test session management
-  - [ ] **Step 2: Stripe Checkout Integration**
-    - [ ] Add Stripe Checkout session creation
-    - [ ] Create success/cancel redirect handling
-    - [ ] Implement checkout metadata
-    - [ ] Test checkout session flow
-  - [ ] **Step 3: Subscription Creation**
-    - [ ] Add subscription creation flow
-    - [ ] Create subscription activation logic
-    - [ ] Implement initial feature provisioning
-    - [ ] Test subscription creation
-  - [ ] **Step 4: Subscription Modification**
-    - [ ] Add plan change handling
-    - [ ] Create upgrade/downgrade flow
-    - [ ] Implement prorated billing
-    - [ ] Test subscription modification
-  - [ ] **Step 5: Success Handling**
-    - [ ] Create success confirmation pages
-    - [ ] Add subscription activation confirmation
-    - [ ] Implement post-purchase guidance
-    - [ ] Test success flows
-  - [ ] **Step 6: Invoicing**
-    - [ ] Add automatic invoice generation
-    - [ ] Create invoice delivery system
-    - [ ] Implement invoice PDF generation
-    - [ ] Test invoicing functionality
-  - [ ] **Step 7: Receipt Emails**
-    - [ ] Create email templates for receipts
-    - [ ] Add transaction summary formatting
-    - [ ] Implement receipt delivery system
-    - [ ] Test email delivery
-  - [ ] **Step 8: Payment Failure Handling**
-    - [ ] Add card decline handling
-    - [ ] Create payment retry system
-    - [ ] Implement clear error messaging
-    - [ ] Test payment failure scenarios
-  - [ ] **Step 9: Duplicate Protection**
-    - [ ] Add idempotency key implementation
-    - [ ] Create duplicate detection logic
-    - [ ] Implement safe retry mechanisms
-    - [ ] Test duplicate payment prevention
-
-- [ ] **Session 6: Credits and Pay-as-you-go System**
+- [ ] **Session 2: Credit System Foundation**
   - [ ] **Step 1: Credit Model**
     - [ ] Create core credit data models
     - [ ] Add credit transaction ledger
     - [ ] Implement credit balance calculation
     - [ ] Test credit model operations
-  - [ ] **Step 2: Credit-Subscription Relationship**
-    - [ ] Add credit allocation to subscription plans
-    - [ ] Create credit provisioning rules
-    - [ ] Implement subscription-triggered allocations
-    - [ ] Test credit allocation
-  - [ ] **Step 3: Credit Purchase Flow**
+  - [ ] **Step 2: Admin Interface for Credits**
+    - [ ] Create credit management dashboard for admins
+    - [ ] Add manual adjustment capabilities
+    - [ ] Implement audit logging for credit changes
+    - [ ] Test admin credit management interface
+  - [ ] **Step 3: Credit Pricing Structure**
+    - [ ] Create simple credit package options
+    - [ ] Add Stripe products for credit packages
+    - [ ] Implement basic price configuration
+    - [ ] Test credit pricing structure
+  - [ ] **Step 4: Credit Purchase Flow**
     - [ ] Create credit purchase interface
-    - [ ] Add Stripe product for credit purchases
-    - [ ] Implement checkout flow
+    - [ ] Add simple checkout flow
+    - [ ] Implement purchase confirmation
     - [ ] Test credit purchase flow
-  - [ ] **Step 4: Credit Tracking**
+
+- [ ] **Session 3: User-facing Credit System**
+  - [ ] **Step 1: User Dashboard**
+    - [ ] Add credit balance display to user dashboard
+    - [ ] Create simple usage history visualization
+    - [ ] Implement purchase button for more credits
+    - [ ] Test user dashboard integration
+  - [ ] **Step 2: Credit Tracking**
     - [ ] Add credit usage tracking
     - [ ] Create consumption recording
     - [ ] Implement real-time balance updates
     - [ ] Test credit tracking accuracy
-  - [ ] **Step 5: Admin Interface**
-    - [ ] Create credit management dashboard
-    - [ ] Add manual adjustment capabilities
-    - [ ] Implement audit logging
-    - [ ] Test admin interface
-  - [ ] **Step 6: User Dashboard**
-    - [ ] Add credit balance display
-    - [ ] Create usage history visualization
-    - [ ] Implement purchase recommendations
-    - [ ] Test user dashboard
-  - [ ] **Step 7: Auto-reload**
-    - [ ] Add auto-reload configuration
-    - [ ] Create threshold-based triggering
-    - [ ] Implement notification system
-    - [ ] Test auto-reload functionality
-  - [ ] **Step 8: Credit Expiration**
-    - [ ] Add expiration date tracking
-    - [ ] Create expiration policy management
-    - [ ] Implement expiration notifications
-    - [ ] Test credit expiration
-  - [ ] **Step 9: Transaction History**
-    - [ ] Create detailed transaction logging
-    - [ ] Add filtering and export capabilities
+  - [ ] **Step 3: User Notifications**
+    - [ ] Add low balance notifications
+    - [ ] Create purchase confirmation emails
+    - [ ] Implement usage summary emails
+    - [ ] Test notification system
+  - [ ] **Step 4: Transaction History**
+    - [ ] Create detailed transaction log view
+    - [ ] Add filtering and sorting options
     - [ ] Implement transaction categorization
-    - [ ] Test transaction history
+    - [ ] Test transaction history display
 
-- [ ] **Session 7: Feature Access Control and Enforcement**
-  - [ ] **Step 1: Feature Registry**
-    - [ ] Create feature definition registry
-    - [ ] Add feature metadata and description
-    - [ ] Implement feature versioning
-    - [ ] Test feature registry
-  - [ ] **Step 2: Access Control System**
-    - [ ] Create feature gating system
-    - [ ] Add plan-based access rules
-    - [ ] Implement rule evaluation engine
-    - [ ] Test access control
-  - [ ] **Step 3: Middleware Integration**
-    - [ ] Add feature access middleware
-    - [ ] Create request annotation
-    - [ ] Implement early rejection
-    - [ ] Test middleware functionality
-  - [ ] **Step 4: Template Integration**
-    - [ ] Create template helpers for feature checks
-    - [ ] Add conditional UI rendering
-    - [ ] Implement graceful degradation
-    - [ ] Test template integration
-  - [ ] **Step 5: View Protection**
-    - [ ] Add view decorator for protection
-    - [ ] Create function-level access control
-    - [ ] Implement API endpoint protection
-    - [ ] Test protected views
-  - [ ] **Step 6: Admin Interface**
-    - [ ] Create feature flag management UI
-    - [ ] Add permission configuration
-    - [ ] Implement override capabilities
-    - [ ] Test admin interface
-  - [ ] **Step 7: Credit Integration**
-    - [ ] Add credit-based access control
-    - [ ] Create usage-based restrictions
-    - [ ] Implement credit verification
-    - [ ] Test credit-based access
-  - [ ] **Step 8: Combined Verification**
-    - [ ] Create unified verification system
-    - [ ] Add subscription + credit checks
-    - [ ] Implement caching for performance
-    - [ ] Test combined verification
-  - [ ] **Step 9: UI Handling**
-    - [ ] Add graceful UI for restricted features
-    - [ ] Create upgrade prompts
-    - [ ] Implement feature explanations
-    - [ ] Test user experience
-
-- [ ] **Session 8: Billing Portal and Management**
-  - [ ] **Step 1: Customer Portal Basics**
-    - [ ] Create portal entry point
-    - [ ] Add basic session handling
-    - [ ] Implement portal navigation
-    - [ ] Test portal rendering
-  - [ ] **Step 2: Stripe Customer Portal**
-    - [ ] Add Stripe Customer Portal integration
-    - [ ] Create portal session generation
-    - [ ] Implement return URL handling
-    - [ ] Test Stripe portal handoff
-  - [ ] **Step 3: Billing History**
-    - [ ] Create billing history views
-    - [ ] Add transaction listing
-    - [ ] Implement filtering and sorting
-    - [ ] Test history display
-  - [ ] **Step 4: Invoice Management**
-    - [ ] Add invoice display
-    - [ ] Create PDF generation
-    - [ ] Implement download functionality
-    - [ ] Test invoice retrieval
-  - [ ] **Step 5: Subscription Management**
-    - [ ] Create subscription management UI
-    - [ ] Add plan change interface
-    - [ ] Implement cancellation flow
-    - [ ] Test subscription management
-  - [ ] **Step 6: Payment Methods**
-    - [ ] Add payment method management
-    - [ ] Create card addition interface
-    - [ ] Implement default method selection
-    - [ ] Test payment method operations
-  - [ ] **Step 7: Billing Settings**
-    - [ ] Create billing settings page
-    - [ ] Add notification preferences
-    - [ ] Implement billing address management
-    - [ ] Test settings persistence
-  - [ ] **Step 8: Account Cancellation**
-    - [ ] Add account cancellation flow
-    - [ ] Create confirmation process
-    - [ ] Implement data retention options
-    - [ ] Test cancellation process
-  - [ ] **Step 9: Unified Dashboard**
-    - [ ] Create unified billing dashboard
-    - [ ] Add subscription and credit summary
-    - [ ] Implement quick action buttons
-    - [ ] Test dashboard usability
-
-- [ ] **Session 9: Security and Error Handling**
-  - [ ] **Step 1: Error Framework**
-    - [ ] Create payment error classification
-    - [ ] Add error handling utilities
-    - [ ] Implement error normalization
-    - [ ] Test error categorization
-  - [ ] **Step 2: Error Logging**
-    - [ ] Add centralized error logging
-    - [ ] Create severity classification
-    - [ ] Implement context preservation
-    - [ ] Test error capture
-  - [ ] **Step 3: PCI Compliance**
-    - [ ] Add Stripe Elements integration
-    - [ ] Create secure form handling
-    - [ ] Implement sensitive data policies
-    - [ ] Test compliance measures
-  - [ ] **Step 4: Rate Limiting**
-    - [ ] Add rate limiting for payment endpoints
-    - [ ] Create graduated response system
-    - [ ] Implement client fingerprinting
-    - [ ] Test rate limiting
-  - [ ] **Step 5: Fraud Protection**
-    - [ ] Add basic fraud detection
-    - [ ] Create suspicious activity alerts
-    - [ ] Implement risk scoring
-    - [ ] Test fraud detection
-  - [ ] **Step 6: Reconciliation**
-    - [ ] Create automated reconciliation process
-    - [ ] Add daily verification checks
-    - [ ] Implement discrepancy alerts
-    - [ ] Test reconciliation
-  - [ ] **Step 7: Recovery Procedures**
-    - [ ] Add recovery flows for failed payments
-    - [ ] Create customer notification system
-    - [ ] Implement retry strategy
-    - [ ] Test recovery procedures
-  - [ ] **Step 8: Security Documentation**
-    - [ ] Create security practices documentation
-    - [ ] Add compliance checklist
-    - [ ] Implement regular audit process
-    - [ ] Test documentation completeness
-  - [ ] **Step 9: Integration Testing**
-    - [ ] Create end-to-end security tests
-    - [ ] Add penetration testing scripts
-    - [ ] Implement security-focused test suite
-    - [ ] Test the entire payment flow
+- [ ] **Session 4: Credit Usage and Error Handling**
+  - [ ] **Step 1: Credit Consumption**
+    - [ ] Create credit consumption API
+    - [ ] Add project generation credit costs
+    - [ ] Implement credit checking before operations
+    - [ ] Test credit consumption flows
+  - [ ] **Step 2: Error Handling**
+    - [ ] Add graceful handling for insufficient credits
+    - [ ] Create user-friendly error messages
+    - [ ] Implement recovery options for failed operations
+    - [ ] Test error scenarios
+  - [ ] **Step 3: Payment Error Handling**
+    - [ ] Create basic error handling for payment issues
+    - [ ] Add recovery flow for failed payments
+    - [ ] Implement clear user guidance for errors
+    - [ ] Test payment error scenarios
+  - [ ] **Step 4: Security Basics**
+    - [ ] Add basic security for payment endpoints
+    - [ ] Create audit logging for sensitive operations
+    - [ ] Implement minimal PCI compliance measures
+    - [ ] Test security implementation
 
 ### Sprint 4:  
 - [ ] **Session 2 (v0.6.1): Test e2e: logs after quickscale build (build logs and execution logs)**
 - [ ] **Session 3 (v0.6.2): Test e2e: quickscale manage tests**
 
-### Sprint 5: Usage Tracking and Quota Management (v0.7.0)
-- [ ] **Session 1: Usage Models**
-  - [ ] Create usage tracking models integrated with credits system
-  - [ ] Implement usage logging middleware
-  - [ ] Add relations to subscription data
-  - [ ] Design quota enforcement architecture
-  - [ ] Ensure secure storage of usage data
+### Sprint 5: Usage Tracking (v0.7.0)
+- [ ] **Session 1: Enhanced Usage Tracking**
+  - [ ] Improve credit usage analytics
+  - [ ] Add detailed usage reporting
+  - [ ] Create usage visualization dashboard
+  - [ ] Implement usage trends and statistics
 
-- [ ] **Session 2: Quota Enforcement**
-  - [ ] Implement quota checking middleware
-  - [ ] Create upgrade prompts for quota limits
-  - [ ] Add usage analytics dashboard
-  - [ ] Create usage projection tools
-  - [ ] Implement graceful degradation when limits are reached
+- [ ] **Session 2: Usage Optimization**
+  - [ ] Add suggestions for optimizing credit usage
+  - [ ] Create cost estimation tools
+  - [ ] Implement usage efficiency metrics
+  - [ ] Add best practices recommendations
 
-- [ ] **Session 3: Alerting and Notifications**
-  - [ ] Implement quota approaching alerts
-  - [ ] Create usage reports
-  - [ ] Add admin monitoring views
-  - [ ] Implement notification preferences
-  - [ ] Create automated billing alerts for unusual usage patterns
-
-- [ ] **Session 4: Testing and Optimization**
-  - [ ] Performance testing for quota systems
-  - [ ] Optimize database queries
-  - [ ] Implement caching for quota checks
-  - [ ] Write comprehensive test suite
-  - [ ] Create load testing scenarios for high-volume usage
-
-- [ ] **Session 5: Stripe Integration for Usage-Based Billing**
-  - [ ] Implement Stripe usage record reporting
-  - [ ] Create metered billing subscription options
-  - [ ] Build automated usage-to-invoice pipeline
-  - [ ] Implement proration for plan changes
-  - [ ] Add detailed usage breakdown in customer invoices
-
-### Sprint 5: File Storage Foundation (v0.8.0)
+### Sprint 6: File Storage Foundation (v0.8.0)
 - [ ] **Session 1: Storage Backend**
   - [ ] Configure Django storage backend
   - [ ] Add AWS S3 or similar integration
@@ -522,33 +188,26 @@
   - [ ] Increase code coverage to 90%+
   - [ ] Add performance tests
   - [ ] Setup automated test runs in CI/CD pipeline
-  - [ ] Create comprehensive test suite for payment processing
+  - [ ] Create comprehensive test suite for credit system
   - [ ] Implement mock Stripe services for testing
 
 - [ ] **Session 2: Architecture Documentation**
   - [ ] Add detailed architecture diagrams
   - [ ] Document the command system design
   - [ ] Create component relationship diagrams
-  - [ ] Document payment processing flow and security measures
-  - [ ] Create data flow diagrams for billing processes
+  - [ ] Document credit system flow
+  - [ ] Create data flow diagrams for payment processes
 
 - [ ] **Session 3: Developer Guide**
   - [ ] Improve inline code documentation
   - [ ] Create developer onboarding guide
   - [ ] Document extension points
-  - [ ] Add detailed guides for payment integration
-  - [ ] Document error handling patterns for payment processing
+  - [ ] Add detailed guides for credit system integration
+  - [ ] Document error handling patterns
 
 - [ ] **Session 4: User Documentation**
   - [ ] Create user guides for key features
   - [ ] Add tutorials for common tasks
   - [ ] Improve help and support resources
-  - [ ] Create billing and subscription management guides
-  - [ ] Document payment troubleshooting procedures
-
-- [ ] **Session 5: Security Documentation and Compliance**
-  - [ ] Document PCI compliance measures
-  - [ ] Create security best practices guide
-  - [ ] Document data retention and privacy policies
-  - [ ] Create incident response procedures for payment issues
-  - [ ] Document regular security audit processes
+  - [ ] Create credit purchase and usage guides
+  - [ ] Document troubleshooting procedures
