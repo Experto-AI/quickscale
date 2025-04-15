@@ -1,0 +1,226 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block title %}Product Management - Admin Dashboard{% endblock %}
+
+{% block content %}
+<section class="hero is-primary is-small">
+    <div class="hero-body">
+        <p class="title">Product Management</p>
+        <p class="subtitle">Manage your Stripe products</p>
+    </div>
+</section>
+
+<section class="section">
+    <div class="container">
+        <!-- Introduction and Stripe link -->
+        <div class="box mb-5">
+            <div class="columns is-vcentered">
+                <div class="column">
+                    <h2 class="title is-4">Stripe Product Management</h2>
+                    <p class="subtitle is-6">View and manage your products synced with Stripe</p>
+                </div>
+                <div class="column is-narrow">
+                    <a href="https://dashboard.stripe.com/products" target="_blank" class="button is-info">
+                        <span>Manage in Stripe Dashboard</span>
+                        <span class="icon"><i class="fas fa-external-link-alt"></i></span>
+                    </a>
+                </div>
+            </div>
+        </div>
+
+        {% if not stripe_enabled %}
+        <div class="notification is-warning">
+            <p>Stripe integration is not enabled. To enable Stripe, set STRIPE_ENABLED=True in your environment.</p>
+        </div>
+        {% elif not stripe_available %}
+        <div class="notification is-danger">
+            <p>Stripe library is not available. Please install the required dependencies.</p>
+        </div>
+        {% elif error %}
+        <div class="notification is-danger">
+            <p>Error loading products: {{ error }}</p>
+        </div>
+        {% else %}
+
+        <!-- Filter options -->
+        <div class="field is-grouped mb-5">
+            <div class="control">
+                <div class="select">
+                    <select id="status-filter">
+                        <option value="all">All Products</option>
+                        <option value="active">Active Only</option>
+                        <option value="inactive">Inactive Only</option>
+                    </select>
+                </div>
+            </div>
+            <div class="control">
+                <button class="button is-primary" id="refresh-products">
+                    <span class="icon"><i class="fas fa-sync"></i></span>
+                    <span>Refresh from Stripe</span>
+                </button>
+            </div>
+        </div>
+
+        <!-- Products table -->
+        <div class="table-container">
+            <table class="table is-fullwidth is-striped is-hoverable">
+                <thead>
+                    <tr>
+                        <th>Name</th>
+                        <th>Price</th>
+                        <th>Status</th>
+                        <th>Created</th>
+                        <th>Stripe ID</th>
+                        <th>Actions</th>
+                    </tr>
+                </thead>
+                <tbody id="products-table-body">
+                    {% if products %}
+                        {% for product in products %}
+                            <tr data-status="{{ product.status }}">
+                                <td>
+                                    <div class="is-flex is-align-items-center">
+                                        {% if product.image %}
+                                            <figure class="image is-48x48 mr-2">
+                                                <img src="{{ product.image.url }}" alt="{{ product.name }}">
+                                            </figure>
+                                        {% endif %}
+                                        <div>
+                                            <p class="has-text-weight-bold">{{ product.name }}</p>
+                                            <p class="is-size-7">{{ product.description|truncatechars:50 }}</p>
+                                        </div>
+                                    </div>
+                                </td>
+                                <td>{{ product.get_formatted_price }}</td>
+                                <td>
+                                    {% if product.status == 'active' %}
+                                        <span class="tag is-success">Active</span>
+                                    {% else %}
+                                        <span class="tag is-danger">Inactive</span>
+                                    {% endif %}
+                                </td>
+                                <td>{{ product.created|date:"M d, Y" }}</td>
+                                <td>
+                                    {% if product.stripe_product_id %}
+                                        <code class="is-size-7">{{ product.stripe_product_id }}</code>
+                                    {% else %}
+                                        <span class="tag is-warning">Not synced</span>
+                                    {% endif %}
+                                </td>
+                                <td>
+                                    <div class="buttons are-small">
+                                        <a href="{% url 'djstripe:product_detail' product.id %}" class="button is-info">
+                                            <span class="icon"><i class="fas fa-eye"></i></span>
+                                            <span>View</span>
+                                        </a>
+                                        {% if product.stripe_product_id %}
+                                            <a href="https://dashboard.stripe.com/products/{{ product.stripe_product_id }}" target="_blank" class="button is-link">
+                                                <span class="icon"><i class="fas fa-external-link-alt"></i></span>
+                                                <span>Stripe</span>
+                                            </a>
+                                        {% endif %}
+                                    </div>
+                                </td>
+                            </tr>
+                        {% endfor %}
+                    {% else %}
+                        <tr>
+                            <td colspan="6" class="has-text-centered">
+                                <p class="has-text-grey my-5">No products found. Create products in your Stripe dashboard.</p>
+                            </td>
+                        </tr>
+                    {% endif %}
+                </tbody>
+            </table>
+        </div>
+
+        <!-- Pagination -->
+        {% if products.has_other_pages %}
+            <nav class="pagination is-centered mt-5" role="navigation" aria-label="pagination">
+                {% if products.has_previous %}
+                    <a href="?page={{ products.previous_page_number }}" class="pagination-previous">Previous</a>
+                {% else %}
+                    <a class="pagination-previous" disabled>Previous</a>
+                {% endif %}
+
+                {% if products.has_next %}
+                    <a href="?page={{ products.next_page_number }}" class="pagination-next">Next</a>
+                {% else %}
+                    <a class="pagination-next" disabled>Next</a>
+                {% endif %}
+
+                <ul class="pagination-list">
+                    {% for i in products.paginator.page_range %}
+                        {% if products.number == i %}
+                            <li><a class="pagination-link is-current" aria-current="page">{{ i }}</a></li>
+                        {% else %}
+                            <li><a href="?page={{ i }}" class="pagination-link">{{ i }}</a></li>
+                        {% endif %}
+                    {% endfor %}
+                </ul>
+            </nav>
+        {% endif %}
+        {% endif %}
+    </div>
+</section>
+
+{% block extra_js %}
+<script>
+    document.addEventListener('DOMContentLoaded', function() {
+        // Filter products by status
+        const statusFilter = document.getElementById('status-filter');
+        const productRows = document.querySelectorAll('#products-table-body tr');
+        
+        if (statusFilter) {
+            statusFilter.addEventListener('change', function() {
+                const status = this.value;
+                
+                productRows.forEach(function(row) {
+                    if (status === 'all') {
+                        row.style.display = '';
+                    } else {
+                        const productStatus = row.getAttribute('data-status');
+                        row.style.display = (productStatus === status) ? '' : 'none';
+                    }
+                });
+            });
+        }
+        
+        // Refresh products button - uses HTMX to reload the product list
+        const refreshButton = document.getElementById('refresh-products');
+        if (refreshButton) {
+            refreshButton.addEventListener('click', function() {
+                // Add spinner to button
+                this.classList.add('is-loading');
+                
+                // Make a request to refresh products
+                fetch('{% url "dashboard:product_admin_refresh" %}', {
+                    method: 'POST',
+                    headers: {
+                        'X-CSRFToken': '{{ csrf_token }}',
+                        'Content-Type': 'application/json'
+                    }
+                })
+                .then(response => {
+                    if (response.ok) {
+                        // Reload the page to show updated products
+                        window.location.reload();
+                    } else {
+                        throw new Error('Failed to refresh products');
+                    }
+                })
+                .catch(error => {
+                    console.error('Error:', error);
+                    alert('Error refreshing products from Stripe');
+                })
+                .finally(() => {
+                    this.classList.remove('is-loading');
+                });
+            });
+        }
+    });
+</script>
+{% endblock %}
+
+{% endblock %} 
