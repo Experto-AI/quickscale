@@ -6,12 +6,19 @@ All URLs are prefixed with 'stripe/' and only enabled when STRIPE_ENABLED=True.
 """
 
 from django.urls import path, include
+from . import views, webhooks
 
 app_name = 'djstripe'
 
 urlpatterns = [
-    # Enable djstripe's built-in webhook URLs
-    # path('webhook/', include('djstripe.urls')),
+    # Webhook endpoint
+    path('webhook/', webhooks.stripe_webhook, name='webhook'),
+    
+    # Status view
+    path('status/', views.stripe_status, name='status'),
+    
+    # Customer management
+    path('customer/create/', views.create_customer, name='create_customer'),
     
     # Subscription management URLs
     # path('subscriptions/', views.subscription_list, name='subscription_list'),

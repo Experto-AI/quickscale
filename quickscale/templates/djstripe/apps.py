@@ -17,6 +17,8 @@ class DjStripeAppConfig(AppConfig):
         App initialization method.
         Import signal handlers and other initialization tasks.
         """
-        # Import any signals or initialization needed when app is ready
-        # Intentionally empty for now - will be filled in later stages
-        pass 
+        # Import signals to register handlers
+        try:
+            import djstripe.signals
+        except ImportError:
+            pass  # Silently fail if signals module is not found 

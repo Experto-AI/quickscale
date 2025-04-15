@@ -1,0 +1,138 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block title %}Stripe Integration Status{% endblock %}
+
+{% block content %}
+<section class="section">
+  <div class="container">
+    <h1 class="title">Stripe Integration Status</h1>
+    
+    <div class="box">
+      <h2 class="subtitle">Configuration Status</h2>
+      
+      <table class="table is-fullwidth">
+        <tbody>
+          <tr>
+            <th>Stripe Enabled</th>
+            <td>
+              {% if stripe_status.enabled %}
+                <span class="tag is-success">Enabled</span>
+              {% else %}
+                <span class="tag is-danger">Disabled</span>
+              {% endif %}
+            </td>
+          </tr>
+          <tr>
+            <th>Stripe Library Available</th>
+            <td>
+              {% if stripe_status.stripe_available %}
+                <span class="tag is-success">Available</span>
+              {% else %}
+                <span class="tag is-danger">Not Available</span>
+              {% endif %}
+            </td>
+          </tr>
+          <tr>
+            <th>API Keys Configured</th>
+            <td>
+              {% if stripe_status.api_keys_configured %}
+                <span class="tag is-success">Configured</span>
+              {% else %}
+                <span class="tag is-danger">Not Configured</span>
+              {% endif %}
+            </td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+    
+    {% if stripe_status.enabled and stripe_status.stripe_available and stripe_status.api_keys_configured %}
+    <div class="box">
+      <h2 class="subtitle">Customer Information</h2>
+      
+      <table class="table is-fullwidth">
+        <tbody>
+          <tr>
+            <th>User</th>
+            <td>{{ user.email }}</td>
+          </tr>
+          <tr>
+            <th>Stripe Customer</th>
+            <td>
+              {% if stripe_status.customer_exists %}
+                <span class="tag is-success">Exists</span>
+              {% else %}
+                <span class="tag is-warning">Not Created</span>
+              {% endif %}
+            </td>
+          </tr>
+          {% if stripe_status.customer_exists %}
+          <tr>
+            <th>Customer ID</th>
+            <td><code>{{ stripe_status.customer_id }}</code></td>
+          </tr>
+          {% endif %}
+        </tbody>
+      </table>
+      
+      {% if not stripe_status.customer_exists %}
+      <div class="field">
+        <div class="control">
+          <button id="create-customer-btn" class="button is-primary">
+            Create Stripe Customer
+          </button>
+        </div>
+      </div>
+      
+      <div id="customer-result" class="notification is-hidden"></div>
+      {% endif %}
+    </div>
+    {% endif %}
+  </div>
+</section>
+
+{% if stripe_status.enabled and stripe_status.stripe_available and stripe_status.api_keys_configured and not stripe_status.customer_exists %}
+<script>
+  document.addEventListener('DOMContentLoaded', function() {
+    const createBtn = document.getElementById('create-customer-btn');
+    const resultDiv = document.getElementById('customer-result');
+    
+    createBtn.addEventListener('click', function() {
+      createBtn.classList.add('is-loading');
+      
+      fetch('{% url "djstripe:create_customer" %}', {
+        method: 'POST',
+        headers: {
+          'X-CSRFToken': '{{ csrf_token }}'
+        }
+      })
+      .then(response => response.json())
+      .then(data => {
+        createBtn.classList.remove('is-loading');
+        
+        resultDiv.classList.remove('is-hidden', 'is-success', 'is-danger');
+        
+        if (data.success) {
+          resultDiv.classList.add('is-success');
+          resultDiv.textContent = 'Customer created successfully! Refreshing...';
+          setTimeout(() => window.location.reload(), 2000);
+        } else if (data.message) {
+          resultDiv.classList.add('is-warning');
+          resultDiv.textContent = data.message;
+        } else {
+          resultDiv.classList.add('is-danger');
+          resultDiv.textContent = data.error || 'An error occurred';
+        }
+      })
+      .catch(error => {
+        createBtn.classList.remove('is-loading');
+        resultDiv.classList.remove('is-hidden');
+        resultDiv.classList.add('is-danger');
+        resultDiv.textContent = 'Error: ' + error.message;
+      });
+    });
+  });
+</script>
+{% endif %}
+{% endblock %} 
