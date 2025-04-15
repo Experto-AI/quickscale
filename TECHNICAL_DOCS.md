@@ -15,234 +15,511 @@ The most important command is `quickscale build`, which generates the project st
     - dj-database-url 2.1.0+ (database URL configuration)
     - django-allauth 0.52.0+ (authentication)
     - Uvicorn 0.27.0+ (ASGI server)
+    - dj-stripe 2.9.0 (with stripe 8.0.0+) for payment processing
 - HTMX (frontend to backend communication for CRUD operations with the simplicity of HTML)
 - Alpine.js (simple vanilla JS library for DOM manipulation)
 - Bulma CSS (simple CSS styling without JavaScript) - Do not mix Tailwind or another alternatives
 - PostgreSQL (database) - Do not use SQLite nor MySQL
 - Deployment: .env + Docker + Uvicorn
 
-## DJANGO MANAGE COMMANDS
-
-QuickScale seamlessly integrates with Django's management commands through the `quickscale manage` command. This allows you to run any Django management command within your project's Docker container.
-
-Common Django management commands:
-
-```bash
-# Database management
-quickscale manage migrate           # Run database migrations
-quickscale manage makemigrations    # Create new migrations based on model changes
-quickscale manage sqlmigrate app_name migration_name  # SQL statements for migration
-
-# Development server
-quickscale manage runserver         # Run development server (rarely needed as Docker handles this)
-
-# User management
-quickscale manage createsuperuser   # Create a Django admin superuser
-quickscale manage changepassword    # Change a user's password
-
-# Application management
-quickscale manage startapp app_name # Create a new Django app
-quickscale manage shell             # Open Django interactive shell
-quickscale manage dbshell           # Open database shell
-
-# Static files
-quickscale manage collectstatic     # Collect static files
-quickscale manage findstatic        # Find static file locations
-
-# Testing
-quickscale manage test              # Run all tests
-quickscale manage test app_name     # Run tests for specific app
-quickscale manage test app.TestClass # Run tests in a specific test class
-quickscale manage test app.TestClass.test_method # Run a specific test method
-
-# Maintenance
-quickscale manage clearsessions     # Clear expired sessions
-quickscale manage flush             # Remove all data from database
-quickscale manage dumpdata          # Export data from database
-quickscale manage loaddata          # Import data to database
-
-# Inspection
-quickscale manage check             # Check for project issues
-quickscale manage diffsettings      # Display differences between current settings and Django defaults
-quickscale manage inspectdb         # Generate models from database
-quickscale manage showmigrations    # Show migration status
-```
-
-When using the `test` command, if a test fails or dependencies are missing, QuickScale will provide informative error messages to help you troubleshoot the issue.
-
 ## PROJECT STRUCTURE
 ```
-project-name/
-├── README.md                 # Project documentation
-├── docker-compose.yml        # Docker Compose configuration
-├── Dockerfile                # Docker configuration
-├── requirements.txt          # Python dependencies
-├── .env                      # Environment variables
-├── .dockerignore             # Docker ignore file
-├── core/                     # Core Django project
-│   ├── settings.py           # Project settings
-│   └── urls.py               # Main URL configuration
-├── common/                   # Common Django app
-│   ├── apps.py
-│   ├── urls.py
-│   ├── views.py
-│   └── templates/            # App-specific templates
-├── dashboard/                # Dashboard Django app
-│   ├── apps.py
-│   ├── urls.py
-│   ├── views.py
-│   └── templates/            # App-specific templates
-├── public/                   # Public Django app
-│   ├── apps.py
-│   ├── urls.py
-│   ├── views.py
-│   └── templates/            # App-specific templates
-├── users/                    # Users Django app
-│   ├── apps.py
-│   ├── urls.py
-│   ├── views.py
-│   └── templates/            # App-specific templates
-└── templates/                # Global templates
-    ├── base/                 # Base templates
-    │   └── base.html
-    ├── base.html
-    ├── components/           # Reusable components
-    │   ├── footer.html
-    │   ├── messages.html
-    │   └── navbar.html
-    ├── dashboard/            # Dashboard templates
-    │   └── index.html
-    ├── public/               # Public templates
-    │   ├── about.html
-    │   ├── contact.html
-    │   ├── home.html
-    │   └── index.html
-    └── users/                # User templates
-        ├── login.html
-        ├── login_form.html
-        ├── profile.html
-        └── signup.html
+quickscale/
+├── commands/                 # Command system implementation
+├── config/                   # Configuration management
+├── quickscale/               # Package core
+│   └── templates/            # Project template files
+├── templates/                # Project templates
+│   ├── common/               # Common Django app
+│   │   ├── migrations/       # Pre-generated migrations
+│   │   └── templates/        # App-specific templates
+│   ├── core/                 # Core Django project
+│   │   └── migrations/       # Pre-generated migrations
+│   ├── dashboard/            # Dashboard Django app
+│   │   ├── migrations/       # Pre-generated migrations
+│   │   └── templates/        # App-specific templates
+│   ├── djstripe/             # Django Stripe integration
+│   │   └── migrations/       # Pre-generated migrations
+│   ├── docs/                 # Documentation files
+│   ├── js/                   # JavaScript assets
+│   ├── logs/                 # Log files directory
+│   ├── public/               # Public Django app
+│   │   ├── migrations/       # Pre-generated migrations
+│   │   └── templates/        # App-specific templates
+│   ├── static/               # Static files
+│   │   ├── css/              # CSS files
+│   │   └── js/               # JavaScript files
+│   ├── templates/            # Global templates
+│   │   ├── account/          # Authentication templates
+│   │   ├── base/             # Base templates
+│   │   ├── components/       # Reusable components
+│   │   ├── dashboard/        # Dashboard templates
+│   │   ├── public/           # Public templates
+│   │   └── users/            # User templates
+│   └── users/                # Users Django app
+│       └── migrations/       # Pre-generated migrations
+├── tests/                    # Test suite
+└── utils/                    # Utility functions
+
+tests/
+├── core/                     # Core functionality tests
+│   └── djstripe/             # Stripe integration tests
+├── e2e/                      # End-to-end tests
+│   └── support/              # E2E test support files
+├── integration/              # Integration tests
+├── unit/                     # Unit tests
+│   ├── commands/             # Command tests
+│   └── fixtures/             # Test fixtures
+└── users/                    # User authentication tests
+    └── migrations/           # Migration tests
 ```
 
-### Pre-generated Migrations
+## PROJECT ARCHITECTURE
 
-QuickScale uses pre-generated migrations in its templates rather than dynamically generating them during the build process. This approach offers several advantages:
-
-1. **Reduced memory usage**: Eliminates Out-of-Memory errors during project creation, especially on systems with limited resources
-2. **Faster build process**: Skips the expensive migration generation step, making project creation faster
-3. **Consistent initial state**: Ensures all projects start with identical database schemas
-4. **Better error handling**: Reduces potential migration-related errors during project setup
-
-The pre-generated migrations are located in the migration directories of each app template:
-
-```
-quickscale/templates/users/migrations/        # User model migrations
-quickscale/templates/dashboard/migrations/    # Dashboard app migrations
-quickscale/templates/public/migrations/       # Public app migrations
-quickscale/templates/common/migrations/       # Common app migrations
-```
-
-During the build process, QuickScale copies these migration files to the new project and applies them directly instead of running the `makemigrations` command.
-
-## APPLICATION STRUCTURE
-
-### Core Components
-1. **CLI (cli.py)**: Main entry point with command routing and argument parsing
-2. **Command System**:
-   - **command_base.py**: Base Command class for all commands
-   - **command_manager.py**: Central command registry and orchestration
-   - **command_utils.py**: Shared utilities for commands
-3. **Command Types**:
-   - **project_commands.py**: Project lifecycle (build, destroy)
-   - **service_commands.py**: Docker services (up, down, logs, ps)
-   - **development_commands.py**: Dev tools (shell, django-shell, manage)
-   - **system_commands.py**: System maintenance
-4. **Project Management**:
-   - **project_manager.py**: Project state and configuration tracking
-   - **logging_manager.py**: Centralized logging system
-   - **help_manager.py**: Help documentation system
-
-### Django Apps
-1. **core**: Main Django project settings and URL configuration
-2. **public**: Public-facing pages (home, about, contact)
-3. **users**: User authentication and profile management
-4. **dashboard**: User dashboard and private pages
-5. **common**: Shared functionality across apps
-
-### Templates Structure
-1. **base**: Base HTML templates that other templates extend
-2. **components**: Reusable HTML components (navbar, footer, messages)
-3. **public**: Templates for public pages
-4. **users**: Templates for user authentication and profile
-5. **dashboard**: Templates for the user dashboard
-
-## DEVELOPMENT AND TESTING
-
-### Running Tests
-
-QuickScale includes a comprehensive test suite to ensure functionality works as expected. 
-
-First, install the test dependencies:
-
-```bash
-pip install -r requirements-test.txt
-```
-
-The simplest way to run tests is using the `run_tests.sh` script:
-
-```bash
-# Run unit tests only (default)
-./run_tests.sh
-
-# Run all tests (unit and integration)
-./run_tests.sh --all
-
-# Run with coverage report
-./run_tests.sh --coverage
-
-# Run tests in parallel
-./run_tests.sh --parallel
-
-# Run integration tests only
-./run_tests.sh --integration
+```mermaid
+---
+config:
+  layout: elk
+---
+flowchart TD
+ subgraph CLI["QuickScale CLI"]
+    direction TB
+        command_manager["Command<br>Manager"]
+        cli["cli.py<br>Entry Point"]
+        project_manager["Project<br>Manager"]
+  end
+ subgraph Commands["Command System"]
+    direction TB
+        command_base["Command (Base)"]
+        project_commands["Project Commands<br>(build, destroy)"]
+        service_commands["Service Commands<br>(up, down, logs, ps)"]
+        dev_commands["Development Commands<br>(shell, django-shell)"]
+        system_commands["System Commands<br>(check)"]
+  end
+ subgraph Utilities["Utility Services"]
+    direction TB
+        error_manager["Error Manager"]
+        logging_manager["Logging Manager"]
+        help_manager["Help Manager"]
+        config_manager["Config Manager"]
+  end
+ subgraph Templates["Template System"]
+    direction TB
+        templates["Project Templates"]
+        style_templates["Style Templates<br>(Bulma CSS)"]
+        js_templates["JS Templates<br>(HTMX/Alpine.js)"]
+  end
+ subgraph Apps["Django Apps"]
+    direction TB
+        public_app["Public App"]
+        users_app["Users App"]
+        dashboard_app["Dashboard App"]
+        common_app["Common App"]
+  end
+ subgraph Generated["Generated Project"]
+    direction TB
+        django_core["Django Core"]
+        database["PostgreSQL"]
+        auth["Authentication<br>(django-allauth)"]
+        djstripe["DjStripe<br>(Payments)"]
+        Apps
+  end
+    user_input["User Input (CLI Commands)"] --> cli
+    cli --> command_manager & project_manager & command_base & help_manager & config_manager
+    user_input -- build command --> project_commands
+    command_manager --> command_base
+    command_base --> project_commands & service_commands & dev_commands & system_commands & error_manager & logging_manager
+    templates --> style_templates & js_templates
+    project_commands --> templates
+    django_core --- database & auth & djstripe & Apps
+    templates -- generates --> Generated
+    Generated -- runs with --> docker["Docker Services<br>(web, db)"]
+    service_commands --> docker
+    CLI --> Commands
+    Commands --> Utilities
+    Utilities --> Templates
+    Templates --> Generated
 ```
 
-For Django application tests, you can use the Django test runner through the QuickScale CLI:
+### Command Execution Sequence
 
-```bash
-# Run all Django tests
-quickscale manage test
+The following diagram illustrates the sequence of interactions when executing the `build` command:
+
+```mermaid
+sequenceDiagram
+    actor User
+    participant CLI as cli.py
+    participant CM as CommandManager
+    participant BC as BuildCommand
+    participant PM as ProjectManager
+    participant TS as Template System
+    participant Docker as Docker Services
+    
+    User->>CLI: quickscale build myproject
+    CLI->>CM: execute_command('build', 'myproject')
+    CM->>BC: execute('myproject')
+    
+    %% Validation phase
+    BC->>BC: validate_project_name('myproject')
+    BC->>PM: check_docker_available()
+    
+    %% Setup phase
+    BC->>PM: create_project_directory('myproject')
+    BC->>TS: copy_template_files('myproject')
+    BC->>PM: generate_env_file('myproject')
+    BC->>PM: generate_config_files('myproject')
+    
+    %% Launch phase
+    BC->>Docker: docker_compose_up('myproject')
+    Docker-->>BC: Container IDs
+    
+    %% Finalization
+    BC->>PM: verify_services_running('myproject')
+    BC-->>CM: Success response
+    CM-->>CLI: Success response
+    CLI-->>User: Project created successfully at http://localhost:8000
 ```
 
-### Test Coverage Reports
+### Project Lifecycle State Diagram
 
-QuickScale leverages pytest-cov to generate test coverage reports, helping you identify which parts of the codebase are well-tested and which need additional coverage:
+This state diagram shows the different states of a QuickScale project and transitions triggered by commands:
 
-```bash
-# Generate an HTML report for visual inspection
-pytest --cov=quickscale --cov-report=html tests/
+```mermaid
+---
+config:
+  look: classic
+  layout: elk
+---
+stateDiagram
+  direction TB
+  [*] --> NonExistent:Initial State
+  NonExistent --> Created:quickscale build
+  Created --> Running:quickscale up
+  Running --> Stopped:quickscale down
+  Stopped --> Running:quickscale up
+  Created --> DatabaseConfigured:DB Setup during build
+  DatabaseConfigured --> AppsInitialized:Django migrations
+  AppsInitialized --> Ready:Static files collected
+  Running --> ShellAccess:quickscale shell
+  ShellAccess --> Running:exit shell
+  Running --> CodeEdit:Development
+  CodeEdit --> Running:Save changes
+  Stopped --> Destroyed:quickscale destroy
+  Destroyed --> [*]
+  note right of NonExistent : No project directory
+  note right of Created : Files generated
+  note right of Running : Docker containers active
+  note right of Stopped : Docker containers stopped
+  note right of Destroyed : All files removed
 ```
 
-After generating the HTML report, you can open `htmlcov/index.html` in your browser to see a detailed visual breakdown of test coverage with color-coded line-by-line analysis.
+### Deployment Flow Diagram
 
-### Test Structure
+This diagram shows the deployment architecture and request flow in a generated project:
 
-The test suite is organized into two main categories:
+```mermaid
+---
+config:
+  layout: elk
+---
+flowchart TD
+ subgraph Client["Client"]
+        browser["Web Browser<br>User Interface"]
+  end
+ subgraph Host["Host Server"]
+    direction TB
+        nginx["Nginx<br>Reverse Proxy<br>SSL Termination"]
+  end
+ subgraph Docker["Docker Environment"]
+    direction TB
+        web["Web Container<br>Django + Uvicorn<br>Application Server"]
+        db["Database Container<br>PostgreSQL<br>Data Storage"]
+  end
+ subgraph External["External Services"]
+    direction TB
+        smtp["SMTP Server<br>Email Delivery<br>(Transactional Emails)"]
+        stripe["Stripe API<br>Payment Processing<br>(Subscriptions &amp; Payments)"]
+  end
+    web -- CRUD<br>Operations --> db
+    Client --> Host
+    Host --> Docker
+    Docker --> External
+    browser -- HTTPS<br>Requests --> nginx
+    nginx -- Proxies to<br>port 8000 --> web
+    web -- Emails --> smtp
+    web -- Payment<br>Processing --> stripe
+    stripe -- Webhooks --> web
+     browser:::client
+     web:::container
+     db:::container
+     smtp:::external
+     stripe:::external
+    classDef container fill:#e1f5fe,stroke:#01579b,stroke-width:1px
+    classDef external fill:#fff8e1,stroke:#ff6f00,stroke-width:1px
+    classDef client fill:#f1f8e9,stroke:#33691e,stroke-width:1px
 
-1. **Unit Tests**: Located in `tests/unit/`, these tests verify individual components in isolation, using mocks for external dependencies. They are fast and help pinpoint issues in specific functions.
+```
 
-2. **Integration Tests**: Located in `tests/integration/`, these tests verify how components work together, including interactions with Docker and the filesystem. They provide confidence in the end-to-end functionality.
+### Command Class Hierarchy
 
-### Testing Best Practices
+This diagram shows the inheritance relationships between QuickScale command classes:
 
-When contributing to QuickScale, please follow these testing guidelines:
+```mermaid
+---
+config:
+  layout: dagre
+  look: classic
+---
+classDiagram
+direction LR
+    class Command {
+	    +logger: Logger
+	    +execute()*
+	    +handle_error()
+	    +safe_execute()
+    }
+    class ProjectCommand {
+	    +project_name: str
+	    +validate_project_name()
+    }
+    class ServiceCommand {
+	    +check_project_exists()
+    }
+    class DevelopmentCommand {
+	    +setup_environment()
+    }
+    class SystemCommand {
+	    +check_dependencies()
+    }
+    class BuildProjectCommand {
+	    +execute(project_name)
+	    +create_project_files()
+	    +setup_docker()
+    }
+    class DestroyProjectCommand {
+	    +execute()
+	    +prompt_confirmation()
+	    +remove_project_files()
+    }
+    class ServiceUpCommand {
+	    +execute()
+	    +start_docker_services()
+    }
+    class ServiceDownCommand {
+	    +execute()
+	    +stop_docker_services()
+    }
+    class ServiceLogsCommand {
+	    +execute(service, follow, lines)
+	    +stream_docker_logs()
+    }
+    class ServiceStatusCommand {
+	    +execute()
+	    +get_service_status()
+    }
+    class ShellCommand {
+	    +execute(django_shell)
+	    +start_interactive_shell()
+    }
+    class ManageCommand {
+	    +execute(args)
+	    +run_django_command()
+    }
+    class CheckCommand {
+	    +execute()
+	    +check_requirements()
+    }
+    class UntitledClass {
+    }
 
-1. **Write tests for new features**: All new functionality should include tests
-2. **Maintain test structure**: Keep unit tests in `tests/unit/` and integration tests in `tests/integration/`
-3. **Use fixtures**: Leverage pytest fixtures in `tests/conftest.py` for reusable test components
-4. **Test edge cases**: Include tests for error conditions and boundary cases
-5. **Follow existing patterns**: Maintain consistent test patterns for readability
-6. **Aim for coverage**: Try to maintain or increase the overall test coverage percentage
+	<<abstract>> Command
+
+    Command <|-- ProjectCommand
+    Command <|-- ServiceCommand
+    Command <|-- DevelopmentCommand
+    Command <|-- SystemCommand
+    ProjectCommand <|-- BuildProjectCommand
+    ProjectCommand <|-- DestroyProjectCommand
+    ServiceCommand <|-- ServiceUpCommand
+    ServiceCommand <|-- ServiceDownCommand
+    ServiceCommand <|-- ServiceLogsCommand
+    ServiceCommand <|-- ServiceStatusCommand
+    DevelopmentCommand <|-- ShellCommand
+    DevelopmentCommand <|-- ManageCommand
+    SystemCommand <|-- CheckCommand
+    ServiceCommand -- UntitledClass
+```
+
+### Generated Project Structure
+
+This component diagram shows the detailed structure of a generated Django project:
+
+```mermaid
+---
+config:
+  layout: elk
+---
+flowchart TD
+ subgraph Django["Generated Django Project"]
+    direction TB
+        settings["core/settings.py<br>Main Configuration"]
+        urls["core/urls.py<br>URL Routing"]
+        wsgi["core/wsgi.py<br>WSGI App"]
+        asgi["core/asgi.py<br>ASGI App"]
+  end
+ subgraph Users["users/"]
+    direction TB
+        users_models["models.py<br>CustomUser"]
+        users_forms["forms.py<br>Auth Forms"]
+        users_adapters["adapters.py<br>Auth Adapters"]
+        users_admin["admin.py<br>Admin UI"]
+  end
+ subgraph Common["common/"]
+    direction TB
+        common_models["models.py<br>Shared Models"]
+        common_middleware["middleware.py<br>Request Processing"]
+        common_utils["utils.py<br>Shared Utilities"]
+  end
+ subgraph Public["public/"]
+    direction TB
+        public_views["views.py<br>Public Pages"]
+        public_urls["urls.py<br>Public Routes"]
+  end
+ subgraph Dashboard["dashboard/"]
+    direction TB
+        dash_views["views.py<br>Dashboard UI"]
+        dash_urls["urls.py<br>Dashboard Routes"]
+  end
+ subgraph Payments["djstripe/"]
+    direction TB
+        payment_models["models.py<br>Subscription Models"]
+        payment_views["views.py<br>Payment Views"]
+        webhook["webhooks.py<br>Stripe Webhooks"]
+  end
+ subgraph Apps["Django Apps"]
+    direction TB
+        Users
+        Common
+        Public
+        Dashboard
+        Payments
+  end
+ subgraph Templates["templates/"]
+    direction TB
+        base["base.html<br>Base Template"]
+        components["components/<br>Reusable UI"]
+        acct_templates["account/<br>Auth Pages"]
+        dash_templates["dashboard/<br>Dashboard UI"]
+  end
+ subgraph Static["static/"]
+    direction TB
+        css["css/<br>Bulma Styles"]
+        js["js/<br>Alpine + HTMX"]
+        images["images/<br>UI Assets"]
+  end
+ subgraph Frontend["Frontend Assets"]
+    direction TB
+        Templates
+        Static
+  end
+ subgraph Infrastructure["Deployment Infrastructure"]
+    direction TB
+        dockerfile["Dockerfile"]
+        compose["docker-compose.yml"]
+        env["Environment<br>.env"]
+        entrypoint["entrypoint.sh"]
+  end
+ subgraph Database["PostgreSQL Database"]
+    direction TB
+        users_table["users_customuser"]
+        profile_table["users_profile"]
+        subscription_table["djstripe_subscription"]
+        customer_table["djstripe_customer"]
+  end
+    settings --> urls & wsgi & asgi
+    dockerfile --> compose
+    env --> compose
+    entrypoint --> dockerfile
+    users_table --> profile_table & customer_table
+    customer_table --> subscription_table
+    Django --> Apps
+    Apps --> Frontend
+    Frontend --> Infrastructure
+    Infrastructure --> Database
+    urls -- includes --> Public & Dashboard & Payments
+    Users -- authenticates --> Dashboard
+    Common -- supports --> Public & Dashboard
+    Payments -- enables --> Dashboard
+```
+
+### Database ER Diagram
+
+This entity-relationship diagram illustrates the database schema of the generated project:
+
+```mermaid
+erDiagram
+    %% Core entities in a more vertical structure
+    USERS {
+        id int PK
+        email string
+        is_active boolean
+        is_staff boolean
+        date_joined datetime
+    }
+    
+    PROFILES {
+        id int PK
+        user_id int FK
+        full_name string
+        bio text
+        avatar string
+    }
+    
+    CUSTOMERS {
+        id int PK
+        user_id int FK
+        stripe_id string
+        livemode boolean
+        account_balance int
+        created datetime
+    }
+    
+    %% Subscription related entities
+    SUBSCRIPTIONS {
+        id int PK
+        customer_id int FK
+        stripe_id string
+        status string
+        current_period_start datetime
+        current_period_end datetime
+        plan_id int FK
+    }
+    
+    PLANS {
+        id int PK
+        stripe_id string
+        name string
+        amount int
+        interval string
+        trial_period_days int
+    }
+    
+    PAYMENT_METHODS {
+        id int PK
+        customer_id int FK
+        stripe_id string
+        type string
+        card_brand string
+        card_last4 string
+    }
+    
+    %% Entity relationships - arranged for better vertical flow
+    USERS ||--o{ PROFILES : "has one"
+    USERS ||--o{ CUSTOMERS : "has one"
+    CUSTOMERS ||--o{ PAYMENT_METHODS : "can have many"
+    CUSTOMERS ||--o{ SUBSCRIPTIONS : "can have many"
+    SUBSCRIPTIONS }o--|| PLANS : "belongs to"
+```
 
 ## AUTHENTICATION
 
@@ -389,12 +666,12 @@ The project uses Docker and Docker Compose for containerization:
 
 1. **Web Container**: Django application
    - Base image: python:3.11-slim
-   - Exposed port: 8000
+   - Exposed port: 8000 by default, other if not available
    - Volumes: Local directory mounted to /app
 
 2. **Database Container**: PostgreSQL
    - Image: postgres:15
-   - Exposed port: 5432
+   - Exposed port: 5432 by default, other if not available
    - Volumes: Persistent volume for data
 
 ## STARTER DATABASE
@@ -432,55 +709,10 @@ Alpine.js is used for all client-side interactivity and state management:
 - **Global Component Functions**: For reusable components, define global functions that return Alpine.js component data objects.
 - **Minimal External Dependencies**: Avoid adding additional JavaScript libraries unless absolutely necessary.
 
-### JavaScript Implementation Examples
-
 **✅ DO: Use Alpine.js for interactive elements**
-```html
-<div x-data="{ open: false }">
-  <button @click="open = !open">Toggle Menu</button>
-  <div x-show="open" class="menu">
-    <!-- Menu content -->
-  </div>
-</div>
-```
-
 **❌ DON'T: Use vanilla JavaScript DOM manipulation**
-```html
-<button id="toggleButton">Toggle Menu</button>
-<div id="menu" class="menu hidden">
-  <!-- Menu content -->
-</div>
-
-<script>
-  document.getElementById('toggleButton').addEventListener('click', function() {
-    document.getElementById('menu').classList.toggle('hidden');
-  });
-</script>
-```
-
 **✅ DO: Use Alpine.js for form validation**
-```html
-<form x-data="formValidation()">
-  <input type="text" x-model="email" @blur="validateEmail()">
-  <p x-show="errors.email" x-text="errors.email" class="error"></p>
-</form>
-```
-
 **❌ DON'T: Add other frameworks like jQuery or React**
-```html
-<!-- jQuery example - NOT PERMITTED -->
-<script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
-<script>
-  $(document).ready(function() {
-    // jQuery code
-  });
-</script>
-
-<!-- React example - NOT PERMITTED -->
-<div id="root"></div>
-<script src="https://unpkg.com/react@17/umd/react.development.js"></script>
-<script src="https://unpkg.com/react-dom@17/umd/react-dom.development.js"></script>
-```
 
 ## FEATURES
 

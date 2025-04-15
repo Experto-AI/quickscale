@@ -15,6 +15,33 @@ INSTALLED_APPS = [
     'users',
 ]
 
+# Import and configure Stripe if enabled
+import os
+stripe_enabled_flag = os.getenv('STRIPE_ENABLED', 'False').lower() == 'true'
+if stripe_enabled_flag:
+    try:
+        # Import settings from djstripe settings module
+        from .djstripe.settings import (
+            DJSTRIPE_USE_NATIVE_JSONFIELD,
+            DJSTRIPE_FOREIGN_KEY_TO_FIELD,
+        )
+
+        # Configure Stripe settings from environment
+        STRIPE_LIVE_MODE = False  # Always false in development/test
+        STRIPE_PUBLIC_KEY = os.getenv('STRIPE_PUBLIC_KEY', '')
+        STRIPE_SECRET_KEY = os.getenv('STRIPE_SECRET_KEY', '')
+        DJSTRIPE_WEBHOOK_SECRET = os.getenv('STRIPE_WEBHOOK_SECRET', '')
+
+        # Enable djstripe in installed apps
+        if isinstance(INSTALLED_APPS, tuple):
+            INSTALLED_APPS = list(INSTALLED_APPS)  # Ensure INSTALLED_APPS is mutable
+        if 'djstripe' not in INSTALLED_APPS:
+            INSTALLED_APPS.append('djstripe')
+    except ImportError as e:
+        pass
+    except Exception as e:
+        pass
+
 MIDDLEWARE = [
     'django.middleware.security.SecurityMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',

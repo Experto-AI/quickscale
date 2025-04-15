@@ -1,6 +1,15 @@
 # Quickscale Changelog
 All notable changes to this project will be documented in this file.
 
+## v0.5.1 (2025-04-13)
+- v0.5.1 fix: enhance Docker service reliability and system robustness
+- Enhances Docker service handling with better error handling and verification
+- Adds quiet mode for test runners to improve CI environment compatibility
+- Prevents security issues by blocking root user for PostgreSQL
+- Improves port detection with more robust available port discovery
+- Replaces silent fallbacks with explicit validation throughout the system
+- Updates documentation for technical stack adherence
+
 ## v0.5.0 (2025-04-05)
 - v0.5.0 feat: Implement django-allauth with comprehensive authentication & testing  
 - Migrated from built-in django auth to django-allauth with email-based authentication

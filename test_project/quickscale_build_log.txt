@@ -1,4 +1,0 @@
-[INFO] QuickScale build log
-[INFO] Project directory: test_project
-[INFO] System: Linux 6.11.0-21-generic
-[INFO] Python: 3.12.3
