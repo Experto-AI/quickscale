@@ -62,22 +62,22 @@
     - [X] Add minimal fields (stripe_id, created)
     - [X] Generate and apply migration
     - [X] Add basic model tests
-  - [ ] **Step 5: Stripe API Integration**
-    - [ ] Add Stripe API client configuration
-    - [ ] Implement customer creation in Stripe
-    - [ ] Link local customers with Stripe customers
-    - [ ] Add CI compatibility with feature flags
-    - [ ] Create mock responses for test environments
-    - [ ] Ensure quickscale build passes with Stripe code
-    - [ ] Add tests that run with STRIPE_ENABLED=False
-  - [ ] **Step 6: Basic Webhooks**
-    - [ ] Add simple webhook endpoint for payment events
-    - [ ] Implement webhook signature verification
-    - [ ] Handle core customer events
-    - [ ] Add webhook test fixtures for CI
-    - [ ] Implement test mode for webhook handlers
-    - [ ] Ensure tests pass with and without Stripe enabled
-    - [ ] Verify quickscale test command works with webhooks
+  - [X] **Step 5: Stripe API Integration**
+    - [X] Add Stripe API client configuration
+    - [X] Implement customer creation in Stripe
+    - [X] Link local customers with Stripe customers
+    - [X] Add CI compatibility with feature flags
+    - [X] Create mock responses for test environments
+    - [X] Ensure quickscale build passes with Stripe code
+    - [X] Add tests that run with STRIPE_ENABLED=False
+  - [X] **Step 6: Basic Webhooks**
+    - [X] Add simple webhook endpoint for payment events
+    - [X] Implement webhook signature verification
+    - [X] Handle core customer events
+    - [X] Add webhook test fixtures for CI
+    - [X] Implement test mode for webhook handlers
+    - [X] Ensure tests pass with and without Stripe enabled
+    - [X] Verify quickscale test command works with webhooks
 
 - [ ] **Session 2: Credit System Foundation**
   - [ ] **Step 1: Credit Model**
