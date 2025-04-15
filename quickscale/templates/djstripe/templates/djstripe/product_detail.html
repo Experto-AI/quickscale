@@ -1,0 +1,123 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block title %}{{ product.name }}{% endblock %}
+
+{% block content %}
+<section class="section">
+  <div class="container">
+    <nav class="breadcrumb" aria-label="breadcrumbs">
+      <ul>
+        <li><a href="{% url 'djstripe:product_list' %}">Products</a></li>
+        <li class="is-active"><a href="#" aria-current="page">{{ product.name }}</a></li>
+      </ul>
+    </nav>
+    
+    <div class="columns">
+      {% if product.image %}
+      <div class="column is-one-third">
+        <figure class="image">
+          <img src="{{ product.image.url }}" alt="{{ product.name }}">
+        </figure>
+      </div>
+      {% endif %}
+      
+      <div class="column">
+        <h1 class="title">{{ product.name }}</h1>
+        
+        <div class="tags mb-4">
+          {% if product.status == 'active' %}
+            <span class="tag is-success">Active</span>
+          {% else %}
+            <span class="tag is-danger">Inactive</span>
+          {% endif %}
+        </div>
+        
+        <div class="price-box mb-5">
+          <p class="title is-4">{{ product.get_formatted_price }}</p>
+        </div>
+        
+        {% if product.description %}
+        <div class="content">
+          <h3 class="subtitle">Description</h3>
+          <p>{{ product.description|linebreaksbr }}</p>
+        </div>
+        {% endif %}
+        
+        {% if product.status == 'active' %}
+          <div class="purchase-options mt-6">
+            {% if purchase_options.can_purchase %}
+              {% if purchase_options.has_customer %}
+                <div class="buttons">
+                  <button class="button is-primary is-large">
+                    Purchase Now
+                  </button>
+                </div>
+              {% else %}
+                <div class="notification is-info">
+                  <p>You need to set up a Stripe customer record before making a purchase.</p>
+                  <a href="{% url 'djstripe:status' %}" class="button is-info is-light mt-3">Set Up Billing</a>
+                </div>
+              {% endif %}
+            {% else %}
+              <div class="notification is-info">
+                <p>You need to log in to purchase this product.</p>
+                <a href="{% url 'account_login' %}" class="button is-info is-light mt-3">Log In</a>
+              </div>
+            {% endif %}
+          </div>
+        {% else %}
+          <div class="notification is-warning">
+            This product is currently unavailable for purchase.
+          </div>
+        {% endif %}
+      </div>
+    </div>
+    
+    {% if product.metadata %}
+    <div class="box mt-5">
+      <h3 class="subtitle">Product Details</h3>
+      <table class="table is-fullwidth">
+        <tbody>
+          {% for key, value in product.metadata.items %}
+          <tr>
+            <th>{{ key|title }}</th>
+            <td>{{ value }}</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% endif %}
+    
+    <!-- Technical details for debugging -->
+    {% if request.user.is_staff %}
+    <div class="box mt-5">
+      <h3 class="subtitle">Technical Information (Staff Only)</h3>
+      <table class="table is-fullwidth">
+        <tbody>
+          <tr>
+            <th>Product ID</th>
+            <td>{{ product.id }}</td>
+          </tr>
+          <tr>
+            <th>Created</th>
+            <td>{{ product.created }}</td>
+          </tr>
+          <tr>
+            <th>Last Updated</th>
+            <td>{{ product.updated }}</td>
+          </tr>
+          {% if product.stripe_product_id %}
+          <tr>
+            <th>Stripe Product ID</th>
+            <td><code>{{ product.stripe_product_id }}</code></td>
+          </tr>
+          {% endif %}
+        </tbody>
+      </table>
+    </div>
+    {% endif %}
+  </div>
+</section>
+{% endblock %} 

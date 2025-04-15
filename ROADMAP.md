@@ -39,8 +39,8 @@
 ## Projected Development Sprints
 
 
-### Sprint 3: Payment Integration and Credit System (v0.6.0)
-- [ ] **Session 1: dj-stripe Setup and Core Implementation**
+### Sprint 3: Payment Integration (v0.6.0)
+- [x] **Session 1: dj-stripe Setup and Core Implementation**
   - [x] **Step 1: Package Integration**
     - [x] Add dj-stripe to pyproject.toml dependencies
     - [x] Add dj-stripe to template requirements.txt
@@ -79,7 +79,65 @@
     - [X] Ensure tests pass with and without Stripe enabled
     - [X] Verify quickscale test command works with webhooks
 
-- [ ] **Session 2: Credit System Foundation**
+- [ ] **Session 2: Basic Payment Products**
+  - [ ] **Step 1: Product Model**
+    - [ ] Create product model for purchasable items
+    - [ ] Add price configuration options
+    - [ ] Implement product status (active/inactive)
+    - [ ] Test product model operations
+  - [ ] **Step 2: Stripe Product Integration**
+    - [ ] Sync local products with Stripe products
+    - [ ] Add product and price creation in Stripe
+    - [ ] Implement webhook handlers for product events
+    - [ ] Test Stripe product synchronization
+  - [ ] **Step 3: Product Management Admin**
+    - [ ] Create product management dashboard
+    - [ ] Add product creation/editing interface
+    - [ ] Implement price configuration UI
+    - [ ] Test admin product management
+
+- [ ] **Session 3: Checkout Process**
+  - [ ] **Step 1: Checkout Page**
+    - [ ] Create purchase flow UI
+    - [ ] Add Stripe Elements integration
+    - [ ] Implement cart functionality 
+    - [ ] Test checkout page UI
+  - [ ] **Step 2: Payment Processing**
+    - [ ] Implement payment intent creation
+    - [ ] Add payment confirmation handling
+    - [ ] Create success/failure pages
+    - [ ] Test payment processing
+  - [ ] **Step 3: Order History**
+    - [ ] Create order/purchase history model
+    - [ ] Add purchase record storage
+    - [ ] Implement purchase history view
+    - [ ] Test order history functionality
+
+- [ ] **Session 4: Payment Management**
+  - [ ] **Step 1: Admin Dashboard**
+    - [ ] Create payment management interface
+    - [ ] Add transaction viewing for admins
+    - [ ] Implement basic sales reporting
+    - [ ] Test admin payment dashboard
+  - [ ] **Step 2: Error Handling**
+    - [ ] Add robust error handling for payments
+    - [ ] Create recovery flows for failed payments
+    - [ ] Implement clear user guidance
+    - [ ] Test payment error scenarios
+  - [ ] **Step 3: Security Measures**
+    - [ ] Add security for payment endpoints
+    - [ ] Create audit logging for transactions
+    - [ ] Implement basic PCI compliance measures
+    - [ ] Test security implementation
+
+### Sprint 4: Testing and Development (v0.6.1) 
+- [ ] **Session 1: Test e2e**
+  - [ ] Logs after quickscale build (build logs and execution logs)
+  - [ ] Quickscale manage tests
+  - [ ] Credit system integration tests
+
+### Sprint 5: Credit System (v0.7.0)
+- [ ] **Session 1: Credit System Foundation**
   - [ ] **Step 1: Credit Model**
     - [ ] Create core credit data models
     - [ ] Add credit transaction ledger
@@ -91,15 +149,22 @@
     - [ ] Implement audit logging for credit changes
     - [ ] Test admin credit management interface
   - [ ] **Step 3: Credit Pricing Structure**
-    - [ ] Create simple credit package options
-    - [ ] Add Stripe products for credit packages
-    - [ ] Implement basic price configuration
+    - [ ] Add credit packages to existing product catalog
+    - [ ] Link credits to stripe products
+    - [ ] Implement credit package configuration
     - [ ] Test credit pricing structure
-  - [ ] **Step 4: Credit Purchase Flow**
-    - [ ] Create credit purchase interface
-    - [ ] Add simple checkout flow
-    - [ ] Implement purchase confirmation
+
+- [ ] **Session 2: Credit Purchase Integration**
+  - [ ] **Step 1: Credit Purchase Flow**
+    - [ ] Extend checkout for credit purchases
+    - [ ] Implement credit allocation after payment
+    - [ ] Add purchase confirmation for credits
     - [ ] Test credit purchase flow
+  - [ ] **Step 2: Credit Webhooks**
+    - [ ] Create webhooks for credit-related events
+    - [ ] Add automatic credit allocation on successful payment
+    - [ ] Implement failed payment handling for credits
+    - [ ] Test credit webhook functionality
 
 - [ ] **Session 3: User-facing Credit System**
   - [ ] **Step 1: User Dashboard**
@@ -134,22 +199,8 @@
     - [ ] Create user-friendly error messages
     - [ ] Implement recovery options for failed operations
     - [ ] Test error scenarios
-  - [ ] **Step 3: Payment Error Handling**
-    - [ ] Create basic error handling for payment issues
-    - [ ] Add recovery flow for failed payments
-    - [ ] Implement clear user guidance for errors
-    - [ ] Test payment error scenarios
-  - [ ] **Step 4: Security Basics**
-    - [ ] Add basic security for payment endpoints
-    - [ ] Create audit logging for sensitive operations
-    - [ ] Implement minimal PCI compliance measures
-    - [ ] Test security implementation
 
-### Sprint 4:  
-- [ ] **Session 2 (v0.6.1): Test e2e: logs after quickscale build (build logs and execution logs)**
-- [ ] **Session 3 (v0.6.2): Test e2e: quickscale manage tests**
-
-### Sprint 5: Usage Tracking (v0.7.0)
+### Sprint 6: Usage Analytics (v0.8.0)
 - [ ] **Session 1: Enhanced Usage Tracking**
   - [ ] Improve credit usage analytics
   - [ ] Add detailed usage reporting
@@ -162,7 +213,7 @@
   - [ ] Implement usage efficiency metrics
   - [ ] Add best practices recommendations
 
-### Sprint 6: File Storage Foundation (v0.8.0)
+### Sprint 7: File Storage Foundation (v0.9.0)
 - [ ] **Session 1: Storage Backend**
   - [ ] Configure Django storage backend
   - [ ] Add AWS S3 or similar integration
@@ -183,13 +234,13 @@
   - [ ] Implement thumbnail generation for images
   - [ ] Add sorting and filtering options
 
-### Sprint 7: Testing and Documentation (v0.9.0)
+### Sprint 8: Documentation and Final Polish (v1.0.0)
 - [ ] **Session 1: Expanding Test Coverage**
   - [ ] Increase code coverage to 90%+
   - [ ] Add performance tests
   - [ ] Setup automated test runs in CI/CD pipeline
-  - [ ] Create comprehensive test suite for credit system
-  - [ ] Implement mock Stripe services for testing
+  - [ ] Create comprehensive test suite for all systems
+  - [ ] Implement full mock services for testing
 
 - [ ] **Session 2: Architecture Documentation**
   - [ ] Add detailed architecture diagrams
@@ -202,12 +253,12 @@
   - [ ] Improve inline code documentation
   - [ ] Create developer onboarding guide
   - [ ] Document extension points
-  - [ ] Add detailed guides for credit system integration
+  - [ ] Add detailed integration guides
   - [ ] Document error handling patterns
 
 - [ ] **Session 4: User Documentation**
   - [ ] Create user guides for key features
   - [ ] Add tutorials for common tasks
   - [ ] Improve help and support resources
-  - [ ] Create credit purchase and usage guides
+  - [ ] Create purchase and credit usage guides
   - [ ] Document troubleshooting procedures

@@ -6,12 +6,13 @@ This module contains view functions or classes for Stripe-related functionality.
 
 import logging
 import os
-from django.shortcuts import render, redirect
+from django.shortcuts import render, redirect, get_object_or_404
 from django.contrib.auth.decorators import login_required
 from django.views.decorators.http import require_POST
 from django.http import JsonResponse
 from django.conf import settings
 from .utils import get_stripe
+from .models import Product
 
 logger = logging.getLogger(__name__)
 
@@ -138,6 +139,63 @@ def create_customer(request):
     except Exception as e:
         logger.error(f"Error creating Stripe customer for user {request.user.email}: {str(e)}")
         return JsonResponse({'error': str(e)}, status=500)
+
+
+def product_list(request):
+    """
+    Display a list of available products.
+    
+    This view shows all active products by default, with an option
+    to show inactive products as well.
+    """
+    # Check if we should include inactive products
+    show_inactive = request.GET.get('show_inactive', 'false').lower() == 'true'
+    
+    # Filter products based on status
+    if show_inactive:
+        products = Product.objects.all()
+    else:
+        products = Product.objects.filter(status=Product.ACTIVE)
+    
+    # Pass context to template
+    context = {
+        'products': products,
+        'show_inactive': show_inactive,
+    }
+    
+    return render(request, 'djstripe/product_list.html', context)
+
+
+def product_detail(request, product_id):
+    """
+    Display details of a specific product.
+    
+    This view shows detailed information about a product,
+    including its description, pricing, and purchase options.
+    """
+    # Get the product or return 404 if not found
+    product = get_object_or_404(Product, pk=product_id)
+    
+    # Prepare purchase options based on whether user is authenticated
+    purchase_options = {
+        'can_purchase': request.user.is_authenticated,
+        'login_required': not request.user.is_authenticated,
+    }
+    
+    # Add Stripe-specific purchase options if user is logged in
+    if request.user.is_authenticated:
+        # Check if user has a Stripe customer ID
+        has_customer = hasattr(request.user, 'stripe_customer')
+        purchase_options['has_customer'] = has_customer
+    
+    # Pass context to template
+    context = {
+        'product': product,
+        'purchase_options': purchase_options,
+    }
+    
+    return render(request, 'djstripe/product_detail.html', context)
+
 
 # Example views for subscription management:
 # 

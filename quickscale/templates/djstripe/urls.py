@@ -20,6 +20,10 @@ urlpatterns = [
     # Customer management
     path('customer/create/', views.create_customer, name='create_customer'),
     
+    # Product management
+    path('products/', views.product_list, name='product_list'),
+    path('products/<int:product_id>/', views.product_detail, name='product_detail'),
+    
     # Subscription management URLs
     # path('subscriptions/', views.subscription_list, name='subscription_list'),
     # path('subscriptions/<uuid:subscription_id>/', views.subscription_details, name='subscription_details'),
