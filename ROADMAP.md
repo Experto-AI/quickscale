@@ -38,7 +38,6 @@
 
 ## Projected Development Sprints
 
-
 ### Sprint 3: Payment Integration (v0.6.0)
 - [x] **Session 1: dj-stripe Setup and Core Implementation**
   - [x] **Step 1: Package Integration**
@@ -97,7 +96,13 @@
     - [X] Include direct links to manage products in Stripe dashboard
     - [X] Test admin product management with Stripe integration
 
-- [ ] **Session 3: Checkout Process**
+### Sprint 4: Testing and Development (v0.6.1) 
+- [ ] **Session 1: Test e2e**
+  - [ ] Logs after quickscale build (build logs and execution logs)
+  - [ ] Quickscale manage tests
+
+### Sprint 5: Checkout Process (v0.7.0)
+- [ ] **Session 1: Checkout Process**
   - [ ] **Step 1: Checkout Page**
     - [ ] Create purchase flow UI
     - [ ] Add Stripe Elements integration
@@ -114,7 +119,8 @@
     - [ ] Implement purchase history view
     - [ ] Test order history functionality
 
-- [ ] **Session 4: Payment Management**
+### Sprint 6: Payment Management (v0.8.0)
+- [ ] **Session 1: Payment Management**
   - [ ] **Step 1: Admin Dashboard**
     - [ ] Create payment management interface
     - [ ] Add transaction viewing for admins
@@ -131,12 +137,8 @@
     - [ ] Implement basic PCI compliance measures
     - [ ] Test security implementation
 
-### Sprint 4: Testing and Development (v0.6.1) 
-- [ ] **Session 1: Test e2e**
-  - [ ] Logs after quickscale build (build logs and execution logs)
-  - [ ] Quickscale manage tests
 
-### Sprint 5: Enhanced Admin Dashboard (v0.7.0)
+### Sprint 7: Enhanced Admin Dashboard (v0.9.0)
 - [ ] **Session 1: User Management**
   - [ ] **Step 1: User Listing and Search**
     - [ ] Create comprehensive user listing interface
@@ -216,7 +218,7 @@
     - [ ] Create custom report builder
     - [ ] Test reporting functionality
 
-### Sprint 6: Credit System (v0.8.0)
+### Sprint 8: Credit System (v0.10.0)
 - [ ] **Session 1: Credit System Foundation**
   - [ ] **Step 1: Credit Model**
     - [ ] Create core credit data models
@@ -280,7 +282,7 @@
     - [ ] Implement recovery options for failed operations
     - [ ] Test error scenarios
 
-### Sprint 7: Usage Analytics (v0.9.0)
+### Sprint 9: Usage Analytics (v0.11.0)
 - [ ] **Session 1: Enhanced Usage Tracking**
   - [ ] Improve credit usage analytics
   - [ ] Add detailed usage reporting
@@ -293,7 +295,7 @@
   - [ ] Implement usage efficiency metrics
   - [ ] Add best practices recommendations
 
-### Sprint 8: File Storage Foundation (v0.10.0)
+### Sprint 10: File Storage Foundation (v0.12.0)
 - [ ] **Session 1: Storage Backend**
   - [ ] Configure Django storage backend
   - [ ] Add AWS S3 or similar integration
@@ -314,7 +316,7 @@
   - [ ] Implement thumbnail generation for images
   - [ ] Add sorting and filtering options
 
-### Sprint 8: Documentation and Final Polish (v0.11.0)
+### Sprint 11: Documentation and Final Polish (v0.13.0)
 - [ ] **Session 1: Expanding Test Coverage**
   - [ ] Increase code coverage to 90%+
   - [ ] Add performance tests
@@ -343,7 +345,7 @@
   - [ ] Create purchase and credit usage guides
   - [ ] Document troubleshooting procedures
 
-### Sprint 9: Enhanced Admin Dashboard (v0.12.0)
+### Sprint 12: Enhanced Admin Dashboard (v0.14.0)
 - [ ] **Session 1: User Management**
   - [ ] **Step 1: User Listing and Search**
     - [ ] Create comprehensive user listing interface
