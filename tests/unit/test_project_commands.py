@@ -26,6 +26,9 @@ def mock_build_command():
     cmd._create_users = MagicMock()
     cmd._run_docker_command = MagicMock()
     
+    # Set project_dir to a non-None value for log scanning tests
+    cmd.project_dir = Path("/mock/project/path")
+    
     return cmd
 
 
@@ -317,44 +320,36 @@ def test_execute_build_project(mock_run, mock_build_command, mock_templates_dir,
                     with patch.object(mock_build_command, 'setup_static_dirs') as mock_setup_static:
                         with patch.object(mock_build_command, 'setup_global_templates') as mock_setup_templates:
                             with patch.object(mock_build_command, 'setup_database', return_value=True) as mock_setup_db:
-                                # Ensure self.variables is set before verify_build is potentially called
-                                mock_build_command.variables = {
-                                    'project_name': 'test_project',
-                                    'port': 8000,
-                                    'secret_key': 'test_secret',
-                                    'db_name': 'test_db',
-                                    'db_user': 'test_user',
-                                    'db_password': 'test_password',
-                                    'pg_user': 'test_user',  # Added for setup_database call
-                                    'pg_email': 'test@example.com', # Added for setup_database call
-                                    'pg_password': 'test_password'  # Added for setup_database call
-                                }
-                                with patch.object(mock_build_command, 'verify_build', return_value={}) as mock_verify_build: # Mock verify_build
-                                    with patch('os.chdir') as mock_chdir:
-                                        # Set port
-                                        mock_build_command.port = 8000
-                                        
-                                        # Execute
-                                        result = mock_build_command.execute("test_project")
-                                        
-                                        # Verify all methods were called
-                                        mock_setup.assert_called_once_with("test_project")
-                                        mock_copy.assert_called_once()
-                                        mock_create_django.assert_called_once()
-                                        assert mock_create_app.call_count == 4  # 4 apps
-                                        mock_setup_static.assert_called_once()
-                                        mock_setup_templates.assert_called_once()
-                                        mock_setup_db.assert_called_once()
-                                        
-                                        # Verify chdir was called twice (into project dir and back)
-                                        assert mock_chdir.call_count >= 1
-                                        
-                                        # Verify result
-                                        assert result is not None
-                                        assert "path" in result
-                                        assert "port" in result
-                                        assert result["port"] == 8000
-                                        mock_verify_build.assert_called_once() # Verify verify_build was called
+                                with patch.object(mock_build_command, 'verify_build', return_value={}) as mock_verify_build:
+                                    with patch.object(mock_build_command, 'scan_build_logs', return_value={"total_issues": 0}) as mock_scan_logs:
+                                        with patch('os.chdir') as mock_chdir:
+                                            # Set port
+                                            mock_build_command.port = 8000
+                                            
+                                            # Execute
+                                            result = mock_build_command.execute("test_project")
+                                            
+                                            # Verify all methods were called
+                                            mock_setup.assert_called_once_with("test_project")
+                                            mock_copy.assert_called_once()
+                                            mock_create_django.assert_called_once()
+                                            assert mock_create_app.call_count == 4  # 4 apps
+                                            mock_setup_static.assert_called_once()
+                                            mock_setup_templates.assert_called_once()
+                                            mock_setup_db.assert_called_once()
+                                            
+                                            # Verify chdir was called twice (into project dir and back)
+                                            assert mock_chdir.call_count >= 1
+                                            
+                                            # Verify result
+                                            assert result is not None
+                                            assert "path" in result
+                                            assert "port" in result
+                                            assert result["port"] == 8000
+                                            mock_verify_build.assert_called_once()  # Verify verify_build was called
+                                            mock_scan_logs.assert_called_once()  # Verify scan_build_logs was called
+                                            assert "log_scan" in result
+                                            assert result["log_scan"] == {"total_issues": 0}
 
 
 def test_copy_with_vars_function(tmp_path):
@@ -783,3 +778,104 @@ def test_verify_web_service_static_files_none(mock_verification_command, monkeyp
     assert result['static_files'] is False
     # Success should be true because 'responds' is true, even if static_files is False
     assert result['success'] is True
+
+
+def test_scan_build_logs(mock_build_command):
+    """Test the scan_build_logs method."""
+    with patch('quickscale.utils.log_scanner.LogScanner') as mock_scanner_class:
+        # Setup mock scanner
+        mock_scanner = MagicMock()
+        mock_scanner_class.return_value = mock_scanner
+        
+        # Configure mock scanner methods
+        mock_scanner.scan_all_logs.return_value = [MagicMock()]
+        mock_scanner.generate_summary.return_value = {
+            "total_issues": 1, 
+            "error_count": 1, 
+            "warning_count": 0,
+            "has_critical_issues": True,
+            "logs_accessed": True
+        }
+        
+        # Call the method
+        result = mock_build_command.scan_build_logs()
+        
+        # Verify logger was used
+        mock_build_command.logger.info.assert_called()
+        
+        # Verify scanner was created
+        mock_scanner_class.assert_called_once()
+        
+        # Verify scanner methods were called
+        mock_scanner.scan_all_logs.assert_called_once()
+        mock_scanner.generate_summary.assert_called_once()
+        mock_scanner.print_summary.assert_called_once()
+        
+        # Verify result
+        assert result == mock_scanner.generate_summary.return_value
+        assert result["total_issues"] == 1
+        assert result["error_count"] == 1
+        assert result["has_critical_issues"] is True
+        assert result["logs_accessed"] is True
+
+
+def test_scan_build_logs_error_handling(mock_build_command):
+    """Test error handling in the scan_build_logs method."""
+    with patch('quickscale.utils.log_scanner.LogScanner') as mock_scanner_class:
+        # Setup scanner to raise an exception with a specific error message
+        mock_scanner_class.side_effect = Exception("Test error")
+        
+        # Call the method
+        result = mock_build_command.scan_build_logs()
+        
+        # Verify logger error was called
+        mock_build_command.logger.error.assert_called()
+        
+        # Verify result contains error info - the error should contain our test error message
+        assert "error" in result
+        assert "Test error" in result["error"]
+        assert result["scan_failed"] is True
+        assert result["total_issues"] == 0
+        assert result["error_count"] == 0
+        assert result["warning_count"] == 0
+        assert result["has_critical_issues"] is False
+        assert result["logs_accessed"] is False
+
+
+def test_scan_build_logs_no_logs_accessed(mock_build_command):
+    """Test the scan_build_logs method when no logs could be accessed."""
+    with patch('quickscale.utils.log_scanner.LogScanner') as mock_scanner_class:
+        # Setup mock scanner
+        mock_scanner = MagicMock()
+        mock_scanner_class.return_value = mock_scanner
+        
+        # Configure mock scanner methods
+        mock_scanner.scan_all_logs.return_value = []
+        mock_scanner.generate_summary.return_value = {
+            "total_issues": 0, 
+            "error_count": 0, 
+            "warning_count": 0,
+            "has_critical_issues": False,
+            "logs_accessed": False
+        }
+        
+        # Call the method
+        result = mock_build_command.scan_build_logs()
+        
+        # Verify logger was used
+        mock_build_command.logger.warning.assert_called_with("Could not access any log files for scanning")
+        
+        # Verify scanner was created
+        mock_scanner_class.assert_called_once()
+        
+        # Verify scanner methods were called
+        mock_scanner.scan_all_logs.assert_called_once()
+        mock_scanner.generate_summary.assert_called_once()
+        mock_scanner.print_summary.assert_called_once()
+        
+        # Verify result
+        assert result == mock_scanner.generate_summary.return_value
+        assert result["total_issues"] == 0
+        assert result["error_count"] == 0
+        assert result["has_critical_issues"] is False
+        assert result["logs_accessed"] is False

@@ -98,12 +98,12 @@
 
 ### Sprint 4: Testing and Development (v0.6.1) 
 - [ ] **Session 1: Build Process Improvements**
-  - [x] **Step 1: Log Scanning Integration**
-    - [x] Integrate log scanning directly into the quickscale build command
-    - [x] Scan both build logs and execution logs for warnings and errors
-    - [x] Display concise issue summary at the end of the build process
-    - [x] Focus on critical errors that may affect project functionality
-    - [x] Add tests to verify log scanning functionality
+  - [X] **Step 1: Log Scanning Integration**
+    - [X] Integrate log scanning directly into the quickscale build command
+    - [X] Scan build logs, both containers logs and migration logs for warnings and errors
+    - [X] Display concise issue summary at the end of the build process
+    - [X] Focus on critical errors that may affect project functionality
+    - [X] Add tests to verify log scanning functionality
   - [ ] **Step 2: Post-build Testing**
     - [ ] Implement quickscale manage tests after quickscale build
 
