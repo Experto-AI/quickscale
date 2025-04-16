@@ -1,16 +1,19 @@
 """Commands for project lifecycle management."""
 import os
 import sys
-import shutil
+import re
+import json
 import subprocess
+import shutil
 import time
 import secrets
 import logging
 from pathlib import Path
 from typing import Dict, Any, Optional, List, Tuple, NoReturn
+from datetime import datetime
 from quickscale.utils.logging_manager import LoggingManager
-from .command_base import Command
 from .project_manager import ProjectManager
+from .command_base import Command
 from .command_utils import (
     get_current_uid_gid,
     copy_with_vars,
@@ -18,8 +21,9 @@ from .command_utils import (
     wait_for_postgres,
     find_available_port,
     fix_permissions,
-    DOCKER_COMPOSE_COMMAND
+    DOCKER_COMPOSE_COMMAND,
 )
+
 class BuildProjectCommand(Command):
     """Handles creation of new QuickScale projects."""
     
@@ -920,11 +924,15 @@ except Exception as e:
             # Run post-build verification checks
             verification_results = self.verify_build()
             
-            # Include verification results in the return value
+            # Run log scanning after the build is complete
+            log_scan_results = self.scan_build_logs()
+            
+            # Include both verification and log scan results in the return value
             return {
                 "path": project_path,
                 "port": self.port,
-                "verification": verification_results
+                "verification": verification_results,
+                "log_scan": log_scan_results
             }
                 
         except Exception as e:
@@ -997,6 +1005,78 @@ except Exception as e:
             self.logger.warning(f"Migration verification failed: {e}{error_output}")
             self.logger.warning("This is not a critical error. Project may still work correctly.")
             # Don't raise the exception, as this is a verification step
+
+    def scan_build_logs(self) -> Dict[str, Any]:
+        """Scan build logs for issues and generate a summary report.
+        
+        This is a final verification step after the build process 
+        that checks for critical errors and warnings in logs that 
+        might affect project functionality.
+        
+        Returns:
+            Dictionary with summary information about issues found
+        """
+        self.logger.info("Scanning build logs for issues...")
+        
+        try:
+            from quickscale.utils.log_scanner import LogScanner
+            
+            # Initialize log scanner with absolute path to project directory
+            if not hasattr(self, 'project_dir') or not self.project_dir:
+                # Fallback to current directory if project_dir not set
+                self.logger.warning("Project directory not set, using current directory")
+                absolute_project_dir = Path.cwd().resolve()
+            else:
+                # Ensure we have an absolute path by resolving it
+                absolute_project_dir = Path(self.project_dir).resolve()
+                
+                # Make sure we're working with the project directory 
+                # and not a subdirectory with the same name
+                # Attempt to get the project name from project_dir path
+                project_name = self.project_dir.split('/')[-1] if isinstance(self.project_dir, str) else self.project_dir.name
+                
+                if absolute_project_dir.name == project_name:
+                    # We're in the correct directory
+                    pass
+                elif absolute_project_dir.parent.name == project_name:
+                    # We're in a subdirectory with the same name as the project
+                    absolute_project_dir = absolute_project_dir.parent
+                
+            self.logger.info(f"Initializing log scanner with project directory: {absolute_project_dir}")
+            scanner = LogScanner(absolute_project_dir, self.logger)
+            
+            # Scan all logs
+            issues = scanner.scan_all_logs()
+            
+            # Generate summary
+            summary = scanner.generate_summary()
+            
+            # Print summary to console
+            scanner.print_summary()
+            
+            # Log summary information
+            if not summary.get("logs_accessed", False):
+                self.logger.warning("Could not access any log files for scanning")
+            elif summary["total_issues"] > 0:
+                self.logger.warning(f"Found {summary['total_issues']} issues in logs "
+                                    f"({summary['error_count']} errors, {summary['warning_count']} warnings)")
+            else:
+                self.logger.info("No issues found in logs")
+            
+            return summary
+            
+        except Exception as e:
+            self.logger.error(f"Error scanning build logs: {e}")
+            # Return a minimal error summary
+            return {
+                "error": str(e),
+                "total_issues": 0,
+                "error_count": 0,
+                "warning_count": 0,
+                "has_critical_issues": False,
+                "scan_failed": True,
+                "logs_accessed": False
+            }
 
 class DestroyProjectCommand(Command):
     """Handles removal of existing QuickScale projects."""

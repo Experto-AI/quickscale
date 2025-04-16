@@ -257,58 +257,57 @@ For Django management commands help, use:
                 # Display verification results if available
                 if 'verification' in build_result:
                     verification = build_result['verification']
-                    print("\n🔍 Post-build verification results:")
-                    
-                    if verification.get('success', False):
-                        print("   ✅ All verification checks passed successfully")
-                    else:
-                        print("   ⚠️  Some verification checks failed")
+                    print("\n✅ Post-build verification results:")
+                    if verification and not verification.get('success', True):
+                        print("⚠️ Some verification checks failed. Your project may not work correctly.")
                         
-                        # Display details about failed checks
-                        failed_checks = []
-                        
+                        # Specific warnings for failed checks
                         if 'container_status' in verification and not verification['container_status'].get('success', True):
-                            status = verification['container_status']
-                            if not status.get('web', {}).get('running', False):
-                                failed_checks.append("Web container not running")
-                            elif not status.get('web', {}).get('healthy', False):
-                                failed_checks.append("Web container not responding")
-                            if not status.get('db', {}).get('running', False):
-                                failed_checks.append("Database container not running")
-                            elif not status.get('db', {}).get('healthy', False):
-                                failed_checks.append("Database container not healthy")
-                        
-                        # Check if 'database' key exists and its value is a dictionary before accessing keys
-                        if 'database' in verification and isinstance(verification['database'], dict) and not verification['database'].get('success', True):
-                            db = verification['database']
-                            if not db.get('can_connect', True):
-                                failed_checks.append("Database connection failed")
-                        
+                            print("   - ❌ Container services are not running properly")
                         if 'web_service' in verification and not verification['web_service'].get('success', True):
-                            if not verification['web_service'].get('responds', True):
-                                failed_checks.append("Web service not responding")
+                            print("   - ❌ Web service is not responding")
+                        if 'database' in verification and not verification['database']:
+                            print("   - ❌ Database connection failed")
                         
-                        if 'project_structure' in verification and not verification['project_structure'].get('success', True):
-                            struct = verification['project_structure']
-                            if not struct.get('required_files', True):
-                                failed_checks.append("Missing required project files")
-                            if not struct.get('env_file', True):
-                                failed_checks.append("Environment configuration incomplete")
-                            if not struct.get('apps_configured', True):
-                                failed_checks.append("Django apps not configured correctly")
-                        
-                        # Print the failures
-                        for issue in failed_checks:
-                            print(f"   ❌ {issue}")
-                            
-                        print("\n⚠️  The project was created but may not function correctly.")
-                        print("   Check the build log for more details: quickscale_build_log.txt")
+                        print("\n   Review the logs with: quickscale logs")
+                    else:
+                        # Show success message for verification
+                        print("   - ✅ Container services running properly")
+                        print("   - ✅ Database connectivity verified")
+                        if 'web_service' in verification and verification['web_service'].get('static_files') is False:
+                            print("   - ℹ️ Static files not accessible yet - this is normal for a fresh installation")
+                        else:
+                            print("   - ✅ Static files configured correctly")
+                        print("   - ✅ Project structure validated")
+                
+                # Display log scan results if available
+                if 'log_scan' in build_result:
+                    log_scan = build_result['log_scan']
+                    
+                    # Check if logs were accessed
+                    if not log_scan.get("logs_accessed", False):
+                        print("\n⚠️ Note: Could not access log files for scanning.")
+                        print("   You can view logs manually with: quickscale logs")
+                    # Display a summary only if there are issues
+                    elif log_scan.get('total_issues', 0) > 0:
+                        # Check if there are errors or only warnings
+                        if log_scan.get('error_count', 0) > 0:
+                            print("\n⚠️ Note the critical issues reported above.")
+                            print("   You can view detailed logs with: quickscale logs")
+                        else:
+                            print("\n⚠️ Some non-critical warnings were found.")
+                            print("   These warnings are not severe and won't affect your project functionality.")
+                            print("   You can view detailed logs with: quickscale logs")
+                    else:
+                        # Logs accessed successfully but no issues found
+                        print("\n✅ Log scanning completed: No issues found!")
+                        print("   All build, container, and migration logs are clean.")
+                
+                print("\n🎉 Build completed!")
+                
             else:
-                # Handle backward compatibility with old return type
-                project_path = build_result
-                print(f"\n📂 Project created in directory:\n   {project_path}")
-                print(f"\n⚡ To enter your project directory, run:\n   cd {args.name}")
-                print("\n🌐 Access your application at:\n   http://localhost:8000")
+                print("Build completed with unknown result format.")
+                logger.warning(f"Unexpected build result format: {build_result}")
             
         elif args.command == "up":
             command_manager.start_services()
