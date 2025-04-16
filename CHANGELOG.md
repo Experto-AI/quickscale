@@ -1,5 +1,20 @@
 # Quickscale Changelog
+
 All notable changes to this project will be documented in this file.
+
+## v0.6.0 (2025-04-15)
+- v0.6.0 feat: Add payment integration with django-stripe
+- Integrated dj-stripe package with proper configuration and feature flags
+- Added CustomUser-StripeCustomer model linking with synchronization
+- Implemented Stripe API client configuration and customer creation
+- Created basic webhook endpoints with signature verification
+- Added product model with price configuration options
+- Implemented Stripe product synchronization and webhook handlers
+- Created product management dashboard with Stripe integration
+- Added comprehensive test suite with mock responses for CI environments
+- Ensured compatibility with feature flag for environments without Stripe
+- Updated documentation with package requirements and setup instructions
+
 
 ## v0.5.1 (2025-04-13)
 - v0.5.1 fix: enhance Docker service reliability and system robustness
