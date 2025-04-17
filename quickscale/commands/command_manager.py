@@ -88,3 +88,64 @@ class CommandManager:
     def get_available_commands(self) -> List[str]:
         """Get list of available command names."""
         return list(self._commands.keys())
+    
+    def handle_command(self, command_name: str, args: Any) -> Any:
+        """Dispatch commands from CLI to appropriate handlers."""
+        # Django management commands
+        if command_name == 'manage':
+            return self.run_manage_command(args.args)
+        # Service commands
+        if command_name == 'up':
+            return self.start_services()
+        if command_name == 'down':
+            return self.stop_services()
+        if command_name == 'logs':
+            return self.view_logs(
+                service=getattr(args, 'service', None),
+                follow=getattr(args, 'follow', False),
+                since=getattr(args, 'since', None),
+                lines=getattr(args, 'lines', 100),
+                timestamps=getattr(args, 'timestamps', False)
+            )
+        if command_name == 'ps':
+            return self.check_services_status()
+        # Project commands
+        if command_name == 'build':
+            return self.build_project(getattr(args, 'name'))
+        if command_name == 'destroy':
+            return self.destroy_project()
+        if command_name == 'check':
+            return self.check_requirements(print_info=True)
+        # Shell commands
+        if command_name == 'shell':
+            return self.open_shell(command=getattr(args, 'cmd', None))
+        if command_name == 'django-shell':
+            return self.open_shell(django_shell=True)
+        # Help and version commands
+        if command_name == 'help':
+            from quickscale.utils.help_manager import show_manage_help
+            topic = getattr(args, 'topic', None)
+            if topic == 'manage':
+                show_manage_help()
+            else:
+                # Show general help with usage instructions
+                print("usage: quickscale [command] [options]")
+                print("\nAvailable commands:")
+                print("  build          - Build a new QuickScale project")
+                print("  up             - Start the project services")
+                print("  down           - Stop the project services")
+                print("  logs           - View project logs")
+                print("  ps             - Show status of running services")
+                print("  shell          - Open a shell in the web container")
+                print("  django-shell   - Open Django shell")
+                print("  manage         - Run Django management commands")
+                print("  help           - Show this help message")
+                print("  version        - Show the current version of QuickScale")
+                print("\nUse 'quickscale help manage' for Django management help.")
+            return
+        if command_name == 'version':
+            from quickscale import __version__
+            print(f"QuickScale version {__version__}")
+            return
+        # Fallback for unknown commands
+        raise KeyError(f"Command '{command_name}' not found")

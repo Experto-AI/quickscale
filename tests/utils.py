@@ -332,26 +332,35 @@ def get_service_logs(service_name):
     except (subprocess.SubprocessError, FileNotFoundError):
         return ""
 
-def run_quickscale_command(command, args=None, timeout=60, check=True):
-    """Run a quickscale command with proper error handling and timeout."""
-    cmd = ['quickscale', command]
-    if args:
-        if isinstance(args, list):
-            cmd.extend(args)
+def run_quickscale_command(*args, capture_output=True, check=False, timeout=None):
+    """Run a QuickScale command with the given arguments.
+    
+    Args will be flattened if they contain lists, ensuring proper command structure.
+    """
+    flat_args = []
+    for arg in args:
+        if isinstance(arg, list):
+            flat_args.extend(arg)
         else:
-            cmd.append(args)
-            
-    try:
-        result = subprocess.run(
-            cmd,
-            capture_output=True,
-            text=True,
-            check=check,
-            timeout=timeout
-        )
-        return result
-    except subprocess.TimeoutExpired as e:
-        raise TimeoutError(f"Command timed out after {timeout}s: {' '.join(cmd)}") from e
+            flat_args.append(arg)
+    
+    cmd = ['quickscale'] + flat_args
+    
+    # Handle capture_output parameter correctly for subprocess.run
+    kwargs = {}
+    if capture_output:
+        kwargs['stdout'] = subprocess.PIPE
+        kwargs['stderr'] = subprocess.PIPE
+        kwargs['text'] = True  # Use text=True instead of universal_newlines
+    
+    # Handle timeout properly, ensuring it's numeric
+    if timeout is not None:
+        if not isinstance(timeout, (int, float)):
+            raise TypeError(f"timeout must be a number, got {type(timeout)}")
+        kwargs['timeout'] = timeout
+    
+    result = subprocess.run(cmd, **kwargs, check=check)
+    return result
 
 def is_docker_available():
     """

@@ -1,11 +1,4 @@
-"""Error handling and management for QuickScale CLI.
-
-This module provides comprehensive error handling for CLI commands including:
-- Custom exception types for different error categories
-- Standardized error formatting
-- Recovery suggestions based on error types
-- Context-aware error messages
-"""
+"""Error handling and management for QuickScale CLI."""
 import sys
 import logging
 import subprocess
@@ -143,15 +136,7 @@ def handle_command_error(
     logger: Optional[logging.Logger] = None,
     exit_on_error: bool = True
 ) -> Optional[NoReturn]:
-    """Handle command errors uniformly.
-    
-    This function processes errors from command execution and:
-    1. Ensures they're properly wrapped in CommandError instances
-    2. Logs appropriate messages with different severity levels
-    3. Prints formatted error messages to console
-    4. Provides recovery suggestions when available
-    5. Exits with appropriate status code if requested
-    """
+    """Handle command errors uniformly."""
     # Convert to CommandError if needed
     if not isinstance(error, CommandError):
         error = convert_exception(error)

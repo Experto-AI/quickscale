@@ -27,9 +27,7 @@ The most important command is `quickscale build`, which generates the project st
 quickscale/
 ├── commands/                 # Command system implementation
 ├── config/                   # Configuration management
-├── quickscale/               # Package core
-│   └── templates/            # Project template files
-├── templates/                # Project templates
+├── templates/                # Project template files
 │   ├── common/               # Common Django app
 │   │   ├── migrations/       # Pre-generated migrations
 │   │   └── templates/        # App-specific templates
@@ -38,8 +36,14 @@ quickscale/
 │   ├── dashboard/            # Dashboard Django app
 │   │   ├── migrations/       # Pre-generated migrations
 │   │   └── templates/        # App-specific templates
+│   │   └── tests/            # App-specific tests
 │   ├── djstripe/             # Django Stripe integration
-│   │   └── migrations/       # Pre-generated migrations
+│   │   ├── management/       # Management commands
+│   │   │   └── commands/     # Custom commands
+│   │   ├── migrations/       # Pre-generated migrations
+│   │   ├── templates/        # App-specific templates
+│   │   │   └── djstripe/     # DjStripe templates
+│   │   └── tests/            # DjStripe tests
 │   ├── docs/                 # Documentation files
 │   ├── js/                   # JavaScript assets
 │   ├── logs/                 # Log files directory
@@ -51,11 +55,13 @@ quickscale/
 │   │   └── js/               # JavaScript files
 │   ├── templates/            # Global templates
 │   │   ├── account/          # Authentication templates
+│   │   │   └── email/        # Email templates
 │   │   ├── base/             # Base templates
 │   │   ├── components/       # Reusable components
 │   │   ├── dashboard/        # Dashboard templates
 │   │   ├── public/           # Public templates
 │   │   └── users/            # User templates
+│   ├── tests/                # Template tests
 │   └── users/                # Users Django app
 │       └── migrations/       # Pre-generated migrations
 ├── tests/                    # Test suite
@@ -66,10 +72,13 @@ tests/
 │   └── djstripe/             # Stripe integration tests
 ├── e2e/                      # End-to-end tests
 │   └── support/              # E2E test support files
+│       └── test_project_template/ # Test template
+│           └── core/         # Core template
 ├── integration/              # Integration tests
 ├── unit/                     # Unit tests
 │   ├── commands/             # Command tests
-│   └── fixtures/             # Test fixtures
+│   ├── fixtures/             # Test fixtures
+│   └── utils/                # Utility tests
 └── users/                    # User authentication tests
     └── migrations/           # Migration tests
 ```

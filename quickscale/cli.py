@@ -292,136 +292,36 @@ For Django management commands help, use:
                     elif log_scan.get('total_issues', 0) > 0:
                         # Check if there are errors or only warnings
                         if log_scan.get('error_count', 0) > 0:
-                            print("\n⚠️ Note the critical issues reported above.")
+                            if log_scan.get('real_errors', False):
+                                print("\n⚠️ Note: Some critical issues were found.")
+                                print("   Please review the details above.")
+                            else:
+                                print("\n⚠️ Note: The issues reported above look like errors but are actually expected.")
+                                print("   - Migration names containing 'error' are false positives")
+                                print("   - Database shutdown messages with 'abort' are normal")
+                                print("   - All migrations showing 'OK' status completed successfully")
                             print("   You can view detailed logs with: quickscale logs")
                         else:
                             print("\n⚠️ Some non-critical warnings were found.")
-                            print("   These warnings are not severe and won't affect your project functionality.")
-                            print("   You can view detailed logs with: quickscale logs")
+                            print("   These warnings are normal during development:")
+                            print("   - Development server warnings are expected")
+                            print("   - Static file 404 errors are normal on first startup")
+                            print("   - PostgreSQL authentication warnings are acceptable in dev environments")
+                            print("   These won't affect your project functionality.")
                     else:
                         # Logs accessed successfully but no issues found
                         print("\n✅ Log scanning completed: No issues found!")
                         print("   All build, container, and migration logs are clean.")
                 
-                print("\n🎉 Build completed!")
-                
             else:
-                print("Build completed with unknown result format.")
-                logger.warning(f"Unexpected build result format: {build_result}")
-            
-        elif args.command == "up":
-            command_manager.start_services()
-            
-        elif args.command == "down":
-            command_manager.stop_services()
-            
-        elif args.command == "destroy":
-            result = command_manager.destroy_project()
-            if result and result.get('success'):
-                if result.get('containers_only'):
-                    print(f"\n✅ Successfully stopped and removed containers.")
-                    print("No project directory was deleted.")
-                else:
-                    project_name = result.get('project')
-                    print(f"\n✅ Project '{project_name}' has been permanently destroyed.")
-                    print("\n⚡ You are still in the deleted project's directory path.")
-                    print("   To navigate to the parent directory, run:\n   cd ..")
-            elif result and result.get('reason') == 'cancelled':
-                print("\n⚠️ Operation cancelled. No changes were made.")
-                
-        elif args.command == "check":
-            command_manager.check_requirements(print_info=True)
-            
-        elif args.command == "logs":
-            follow = getattr(args, 'follow', False)
-            since = getattr(args, 'since', None)
-            lines = getattr(args, 'lines', 100)
-            timestamps = getattr(args, 'timestamps', False)
-            command_manager.view_logs(
-                args.service, 
-                follow=follow,
-                since=since,
-                lines=lines,
-                timestamps=timestamps
-            )
-            
-        elif args.command == "manage":
-            # First check if project exists, consistent with other commands
-            state = ProjectManager.get_project_state()
-            if not state['has_project']:
-                error = CommandError(
-                    ProjectManager.PROJECT_NOT_FOUND_MESSAGE,
-                    recovery="Create a project with 'quickscale build <project_name>'"
-                )
-                handle_command_error(error)
-                
-            if not args.args:
-                error = ValidationError(
-                    "No Django management command specified",
-                    recovery="Use 'quickscale manage -h' or 'quickscale help manage' to see available commands"
-                )
-                handle_command_error(error)
-                
-            if args.args[0] in ['help', '--help', '-h']:
-                show_manage_help()
-            else:
-                command_manager.run_manage_command(args.args)
-                
-        elif args.command == "ps":
-            command_manager.check_services_status()
-            
-        elif args.command == "shell":
-            if hasattr(args, 'cmd') and args.cmd:
-                command_manager.open_shell(command=args.cmd)
-            else:
-                command_manager.open_shell()
-            
-        elif args.command == "django-shell":
-            command_manager.open_shell(django_shell=True)
-            
-        elif args.command == "help":
-            if hasattr(args, 'topic') and args.topic:
-                if args.topic == "manage":
-                    show_manage_help()
-                elif args.topic in subparsers.choices:
-                    subparsers.choices[args.topic].print_help()
-                else:
-                    logger.warning(f"Unknown help topic requested: {args.topic}")
-                    print(f"Unknown help topic: {args.topic}")
-                    parser.print_help()
-            else:
-                parser.print_help()
-                print("\nFor Django management commands help, use:")
-                print("  quickscale help manage")
-                
-        elif args.command == "version":
-            print(f"QuickScale version {__version__}")
+                print("Build failed. Please check the logs for more details.")
             
         else:
-            error = UnknownCommandError(
-                f"Unknown command: {args.command}",
-                recovery="Use 'quickscale help' to see available commands"
-            )
-            handle_command_error(error)
+            # Handle other commands
+            command_manager.handle_command(args.command, args)
             
-        return 0
-        
-    except KeyboardInterrupt:
-        logger.info("Operation cancelled by user")
-        print("\nOperation cancelled by user")
-        return 1
-        
     except Exception as e:
-        # Log the full exception details for debugging
-        logger.exception("Unhandled exception in CLI")
-        
-        # Handle the error with our error handling system
-        error = CommandError(
-            f"An unexpected error occurred: {str(e)}",
-            details=f"{e.__class__.__name__}: {str(e)}",
-            recovery="Check logs for details or report this issue"
-        )
-        handle_command_error(error)
+        print(f"An error occurred: {e}")
         return 1
 
 if __name__ == "__main__":

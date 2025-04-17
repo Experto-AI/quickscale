@@ -61,8 +61,15 @@ class ManageCommand(Command):
         """Run Django management commands."""
         state = ProjectManager.get_project_state()
         if not state['has_project']:
-            print(ProjectManager.PROJECT_NOT_FOUND_MESSAGE)
-            return
+            print("Error: " + ProjectManager.PROJECT_NOT_FOUND_MESSAGE)
+            print("Suggestion: Make sure you're in a QuickScale project directory or create a new project with 'quickscale build <project_name>'")
+            sys.exit(1)
+        
+        # Check if no Django management command was specified
+        if not args:
+            print("Error: No Django management command specified")
+            print("Suggestion: Run 'quickscale manage help' to see available commands")
+            sys.exit(1)
         
         try:
             subprocess.run(
