@@ -105,10 +105,7 @@ def wait_for_postgres(
     max_attempts: int = 10,
     delay: int = 1
 ) -> bool:
-    """Wait for PostgreSQL to be ready with exponential backoff."""
-    logger.info("Waiting for PostgreSQL...")
-    
-    # Validate pg_user parameter
+    """Wait for PostgreSQL to be ready."""
     if not pg_user:
         logger.error("PostgreSQL user is not specified")
         logger.error("Set the pg_user variable in your project configuration")
@@ -122,7 +119,7 @@ def wait_for_postgres(
     for attempt in range(1, max_attempts + 1):
         try:
             result = subprocess.run(
-                [DOCKER_COMPOSE_COMMAND, "exec", "db", "pg_isready", "-U", pg_user],
+                [DOCKER_COMPOSE_COMMAND, "exec", "-e", f"PGUSER={pg_user}", "db", "pg_isready", "-U", pg_user],
                 check=False,
                 capture_output=True,
                 text=True,

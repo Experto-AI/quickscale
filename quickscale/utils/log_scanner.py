@@ -109,30 +109,31 @@ class LogScanner:
                 "Docker environment variable not set"
             ),
             LogPattern(
-                r"warning: enabling \"trust\" authentication for local connections", 
-                "warning",
-                "PostgreSQL using trust authentication"
-            ),
-            LogPattern(
                 r"FATAL:.*role .* does not exist", 
                 "error",
                 "PostgreSQL role/user does not exist"
             ),
             # Generic patterns to catch other issues
             LogPattern(
-                r"(?i)error|exception|fail|failed|failure", 
+                r"(?i)\b(error|exception|fail|failed|failure)\b(?!.*OK)", 
                 "error",
                 "Generic error detected",
                 context_lines=2
             ),
             LogPattern(
-                r"(?i)fatal|killed|crash|abort", 
+                r"(?i)\b(fatal|killed|crash)\b(?!.*OK)", 
                 "error",
                 "Fatal error detected",
                 context_lines=2
             ),
             LogPattern(
-                r"(?i)warn|warning", 
+                r"(?i)\babort\b(?!.*normal)", 
+                "error",
+                "Abort detected",
+                context_lines=2
+            ),
+            LogPattern(
+                r"(?i)\b(warn|warning)\b(?!.*404)(?!.*development server)(?!.*trust authentication)", 
                 "warning",
                 "Generic warning detected",
                 context_lines=1
@@ -193,19 +194,25 @@ class LogScanner:
             ),
             # Generic patterns to catch other issues
             LogPattern(
-                r"(?i)error|exception|fail|failed|failure", 
+                r"(?i)\b(error|exception|fail|failed|failure)\b(?!.*OK)", 
                 "error",
                 "Generic error detected",
                 context_lines=2
             ),
             LogPattern(
-                r"(?i)fatal|killed|crash|abort", 
+                r"(?i)\b(fatal|killed|crash)\b(?!.*OK)", 
                 "error",
                 "Fatal error detected",
                 context_lines=2
             ),
             LogPattern(
-                r"(?i)warn|warning", 
+                r"(?i)\babort\b(?!.*normal)", 
+                "error",
+                "Abort detected",
+                context_lines=2
+            ),
+            LogPattern(
+                r"(?i)\b(warn|warning)\b(?!.*404)(?!.*development server)(?!.*trust authentication)", 
                 "warning",
                 "Generic warning detected",
                 context_lines=1
@@ -251,19 +258,25 @@ class LogScanner:
             ),
             # Generic patterns to catch other issues
             LogPattern(
-                r"(?i)error|exception|fail|failed|failure", 
+                r"(?i)\b(error|exception|fail|failed|failure)\b(?!.*OK)", 
                 "error",
                 "Generic error detected",
                 context_lines=2
             ),
             LogPattern(
-                r"(?i)fatal|killed|crash|abort", 
+                r"(?i)\b(fatal|killed|crash)\b(?!.*OK)", 
                 "error",
                 "Fatal error detected",
                 context_lines=2
             ),
             LogPattern(
-                r"(?i)warn|warning", 
+                r"(?i)\babort\b(?!.*normal)", 
+                "error",
+                "Abort detected",
+                context_lines=2
+            ),
+            LogPattern(
+                r"(?i)\b(warn|warning)\b(?!.*404)(?!.*development server)(?!.*trust authentication)", 
                 "warning",
                 "Generic warning detected",
                 context_lines=1
@@ -312,7 +325,18 @@ class LogScanner:
                             warnings = re.findall(r"WARN\[\d+\].*", content)
                             if warnings:
                                 self.logger.debug(f"Docker warnings found: {len(warnings)}")
-                                for warning in warnings[:3]:  # Log first few warnings
+                                filtered_warnings = []
+                                for warning in warnings:
+                                    # Check for static files warning false positive
+                                    if "Static files not accessible yet" in warning:
+                                        static_css_path = os.path.join(self.project_dir, "static", "css")
+                                        static_js_path = os.path.join(self.project_dir, "static", "js")
+                                        if os.path.isdir(static_css_path) and os.path.isdir(static_js_path):
+                                            # This warning is a known false positive as static assets (css and js) are present
+                                            continue  # Skip adding this warning
+                                    # Add warning if it doesn't match known benign patterns
+                                    filtered_warnings.append(warning)
+                                for warning in filtered_warnings[:3]:  # Log first few warnings
                                     self.logger.debug(f"Warning: {warning.strip()}")
                 except Exception as e:
                     self.logger.warning(f"Error checking build log for warnings: {e}")
@@ -501,6 +525,11 @@ class LogScanner:
                 line_number = content[:match.start()].count('\n') + 1
                 message = match.group(0).strip()
                 
+                # Skip known false positives
+                if self._is_false_positive(message, source_type, lines, line_number):
+                    self.logger.debug(f"Skipping false positive: {message}")
+                    continue
+                
                 # Get context lines if needed
                 context = []
                 if pattern.context_lines > 0:
@@ -520,6 +549,71 @@ class LogScanner:
         
         return issues
     
+    def _is_false_positive(self, message: str, source_type: str, lines: List[str], line_number: int) -> bool:
+        """Check if a match is a known false positive.
+        
+        Args:
+            message: The matched message
+            source_type: Type of log source
+            lines: All lines in the log file
+            line_number: Line number of the match
+
+        Returns:
+            True if the match is a false positive, False otherwise
+        """
+        # Static files warning during initial build is expected
+        if "Static files not accessible yet" in message:
+            return True
+            
+        # PostgreSQL trust authentication warning is expected during initialization
+        if "trust authentication" in message or "enabling \"trust\" authentication" in message:
+            return True
+            
+        # Specific PostgreSQL initdb trust authentication warning
+        if "initdb: warning: enabling" in message and "trust" in message and "authentication for local connections" in message:
+            return True
+            
+        # Django auth permission duplication errors are handled gracefully in migrations
+        if "duplicate key value violates unique constraint" in message and "auth_permission" in message:
+            # Check if we're continuing despite this error by looking at surrounding lines
+            for i in range(max(0, line_number), min(len(lines), line_number + 5)):
+                if "Continuing despite error with auth migrations" in lines[i]:
+                    return True
+            
+        # Django missing migrations warning during build is handled by auto-generation
+        if "have changes that are not yet reflected in a migration" in message:
+            return True
+            
+        # Postgres normal shutdown messages should not be treated as errors
+        if "database system was shut down" in message or "database system is ready to accept connections" in message:
+            return True
+            
+        # Docker temporary connection issues that eventually succeed
+        if "Error response from daemon" in message and "container not running" in message:
+            # Check if service starts successfully later
+            for i in range(min(len(lines), line_number + 20)):
+                if "Starting" in lines[i] and "Started" in lines[i]:
+                    return True
+        
+        # False positive errors in migration messages
+        if source_type == "build" and ("ERROR" in message or "Error" in message):
+            # Check context to see if this is part of a migration that actually succeeded
+            context_start = max(0, line_number - 5)
+            context_end = min(len(lines), line_number + 5)
+            context = lines[context_start:context_end]
+            
+            # If the error is followed by "Migrations applied successfully", it's a false positive
+            for line in context:
+                if "Migrations for" in line and "applied successfully" in line:
+                    return True
+                    
+            # Skip errors about continuing after auth migrations which are handled
+            if "Continuing despite error with auth migrations" in message:
+                return True
+        
+        # Default: not a false positive
+        return False
+    
     def generate_summary(self) -> Dict[str, Any]:
         """Generate a summary of issues found during scanning.
         
@@ -535,7 +629,8 @@ class LogScanner:
                 "issues_by_source": {},
                 "issues_by_severity": {},
                 "has_critical_issues": False,
-                "logs_accessed": False  # Important flag to indicate no logs were accessed
+                "logs_accessed": False,  # Important flag to indicate no logs were accessed
+                "real_errors": False
             }
             
         if not self.issues:
@@ -546,38 +641,54 @@ class LogScanner:
                 "issues_by_source": {},
                 "issues_by_severity": {},
                 "has_critical_issues": False,
-                "logs_accessed": True  # Logs were accessed but no issues found
+                "logs_accessed": True,  # Logs were accessed but no issues found
+                "real_errors": False
             }
         
+        # Filter out PostgreSQL trust authentication warnings
+        filtered_issues = []
+        for issue in self.issues:
+            if (issue.severity == "warning" and 
+                ("trust authentication" in issue.message or "enabling \"trust\" authentication" in issue.message)):
+                # Skip this warning
+                continue
+            filtered_issues.append(issue)
+        
         # Count issues by severity and source
-        error_count = sum(1 for issue in self.issues if issue.severity == "error")
-        warning_count = sum(1 for issue in self.issues if issue.severity == "warning")
+        error_count = sum(1 for issue in filtered_issues if issue.severity == "error")
+        warning_count = sum(1 for issue in filtered_issues if issue.severity == "warning")
+        
+        # Analyze error issues to check if they're real errors
+        error_issues = [issue for issue in filtered_issues if issue.severity == "error"]
+        real_errors = any(self._analyze_migration_issue(issue) for issue in error_issues 
+                          if "migration" in issue.source or "apply" in issue.message.lower())
         
         issues_by_source = {}
-        for issue in self.issues:
+        for issue in filtered_issues:
             if issue.source not in issues_by_source:
                 issues_by_source[issue.source] = []
             issues_by_source[issue.source].append(issue)
         
         issues_by_severity = {
-            "error": [issue for issue in self.issues if issue.severity == "error"],
-            "warning": [issue for issue in self.issues if issue.severity == "warning"],
-            "info": [issue for issue in self.issues if issue.severity == "info"]
+            "error": [issue for issue in filtered_issues if issue.severity == "error"],
+            "warning": [issue for issue in filtered_issues if issue.severity == "warning"],
+            "info": [issue for issue in filtered_issues if issue.severity == "info"]
         }
         
         return {
-            "total_issues": len(self.issues),
+            "total_issues": len(filtered_issues),
             "error_count": error_count,
             "warning_count": warning_count,
             "issues_by_source": issues_by_source,
             "issues_by_severity": issues_by_severity,
             "has_critical_issues": error_count > 0,
-            "logs_accessed": True
+            "logs_accessed": True,
+            "real_errors": real_errors
         }
     
     def print_summary(self) -> None:
         """Print a summary of issues found during scanning."""
-        summary = self.generate_summary()
+        summary = self.generate_summary()  # This already filters out PostgreSQL trust warnings
         
         # Check if any logs were successfully accessed
         if not summary.get("logs_accessed", False):
@@ -588,7 +699,7 @@ class LogScanner:
             print("   - Docker logs collection failed")
             return
         
-        # If no issues found, print a success message
+        # If no issues found after filtering, print a success message
         if summary["total_issues"] == 0:
             print("\n✅ No issues found in logs")
             return
@@ -603,6 +714,15 @@ class LogScanner:
         # Print critical issues first
         if summary['error_count'] > 0:
             print("\n❌ Critical Issues:")
+            
+            # Add note about false positives if we have migration errors that are false positives
+            has_migration_errors = any("migration" in issue.source or "apply" in issue.message.lower() 
+                                      for issue in summary["issues_by_severity"]["error"])
+            
+            if has_migration_errors and not summary.get('real_errors', False):
+                print("   Note: The following errors are likely false positives from normal operation")
+                print("   Migration names containing 'error' or database shutdown messages are usually normal")
+                
             for issue in summary["issues_by_severity"]["error"]:
                 source_label = f" ({issue.source})" if issue.source else ""
                 print(f"   * {issue.message}{source_label}")
@@ -615,6 +735,10 @@ class LogScanner:
         # Print warnings
         if summary['warning_count'] > 0:
             print("\n⚠️ Warnings:")
+            
+            # Add note about expected warnings
+            print("   Note: Most warnings below are expected during normal development and startup")
+            
             for issue in summary["issues_by_severity"]["warning"]:
                 source_label = f" ({issue.source})" if issue.source else ""
                 print(f"   * {issue.message}{source_label}")
@@ -625,4 +749,27 @@ class LogScanner:
                         print(f"      {prefix}{line}")
                 
         # Print a separator line
-        print("\n" + "-" * 50) 
+        print("\n" + "-" * 50)
+    
+    def _analyze_migration_issue(self, issue: LogIssue) -> bool:
+        """Analyze a migration issue to determine if it's a real error.
+        
+        Args:
+            issue: The migration issue to analyze
+            
+        Returns:
+            True if it's a real error, False if it's a false positive
+        """
+        # If the issue is related to migrations and contains "OK" or "[X]", it's a false positive
+        message = issue.message.lower()
+        
+        # If it has indication of successful completion, it's not a real error
+        if "... ok" in message or "[x]" in message:
+            return False
+            
+        # If it contains error-like words but is actually a migration name, it's a false positive
+        if ("error" in message or "validator" in message) and (
+            "apply" in message or "migration" in message):
+            return False
+            
+        return True 

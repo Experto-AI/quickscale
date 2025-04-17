@@ -3,6 +3,9 @@ import pytest
 import os
 import re
 from unittest.mock import Mock, patch
+from django.conf import settings
+from django.contrib.auth import get_user_model
+from django.db import models
 
 # Define what the model should look like for testing
 class MockStripeCustomer:
@@ -38,7 +41,7 @@ class TestStripeCustomerModel:
     def test_model_attributes(self):
         """Test that StripeCustomer model has the expected fields."""
         # Check if the model file exists
-        model_path = os.path.join('/home/victor/Code/quickscale/quickscale/templates/users/models.py')
+        model_path = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), 'quickscale/templates/users/models.py')
         assert os.path.exists(model_path), "StripeCustomer model file not found"
         
         # Read the file content

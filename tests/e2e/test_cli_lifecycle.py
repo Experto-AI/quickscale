@@ -961,14 +961,14 @@ class TestCLILifecycle:
                     pytest.skip("Test skipped due to container stability issues. Unable to capture debug logs.")
     
     def test_05_django_manage(self, test_project):
-        """Test running Django management commands."""
+        """Test Django manage commands."""
+        # Skip test if project creation failed
         if not test_project:
             pytest.skip("Test project creation failed")
-            
         # Change to project directory before running commands
         with self.in_project_dir(test_project["dir"]):
             # Run a simple Django management command (help)
-            result = run_quickscale_command('manage', ['help'], timeout=30)
+            result = run_quickscale_command('manage', 'help', timeout=30)
             
             # Verify command succeeded
             assert result.returncode == 0, f"Command failed: {result.stdout}\n{result.stderr}"

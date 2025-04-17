@@ -2,6 +2,20 @@
 
 All notable changes to this project will be documented in this file.
 
+## v0.6.1 (2025-04-18)
+- v0.6.1 fix: improve log scanning and build process with better error detection
+- Add log scanning integration into quickscale build command
+- Fix PostgreSQL \"role 'root' does not exist\" error detection
+- Fix quickscale manage test functionality after build
+- Fix environment variable warnings for DOCKER_UID and DOCKER_GID
+- Enhance _is_false_positive method to detect more expected messages
+- Add migration-specific analysis to identify real errors vs. false positives
+- Improve regular expressions for pattern matching to reduce false matches
+- Add better context in CLI output to explain normal messages
+- Add more detailed logging about false positive filtering
+- Added test to verify codebase directory structure
+- Added test to verify Dockerfile and docker-compose.yml file existence
+
 ## v0.6.0 (2025-04-15)
 - v0.6.0 feat: Add payment integration with django-stripe
 - Integrated dj-stripe package with proper configuration and feature flags
