@@ -150,6 +150,108 @@ flowchart TD
     Templates --> Generated
 ```
 
+### Generated Project Structure
+
+This component diagram shows the detailed structure of a generated Django project:
+
+```mermaid
+---
+config:
+  layout: elk
+---
+flowchart TD
+ subgraph Django["Generated Django Project"]
+    direction TB
+        settings["core/settings.py<br>Main Configuration"]
+        urls["core/urls.py<br>URL Routing"]
+        wsgi["core/wsgi.py<br>WSGI App"]
+        asgi["core/asgi.py<br>ASGI App"]
+  end
+ subgraph Users["users/"]
+    direction TB
+        users_models["models.py<br>CustomUser"]
+        users_forms["forms.py<br>Auth Forms"]
+        users_adapters["adapters.py<br>Auth Adapters"]
+        users_admin["admin.py<br>Admin UI"]
+  end
+ subgraph Common["common/"]
+    direction TB
+        common_models["models.py<br>Shared Models"]
+        common_middleware["middleware.py<br>Request Processing"]
+        common_utils["utils.py<br>Shared Utilities"]
+  end
+ subgraph Public["public/"]
+    direction TB
+        public_views["views.py<br>Public Pages"]
+        public_urls["urls.py<br>Public Routes"]
+  end
+ subgraph Dashboard["dashboard/"]
+    direction TB
+        dash_views["views.py<br>Dashboard UI"]
+        dash_urls["urls.py<br>Dashboard Routes"]
+  end
+ subgraph Payments["djstripe/"]
+    direction TB
+        payment_models["models.py<br>Subscription Models"]
+        payment_views["views.py<br>Payment Views"]
+        webhook["webhooks.py<br>Stripe Webhooks"]
+  end
+ subgraph Apps["Django Apps"]
+    direction TB
+        Users
+        Common
+        Public
+        Dashboard
+        Payments
+  end
+ subgraph Templates["templates/"]
+    direction TB
+        base["base.html<br>Base Template"]
+        components["components/<br>Reusable UI"]
+        acct_templates["account/<br>Auth Pages"]
+        dash_templates["dashboard/<br>Dashboard UI"]
+  end
+ subgraph Static["static/"]
+    direction TB
+        css["css/<br>Bulma Styles"]
+        js["js/<br>Alpine + HTMX"]
+        images["images/<br>UI Assets"]
+  end
+ subgraph Frontend["Frontend Assets"]
+    direction TB
+        Templates
+        Static
+  end
+ subgraph Infrastructure["Deployment Infrastructure"]
+    direction TB
+        dockerfile["Dockerfile"]
+        compose["docker-compose.yml"]
+        env["Environment<br>.env"]
+        entrypoint["entrypoint.sh"]
+  end
+ subgraph Database["PostgreSQL Database"]
+    direction TB
+        users_table["users_customuser"]
+        profile_table["users_profile"]
+        subscription_table["djstripe_subscription"]
+        customer_table["djstripe_customer"]
+  end
+    settings --> urls & wsgi & asgi
+    dockerfile --> compose
+    env --> compose
+    entrypoint --> dockerfile
+    users_table --> profile_table & customer_table
+    customer_table --> subscription_table
+    Django --> Apps
+    Apps --> Frontend
+    Frontend --> Infrastructure
+    Infrastructure --> Database
+    urls -- includes --> Public & Dashboard & Payments
+    Users -- authenticates --> Dashboard
+    Common -- supports --> Public & Dashboard
+    Payments -- enables --> Dashboard
+```
+
 ### Command Execution Sequence
 
 The following diagram illustrates the sequence of interactions when executing the `build` command:
@@ -359,107 +461,6 @@ direction LR
     ServiceCommand -- UntitledClass
 ```
 
-### Generated Project Structure
-
-This component diagram shows the detailed structure of a generated Django project:
-
-```mermaid
----
-config:
-  layout: elk
----
-flowchart TD
- subgraph Django["Generated Django Project"]
-    direction TB
-        settings["core/settings.py<br>Main Configuration"]
-        urls["core/urls.py<br>URL Routing"]
-        wsgi["core/wsgi.py<br>WSGI App"]
-        asgi["core/asgi.py<br>ASGI App"]
-  end
- subgraph Users["users/"]
-    direction TB
-        users_models["models.py<br>CustomUser"]
-        users_forms["forms.py<br>Auth Forms"]
-        users_adapters["adapters.py<br>Auth Adapters"]
-        users_admin["admin.py<br>Admin UI"]
-  end
- subgraph Common["common/"]
-    direction TB
-        common_models["models.py<br>Shared Models"]
-        common_middleware["middleware.py<br>Request Processing"]
-        common_utils["utils.py<br>Shared Utilities"]
-  end
- subgraph Public["public/"]
-    direction TB
-        public_views["views.py<br>Public Pages"]
-        public_urls["urls.py<br>Public Routes"]
-  end
- subgraph Dashboard["dashboard/"]
-    direction TB
-        dash_views["views.py<br>Dashboard UI"]
-        dash_urls["urls.py<br>Dashboard Routes"]
-  end
- subgraph Payments["djstripe/"]
-    direction TB
-        payment_models["models.py<br>Subscription Models"]
-        payment_views["views.py<br>Payment Views"]
-        webhook["webhooks.py<br>Stripe Webhooks"]
-  end
- subgraph Apps["Django Apps"]
-    direction TB
-        Users
-        Common
-        Public
-        Dashboard
-        Payments
-  end
- subgraph Templates["templates/"]
-    direction TB
-        base["base.html<br>Base Template"]
-        components["components/<br>Reusable UI"]
-        acct_templates["account/<br>Auth Pages"]
-        dash_templates["dashboard/<br>Dashboard UI"]
-  end
- subgraph Static["static/"]
-    direction TB
-        css["css/<br>Bulma Styles"]
-        js["js/<br>Alpine + HTMX"]
-        images["images/<br>UI Assets"]
-  end
- subgraph Frontend["Frontend Assets"]
-    direction TB
-        Templates
-        Static
-  end
- subgraph Infrastructure["Deployment Infrastructure"]
-    direction TB
-        dockerfile["Dockerfile"]
-        compose["docker-compose.yml"]
-        env["Environment<br>.env"]
-        entrypoint["entrypoint.sh"]
-  end
- subgraph Database["PostgreSQL Database"]
-    direction TB
-        users_table["users_customuser"]
-        profile_table["users_profile"]
-        subscription_table["djstripe_subscription"]
-        customer_table["djstripe_customer"]
-  end
-    settings --> urls & wsgi & asgi
-    dockerfile --> compose
-    env --> compose
-    entrypoint --> dockerfile
-    users_table --> profile_table & customer_table
-    customer_table --> subscription_table
-    Django --> Apps
-    Apps --> Frontend
-    Frontend --> Infrastructure
-    Infrastructure --> Database
-    urls -- includes --> Public & Dashboard & Payments
-    Users -- authenticates --> Dashboard
-    Common -- supports --> Public & Dashboard
-    Payments -- enables --> Dashboard
-```
 
 ### Database ER Diagram
 
