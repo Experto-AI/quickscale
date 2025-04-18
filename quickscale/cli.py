@@ -257,172 +257,71 @@ For Django management commands help, use:
                 # Display verification results if available
                 if 'verification' in build_result:
                     verification = build_result['verification']
-                    print("\n🔍 Post-build verification results:")
-                    
-                    if verification.get('success', False):
-                        print("   ✅ All verification checks passed successfully")
-                    else:
-                        print("   ⚠️  Some verification checks failed")
+                    print("\n✅ Post-build verification results:")
+                    if verification and not verification.get('success', True):
+                        print("⚠️ Some verification checks failed. Your project may not work correctly.")
                         
-                        # Display details about failed checks
-                        failed_checks = []
-                        
+                        # Specific warnings for failed checks
                         if 'container_status' in verification and not verification['container_status'].get('success', True):
-                            status = verification['container_status']
-                            if not status.get('web', {}).get('running', False):
-                                failed_checks.append("Web container not running")
-                            elif not status.get('web', {}).get('healthy', False):
-                                failed_checks.append("Web container not responding")
-                            if not status.get('db', {}).get('running', False):
-                                failed_checks.append("Database container not running")
-                            elif not status.get('db', {}).get('healthy', False):
-                                failed_checks.append("Database container not healthy")
-                        
-                        # Check if 'database' key exists and its value is a dictionary before accessing keys
-                        if 'database' in verification and isinstance(verification['database'], dict) and not verification['database'].get('success', True):
-                            db = verification['database']
-                            if not db.get('can_connect', True):
-                                failed_checks.append("Database connection failed")
-                        
+                            print("   - ❌ Container services are not running properly")
                         if 'web_service' in verification and not verification['web_service'].get('success', True):
-                            if not verification['web_service'].get('responds', True):
-                                failed_checks.append("Web service not responding")
+                            print("   - ❌ Web service is not responding")
+                        if 'database' in verification and not verification['database']:
+                            print("   - ❌ Database connection failed")
                         
-                        if 'project_structure' in verification and not verification['project_structure'].get('success', True):
-                            struct = verification['project_structure']
-                            if not struct.get('required_files', True):
-                                failed_checks.append("Missing required project files")
-                            if not struct.get('env_file', True):
-                                failed_checks.append("Environment configuration incomplete")
-                            if not struct.get('apps_configured', True):
-                                failed_checks.append("Django apps not configured correctly")
-                        
-                        # Print the failures
-                        for issue in failed_checks:
-                            print(f"   ❌ {issue}")
-                            
-                        print("\n⚠️  The project was created but may not function correctly.")
-                        print("   Check the build log for more details: quickscale_build_log.txt")
+                        print("\n   Review the logs with: quickscale logs")
+                    else:
+                        # Show success message for verification
+                        print("   - ✅ Container services running properly")
+                        print("   - ✅ Database connectivity verified")
+                        if 'web_service' in verification and verification['web_service'].get('static_files') is False:
+                            print("   - ℹ️ Static files not accessible yet - this is normal for a fresh installation")
+                        else:
+                            print("   - ✅ Static files configured correctly")
+                        print("   - ✅ Project structure validated")
+                
+                # Display log scan results if available
+                if 'log_scan' in build_result:
+                    log_scan = build_result['log_scan']
+                    
+                    # Check if logs were accessed
+                    if not log_scan.get("logs_accessed", False):
+                        print("\n⚠️ Note: Could not access log files for scanning.")
+                        print("   You can view logs manually with: quickscale logs")
+                    # Display a summary only if there are issues
+                    elif log_scan.get('total_issues', 0) > 0:
+                        # Check if there are errors or only warnings
+                        if log_scan.get('error_count', 0) > 0:
+                            if log_scan.get('real_errors', False):
+                                print("\n⚠️ Note: Some critical issues were found.")
+                                print("   Please review the details above.")
+                            else:
+                                print("\n⚠️ Note: The issues reported above look like errors but are actually expected.")
+                                print("   - Migration names containing 'error' are false positives")
+                                print("   - Database shutdown messages with 'abort' are normal")
+                                print("   - All migrations showing 'OK' status completed successfully")
+                            print("   You can view detailed logs with: quickscale logs")
+                        else:
+                            print("\n⚠️ Some non-critical warnings were found.")
+                            print("   These warnings are normal during development:")
+                            print("   - Development server warnings are expected")
+                            print("   - Static file 404 errors are normal on first startup")
+                            print("   - PostgreSQL authentication warnings are acceptable in dev environments")
+                            print("   These won't affect your project functionality.")
+                    else:
+                        # Logs accessed successfully but no issues found
+                        print("\n✅ Log scanning completed: No issues found!")
+                        print("   All build, container, and migration logs are clean.")
+                
             else:
-                # Handle backward compatibility with old return type
-                project_path = build_result
-                print(f"\n📂 Project created in directory:\n   {project_path}")
-                print(f"\n⚡ To enter your project directory, run:\n   cd {args.name}")
-                print("\n🌐 Access your application at:\n   http://localhost:8000")
-            
-        elif args.command == "up":
-            command_manager.start_services()
-            
-        elif args.command == "down":
-            command_manager.stop_services()
-            
-        elif args.command == "destroy":
-            result = command_manager.destroy_project()
-            if result and result.get('success'):
-                if result.get('containers_only'):
-                    print(f"\n✅ Successfully stopped and removed containers.")
-                    print("No project directory was deleted.")
-                else:
-                    project_name = result.get('project')
-                    print(f"\n✅ Project '{project_name}' has been permanently destroyed.")
-                    print("\n⚡ You are still in the deleted project's directory path.")
-                    print("   To navigate to the parent directory, run:\n   cd ..")
-            elif result and result.get('reason') == 'cancelled':
-                print("\n⚠️ Operation cancelled. No changes were made.")
-                
-        elif args.command == "check":
-            command_manager.check_requirements(print_info=True)
-            
-        elif args.command == "logs":
-            follow = getattr(args, 'follow', False)
-            since = getattr(args, 'since', None)
-            lines = getattr(args, 'lines', 100)
-            timestamps = getattr(args, 'timestamps', False)
-            command_manager.view_logs(
-                args.service, 
-                follow=follow,
-                since=since,
-                lines=lines,
-                timestamps=timestamps
-            )
-            
-        elif args.command == "manage":
-            # First check if project exists, consistent with other commands
-            state = ProjectManager.get_project_state()
-            if not state['has_project']:
-                error = CommandError(
-                    ProjectManager.PROJECT_NOT_FOUND_MESSAGE,
-                    recovery="Create a project with 'quickscale build <project_name>'"
-                )
-                handle_command_error(error)
-                
-            if not args.args:
-                error = ValidationError(
-                    "No Django management command specified",
-                    recovery="Use 'quickscale manage -h' or 'quickscale help manage' to see available commands"
-                )
-                handle_command_error(error)
-                
-            if args.args[0] in ['help', '--help', '-h']:
-                show_manage_help()
-            else:
-                command_manager.run_manage_command(args.args)
-                
-        elif args.command == "ps":
-            command_manager.check_services_status()
-            
-        elif args.command == "shell":
-            if hasattr(args, 'cmd') and args.cmd:
-                command_manager.open_shell(command=args.cmd)
-            else:
-                command_manager.open_shell()
-            
-        elif args.command == "django-shell":
-            command_manager.open_shell(django_shell=True)
-            
-        elif args.command == "help":
-            if hasattr(args, 'topic') and args.topic:
-                if args.topic == "manage":
-                    show_manage_help()
-                elif args.topic in subparsers.choices:
-                    subparsers.choices[args.topic].print_help()
-                else:
-                    logger.warning(f"Unknown help topic requested: {args.topic}")
-                    print(f"Unknown help topic: {args.topic}")
-                    parser.print_help()
-            else:
-                parser.print_help()
-                print("\nFor Django management commands help, use:")
-                print("  quickscale help manage")
-                
-        elif args.command == "version":
-            print(f"QuickScale version {__version__}")
+                print("Build failed. Please check the logs for more details.")
             
         else:
-            error = UnknownCommandError(
-                f"Unknown command: {args.command}",
-                recovery="Use 'quickscale help' to see available commands"
-            )
-            handle_command_error(error)
+            # Handle other commands
+            command_manager.handle_command(args.command, args)
             
-        return 0
-        
-    except KeyboardInterrupt:
-        logger.info("Operation cancelled by user")
-        print("\nOperation cancelled by user")
-        return 1
-        
     except Exception as e:
-        # Log the full exception details for debugging
-        logger.exception("Unhandled exception in CLI")
-        
-        # Handle the error with our error handling system
-        error = CommandError(
-            f"An unexpected error occurred: {str(e)}",
-            details=f"{e.__class__.__name__}: {str(e)}",
-            recovery="Check logs for details or report this issue"
-        )
-        handle_command_error(error)
+        print(f"An error occurred: {e}")
         return 1
 
 if __name__ == "__main__":

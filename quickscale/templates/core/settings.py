@@ -199,6 +199,9 @@ MEDIA_ROOT = BASE_DIR / 'media'
 # Default Primary Key
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
+# Use custom QuickScale test runner to restrict test discovery
+TEST_RUNNER = 'core.test_runner.QuickScaleTestRunner'
+
 # Custom User Model
 AUTH_USER_MODEL = 'users.CustomUser'
 

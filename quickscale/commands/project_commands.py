@@ -1,16 +1,19 @@
 """Commands for project lifecycle management."""
 import os
 import sys
-import shutil
+import re
+import json
 import subprocess
+import shutil
 import time
 import secrets
 import logging
 from pathlib import Path
 from typing import Dict, Any, Optional, List, Tuple, NoReturn
+from datetime import datetime
 from quickscale.utils.logging_manager import LoggingManager
-from .command_base import Command
 from .project_manager import ProjectManager
+from .command_base import Command
 from .command_utils import (
     get_current_uid_gid,
     copy_with_vars,
@@ -18,27 +21,32 @@ from .command_utils import (
     wait_for_postgres,
     find_available_port,
     fix_permissions,
-    DOCKER_COMPOSE_COMMAND
+    DOCKER_COMPOSE_COMMAND,
 )
+
 class BuildProjectCommand(Command):
     """Handles creation of new QuickScale projects."""
     
     def __init__(self) -> None:
         """Initialize build command state."""
         # Get the already configured logger
+        super().__init__()
         self.logger = LoggingManager.get_logger()
-        self.current_uid = None
-        self.current_gid = None
+        self.current_uid, self.current_gid = get_current_uid_gid()
         self.templates_dir = None
         self.project_dir = None
         self.variables = None
         self.env_vars = None
     
     def setup_project_environment(self, project_name: str) -> Path:
-        """Initialize project environment and setup project-specific logging."""
+        """Set up the project environment."""
         from .system_commands import CheckCommand
         CheckCommand().execute(print_info=True)
         
+        # Verify project name
+        self._validate_project_name(project_name)
+        
+        # Create project directory and change to it
         project_dir = Path(project_name)
         if project_dir.exists():
             self._exit_with_error(f"Project directory '{project_name}' already exists")
@@ -52,7 +60,6 @@ class BuildProjectCommand(Command):
         
         self.logger.info("Starting project build")
         
-        self.current_uid, self.current_gid = get_current_uid_gid()
         self.templates_dir = Path(__file__).parent.parent / "templates"
         
         # Generate a random SECRET_KEY
@@ -68,16 +75,20 @@ class BuildProjectCommand(Command):
         if self.pg_port != 5432:
             self.logger.info(f"Port 5432 is already in use, using port {self.pg_port} for PostgreSQL instead")
         
-        # Validate PostgreSQL user is not "root"
-        pg_user = "admin"
-        if pg_user == "root":
-            self._exit_with_error("PostgreSQL user cannot be 'root'. Please use a different username.")
+        # Ensure PostgreSQL user is never "root"
+        # Get user's preferred PostgreSQL username or use default
+        pg_user = os.environ.get('POSTGRES_USER', "admin")
+        
+        # Override if root is specified
+        if pg_user.lower() == "root":
+            self.logger.warning("PostgreSQL user 'root' is not allowed, using 'admin' instead")
+            pg_user = "admin"
         
         # Set up required variables without fallbacks
         self.variables = {
             'project_name': project_name,
             'pg_user': pg_user,
-            'pg_password': 'adminpasswd',
+            'pg_password': os.environ.get('POSTGRES_PASSWORD', 'adminpasswd'),
             'pg_email': 'admin@test.com',
             'SECRET_KEY': secret_key,
             'port': self.port,
@@ -88,8 +99,10 @@ class BuildProjectCommand(Command):
         self.env_vars = {
             'SECRET_KEY': secret_key,
             'pg_user': pg_user,
-            'pg_password': 'adminpasswd',
-            'DOCKER_UID': str(self.current_uid),
+            'pg_password': os.environ.get('POSTGRES_PASSWORD', 'adminpasswd'),
+            'docker_uid': str(self.current_uid),  # Lowercase for template substitution in .env files
+            'docker_gid': str(self.current_gid),
+            'DOCKER_UID': str(self.current_uid),  # UPPERCASE for direct Docker environment variables
             'DOCKER_GID': str(self.current_gid),
             'PORT': str(self.port),
             'PG_PORT': str(self.pg_port),
@@ -288,6 +301,33 @@ class {config_class}(AppConfig):
         except (subprocess.SubprocessError, subprocess.TimeoutExpired) as e:
             self.logger.error(f"Error checking web container status: {e}")
             raise
+            
+        # Check for unmigrated model changes before starting migrations
+        self.logger.info("Checking for unmigrated model changes...")
+        try:
+            check_result = subprocess.run(
+                [DOCKER_COMPOSE_COMMAND, "exec", "-T", "web", 
+                 "python", "manage.py", "check", "--deploy"],
+                check=False, timeout=30, capture_output=True, text=True
+            )
+            
+            # If we detect unmigrated model changes, generate migrations before proceeding
+            if "Your models in app(s)" in check_result.stdout or "Your models in app(s)" in check_result.stderr:
+                self.logger.info("Unmigrated model changes detected. Generating migrations...")
+                for app in apps:
+                    try:
+                        self.logger.info(f"Generating migrations for {app}...")
+                        subprocess.run(
+                            [DOCKER_COMPOSE_COMMAND, "exec", "-T", "web", 
+                             "python", "manage.py", "makemigrations", app],
+                            check=False, timeout=30, capture_output=True, text=True
+                        )
+                    except Exception as e:
+                        self.logger.warning(f"Error generating migrations for {app}: {e}")
+                        continue
+        except Exception as e:
+            self.logger.warning(f"Error checking for model changes: {e}")
+            # Continue with migrations even if check fails
             
         # Skip makemigrations step since we now use pre-generated migrations
         self.logger.info("Using pre-generated migrations, skipping makemigrations step")
@@ -588,7 +628,7 @@ if not User.objects.filter(email='{email}').exists():
                 
                 # Check db container health
                 db_health = subprocess.run(
-                    [DOCKER_COMPOSE_COMMAND, "exec", "-T", "db", "pg_isready"],
+                    [DOCKER_COMPOSE_COMMAND, "exec", "-T", "-e", f"PGUSER={self.variables.get('pg_user', 'admin')}", "db", "pg_isready"],
                     check=False, capture_output=True, text=True, timeout=5
                 )
                 result['db']['healthy'] = db_health.returncode == 0
@@ -840,12 +880,16 @@ except Exception as e:
                 self.logger.error(f"  - {var}")
             self.logger.error("Please ensure all required variables are set in your .env file")
             return False
-        
+            
         # Validate specific constraints
-        if self.variables.get('pg_user') == 'root':
-            self.logger.error("PostgreSQL user cannot be 'root'. Please use a different username.")
+        # PostgreSQL user cannot be root (additional validation)
+        if self.variables.get('pg_user', '').lower() == 'root':
+            self.logger.error("PostgreSQL user cannot be 'root'")
+            self.logger.info("Please set a different PostgreSQL username in your environment")
+            # Don't automatically change the username, instead fail validation
             return False
         
+        self.logger.info("Environment validation successful")
         return True
     
     def execute(self, project_name: str) -> Dict[str, Any]:
@@ -867,6 +911,7 @@ except Exception as e:
                 
             self.setup_static_dirs()
             self.setup_global_templates()
+            self.setup_tests_directory()
             
             # Validate environment before starting Docker
             if not self.validate_environment():
@@ -920,11 +965,15 @@ except Exception as e:
             # Run post-build verification checks
             verification_results = self.verify_build()
             
-            # Include verification results in the return value
+            # Run log scanning after the build is complete
+            log_scan_results = self.scan_build_logs()
+            
+            # Include both verification and log scan results in the return value
             return {
                 "path": project_path,
                 "port": self.port,
-                "verification": verification_results
+                "verification": verification_results,
+                "log_scan": log_scan_results
             }
                 
         except Exception as e:
@@ -997,6 +1046,148 @@ except Exception as e:
             self.logger.warning(f"Migration verification failed: {e}{error_output}")
             self.logger.warning("This is not a critical error. Project may still work correctly.")
             # Don't raise the exception, as this is a verification step
+
+    def scan_build_logs(self) -> Dict[str, Any]:
+        """Scan build logs for issues and generate a summary report.
+        
+        This is a final verification step after the build process 
+        that checks for critical errors and warnings in logs that 
+        might affect project functionality.
+        
+        Returns:
+            Dictionary with summary information about issues found
+        """
+        self.logger.info("Scanning build logs for issues...")
+        
+        try:
+            from quickscale.utils.log_scanner import LogScanner
+            
+            # Initialize log scanner with absolute path to project directory
+            if not hasattr(self, 'project_dir') or not self.project_dir:
+                # Fallback to current directory if project_dir not set
+                self.logger.warning("Project directory not set, using current directory")
+                absolute_project_dir = Path.cwd().resolve()
+            else:
+                # Ensure we have an absolute path by resolving it
+                absolute_project_dir = Path(self.project_dir).resolve()
+                
+                # Make sure we're working with the project directory 
+                # and not a subdirectory with the same name
+                # Attempt to get the project name from project_dir path
+                project_name = self.project_dir.split('/')[-1] if isinstance(self.project_dir, str) else self.project_dir.name
+                
+                if absolute_project_dir.name == project_name:
+                    # We're in the correct directory
+                    pass
+                elif absolute_project_dir.parent.name == project_name:
+                    # We're in a subdirectory with the same name as the project
+                    absolute_project_dir = absolute_project_dir.parent
+                
+            self.logger.info(f"Initializing log scanner with project directory: {absolute_project_dir}")
+            scanner = LogScanner(absolute_project_dir, self.logger)
+            
+            # Scan all logs
+            issues = scanner.scan_all_logs()
+            
+            # Generate summary
+            summary = scanner.generate_summary()
+            
+            # Print summary to console
+            scanner.print_summary()
+            
+            # Log summary information
+            if not summary.get("logs_accessed", False):
+                self.logger.warning("Could not access any log files for scanning")
+            elif summary["total_issues"] > 0:
+                self.logger.warning(f"Found {summary['total_issues']} issues in logs "
+                                    f"({summary['error_count']} errors, {summary['warning_count']} warnings)")
+            else:
+                self.logger.info("No issues found in logs")
+            
+            return summary
+            
+        except Exception as e:
+            self.logger.error(f"Error scanning build logs: {e}")
+            # Return a minimal error summary
+            return {
+                "error": str(e),
+                "total_issues": 0,
+                "error_count": 0,
+                "warning_count": 0,
+                "has_critical_issues": False,
+                "scan_failed": True,
+                "logs_accessed": False
+            }
+
+    def _validate_project_name(self, project_name: str) -> None:
+        """Validate project name against Django project naming requirements.
+        
+        Args:
+            project_name: The name of the project to validate
+            
+        Raises:
+            SystemExit: If the project name is invalid
+        """
+        # Check if project name is empty
+        if not project_name:
+            self._exit_with_error("Project name cannot be empty")
+            
+        # Check if project name starts with a number
+        if project_name[0].isdigit():
+            self._exit_with_error("Project name cannot start with a number")
+            
+        # Check if project name contains only allowed characters
+        if not re.match(r'^[a-zA-Z0-9_-]+$', project_name):
+            self._exit_with_error(
+                "Project name can only contain letters, numbers, underscores, and hyphens"
+            )
+            
+        # Check if project name is a Python reserved word
+        import keyword
+        if keyword.iskeyword(project_name):
+            self._exit_with_error(f"'{project_name}' is a Python reserved keyword and cannot be used as a project name")
+            
+        # Check if the project name is a Django built-in app name
+        django_apps = ['django', 'admin', 'auth', 'contenttypes', 'sessions', 'messages', 'staticfiles']
+        if project_name.lower() in django_apps:
+            self._exit_with_error(f"'{project_name}' conflicts with a Django built-in app name and cannot be used")
+            
+        self.logger.debug(f"Project name '{project_name}' is valid")
+    
+    def setup_tests_directory(self) -> None:
+        """Create tests directory structure with sample test file."""
+        self.logger.info("Setting up tests directory structure...")
+        
+        # Create tests directory if it doesn't exist
+        tests_dir = Path("tests")
+        tests_dir.mkdir(exist_ok=True)
+        
+        # Check if templates_dir is set before trying to access it
+        if not hasattr(self, 'templates_dir') or self.templates_dir is None:
+            self.logger.warning("Templates directory not set, skipping tests template files copy")
+            # Create a basic __init__.py file to ensure the tests directory is a valid package
+            init_py = tests_dir / "__init__.py"
+            with open(init_py, 'w') as f:
+                f.write('"""Tests package for the project."""\n')
+            self.logger.info("Created tests/__init__.py file")
+            return
+        
+        # Copy tests template files
+        tests_template_dir = self.templates_dir / "tests"
+        if tests_template_dir.is_dir():
+            for file_path in tests_template_dir.glob("**/*"):
+                if file_path.is_file():
+                    relative_path = file_path.relative_to(tests_template_dir)
+                    target_path = tests_dir / relative_path
+                    target_path.parent.mkdir(parents=True, exist_ok=True)
+                    copy_with_vars(file_path, target_path, self.logger, **self.variables)
+                    self.logger.info(f"Copied test file: {target_path}")
+        else:
+            # If no template files, at least create an __init__.py
+            init_py = tests_dir / "__init__.py"
+            with open(init_py, 'w') as f:
+                f.write('"""Tests package for the project."""\n')
+            self.logger.info("Created tests/__init__.py file")
 
 class DestroyProjectCommand(Command):
     """Handles removal of existing QuickScale projects."""

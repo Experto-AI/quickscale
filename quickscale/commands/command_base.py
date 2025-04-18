@@ -23,11 +23,7 @@ class Command(abc.ABC):
         raise NotImplementedError
     
     def _exit_with_error(self, message: str) -> NoReturn:
-        """Exit program with error message.
-        
-        This is a legacy method kept for backward compatibility.
-        New code should use handle_error instead.
-        """
+        """Exit program with error message."""
         if self.logger:
             self.logger.error(message)
         print(f"Error: {message}")
@@ -38,14 +34,7 @@ class Command(abc.ABC):
                     context: Optional[Dict[str, Any]] = None,
                     recovery: Optional[str] = None,
                     exit_on_error: bool = True) -> Optional[NoReturn]:
-        """Handle command errors with context.
-        
-        Args:
-            error: The exception or error message
-            context: Optional contextual information about the error
-            recovery: Optional recovery suggestion
-            exit_on_error: If True, exit process after handling the error
-        """
+        """Handle command errors with context."""
         if isinstance(error, str):
             error_obj = CommandError(error, recovery=recovery)
         elif not isinstance(error, CommandError):
@@ -68,10 +57,7 @@ class Command(abc.ABC):
         return handle_command_error(error_obj, self.logger, exit_on_error)
         
     def safe_execute(self, *args: Any, **kwargs: Any) -> Any:
-        """Execute the command with error handling.
-        
-        This wrapper ensures all exceptions are properly caught and handled.
-        """
+        """Execute the command with error handling."""
         try:
             return self.execute(*args, **kwargs)
         except Exception as e:
