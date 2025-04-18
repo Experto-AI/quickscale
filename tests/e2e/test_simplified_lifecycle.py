@@ -3,6 +3,7 @@ import os
 import subprocess
 import time
 from pathlib import Path
+from tests.utils import run_quickscale_command
 import pytest
 
 @pytest.mark.e2e
@@ -20,15 +21,19 @@ class TestSimplifiedLifecycle:
         assert 'QuickScale version' in result.stdout
         
     def test_cli_help(self):
-        """Test that the CLI help command works."""
-        result = subprocess.run(['quickscale', 'help'], 
-                              capture_output=True, text=True, timeout=10)
+        """Test the CLI help command."""
+        result = run_quickscale_command('help')
         assert result.returncode == 0
-        assert 'QuickScale CLI' in result.stdout
+        assert 'Available commands:' in result.stdout
+        # Check that all main commands are listed in the help output
+        assert 'build' in result.stdout
+        assert 'up' in result.stdout
+        assert 'down' in result.stdout
+        assert 'manage' in result.stdout
         
     def test_cli_check(self):
         """Test that the CLI check command works."""
         result = subprocess.run(['quickscale', 'check'], 
                               capture_output=True, text=True, timeout=30)
         assert result.returncode == 0
-        assert 'Python' in result.stdout 
+        assert 'Python' in result.stdout

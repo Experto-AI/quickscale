@@ -1,1 +1,1 @@
-"""QuickScale test package.""" 
+"""Tests package for the project."""

@@ -17,6 +17,12 @@ validate_env() {
     exit 1
   fi
   
+  if [ "$POSTGRES_USER" = "root" ]; then
+    echo "ERROR: Cannot use 'root' as PostgreSQL user"
+    echo "Please use a different username in your .env file"
+    exit 1
+  fi
+  
   if [ -z "$POSTGRES_PASSWORD" ]; then
     echo "ERROR: Required environment variable POSTGRES_PASSWORD is not set"
     echo "Please ensure POSTGRES_PASSWORD is defined in your .env file"
