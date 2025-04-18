@@ -107,7 +107,16 @@
   - [X] **Step 2: Post-build Testing**
     - [X] Implement quickscale manage tests after quickscale build
 
-### Sprint 5: Checkout Process (v0.7.0)
+### Sprint 5: Enhanced documentation for AI coding assistants (v0.6.2) 
+- [ ] **Session 1: Refactor CONTRIBUTING.md**
+  - [ ] **Step 1: Group and split sections**
+    - [ ] Group related sections together
+    - [ ] Split into smaller, more manageable sections
+    - [ ] Create different files for each section
+    - [ ] Reorder numbered sections to match the new structure
+    - [ ] Create new CONTRIBUTING.md as an index of the new files
+  
+### Sprint 6: Checkout Process (v0.7.0)
 - [ ] **Session 1: Checkout Process**
   - [ ] **Step 1: Checkout Page**
     - [ ] Create purchase flow UI
@@ -125,7 +134,7 @@
     - [ ] Implement purchase history view
     - [ ] Test order history functionality
 
-### Sprint 6: Payment Management (v0.8.0)
+### Sprint 7: Payment Management (v0.8.0)
 - [ ] **Session 1: Payment Management**
   - [ ] **Step 1: Admin Dashboard**
     - [ ] Create payment management interface
@@ -144,7 +153,7 @@
     - [ ] Test security implementation
 
 
-### Sprint 7: Enhanced Admin Dashboard (v0.9.0)
+### Sprint 8: Enhanced Admin Dashboard (v0.9.0)
 - [ ] **Session 1: User Management**
   - [ ] **Step 1: User Listing and Search**
     - [ ] Create comprehensive user listing interface
@@ -224,7 +233,7 @@
     - [ ] Create custom report builder
     - [ ] Test reporting functionality
 
-### Sprint 8: Credit System (v0.10.0)
+### Sprint 9: Credit System (v0.10.0)
 - [ ] **Session 1: Credit System Foundation**
   - [ ] **Step 1: Credit Model**
     - [ ] Create core credit data models
@@ -288,7 +297,7 @@
     - [ ] Implement recovery options for failed operations
     - [ ] Test error scenarios
 
-### Sprint 9: Usage Analytics (v0.11.0)
+### Sprint 10: Usage Analytics (v0.11.0)
 - [ ] **Session 1: Enhanced Usage Tracking**
   - [ ] Improve credit usage analytics
   - [ ] Add detailed usage reporting
@@ -301,7 +310,7 @@
   - [ ] Implement usage efficiency metrics
   - [ ] Add best practices recommendations
 
-### Sprint 10: File Storage Foundation (v0.12.0)
+### Sprint 11: File Storage Foundation (v0.12.0)
 - [ ] **Session 1: Storage Backend**
   - [ ] Configure Django storage backend
   - [ ] Add AWS S3 or similar integration
@@ -322,7 +331,7 @@
   - [ ] Implement thumbnail generation for images
   - [ ] Add sorting and filtering options
 
-### Sprint 11: Documentation and Final Polish (v0.13.0)
+### Sprint 12: Documentation and Final Polish (v0.13.0)
 - [ ] **Session 1: Expanding Test Coverage**
   - [ ] Increase code coverage to 90%+
   - [ ] Add performance tests
@@ -351,7 +360,7 @@
   - [ ] Create purchase and credit usage guides
   - [ ] Document troubleshooting procedures
 
-### Sprint 12: Enhanced Admin Dashboard (v0.14.0)
+### Sprint 13: Enhanced Admin Dashboard (v0.14.0)
 - [ ] **Session 1: User Management**
   - [ ] **Step 1: User Listing and Search**
     - [ ] Create comprehensive user listing interface
