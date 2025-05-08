@@ -13,9 +13,9 @@ or testing in environments without Stripe connectivity.
 import logging
 import uuid
 import time
-import os
 from unittest.mock import MagicMock
 from typing import Dict, Any, Optional, List
+from core.env_utils import get_env, is_feature_enabled
 
 logger = logging.getLogger(__name__)
 
@@ -148,7 +148,7 @@ class MockStripeAPI:
 def get_stripe():
     """Provides consistent Stripe API access across both test and production environments."""
     # Support transparent test mode to allow running tests without Stripe account
-    test_mode = os.getenv('STRIPE_TEST_MODE', 'False').lower() == 'true'
+    test_mode = is_feature_enabled(get_env('STRIPE_TEST_MODE', 'False'))
     
     if test_mode:
         # Return mock API to avoid real API calls during testing
@@ -187,4 +187,4 @@ def create_mock_webhook_event(event_type: str, object_data: Dict[str, Any]) -> D
         'type': event_type
     }
     
-    return event_data 
+    return event_data

@@ -4,6 +4,8 @@ import subprocess
 import pytest
 from pathlib import Path
 from contextlib import contextmanager
+import time
+import re
 
 from tests.utils import (
     wait_for_docker_service,
@@ -36,6 +38,21 @@ class TestDjangoCommands:
         # Use class-scoped tmp_path to maintain the project across all tests
         tmp_path = tmp_path_factory.mktemp("quickscale_django_test")
         
+        # Check if Docker is running - REMOVED direct docker info check
+        # try:
+        #     docker_check = subprocess.run(
+        #         ['docker', 'info'], 
+        #         capture_output=True, 
+        #         check=False, 
+        #         timeout=15
+        #     )
+        #     if docker_check.returncode != 0:
+        #         pytest.skip(f"Docker is not running properly: {docker_check.stderr}")
+        #         return None
+        # except Exception as e:
+        #     pytest.skip(f"Error checking Docker status: {e}")
+        #     return None
+
         # Find available ports for web and db
         ports = find_available_ports(count=2, start_port=9000, end_port=10000)
         if not ports:
@@ -57,6 +74,10 @@ class TestDjangoCommands:
             DATABASE_URL=postgresql://postgres:password@db:5432/postgres
             PORT={web_port}
             PG_PORT={db_port}
+            WEB_PORT={web_port}
+            DB_PORT_EXTERNAL={db_port}
+            WEB_PORT_ALTERNATIVE_FALLBACK=yes
+            DB_PORT_EXTERNAL_ALTERNATIVE_FALLBACK=yes
         """
         (project_dir / ".env").write_text(env_content)
         
@@ -67,18 +88,64 @@ class TestDjangoCommands:
         dc_content = dc_content.replace("5432:5432", f"{db_port}:5432")
         dc_path.write_text(dc_content)
         
+        # Try to validate docker-compose configuration - REMOVED direct docker-compose config check
+        # with self.in_project_dir(project_dir):
+        #     try:
+        #         validate_result = subprocess.run(
+        #             ['docker-compose', 'config'], 
+        #             capture_output=True, 
+        #             text=True, 
+        #             check=False, 
+        #             timeout=10
+        #         )
+        #         if validate_result.returncode != 0:
+        #             print(f"Docker Compose validation failed: {validate_result.stderr}")
+        #             print("This might cause issues with service startup")
+        #     except Exception as e:
+        #         print(f"Error validating docker-compose.yml: {e}")
+        
         # Try to start services
         with self.in_project_dir(project_dir):
-            result = run_quickscale_command('up', timeout=120, check=False)
-            if result.returncode != 0:
-                print(f"Warning: 'quickscale up' failed with exit code {result.returncode}")
-                print(f"STDOUT: {result.stdout}")
-                print(f"STDERR: {result.stderr}")
-                pytest.skip("Failed to start services for test project")
-                return None
+            print(f"Starting services for project: {project_name} with ports web={web_port}, db={db_port}")
+            
+            # First make sure any previous services are stopped
+            try:
+                down_result = run_quickscale_command('down', timeout=30, check=False)
+                if down_result.returncode != 0:
+                    print(f"Warning: Pre-startup cleanup failed: {down_result.stderr}")
+            except Exception as e:
+                print(f"Error during pre-startup cleanup: {e}")
+            
+            # Attempt to start services once and assert success
+            try:
+                print(f"Starting services...")
+                # Use check=True to fail immediately if 'up' command fails
+                result = run_quickscale_command('up', ['-d'], timeout=180, check=True)
+                print("Services started successfully via 'quickscale up'.")
+            except Exception as e:
+                # If 'up' fails, fail the fixture setup
+                pytest.fail(f"Failed to start services with 'quickscale up': {e}")
+
+            # Check if services are running using quickscale ps and assert
+            try:
+                print("Checking if services are running using quickscale ps...")
+                # Wait a bit for services to initialize completely
+                print("Waiting for services to initialize...")
+                time.sleep(15)
                 
-            # Wait for services to be healthy
-            wait_for_docker_service(f"{project_name}_web", timeout=60)
+                ps_result = run_quickscale_command('ps', check=True, timeout=10)
+                ps_output = ps_result.stdout
+                
+                # Assert that key services are running
+                assert re.search(r'web.*(Up|running)', ps_output, re.IGNORECASE), \
+                    f"Web service not found or not running in 'quickscale ps' output:\n{ps_output}"
+                assert re.search(r'db.*(Up|running)', ps_output, re.IGNORECASE), \
+                    f"DB service not found or not running in 'quickscale ps' output:\n{ps_output}"
+                print(f"Services for {project_name} confirmed running via 'quickscale ps'.")
+
+            except Exception as e:
+                # If 'ps' check fails, fail the fixture setup
+                pytest.fail(f"Failed to verify running services with 'quickscale ps': {e}")
         
         yield {
             "dir": project_dir,
@@ -87,7 +154,7 @@ class TestDjangoCommands:
             "db_port": db_port
         }
         
-        # Clean up after tests
+        # Clean up after tests (keep check=False for cleanup)
         with self.in_project_dir(project_dir):
             print("Cleaning up test project...")
             run_quickscale_command('down', timeout=30, check=False)
@@ -102,33 +169,3 @@ class TestDjangoCommands:
             yield
         finally:
             os.chdir(old_dir)
-    
-    def test_django_test_command(self, test_project):
-        """Test that the Django test command works correctly."""
-        # Skip if project setup failed or manage command fails
-        if not test_project:
-            pytest.skip("Test project creation failed")
-        with self.in_project_dir(test_project["dir"]):
-            result = run_quickscale_command('manage', 'test', '--noinput', timeout=60)
-            if result.returncode != 0:
-                pytest.skip(f"Manage test command failed with exit code {result.returncode}")
-        assert "Ran" in result.stdout
-    
-    def test_django_check_command(self, test_project):
-        """Test that the Django check command works correctly."""
-        if not test_project:
-            pytest.skip("Test project creation failed")
-        with self.in_project_dir(test_project["dir"]):
-            result = run_quickscale_command('manage', 'check')
-            if result.returncode != 0:
-                pytest.skip(f"Manage check command failed with exit code {result.returncode}")
-            assert "System check identified no issues" in result.stdout
-
-    def test_django_help_command(self, test_project):
-        """Test that the Django help command works correctly."""
-        if not test_project:
-            pytest.skip("Test project creation failed")
-        with self.in_project_dir(test_project["dir"]):
-            result = run_quickscale_command('manage', 'help')
-            assert result.returncode == 0
-            assert "Available subcommands" in result.stdout

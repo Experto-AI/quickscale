@@ -196,34 +196,35 @@ def test_wait_for_postgres_timeout(mock_run, mock_sleep):
     assert result is False
 
 
-@patch('quickscale.commands.command_utils.find_available_port')
-def test_find_available_ports(mock_find_port):
-    """Test finding multiple available ports using the find_available_port function."""
+@patch('socket.socket')
+def test_find_available_ports(mock_socket):
+    """Test finding multiple available ports directly."""
     # Import the function
     from quickscale.commands.command_utils import find_available_ports
     
-    # Configure mock to return predictable port numbers
-    mock_find_port.side_effect = [8000, 8100, 8200]
+    # Setup mock socket behavior
+    socket_instance = MagicMock()
+    mock_socket.return_value.__enter__.return_value = socket_instance
+    
+    # Make socket.bind() always succeed (indicating ports are available)
+    socket_instance.bind.side_effect = None
     
     # Test finding 2 ports
     ports = find_available_ports(count=2, start_port=8000, max_attempts=10)
     
-    # Should get 2 ports from the mocked function
+    # Should get 2 sequential ports
     assert len(ports) == 2
-    assert ports == [8000, 8100]
-    assert mock_find_port.call_count == 2
+    assert ports == [8000, 8001]
     
     # Reset mock for next test
-    mock_find_port.reset_mock()
-    mock_find_port.side_effect = [9000, 9000, 9100]  # First port repeats
+    socket_instance.bind.reset_mock()
     
-    # Test finding ports with duplicate return values
+    # Test with a different start port
     ports = find_available_ports(count=2, start_port=9000, max_attempts=10)
     
-    # Should still get 2 unique ports
+    # Should get 2 sequential ports
     assert len(ports) == 2
-    assert ports == [9000, 9100]
-    assert mock_find_port.call_count == 3  # Called 3 times due to duplicate
+    assert ports == [9000, 9001]
 
 
 @patch('subprocess.run')

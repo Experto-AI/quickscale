@@ -7,6 +7,7 @@ import random
 import string
 from contextlib import contextmanager
 from pathlib import Path
+import shutil
 
 def is_port_open(host, port):
     """Check if a port is open on the given host."""
@@ -34,13 +35,60 @@ def find_available_ports(count=2, start_port=8000, end_port=9000):
         
     return available_ports if len(available_ports) == count else None
 
-def wait_for_port(host, port, timeout=30, interval=0.5):
-    """Wait for a port to be open on the given host."""
+def wait_for_port(host, port, timeout=60, interval=1.0):
+    """
+    Wait for a port to be open on the given host with enhanced logging and diagnostics.
+    
+    Args:
+        host: Hostname or IP address
+        port: Port number
+        timeout: Maximum time to wait in seconds
+        interval: Time between checks in seconds
+        
+    Returns:
+        bool: True if port becomes available, False otherwise
+    """
     start_time = time.time()
+    attempt = 1
+    
+    print(f"Waiting for {host}:{port} to become available (timeout: {timeout}s)")
+    
     while time.time() - start_time < timeout:
-        if is_port_open(host, port):
-            return True
+        try:
+            with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
+                sock.settimeout(2)
+                result = sock.connect_ex((host, int(port)))
+                if result == 0:
+                    print(f"✅ Port {port} is now open on {host} (after {time.time() - start_time:.1f}s)")
+                    return True
+                
+                # Provide more detailed error information based on result code
+                if attempt % 5 == 0:  # Log details every 5 attempts
+                    if result == 111:  # Connection refused
+                        print(f"⌛ Attempt {attempt}: Connection refused at {host}:{port}")
+                    elif result == 110:  # Connection timed out
+                        print(f"⌛ Attempt {attempt}: Connection timed out at {host}:{port}")
+                    else:
+                        print(f"⌛ Attempt {attempt}: Port {port} not available on {host} (code: {result})")
+                    
+                    # Try to get more information about what might be using the port
+                    if os.name == 'posix':  # Unix/Linux/macOS
+                        try:
+                            lsof = subprocess.run(
+                                ['lsof', '-i', f':{port}'],
+                                capture_output=True, text=True, check=False
+                            )
+                            if lsof.stdout:
+                                print(f"Port {port} usage information:\n{lsof.stdout}")
+                        except:
+                            pass  # lsof might not be available
+        except socket.error as e:
+            print(f"Socket error when checking {host}:{port} - {e}")
+            
+        attempt += 1
         time.sleep(interval)
+    
+    print(f"❌ Timeout: Port {port} not available on {host} after {timeout}s")
     return False
 
 def is_docker_service_running(service_name):
@@ -98,38 +146,155 @@ def wait_for_docker_service(service_name, timeout=30, interval=0.5):
     return False
 
 def is_container_healthy(container_name):
-    """Check if a Docker container is healthy based on health status."""
+    """
+    Check if a Docker container is healthy based on health status, with enhanced error handling.
+    
+    Args:
+        container_name: Name or ID of the container
+        
+    Returns:
+        bool: True if container is healthy, False otherwise
+    """
     try:
+        # Try with v1 naming first
         result = subprocess.run(
             ['docker', 'inspect', '--format', '{{.State.Health.Status}}', container_name],
             capture_output=True,
             text=True,
-            check=True
+            check=False
         )
-        return result.stdout.strip() == "healthy"
-    except (subprocess.SubprocessError, FileNotFoundError):
+        
+        # If that fails, try v2 naming (with hyphens)
+        if result.returncode != 0:
+            alternative_name = container_name.replace('_', '-')
+            if alternative_name != container_name:
+                result = subprocess.run(
+                    ['docker', 'inspect', '--format', '{{.State.Health.Status}}', alternative_name],
+                    capture_output=True,
+                    text=True,
+                    check=False
+                )
+        
+        # Check the result
+        if result.returncode == 0:
+            health_status = result.stdout.strip()
+            print(f"Container '{container_name}' health status: {health_status}")
+            return health_status == "healthy"
+        else:
+            print(f"Container '{container_name}' inspect error: {result.stderr}")
+            return False
+    except Exception as e:
+        print(f"Error checking container health: {e}")
         return False
 
-def wait_for_container_health(container_name, timeout=30, interval=0.5):
-    """Wait for a Docker container to be healthy."""
+def wait_for_container_health(container_name, timeout=60, interval=1.0):
+    """
+    Wait for a Docker container to be healthy with enhanced diagnostics.
+    
+    Args:
+        container_name: Name or ID of the container
+        timeout: Maximum time to wait in seconds
+        interval: Time between checks in seconds
+        
+    Returns:
+        bool: True if container becomes healthy, False otherwise
+    """
     start_time = time.time()
+    attempt = 1
+    
+    print(f"Waiting for container '{container_name}' to become healthy (timeout: {timeout}s)")
+    
+    # Also try with v2 naming (with hyphens)
+    alternative_name = container_name.replace('_', '-')
+    
     while time.time() - start_time < timeout:
+        # Try original name
         if is_container_healthy(container_name):
+            print(f"✅ Container '{container_name}' is healthy (after {time.time() - start_time:.1f}s)")
             return True
+            
+        # Try alternative name
+        if alternative_name != container_name and is_container_healthy(alternative_name):
+            print(f"✅ Container '{alternative_name}' is healthy (after {time.time() - start_time:.1f}s)")
+            return True
+        
+        # Provide more details every few attempts
+        if attempt % 5 == 0:
+            print(f"⌛ Attempt {attempt}: Container not yet healthy, checking status...")
+            
+            # Get container state information
+            try:
+                inspect_cmd = ['docker', 'inspect', '--format', '{{json .State}}', container_name]
+                result = subprocess.run(inspect_cmd, capture_output=True, text=True, check=False)
+                
+                if result.returncode == 0 and result.stdout.strip():
+                    print(f"Container state: {result.stdout.strip()}")
+                    
+                    # Check logs if container exists
+                    logs = get_container_logs(container_name, tail=10)
+                    if logs:
+                        print(f"Recent container logs:\n{logs}")
+                else:
+                    # Try with alternative name
+                    inspect_cmd = ['docker', 'inspect', '--format', '{{json .State}}', alternative_name]
+                    result = subprocess.run(inspect_cmd, capture_output=True, text=True, check=False)
+                    
+                    if result.returncode == 0 and result.stdout.strip():
+                        print(f"Container state (alternative name): {result.stdout.strip()}")
+                        
+                        # Check logs if container exists
+                        logs = get_container_logs(alternative_name, tail=10)
+                        if logs:
+                            print(f"Recent container logs (alternative name):\n{logs}")
+            except Exception as e:
+                print(f"Error getting container details: {e}")
+        
+        attempt += 1
         time.sleep(interval)
+    
+    print(f"❌ Timeout: Container '{container_name}' not healthy after {timeout}s")
+    
+    # One final attempt to get detailed information
+    try:
+        # List all containers
+        ps_result = subprocess.run(['docker', 'ps', '-a'], capture_output=True, text=True, check=False)
+        print(f"Current Docker containers:\n{ps_result.stdout}")
+    except Exception as e:
+        print(f"Error listing containers: {e}")
+        
     return False
 
-def get_container_logs(container_name):
-    """Get logs from a Docker container."""
+def get_container_logs(container_name, tail=None):
+    """
+    Get logs from a Docker container with enhanced error handling.
+    
+    Args:
+        container_name: Name or ID of the container
+        tail: Number of lines to retrieve from the end (None for all)
+        
+    Returns:
+        str: Container logs or empty string if an error occurred
+    """
     try:
-        result = subprocess.run(
-            ['docker', 'logs', container_name],
-            capture_output=True,
-            text=True,
-            check=True
-        )
-        return result.stdout
-    except (subprocess.SubprocessError, FileNotFoundError):
+        cmd = ['docker', 'logs', container_name]
+        if tail:
+            cmd.extend(['--tail', str(tail)])
+            
+        result = subprocess.run(cmd, capture_output=True, text=True, check=False)
+        
+        # If that fails, try v2 naming (with hyphens)
+        if result.returncode != 0:
+            alternative_name = container_name.replace('_', '-')
+            if alternative_name != container_name:
+                cmd = ['docker', 'logs', alternative_name]
+                if tail:
+                    cmd.extend(['--tail', str(tail)])
+                    
+                result = subprocess.run(cmd, capture_output=True, text=True, check=False)
+        
+        return result.stdout if result.returncode == 0 else ""
+    except Exception as e:
+        print(f"Error getting container logs: {e}")
         return ""
 
 def generate_random_name(prefix="test", length=6):
@@ -145,12 +310,12 @@ def create_test_project_structure(base_dir, project_name="test_project"):
     project_dir.mkdir(exist_ok=True)
     
     # Create docker-compose.yml file
-    docker_compose_content = """version: '3'
+    docker_compose_content = """version: '3.8'
 services:
   web:
     build: .
     ports:
-      - '8000:8000'
+      - '${PORT:-8000}:8000'
     volumes:
       - ./:/app
     depends_on:
@@ -167,6 +332,14 @@ services:
       - DJANGO_SETTINGS_MODULE=core.settings
       - DATABASE_URL=postgres://postgres:password@db:5432/postgres
       - PYTHONUNBUFFERED=1
+    # Healthcheck to verify web container is working
+    healthcheck:
+      test: ["CMD", "nc", "-z", "localhost", "8000"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
+      
   db:
     image: postgres:13-alpine
     # Set memory limits for database too
@@ -176,10 +349,19 @@ services:
           memory: 1G
         reservations:
           memory: 256M
+    ports:
+      - '${PG_PORT:-5432}:5432'
     environment:
       POSTGRES_PASSWORD: password
       POSTGRES_USER: postgres
       POSTGRES_DB: postgres
+    # Healthcheck to verify database is working
+    healthcheck:
+      test: ["CMD", "pg_isready", "-U", "postgres"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
 """
     (project_dir / "docker-compose.yml").write_text(docker_compose_content)
     
@@ -189,12 +371,23 @@ services:
 WORKDIR /app
 
 # Install dependencies - using netcat-openbsd instead of netcat for compatibility
-RUN apt-get update && apt-get install -y bash netcat-openbsd procps
+RUN apt-get update && \\
+    apt-get install -y --no-install-recommends \\
+    bash \\
+    netcat-openbsd \\
+    procps \\
+    postgresql-client \\
+    libpq-dev \\
+    && rm -rf /var/lib/apt/lists/*
 
 COPY requirements.txt /app/
 RUN pip install --no-cache-dir -r requirements.txt
 
 COPY . /app/
+
+# Set default command with proper health check
+HEALTHCHECK --interval=10s --timeout=5s --start-period=30s --retries=3 \\
+    CMD nc -z localhost 8000 || exit 1
 
 CMD ["python", "manage.py", "runserver", "0.0.0.0:8000"]
 """
@@ -269,6 +462,22 @@ MIDDLEWARE = [
 
 ROOT_URLCONF = 'core.urls'
 
+TEMPLATES = [
+    {
+        'BACKEND': 'django.template.backends.django.DjangoTemplates',
+        'DIRS': [os.path.join(BASE_DIR, 'templates')],
+        'APP_DIRS': True,
+        'OPTIONS': {
+            'context_processors': [
+                'django.template.context_processors.debug',
+                'django.template.context_processors.request',
+                'django.contrib.auth.context_processors.auth',
+                'django.contrib.messages.context_processors.messages',
+            ],
+        },
+    },
+]
+
 DATABASES = {
     'default': {
         'ENGINE': 'django.db.backends.postgresql',
@@ -290,18 +499,82 @@ STATIC_URL = '/static/'
     # Create urls.py
     urls_content = """from django.urls import path
 from django.http import HttpResponse
+from django.contrib import admin
 
 def home(request):
     return HttpResponse("<h1>Test Project Home</h1>")
 
 urlpatterns = [
     path('', home, name='home'),
+    path('admin/', admin.site.urls),
 ]
 """
     (core_dir / "urls.py").write_text(urls_content)
+    
+    # Create wsgi.py
+    wsgi_content = """import os
+from django.core.wsgi import get_wsgi_application
+
+os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'core.settings')
+
+application = get_wsgi_application()
+"""
+    (core_dir / "wsgi.py").write_text(wsgi_content)
+    
+    # Create a basic templates directory structure
+    templates_dir = project_dir / "templates"
+    templates_dir.mkdir(exist_ok=True)
+    
+    # Create admin directory
+    admin_dir = templates_dir / "admin"
+    admin_dir.mkdir(exist_ok=True)
+    
+    # Create basic admin base template
+    base_template = """<!DOCTYPE html>
+<html>
+<head>
+    <title>{% block title %}Django Admin{% endblock %}</title>
+</head>
+<body>
+    {% block content %}{% endblock %}
+</body>
+</html>
+"""
+    (admin_dir / "base_site.html").write_text(base_template)
 
     # Return the project directory
     return project_dir
+
+@contextmanager
+def change_directory(path):
+    """Context manager to temporarily change the working directory."""
+    original_dir = os.getcwd()
+    try:
+        os.chdir(path)
+        yield
+    finally:
+        os.chdir(original_dir)
+
+def remove_project_dir(project_dir):
+    """Safely remove the project directory."""
+    if project_dir and Path(project_dir).exists():
+        try:
+            print(f"Removing project directory: {project_dir}")
+            # Force removal, ignore errors if files are locked (common in CI)
+            shutil.rmtree(project_dir, ignore_errors=True)
+            # Add a small delay and retry if it still exists (Windows file locking)
+            if Path(project_dir).exists():
+                time.sleep(1)
+                shutil.rmtree(project_dir, ignore_errors=True)
+            
+            if not Path(project_dir).exists():
+                print(f"Successfully removed {project_dir}")
+            else:
+                print(f"Warning: Failed to completely remove {project_dir} after retrying.")
+        except Exception as e: # Catch broader exceptions during removal
+            print(f"Error removing directory {project_dir}: {e}")
+    else:
+        print(f"Project directory {project_dir} not found or not specified, skipping removal.")
 
 @contextmanager
 def capture_output():
@@ -332,10 +605,20 @@ def get_service_logs(service_name):
     except (subprocess.SubprocessError, FileNotFoundError):
         return ""
 
-def run_quickscale_command(*args, capture_output=True, check=False, timeout=None):
+def run_quickscale_command(*args, capture_output=True, check=False, timeout=None, env=None):
     """Run a QuickScale command with the given arguments.
     
     Args will be flattened if they contain lists, ensuring proper command structure.
+    
+    Args:
+        *args: Command arguments
+        capture_output: Whether to capture command output
+        check: Whether to check the return code
+        timeout: Timeout in seconds
+        env: Environment variables to pass to the command
+    
+    Returns:
+        subprocess.CompletedProcess: The completed process
     """
     flat_args = []
     for arg in args:
@@ -351,7 +634,12 @@ def run_quickscale_command(*args, capture_output=True, check=False, timeout=None
     if capture_output:
         kwargs['stdout'] = subprocess.PIPE
         kwargs['stderr'] = subprocess.PIPE
-        kwargs['text'] = True  # Use text=True instead of universal_newlines
+    
+    # Add environment variables if provided
+    if env:
+        kwargs['env'] = env
+    
+    kwargs['text'] = True  # Use text=True instead of universal_newlines
     
     # Handle timeout properly, ensuring it's numeric
     if timeout is not None:
@@ -359,8 +647,67 @@ def run_quickscale_command(*args, capture_output=True, check=False, timeout=None
             raise TypeError(f"timeout must be a number, got {type(timeout)}")
         kwargs['timeout'] = timeout
     
-    result = subprocess.run(cmd, **kwargs, check=check)
-    return result
+    try:
+        # Run the command and return the completed process object
+        print(f"Running command: {' '.join(cmd)}")
+        # The 'check' parameter here is the one passed to run_quickscale_command
+        process_result = subprocess.run(cmd, **kwargs, check=check) # 'check' is from args
+        
+        # For debugging, print the command output if captured
+        if capture_output:
+            print(f"Return code: {process_result.returncode}")
+            if process_result.stdout and len(process_result.stdout) > 0:
+                print(f"STDOUT summary: {process_result.stdout[:100]}...")
+            if process_result.stderr and len(process_result.stderr) > 0:
+                print(f"STDERR summary: {process_result.stderr[:100]}...")
+        return process_result
+
+    except subprocess.CalledProcessError as e:
+        # This block is hit if 'check=True' was effectively used in subprocess.run AND the command failed.
+        print(f"Command failed with CalledProcessError: {' '.join(e.cmd)} - Return Code: {e.returncode}")
+        # Log the full stdout and stderr if captured
+        actual_stdout = getattr(e, 'stdout', "")
+        actual_stderr = getattr(e, 'stderr', "")
+        if capture_output:
+            print(f"Failed command STDOUT:\\n{actual_stdout}")
+            print(f"Failed command STDERR:\\n{actual_stderr}")
+        
+        # Return a CompletedProcess with the original details from CalledProcessError
+        return subprocess.CompletedProcess(
+            args=e.cmd,
+            returncode=e.returncode,
+            stdout=actual_stdout,
+            stderr=actual_stderr
+        )
+        
+    except subprocess.TimeoutExpired as e:
+        timeout_duration = kwargs.get('timeout', 'N/A')
+        print(f"Command timed out after {timeout_duration}s: {' '.join(cmd)}")
+        
+        # Attempt to get any output produced before timeout
+        stdout_val = getattr(e, 'stdout', "")
+        stderr_val = getattr(e, 'stderr', "")
+        
+        # Ensure they are strings and append timeout info
+        # Convert to string in case they are None
+        stdout_val = str(stdout_val or "") + f"\\nCommand timed out after {timeout_duration}s."
+        stderr_val = str(stderr_val or "") + f"\\nTimeoutExpired: {str(e)}"
+
+        return subprocess.CompletedProcess(
+            args=cmd,
+            returncode=-1, # Custom code for timeout
+            stdout=stdout_val,
+            stderr=stderr_val
+        )
+        
+    except OSError as e: # For errors like "No such file or directory"
+        print(f"OSError running command: {' '.join(cmd)} - {e}")
+        return subprocess.CompletedProcess(
+            args=cmd,
+            returncode=-3, # Custom code for OSError
+            stdout="",
+            stderr=str(e)
+        )
 
 def is_docker_available():
     """
@@ -689,3 +1036,34 @@ def capture_container_debug_info(container_name, output_dir=None):
     
     print(f"Debug information for {container_name} saved to {log_file}")
     return str(log_file)
+
+def init_test_project(tmp_path, project_name, env=None, check=True):
+    """
+    Initialize a test project using quickscale init command.
+    
+    Args:
+        tmp_path: Path to create the project in
+        project_name: Name of the project
+        env: Optional environment variables to pass to the command
+        check: Whether to check the return code
+        
+    Returns:
+        Tuple of (project_dir, result)
+    """
+    # Store original directory
+    original_dir = os.getcwd()
+    
+    try:
+        # Change to tmp_path
+        os.chdir(tmp_path)
+        
+        # Run quickscale init
+        result = run_quickscale_command(['init', project_name], env=env, timeout=60, check=check)
+        
+        # Set project directory
+        project_dir = tmp_path / project_name
+        
+        return project_dir, result
+    finally:
+        # Change back to original directory
+        os.chdir(original_dir)

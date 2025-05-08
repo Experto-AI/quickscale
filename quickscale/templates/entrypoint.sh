@@ -48,6 +48,16 @@ until PGPASSWORD=$POSTGRES_PASSWORD psql -h db -U $POSTGRES_USER -d $POSTGRES_DB
   echo "Waiting for PostgreSQL to start, retry $((RETRY_COUNT+1))/$MAX_RETRIES..."
   RETRY_COUNT=$((RETRY_COUNT+1))
   sleep 5
+  
+  # On every other attempt, check if DB is reachable via netcat
+  if [ $((RETRY_COUNT % 2)) -eq 0 ]; then
+    echo "Checking if PostgreSQL port is reachable..."
+    if nc -z db 5432; then
+      echo "PostgreSQL port is reachable, but connection failed. Trying again..."
+    else
+      echo "PostgreSQL port is not reachable yet."
+    fi
+  fi
 done
 
 if [ $RETRY_COUNT -eq $MAX_RETRIES ]; then

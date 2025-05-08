@@ -13,8 +13,10 @@ Ideal for **solo developers** or small teams looking to turn their ideas into pr
 ## GET STARTED 🔥 - LAUNCH QUICKLY 🚀
 
 1.  Install: `pip install quickscale`
-2.  Create project: `quickscale build awesome-project`
-3.  Access Local Deployment: `http://localhost:8000`
+2.  Create project: `quickscale init awesome-project`
+3.  Configure: Review and edit `.env` file with your settings
+4.  Start: `quickscale up`
+5.  Access: `http://localhost:8000`
 
 ## KEY FEATURES
 
@@ -24,6 +26,7 @@ Ideal for **solo developers** or small teams looking to turn their ideas into pr
 - **Containerized**: Docker setup for consistent development and deployment
 - **Command-Line Control**: Intuitive CLI for managing your project lifecycle
 - **Starter Accounts**: Pre-configured user and admin accounts for immediate testing
+- **Automatic Port Fallback**: Smart handling of port conflicts with automatic alternative port selection
 
 
 ## PROJECT USAGE
@@ -32,7 +35,7 @@ QuickScale provides a convenient command-line interface to manage your projects:
 
 ```
 Available commands:
-  build          - Build a new QuickScale project - Most important command
+  init           - Initialize a new QuickScale project
   up             - Start the project services
   down           - Stop the project services
   logs           - View project logs (optional service parameter: web, db)
@@ -48,12 +51,12 @@ Available commands:
 
 Examples:
 ```bash
-quickscale build awesome-project   # Create a new project called "awesome-project"
-quickscale up                      # Start the services
-quickscale logs web                # View logs from the web service
-quickscale shell                   # Enter an interactive bash shell in the web container
-quickscale django-shell            # Enter the Django shell in the web container
-quickscale down                    # Stop the services
+quickscale init awesome-project   # Create a new project called "awesome-project"
+quickscale up                     # Start the services
+quickscale logs web               # View logs from the web service
+quickscale shell                  # Enter an interactive bash shell in the web container
+quickscale django-shell           # Enter the Django shell in the web container
+quickscale down                   # Stop the services
 ```
 
 ## STARTER PAGES
@@ -95,4 +98,3 @@ quickscale down                    # Stop the services
 - [Roadmap](./ROADMAP.md) - Future plans and features for QuickScale
 - [Changelog](./CHANGELOG.md) - Release notes and version history
 - [HomePage](https://github.com/Experto-AI/quickscale)
-

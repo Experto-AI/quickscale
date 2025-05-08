@@ -14,6 +14,8 @@ RUN apt-get update && apt-get install -y \
     build-essential \
     libpq-dev \
     postgresql-client \
+    netcat-openbsd \
+    curl \
     && rm -rf /var/lib/apt/lists/*
 
 # Create quickscale user and group with a home directory
@@ -26,7 +28,7 @@ ENV HOSTNAME=quickscale
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Copy project files
+# Copy the rest of the application code
 COPY . .
 
 # Create logs directory with proper permissions - ensure it's writable for the quickscale user

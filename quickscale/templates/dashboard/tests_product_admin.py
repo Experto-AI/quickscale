@@ -11,9 +11,7 @@ from django.conf import settings
 import os
 
 # Check if Stripe is enabled using the same logic as in settings.py
-stripe_enabled = os.getenv('STRIPE_ENABLED', 'False').lower() == 'true'
-STRIPE_AVAILABLE = False
-Product = None
+stripe_enabled = is_feature_enabled(get_env('STRIPE_ENABLED', 'False'))= None
 
 # Only attempt to import from djstripe if Stripe is enabled
 if stripe_enabled:

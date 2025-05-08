@@ -15,7 +15,7 @@ class Command(abc.ABC):
     
     def __init__(self) -> None:
         """Initialize command instance with logger."""
-        self.logger: Optional[logging.Logger] = None
+        self.logger = logging.getLogger('quickscale.commands')
     
     @abc.abstractmethod
     def execute(self, *args: Any, **kwargs: Any) -> Any:

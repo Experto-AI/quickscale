@@ -3,10 +3,10 @@ from django.contrib.auth.decorators import login_required, user_passes_test
 from django.http import HttpRequest, HttpResponse, JsonResponse
 from django.shortcuts import render
 from django.core.paginator import Paginator
-import os
+from core.env_utils import get_env, is_feature_enabled
 
 # Check if Stripe is enabled using the same logic as in settings.py
-stripe_enabled = os.getenv('STRIPE_ENABLED', 'False').lower() == 'true'
+stripe_enabled = is_feature_enabled(get_env('STRIPE_ENABLED', 'False'))
 STRIPE_AVAILABLE = False
 Product = None
 ProductService = None
@@ -40,7 +40,7 @@ def product_admin(request: HttpRequest) -> HttpResponse:
     read-only access to product details with links to Stripe dashboard.
     """
     # Check if Stripe is enabled
-    stripe_enabled = os.getenv('STRIPE_ENABLED', 'False').lower() == 'true'
+    stripe_enabled = is_feature_enabled(get_env('STRIPE_ENABLED', 'False'))
     
     # Default empty context
     context = {
@@ -79,7 +79,7 @@ def product_admin_refresh(request: HttpRequest) -> JsonResponse:
         return JsonResponse({'error': 'Method not allowed'}, status=405)
     
     # Check if Stripe is enabled
-    stripe_enabled = os.getenv('STRIPE_ENABLED', 'False').lower() == 'true'
+    stripe_enabled = is_feature_enabled(get_env('STRIPE_ENABLED', 'False'))
     
     if not stripe_enabled or not STRIPE_AVAILABLE or ProductService is None:
         return JsonResponse({

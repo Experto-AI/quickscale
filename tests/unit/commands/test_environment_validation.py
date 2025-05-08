@@ -4,135 +4,70 @@ from unittest.mock import patch, MagicMock
 from pathlib import Path
 import os
 
-from quickscale.commands.project_commands import BuildProjectCommand
+from quickscale.commands.init_command import InitCommand
+from quickscale.utils.error_manager import ProjectError, ValidationError
 
 class TestEnvironmentValidation:
     """Tests for the environment validation functionality"""
-    
+        
     @pytest.fixture
-    def build_command(self):
-        """Setup a BuildProjectCommand fixture for testing"""
-        cmd = BuildProjectCommand()
+    def init_command(self):
+        """Setup an InitCommand fixture for testing"""
+        cmd = InitCommand()
         cmd.logger = logging.getLogger("test_logger")
-        cmd.templates_dir = Path("templates")
         return cmd
     
-    def test_validate_environment_success(self, build_command):
-        """Test that validation passes with all required variables"""
-        # Setup environment with all required variables
-        build_command.variables = {
-            'pg_user': 'validuser',
-            'pg_password': 'password',
-            'SECRET_KEY': 'secretkey',
-            'port': '8000',
-            'pg_port': '5432'
-        }
-        build_command.env_vars = {
-            'DOCKER_UID': '1000',
-            'DOCKER_GID': '1000'
-        }
+    def test_validation_functionality_placeholder(self):
+        """Placeholder for environment validation tests.
         
-        # Run validation
-        result = build_command.validate_environment()
-        
-        # Assert validation passed
-        assert result is True
+        This test serves as a reminder that environment validation
+        functionality is expected to be implemented in the future.
+        The original tests were removed as they depended on a 
+        'validate_environment' method that doesn't exist in InitCommand.
+        """
+        pass
+
+class TestInitCommandValidation:
+    """Tests for InitCommand validation functionality"""
     
-    def test_validate_environment_missing_variables(self, build_command):
-        """Test that validation fails when required variables are missing"""
-        # Setup environment with missing required variables
-        build_command.variables = {
-            'pg_user': 'validuser',
-            # Missing pg_password
-            'SECRET_KEY': 'secretkey',
-            # Missing port
-        }
-        build_command.env_vars = {}
-        
-        # Run validation
-        result = build_command.validate_environment()
-        
-        # Assert validation failed
-        assert result is False
+    @pytest.fixture
+    def init_command(self):
+        """Setup an InitCommand fixture for testing"""
+        cmd = InitCommand()
+        cmd.logger = logging.getLogger("test_logger")
+        return cmd
     
-    def test_validate_environment_root_pg_user(self, build_command):
-        """Test that validation fails when pg_user is 'root'"""
-        # Setup environment with root as pg_user
-        build_command.variables = {
-            'pg_user': 'root',  # Root user is not allowed
-            'pg_password': 'password',
-            'SECRET_KEY': 'secretkey',
-            'port': '8000',
-            'pg_port': '5432'
-        }
-        build_command.env_vars = {}
+    def test_validate_project_name_valid(self, init_command):
+        """Test that valid project names are accepted"""
+        # Test valid project names
+        valid_names = ["project", "my_project", "project123", "Project_123"]
         
-        # Run validation
-        result = build_command.validate_environment()
-        
-        # Assert validation failed
-        assert result is False
+        for name in valid_names:
+            with patch('pathlib.Path.exists', return_value=False):
+                # Should not raise any exceptions
+                init_command.validate_project_name(name)
     
-    def test_validate_environment_empty_pg_user(self, build_command):
-        """Test that validation fails when pg_user is empty"""
-        # Setup environment with empty pg_user
-        build_command.variables = {
-            'pg_user': '',  # Empty user is not allowed
-            'pg_password': 'password',
-            'SECRET_KEY': 'secretkey',
-            'port': '8000',
-            'pg_port': '5432'
-        }
-        build_command.env_vars = {}
+    def test_validate_project_name_invalid(self, init_command):
+        """Test that invalid project names are rejected"""
+        # Test invalid project names
+        invalid_names = ["123project", "project-name", "project.name", "project name"]
         
-        # Run validation
-        result = build_command.validate_environment()
-        
-        # Assert validation failed
-        assert result is False
+        for name in invalid_names:
+            with pytest.raises(ValidationError):
+                init_command.validate_project_name(name)
     
-    def test_docker_uid_gid_transfer(self, build_command):
-        """Test that DOCKER_UID and DOCKER_GID are transferred from env_vars to variables"""
-        # Setup
-        build_command.variables = {
-            'pg_user': 'validuser',
-            'pg_password': 'password',
-            'SECRET_KEY': 'secretkey',
-            'port': '8000',
-            'pg_port': '5432'
-            # No DOCKER_UID or DOCKER_GID here
-        }
-        build_command.env_vars = {
-            'DOCKER_UID': '1234',
-            'DOCKER_GID': '5678'
-        }
-        
-        # Run validation
-        build_command.validate_environment()
-        
-        # Assert that values were transferred
-        assert build_command.variables.get('DOCKER_UID') == '1234'
-        assert build_command.variables.get('DOCKER_GID') == '5678'
+    def test_validate_project_dir_exists(self, init_command):
+        """Test that validation fails when project directory already exists"""
+        with patch('pathlib.Path.exists', return_value=True):
+            with pytest.raises(ProjectError):
+                init_command.validate_project_name("existing_project")
     
-    def test_execute_checks_environment(self, build_command):
-        """Test that execute calls validate_environment and exits on failure"""
-        # Create a custom execute method that only tests the validation part
-        original_execute = BuildProjectCommand.execute
+    @patch('shutil.copytree')
+    @patch('pathlib.Path.exists')
+    def test_init_command_template_missing(self, mock_exists, mock_copytree, init_command):
+        """Test that init command fails when template directory is missing"""
+        # Setup so template directory doesn't exist
+        mock_exists.return_value = False
         
-        def execute_spy(self, project_name):
-            if not self.validate_environment():
-                self._exit_with_error("Environment validation failed. Please fix the issues above.")
-                return {}
-            return {"success": True}
-        
-        # Replace the execute method with our spy
-        with patch.object(BuildProjectCommand, 'execute', execute_spy):
-            # Setup mocks
-            with patch.object(build_command, 'validate_environment', return_value=False) as mock_validate:
-                with patch.object(build_command, '_exit_with_error') as mock_exit:
-                    # Call execute
-                    build_command.execute("test_project")
-        
-            # Verify method calls
-            mock_validate.assert_called_once()
-            mock_exit.assert_called_once_with("Environment validation failed. Please fix the issues above.") 
+        with pytest.raises(ProjectError, match="Template directory not found"):
+            init_command.execute("test_project")

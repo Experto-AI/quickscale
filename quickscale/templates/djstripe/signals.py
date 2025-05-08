@@ -10,11 +10,11 @@ without Stripe configuration while using the same codebase.
 """
 
 import logging
-import os
 from django.db.models.signals import post_save
 from django.dispatch import receiver
 from django.conf import settings
 from django.contrib.auth import get_user_model
+from core.env_utils import get_env, is_feature_enabled
 from .utils import get_stripe
 
 logger = logging.getLogger(__name__)
@@ -33,7 +33,7 @@ except ImportError:
 def create_stripe_customer(sender, instance, created, **kwargs):
     """Ensures every user has a corresponding Stripe customer for billing purposes."""
     # Skip for existing users to avoid duplicate customer creation in Stripe
-    if not created or not os.getenv('STRIPE_ENABLED', 'False').lower() == 'true':
+    if not created or not is_feature_enabled(get_env('STRIPE_ENABLED', 'False')):
         return
         
     # Use utility function to handle both real and test environments consistently
@@ -69,4 +69,4 @@ def create_stripe_customer(sender, instance, created, **kwargs):
             logger.warning(f"StripeCustomer model relation not found on User model. Customer created in Stripe but not linked: {stripe_customer.id}")
             
     except Exception as e:
-        logger.error(f"Error creating Stripe customer for user {instance.email}: {str(e)}") 
+        logger.error(f"Error creating Stripe customer for user {instance.email}: {str(e)}")

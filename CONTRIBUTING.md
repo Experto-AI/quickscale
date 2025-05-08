@@ -1,6 +1,7 @@
 # Contributing Guidelines
 
 This document outlines the coding standards and guidelines for contributing to this project.
+This document is written for humans but also for AI coding assistants like GitHub Copilot, Cursor, and Windsurf.
 
 ## Table of Contents
 - [1. AI Programming Assistant LLM System Prompt Guidelines ](docs/contrib/01_ai_programming_assistant.md)

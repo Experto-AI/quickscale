@@ -9,6 +9,7 @@ from unittest.mock import patch
 from django.test import TestCase, override_settings
 from django.urls import reverse
 from django.contrib.auth import get_user_model
+from core.env_utils import get_env, is_feature_enabled
 
 
 class DashboardWithoutStripeTestCase(TestCase):
@@ -43,8 +44,8 @@ class DashboardWithoutStripeTestCase(TestCase):
         # Clean up test data
         get_user_model().objects.all().delete()
     
-    @patch('dashboard.views.os.getenv', return_value='false')
-    def test_dashboard_index_loads_without_stripe(self, mock_getenv):
+    @patch('dashboard.views.is_feature_enabled', return_value=False)
+    def test_dashboard_index_loads_without_stripe(self, mock_is_feature_enabled):
         """Test that dashboard index loads when Stripe is disabled."""
         # Login as admin
         self.client.login(email='admin@test.com', password='adminpassword')
@@ -55,8 +56,8 @@ class DashboardWithoutStripeTestCase(TestCase):
         # Should load successfully
         self.assertEqual(response.status_code, 200)
     
-    @patch('dashboard.views.os.getenv', return_value='false')
-    def test_product_admin_loads_without_stripe(self, mock_getenv):
+    @patch('dashboard.views.is_feature_enabled', return_value=False)
+    def test_product_admin_loads_without_stripe(self, mock_is_feature_enabled):
         """Test that product admin page loads when Stripe is disabled."""
         # Login as admin
         self.client.login(email='admin@test.com', password='adminpassword')
@@ -75,8 +76,8 @@ class DashboardWithoutStripeTestCase(TestCase):
         self.assertIn('products', response.context)
         self.assertEqual(len(response.context['products']), 0)
     
-    @patch('dashboard.views.os.getenv', return_value='false')
-    def test_product_admin_refresh_error_without_stripe(self, mock_getenv):
+    @patch('dashboard.views.is_feature_enabled', return_value=False)
+    def test_product_admin_refresh_error_without_stripe(self, mock_is_feature_enabled):
         """Test that product admin refresh returns error when Stripe is disabled."""
         # Login as admin
         self.client.login(email='admin@test.com', password='adminpassword')
@@ -95,4 +96,4 @@ class DashboardWithoutStripeTestCase(TestCase):
                 'success': False,
                 'error': 'Stripe integration is not enabled or available'
             }
-        ) 
+        )

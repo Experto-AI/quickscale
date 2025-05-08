@@ -1,7 +1,8 @@
 """Orchestrates command operations and provides a simplified interface for the CLI."""
 from typing import Dict, Any, List, Optional, Type
 from .command_base import Command
-from .project_commands import BuildProjectCommand, DestroyProjectCommand
+from .init_command import InitCommand
+from .project_commands import DestroyProjectCommand
 from .service_commands import ServiceUpCommand, ServiceDownCommand, ServiceLogsCommand, ServiceStatusCommand
 from .development_commands import ShellCommand, ManageCommand
 from .system_commands import CheckCommand
@@ -13,7 +14,7 @@ class CommandManager:
         """Initialize command registry."""
         self._commands: Dict[str, Command] = {
             # Project commands
-            'build': BuildProjectCommand(),
+            'init': InitCommand(),
             'destroy': DestroyProjectCommand(),
             
             # Service commands
@@ -43,9 +44,9 @@ class CommandManager:
             
         return command.execute(*args, **kwargs)
     
-    def build_project(self, project_name: str) -> Dict[str, Any]:
-        """Build a new QuickScale project."""
-        return self.execute_command('build', project_name)
+    def init_project(self, project_name: str) -> None:
+        """Initialize a new QuickScale project."""
+        return self.execute_command('init', project_name)
     
     def destroy_project(self) -> Dict[str, bool]:
         """Destroy the current project."""
@@ -110,15 +111,16 @@ class CommandManager:
         if command_name == 'ps':
             return self.check_services_status()
         # Project commands
-        if command_name == 'build':
-            return self.build_project(getattr(args, 'name'))
+        if command_name == 'init':
+            return self.init_project(getattr(args, 'name'))
         if command_name == 'destroy':
             return self.destroy_project()
         if command_name == 'check':
             return self.check_requirements(print_info=True)
         # Shell commands
         if command_name == 'shell':
-            return self.open_shell(command=getattr(args, 'cmd', None))
+            cmd = getattr(args, 'cmd', None)
+            return self.open_shell(command=cmd)
         if command_name == 'django-shell':
             return self.open_shell(django_shell=True)
         # Help and version commands
@@ -131,7 +133,7 @@ class CommandManager:
                 # Show general help with usage instructions
                 print("usage: quickscale [command] [options]")
                 print("\nAvailable commands:")
-                print("  build          - Build a new QuickScale project")
+                print("  init           - Initialize a new QuickScale project")
                 print("  up             - Start the project services")
                 print("  down           - Stop the project services")
                 print("  logs           - View project logs")

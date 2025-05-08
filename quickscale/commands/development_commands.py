@@ -22,8 +22,19 @@ class ShellCommand(Command):
             command: Optional command to run non-interactively
         """
         state = ProjectManager.get_project_state()
-        if not state['has_project']:
-            print(ProjectManager.PROJECT_NOT_FOUND_MESSAGE)
+        # If we're in help mode or not in a project directory, show usage
+        if not state['has_project'] or command == '--help':
+            if not django_shell:
+                print("usage: quickscale shell [options]")
+                print("\nOpen an interactive bash shell in the web container.")
+                print("\nOptions:")
+                print("  -c, --cmd <command>   Run this command in the container instead of starting an interactive shell")
+                print("\nExamples:")
+                print("  quickscale shell              # Open an interactive bash shell")
+                print("  quickscale shell -c 'ls -la'  # Run 'ls -la' command in the web container")
+            else:
+                print("usage: quickscale django-shell")
+                print("\nOpen an interactive Django shell in the web container.")
             return
         
         try:
@@ -62,7 +73,7 @@ class ManageCommand(Command):
         state = ProjectManager.get_project_state()
         if not state['has_project']:
             print("Error: " + ProjectManager.PROJECT_NOT_FOUND_MESSAGE)
-            print("Suggestion: Make sure you're in a QuickScale project directory or create a new project with 'quickscale build <project_name>'")
+            print("Suggestion: Make sure you're in a QuickScale project directory or create a new project with 'quickscale init <project_name>'")
             sys.exit(1)
         
         # Check if no Django management command was specified

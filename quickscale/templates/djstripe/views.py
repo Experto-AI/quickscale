@@ -5,7 +5,6 @@ This module contains view functions or classes for Stripe-related functionality.
 """
 
 import logging
-import os
 from django.shortcuts import render, redirect, get_object_or_404
 from django.contrib.auth.decorators import login_required
 from django.views.decorators.http import require_POST
@@ -13,6 +12,7 @@ from django.http import JsonResponse
 from django.conf import settings
 from .utils import get_stripe
 from .models import Product
+from core.env_utils import get_env, is_feature_enabled
 
 logger = logging.getLogger(__name__)
 
@@ -35,7 +35,7 @@ def stripe_status(request):
     and if the current user has a Stripe customer ID.
     """
     # Feature flag allows disabling Stripe in environments without API keys
-    stripe_enabled = os.getenv('STRIPE_ENABLED', 'False').lower() == 'true'
+    stripe_enabled = is_feature_enabled(get_env('STRIPE_ENABLED', 'False'))
     
     # Use utility to handle both real and mock Stripe environments
     stripe = get_stripe()
@@ -86,9 +86,9 @@ def create_customer(request):
     if one doesn't already exist.
     """
     # Feature flag check prevents calls in environments without Stripe
-    stripe_enabled = os.getenv('STRIPE_ENABLED', 'False').lower() == 'true'
+    stripe_enabled = is_feature_enabled(get_env('STRIPE_ENABLED', 'False'))
     stripe = get_stripe()
-    
+
     if not stripe_enabled or not stripe:
         return JsonResponse({'error': 'Stripe is not enabled or available'}, status=400)
         
@@ -243,4 +243,4 @@ def product_detail(request, product_id):
 #     
 #     return render(request, 'djstripe/create_subscription.html', {
 #         # 'form': form,
-#     }) 
+#     })

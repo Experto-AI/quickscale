@@ -15,24 +15,20 @@ INSTALLED_APPS = [
     'users',
 ]
 
+from quickscale.utils.env_utils import get_env, is_feature_enabled
+
 # Import and configure Stripe if enabled
-import os
-stripe_enabled_flag = os.getenv('STRIPE_ENABLED', 'False').lower() == 'true'
+stripe_enabled_flag = is_feature_enabled(get_env('STRIPE_ENABLED', 'False'))
 if stripe_enabled_flag:
     try:
-        # Import settings from djstripe settings module
         from .djstripe.settings import (
             DJSTRIPE_USE_NATIVE_JSONFIELD,
             DJSTRIPE_FOREIGN_KEY_TO_FIELD,
         )
-
-        # Configure Stripe settings from environment
         STRIPE_LIVE_MODE = False  # Always false in development/test
-        STRIPE_PUBLIC_KEY = os.getenv('STRIPE_PUBLIC_KEY', '')
-        STRIPE_SECRET_KEY = os.getenv('STRIPE_SECRET_KEY', '')
-        DJSTRIPE_WEBHOOK_SECRET = os.getenv('STRIPE_WEBHOOK_SECRET', '')
-
-        # Enable djstripe in installed apps
+        STRIPE_PUBLIC_KEY = get_env('STRIPE_PUBLIC_KEY', '')
+        STRIPE_SECRET_KEY = get_env('STRIPE_SECRET_KEY', '')
+        DJSTRIPE_WEBHOOK_SECRET = get_env('STRIPE_WEBHOOK_SECRET', '')
         if isinstance(INSTALLED_APPS, tuple):
             INSTALLED_APPS = list(INSTALLED_APPS)  # Ensure INSTALLED_APPS is mutable
         if 'djstripe' not in INSTALLED_APPS:
@@ -81,4 +77,4 @@ DATABASES = {
 
 SITE_ID = 1
 
-AUTH_USER_MODEL = 'users.CustomUser' 
+AUTH_USER_MODEL = 'users.CustomUser'

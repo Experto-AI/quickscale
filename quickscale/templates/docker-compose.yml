@@ -4,60 +4,69 @@ services:
   web:
     build: .
     command: python manage.py runserver 0.0.0.0:8000
-    # User mapping to maintain file ownership; 1000 is default UID/GID for first Linux user account
+    # User mapping to maintain file ownership
     user: "${DOCKER_UID:-1000}:${DOCKER_GID:-1000}"
     volumes:
       - ./:/app
     ports:
-      - "${PORT}:8000"
-    mem_limit: 6G  # Increase direct memory limit to 6G
-    mem_reservation: 2G  # Add direct memory reservation
+      - "${WEB_PORT:-8000}:8000"
+    deploy:
+      resources:
+        limits:
+          memory: ${WEB_MEMORY_LIMIT:-2G}
+        reservations:
+          memory: ${WEB_MEMORY_RESERVE:-1G}
     environment:
-      - DEBUG=True
-      - SECRET_KEY=${SECRET_KEY}
-      - DATABASE_URL=postgresql://${pg_user:-admin}:${pg_password:-adminpasswd}@db:5432/${pg_user:-admin}
-      - POSTGRES_DB=${pg_user:-admin}
-      - POSTGRES_USER=${pg_user:-admin}
-      - POSTGRES_PASSWORD=${pg_password:-adminpasswd}
-      - POSTGRES_HOST=db
+      - DEBUG=${DEBUG:-True}
+      - SECRET_KEY=${SECRET_KEY:-dev-only-dummy-key-replace-in-production}
+      - DATABASE_URL=postgresql://${DB_USER:-admin}:${DB_PASSWORD:-adminpasswd}@${DB_HOST:-db}:${DB_PORT:-5432}/${DB_NAME:-admin}
+      - POSTGRES_DB=${DB_NAME:-admin}
+      - POSTGRES_USER=${DB_USER:-admin}
+      - POSTGRES_PASSWORD=${DB_PASSWORD:-adminpasswd}
+      - POSTGRES_HOST=${DB_HOST:-db}
       - IN_DOCKER=True
-      - DOCKER_UID=${DOCKER_UID:-1000}  # UPPERCASE for Docker environment variables
+      - DOCKER_UID=${DOCKER_UID:-1000}
       - DOCKER_GID=${DOCKER_GID:-1000}
     depends_on:
       db:
         condition: service_healthy
     restart: unless-stopped
-  
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health/" , "||", "exit", "1"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+
   # PostgreSQL database service
   db:
     image: postgres:15
     volumes:
       - postgres_data:/var/lib/postgresql/data
     environment:
-      - POSTGRES_DB=${pg_user:-admin}
-      - POSTGRES_USER=${pg_user:-admin}
-      - POSTGRES_PASSWORD=${pg_password:-adminpasswd}
-      # Add PostgreSQL memory optimization settings
-      - POSTGRES_SHARED_BUFFERS=128MB
-      - POSTGRES_WORK_MEM=16MB
+      - POSTGRES_DB=${DB_NAME:-admin}
+      - POSTGRES_USER=${DB_USER:-admin}
+      - POSTGRES_PASSWORD=${DB_PASSWORD:-adminpasswd}
+      - POSTGRES_SHARED_BUFFERS=${DB_SHARED_BUFFERS:-128MB}
+      - POSTGRES_WORK_MEM=${DB_WORK_MEM:-16MB}
       - DOCKER_UID=${DOCKER_UID:-1000}
       - DOCKER_GID=${DOCKER_GID:-1000}
-      # Configure authentication method to use password instead of trust
       - POSTGRES_HOST_AUTH_METHOD=md5
     ports:
-      - "${PG_PORT}:5432"
+      - "${DB_PORT_EXTERNAL:-5432}:5432"
     healthcheck:
-      test: ["CMD-SHELL", "PGUSER=${pg_user:-admin} pg_isready -U ${pg_user:-admin}"]
-      interval: 5s
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER:-admin} || exit 1"]
+      interval: 10s
       timeout: 5s
       retries: 5
-    # Memory management for database
+      start_period: 10s
+    restart: unless-stopped
     deploy:
       resources:
         limits:
-          memory: 384M
+          memory: ${DB_MEMORY_LIMIT:-1G}
         reservations:
-          memory: 256M
+          memory: ${DB_MEMORY_RESERVE:-512M}
 
 # Named volumes for persistent data
 volumes:
