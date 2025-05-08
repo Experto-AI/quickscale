@@ -6,14 +6,18 @@ import logging
 from pathlib import Path
 from typing import List, Optional, Dict, Any
 
+from dotenv import load_dotenv, find_dotenv
+
 from quickscale import __version__
 from quickscale.commands import command_manager
+from quickscale.commands.init_command import InitCommand
 from quickscale.commands.project_manager import ProjectManager
 from quickscale.utils.help_manager import show_manage_help
 from quickscale.utils.error_manager import (
     handle_command_error, CommandError, 
     UnknownCommandError, ValidationError
 )
+from quickscale.utils.env_utils import get_env
 
 
 # Ensure log directory exists
@@ -24,7 +28,17 @@ os.makedirs(log_dir, exist_ok=True)
 
 # Get the specific logger for quickscale operations
 qs_logger = logging.getLogger('quickscale')
-qs_logger.setLevel(logging.INFO) # Default level for quickscale logger
+
+# Set log level from environment variable (default INFO)
+LOG_LEVEL = get_env('LOG_LEVEL', 'INFO', from_env_file=True).upper()
+LOG_LEVEL_MAP = {
+    'CRITICAL': logging.CRITICAL,
+    'ERROR': logging.ERROR,
+    'WARNING': logging.WARNING,
+    'INFO': logging.INFO,
+    'DEBUG': logging.DEBUG,
+}
+qs_logger.setLevel(LOG_LEVEL_MAP.get(LOG_LEVEL, logging.INFO))
 
 # Prevent messages propagating to the root logger to avoid duplicate handling
 qs_logger.propagate = False
@@ -35,7 +49,7 @@ if qs_logger.hasHandlers():
 
 # Create console handler with the desired simple format
 console_handler = logging.StreamHandler(sys.stdout) 
-console_handler.setLevel(logging.INFO) # Set level for console output
+console_handler.setLevel(LOG_LEVEL_MAP.get(LOG_LEVEL, logging.INFO))
 console_handler.setFormatter(logging.Formatter('[%(levelname)s] %(message)s'))
 qs_logger.addHandler(console_handler)
 
@@ -94,11 +108,11 @@ def main() -> int:
         usage="quickscale [command] [options]")
     subparsers = parser.add_subparsers(dest="command", help="Available commands", metavar="command")
     
-    # Build command
-    build_parser = subparsers.add_parser("build", 
-        help="Build a new QuickScale project",
+    # Init command (replaces build command)
+    init_parser = subparsers.add_parser("init",
+        help="Initialize a new QuickScale project",
         description="""
-QuickScale Project Builder
+QuickScale Project Initializer
 
 This command creates a new Django project with a complete setup including:
 - Docker and Docker Compose configuration
@@ -111,17 +125,20 @@ This command creates a new Django project with a complete setup including:
 
 The project name should be a valid Python package name (lowercase, no spaces).
 
-After creation, the project will be running on local and accessible in http://localhost:8000.
+After creation:
+1. Review and edit .env file to configure your project
+2. Run 'quickscale up' to start the services
+3. Access your project at http://localhost:8000
         """,
         epilog="""
 Examples:
-  quickscale build myapp             Create a new project named "myapp"
-  quickscale build awesome-project   Create a new project named "awesome-project"
+  quickscale init myapp             Create a new project named "myapp"
+  quickscale init awesome-project   Create a new project named "awesome-project"
         """,
         formatter_class=argparse.RawDescriptionHelpFormatter,
-        usage="quickscale build <project_name>")
-    build_parser.add_argument(
-        "name", 
+        usage="quickscale init <project_name>")
+    init_parser.add_argument(
+        "name",
         metavar="project_name",
         help="Name of the project to create (e.g., myapp, awesome-project)")
     
@@ -244,79 +261,65 @@ For Django management commands help, use:
             parser.print_help()
             return 0
             
-        if args.command == "build":
-            build_result = command_manager.build_project(args.name)
-            
-            if isinstance(build_result, dict) and 'path' in build_result and 'port' in build_result:
-                project_path = build_result['path']
-                port = build_result['port']
-                print(f"\n📂 Project created in directory:\n   {project_path}")
-                print(f"\n⚡ To enter your project directory, run:\n   cd {args.name}")
-                print(f"\n🌐 Access your application at:\n   http://localhost:{port}")
-                
-                # Display verification results if available
-                if 'verification' in build_result:
-                    verification = build_result['verification']
-                    print("\n✅ Post-build verification results:")
-                    if verification and not verification.get('success', True):
-                        print("⚠️ Some verification checks failed. Your project may not work correctly.")
-                        
-                        # Specific warnings for failed checks
-                        if 'container_status' in verification and not verification['container_status'].get('success', True):
-                            print("   - ❌ Container services are not running properly")
-                        if 'web_service' in verification and not verification['web_service'].get('success', True):
-                            print("   - ❌ Web service is not responding")
-                        if 'database' in verification and not verification['database']:
-                            print("   - ❌ Database connection failed")
-                        
-                        print("\n   Review the logs with: quickscale logs")
-                    else:
-                        # Show success message for verification
-                        print("   - ✅ Container services running properly")
-                        print("   - ✅ Database connectivity verified")
-                        if 'web_service' in verification and verification['web_service'].get('static_files') is False:
-                            print("   - ℹ️ Static files not accessible yet - this is normal for a fresh installation")
-                        else:
-                            print("   - ✅ Static files configured correctly")
-                        print("   - ✅ Project structure validated")
-                
-                # Display log scan results if available
-                if 'log_scan' in build_result:
-                    log_scan = build_result['log_scan']
-                    
-                    # Check if logs were accessed
-                    if not log_scan.get("logs_accessed", False):
-                        print("\n⚠️ Note: Could not access log files for scanning.")
-                        print("   You can view logs manually with: quickscale logs")
-                    # Display a summary only if there are issues
-                    elif log_scan.get('total_issues', 0) > 0:
-                        # Check if there are errors or only warnings
-                        if log_scan.get('error_count', 0) > 0:
-                            if log_scan.get('real_errors', False):
-                                print("\n⚠️ Note: Some critical issues were found.")
-                                print("   Please review the details above.")
-                            else:
-                                print("\n⚠️ Note: The issues reported above look like errors but are actually expected.")
-                                print("   - Migration names containing 'error' are false positives")
-                                print("   - Database shutdown messages with 'abort' are normal")
-                                print("   - All migrations showing 'OK' status completed successfully")
-                            print("   You can view detailed logs with: quickscale logs")
-                        else:
-                            print("\n⚠️ Some non-critical warnings were found.")
-                            print("   These warnings are normal during development:")
-                            print("   - Development server warnings are expected")
-                            print("   - Static file 404 errors are normal on first startup")
-                            print("   - PostgreSQL authentication warnings are acceptable in dev environments")
-                            print("   These won't affect your project functionality.")
-                    else:
-                        # Logs accessed successfully but no issues found
-                        print("\n✅ Log scanning completed: No issues found!")
-                        print("   All build, container, and migration logs are clean.")
-                
-            else:
-                print("Build failed. Please check the logs for more details.")
+        if args.command == "init":
+            init_cmd = InitCommand()
+            try:
+                init_cmd.execute(args.name)
+                print(f"\n📂 Project created in directory:\n   {os.path.abspath(args.name)}")
+                print(f"\n⚡ To get started:\n   cd {args.name}")
+                print("   Review and edit .env file with your settings")
+                print("   Run 'quickscale up' to start the services")
+                print("\n🌐 Then access your application at:\n   http://localhost:8000")
+            except Exception as e:
+                print(f"Project initialization failed: {str(e)}")
+                print("Check the logs for more details with: quickscale logs")
+                return 1
             
         else:
+            # Handle database verification result display for check command
+            if args.command == "check" and hasattr(args, 'db_verification'):
+                verification = args.db_verification
+                if verification and 'database' in verification:
+                    print("   - ✅ Database connectivity verified")
+                    if 'web_service' in verification and verification['web_service'].get('static_files') is False:
+                        print("   - ℹ️ Static files not accessible yet - this is normal for a fresh installation")
+                    else:
+                        print("   - ✅ Static files configured correctly")
+                    print("   - ✅ Project structure validated")
+            
+            # Display log scan results if available
+            if hasattr(args, 'log_scan') and args.log_scan:
+                log_scan = args.log_scan
+                
+                # Check if logs were accessed
+                if not log_scan.get("logs_accessed", False):
+                    print("\n⚠️ Note: Could not access log files for scanning.")
+                    print("   You can view logs manually with: quickscale logs")
+                # Display a summary only if there are issues
+                elif log_scan.get('total_issues', 0) > 0:
+                    # Check if there are errors or only warnings
+                    if log_scan.get('error_count', 0) > 0:
+                        if log_scan.get('real_errors', False):
+                            print("\n⚠️ Note: Some critical issues were found.")
+                            print("   Please review the details above.")
+                        else:
+                            print("\n⚠️ Note: The issues reported above look like errors but are actually expected.")
+                            print("   - Migration names containing 'error' are false positives")
+                            print("   - Database shutdown messages with 'abort' are normal")
+                            print("   - All migrations showing 'OK' status completed successfully")
+                        print("   You can view detailed logs with: quickscale logs")
+                    else:
+                        print("\n⚠️ Some non-critical warnings were found.")
+                        print("   These warnings are normal during development:")
+                        print("   - Development server warnings are expected")
+                        print("   - Static file 404 errors are normal on first startup")
+                        print("   - PostgreSQL authentication warnings are acceptable in dev environments")
+                        print("   These won't affect your project functionality.")
+                else:
+                    # Logs accessed successfully but no issues found
+                    print("\n✅ Log scanning completed: No issues found!")
+                    print("   All build, container, and migration logs are clean.")
+            
             # Handle other commands
             command_manager.handle_command(args.command, args)
             
@@ -325,4 +328,14 @@ For Django management commands help, use:
         return 1
 
 if __name__ == "__main__":
+
+    # Log .env loading status and key environment variables for debugging
+    if LOG_LEVEL == 'DEBUG':
+        qs_logger.info(f"Loaded .env file from: {find_dotenv()}")
+        # Show a few key environment variables 
+        qs_logger.info(f"PROJECT_NAME={os.environ.get('PROJECT_NAME', '???')}")
+        qs_logger.info(f"LOG_LEVEL={os.environ.get('LOG_LEVEL', '???')}")
+    else:
+        qs_logger.info("LOG_LEVEL is not set to DEBUG, skipping environment variable logging.")
+
     sys.exit(main())

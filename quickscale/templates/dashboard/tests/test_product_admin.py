@@ -8,10 +8,10 @@ from django.test import TestCase
 from django.urls import reverse
 from django.contrib.auth import get_user_model
 from django.conf import settings
-import os
+from core.env_utils import get_env, is_feature_enabled
 
 # Check if Stripe is enabled using the same logic as in settings.py
-stripe_enabled = os.getenv('STRIPE_ENABLED', 'False').lower() == 'true'
+stripe_enabled = is_feature_enabled(get_env('STRIPE_ENABLED', 'False'))
 STRIPE_AVAILABLE = False
 Product = None
 
@@ -24,7 +24,7 @@ if stripe_enabled:
         STRIPE_AVAILABLE = False
 
 
-@patch('dashboard.views.os.getenv', return_value='true')
+@patch('dashboard.views.get_env', return_value='true')
 class ProductAdminTestCase(TestCase):
     """
     Test cases for the product management admin functionality.
@@ -181,4 +181,4 @@ class ProductAdminTestCase(TestCase):
         self.assertJSONEqual(
             response.content,
             {'error': 'Method not allowed'}
-        ) 
+        )

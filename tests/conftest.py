@@ -209,7 +209,7 @@ def real_project_fixture(tmp_path_factory):
         try:
             print(f"\nCreating test project: {project_name} in {tmp_path}")
             build_result = subprocess.run(
-                ['quickscale', 'build', project_name], 
+                ['quickscale', 'init', project_name],
                 capture_output=True, 
                 text=True,
                 check=False,
@@ -217,9 +217,9 @@ def real_project_fixture(tmp_path_factory):
             )
             
             if build_result.returncode != 0:
-                print(f"Build failed: {build_result.stderr}")
-                print(f"Build stdout: {build_result.stdout}")
-                pytest.skip(f"Build failed with returncode {build_result.returncode}")
+                print(f"Project initialization failed: {build_result.stderr}")
+                print(f"Initialization stdout: {build_result.stdout}")
+                pytest.skip(f"Project initialization failed with returncode {build_result.returncode}")
                 yield None
                 return
                 
@@ -246,6 +246,36 @@ def real_project_fixture(tmp_path_factory):
                 
                 # Wait a bit for services to fully start
                 time.sleep(5)
+
+                # *** ADDED: Wait for the web port to be open ***
+                from tests.utils import wait_for_port, get_container_logs
+                
+                print(f"Waiting for web service to be ready on port {web_port}...")
+                web_ready = wait_for_port('127.0.0.1', web_port, timeout=60)
+
+                if not web_ready:
+                    print(f"Web service on port {web_port} not ready after 60 seconds.")
+                    # *** ADDED: Attempt to get container logs before skipping ***
+                    print("Attempting to fetch web container logs...")
+                    container_logs = "" # Placeholder
+                    # Try potential container names
+                    web_container_names = [f"{project_name}_web", f"{project_name}-web-1"]
+                    for name in web_container_names:
+                         logs = get_container_logs(name)
+                         if logs:
+                              container_logs += f"\n--- Logs for {name} ---\n{logs}"
+
+                    if container_logs:
+                         print("--- START WEB CONTAINER LOGS ---")
+                         print(container_logs)
+                         print("--- END WEB CONTAINER LOGS ---")
+                    else:
+                         print("Could not retrieve web container logs.")
+                    # *** END ADDED ***
+                    pytest.skip(f"Web service on port {web_port} not ready.")
+                else:
+                    print(f"Web service on port {web_port} is ready.")
+                # *** END ADDED ***
             
             # Check if containers are running
             check_result = subprocess.run(

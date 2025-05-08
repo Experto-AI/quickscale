@@ -11,6 +11,7 @@ from django.conf import settings
 from django.utils.translation import gettext_lazy as _
 from django.db.models.signals import post_save, pre_delete
 from django.dispatch import receiver
+from core.env_utils import get_env, is_feature_enabled
 
 # Placeholder for future custom models extending djstripe
 # For example:
@@ -177,8 +178,7 @@ def product_post_save(sender, instance, created, **kwargs):
     
     This only runs when STRIPE_ENABLED is True.
     """
-    import os
-    if not os.getenv('STRIPE_ENABLED', 'False').lower() == 'true':
+    if not is_feature_enabled(get_env('STRIPE_ENABLED', 'False')):
         return
     
     # Delay import to avoid circular dependency
@@ -214,12 +214,11 @@ def product_pre_delete(sender, instance, **kwargs):
     
     This only runs when STRIPE_ENABLED is True.
     """
-    import os
-    if not os.getenv('STRIPE_ENABLED', 'False').lower() == 'true':
+    if not is_feature_enabled(get_env('STRIPE_ENABLED', 'False')):
         return
     
     # Only try to delete if it has a Stripe ID
     if instance.stripe_product_id:
         # Delay import to avoid circular dependency
         from .services import ProductService
-        ProductService.delete_from_stripe(instance) 
+        ProductService.delete_from_stripe(instance)

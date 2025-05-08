@@ -18,6 +18,7 @@ rm -f "$CURSOR_RULES_DIR"/*
 echo "# Contributing Guidelines" > $OUTPUT_FILE
 echo "" >> $OUTPUT_FILE
 echo "This document outlines the coding standards and guidelines for contributing to this project." >> $OUTPUT_FILE
+echo "This document is written for humans but also for AI coding assistants like GitHub Copilot, Cursor, and Windsurf." >> $OUTPUT_FILE
 echo "" >> $OUTPUT_FILE
 echo "## Table of Contents" >> $OUTPUT_FILE
 

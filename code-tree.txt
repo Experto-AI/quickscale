@@ -1,0 +1,1158 @@
+quickscale
+├── dist
+│   ├── quickscale-0.6.2-py3-none-any.whl
+│   └── quickscale-0.6.2.tar.gz
+├── docs
+│   └── contrib
+│       ├── 01_ai_programming_assistant.md
+│       ├── 02_documentation_guidelines.md
+│       ├── 03_clean_code_principles.md
+│       ├── 04_testing_guidelines.md
+│       ├── 05_stack_and_architecture.md
+│       ├── 06_development_workflow.md
+│       └── 07_task_focus_and_ai_workflow.md
+├── quickscale
+│   ├── commands
+│   │   ├── verification
+│   │   │   ├── __init__.py
+│   │   │   └── service_verification.py
+│   │   │       ├── _verify_container_status(self)
+│   │   │       ├── _verify_database_connectivity(project_name, self)
+│   │   │       └── _verify_web_service(self)
+│   │   ├── __init__.py
+│   │   ├── command_base.py
+│   │   │   └── Command {}
+│   │   │       ├── __init__(self)
+│   │   │       ├── execute(self)
+│   │   │       ├── _exit_with_error(self, message)
+│   │   │       ├── handle_error(self, error, context, recovery, exit_on_error)
+│   │   │       └── safe_execute(self)
+│   │   ├── command_manager.py
+│   │   │   └── CommandManager {}
+│   │   │       ├── __init__(self)
+│   │   │       ├── execute_command(self, command_name)
+│   │   │       ├── init_project(self, project_name)
+│   │   │       ├── destroy_project(self)
+│   │   │       ├── start_services(self)
+│   │   │       ├── stop_services(self)
+│   │   │       ├── view_logs(self, service, follow, since, lines, timestamps)
+│   │   │       ├── check_services_status(self)
+│   │   │       ├── open_shell(self, django_shell, command)
+│   │   │       ├── run_manage_command(self, args)
+│   │   │       ├── check_requirements(self, print_info)
+│   │   │       ├── get_available_commands(self)
+│   │   │       └── handle_command(self, command_name, args)
+│   │   ├── command_utils.py
+│   │   │   ├── get_current_uid_gid()
+│   │   │   ├── generate_secret_key(length)
+│   │   │   ├── is_binary_file(file_path)
+│   │   │   ├── copy_with_vars(src_file, dest_file, logger)
+│   │   │   ├── _copy_binary_file(src_file, dest_file, logger)
+│   │   │   ├── _copy_text_file(src_file, dest_file, logger)
+│   │   │   ├── copy_files_recursive(src_dir, dest_dir, logger)
+│   │   │   ├── wait_for_postgres(pg_user, logger, max_attempts, delay)
+│   │   │   ├── fix_permissions(directory, uid, gid, logger, pg_user)
+│   │   │   ├── find_available_port(start_port, max_attempts)
+│   │   │   └── find_available_ports(count, start_port, max_attempts)
+│   │   ├── development_commands.py
+│   │   │   ├── ShellCommand {}
+│   │   │   │   └── execute(self, django_shell, command)
+│   │   │   └── ManageCommand {}
+│   │   │       └── execute(self, args)
+│   │   ├── init_command.py
+│   │   │   └── InitCommand {}
+│   │   │       ├── validate_project_name(self, project_name)
+│   │   │       ├── _generate_secret_key(self, length)
+│   │   │       ├── _get_template_variables(self, project_name)
+│   │   │       ├── _sync_template_modules(self, project_dir, project_name)
+│   │   │       └── execute(self, project_name)
+│   │   ├── project_commands.py
+│   │   │   └── DestroyProjectCommand {}
+│   │   │       ├── __init__(self)
+│   │   │       ├── _confirm_destruction(self, project_name)
+│   │   │       └── execute(self)
+│   │   ├── project_manager.py
+│   │   │   └── ProjectManager {}
+│   │   │       ├── get_project_root()
+│   │   │       ├── check_project_exists(print_message)
+│   │   │       ├── get_project_state()
+│   │   │       ├── check_test_directory()
+│   │   │       ├── check_running_containers()
+│   │   │       ├── stop_containers(project_name)
+│   │   │       ├── read_tracking_file(file_path)
+│   │   │       ├── write_tracking_file(file_path, data)
+│   │   │       ├── get_tracking_param(file_path, param_name)
+│   │   │       └── get_project_name(file_path)
+│   │   ├── service_commands.py
+│   │   │   ├── handle_service_error(e, action)
+│   │   │   ├── ServiceUpCommand {}
+│   │   │   │   ├── __init__(self)
+│   │   │   │   ├── _find_available_ports(self, start_offset)
+│   │   │   │   ├── _update_env_file_ports(self, env)
+│   │   │   │   ├── _is_port_in_use(self, port)
+│   │   │   │   ├── _is_feature_enabled(self, env_value)
+│   │   │   │   ├── _update_docker_compose_ports(self, updated_ports)
+│   │   │   │   ├── _check_port_availability(self, env)
+│   │   │   │   └── execute(self)
+│   │   │   ├── ServiceDownCommand {}
+│   │   │   │   ├── __init__(self)
+│   │   │   │   └── execute(self)
+│   │   │   ├── ServiceLogsCommand {}
+│   │   │   │   ├── __init__(self)
+│   │   │   │   └── execute(self, service, follow, since, lines, timestamps)
+│   │   │   └── ServiceStatusCommand {}
+│   │   │       ├── __init__(self)
+│   │   │       └── execute(self)
+│   │   └── system_commands.py
+│   │       └── CheckCommand {}
+│   │           └── execute(self, print_info)
+│   ├── config
+│   │   ├── __init__.py
+│   │   ├── config_manager.py
+│   │   │   ├── load_config(config_path)
+│   │   │   ├── save_config(config_data, output_path)
+│   │   │   ├── validate_config(config_data)
+│   │   │   └── find_default_config()
+│   │   └── settings.py
+│   │       └── validate_production_settings()
+│   ├── templates
+│   │   ├── common
+│   │   │   ├── migrations
+│   │   │   │   ├── 0001_initial.py
+│   │   │   │   │   └── Migration {}
+│   │   │   │   └── __init__.py
+│   │   │   ├── templates
+│   │   │   ├── apps.py
+│   │   │   │   └── CommonConfig {}
+│   │   │   ├── urls.py
+│   │   │   └── views.py
+│   │   ├── core
+│   │   │   ├── djstripe
+│   │   │   │   ├── __init__.py
+│   │   │   │   └── settings.py
+│   │   │   ├── migrations
+│   │   │   │   ├── 0001_update_site_domain.py
+│   │   │   │   │   ├── update_site_forward(apps, schema_editor)
+│   │   │   │   │   ├── update_site_backward(apps, schema_editor)
+│   │   │   │   │   ├── create_site_permissions(apps, schema_editor)
+│   │   │   │   │   └── Migration {}
+│   │   │   │   └── __init__.py
+│   │   │   ├── asgi.py
+│   │   │   ├── context_processors.py
+│   │   │   │   └── project_settings(request)
+│   │   │   ├── email_settings.py
+│   │   │   ├── settings.py
+│   │   │   │   ├── validate_required_vars(component)
+│   │   │   │   └── validate_production_settings()
+│   │   │   ├── test_runner.py
+│   │   │   │   ├── QuickScaleTestLoader {}
+│   │   │   │   │   └── discover(self, start_dir, pattern, top_level_dir)
+│   │   │   │   └── QuickScaleTestRunner {}
+│   │   │   │       ├── __init__(self)
+│   │   │   │       └── build_suite(self, test_labels)
+│   │   │   ├── test_settings.py
+│   │   │   ├── urls.py
+│   │   │   │   └── health_check(request)
+│   │   │   └── wsgi.py
+│   │   ├── dashboard
+│   │   │   ├── migrations
+│   │   │   │   ├── 0001_initial.py
+│   │   │   │   │   └── Migration {}
+│   │   │   │   └── __init__.py
+│   │   │   ├── templates
+│   │   │   ├── tests
+│   │   │   │   ├── __init__.py
+│   │   │   │   ├── test_product_admin.py
+│   │   │   │   │   └── ProductAdminTestCase {}
+│   │   │   │   │       ├── setUpClass(cls)
+│   │   │   │   │       ├── tearDownClass(cls)
+│   │   │   │   │       ├── test_product_admin_page_requires_staff(self, mock_getenv)
+│   │   │   │   │       ├── test_product_admin_displays_products(self, mock_getenv)
+│   │   │   │   │       ├── test_product_admin_refresh_functionality(self, mock_sync, mock_getenv)
+│   │   │   │   │       └── test_product_admin_refresh_requires_post(self, mock_getenv)
+│   │   │   │   └── test_views_no_stripe.py
+│   │   │   │       └── DashboardWithoutStripeTestCase {}
+│   │   │   │           ├── setUpClass(cls)
+│   │   │   │           ├── tearDownClass(cls)
+│   │   │   │           ├── test_dashboard_index_loads_without_stripe(self, mock_is_feature_enabled)
+│   │   │   │           ├── test_product_admin_loads_without_stripe(self, mock_is_feature_enabled)
+│   │   │   │           └── test_product_admin_refresh_error_without_stripe(self, mock_is_feature_enabled)
+│   │   │   ├── apps.py
+│   │   │   │   └── DashboardConfig {}
+│   │   │   ├── tests_product_admin.py
+│   │   │   ├── tests_views_no_stripe.py
+│   │   │   │   └── DashboardWithoutStripeTestCase {}
+│   │   │   │       ├── setUpTestData(cls)
+│   │   │   │       ├── setUp(self)
+│   │   │   │       ├── test_dashboard_loads_without_stripe(self)
+│   │   │   │       └── test_subscription_page_without_stripe(self)
+│   │   │   ├── urls.py
+│   │   │   └── views.py
+│   │   │       ├── index(request)
+│   │   │       ├── product_admin(request)
+│   │   │       └── product_admin_refresh(request)
+│   │   ├── djstripe
+│   │   │   ├── management
+│   │   │   │   ├── commands
+│   │   │   │   │   ├── __init__.py
+│   │   │   │   │   └── sync_products_with_stripe.py
+│   │   │   │   │       └── Command {}
+│   │   │   │   │           ├── add_arguments(self, parser)
+│   │   │   │   │           ├── handle(self)
+│   │   │   │   │           ├── push_to_stripe(self, options, verbosity)
+│   │   │   │   │           └── pull_from_stripe(self, options, verbosity)
+│   │   │   │   └── __init__.py
+│   │   │   ├── migrations
+│   │   │   │   ├── 0001_initial.py
+│   │   │   │   │   └── Migration {}
+│   │   │   │   ├── 0006_webhookendpoint_stripe_data.py
+│   │   │   │   │   └── Migration {}
+│   │   │   │   └── __init__.py
+│   │   │   ├── templates
+│   │   │   │   └── djstripe
+│   │   │   │       ├── __init__.py
+│   │   │   │       ├── product_detail.html
+│   │   │   │       ├── product_list.html
+│   │   │   │       └── status.html
+│   │   │   ├── tests
+│   │   │   │   ├── __init__.py
+│   │   │   │   ├── test_mock_stripe.py
+│   │   │   │   │   ├── MockStripeObjectTest {}
+│   │   │   │   │   │   ├── test_dict_access(self)
+│   │   │   │   │   │   ├── test_attribute_access(self)
+│   │   │   │   │   │   └── test_nested_lists(self)
+│   │   │   │   │   ├── MockStripeCustomerTest {}
+│   │   │   │   │   │   └── test_create(self)
+│   │   │   │   │   ├── MockStripeSubscriptionTest {}
+│   │   │   │   │   │   └── test_create(self)
+│   │   │   │   │   ├── MockStripeAPITest {}
+│   │   │   │   │   │   ├── test_initialization(self)
+│   │   │   │   │   │   ├── test_customer_creation(self)
+│   │   │   │   │   │   ├── test_subscription_creation(self)
+│   │   │   │   │   │   └── test_reset_mocks(self)
+│   │   │   │   │   ├── GetStripeTest {}
+│   │   │   │   │   │   ├── test_test_mode(self)
+│   │   │   │   │   │   └── test_real_mode(self)
+│   │   │   │   │   └── MockWebhookEventTest {}
+│   │   │   │   │       └── test_create_event(self)
+│   │   │   │   ├── test_product_model.py
+│   │   │   │   │   └── ProductModelTests {}
+│   │   │   │   │       ├── setUp(self)
+│   │   │   │   │       ├── test_product_creation(self)
+│   │   │   │   │       ├── test_product_string_representation(self)
+│   │   │   │   │       ├── test_is_active_method(self)
+│   │   │   │   │       ├── test_get_formatted_price_usd(self)
+│   │   │   │   │       ├── test_get_formatted_price_eur(self)
+│   │   │   │   │       ├── test_get_formatted_price_jpy(self)
+│   │   │   │   │       ├── test_get_formatted_price_unknown_currency(self)
+│   │   │   │   │       ├── test_ordering(self)
+│   │   │   │   │       └── test_metadata_field(self)
+│   │   │   │   ├── test_product_stripe_integration.py
+│   │   │   │   │   └── ProductStripeIntegrationTest {}
+│   │   │   │   │       ├── setUp(self)
+│   │   │   │   │       ├── tearDown(self)
+│   │   │   │   │       ├── test_create_in_stripe(self)
+│   │   │   │   │       ├── test_update_in_stripe(self)
+│   │   │   │   │       ├── test_sync_from_stripe(self)
+│   │   │   │   │       ├── test_delete_from_stripe(self)
+│   │   │   │   │       ├── test_sync_all_to_stripe(self)
+│   │   │   │   │       ├── test_product_save_signal(self, mock_thread)
+│   │   │   │   │       ├── test_product_delete_signal(self, mock_delete)
+│   │   │   │   │       ├── test_webhook_product_created(self)
+│   │   │   │   │       ├── test_sync_to_stripe_method(self)
+│   │   │   │   │       └── test_delete_from_stripe_method(self)
+│   │   │   │   ├── test_product_views.py
+│   │   │   │   │   └── ProductViewsTests {}
+│   │   │   │   │       ├── setUp(self)
+│   │   │   │   │       ├── test_product_list_view(self)
+│   │   │   │   │       ├── test_product_list_view_with_inactive(self)
+│   │   │   │   │       ├── test_product_detail_view(self)
+│   │   │   │   │       ├── test_product_detail_view_authenticated(self)
+│   │   │   │   │       ├── test_inactive_product_detail_view(self)
+│   │   │   │   │       └── test_nonexistent_product_detail_view(self)
+│   │   │   │   ├── test_signals.py
+│   │   │   │   │   └── StripeCustomerSignalTest {}
+│   │   │   │   │       ├── setUp(self)
+│   │   │   │   │       ├── tearDown(self)
+│   │   │   │   │       ├── test_customer_created_on_user_creation(self)
+│   │   │   │   │       ├── test_customer_not_created_when_stripe_disabled(self)
+│   │   │   │   │       ├── test_customer_not_created_when_stripe_unavailable(self, mock_get_stripe)
+│   │   │   │   │       └── test_customer_links_to_user(self)
+│   │   │   │   └── test_webhooks.py
+│   │   │   │       ├── StripeWebhookTest {}
+│   │   │   │       │   ├── setUp(self)
+│   │   │   │       │   ├── tearDown(self)
+│   │   │   │       │   ├── test_webhook_processing(self)
+│   │   │   │       │   ├── test_webhook_disabled_stripe(self)
+│   │   │   │       │   ├── test_webhook_missing_signature(self)
+│   │   │   │       │   ├── test_webhook_invalid_signature(self)
+│   │   │   │       │   └── test_handle_customer_created(self)
+│   │   │   │       └── CreateMockWebhookEventTest {}
+│   │   │   │           ├── test_customer_created_event(self)
+│   │   │   │           └── test_subscription_updated_event(self)
+│   │   │   ├── README.md
+│   │   │   ├── __init__.py
+│   │   │   ├── admin.py
+│   │   │   │   └── ProductAdmin {}
+│   │   │   │       ├── get_queryset(self, request)
+│   │   │   │       ├── stripe_status(self, obj)
+│   │   │   │       ├── sync_selected_to_stripe(self, request, queryset)
+│   │   │   │       ├── sync_selected_from_stripe(self, request, queryset)
+│   │   │   │       └── mark_selected_as_inactive(self, request, queryset)
+│   │   │   ├── apps.py
+│   │   │   │   └── DjStripeAppConfig {}
+│   │   │   │       └── ready(self)
+│   │   │   ├── forms.py
+│   │   │   ├── models.py
+│   │   │   │   ├── Product {}
+│   │   │   │   │   ├── Meta {}
+│   │   │   │   │   ├── __str__(self)
+│   │   │   │   │   ├── is_active(self)
+│   │   │   │   │   ├── get_formatted_price(self)
+│   │   │   │   │   ├── sync_to_stripe(self)
+│   │   │   │   │   └── delete_from_stripe(self)
+│   │   │   │   ├── product_post_save(sender, instance, created)
+│   │   │   │   └── product_pre_delete(sender, instance)
+│   │   │   ├── services.py
+│   │   │   │   └── ProductService {}
+│   │   │   │       ├── create_in_stripe(product)
+│   │   │   │       ├── update_in_stripe(product)
+│   │   │   │       ├── sync_from_stripe(stripe_product_id)
+│   │   │   │       ├── delete_from_stripe(product)
+│   │   │   │       ├── sync_all_to_stripe()
+│   │   │   │       └── sync_all_from_stripe()
+│   │   │   ├── settings.py
+│   │   │   ├── signals.py
+│   │   │   │   └── create_stripe_customer(sender, instance, created)
+│   │   │   ├── tests.py
+│   │   │   │   └── DjStripeConfigTests {}
+│   │   │   │       ├── test_stripe_disabled_by_default(self)
+│   │   │   │       └── test_stripe_enabled_configuration(self)
+│   │   │   ├── urls.py
+│   │   │   ├── utils.py
+│   │   │   │   ├── MockStripeObject {}
+│   │   │   │   │   ├── __init__(self, data)
+│   │   │   │   │   └── __getattr__(self, key)
+│   │   │   │   ├── MockStripeCustomer {}
+│   │   │   │   │   └── create(cls)
+│   │   │   │   ├── MockStripeSubscription {}
+│   │   │   │   │   └── create(cls)
+│   │   │   │   ├── MockStripeAPI {}
+│   │   │   │   │   ├── __init__(self)
+│   │   │   │   │   └── reset_mocks(self)
+│   │   │   │   ├── get_stripe()
+│   │   │   │   └── create_mock_webhook_event(event_type, object_data)
+│   │   │   ├── views.py
+│   │   │   │   ├── stripe_status(request)
+│   │   │   │   ├── create_customer(request)
+│   │   │   │   ├── product_list(request)
+│   │   │   │   └── product_detail(request, product_id)
+│   │   │   └── webhooks.py
+│   │   │       ├── stripe_webhook(request)
+│   │   │       ├── handle_customer_created(event)
+│   │   │       ├── handle_customer_updated(event)
+│   │   │       ├── handle_customer_deleted(event)
+│   │   │       ├── handle_subscription_event(event)
+│   │   │       ├── handle_payment_event(event)
+│   │   │       ├── handle_product_created(event)
+│   │   │       ├── handle_product_updated(event)
+│   │   │       ├── handle_product_deleted(event)
+│   │   │       ├── handle_price_created(event)
+│   │   │       ├── handle_price_updated(event)
+│   │   │       └── handle_price_deleted(event)
+│   │   ├── docs
+│   │   │   ├── auth_templates.md
+│   │   │   ├── styling_guidelines.md
+│   │   │   └── template_customization_examples.md
+│   │   ├── js
+│   │   │   └── password_validation.js
+│   │   │       ├── addEventListener('DOMContentLoaded', function()
+│   │   │       ├── checkPasswordStrength(password)
+│   │   │       ├── updateUI()
+│   │   │       ├── validatePassword(password)
+│   │   │       └── score(()
+│   │   ├── logs
+│   │   ├── public
+│   │   │   ├── migrations
+│   │   │   │   ├── 0001_initial.py
+│   │   │   │   │   └── Migration {}
+│   │   │   │   └── __init__.py
+│   │   │   ├── templates
+│   │   │   ├── apps.py
+│   │   │   │   └── PublicConfig {}
+│   │   │   ├── urls.py
+│   │   │   └── views.py
+│   │   │       ├── index(request)
+│   │   │       ├── about(request)
+│   │   │       └── contact(request)
+│   │   ├── static
+│   │   │   ├── css
+│   │   │   │   └── styles.css
+│   │   │   ├── js
+│   │   │   │   ├── main.js
+│   │   │   │   │   ├── addEventListener('DOMContentLoaded', function()
+│   │   │   │   │   ├── setupMobileMenu()
+│   │   │   │   │   ├── forEach(el => {
+            el.addEventListener('click', ()
+│   │   │   │   │   ├── setupFlashMessages()
+│   │   │   │   │   ├── forEach(($delete)
+│   │   │   │   │   ├── addEventListener('click', ()
+│   │   │   │   │   ├── setCookie(name, value, days)
+│   │   │   │   │   └── getCookie(name)
+│   │   │   │   └── password_validation.js
+│   │   │   │       ├── addEventListener('alpine:init', ()
+│   │   │   │       ├── progressValue()
+│   │   │   │       ├── color()
+│   │   │   │       ├── feedback()
+│   │   │   │       ├── matchMessage()
+│   │   │   │       ├── matchMessageClass()
+│   │   │   │       └── isSubmitDisabled()
+│   │   │   ├── favicon.ico
+│   │   │   ├── favicon.svg
+│   │   │   └── generate_favicon.sh
+│   │   ├── templates
+│   │   │   ├── account
+│   │   │   │   ├── email
+│   │   │   │   │   ├── account_already_exists_message.txt
+│   │   │   │   │   ├── account_already_exists_subject.txt
+│   │   │   │   │   ├── base_message.txt
+│   │   │   │   │   ├── base_notification.txt
+│   │   │   │   │   ├── base_signup.txt
+│   │   │   │   │   ├── email_confirmation_message.txt
+│   │   │   │   │   ├── email_confirmation_signup_message.txt
+│   │   │   │   │   ├── email_confirmation_signup_subject.txt
+│   │   │   │   │   ├── email_confirmation_subject.txt
+│   │   │   │   │   ├── password_reset_key_message.txt
+│   │   │   │   │   ├── password_reset_key_subject.txt
+│   │   │   │   │   ├── unknown_account_message.txt
+│   │   │   │   │   └── unknown_account_subject.txt
+│   │   │   │   ├── base.html
+│   │   │   │   ├── email.html
+│   │   │   │   ├── email_confirm.html
+│   │   │   │   ├── login.html
+│   │   │   │   ├── logout.html
+│   │   │   │   ├── password_change.html
+│   │   │   │   ├── password_reset.html
+│   │   │   │   ├── password_reset_done.html
+│   │   │   │   ├── password_reset_from_key.html
+│   │   │   │   ├── password_reset_from_key_done.html
+│   │   │   │   ├── signup.html
+│   │   │   │   ├── verification_sent.html
+│   │   │   │   └── verified_email_required.html
+│   │   │   ├── base
+│   │   │   │   └── base.html
+│   │   │   ├── components
+│   │   │   │   ├── footer.html
+│   │   │   │   ├── messages.html
+│   │   │   │   └── navbar.html
+│   │   │   ├── dashboard
+│   │   │   │   ├── index.html
+│   │   │   │   └── product_admin.html
+│   │   │   ├── public
+│   │   │   │   ├── about.html
+│   │   │   │   ├── contact.html
+│   │   │   │   ├── home.html
+│   │   │   │   └── index.html
+│   │   │   ├── users
+│   │   │   │   ├── login.html
+│   │   │   │   ├── login_form.html
+│   │   │   │   ├── profile.html
+│   │   │   │   ├── profile_form.html
+│   │   │   │   ├── signup.html
+│   │   │   │   └── signup_form.html
+│   │   │   └── base.html
+│   │   ├── tests
+│   │   │   ├── __init__.py
+│   │   │   └── test_sample.py
+│   │   │       └── SampleTestCase {}
+│   │   │           └── test_sample(self)
+│   │   ├── users
+│   │   │   ├── migrations
+│   │   │   │   ├── 0001_initial.py
+│   │   │   │   │   └── Migration {}
+│   │   │   │   ├── 0002_extend_user_profile.py
+│   │   │   │   │   └── Migration {}
+│   │   │   │   ├── 0003_alter_customuser_options.py
+│   │   │   │   │   └── Migration {}
+│   │   │   │   ├── 0004_stripecustomer.py
+│   │   │   │   │   └── Migration {}
+│   │   │   │   └── __init__.py
+│   │   │   ├── adapters.py
+│   │   │   │   ├── AccountAdapter {}
+│   │   │   │   │   ├── is_open_for_signup(self, request)
+│   │   │   │   │   ├── get_email_confirmation_url(self, request, emailconfirmation)
+│   │   │   │   │   ├── get_login_redirect_url(self, request)
+│   │   │   │   │   ├── send_mail(self, template_prefix, email, context)
+│   │   │   │   │   └── populate_username(self, request, user)
+│   │   │   │   └── SocialAccountAdapter {}
+│   │   │   │       ├── is_open_for_signup(self, request, sociallogin)
+│   │   │   │       ├── pre_social_login(self, request, sociallogin)
+│   │   │   │       └── populate_user(self, request, sociallogin, data)
+│   │   │   ├── admin.py
+│   │   │   │   └── CustomUserAdmin {}
+│   │   │   ├── apps.py
+│   │   │   │   └── UsersConfig {}
+│   │   │   ├── forms.py
+│   │   │   │   ├── CustomLoginForm {}
+│   │   │   │   │   └── __init__(self)
+│   │   │   │   ├── CustomSignupForm {}
+│   │   │   │   │   ├── __init__(self)
+│   │   │   │   │   └── save(self, request)
+│   │   │   │   ├── CustomResetPasswordForm {}
+│   │   │   │   │   └── __init__(self)
+│   │   │   │   ├── CustomResetPasswordKeyForm {}
+│   │   │   │   │   └── __init__(self)
+│   │   │   │   ├── CustomChangePasswordForm {}
+│   │   │   │   │   └── __init__(self)
+│   │   │   │   └── ProfileForm {}
+│   │   │   │       ├── Meta {}
+│   │   │   │       └── __init__(self)
+│   │   │   ├── models.py
+│   │   │   │   ├── CustomUserManager {}
+│   │   │   │   │   ├── create_user(self, email, password)
+│   │   │   │   │   └── create_superuser(self, email, password)
+│   │   │   │   ├── CustomUser {}
+│   │   │   │   │   ├── Meta {}
+│   │   │   │   │   ├── __str__(self)
+│   │   │   │   │   └── get_full_name(self)
+│   │   │   │   └── StripeCustomer {}
+│   │   │   │       ├── Meta {}
+│   │   │   │       └── __str__(self)
+│   │   │   ├── signup.html
+│   │   │   ├── urls.py
+│   │   │   ├── validators.py
+│   │   │   │   ├── PasswordStrengthValidator {}
+│   │   │   │   │   ├── __init__(self, min_length, require_uppercase, require_lowercase, require_digit, require_special)
+│   │   │   │   │   ├── validate(self, password, user)
+│   │   │   │   │   └── get_help_text(self)
+│   │   │   │   └── BreachedPasswordValidator {}
+│   │   │   │       ├── __init__(self, min_pwned_count)
+│   │   │   │       ├── validate(self, password, user)
+│   │   │   │       └── get_help_text(self)
+│   │   │   └── views.py
+│   │   │       ├── login_view(request)
+│   │   │       ├── logout_view(request)
+│   │   │       ├── CustomSignupForm {}
+│   │   │       │   └── Meta {}
+│   │   │       ├── signup_view(request)
+│   │   │       └── profile_view(request)
+│   │   ├── Dockerfile
+│   │   ├── docker-compose.yml
+│   │   ├── entrypoint.sh
+│   │   ├── manage.py
+│   │   │   └── main()
+│   │   └── requirements.txt
+│   ├── tests
+│   ├── utils
+│   │   ├── __init__.py
+│   │   ├── env_utils.py
+│   │   │   ├── get_env(key, default, from_env_file)
+│   │   │   ├── is_feature_enabled(env_value)
+│   │   │   ├── refresh_env_cache()
+│   │   │   └── debug_env_cache()
+│   │   ├── error_manager.py
+│   │   │   ├── CommandError {}
+│   │   │   │   └── __init__(self, message, details, recovery)
+│   │   │   ├── ConfigurationError {}
+│   │   │   ├── EnvironmentError {}
+│   │   │   ├── DependencyError {}
+│   │   │   ├── ServiceError {}
+│   │   │   ├── ProjectError {}
+│   │   │   ├── ValidationError {}
+│   │   │   ├── UnknownCommandError {}
+│   │   │   ├── DatabaseError {}
+│   │   │   ├── NetworkError {}
+│   │   │   ├── register_error_handler(exception_type)
+│   │   │   ├── handle_subprocess_error(exc)
+│   │   │   ├── handle_file_not_found(exc)
+│   │   │   ├── handle_permission_error(exc)
+│   │   │   ├── convert_exception(exc)
+│   │   │   ├── handle_command_error(error, logger, exit_on_error)
+│   │   │   └── format_error_context(exc, context)
+│   │   ├── help_manager.py
+│   │   │   └── show_manage_help()
+│   │   ├── log_scanner.py
+│   │   │   ├── LogPattern {}
+│   │   │   │   └── __init__(self, pattern, severity, description, context_lines)
+│   │   │   ├── LogIssue {}
+│   │   │   │   ├── __init__(self, message, severity, source, line_number, context)
+│   │   │   │   └── __str__(self)
+│   │   │   └── LogScanner {}
+│   │   │       ├── __init__(self, project_dir, logger)
+│   │   │       ├── scan_build_log(self)
+│   │   │       ├── scan_container_logs(self)
+│   │   │       ├── scan_migration_logs(self)
+│   │   │       ├── scan_all_logs(self)
+│   │   │       ├── _scan_file(self, file_path, source_type)
+│   │   │       ├── _scan_content(self, content, source_type)
+│   │   │       ├── _is_false_positive(self, message, source_type, lines, line_number)
+│   │   │       ├── generate_summary(self)
+│   │   │       ├── print_summary(self)
+│   │   │       └── _analyze_migration_issue(self, issue)
+│   │   ├── logging_manager.py
+│   │   │   └── LoggingManager {}
+│   │   │       ├── get_logger()
+│   │   │       ├── setup_logging(project_dir, log_level)
+│   │   │       ├── _add_file_handler(logger, project_dir, log_level)
+│   │   │       └── _log_system_info(logger, project_dir)
+│   │   └── template_generator.py
+│   │       ├── copy_sync_modules(project_dir, quickscale_dir, logger)
+│   │       ├── is_binary_file(file_path)
+│   │       ├── render_template(content, variables)
+│   │       ├── process_file_templates(project_dir, template_variables, logger)
+│   │       ├── fix_imports(project_dir, logger)
+│   │       └── remove_duplicated_templates(project_dir, logger)
+│   ├── __init__.py
+│   └── cli.py
+│       ├── QuickScaleArgumentParser {}
+│       │   └── error(self, message)
+│       └── main()
+├── quickscale.egg-info
+│   ├── PKG-INFO
+│   ├── SOURCES.txt
+│   ├── dependency_links.txt
+│   ├── entry_points.txt
+│   ├── requires.txt
+│   └── top_level.txt
+├── tests
+│   ├── core
+│   │   ├── djstripe
+│   │   │   ├── __init__.py
+│   │   │   └── settings.py
+│   │   ├── __init__.py
+│   │   ├── settings.py
+│   │   ├── urls.py
+│   │   └── wsgi.py
+│   ├── e2e
+│   │   ├── support
+│   │   │   ├── test_project_template
+│   │   │   │   └── core
+│   │   │   ├── __init__.py
+│   │   │   └── command_runner.py
+│   │   │       └── run_quickscale_command()
+│   │   ├── __init__.py
+│   │   ├── test_auth_e2e.py
+│   │   │   └── TestAuthE2E {}
+│   │   │       ├── setUp(self)
+│   │   │       ├── test_login_page_loads(self)
+│   │   │       ├── test_signup_page_loads(self)
+│   │   │       ├── test_login_with_valid_credentials(self)
+│   │   │       ├── test_login_with_invalid_credentials(self)
+│   │   │       ├── test_password_reset_request(self)
+│   │   │       ├── test_signup_with_valid_data(self)
+│   │   │       ├── test_signup_with_invalid_data(self)
+│   │   │       └── test_signup_with_existing_email(self)
+│   │   ├── test_django_commands.py
+│   │   │   └── TestDjangoCommands {}
+│   │   │       ├── check_docker(self)
+│   │   │       ├── test_project(self, tmp_path_factory)
+│   │   │       └── in_project_dir(self, project_dir)
+│   │   ├── test_env_utils_e2e.py
+│   │   │   └── TestEnvUtilsE2E {}
+│   │   │       ├── temp_env_files(self)
+│   │   │       ├── test_env_file_loading(self, temp_env_files)
+│   │   │       ├── test_feature_enabled_check(self, temp_env_files)
+│   │   │       ├── test_env_example_fallback(self, temp_env_files)
+│   │   │       ├── test_cache_refresh(self, temp_env_files)
+│   │   │       ├── test_direct_dotenv_values(self, temp_env_files)
+│   │   │       ├── test_module_initialization(self, temp_env_files)
+│   │   │       ├── test_env_example_copied_to_env(self)
+│   │   │       └── test_init_and_up_env_loading(self)
+│   │   ├── test_init_env_loading.py
+│   │   │   └── TestEnvFileLoading {}
+│   │   │       ├── test_project_dir(self)
+│   │   │       ├── test_env_example_copied_to_env(self, test_project_dir)
+│   │   │       └── test_env_reload_after_changes(self, test_project_dir)
+│   │   ├── test_init_up_env_loading.py
+│   │   │   └── TestInitUpEnvLoading {}
+│   │   │       ├── check_docker(self)
+│   │   │       ├── clean_test_env(self, tmp_path)
+│   │   │       └── test_init_and_up_env_loading(self, clean_test_env)
+│   │   ├── test_real_lifecycle.py
+│   │   │   └── TestRealLifecycle {}
+│   │   │       ├── verify_docker(self)
+│   │   │       ├── is_port_in_use(self, port)
+│   │   │       ├── assert_containers_running(self, project_name)
+│   │   │       ├── find_available_ports(self)
+│   │   │       ├── fix_dockerfile_netcat(self, project_dir)
+│   │   │       ├── real_project(self, tmp_path_factory)
+│   │   │       ├── test_01_verify_services_after_init(self, real_project)
+│   │   │       ├── test_02_down_command(self, real_project)
+│   │   │       ├── test_03_up_command(self, real_project)
+│   │   │       ├── test_04_project_ps_command(self, real_project)
+│   │   │       ├── test_05_project_logs_command(self, real_project)
+│   │   │       ├── test_06_project_shell_command(self, real_project)
+│   │   │       ├── test_07_django_manage_command(self, real_project)
+│   │   │       ├── test_08_django_manage_test(self, real_project)
+│   │   │       ├── test_09_django_manage_check(self, real_project)
+│   │   │       └── test_10_django_manage_help(self, real_project)
+│   │   └── test_simplified_lifecycle.py
+│   │       └── TestSimplifiedLifecycle {}
+│   │           ├── test_cli_version(self)
+│   │           ├── test_cli_help(self)
+│   │           └── test_cli_check(self)
+│   ├── integration
+│   │   ├── __init__.py
+│   │   ├── test_auth_integration.py
+│   │   │   ├── mock_user()
+│   │   │   ├── mock_request()
+│   │   │   ├── mock_social_account()
+│   │   │   ├── TestAuthenticationFlow {}
+│   │   │   │   ├── test_signup_flow(self, mock_class)
+│   │   │   │   ├── test_login_flow(self, mock_class)
+│   │   │   │   ├── test_password_reset_flow(self, mock_class)
+│   │   │   │   └── test_profile_update_flow(self, mock_class)
+│   │   │   ├── TestSocialAuthentication {}
+│   │   │   │   ├── test_social_account_connection(self, mock_class, mock_user, mock_social_account)
+│   │   │   │   ├── test_social_account_data_retrieval(self, mock_class, mock_social_account)
+│   │   │   │   └── test_pre_social_login_signal(self, mock_class, mock_social_account)
+│   │   │   └── TestIntegrationWithDjangoAllauth {}
+│   │   │       ├── test_custom_adapter_integration(self, mock_class)
+│   │   │       └── test_custom_social_adapter_integration(self, mock_class, mock_social_account)
+│   │   ├── test_auth_utils.py
+│   │   │   └── patch_django_for_e2e_testing()
+│   │   ├── test_cli_error_handling.py
+│   │   │   ├── TestCLIErrorHandling {}
+│   │   │   │   ├── test_unknown_command_error(self, capsys)
+│   │   │   │   ├── test_missing_required_argument(self, script_runner, capsys)
+│   │   │   │   ├── test_project_not_found_error(self, capsys, tmp_path)
+│   │   │   │   └── test_validation_error_empty_manage(self, capsys)
+│   │   │   └── TestArgumentParserErrorHandling {}
+│   │   │       ├── test_argument_parsing_error(self)
+│   │   │       └── test_invalid_choice_error(self)
+│   │   ├── test_cli_integration.py
+│   │   │   └── TestCLIIntegration {}
+│   │   │       ├── test_version_command(self, script_runner)
+│   │   │       ├── test_help_command(self, script_runner)
+│   │   │       ├── test_invalid_command(self, script_runner)
+│   │   │       ├── test_project_workflow(self, script_runner, tmp_path)
+│   │   │       ├── test_end_user_workflow_cli_part(self, mock_init_execute, mock_subprocess_run, script_runner, tmp_path)
+│   │   │       ├── test_docker_services_cli_part(self, mock_subprocess_run, script_runner, tmp_path)
+│   │   │       ├── test_environment_validation_cli_integration(self, mock_validate, script_runner, tmp_path)
+│   │   │       └── test_port_fallback_functionality(self, mock_subprocess_run, mock_is_port_in_use, script_runner, tmp_path)
+│   │   ├── test_init_integration.py
+│   │   │   └── TestInitIntegration {}
+│   │   │       ├── test_init_command_basics(self, script_runner, tmp_path)
+│   │   │       ├── test_init_command_with_existing_dir(self, script_runner, tmp_path)
+│   │   │       ├── test_init_command_invalid_name(self, script_runner, tmp_path)
+│   │   │       └── test_init_creates_env_file(self, script_runner, tmp_path)
+│   │   └── test_project_settings.py
+│   │       ├── MockSettings {}
+│   │       ├── MockResponse {}
+│   │       │   └── __init__(self)
+│   │       └── ProjectSettingsTests {}
+│   │           ├── setUp(self)
+│   │           ├── tearDown(self)
+│   │           ├── test_project_name_default(self)
+│   │           ├── test_project_name_override(self)
+│   │           ├── test_project_name_from_env(self)
+│   │           ├── test_context_processor_provides_project_name(self)
+│   │           ├── test_template_renders_project_name(self)
+│   │           ├── test_template_uses_custom_project_name(self)
+│   │           ├── test_invalid_project_name(self)
+│   │           ├── test_missing_context_processor(self)
+│   │           ├── test_long_project_name(self)
+│   │           └── test_special_chars_project_name(self)
+│   ├── unit
+│   │   ├── commands
+│   │   │   ├── test_command_utils.py
+│   │   │   │   └── TestCommandUtils {}
+│   │   │   │       ├── test_wait_for_postgres_with_valid_user(self, mock_run)
+│   │   │   │       ├── test_wait_for_postgres_with_empty_user(self, mock_run)
+│   │   │   │       ├── test_wait_for_postgres_with_root_user(self, mock_run)
+│   │   │   │       ├── test_fix_permissions_with_valid_user(self, mock_run)
+│   │   │   │       ├── test_fix_permissions_with_empty_user(self, mock_run)
+│   │   │   │       ├── test_fix_permissions_with_root_user(self, mock_run)
+│   │   │   │       └── test_fix_permissions_with_no_user(self, mock_run)
+│   │   │   ├── test_environment_validation.py
+│   │   │   │   ├── TestEnvironmentValidation {}
+│   │   │   │   │   ├── init_command(self)
+│   │   │   │   │   └── test_validation_functionality_placeholder(self)
+│   │   │   │   └── TestInitCommandValidation {}
+│   │   │   │       ├── init_command(self)
+│   │   │   │       ├── test_validate_project_name_valid(self, init_command)
+│   │   │   │       ├── test_validate_project_name_invalid(self, init_command)
+│   │   │   │       ├── test_validate_project_dir_exists(self, init_command)
+│   │   │   │       └── test_init_command_template_missing(self, mock_exists, mock_copytree, init_command)
+│   │   │   ├── test_project_commands.py
+│   │   │   │   └── TestInitCommand {}
+│   │   │   │       ├── init_command(self)
+│   │   │   │       ├── test_init_command_success(self, mock_mkdir, mock_copytree, init_command)
+│   │   │   │       ├── test_env_file_creation(self, mock_copy2, mock_mkdir, mock_copytree, init_command)
+│   │   │   │       └── test_template_variables(self, mock_truediv, mock_read_text, init_command)
+│   │   │   └── test_project_name.py
+│   │   │       ├── init_command()
+│   │   │       ├── test_env()
+│   │   │       ├── test_project_name_in_env_file(mock_write_text, mock_read_text, mock_copy2, mock_mkdir, mock_copytree, init_command, test_env)
+│   │   │       ├── test_project_name_default_in_env_file(mock_write_text, mock_read_text, mock_copy2, mock_mkdir, mock_copytree, init_command, test_env)
+│   │   │       └── test_project_name_in_templates(mock_write_text, mock_read_text, mock_copy2, mock_mkdir, mock_copytree, init_command, test_env)
+│   │   ├── fixtures
+│   │   │   └── docker-compose.yml
+│   │   ├── utils
+│   │   │   └── test_log_scanner.py
+│   │   │       ├── TestLogPattern {}
+│   │   │       │   ├── test_pattern_initialization(self)
+│   │   │       │   └── test_pattern_matching(self)
+│   │   │       ├── TestLogIssue {}
+│   │   │       │   ├── test_issue_initialization(self)
+│   │   │       │   └── test_issue_string_representation(self)
+│   │   │       └── TestLogScanner {}
+│   │   │           ├── temp_project_dir(self)
+│   │   │           ├── mock_logger(self)
+│   │   │           ├── scanner(self, temp_project_dir, mock_logger)
+│   │   │           ├── test_scanner_initialization(self, scanner, temp_project_dir, mock_logger)
+│   │   │           ├── test_scan_file(self, scanner, temp_project_dir)
+│   │   │           ├── test_generate_summary(self, scanner)
+│   │   │           ├── test_empty_summary(self, scanner)
+│   │   │           ├── test_summary_no_logs_accessed(self, scanner)
+│   │   │           ├── test_print_summary_no_issues(self, mock_print, scanner)
+│   │   │           ├── test_print_summary_with_issues(self, mock_print, scanner)
+│   │   │           ├── test_print_summary_no_logs_accessed(self, mock_print, scanner)
+│   │   │           ├── test_scan_container_logs(self, mock_run, scanner)
+│   │   │           ├── test_scan_migration_logs(self, mock_run, scanner)
+│   │   │           └── test_scan_all_logs(self, scanner)
+│   │   ├── __init__.py
+│   │   ├── test_auth_components.py
+│   │   │   ├── MockPasswordStrengthValidator()
+│   │   │   ├── MockBreachedPasswordValidator()
+│   │   │   ├── MockCustomUserManager()
+│   │   │   ├── MockAccountAdapter()
+│   │   │   ├── MockSocialAccountAdapter()
+│   │   │   ├── PermissionDenied {}
+│   │   │   ├── TestPasswordValidators {}
+│   │   │   │   ├── test_password_strength_validator(self, MockPasswordStrengthValidator)
+│   │   │   │   ├── test_breached_password_validator(self, MockBreachedPasswordValidator)
+│   │   │   │   └── test_validator_help_text(self, MockPasswordStrengthValidator, MockBreachedPasswordValidator)
+│   │   │   ├── TestCustomUserManager {}
+│   │   │   │   ├── test_create_user_without_email(self, MockCustomUserManager)
+│   │   │   │   ├── test_create_user_normalizes_email(self, MockCustomUserManager)
+│   │   │   │   ├── test_create_superuser(self, MockCustomUserManager)
+│   │   │   │   ├── test_create_superuser_enforces_staff_status(self, MockCustomUserManager)
+│   │   │   │   └── test_create_superuser_enforces_superuser_status(self, MockCustomUserManager)
+│   │   │   ├── TestAccountAdapter {}
+│   │   │   │   ├── test_is_open_for_signup(self, MockAccountAdapter)
+│   │   │   │   └── test_populate_username(self, MockAccountAdapter)
+│   │   │   └── TestSocialAccountAdapter {}
+│   │   │       ├── test_is_open_for_signup(self, MockSocialAccountAdapter)
+│   │   │       ├── test_pre_social_login(self, MockSocialAccountAdapter)
+│   │   │       └── test_populate_user(self, MockSocialAccountAdapter)
+│   │   ├── test_auth_forms.py
+│   │   │   ├── MockCustomLoginForm()
+│   │   │   ├── MockCustomSignupForm()
+│   │   │   ├── MockCustomResetPasswordForm()
+│   │   │   ├── MockCustomResetPasswordKeyForm()
+│   │   │   ├── MockCustomChangePasswordForm()
+│   │   │   ├── MockProfileForm()
+│   │   │   ├── TestCustomLoginForm {}
+│   │   │   │   └── test_initialization(self, MockCustomLoginForm)
+│   │   │   ├── TestCustomSignupForm {}
+│   │   │   │   ├── test_required_fields(self, MockCustomSignupForm)
+│   │   │   │   ├── test_field_styling(self, MockCustomSignupForm)
+│   │   │   │   └── test_save_method(self, MockCustomSignupForm)
+│   │   │   ├── TestCustomResetPasswordForm {}
+│   │   │   │   └── test_initialization(self, MockCustomResetPasswordForm)
+│   │   │   ├── TestCustomResetPasswordKeyForm {}
+│   │   │   │   └── test_initialization(self, MockCustomResetPasswordKeyForm)
+│   │   │   ├── TestCustomChangePasswordForm {}
+│   │   │   │   └── test_initialization(self, MockCustomChangePasswordForm)
+│   │   │   └── TestProfileForm {}
+│   │   │       └── test_initialization(self, MockProfileForm)
+│   │   ├── test_cli_commands.py
+│   │   │   └── TestCLICommands {}
+│   │   │       ├── test_version_command(self, capsys)
+│   │   │       ├── test_help_command(self, capsys)
+│   │   │       ├── test_check_command(self)
+│   │   │       └── test_invalid_command(self, capsys)
+│   │   ├── test_cli_config.py
+│   │   │   └── TestCLIConfig {}
+│   │   │       ├── test_config_loading(self, mock_config_file)
+│   │   │       ├── test_config_with_custom_path(self)
+│   │   │       ├── test_save_config(self, tmp_path)
+│   │   │       └── test_config_validation(self, capsys)
+│   │   ├── test_cli_params.py
+│   │   │   └── TestCLIParameters {}
+│   │   │       ├── test_command_parameters(self, args, expected_func, expected_kwargs)
+│   │   │       └── test_help_command_general(self, capsys)
+│   │   ├── test_command_base.py
+│   │   │   ├── CommandForTesting {}
+│   │   │   │   ├── execute(self)
+│   │   │   │   └── raise_exception(self, exception)
+│   │   │   └── TestCommandBase {}
+│   │   │       ├── test_handle_error_with_string(self)
+│   │   │       ├── test_handle_error_with_exception(self)
+│   │   │       ├── test_handle_error_with_recovery(self)
+│   │   │       ├── test_handle_error_with_context(self)
+│   │   │       ├── test_safe_execute(self)
+│   │   │       └── test_exit_with_error(self)
+│   │   ├── test_command_utils.py
+│   │   │   ├── test_get_current_uid_gid()
+│   │   │   ├── test_generate_secret_key()
+│   │   │   ├── test_is_binary_file(tmp_path)
+│   │   │   ├── test_copy_with_vars(tmp_path)
+│   │   │   ├── test_copy_files_recursive(tmp_path)
+│   │   │   ├── test_wait_for_postgres_success(mock_run, mock_sleep)
+│   │   │   ├── test_wait_for_postgres_timeout(mock_run, mock_sleep)
+│   │   │   ├── test_find_available_ports(mock_socket)
+│   │   │   ├── test_fix_permissions(mock_run, tmp_path)
+│   │   │   └── test_find_available_port(mock_socket)
+│   │   ├── test_dashboard_views.py
+│   │   │   ├── DashboardViewsWithStripeDisabledTests {}
+│   │   │   │   ├── setUp(self)
+│   │   │   │   ├── test_product_admin_page_loads_with_stripe_disabled(self)
+│   │   │   │   └── test_product_refresh_fails_with_stripe_disabled(self)
+│   │   │   ├── DashboardViewsWithStripeUnavailableTests {}
+│   │   │   │   ├── setUp(self)
+│   │   │   │   ├── test_product_admin_page_loads_with_stripe_unavailable(self)
+│   │   │   │   └── test_product_refresh_fails_with_stripe_unavailable(self)
+│   │   │   └── DashboardViewsWithStripeDatabaseErrorTests {}
+│   │   │       ├── setUp(self)
+│   │   │       ├── test_product_admin_page_handles_database_error(self)
+│   │   │       └── test_product_refresh_handles_api_error(self)
+│   │   ├── test_development_commands.py
+│   │   │   └── TestDevelopmentCommandErrorHandling {}
+│   │   │       ├── test_shell_command_error_handling(self)
+│   │   │       ├── test_django_shell_command_error_handling(self)
+│   │   │       └── test_manage_command_error_handling(self)
+│   │   ├── test_djstripe_import.py
+│   │   │   ├── test_djstripe_import()
+│   │   │   └── test_stripe_import()
+│   │   ├── test_env_template.py
+│   │   │   ├── load_env_file_to_environ(env_file_path)
+│   │   │   └── TestEnvTemplate {}
+│   │   │       ├── setUp(self)
+│   │   │       ├── tearDown(self)
+│   │   │       ├── test_env_example_exists(self)
+│   │   │       ├── test_env_example_loads_without_errors(self)
+│   │   │       ├── test_get_env_retrieves_variables(self)
+│   │   │       ├── test_is_feature_enabled_works_with_env_values(self)
+│   │   │       ├── test_env_example_format_consistency(self)
+│   │   │       ├── test_env_example_security_warnings(self)
+│   │   │       ├── test_env_example_no_real_credentials(self)
+│   │   │       └── test_env_example_log_level(self)
+│   │   ├── test_environment_isolation.py
+│   │   │   ├── load_env_file(env_file_path)
+│   │   │   └── TestEnvironmentIsolation {}
+│   │   │       ├── setUp(self)
+│   │   │       ├── tearDown(self)
+│   │   │       ├── test_environment_file_isolation(self, mock_open, mock_exists)
+│   │   │       ├── test_environment_separation_in_settings(self)
+│   │   │       └── test_validation_functions_environment_aware(self)
+│   │   ├── test_error_manager.py
+│   │   │   ├── TestErrorConversion {}
+│   │   │   │   ├── test_convert_subprocess_error(self)
+│   │   │   │   ├── test_convert_database_error(self)
+│   │   │   │   ├── test_convert_file_not_found(self)
+│   │   │   │   ├── test_convert_permission_error(self)
+│   │   │   │   └── test_convert_unknown_error(self)
+│   │   │   ├── TestErrorHandling {}
+│   │   │   │   ├── test_handle_command_error(self, mock_exit, mock_print)
+│   │   │   │   ├── test_handle_error_no_exit(self, mock_print)
+│   │   │   │   └── test_error_hierarchy(self)
+│   │   │   └── TestCommandErrorProperties {}
+│   │   │       ├── test_exit_codes(self)
+│   │   │       └── test_error_details(self)
+│   │   ├── test_production_security.py
+│   │   │   └── TestProductionSecurity {}
+│   │   │       ├── test_production_requires_strong_secret_key(self)
+│   │   │       ├── test_production_requires_specific_allowed_hosts(self)
+│   │   │       └── test_secure_defaults(self)
+│   │   ├── test_project_commands.py
+│   │   │   ├── mock_init_command()
+│   │   │   ├── mock_templates_dir(tmp_path)
+│   │   │   ├── mock_destroy_command()
+│   │   │   ├── test_init_command_project_creation(mock_init_command, tmp_path, monkeypatch)
+│   │   │   ├── test_copy_with_vars_function(tmp_path)
+│   │   │   ├── test_find_available_port_function(mock_socket)
+│   │   │   ├── test_destroy_project_command(mock_destroy_command, tmp_path, monkeypatch)
+│   │   │   ├── test_destroy_project_cancelled(mock_destroy_command)
+│   │   │   ├── test_destroy_project_no_project(mock_destroy_command)
+│   │   │   ├── mock_verification_command()
+│   │   │   ├── test_verify_container_status(mock_verification_command, monkeypatch)
+│   │   │   ├── test_verify_container_status_failure(mock_verification_command, monkeypatch)
+│   │   │   ├── test_verify_database_connectivity(mock_verification_command, monkeypatch)
+│   │   │   ├── test_verify_database_connectivity_failure(mock_verification_command, monkeypatch)
+│   │   │   ├── test_verify_web_service(mock_verification_command, monkeypatch)
+│   │   │   ├── test_verify_web_service_failure(mock_verification_command, monkeypatch)
+│   │   │   └── test_verify_web_service_static_files_none(mock_verification_command, monkeypatch)
+│   │   ├── test_project_structure.py
+│   │   │   ├── get_expected_structure_from_docs()
+│   │   │   ├── get_actual_structure(root_dir)
+│   │   │   ├── test_project_structure_matches_docs()
+│   │   │   ├── get_template_structure_from_docs()
+│   │   │   ├── get_actual_template_structure()
+│   │   │   ├── test_template_structure_correctness()
+│   │   │   ├── get_django_app_structure_from_docs()
+│   │   │   ├── is_django_app(directory_path)
+│   │   │   ├── test_django_apps_in_correct_locations()
+│   │   │   ├── get_static_dirs_from_docs()
+│   │   │   ├── is_static_file(file_path)
+│   │   │   ├── test_static_files_in_correct_locations()
+│   │   │   ├── get_docker_files_from_docs()
+│   │   │   ├── get_docker_file_locations()
+│   │   │   ├── test_docker_files_in_correct_locations()
+│   │   │   └── test_no_nested_quickscale_directory()
+│   │   ├── test_secure_defaults.py
+│   │   │   └── TestSecureDefaults {}
+│   │   │       ├── setUp(self)
+│   │   │       ├── tearDown(self)
+│   │   │       ├── test_env_example_file_comments(self, mock_exists, mock_file)
+│   │   │       ├── test_default_values_not_exposing_secrets(self)
+│   │   │       ├── test_password_strength_requirements(self)
+│   │   │       ├── test_security_headers_defaults(self)
+│   │   │       └── test_cookie_security_defaults(self)
+│   │   ├── test_service_commands.py
+│   │   │   └── TestServiceCommandErrorHandling {}
+│   │   │       ├── test_service_up_command_error_handling(self)
+│   │   │       ├── test_service_down_command_error_handling(self)
+│   │   │       ├── test_service_logs_command_error_handling(self)
+│   │   │       ├── test_service_status_command_error_handling(self)
+│   │   │       ├── test_env_file_port_update_error_handling(self)
+│   │   │       ├── test_port_availability_check_web_port_available(self)
+│   │   │       ├── test_port_availability_check_web_port_in_use_with_fallback(self)
+│   │   │       ├── test_port_availability_check_web_port_in_use_without_fallback(self)
+│   │   │       ├── test_port_availability_check_db_port_in_use_with_fallback(self)
+│   │   │       ├── test_port_availability_check_db_port_in_use_without_fallback(self)
+│   │   │       ├── test_port_availability_check_no_available_alternative(self)
+│   │   │       ├── test_execute_with_port_availability_check(self)
+│   │   │       ├── test_is_feature_enabled_truthy_values(self)
+│   │   │       ├── test_is_feature_enabled_falsy_values(self)
+│   │   │       ├── test_port_fallback_with_various_boolean_formats(self)
+│   │   │       └── test_is_feature_enabled_with_inline_comments(self)
+│   │   ├── test_settings_validation.py
+│   │   │   ├── validate_required_vars(component)
+│   │   │   ├── validate_production_settings()
+│   │   │   └── TestSettingsValidation {}
+│   │   │       ├── setUp(self)
+│   │   │       ├── tearDown(self)
+│   │   │       ├── test_validate_required_vars_missing(self)
+│   │   │       ├── test_validate_production_settings_insecure_secret_key(self)
+│   │   │       ├── test_validate_production_settings_wildcard_allowed_hosts(self)
+│   │   │       ├── test_validate_production_settings_valid(self)
+│   │   │       ├── test_env_defaults(self)
+│   │   │       └── test_env_overrides(self)
+│   │   ├── test_stripe_config.py
+│   │   │   └── StripeConfigurationTests {}
+│   │   │       ├── setUp(self)
+│   │   │       ├── tearDown(self)
+│   │   │       ├── test_stripe_disabled_by_default(self)
+│   │   │       └── test_stripe_settings_with_flag_enabled(self)
+│   │   ├── test_stripe_customer.py
+│   │   │   ├── MockStripeCustomer {}
+│   │   │   │   ├── __init__(self, user, stripe_id)
+│   │   │   │   └── __str__(self)
+│   │   │   ├── mock_user()
+│   │   │   └── TestStripeCustomerModel {}
+│   │   │       ├── test_model_attributes(self)
+│   │   │       ├── test_create_stripe_customer(self, mock_user)
+│   │   │       ├── test_string_representation(self, mock_user)
+│   │   │       ├── test_user_relationship(self, mock_user)
+│   │   │       └── test_required_fields(self)
+│   │   └── test_template_generator.py
+│   │       └── TestTemplateGenerator {}
+│   │           ├── setUp(self)
+│   │           ├── tearDown(self)
+│   │           ├── test_is_binary_file(self)
+│   │           ├── test_render_template(self)
+│   │           └── test_process_file_templates(self)
+│   ├── users
+│   │   ├── migrations
+│   │   │   ├── 0001_initial.py
+│   │   │   │   └── Migration {}
+│   │   │   └── __init__.py
+│   │   ├── __init__.py
+│   │   ├── adapters.py
+│   │   │   ├── AccountAdapter {}
+│   │   │   │   ├── is_open_for_signup(self, request)
+│   │   │   │   ├── get_email_confirmation_url(self, request, emailconfirmation)
+│   │   │   │   ├── get_login_redirect_url(self, request)
+│   │   │   │   ├── send_mail(self, template_prefix, email, context)
+│   │   │   │   └── populate_username(self, request, user)
+│   │   │   └── SocialAccountAdapter {}
+│   │   │       ├── is_open_for_signup(self, request, sociallogin)
+│   │   │       ├── pre_social_login(self, request, sociallogin)
+│   │   │       └── populate_user(self, request, sociallogin, data)
+│   │   ├── apps.py
+│   │   │   └── UsersConfig {}
+│   │   ├── models.py
+│   │   │   ├── CustomUserManager {}
+│   │   │   │   ├── create_user(self, email, password)
+│   │   │   │   └── create_superuser(self, email, password)
+│   │   │   └── CustomUser {}
+│   │   │       ├── Meta {}
+│   │   │       ├── __str__(self)
+│   │   │       └── get_full_name(self)
+│   │   └── validators.py
+│   │       ├── PasswordStrengthValidator {}
+│   │       │   ├── __init__(self, min_length, require_uppercase, require_lowercase, require_digit, require_special)
+│   │       │   ├── validate(self, password, user)
+│   │       │   └── get_help_text(self)
+│   │       └── BreachedPasswordValidator {}
+│   │           ├── __init__(self, min_pwned_count)
+│   │           ├── validate(self, password, user)
+│   │           └── get_help_text(self)
+│   ├── utils
+│   │   └── wait_for_tests.py
+│   │       ├── is_port_open(host, port, timeout)
+│   │       ├── check_container_logs(container_name)
+│   │       ├── wait_for_service(host, port, container_name, max_attempts, delay)
+│   │       └── main()
+│   ├── README.md
+│   ├── __init__.py
+│   ├── conftest.py
+│   │   ├── patch_django_for_bytes_path()
+│   │   ├── setup_test_environment()
+│   │   ├── chdir(path)
+│   │   ├── cli_runner(monkeypatch, tmp_path)
+│   │   ├── mock_config_file(tmp_path)
+│   │   ├── wait_for_service()
+│   │   ├── real_project_fixture(tmp_path_factory)
+│   │   ├── mock_docker()
+│   │   ├── retry(request)
+│   │   ├── check_docker_dependency(request)
+│   │   ├── docker_ready(request)
+│   │   ├── mock_stripe_disabled()
+│   │   ├── mock_stripe_enabled()
+│   │   └── mock_stripe_unavailable()
+│   ├── debug_test.py
+│   │   ├── validate_production_settings()
+│   │   ├── test_secret_key()
+│   │   ├── test_allowed_hosts()
+│   │   ├── test_db_password()
+│   │   └── test_email_tls()
+│   └── utils.py
+│       ├── is_port_open(host, port)
+│       ├── find_available_port(start_port, end_port)
+│       ├── find_available_ports(count, start_port, end_port)
+│       ├── wait_for_port(host, port, timeout, interval)
+│       ├── is_docker_service_running(service_name)
+│       ├── wait_for_docker_service(service_name, timeout, interval)
+│       ├── is_container_healthy(container_name)
+│       ├── wait_for_container_health(container_name, timeout, interval)
+│       ├── get_container_logs(container_name, tail)
+│       ├── generate_random_name(prefix, length)
+│       ├── create_test_project_structure(base_dir, project_name)
+│       ├── change_directory(path)
+│       ├── remove_project_dir(project_dir)
+│       ├── capture_output()
+│       ├── get_service_logs(service_name)
+│       ├── run_quickscale_command()
+│       ├── is_docker_available()
+│       ├── check_docker_health()
+│       ├── capture_container_debug_info(container_name, output_dir)
+│       └── init_test_project(tmp_path, project_name, env, check)
+├── CHANGELOG.md
+├── CONTRIBUTING.md
+├── LICENSE
+├── MANIFEST.in
+├── MIGRATION_PLAN.md
+├── README.md
+├── ROADMAP.md
+├── TECHNICAL_DOCS.md
+├── USER_GUIDE.md
+├── compile_docs.sh
+├── pyproject.toml
+├── pytest.ini
+├── requirements-dev.txt
+├── requirements-test.txt
+├── run_tests.sh
+└── setup.cfg

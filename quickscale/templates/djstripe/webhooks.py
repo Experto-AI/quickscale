@@ -12,12 +12,12 @@ only accepted from Stripe's verified servers through signature validation.
 
 import logging
 import json
-import os
 from django.http import HttpResponse
 from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_POST
 from django.conf import settings
 from .utils import get_stripe
+from core.env_utils import get_env, is_feature_enabled
 
 logger = logging.getLogger(__name__)
 
@@ -35,7 +35,7 @@ except ImportError:
 def stripe_webhook(request):
     """Process incoming Stripe webhook events and route to appropriate handlers."""
     # Feature flag allows disabling Stripe in environments without API keys
-    if not os.getenv('STRIPE_ENABLED', 'False').lower() == 'true':
+    if not is_feature_enabled(get_env('STRIPE_ENABLED', 'False')):
         logger.warning("Stripe is not enabled. Webhook event ignored.")
         return HttpResponse(status=400)
         
@@ -376,4 +376,4 @@ def handle_price_deleted(event):
     logger.info(f"Price deleted in Stripe: {price_id} for product: {product_id}")
     
     # Processing would be similar to deactivation in price.updated
-    handle_price_updated(event) 
+    handle_price_updated(event)

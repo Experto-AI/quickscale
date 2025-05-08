@@ -7,9 +7,9 @@ and external API interactions with Stripe.
 """
 
 import logging
-import os
 from typing import Optional, Dict, Any, List, Tuple
 from django.conf import settings
+from core.env_utils import get_env, is_feature_enabled
 from .models import Product
 from .utils import get_stripe
 
@@ -35,7 +35,7 @@ class ProductService:
         Returns:
             The Stripe product ID if successful, None otherwise
         """
-        if not os.getenv('STRIPE_ENABLED', 'False').lower() == 'true':
+        if not is_feature_enabled(get_env('STRIPE_ENABLED', 'False')):
             logger.warning("Stripe is not enabled. Skipping product creation in Stripe.")
             return None
             
@@ -93,7 +93,7 @@ class ProductService:
         Returns:
             True if the update was successful, False otherwise
         """
-        if not os.getenv('STRIPE_ENABLED', 'False').lower() == 'true':
+        if not is_feature_enabled(get_env('STRIPE_ENABLED', 'False')):
             logger.warning("Stripe is not enabled. Skipping product update in Stripe.")
             return False
             
@@ -188,7 +188,7 @@ class ProductService:
         Returns:
             The synced Product model instance if successful, None otherwise
         """
-        if not os.getenv('STRIPE_ENABLED', 'False').lower() == 'true':
+        if not is_feature_enabled(get_env('STRIPE_ENABLED', 'False')):
             logger.warning("Stripe is not enabled. Skipping product sync from Stripe.")
             return None
             
@@ -255,7 +255,7 @@ class ProductService:
         Returns:
             True if the deletion was successful, False otherwise
         """
-        if not os.getenv('STRIPE_ENABLED', 'False').lower() == 'true':
+        if not is_feature_enabled(get_env('STRIPE_ENABLED', 'False')):
             logger.warning("Stripe is not enabled. Skipping product deletion in Stripe.")
             return False
             
@@ -292,7 +292,7 @@ class ProductService:
         Returns:
             A tuple containing (created_count, updated_count, failed_count)
         """
-        if not os.getenv('STRIPE_ENABLED', 'False').lower() == 'true':
+        if not is_feature_enabled(get_env('STRIPE_ENABLED', 'False')):
             logger.warning("Stripe is not enabled. Skipping product sync to Stripe.")
             return (0, 0, 0)
             
@@ -329,7 +329,7 @@ class ProductService:
         Returns:
             The number of products successfully synced
         """
-        if not os.getenv('STRIPE_ENABLED', 'False').lower() == 'true':
+        if not is_feature_enabled(get_env('STRIPE_ENABLED', 'False')):
             logger.warning("Stripe is not enabled. Skipping product sync from Stripe.")
             return 0
             
@@ -424,4 +424,4 @@ class ProductService:
             
         except Exception as e:
             logger.error(f"Error syncing products from Stripe: {str(e)}")
-            return 0 
+            return 0

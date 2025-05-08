@@ -22,28 +22,33 @@ QuickScale requires Python 3.11+ and Docker. Follow these steps to install Quick
 
 ## **2. Creating a New Project**
 
-To create a new project, use the `quickscale build` command:
+To create a new project, use the `quickscale init` command:
 
-1. **Build a Project**:
+1. **Initialize a Project**:
    ```bash
-   quickscale build my-awesome-project
+   quickscale init my-awesome-project
    ```
 
-2. **Access the Application**:
-   Open your browser and go to `http://localhost:8000`.
+2. **Configure the Project**:
+   Review and edit `.env` file with your settings:
+   ```bash
+   cd my-awesome-project
+   # Edit .env file with your preferred editor
+   ```
 
-   NOTE: It is not necessary to execute `quickscale up`
+3. **Start the Services**:
+   ```bash
+   quickscale up
+   ```
+
+4. **Access the Application**:
+   Open your browser and go to `http://localhost:8000` or alternate port if specified in `.env`.
 
 ---
 
 ## **3. Managing Your Project**
 
 QuickScale provides a CLI for managing your project. Below are the most common commands:
-
-### **3.1. Navigate to the Project Directory**:
-   ```bash
-   cd my-awesome-project
-   ```
 
 ### **3.2. Starting and Stopping Services**
 - **Start Services**:
@@ -63,6 +68,7 @@ QuickScale provides a CLI for managing your project. Below are the most common c
 - **View Logs for a Specific Service**:
   ```bash
   quickscale logs web
+  quickscale logs db
   ```
 
 ### **3.4. Running Django Commands**
@@ -72,7 +78,7 @@ QuickScale provides a CLI for managing your project. Below are the most common c
   ```
   Example:
   ```bash
-  quickscale manage test
+  quickscale manage help
   ```
 
 ### **3.5. Accessing Shells**
@@ -108,51 +114,9 @@ QuickScale includes pre-configured accounts for testing:
 
 ---
 
-## **5. Customizing Your Project**
+## **5. Troubleshooting**
 
-### **5.1. Updating Templates**
-QuickScale templates are located in the `templates/` directory. You can customize them to match your branding.
-
-### **5.2. Adding New Apps**
-To add a new Django app:
-1. Run:
-   ```bash
-   quickscale manage startapp <app_name>
-   ```
-2. Add the app to `INSTALLED_APPS` in `core/settings.py`.
-
----
-
-## **6. Deployment**
-
-QuickScale uses Docker for deployment. Follow these steps to deploy your project:
-
-1. **Set Up Environment Variables**:
-   Update the `.env` file with production settings.
-
-2. **Build and Start Services**:
-   ```bash
-   docker-compose up --build -d
-   ```
-
-3. **Run Database Migrations**:
-   ```bash
-   quickscale manage migrate
-   ```
-
-4. **Collect Static Files**:
-   ```bash
-   quickscale manage collectstatic
-   ```
-
-5. **Access the Application**:
-   Open your browser and go to your server's IP or domain.
-
----
-
-## **7. Troubleshooting**
-
-### **7.1. Common Issues**
+### **5.1. Common Issues**
 - **Docker Not Running**:
   Ensure Docker is installed and running on your system.
 
@@ -163,16 +127,26 @@ QuickScale uses Docker for deployment. Follow these steps to deploy your project
   sudo kill <PID>
   ```
 
-- **Database Connection Errors**:
-  Verify your `DATABASE_URL` in the `.env` file.
+- **Environment Configuration**:
+  - Review and edit `.env` file for proper configuration
+  - Make sure required variables are set (check .env.example for reference)
+  - For production, ensure secure values are used (not default ones)
 
-### **7.2. Logs**
+- **Database Connection Errors**:
+  - Verify your `DB_USER`, `DB_PASSWORD`, and other database settings in `.env` file
+  - Check if database service is running: `quickscale ps`
+  - View database logs: `quickscale logs db`
+  - View web server logs: `quickscale logs web`
+
+### **5.2. Logs**
 Check logs for detailed error messages:
 ```bash
 quickscale logs
+quickscale logs web
+quickscale logs db
 ```
 
-### **7.3. Django Manage Commands**
+### **5.3. Django Manage Commands**
 
 QuickScale seamlessly integrates with Django's management commands through the `quickscale manage` command. This allows you to run any Django management command within your project's Docker container.
 
@@ -220,7 +194,7 @@ quickscale manage showmigrations    # Show migration status
 ```
 ---
 
-### **7.4. Running Codebase Tests**
+### **5.4. Running Codebase Tests**
 
 QuickScale includes a comprehensive test suite to ensure functionality works as expected. 
 
@@ -256,7 +230,7 @@ For Django application tests, you can use the Django test runner through the Qui
 quickscale manage test
 ```
 
-## **8. Additional Resources**
+## **6. Additional Resources**
 
 - [Technical Documentation](./TECHNICAL_DOCS.md)
 - [Contributing Guide](./CONTRIBUTING.md)

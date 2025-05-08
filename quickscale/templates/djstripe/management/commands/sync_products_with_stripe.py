@@ -13,13 +13,13 @@ Example usage:
     python manage.py sync_products_with_stripe --push --product-id=1
 """
 
-import os
 import logging
 from django.core.management.base import BaseCommand, CommandError
 from django.db import transaction
 from djstripe.models import Product
 from djstripe.services import ProductService
 from djstripe.utils import get_stripe
+from core.env_utils import get_env, is_feature_enabled
 
 logger = logging.getLogger(__name__)
 
@@ -42,7 +42,7 @@ class Command(BaseCommand):
     def handle(self, *args, **options):
         """Execute the command."""
         # Check if Stripe is enabled
-        if not os.getenv('STRIPE_ENABLED', 'False').lower() == 'true':
+        if not is_feature_enabled(get_env('STRIPE_ENABLED', 'False')):
             raise CommandError('Stripe is not enabled. Set STRIPE_ENABLED=true in your environment.')
         
         # Get Stripe API client
@@ -133,7 +133,7 @@ class Command(BaseCommand):
         all_products = options.get('all_products')
         
         stripe = get_stripe()
-        stripe.api_key = os.getenv('STRIPE_SECRET_KEY')
+        stripe.api_key = get_env('STRIPE_SECRET_KEY')
         
         if product_id:
             # Sync specific local product from Stripe
@@ -212,4 +212,4 @@ class Command(BaseCommand):
             # Show summary
             self.stdout.write(self.style.SUCCESS(
                 f"Sync complete: {created} created, {updated} updated, {failed} failed"
-            )) 
+            ))

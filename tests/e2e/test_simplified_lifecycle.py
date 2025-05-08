@@ -26,7 +26,7 @@ class TestSimplifiedLifecycle:
         assert result.returncode == 0
         assert 'Available commands:' in result.stdout
         # Check that all main commands are listed in the help output
-        assert 'build' in result.stdout
+        assert 'init' in result.stdout
         assert 'up' in result.stdout
         assert 'down' in result.stdout
         assert 'manage' in result.stdout

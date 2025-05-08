@@ -3,22 +3,23 @@ import os
 from pathlib import Path
 
 from dotenv import load_dotenv
+from .env_utils import get_env, is_feature_enabled
 
 # Load environment variables
 load_dotenv()
 
 # Email Configuration
-EMAIL_HOST = os.getenv('EMAIL_HOST', '')
-EMAIL_PORT = int(os.getenv('EMAIL_PORT', 587))
-EMAIL_HOST_USER = os.getenv('EMAIL_HOST_USER', '')
-EMAIL_HOST_PASSWORD = os.getenv('EMAIL_HOST_PASSWORD', '')
-EMAIL_USE_TLS = os.getenv('EMAIL_USE_TLS', 'True') == 'True'
-EMAIL_USE_SSL = os.getenv('EMAIL_USE_SSL', 'False') == 'True'
-DEFAULT_FROM_EMAIL = os.getenv('DEFAULT_FROM_EMAIL', 'noreply@example.com')
-SERVER_EMAIL = os.getenv('SERVER_EMAIL', 'server@example.com')
+EMAIL_HOST = get_env('EMAIL_HOST', '')
+EMAIL_PORT = int(get_env('EMAIL_PORT', 587))
+EMAIL_HOST_USER = get_env('EMAIL_HOST_USER', '')
+EMAIL_HOST_PASSWORD = get_env('EMAIL_HOST_PASSWORD', '')
+EMAIL_USE_TLS = get_env('EMAIL_USE_TLS', 'True') == 'True'
+EMAIL_USE_SSL = get_env('EMAIL_USE_SSL', 'False') == 'True'
+DEFAULT_FROM_EMAIL = get_env('DEFAULT_FROM_EMAIL', 'noreply@example.com')
+SERVER_EMAIL = get_env('SERVER_EMAIL', 'server@example.com')
 
-# Django Debug Settings - use console backend for development
-DEBUG = os.getenv('DEBUG', 'False') == 'True'
+IS_PRODUCTION = is_feature_enabled(get_env('IS_PRODUCTION', 'False'))
+DEBUG = not IS_PRODUCTION
 EMAIL_BACKEND = 'django.core.mail.backends.console.EmailBackend' if DEBUG else 'django.core.mail.backends.smtp.EmailBackend'
 
 # Django-Allauth Email Settings
@@ -41,4 +42,4 @@ ACCOUNT_EMAIL_CONFIRMATION_ANONYMOUS_REDIRECT_URL = 'account_login'
 
 # Email adapter configuration
 ACCOUNT_ADAPTER = 'users.adapters.AccountAdapter'
-ACCOUNT_DEFAULT_HTTP_PROTOCOL = 'https' if not DEBUG else 'http' 
+ACCOUNT_DEFAULT_HTTP_PROTOCOL = 'https' if not DEBUG else 'http'

@@ -6,7 +6,7 @@ Tests for the djstripe integration.
 
 from django.test import TestCase, override_settings
 from django.conf import settings
-import os
+from core.env_utils import get_env, is_feature_enabled
 
 
 class DjStripeConfigTests(TestCase):
@@ -19,9 +19,7 @@ class DjStripeConfigTests(TestCase):
         Test that Stripe is disabled by default.
         """
         # Check the environment variable
-        self.assertEqual(
-            os.getenv('STRIPE_ENABLED', 'False').lower(),
-            'false',
+        self.assertFalse(is_feature_enabled(get_env('STRIPE_ENABLED', 'False')),
             "STRIPE_ENABLED should be False by default"
         )
         
@@ -51,4 +49,4 @@ class DjStripeConfigTests(TestCase):
             self.assertTrue(hasattr(settings, 'STRIPE_LIVE_MODE'))
             self.assertTrue(hasattr(settings, 'STRIPE_PUBLIC_KEY'))
             self.assertTrue(hasattr(settings, 'STRIPE_SECRET_KEY'))
-            self.assertTrue(hasattr(settings, 'DJSTRIPE_WEBHOOK_SECRET')) 
+            self.assertTrue(hasattr(settings, 'DJSTRIPE_WEBHOOK_SECRET'))

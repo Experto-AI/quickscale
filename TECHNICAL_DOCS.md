@@ -2,10 +2,11 @@
 
 This document contains detailed technical information about the QuickScale project, including the tech stack, project structure, development workflows, and more.
 
-This is a project generator that generates a project only once. 
-AI coding assistants must edit the templates and quickscale build associated files (root cause or source files), not project generated files (symptom generated or destination files).
+This is a project generator that generates a project only once.
+AI coding assistants must edit the template files (root cause or source files), not project generated files (destination files).
 
-The most important command is `quickscale build`, which generates the project structure and files.
+The main command for end users is `quickscale init`, which creates a new project from templates.
+Project configuration is managed through environment variables with secure defaults.
 
 ## TECHNICAL STACK
 - Django 5.0.1+ (backend framework)
@@ -20,9 +21,15 @@ The most important command is `quickscale build`, which generates the project st
 - Alpine.js (simple vanilla JS library for DOM manipulation)
 - Bulma CSS (simple CSS styling without JavaScript) - Do not mix Tailwind or another alternatives
 - PostgreSQL (database) - Do not use SQLite nor MySQL
-- Deployment: .env + Docker + Uvicorn
+- Configuration: Environment variables with secure defaults
+- Deployment: Docker + Uvicorn
 
 ## PROJECT STRUCTURE
+
+### QuickScale Project Generator Structure
+
+This is the typical directory structure in the QuickScale project generator repository:
+
 ```
 quickscale/
 ├── commands/                 # Command system implementation
@@ -83,6 +90,32 @@ tests/
     └── migrations/           # Migration tests
 ```
 
+### Generated Project Structure (Example)
+
+This is the typical directory structure created when you run `quickscale init`:
+
+```
+PROJECT_NAME/
+├── common/                 # Common Django app (shared models, utils)
+├── core/                   # Core Django project settings and configurations
+├── dashboard/              # User dashboard app
+├── djstripe/               # Stripe integration app
+├── docs/                   # Project-specific documentation
+├── js/                     # JavaScript source files (e.g., Alpine.js components)
+├── logs/                   # Log files directory
+├── public/                 # Public-facing pages app (landing, about, contact)
+├── static/                 # Compiled static assets (CSS, JS, images)
+├── templates/              # Django HTML templates
+│   ├── account/            # Authentication templates (allauth)
+│   ├── base/               # Base layout templates
+│   ├── components/         # Reusable UI components (navbar, footer)
+│   ├── dashboard/          # Dashboard specific templates
+│   ├── public/             # Public page templates
+│   └── users/              # User profile and settings templates
+├── tests/                  # Project tests
+└── users/                  # Custom user model and authentication logic
+```
+
 ## PROJECT ARCHITECTURE
 
 ```mermaid
@@ -100,7 +133,7 @@ flowchart TD
  subgraph Commands["Command System"]
     direction TB
         command_base["Command (Base)"]
-        project_commands["Project Commands<br>(build, destroy)"]
+        project_commands["Project Commands<br>(init, destroy)"]
         service_commands["Service Commands<br>(up, down, logs, ps)"]
         dev_commands["Development Commands<br>(shell, django-shell)"]
         system_commands["System Commands<br>(check)"]
@@ -135,7 +168,7 @@ flowchart TD
   end
     user_input["User Input (CLI Commands)"] --> cli
     cli --> command_manager & project_manager & command_base & help_manager & config_manager
-    user_input -- build command --> project_commands
+    user_input -- init command --> project_commands
     command_manager --> command_base
     command_base --> project_commands & service_commands & dev_commands & system_commands & error_manager & logging_manager
     templates --> style_templates & js_templates
@@ -254,41 +287,33 @@ flowchart TD
 
 ### Command Execution Sequence
 
-The following diagram illustrates the sequence of interactions when executing the `build` command:
+The following diagram illustrates the sequence of interactions when executing the `init` command:
 
 ```mermaid
 sequenceDiagram
     actor User
     participant CLI as cli.py
     participant CM as CommandManager
-    participant BC as BuildCommand
+    participant IC as InitCommand
     participant PM as ProjectManager
     participant TS as Template System
-    participant Docker as Docker Services
     
-    User->>CLI: quickscale build myproject
-    CLI->>CM: execute_command('build', 'myproject')
-    CM->>BC: execute('myproject')
+    User->>CLI: quickscale init myproject
+    CLI->>CM: execute_command('init', 'myproject')
+    CM->>IC: execute('myproject')
     
     %% Validation phase
-    BC->>BC: validate_project_name('myproject')
-    BC->>PM: check_docker_available()
+    IC->>IC: validate_project_name('myproject')
     
     %% Setup phase
-    BC->>PM: create_project_directory('myproject')
-    BC->>TS: copy_template_files('myproject')
-    BC->>PM: generate_env_file('myproject')
-    BC->>PM: generate_config_files('myproject')
-    
-    %% Launch phase
-    BC->>Docker: docker_compose_up('myproject')
-    Docker-->>BC: Container IDs
+    IC->>PM: create_project_directory('myproject')
+    IC->>TS: copy_template_files('myproject')
+    IC->>PM: create_env_file('myproject')
     
     %% Finalization
-    BC->>PM: verify_services_running('myproject')
-    BC-->>CM: Success response
+    IC-->>CM: Success response
     CM-->>CLI: Success response
-    CLI-->>User: Project created successfully at http://localhost:8000
+    CLI-->>User: Project created successfully, run 'quickscale up' to start
 ```
 
 ### Project Lifecycle State Diagram
@@ -304,7 +329,7 @@ config:
 stateDiagram
   direction TB
   [*] --> NonExistent:Initial State
-  NonExistent --> Created:quickscale build
+  NonExistent --> Created:quickscale init
   Created --> Running:quickscale up
   Running --> Stopped:quickscale down
   Stopped --> Running:quickscale up
@@ -402,10 +427,9 @@ direction LR
     class SystemCommand {
 	    +check_dependencies()
     }
-    class BuildProjectCommand {
+    class InitCommand {
 	    +execute(project_name)
-	    +create_project_files()
-	    +setup_docker()
+	    +validate_project_name(project_name)
     }
     class DestroyProjectCommand {
 	    +execute()
@@ -449,7 +473,7 @@ direction LR
     Command <|-- ServiceCommand
     Command <|-- DevelopmentCommand
     Command <|-- SystemCommand
-    ProjectCommand <|-- BuildProjectCommand
+    Command <|-- InitCommand
     ProjectCommand <|-- DestroyProjectCommand
     ServiceCommand <|-- ServiceUpCommand
     ServiceCommand <|-- ServiceDownCommand
@@ -648,27 +672,134 @@ To modify the authentication flow:
 
 ## ENVIRONMENT VARIABLES
 
-The project uses the following environment variables:
+The project uses a standardized environment variable system with validation and secure defaults.
 
-| Variable                   | Description                         | Default                                      |
-|----------------------------|-------------------------------------|----------------------------------------------|
-| DEBUG                      | Debug mode                          | True                                         |
-| SECRET_KEY                 | Django secret key                   | Automatically generated secure random string |
-| DATABASE_URL               | PostgreSQL connection URL           | postgresql://admin:adminpasswd@db:5432/admin |
-| POSTGRES_HOST              | PostgreSQL host                     | db                                           |
-| POSTGRES_DB                | PostgreSQL database name            | admin                                        |
-| POSTGRES_USER              | PostgreSQL username                 | admin                                        |
-| POSTGRES_PASSWORD          | PostgreSQL password                 | adminpasswd                                  |
-| EMAIL_HOST                 | SMTP host for sending emails        | smtp.example.com                             |
-| EMAIL_PORT                 | SMTP port                           | 587                                          |
-| EMAIL_HOST_USER            | SMTP username                       | -                                            |
-| EMAIL_HOST_PASSWORD        | SMTP password                       | -                                            |
-| EMAIL_USE_TLS              | Use TLS for email                   | True                                         |
-| EMAIL_USE_SSL              | Use SSL for email                   | False                                        |
-| DEFAULT_FROM_EMAIL         | Default sender email                | noreply@example.com                          |
-| SERVER_EMAIL               | Server email for admin notifications | server@example.com                           |
-| ACCOUNT_EMAIL_VERIFICATION | Email verification requirement      | mandatory                                    |
-| ACCOUNT_ALLOW_REGISTRATION | Allow user registration             | True                                         |
+### Environment Variable Validation
+
+The system validates required variables based on component usage:
+
+```python
+# Required variables by component
+REQUIRED_VARS = {
+    'web': ['WEB_PORT', 'SECRET_KEY'],
+    'db': ['DB_USER', 'DB_PASSWORD', 'DB_NAME'],
+    'email': ['EMAIL_HOST', 'EMAIL_HOST_USER', 'EMAIL_HOST_PASSWORD'],
+    'stripe': ['STRIPE_PUBLIC_KEY', 'STRIPE_SECRET_KEY', 'STRIPE_WEBHOOK_SECRET']
+}
+
+# Production environment validation
+from quickscale.utils.env_utils import get_env, is_feature_enabled
+
+def validate_production_settings():
+    """Validate settings for production environment."""
+    # Use IS_PRODUCTION (opposite of old DEBUG logic). IS_PRODUCTION is False by default (development mode).
+    if is_feature_enabled(get_env('IS_PRODUCTION', 'False')):
+        if get_env('SECRET_KEY') == 'dev-only-dummy-key-replace-in-production':
+            raise ValueError("Production requires a secure SECRET_KEY")
+        if '*' in get_env('ALLOWED_HOSTS', '').split(','):
+            raise ValueError("Production requires specific ALLOWED_HOSTS")
+```
+
+### Environment Variables by Component
+
+### System Configuration Variables
+
+| Variable            | Description                  | Default              |
+|--------------------|------------------------------|---------------------|
+| PROJECT_NAME        | Project name in templates    | QuickScale          |
+| WEB_PORT           | Web server port              | 8000                |
+| WEB_MEMORY_LIMIT   | Web container memory limit   | 1G                  |
+| WEB_MEMORY_RESERVE | Web container memory reserve | 512M                |
+| DOCKER_UID         | Docker user ID               | 1000                |
+| DOCKER_GID         | Docker group ID              | 1000                |
+
+### Database Variables
+
+| Variable            | Description                  | Default              |
+|--------------------|------------------------------|---------------------|
+| DB_HOST            | Database hostname            | db                  |
+| DB_PORT            | Database port                | 5432                |
+| DB_NAME            | Database name                | admin               |
+| DB_USER            | Database username            | admin               |
+| DB_PASSWORD        | Database password            | adminpasswd         |
+| DB_MEMORY_LIMIT    | Database memory limit        | 384M                |
+| DB_MEMORY_RESERVE  | Database memory reserve      | 256M                |
+
+### Security Variables
+
+| Variable            | Description                  | Default              |
+|--------------------|------------------------------|---------------------|
+| DEBUG              | Debug mode                   | True                |
+| SECRET_KEY         | Django secret key            | dev-only-dummy-key  |
+| ALLOWED_HOSTS      | Allowed host names           | *                   |
+
+### Email Variables
+
+| Variable            | Description                  | Default              |
+|--------------------|------------------------------|---------------------|
+| EMAIL_HOST         | SMTP host                    | smtp.example.com    |
+| EMAIL_PORT         | SMTP port                    | 587                 |
+| EMAIL_HOST_USER    | SMTP username                | -                   |
+| EMAIL_HOST_PASSWORD| SMTP password                | -                   |
+| EMAIL_USE_TLS      | Use TLS for email           | True                |
+| DEFAULT_FROM_EMAIL | Default sender email         | noreply@example.com |
+
+### Feature Flags
+
+| Variable                   | Description                  | Default              |
+|---------------------------|------------------------------|---------------------|
+| STRIPE_ENABLED            | Enable Stripe integration    | False               |
+| STRIPE_LIVE_MODE          | Use Stripe live mode        | False               |
+| ACCOUNT_EMAIL_VERIFICATION| Email verification required  | mandatory           |
+
+### Port Fallback Configuration Variables
+
+| Variable                              | Description                                    | Default |
+|---------------------------------------|------------------------------------------------|---------|
+| WEB_PORT_ALTERNATIVE_FALLBACK         | Enable automatic fallback for web port         | Disabled|
+| DB_PORT_EXTERNAL_ALTERNATIVE_FALLBACK | Enable automatic fallback for database port    | Disabled|
+
+When enabled, these settings allow QuickScale to automatically find and use alternative ports when the configured ports (WEB_PORT, DB_PORT_EXTERNAL) are already in use. This prevents port conflicts during development and deployment.
+
+The system accepts various boolean formats for enabling these features:
+* `yes`, `true`, `1`, `on`, `enabled`, `y`, `t` (all case-insensitive)
+
+If these settings are disabled and a port conflict occurs, a clear error message is shown with recovery instructions.
+
+### Environment Variable Best Practices
+
+1. **Naming Conventions**
+   - Use UPPERCASE for all environment variables
+   - Use underscores as separators
+   - Add component prefixes (WEB_, DB_, etc.)
+   - Example: `WEB_PORT` instead of `PORT`
+
+2. **Default Values**
+   - All variables have secure defaults for development
+   - Production values must be explicitly set
+   - Sensitive values have clear "replace me" defaults
+
+3. **Production Validation**
+   - Required variables are validated on startup
+   - Production mode enforces secure settings
+   - Clear error messages guide configuration
+
+4. **Documentation**
+   - All variables are documented in .env.example
+   - Comments explain purpose and valid values
+   - Default values are clearly marked
+
+### Environment Variable Loading
+
+The project uses two different approaches for loading environment variables:
+
+1. **CLI Commands**: CLI commands use direct access to values from .env files using the `from_env_file=True` parameter when calling environment variable utilities. This allows CLI commands to work without requiring the environment variables to be set in the system environment.
+
+2. **Deployed Containers**: When deployed in containers, Django applications use environment variables that are loaded from the host system. 
+- For production, these environment variables are configured to be read from the environment variables set in the host system.
+- For development, same as production, but the variables are populated from the .env file during container creation.
+
+This dual approach ensures that both local development and containerized deployments have consistent access to the necessary configuration values.
 
 ## DOCKER CONFIGURATION
 

@@ -2,6 +2,51 @@
 
 This document provides examples of common customizations for authentication templates in QuickScale projects.
 
+## Environment Variables in Templates
+
+QuickScale uses environment variables for configuration, which are made available in templates through context processors.
+
+### Project Name Configuration
+
+The project name is configured through the `PROJECT_NAME` environment variable and is available in all templates:
+
+```env
+# In .env file
+PROJECT_NAME=MyAwesomeProject  # Default: QuickScale
+```
+
+```html
+<!-- Using project_name in templates -->
+<title>{{ project_name }}</title>
+<h1>Welcome to {{ project_name }}</h1>
+```
+
+### Context Processor
+
+The project settings are made available through the `core.context_processors.project_settings` context processor, which is automatically configured. This processor provides:
+
+- `project_name`: The configured project name from PROJECT_NAME environment variable
+
+### Default Values
+
+If not specified in the environment, these defaults are used:
+- PROJECT_NAME: "QuickScale"
+
+### Example Usage
+
+```html
+<!-- In base.html -->
+<title>{% block title %}{{ project_name }}{% endblock %}</title>
+
+<!-- In navbar.html -->
+<a class="navbar-item" href="{% url 'public:index' %}">
+    {{ project_name }}
+</a>
+
+<!-- In dashboard/index.html -->
+{% block title %}Dashboard - {{ project_name }}{% endblock %}
+```
+
 ## Customizing the Login Form
 
 ### Adding Social Login Buttons (If Social Auth is Enabled)

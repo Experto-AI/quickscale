@@ -2,6 +2,22 @@
 
 All notable changes to this project will be documented in this file.
 
+## v0.7.0 (2025-05-08)
+- v0.7.0 feat: Remove the build stage and just use a copy of the templates
+- Remove the quickscale build command
+- Add a new quickscale init command to create a new project from the templates
+- Add unit, integration and E2E tests
+
+## v0.6.2 (2025-04-19)
+- v0.6.2 docs: refactor CONTRIBUTING.md into structured documentation files for AI programming ssistants (#5)
+- Improve documentation for AI coding assistants and human contributors by:
+- Creating 7 specialized documentation files in docs/contrib/
+- Grouping related topics and standardizing section numbering
+- Implementing a logical progression from system prompts to task focus
+- Ensuring clean, maintainable documentation structure
+- Created compile_docs.sh to generate CONTRIBUTING.md as a navigable index and Cursor rules
+- Ensuring compatibility with Cursor, Windsurf and Github Copilot.
+
 ## v0.6.1 (2025-04-18)
 - v0.6.1 fix: improve log scanning and build process with better error detection
 - Add log scanning integration into quickscale build command
