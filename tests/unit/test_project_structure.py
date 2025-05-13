@@ -175,8 +175,8 @@ def test_template_structure_correctness():
         if any(rel_path.startswith(expected_dir) for expected_dir in expected_template_dirs):
             continue
         
-        # Skip test directories
-        if 'tests' in rel_path or 'fixtures' in rel_path:
+        # Skip test directories, htmlcov (test coverage reports), and other known directories
+        if 'tests' in rel_path or 'fixtures' in rel_path or rel_path.startswith('htmlcov'):
             continue
             
         # Check for template files in unexpected locations
@@ -349,10 +349,11 @@ def test_static_files_in_correct_locations():
     for root, dirs, files in os.walk(root_dir):
         rel_path = os.path.relpath(root, start=root_dir)
         
-        # Skip proper static directories, test directories, and node_modules
+        # Skip proper static directories, test directories, and other known directories
         if any(rel_path.startswith(static_dir) for static_dir in expanded_static_dirs) or \
            rel_path.startswith('tests') or rel_path.startswith('node_modules') or \
            rel_path.startswith('.git') or rel_path.startswith('.pytest_cache') or \
+           rel_path.startswith('htmlcov') or \
            'templates/js' in rel_path:  # Allow js in templates (for template-specific JS)
             continue
             

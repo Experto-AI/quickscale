@@ -1,9 +1,4 @@
-"""Log scanning for critical errors and warnings in build process.
-
-This module provides functionality to scan logs from the build process,
-container logs, and migration logs to identify critical issues that may
-affect project functionality.
-"""
+"""Log scanning for critical errors and warnings in build processes and container logs."""
 import re
 import os
 from pathlib import Path
@@ -18,14 +13,7 @@ class LogPattern:
                  severity: str = "error", 
                  description: str = "",
                  context_lines: int = 0):
-        """Initialize a log pattern.
-        
-        Args:
-            pattern: Regular expression pattern to match
-            severity: Severity level ('error', 'warning', 'info')
-            description: Human-readable description of the issue
-            context_lines: Number of lines of context to include (before and after)
-        """
+        """Initialize a log pattern with regex matching configuration."""
         self.pattern = re.compile(pattern, re.IGNORECASE | re.MULTILINE)
         self.severity = severity
         self.description = description
@@ -41,15 +29,7 @@ class LogIssue:
                  source: str,
                  line_number: Optional[int] = None,
                  context: Optional[List[str]] = None):
-        """Initialize a log issue.
-        
-        Args:
-            message: The actual log message that was matched
-            severity: Severity level ('error', 'warning', 'info')
-            source: Source of the log (build, container, migration)
-            line_number: Line number in the log file where the issue was found
-            context: Context lines around the issue
-        """
+        """Initialize a log issue with message details and contextual information."""
         self.message = message
         self.severity = severity
         self.source = source
@@ -285,12 +265,7 @@ class LogScanner:
     }
     
     def __init__(self, project_dir: Path, logger: Optional[logging.Logger] = None):
-        """Initialize log scanner.
-        
-        Args:
-            project_dir: Project directory containing logs
-            logger: Logger to use (or create a new one if None)
-        """
+        """Initialize log scanner with project directory configuration."""
         # Ensure project_dir is an absolute path and exists
         self.project_dir = project_dir.resolve() if project_dir else Path.cwd().resolve()
         # Ensure we're using the correct directory
@@ -302,9 +277,8 @@ class LogScanner:
         self.logs_accessed = False  # Track if any logs were successfully accessed
         self.logger.debug(f"Log scanner initialized with project directory: {self.project_dir}")
     
-    def scan_build_log(self) -> List[LogIssue]:
-        """Scan build log for issues."""
-        # Try multiple possible locations for the build log
+    def _find_build_log_path(self) -> Optional[Path]:
+        """Find the build log file path from possible locations."""
         possible_locations = [
             self.project_dir / "quickscale_build_log.txt",
             self.project_dir.parent / "quickscale_build_log.txt",
@@ -315,42 +289,61 @@ class LogScanner:
             self.logger.debug(f"Looking for build log at {build_log_path}")
             if build_log_path.exists():
                 self.logger.info(f"Found build log at {build_log_path}")
-                try:
-                    # First check if the log contains Docker warnings
-                    with open(build_log_path, 'r') as f:
-                        content = f.read()
-                        if "WARN[" in content:
-                            self.logger.debug(f"Build log contains Docker warnings")
-                            # Extract the warnings for debugging
-                            warnings = re.findall(r"WARN\[\d+\].*", content)
-                            if warnings:
-                                self.logger.debug(f"Docker warnings found: {len(warnings)}")
-                                filtered_warnings = []
-                                for warning in warnings:
-                                    # Check for static files warning false positive
-                                    if "Static files not accessible yet" in warning:
-                                        static_css_path = os.path.join(self.project_dir, "static", "css")
-                                        static_js_path = os.path.join(self.project_dir, "static", "js")
-                                        if os.path.isdir(static_css_path) and os.path.isdir(static_js_path):
-                                            # This warning is a known false positive as static assets (css and js) are present
-                                            continue  # Skip adding this warning
-                                    # Add warning if it doesn't match known benign patterns
-                                    filtered_warnings.append(warning)
-                                for warning in filtered_warnings[:3]:  # Log first few warnings
-                                    self.logger.debug(f"Warning: {warning.strip()}")
-                except Exception as e:
-                    self.logger.warning(f"Error checking build log for warnings: {e}")
-                
-                # Now scan the file for issues
-                issues = self._scan_file(build_log_path, "build")
-                if issues is not None:
-                    self.logs_accessed = True
-                    # Log how many issues were found
-                    self.logger.debug(f"Found {len(issues)} issues in build log")
-                    return issues
+                return build_log_path
         
         # If we couldn't find the build log file, log a warning
         self.logger.warning("Build log not found in any of the expected locations")
+        return None
+
+    def _filter_docker_warnings(self, warnings: List[str]) -> List[str]:
+        """Filter Docker warnings to exclude known false positives."""
+        filtered_warnings = []
+        for warning in warnings:
+            # Check for static files warning false positive
+            if "Static files not accessible yet" in warning:
+                static_css_path = os.path.join(self.project_dir, "static", "css")
+                static_js_path = os.path.join(self.project_dir, "static", "js")
+                if os.path.isdir(static_css_path) and os.path.isdir(static_js_path):
+                    # This warning is a known false positive as static assets (css and js) are present
+                    continue  # Skip adding this warning
+            # Add warning if it doesn't match known benign patterns
+            filtered_warnings.append(warning)
+        return filtered_warnings
+
+    def _check_for_docker_warnings(self, content: str) -> None:
+        """Check if log content contains Docker warnings and log them for debugging."""
+        if "WARN[" in content:
+            self.logger.debug("Build log contains Docker warnings")
+            # Extract the warnings for debugging
+            warnings = re.findall(r"WARN\[\d+\].*", content)
+            if warnings:
+                self.logger.debug(f"Docker warnings found: {len(warnings)}")
+                filtered_warnings = self._filter_docker_warnings(warnings)
+                for warning in filtered_warnings[:3]:  # Log first few warnings
+                    self.logger.debug(f"Warning: {warning.strip()}")
+
+    def scan_build_log(self) -> List[LogIssue]:
+        """Scan build log for issues."""
+        build_log_path = self._find_build_log_path()
+        if not build_log_path:
+            return []
+        
+        try:
+            # First check if the log contains Docker warnings
+            with open(build_log_path, 'r') as f:
+                content = f.read()
+                self._check_for_docker_warnings(content)
+        except Exception as e:
+            self.logger.warning(f"Error checking build log for warnings: {e}")
+        
+        # Now scan the file for issues
+        issues = self._scan_file(build_log_path, "build")
+        if issues is not None:
+            self.logs_accessed = True
+            # Log how many issues were found
+            self.logger.debug(f"Found {len(issues)} issues in build log")
+            return issues
+        
         return []
     
     def scan_container_logs(self) -> List[LogIssue]:
@@ -507,15 +500,7 @@ class LogScanner:
             return None
     
     def _scan_content(self, content: str, source_type: str) -> List[LogIssue]:
-        """Scan log content directly for issues.
-        
-        Args:
-            content: String content to scan
-            source_type: Type of log source (build, container, migration)
-            
-        Returns:
-            List of LogIssue objects
-        """
+        """Scan log content directly for issues using pattern matching."""
         issues = []
         lines = content.splitlines()
         
@@ -549,22 +534,12 @@ class LogScanner:
         
         return issues
     
-    def _is_false_positive(self, message: str, source_type: str, lines: List[str], line_number: int) -> bool:
-        """Check if a match is a known false positive.
-        
-        Args:
-            message: The matched message
-            source_type: Type of log source
-            lines: All lines in the log file
-            line_number: Line number of the match
+    def _check_static_files_false_positive(self, message: str) -> bool:
+        """Check for static files related false positives."""
+        return "Static files not accessible yet" in message
 
-        Returns:
-            True if the match is a false positive, False otherwise
-        """
-        # Static files warning during initial build is expected
-        if "Static files not accessible yet" in message:
-            return True
-            
+    def _check_postgres_auth_false_positive(self, message: str) -> bool:
+        """Check for PostgreSQL authentication related false positives."""
         # PostgreSQL trust authentication warning is expected during initialization
         if "trust authentication" in message or "enabling \"trust\" authentication" in message:
             return True
@@ -573,6 +548,15 @@ class LogScanner:
         if "initdb: warning: enabling" in message and "trust" in message and "authentication for local connections" in message:
             return True
             
+        return False
+
+    def _check_postgres_status_false_positive(self, message: str) -> bool:
+        """Check for PostgreSQL normal status messages that look like errors."""
+        return ("database system was shut down" in message or 
+                "database system is ready to accept connections" in message)
+
+    def _check_django_migration_false_positive(self, message: str, lines: List[str], line_number: int) -> bool:
+        """Check for Django migration related false positives."""
         # Django auth permission duplication errors are handled gracefully in migrations
         if "duplicate key value violates unique constraint" in message and "auth_permission" in message:
             # Check if we're continuing despite this error by looking at surrounding lines
@@ -584,18 +568,19 @@ class LogScanner:
         if "have changes that are not yet reflected in a migration" in message:
             return True
             
-        # Postgres normal shutdown messages should not be treated as errors
-        if "database system was shut down" in message or "database system is ready to accept connections" in message:
-            return True
-            
-        # Docker temporary connection issues that eventually succeed
+        return False
+
+    def _check_docker_connection_false_positive(self, message: str, lines: List[str], line_number: int) -> bool:
+        """Check for Docker connection issues that eventually succeed."""
         if "Error response from daemon" in message and "container not running" in message:
             # Check if service starts successfully later
             for i in range(min(len(lines), line_number + 20)):
                 if "Starting" in lines[i] and "Started" in lines[i]:
                     return True
-        
-        # False positive errors in migration messages
+        return False
+
+    def _check_migration_error_false_positive(self, message: str, source_type: str, lines: List[str], line_number: int) -> bool:
+        """Check for false positive errors in migration messages."""
         if source_type == "build" and ("ERROR" in message or "Error" in message):
             # Check context to see if this is part of a migration that actually succeeded
             context_start = max(0, line_number - 5)
@@ -610,16 +595,25 @@ class LogScanner:
             # Skip errors about continuing after auth migrations which are handled
             if "Continuing despite error with auth migrations" in message:
                 return True
-        
-        # Default: not a false positive
         return False
+
+    def _is_false_positive(self, message: str, source_type: str, lines: List[str], line_number: int) -> bool:
+        """Check if a log match is a known false positive to avoid reporting normal conditions as errors."""
+        # Check different categories of false positives
+        checks = [
+            self._check_static_files_false_positive(message),
+            self._check_postgres_auth_false_positive(message),
+            self._check_postgres_status_false_positive(message),
+            self._check_django_migration_false_positive(message, lines, line_number),
+            self._check_docker_connection_false_positive(message, lines, line_number),
+            self._check_migration_error_false_positive(message, source_type, lines, line_number)
+        ]
+        
+        # If any check returns True, this is a false positive
+        return any(checks)
     
     def generate_summary(self) -> Dict[str, Any]:
-        """Generate a summary of issues found during scanning.
-        
-        Returns:
-            Dictionary with summary information
-        """
+        """Generate a summary of issues found during log scanning."""
         # Check if any logs were successfully accessed
         if not self.logs_accessed:
             return {
@@ -686,80 +680,108 @@ class LogScanner:
             "real_errors": real_errors
         }
     
+    def _print_no_logs_message(self) -> None:
+        """Print a message when no logs could be accessed."""
+        print("\n⚠️ Could not access any log files for scanning")
+        print("   This may be because:")
+        print("   - Log files haven't been generated yet")
+        print("   - The scanner doesn't have permission to read the logs")
+        print("   - Docker logs collection failed")
+
+    def _print_no_issues_message(self) -> None:
+        """Print a message when no issues were found."""
+        print("\n✅ No issues found in logs")
+
+    def _print_issue_counts(self, total: int, error_count: int, warning_count: int) -> None:
+        """Print counts of issues found."""
+        print("\n🔍 Log Scan Results:")
+        print(f"   Found {total} issues:")
+        if error_count > 0:
+            print(f"   - {error_count} errors")
+        if warning_count > 0:
+            print(f"   - {warning_count} warnings")
+
+    def _print_issue_context(self, issue: LogIssue) -> None:
+        """Print context lines for an issue."""
+        if not issue.context:
+            return
+        
+        for i, line in enumerate(issue.context):
+            prefix = ">> " if i == len(issue.context) // 2 else "   "
+            print(f"      {prefix}{line}")
+
+    def _print_critical_issues(self, error_issues: List[LogIssue], has_real_errors: bool) -> None:
+        """Print critical (error) issues."""
+        if not error_issues:
+            return
+        
+        print("\n❌ Critical Issues:")
+        
+        # Add note about false positives if we have migration errors that are false positives
+        has_migration_errors = any("migration" in issue.source or "apply" in issue.message.lower() 
+                                   for issue in error_issues)
+        
+        if has_migration_errors and not has_real_errors:
+            print("   Note: The following errors are likely false positives from normal operation")
+            print("   Migration names containing 'error' or database shutdown messages are usually normal")
+            
+        for issue in error_issues:
+            source_label = f" ({issue.source})" if issue.source else ""
+            print(f"   * {issue.message}{source_label}")
+            self._print_issue_context(issue)
+
+    def _print_warning_issues(self, warning_issues: List[LogIssue]) -> None:
+        """Print warning issues."""
+        if not warning_issues:
+            return
+        
+        print("\n⚠️ Warnings:")
+        
+        # Add note about expected warnings
+        print("   Note: Most warnings below are expected during normal development and startup")
+        
+        for issue in warning_issues:
+            source_label = f" ({issue.source})" if issue.source else ""
+            print(f"   * {issue.message}{source_label}")
+            self._print_issue_context(issue)
+
     def print_summary(self) -> None:
         """Print a summary of issues found during scanning."""
         summary = self.generate_summary()  # This already filters out PostgreSQL trust warnings
         
         # Check if any logs were successfully accessed
         if not summary.get("logs_accessed", False):
-            print("\n⚠️ Could not access any log files for scanning")
-            print("   This may be because:")
-            print("   - Log files haven't been generated yet")
-            print("   - The scanner doesn't have permission to read the logs")
-            print("   - Docker logs collection failed")
+            self._print_no_logs_message()
             return
         
         # If no issues found after filtering, print a success message
         if summary["total_issues"] == 0:
-            print("\n✅ No issues found in logs")
+            self._print_no_issues_message()
             return
         
-        print("\n🔍 Log Scan Results:")
-        print(f"   Found {summary['total_issues']} issues:")
-        if summary['error_count'] > 0:
-            print(f"   - {summary['error_count']} errors")
-        if summary['warning_count'] > 0:
-            print(f"   - {summary['warning_count']} warnings")
-            
-        # Print critical issues first
-        if summary['error_count'] > 0:
-            print("\n❌ Critical Issues:")
-            
-            # Add note about false positives if we have migration errors that are false positives
-            has_migration_errors = any("migration" in issue.source or "apply" in issue.message.lower() 
-                                      for issue in summary["issues_by_severity"]["error"])
-            
-            if has_migration_errors and not summary.get('real_errors', False):
-                print("   Note: The following errors are likely false positives from normal operation")
-                print("   Migration names containing 'error' or database shutdown messages are usually normal")
-                
-            for issue in summary["issues_by_severity"]["error"]:
-                source_label = f" ({issue.source})" if issue.source else ""
-                print(f"   * {issue.message}{source_label}")
-                # Print context if available
-                if issue.context:
-                    for i, line in enumerate(issue.context):
-                        prefix = ">> " if i == len(issue.context) // 2 else "   "
-                        print(f"      {prefix}{line}")
+        # Print issue counts
+        self._print_issue_counts(
+            summary["total_issues"],
+            summary["error_count"],
+            summary["warning_count"]
+        )
+        
+        # Print critical issues
+        self._print_critical_issues(
+            summary["issues_by_severity"].get("error", []),
+            summary.get("real_errors", False)
+        )
         
         # Print warnings
-        if summary['warning_count'] > 0:
-            print("\n⚠️ Warnings:")
-            
-            # Add note about expected warnings
-            print("   Note: Most warnings below are expected during normal development and startup")
-            
-            for issue in summary["issues_by_severity"]["warning"]:
-                source_label = f" ({issue.source})" if issue.source else ""
-                print(f"   * {issue.message}{source_label}")
-                # Print context for warnings too
-                if issue.context:
-                    for i, line in enumerate(issue.context):
-                        prefix = ">> " if i == len(issue.context) // 2 else "   "
-                        print(f"      {prefix}{line}")
-                
+        self._print_warning_issues(
+            summary["issues_by_severity"].get("warning", [])
+        )
+        
         # Print a separator line
         print("\n" + "-" * 50)
     
     def _analyze_migration_issue(self, issue: LogIssue) -> bool:
-        """Analyze a migration issue to determine if it's a real error.
-        
-        Args:
-            issue: The migration issue to analyze
-            
-        Returns:
-            True if it's a real error, False if it's a false positive
-        """
+        """Analyze a migration issue to determine if it's a real error or false positive."""
         # If the issue is related to migrations and contains "OK" or "[X]", it's a false positive
         message = issue.message.lower()
         

@@ -137,6 +137,9 @@ def handle_command_error(
     exit_on_error: bool = True
 ) -> Optional[NoReturn]:
     """Handle command errors uniformly."""
+    # Import here to avoid circular imports
+    from quickscale.utils.message_manager import MessageManager, MessageType
+    
     # Convert to CommandError if needed
     if not isinstance(error, CommandError):
         error = convert_exception(error)
@@ -148,12 +151,12 @@ def handle_command_error(
             logger.debug(error.details)
 
     # Print user-friendly error message
-    print(f"\nError: {error.message}")
+    MessageManager.error(error.message, logger)
     
     # Print recovery suggestion if available
     if error.recovery:
-        print(f"\nSuggestion: {error.recovery}")
-    
+        MessageManager.print_recovery_suggestion("custom", suggestion=error.recovery)
+        
     # Exit with appropriate status code if requested
     if exit_on_error:
         sys.exit(error.exit_code)

@@ -68,26 +68,29 @@ class TestErrorConversion:
 class TestErrorHandling:
     """Tests for error handling functionality."""
     
-    @patch("builtins.print")
+    @patch("quickscale.utils.message_manager.MessageManager.error")
+    @patch("quickscale.utils.message_manager.MessageManager.print_recovery_suggestion")
     @patch("sys.exit")
-    def test_handle_command_error(self, mock_exit, mock_print):
+    def test_handle_command_error(self, mock_exit, mock_recovery, mock_error):
         """Verify error handling with exiting."""
         error = CommandError("Test error", 
                             details="Test details", 
                             recovery="Test recovery")
         handle_command_error(error)
         
-        mock_print.assert_any_call("\nError: Test error")
-        mock_print.assert_any_call("\nSuggestion: Test recovery")
+        mock_error.assert_called_once_with("Test error", None)
+        mock_recovery.assert_called_once_with("custom", suggestion="Test recovery")
         mock_exit.assert_called_once_with(error.exit_code)
     
-    @patch("builtins.print")
-    def test_handle_error_no_exit(self, mock_print):
+    @patch("quickscale.utils.message_manager.MessageManager.error")
+    @patch("quickscale.utils.message_manager.MessageManager.print_recovery_suggestion")
+    def test_handle_error_no_exit(self, mock_recovery, mock_error):
         """Verify error handling without exiting."""
         error = CommandError("Test error", recovery="Test recovery")
         result = handle_command_error(error, exit_on_error=False)
         
-        mock_print.assert_any_call("\nError: Test error")
+        mock_error.assert_called_once_with("Test error", None)
+        mock_recovery.assert_called_once_with("custom", suggestion="Test recovery")
         assert result is None
 
     def test_error_hierarchy(self):

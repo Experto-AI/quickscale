@@ -24,7 +24,8 @@ EMAIL_BACKEND = 'django.core.mail.backends.console.EmailBackend' if DEBUG else '
 
 # Django-Allauth Email Settings
 ACCOUNT_UNIQUE_EMAIL = True
-ACCOUNT_EMAIL_VERIFICATION = 'mandatory'
+# Only require email verification in production for better developer experience
+ACCOUNT_EMAIL_VERIFICATION = 'optional' if DEBUG else get_env('ACCOUNT_EMAIL_VERIFICATION', 'mandatory')
 ACCOUNT_EMAIL_SUBJECT_PREFIX = '[QuickScale] '
 
 # Updated to new django-allauth format (replacing deprecated settings)

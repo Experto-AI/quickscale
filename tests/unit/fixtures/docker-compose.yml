@@ -8,10 +8,11 @@ services:
     volumes:
       - .:/app
     environment:
-      - POSTGRES_HOST=db
-      - POSTGRES_USER=${pg_user}
-      - POSTGRES_PASSWORD=${pg_password}
-      - POSTGRES_DB=${project_name}
+      # Use DB_* variables for Django
+      - DB_HOST=db
+      - DB_USER=${pg_user}
+      - DB_PASSWORD=${pg_password}
+      - DB_NAME=${project_name}
     depends_on:
       - db
     user: "${DOCKER_UID}:${DOCKER_GID}"
@@ -23,6 +24,7 @@ services:
     volumes:
       - postgres_data:/var/lib/postgresql/data/
     environment:
+      # Map DB_* names to POSTGRES_* for PostgreSQL container
       - POSTGRES_USER=${pg_user}
       - POSTGRES_PASSWORD=${pg_password}
       - POSTGRES_DB=${project_name}

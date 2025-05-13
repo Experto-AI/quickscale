@@ -38,7 +38,18 @@ class TestCLICommands:
                 result = main()
                 captured = capsys.readouterr()
                 assert result == 1
-                assert "usage:" in captured.out.lower() or "unknown command" in captured.out.lower() or "invalid command" in captured.out.lower()
+                # Updated assertion to check for the new error format
+                assert "usage:" in captured.out.lower() or "unknown command" in captured.out.lower() or "invalid command" in captured.out.lower() or "command error:" in captured.out.lower()
             except SystemExit as e:
                 # Handle the case where argparse exits with sys.exit()
                 assert e.code != 0
+                
+    def test_command_execution_error(self, capsys):
+        """Test error handling during command execution."""
+        with patch.object(sys, 'argv', ['quickscale', 'check']):
+            with patch.object(command_manager, 'handle_command', side_effect=Exception("Test error")):
+                result = main()
+                captured = capsys.readouterr()
+                assert result == 1
+                assert "an error occurred while executing 'check'" in captured.out.lower()
+                assert "test error" in captured.out.lower()

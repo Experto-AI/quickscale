@@ -2,6 +2,28 @@
 
 All notable changes to this project will be documented in this file.
 
+## v0.8.0 (2025-05-13)
+- v0.8.0 feat: Comprehensive CLI improvements and enhanced system reliability
+- Implemented MessageManager for consistent CLI output with color and icon support
+- Enhanced error handling for unknown commands and execution errors
+- Added security settings and validation for environment variables
+- Standardized database environment variables and connection handling
+- Implemented default user creation command
+- Added comprehensive test coverage:
+  - Unit tests for settings validation
+  - Tests for system commands and Docker checks
+  - Environment utility function tests
+  - Help manager and message formatting tests
+  - Log scanner and logging manager tests
+- Refactored codebase to improve maintainability (McCabe < 10)
+- Updated roadmap and enhanced code documentation
+
+## v0.7.0 (2025-05-08)
+- v0.7.0 feat: Remove the build stage and just use a copy of the templates
+- Remove the quickscale build command
+- Add a new quickscale init command to create a new project from the templates
+- Add unit, integration and E2E tests
+
 ## v0.7.0 (2025-05-08)
 - v0.7.0 feat: Remove the build stage and just use a copy of the templates
 - Remove the quickscale build command
