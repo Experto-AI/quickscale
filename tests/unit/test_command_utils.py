@@ -279,31 +279,332 @@ def test_fix_permissions(mock_run, tmp_path):
 @patch('socket.socket')
 def test_find_available_port(mock_socket):
     """Test finding an available port."""
-    # Setup the socket mock to simulate a port being in use and then available
+    # Setup mock socket behavior
     socket_instance = MagicMock()
     mock_socket.return_value.__enter__.return_value = socket_instance
     
-    # Test 1: Port is immediately available
-    start_port = 50000
-    socket_instance.bind.reset_mock()
-    socket_instance.bind.side_effect = None  # No error means port is available
+    # Make socket.bind() succeed on the first try
+    socket_instance.bind.return_value = None
     
-    port = find_available_port(start_port, 5)
+    # Call the function
+    port = find_available_port(8000)
     
-    # Verify port was returned and it's the start port (since it was available)
-    assert port == start_port
+    # Verify it returns the first port
+    assert port == 8000
     socket_instance.bind.assert_called_once()
+    socket_instance.bind.assert_called_with(('127.0.0.1', 8000))
     
-    # Test 2: First port is in use, second port is available
-    used_port = 12345
+    # Reset mock
     socket_instance.bind.reset_mock()
+    
+    # Make socket.bind() fail on first port, succeed on second
+    socket_instance.bind.side_effect = [socket.error, None]
+    
+    # Call the function
+    port = find_available_port(8000)
+    
+    # Verify it returns the second port
+    assert port == 8001
+
+
+@patch('socket.socket')
+def test_check_port_availability(mock_socket):
+    """Test checking if a port is available."""
+    # Import the function
+    from quickscale.commands.command_utils import _check_port_availability
+    
+    # Setup mock socket behavior
+    socket_instance = MagicMock()
+    mock_socket.return_value.__enter__.return_value = socket_instance
+    
+    # Test when port is available (bind succeeds)
+    socket_instance.bind.side_effect = None
+    assert _check_port_availability(8000) is True
+    socket_instance.bind.assert_called_with(('127.0.0.1', 8000))
+    
+    # Reset mock
+    socket_instance.bind.reset_mock()
+    
+    # Test when port is unavailable (bind fails)
+    socket_instance.bind.side_effect = socket.error("Address already in use")
+    assert _check_port_availability(8000) is False
+    socket_instance.bind.assert_called_with(('127.0.0.1', 8000))
+
+
+@patch('socket.socket')
+def test_find_available_port_in_range(mock_socket):
+    """Test finding an available port within a specific range."""
+    # Import the function
+    from quickscale.commands.command_utils import _find_available_port_in_range
+    
+    # Setup mock socket behavior
+    socket_instance = MagicMock()
+    mock_socket.return_value.__enter__.return_value = socket_instance
+    
+    # Make all ports unavailable except 8002
     socket_instance.bind.side_effect = [
-        OSError("Port in use"),  # First port (used_port) is in use
-        None  # Second port (used_port + 1) is available
+        socket.error("Address already in use"),  # 8000
+        socket.error("Address already in use"),  # 8001
+        None,                                    # 8002 - available
+        socket.error("Address already in use")   # 8003
     ]
     
-    port = find_available_port(used_port, 5)
+    # Call the function
+    port = _find_available_port_in_range(8000, 8003)
     
-    # Verify that we got the next available port
-    assert port == used_port + 1
-    assert socket_instance.bind.call_count == 2 
+    # Verify it returns the available port
+    assert port == 8002
+    assert socket_instance.bind.call_count == 3  # It should stop after finding the available port
+    
+    # Reset mock
+    socket_instance.bind.reset_mock()
+    
+    # Make all ports unavailable
+    socket_instance.bind.side_effect = socket.error("Address already in use")
+    
+    # Call the function
+    port = _find_available_port_in_range(8000, 8003)
+    
+    # Verify it returns None
+    assert port is None
+    assert socket_instance.bind.call_count == 4  # It should try all ports
+
+
+def test_find_port_in_sequential_range():
+    """Test finding ports in a sequential range."""
+    # Import the function
+    from quickscale.commands.command_utils import _find_port_in_sequential_range
+    
+    # Setup a logger mock
+    logger = MagicMock()
+    
+    # Setup test with mocked _check_port_availability
+    with patch('quickscale.commands.command_utils._check_port_availability') as mock_check:
+        # Make all ports available
+        mock_check.return_value = True
+        
+        # Call the function
+        available_ports = []
+        result = _find_port_in_sequential_range(8000, 2, available_ports, 10, logger)
+        
+        # Verify it returns a list with the expected ports
+        assert result == [8000, 8001]
+        assert mock_check.call_count == 2
+        
+        # Reset mock
+        mock_check.reset_mock()
+        
+        # Make some ports unavailable
+        mock_check.side_effect = [False, True, True]  # 8000 unavailable, 8001-8002 available
+        
+        # Call the function
+        available_ports = []
+        result = _find_port_in_sequential_range(8000, 2, available_ports, 10, logger)
+        
+        # Verify it returns a list with the expected ports
+        assert result == [8001, 8002]
+        assert mock_check.call_count == 3
+
+
+def test_find_port_in_common_ranges():
+    """Test finding ports in common port ranges."""
+    # Import the function
+    from quickscale.commands.command_utils import _find_port_in_common_ranges
+    
+    # Setup a logger mock
+    logger = MagicMock()
+    
+    # Setup test with mocked _check_port_availability
+    with patch('quickscale.commands.command_utils._check_port_availability') as mock_check:
+        # Make all ports available
+        mock_check.return_value = True
+        
+        # Call the function
+        available_ports = []
+        result, attempts = _find_port_in_common_ranges(2, available_ports, 50, 0, logger)
+        
+        # Verify the function found ports and tracked attempts
+        assert len(result) == 2
+        assert attempts > 0
+        assert mock_check.call_count == 2  # Called twice to find 2 ports
+        
+        # Reset mock
+        mock_check.reset_mock()
+        
+        # Make all ports unavailable
+        mock_check.return_value = False
+        
+        # Call the function with limited attempts
+        available_ports = []
+        result, attempts = _find_port_in_common_ranges(2, available_ports, 10, 0, logger)
+        
+        # Verify it couldn't find any ports and exhausted attempts
+        assert result == []
+        assert attempts == 10
+        assert mock_check.call_count == 10
+
+
+def test_find_port_in_random_ranges():
+    """Test finding ports in random port ranges."""
+    # Import the function
+    from quickscale.commands.command_utils import _find_port_in_random_ranges
+    
+    # Setup a logger mock
+    logger = MagicMock()
+    
+    # Setup test with mocked _check_port_availability and random.randint
+    with patch('quickscale.commands.command_utils._check_port_availability') as mock_check, \
+         patch('random.randint') as mock_randint:
+        
+        # Configure random to return sequential values for testing
+        mock_randint.side_effect = [8100, 8101]
+        
+        # Make ports available
+        mock_check.return_value = True
+        
+        # Call the function
+        available_ports = []
+        result = _find_port_in_random_ranges(2, available_ports, 50, 0, logger)
+        
+        # Verify it returns the expected ports
+        assert result == [8100, 8101]
+        assert mock_check.call_count == 2
+        assert mock_randint.call_count == 2
+        
+        # Reset mocks
+        mock_check.reset_mock()
+        mock_randint.reset_mock()
+        
+        # Configure random to return duplicates, then unique values
+        mock_randint.side_effect = [8100, 8100, 8101]
+        
+        # Make ports available
+        mock_check.return_value = True
+        
+        # Call the function
+        available_ports = []
+        result = _find_port_in_random_ranges(2, available_ports, 50, 0, logger)
+        
+        # Verify it handles duplicates correctly
+        assert result == [8100, 8101]
+        assert mock_check.call_count == 2
+        assert mock_randint.call_count == 3  # Called 3 times due to duplicate
+
+
+def test_add_random_high_ports():
+    """Test adding random high ports when other methods fail."""
+    # Import the function directly to avoid import issues
+    from quickscale.commands.command_utils import _add_random_high_ports
+    
+    # Setup a logger mock
+    logger = MagicMock()
+    
+    # Setup test with mocked random.randint - use a simpler approach
+    with patch('random.randint') as mock_randint:
+        # Just return a fixed value to avoid potential memory issues
+        mock_randint.return_value = 30000
+        
+        # Call the function with a small count
+        available_ports = []
+        result = _add_random_high_ports(1, available_ports, logger)
+        
+        # Verify the result
+        assert len(result) == 1
+        assert result[0] == 30000  # Should match our mocked return value
+        assert mock_randint.call_count == 1  # Should be called once
+        assert logger.warning.call_count >= 1  # Should log at least one warning
+
+    
+# Test the find_available_ports function with more complex scenarios
+@patch('quickscale.commands.command_utils._find_port_in_sequential_range')
+@patch('quickscale.commands.command_utils._find_port_in_common_ranges')
+@patch('quickscale.commands.command_utils._find_port_in_random_ranges')
+@patch('quickscale.commands.command_utils._add_random_high_ports')
+def test_find_available_ports_fallback_strategies(
+    mock_add_random, mock_random_ranges, mock_common_ranges, mock_sequential_range
+):
+    """Test find_available_ports with different fallback strategies."""
+    # Import the function
+    from quickscale.commands.command_utils import find_available_ports
+    import logging
+    
+    # Configure mocks for different test scenarios
+    
+    # Scenario 1: Sequential range succeeds
+    mock_sequential_range.return_value = [8000, 8001]
+    mock_common_ranges.return_value = ([], 0)
+    mock_random_ranges.return_value = []
+    mock_add_random.return_value = []
+    
+    # Call the function
+    ports = find_available_ports(count=2, start_port=8000)
+    
+    # Verify the result
+    assert ports == [8000, 8001]
+    mock_sequential_range.assert_called_once()
+    mock_common_ranges.assert_not_called()
+    mock_random_ranges.assert_not_called()
+    mock_add_random.assert_not_called()
+    
+    # Reset mocks
+    mock_sequential_range.reset_mock()
+    mock_common_ranges.reset_mock()
+    mock_random_ranges.reset_mock()
+    mock_add_random.reset_mock()
+    
+    # Scenario 2: Sequential range fails, common ranges succeed
+    mock_sequential_range.return_value = []
+    mock_common_ranges.return_value = ([9000, 9001], 20)
+    
+    # Call the function
+    ports = find_available_ports(count=2, start_port=8000)
+    
+    # Verify the result
+    assert ports == [9000, 9001]
+    mock_sequential_range.assert_called_once()
+    mock_common_ranges.assert_called_once()
+    mock_random_ranges.assert_not_called()
+    mock_add_random.assert_not_called()
+    
+    # Reset mocks
+    mock_sequential_range.reset_mock()
+    mock_common_ranges.reset_mock()
+    mock_random_ranges.reset_mock()
+    mock_add_random.reset_mock()
+    
+    # Scenario 3: Sequential and common ranges fail, random ranges succeed
+    mock_sequential_range.return_value = []
+    mock_common_ranges.return_value = ([], 50)
+    mock_random_ranges.return_value = [10000, 10001]
+    
+    # Call the function
+    ports = find_available_ports(count=2, start_port=8000)
+    
+    # Verify the result
+    assert ports == [10000, 10001]
+    mock_sequential_range.assert_called_once()
+    mock_common_ranges.assert_called_once()
+    mock_random_ranges.assert_called_once()
+    mock_add_random.assert_not_called()
+    
+    # Reset mocks
+    mock_sequential_range.reset_mock()
+    mock_common_ranges.reset_mock()
+    mock_random_ranges.reset_mock()
+    mock_add_random.reset_mock()
+    
+    # Scenario 4: All strategies fail except fallback
+    mock_sequential_range.return_value = []
+    mock_common_ranges.return_value = ([], 50)
+    mock_random_ranges.return_value = []
+    mock_add_random.return_value = [20000, 20001]
+    
+    # Call the function
+    ports = find_available_ports(count=2, start_port=8000)
+    
+    # Verify the result
+    assert ports == [20000, 20001]
+    mock_sequential_range.assert_called_once()
+    mock_common_ranges.assert_called_once()
+    mock_random_ranges.assert_called_once()
+    mock_add_random.assert_called_once() 

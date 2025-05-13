@@ -3,7 +3,7 @@ import os
 import sys
 import subprocess
 import logging
-from typing import Optional, NoReturn, List, Dict
+from typing import Optional, NoReturn, List, Dict, Tuple
 from pathlib import Path
 import re
 import time
@@ -33,14 +33,7 @@ class ServiceUpCommand(Command):
         self.logger = logging.getLogger(__name__)
     
     def _find_available_ports(self, start_offset: int = 0) -> Dict[str, int]:
-        """Find available ports for web and PostgreSQL with an offset for retries.
-        
-        Args:
-            start_offset: Offset to add to the default start port (8000) to avoid port conflicts on retries
-        
-        Returns:
-            Dict with 'PORT' and 'PG_PORT' keys mapped to available port numbers
-        """
+        """Find available ports for web and PostgreSQL services with configurable starting offset."""
         from quickscale.commands.command_utils import find_available_ports
         
         # Start from a higher port range if this is a retry
@@ -60,6 +53,61 @@ class ServiceUpCommand(Command):
         
         return {'PORT': web_port, 'PG_PORT': pg_port}
     
+    def _extract_port_values(self, env_content: str) -> Tuple[int, int]:
+        """Extract current port values from env content."""
+        pg_port_match = re.search(r'PG_PORT=(\d+)', env_content)
+        web_port_match = re.search(r'PORT=(\d+)', env_content)
+        
+        pg_port = int(pg_port_match.group(1)) if pg_port_match else 5432
+        web_port = int(web_port_match.group(1)) if web_port_match else 8000
+        
+        return pg_port, web_port
+
+    def _check_and_update_pg_port(self, pg_port: int) -> Optional[int]:
+        """Check if PostgreSQL port is in use and find an alternative if needed."""
+        if not self._is_port_in_use(pg_port):
+            return None
+        
+        # For PostgreSQL, start from a higher range if the default is in use
+        pg_port_range_start = 5432 if pg_port == 5432 else pg_port
+        new_pg_port = find_available_port(pg_port_range_start, 200)
+        
+        if new_pg_port != pg_port:
+            self.logger.info(f"PostgreSQL port {pg_port} is already in use, using port {new_pg_port} instead")
+            return new_pg_port
+        
+        return None
+
+    def _check_and_update_web_port(self, web_port: int) -> Optional[int]:
+        """Check if web port is in use and find an alternative if needed."""
+        if not self._is_port_in_use(web_port):
+            return None
+        
+        # For web, try ports in a common web range (default is 8000)
+        web_port_range_start = 8000 if web_port == 8000 else web_port
+        new_web_port = find_available_port(web_port_range_start, 200)
+        
+        if new_web_port != web_port:
+            self.logger.info(f"Web port {web_port} is already in use, using port {new_web_port} instead")
+            return new_web_port
+        
+        return None
+
+    def _update_env_content(self, env_content: str, updated_ports: Dict[str, int]) -> str:
+        """Update environment file content with new port values."""
+        new_content = env_content
+        
+        for key, value in updated_ports.items():
+            if key == 'PG_PORT' and re.search(r'PG_PORT=\d+', new_content):
+                new_content = re.sub(r'PG_PORT=\d+', f'PG_PORT={value}', new_content)
+            elif key == 'PORT' and re.search(r'PORT=\d+', new_content):
+                new_content = re.sub(r'PORT=\d+', f'PORT={value}', new_content)
+            else:
+                # Add the variable if it doesn't exist
+                new_content += f"\n{key}={value}"
+        
+        return new_content
+
     def _update_env_file_ports(self, env=None) -> Dict[str, int]:
         """Update .env file with available ports if there are conflicts."""
         updated_ports = {}
@@ -73,44 +121,22 @@ class ServiceUpCommand(Command):
                 env_content = f.read()
                 
             # Extract current port values
-            pg_port_match = re.search(r'PG_PORT=(\d+)', env_content)
-            web_port_match = re.search(r'PORT=(\d+)', env_content)
+            pg_port, web_port = self._extract_port_values(env_content)
             
-            pg_port = int(pg_port_match.group(1)) if pg_port_match else 5432
-            web_port = int(web_port_match.group(1)) if web_port_match else 8000
+            # Check if ports are currently in use and find alternatives if needed
+            new_pg_port = self._check_and_update_pg_port(pg_port)
+            new_web_port = self._check_and_update_web_port(web_port)
             
-            # Check if ports are currently in use before trying to find new ones
-            is_pg_port_in_use = self._is_port_in_use(pg_port)
-            is_web_port_in_use = self._is_port_in_use(web_port)
+            # Update the dictionary with new port values if they changed
+            if new_pg_port:
+                updated_ports['PG_PORT'] = new_pg_port
             
-            # Only find new ports if current ones are in use
-            if is_pg_port_in_use:
-                # For PostgreSQL, start from a higher range if the default is in use
-                pg_port_range_start = 5432 if pg_port == 5432 else pg_port
-                new_pg_port = find_available_port(pg_port_range_start, 200)
-                if new_pg_port != pg_port:
-                    self.logger.info(f"PostgreSQL port {pg_port} is already in use, using port {new_pg_port} instead")
-                    updated_ports['PG_PORT'] = new_pg_port
-            
-            if is_web_port_in_use:
-                # For web, try ports in a common web range (default is 8000)
-                web_port_range_start = 8000 if web_port == 8000 else web_port
-                new_web_port = find_available_port(web_port_range_start, 200)
-                if new_web_port != web_port:
-                    self.logger.info(f"Web port {web_port} is already in use, using port {new_web_port} instead")
-                    updated_ports['PORT'] = new_web_port
+            if new_web_port:
+                updated_ports['PORT'] = new_web_port
         
             # Update .env file with new port values
             if updated_ports:
-                new_content = env_content
-                for key, value in updated_ports.items():
-                    if key == 'PG_PORT' and pg_port_match:
-                        new_content = re.sub(r'PG_PORT=\d+', f'PG_PORT={value}', new_content)
-                    elif key == 'PORT' and web_port_match:
-                        new_content = re.sub(r'PORT=\d+', f'PORT={value}', new_content)
-                    else:
-                        # Add the variable if it doesn't exist
-                        new_content += f"\n{key}={value}"
+                new_content = self._update_env_content(env_content, updated_ports)
                 
                 with open(".env", "w", encoding="utf-8") as f:
                     f.write(new_content)
@@ -277,21 +303,11 @@ class ServiceUpCommand(Command):
                 )
         return updated_ports
 
-    def execute(self) -> None:
-        """Start the project services."""
-        state = ProjectManager.get_project_state()
-        if not state['has_project']:
-            self.logger.error(ProjectManager.PROJECT_NOT_FOUND_MESSAGE)
-            print(ProjectManager.PROJECT_NOT_FOUND_MESSAGE)  # Keep this print since it's user-facing error
-            return
-        
-        max_retries = 3
-        retry_count = 0
-        last_error = None
-        updated_ports = {}
-        
+    def _prepare_environment_and_ports(self) -> Tuple[Dict, Dict[str, int]]:
+        """Prepare environment variables and check for port availability."""
         # Get environment variables for docker-compose
         env = os.environ.copy()
+        updated_ports = {}
         
         # Check for port availability and handle fallbacks before starting services
         try:
@@ -306,274 +322,273 @@ class ServiceUpCommand(Command):
             self.logger.error(str(e))
             print(f"Error: {e}")  # User-facing error
             print(f"Recovery: {e.recovery}")
+            raise e
+            
+        return env, updated_ports
+        
+    def _find_ports_for_retry(self, retry_count: int, max_retries: int) -> Dict[str, int]:
+        """Find available ports for retry attempts."""
+        self.logger.info(f"Port conflict detected (attempt {retry_count+1}/{max_retries}). Finding new ports in higher ranges...")
+        
+        # On each retry, start from higher port ranges to avoid conflicts
+        # Use progressively higher port ranges for each retry 
+        offset = retry_count * 1000  # 1000, 2000 on subsequent retries
+        updated_ports = self._find_available_ports(start_offset=offset)
+        
+        if not updated_ports:
+            self.logger.warning("Could not find enough available ports, will try with random high ports")
+            # Last resort - use very high random ports
+            import random
+            web_port = random.randint(30000, 50000)
+            pg_port = random.randint(30000, 50000)
+            # Make sure they're different
+            while pg_port == web_port:
+                pg_port = random.randint(30000, 50000)
+            updated_ports = {'PORT': web_port, 'PG_PORT': pg_port}
+            
+        return updated_ports
+        
+    def _start_docker_services(self, env: Dict) -> None:
+        """Start the Docker services using docker-compose."""
+        try:
+            result = subprocess.run([DOCKER_COMPOSE_COMMAND, "up", "--build", "-d"], check=True, env=env, capture_output=True, text=True)
+            self.logger.info("Services started successfully.")
+        except subprocess.CalledProcessError as e:
+            self._handle_docker_process_error(e, env)
+            
+    def _handle_docker_process_error(self, e: subprocess.CalledProcessError, env: Dict) -> None:
+        """Handle errors from docker-compose command."""
+        # Special handling for exit code 5 or 1, which can happen but services might still start
+        if e.returncode not in [1, 5]:
+            # For other error codes, re-raise the error
+            raise e
+            
+        self.logger.warning(f"Docker Compose returned exit code {e.returncode}, but services might still be starting.")
+        # Enhanced logging of error output
+        if hasattr(e, 'stdout') and e.stdout:
+            self.logger.debug(f"Command stdout: {e.stdout}")
+        if hasattr(e, 'stderr') and e.stderr:
+            self.logger.debug(f"Command stderr: {e.stderr}")
+        
+        # Try to get detailed service logs
+        self._get_docker_compose_logs(env)
+        
+        # Try to inspect what's happening
+        self._check_if_services_running_despite_error(e, env)
+    
+    def _get_docker_compose_logs(self, env: Dict) -> None:
+        """Get logs from docker-compose for debugging."""
+        try:
+            logs_result = subprocess.run([DOCKER_COMPOSE_COMMAND, "logs"], capture_output=True, text=True, env=env, check=False)
+            if logs_result.returncode == 0:
+                self.logger.debug(f"Docker compose logs output: {logs_result.stdout}")
+                if logs_result.stderr:
+                    self.logger.debug(f"Docker compose logs stderr: {logs_result.stderr}")
+        except Exception as logs_err:
+            self.logger.debug(f"Failed to get docker-compose logs: {logs_err}")
+    
+    def _check_if_services_running_despite_error(self, e: subprocess.CalledProcessError, env: Dict) -> None:
+        """Check if services are running despite docker-compose error."""
+        try:
+            # Check if the services are starting despite the error
+            ps_result = subprocess.run([DOCKER_COMPOSE_COMMAND, "ps"], check=False, env=env, capture_output=True, text=True)
+            if ps_result.returncode == 0 and ("db" in ps_result.stdout or "web" in ps_result.stdout):
+                self.logger.info("Services appear to be starting despite exit code, proceeding.")
+                # Continue with the operation, treating as if it succeeded
+            else:
+                # Try to see what's happening with docker
+                self.logger.info("Checking container status with docker ps...")
+                docker_ps = subprocess.run(["docker", "ps", "-a"], check=False, capture_output=True, text=True)
+                self.logger.debug(f"Docker ps output: {docker_ps.stdout}")
+                
+                # If no services are showing up, re-raise the error
+                self.logger.error("No services found running after exit code error.")
+                raise e
+        except Exception as inspect_error:
+            self.logger.error(f"Error inspecting service status: {inspect_error}")
+            # Re-raise the original error
+            raise e
+            
+    def _verify_services_running(self, env: Dict) -> None:
+        """Verify that services are actually running."""
+        try:
+            ps_result = subprocess.run([DOCKER_COMPOSE_COMMAND, "ps"], capture_output=True, text=True, check=True, env=env)
+            if "db" not in ps_result.stdout:
+                self.logger.warning("Database service not detected in running containers. Services may not be fully started.")
+                self.logger.debug(f"Docker compose ps output: {ps_result.stdout}")
+                
+                # Try more direct Docker commands as a fallback
+                self._start_stopped_containers()
+        except subprocess.SubprocessError as ps_err:
+            self.logger.warning(f"Could not verify if services are running: {ps_err}")
+            
+    def _start_stopped_containers(self) -> None:
+        """Attempt to start containers that exist but are stopped."""
+        self.logger.info("Attempting to check and start services directly with Docker...")
+        
+        # Get project name from directory name
+        project_name = os.path.basename(os.getcwd())
+        
+        # Check if containers exist but are stopped
+        docker_ps_a = subprocess.run(
+            ["docker", "ps", "-a", "--format", "{{.Names}},{{.Status}}", "--filter", f"name={project_name}"],
+            capture_output=True, text=True, check=False
+        )
+        
+        for container_line in docker_ps_a.stdout.splitlines():
+            if not container_line:
+                continue
+                
+            parts = container_line.split(',', 1)
+            container_name = parts[0].strip()
+            status = parts[1].strip() if len(parts) > 1 else ""
+            
+            # Check if container is created or exited but not running
+            if ("Created" in status or "Exited" in status) and container_name:
+                self._start_container(container_name, status)
+                
+        # Wait a bit for containers to start
+        time.sleep(5)
+        
+        # Check again if services are running
+        ps_retry = subprocess.run([DOCKER_COMPOSE_COMMAND, "ps"], capture_output=True, text=True, check=False)
+        if ps_retry.returncode == 0 and "db" in ps_retry.stdout:
+            self.logger.info("Services are now running after direct intervention.")
+        else:
+            self.logger.warning("Still unable to detect running services.")
+            
+    def _start_container(self, container_name: str, status: str) -> None:
+        """Start an individual container."""
+        self.logger.info(f"Found container in non-running state: {container_name} ({status})")
+        try:
+            # Try to start the container
+            start_result = subprocess.run(
+                ["docker", "start", container_name],
+                capture_output=True, text=True, check=False
+            )
+            if start_result.returncode == 0:
+                self.logger.info(f"Successfully started container: {container_name}")
+            else:
+                self.logger.warning(f"Failed to start container {container_name}: {start_result.stderr}")
+        except Exception as e:
+            self.logger.warning(f"Error starting container {container_name}: {e}")
+            
+    def _print_service_info(self, updated_ports: Dict[str, int]) -> None:
+        """Print user-friendly message with the port information."""
+        from quickscale.utils.message_manager import MessageManager
+        
+        # Print user-friendly message with the port info if changed
+        if 'WEB_PORT' in updated_ports:
+            web_port = updated_ports['WEB_PORT']
+            MessageManager.print_command_result(service="web", port=web_port)
+        elif 'PORT' in updated_ports:
+            web_port = updated_ports['PORT']
+            MessageManager.print_command_result(service="web", port=web_port)
+        
+        if 'DB_PORT_EXTERNAL' in updated_ports:
+            db_port_external = updated_ports['DB_PORT_EXTERNAL']
+            db_port = int(get_env('DB_PORT', 5432, from_env_file=True))  # Internal DB port
+            MessageManager.success([
+                MessageManager.get_template("db_port_external", port=db_port_external),
+                MessageManager.get_template("db_port_internal", port=db_port)
+            ])
+    
+    def _handle_retry_attempt(self, retry_count: int, max_retries: int, env: Dict, updated_ports: Dict[str, int]) -> Dict[str, int]:
+        """Handle a retry attempt for starting services."""
+        # For first attempt, try to find multiple available ports at once to be proactive
+        if retry_count == 0:
+            # This is more effective than checking each port individually
+            if not updated_ports:  # Skip if we've already found ports in _check_port_availability
+                self.logger.info("Proactively finding all available ports...")
+                updated_ports = self._find_available_ports()
+            if not updated_ports:
+                # Fallback to checking specific ports if needed
+                updated_ports = self._update_env_file_ports(env)
+        else:
+            # For retries, use our comprehensive multi-port finder with higher ranges
+            updated_ports = self._find_ports_for_retry(retry_count, max_retries)
+            
+            # If we couldn't find ports with the retry method, try proactive port finding as a fallback
+            if not updated_ports:
+                self.logger.info("Proactively finding all available ports...")
+                updated_ports = self._find_available_ports()
+        
+        # Update docker-compose configuration with new ports
+        if updated_ports:
+            self._update_docker_compose_ports(updated_ports)
+            
+            # Update environment variables with new ports
+            for key, value in updated_ports.items():
+                env[key] = str(value)
+            self.logger.info(f"Using ports: Web={updated_ports.get('PORT', 'default')}, PostgreSQL={updated_ports.get('PG_PORT', 'default')}")
+        
+        return updated_ports
+
+    def _start_services_with_retry(self, max_retries: int) -> None:
+        """Attempt to start services with multiple retries if needed."""
+        retry_count = 0
+        last_error = None
+        
+        try:
+            # Prepare initial environment and check port availability
+            env, updated_ports = self._prepare_environment_and_ports()
+        except ServiceError:
+            # Error already logged and printed in _prepare_environment_and_ports
             return
         
         while retry_count < max_retries:
             try:
-                # Update ports in configuration files if needed
-                if retry_count == 0:
-                    # For first attempt, try to find multiple available ports at once to be proactive
-                    # This is more effective than checking each port individually
-                    if not updated_ports:  # Skip if we've already found ports in _check_port_availability
-                        self.logger.info("Proactively finding all available ports...")
-                        updated_ports = self._find_available_ports()
-                    if not updated_ports:
-                        # Fallback to checking specific ports if needed
-                        updated_ports = self._update_env_file_ports(env)
-                elif retry_count > 0:
-                    # For retries, always use our comprehensive multi-port finder with higher ranges
-                    # to completely avoid any previously detected conflicts
-                    self.logger.info(f"Port conflict detected (attempt {retry_count+1}/{max_retries}). Finding new ports in higher ranges...")
-                    
-                    # On each retry, start from higher port ranges to avoid conflicts
-                    # Use progressively higher port ranges for each retry 
-                    offset = retry_count * 1000  # 1000, 2000 on subsequent retries
-                    updated_ports = self._find_available_ports(start_offset=offset)
-                    
-                    if not updated_ports:
-                        self.logger.warning("Could not find enough available ports, will try with random high ports")
-                        # Last resort - use very high random ports
-                        import random
-                        web_port = random.randint(30000, 50000)
-                        pg_port = random.randint(30000, 50000)
-                        # Make sure they're different
-                        while pg_port == web_port:
-                            pg_port = random.randint(30000, 50000)
-                        updated_ports = {'PORT': web_port, 'PG_PORT': pg_port}
-                
-                if updated_ports:
-                    self._update_docker_compose_ports(updated_ports)
+                # Handle retry attempt and get updated ports
+                updated_ports = self._handle_retry_attempt(retry_count, max_retries, env, updated_ports)
             
                 self.logger.info(f"Starting services (attempt {retry_count+1}/{max_retries})...")
                 
-                if updated_ports:
-                    for key, value in updated_ports.items():
-                        env[key] = str(value)
-                    self.logger.info(f"Using ports: Web={updated_ports.get('PORT', 'default')}, PostgreSQL={updated_ports.get('PG_PORT', 'default')}")
-                        
-                # Try running docker-compose up first with check=True
-                try:
-                    result = subprocess.run([DOCKER_COMPOSE_COMMAND, "up", "--build", "-d"], check=True, env=env, capture_output=True, text=True)
-                    self.logger.info("Services started successfully.")
-                except subprocess.CalledProcessError as e:
-                    # Special handling for exit code 5 or 1, which can happen but services might still start
-                    if e.returncode in [1, 5]:
-                        self.logger.warning(f"Docker Compose returned exit code {e.returncode}, but services might still be starting.")
-                        # Enhanced logging of error output
-                        if hasattr(e, 'stdout') and e.stdout:
-                            self.logger.debug(f"Command stdout: {e.stdout}")
-                        if hasattr(e, 'stderr') and e.stderr:
-                            self.logger.debug(f"Command stderr: {e.stderr}")
-                        
-                        # Try to get detailed service logs
-                        try:
-                            logs_result = subprocess.run([DOCKER_COMPOSE_COMMAND, "logs"], capture_output=True, text=True, env=env, check=False)
-                            if logs_result.returncode == 0:
-                                self.logger.debug(f"Docker compose logs output: {logs_result.stdout}")
-                                if logs_result.stderr:
-                                    self.logger.debug(f"Docker compose logs stderr: {logs_result.stderr}")
-                        except Exception as logs_err:
-                            self.logger.debug(f"Failed to get docker-compose logs: {logs_err}")
-                        
-                        # Try to inspect what's happening
-                        try:
-                            # Check if the services are starting despite the error
-                            ps_result = subprocess.run([DOCKER_COMPOSE_COMMAND, "ps"], check=False, env=env, capture_output=True, text=True)
-                            if ps_result.returncode == 0 and ("db" in ps_result.stdout or "web" in ps_result.stdout):
-                                self.logger.info("Services appear to be starting despite exit code, proceeding.")
-                                # Continue with the operation, treating as if it succeeded
-                            else:
-                                # Try to see what's happening with docker
-                                self.logger.info("Checking container status with docker ps...")
-                                docker_ps = subprocess.run(["docker", "ps", "-a"], check=False, capture_output=True, text=True)
-                                self.logger.debug(f"Docker ps output: {docker_ps.stdout}")
-                                
-                                # If no services are showing up, re-raise the error
-                                self.logger.error("No services found running after exit code error.")
-                                raise
-                        except Exception as inspect_error:
-                            self.logger.error(f"Error inspecting service status: {inspect_error}")
-                            # Re-raise the original error
-                            raise e
-                    else:
-                        # For other error codes, re-raise the error
-                        raise
+                # Start docker services
+                self._start_docker_services(env)
                 
                 # Add a delay to allow services to start properly
                 self.logger.info("Waiting for services to stabilize...")
                 time.sleep(15)  # Give containers time to fully start and register
                 
                 # Verify services are actually running
-                try:
-                    ps_result = subprocess.run([DOCKER_COMPOSE_COMMAND, "ps"], capture_output=True, text=True, check=True, env=env)
-                    if "db" not in ps_result.stdout:
-                        self.logger.warning("Database service not detected in running containers. Services may not be fully started.")
-                        self.logger.debug(f"Docker compose ps output: {ps_result.stdout}")
-                        
-                        # Try more direct Docker commands as a fallback
-                        self.logger.info("Attempting to check and start services directly with Docker...")
-                        
-                        # Get project name from directory name
-                        project_name = os.path.basename(os.getcwd())
-                        
-                        # Check if containers exist but are stopped
-                        docker_ps_a = subprocess.run(
-                            ["docker", "ps", "-a", "--format", "{{.Names}},{{.Status}}", "--filter", f"name={project_name}"],
-                            capture_output=True, text=True, check=False
-                        )
-                        
-                        for container_line in docker_ps_a.stdout.splitlines():
-                            if not container_line:
-                                continue
-                                
-                            parts = container_line.split(',', 1)
-                            container_name = parts[0].strip()
-                            status = parts[1].strip() if len(parts) > 1 else ""
-                            
-                            # Check if container is created or exited but not running
-                            if ("Created" in status or "Exited" in status) and container_name:
-                                self.logger.info(f"Found container in non-running state: {container_name} ({status})")
-                                try:
-                                    # Try to start the container
-                                    start_result = subprocess.run(
-                                        ["docker", "start", container_name],
-                                        capture_output=True, text=True, check=False
-                                    )
-                                    if start_result.returncode == 0:
-                                        self.logger.info(f"Successfully started container: {container_name}")
-                                    else:
-                                        self.logger.warning(f"Failed to start container {container_name}: {start_result.stderr}")
-                                except Exception as e:
-                                    self.logger.warning(f"Error starting container {container_name}: {e}")
-                        
-                        # Wait a bit for containers to start
-                        time.sleep(5)
-                        
-                        # Check again if services are running
-                        ps_retry = subprocess.run([DOCKER_COMPOSE_COMMAND, "ps"], capture_output=True, text=True, check=False, env=env)
-                        if ps_retry.returncode == 0 and "db" in ps_retry.stdout:
-                            self.logger.info("Services are now running after direct intervention.")
-                        else:
-                            self.logger.warning("Still unable to detect running services.")
-                except subprocess.SubprocessError as ps_err:
-                    self.logger.warning(f"Could not verify if services are running: {ps_err}")
+                self._verify_services_running(env)
                 
-                # Print user-friendly message with the port info if changed
-                if 'WEB_PORT' in updated_ports:
-                    web_port = updated_ports['WEB_PORT']
-                    print(f"Web service is running on port {web_port}")
-                    print(f"Access at: http://localhost:{web_port}")
-                elif 'PORT' in updated_ports:
-                    web_port = updated_ports['PORT']
-                    print(f"Web service is running on port {web_port}")
-                    print(f"Access at: http://localhost:{web_port}")
+                # Print service information for the user
+                self._print_service_info(updated_ports)
                 
-                if 'DB_PORT_EXTERNAL' in updated_ports:
-                    db_port_external = updated_ports['DB_PORT_EXTERNAL']
-                    db_port = int(get_env('DB_PORT', 5432, from_env_file=True))  # Internal DB port
-                    print(f"PostgreSQL database is accessible externally on port {db_port_external}")
-                    print(f"Internal container port remains at {db_port}")
-             
                 self.logger.info("Services started successfully.")
+                return
                 
-
-                return  # Successfully started services, exit the function
-                
-            except subprocess.SubprocessError as e:
-                error_output = str(e)
+            except Exception as e:
                 last_error = e
+                self.logger.error(f"Error starting services (attempt {retry_count+1}/{max_retries}): {e}")
                 retry_count += 1
-                
-                # Log detailed error information to help debug port issues
-                self.logger.warning(f"Error starting services (attempt {retry_count}/{max_retries}): {error_output}")
-                
-                # Add more detailed debugging for exit codes 1 and 5
-                exit_code = getattr(e, 'returncode', None)
-                if exit_code in [1, 5]:
-                    self.logger.warning(f"Docker Compose exit code {exit_code} detected - investigating the issue...")
-                    # Log stdout and stderr for detailed debugging
-                    if hasattr(e, 'stdout') and e.stdout:
-                        self.logger.debug(f"Command stdout: {e.stdout}")
-                    if hasattr(e, 'stderr') and e.stderr:
-                        self.logger.debug(f"Command stderr: {e.stderr}")
-                    
-                    # Try to get more details about the problem with docker-compose logs
-                    try:
-                        logs_result = subprocess.run([DOCKER_COMPOSE_COMMAND, "logs"], capture_output=True, text=True, env=env)
-                        self.logger.debug(f"Docker compose logs: {logs_result.stdout}")
-                        if logs_result.stderr:
-                            self.logger.debug(f"Docker compose logs stderr: {logs_result.stderr}")
-                    except Exception as logs_err:
-                        self.logger.debug(f"Failed to get docker logs: {logs_err}")
-                
-                # Determine if we should retry based on the error
-                is_port_conflict = "port is already allocated" in error_output or ("Bind for" in error_output and "failed" in error_output)
-                is_recoverable_exit_code = exit_code == 5  # Only retry automatically on exit code 5
-                
-                # Only retry if it's a known recoverable error and we haven't hit max retries
-                should_retry = (is_port_conflict or is_recoverable_exit_code) and retry_count < max_retries
-                
-                if not should_retry:
-                    self.logger.error(f"Non-recoverable error or max retries reached. Stopping retry attempts.")
+                if retry_count >= max_retries:
                     break
-                
-                # Extract the conflicting port for better error messages
-                if is_port_conflict:
-                    port_match = re.search(r'Bind for.*:(\d+)', error_output)
-                    conflict_port = port_match.group(1) if port_match else "unknown"
-                    self.logger.warning(f"Port conflict detected on port {conflict_port}. "
-                                      f"Retrying with different ports (attempt {retry_count}/{max_retries})...")
-                else:
-                    # For exit code 5 or other recoverable errors
-                    self.logger.warning(f"Attempting retry {retry_count}/{max_retries} with new ports due to potentially transient error...")
-                
-                # Small delay before retry to allow transient port issues to resolve
-                time.sleep(2)
+                time.sleep(2)  # Brief pause before retrying
         
-        # If we get here, all retries failed
-        if "port is already allocated" in str(last_error) or ("Bind for" in str(last_error) and "failed" in str(last_error)):
-            port_match = re.search(r'Bind for.*:(\d+)', str(last_error))
-            port = port_match.group(1) if port_match else "unknown"
-            self.handle_error(
-                last_error,
-                context={"action": "starting services", "port_binding_error": True, "port": port},
-                recovery=f"Port {port} is already in use. Try manually specifying a different port in .env file:\n"
-                        f"PORT=10000\nPG_PORT=15432"
-            )
-        elif hasattr(last_error, 'returncode') and last_error.returncode == 1:
-            # Special handling for exit code 1 (typically build or startup error)
-            error_msg = ""
-            if hasattr(last_error, 'stderr') and last_error.stderr:
-                error_msg = f"\n\nError details: {last_error.stderr}"
-                
-            self.handle_error(
-                last_error,
-                context={"action": "starting services", "exit_code": last_error.returncode},
-                recovery="Docker Compose failed to start services. This might be due to:\n"
-                        "1. Build errors in Dockerfile or application code\n"
-                        "2. Docker daemon not running properly (try restarting Docker)\n"
-                        "3. Conflicting container names (run 'docker ps -a' to check)\n"
-                        "4. Insufficient permissions or disk space\n"
-                        f"5. Container startup errors (check logs with 'quickscale logs'){error_msg}"
-            )
-        elif hasattr(last_error, 'returncode') and last_error.returncode == 5:
-            # Special handling for exit code 5 (typically service startup issue)
-            self.handle_error(
-                last_error,
-                context={"action": "starting services", "exit_code": last_error.returncode},
-                recovery="Docker Compose exit code 5 indicates services had trouble starting properly. This might be due to:\n"
-                        "1. Service dependencies not being ready (database not initialized)\n"
-                        "2. Health checks failing\n"
-                        "3. Application startup errors\n"
-                        "Check logs with 'quickscale logs' for more details"
-            )
-        else:
-            # Generic Docker error
-            self.handle_error(
-                last_error,
-                context={"action": "starting services"},
-                recovery="Make sure Docker is running and properly configured."
-            )
+        # If we reached here, all attempts failed
+        error_message = f"Failed to start services after {max_retries} attempts."
+        if last_error:
+            error_message += f" Last error: {last_error}"
+        self.logger.error(error_message)
+        
+        from quickscale.utils.message_manager import MessageManager
+        MessageManager.error(error_message)
+        MessageManager.print_recovery_suggestion("custom", suggestion="Try again with ports that are not in use, or check Docker logs for more details.")
+    
+    def execute(self) -> None:
+        """Start the project services."""
+        from quickscale.utils.message_manager import MessageManager
+        
+        state = ProjectManager.get_project_state()
+        if not state['has_project']:
+            # Only use MessageManager.error which already logs the error
+            MessageManager.error(ProjectManager.PROJECT_NOT_FOUND_MESSAGE, self.logger)
+            return
+        
+        # Start services with retry mechanism
+        self._start_services_with_retry(max_retries=3)
 
 class ServiceDownCommand(Command):
     """Stops project services."""
@@ -585,16 +600,18 @@ class ServiceDownCommand(Command):
     
     def execute(self) -> None:
         """Stop the project services."""
+        from quickscale.utils.message_manager import MessageManager
+        
         state = ProjectManager.get_project_state()
         if not state['has_project']:
             self.logger.error(ProjectManager.PROJECT_NOT_FOUND_MESSAGE)
-            print(ProjectManager.PROJECT_NOT_FOUND_MESSAGE)  # Keep this print since it's user-facing error
+            MessageManager.error(ProjectManager.PROJECT_NOT_FOUND_MESSAGE, self.logger)
             return
         
         try:
-            self.logger.info("Stopping services...")
+            MessageManager.info("Stopping services...", self.logger)
             subprocess.run([DOCKER_COMPOSE_COMMAND, "down"], check=True)
-            self.logger.info("Services stopped successfully.")
+            MessageManager.success("Services stopped successfully.", self.logger)
         except subprocess.SubprocessError as e:
             self.handle_error(
                 e,
@@ -614,19 +631,13 @@ class ServiceLogsCommand(Command):
     def execute(self, service: Optional[str] = None, follow: bool = False, 
                 since: Optional[str] = None, lines: int = 100, 
                 timestamps: bool = False) -> None:
-        """View service logs.
+        """View service logs with flexible filtering and display options."""
+        from quickscale.utils.message_manager import MessageManager, MessageType
         
-        Args:
-            service: Optional service name to filter logs (web or db)
-            follow: If True, follow logs continuously (default: False)
-            since: Show logs since timestamp (e.g. 2023-11-30T11:45:00) or relative time (e.g. 42m for 42 minutes)
-            lines: Number of lines to show (default: 100)
-            timestamps: If True, show timestamps (default: False)
-        """
         state = ProjectManager.get_project_state()
         if not state['has_project']:
             self.logger.error(ProjectManager.PROJECT_NOT_FOUND_MESSAGE)
-            print(ProjectManager.PROJECT_NOT_FOUND_MESSAGE)  # Keep this print since it's user-facing error
+            MessageManager.error(ProjectManager.PROJECT_NOT_FOUND_MESSAGE, self.logger)
             return
         
         try:
@@ -643,9 +654,9 @@ class ServiceLogsCommand(Command):
                 
             if service:
                 cmd.append(service)
-                self.logger.info(f"Viewing logs for {service} service...")
+                MessageManager.template("viewing_logs", logger=self.logger, service=service)
             else:
-                self.logger.info("Viewing logs for all services...")
+                MessageManager.template("viewing_all_logs", logger=self.logger)
                 
             subprocess.run(cmd, check=True)
         except subprocess.SubprocessError as e:
@@ -655,7 +666,7 @@ class ServiceLogsCommand(Command):
                 recovery="Ensure services are running with 'quickscale up'"
             )
         except KeyboardInterrupt:
-            self.logger.info("Log viewing stopped.")
+            MessageManager.template("log_viewing_stopped", logger=self.logger)
 
 
 class ServiceStatusCommand(Command):
@@ -668,14 +679,16 @@ class ServiceStatusCommand(Command):
     
     def execute(self) -> None:
         """Show status of running services."""
+        from quickscale.utils.message_manager import MessageManager, MessageType
+        
         state = ProjectManager.get_project_state()
         if not state['has_project']:
             self.logger.error(ProjectManager.PROJECT_NOT_FOUND_MESSAGE)
-            print(ProjectManager.PROJECT_NOT_FOUND_MESSAGE)  # Keep this print since it's user-facing error
+            MessageManager.error(ProjectManager.PROJECT_NOT_FOUND_MESSAGE, self.logger)
             return
         
         try:
-            self.logger.info("Checking service status...")
+            MessageManager.info("Checking service status...", self.logger)
             subprocess.run(["docker", "compose", "ps"], check=True)
         except subprocess.SubprocessError as e:
             self.handle_error(

@@ -11,7 +11,7 @@ from typing import Optional, Dict, Any, List, Tuple
 class ProjectManager:
     """Manages project configuration and tracking."""
     
-    PROJECT_NOT_FOUND_MESSAGE = "No active project found in current directory.\nEnter project directory or run 'quickscale build <project_name>' to create one."
+    PROJECT_NOT_FOUND_MESSAGE = "No active project found in current directory. Enter project directory or run 'quickscale init <project_name>' to create one."
     
     @staticmethod
     def get_project_root() -> Path:
@@ -21,9 +21,10 @@ class ProjectManager:
     @staticmethod
     def check_project_exists(print_message: bool = True) -> bool:
         """Check if current directory is a project."""
+        from quickscale.utils.message_manager import MessageManager, MessageType
         exists = Path("docker-compose.yml").is_file()
         if not exists and print_message:
-            print(ProjectManager.PROJECT_NOT_FOUND_MESSAGE)
+            MessageManager.error(ProjectManager.PROJECT_NOT_FOUND_MESSAGE)
         return exists
 
     @staticmethod

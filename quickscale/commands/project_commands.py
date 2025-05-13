@@ -65,7 +65,9 @@ class DestroyProjectCommand(Command):
             
         except subprocess.SubprocessError as e:
             self.logger.error(f"Container operation error: {e}")
+            print(f"[ERROR] Container operation error: {e}")
             return {'success': False, 'reason': 'subprocess_error', 'error': str(e)}
         except Exception as e:
             self.logger.error(f"Project destruction error: {e}")
+            print(f"[ERROR] Project destruction error: {e}")
             return {'success': False, 'reason': 'error', 'error': str(e)}

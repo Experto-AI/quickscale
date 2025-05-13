@@ -16,6 +16,8 @@ This document is written for humans but also for AI coding assistants like GitHu
       - 2.1.2. [TECHNICAL_DOCS.md](../../TECHNICAL_DOCS.md): Technical information of the project to adhere to.
       - 2.1.3. [USER_GUIDE.md](../../USER_GUIDE.md): User commands and usage instructions.
       - 2.1.4. [CONTRIBUTING.md](../../CONTRIBUTING.md): Contribution guidelines index for developers and AI assistants.
+      - 2.1.5. [DATABASE_VARIABLES.md](../../docs/DATABASE_VARIABLES.md): Database configuration guidelines and variable standardization.
+      - 2.1.6. [MESSAGE_MANAGER.md](../../docs/MESSAGE_MANAGER.md): CLI output standardization using MessageManager.
     - 2.2. Follow these guidelines for code documentation
       - 2.2.1. Use single-line comments for major code sections
       - 2.1.2. Use single-line docstrings for functions and classes, do not use multi-line docstrings

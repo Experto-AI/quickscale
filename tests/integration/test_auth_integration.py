@@ -1,4 +1,4 @@
-"""Integration tests for authentication flows in django-allauth integration."""
+# Integration tests for authentication flows in django-allauth integration.
 import unittest
 import pytest
 from unittest.mock import Mock, patch, MagicMock

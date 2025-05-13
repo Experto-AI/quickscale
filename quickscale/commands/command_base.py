@@ -24,9 +24,10 @@ class Command(abc.ABC):
     
     def _exit_with_error(self, message: str) -> NoReturn:
         """Exit program with error message."""
+        from quickscale.utils.message_manager import MessageManager
         if self.logger:
             self.logger.error(message)
-        print(f"Error: {message}")
+        MessageManager.error(message, self.logger)
         sys.exit(1)
     
     def handle_error(self, 

@@ -204,6 +204,9 @@ class TestEnvUtilsE2E:
         # Force reload of the module
         importlib.reload(quickscale.utils.env_utils)
         
+        # Explicitly call initialize_env to ensure environment is properly initialized
+        quickscale.utils.env_utils.initialize_env()
+        
         # Check if environment variables were loaded during module initialization
         assert get_env('TEST_VAR') == 'test_value'
         
@@ -265,9 +268,10 @@ class TestEnvUtilsE2E:
                 project_dir = temp_path / "test_project"
                 os.chdir(project_dir)
                 
-                # Update the dotenv_path to match our current directory
+                # Update the environment to use current directory
                 import quickscale.utils.env_utils
-                quickscale.utils.env_utils.dotenv_path = os.path.join(os.getcwd(), '.env')
+                # Call initialize_env to update the environment with current directory
+                quickscale.utils.env_utils.initialize_env()
                 
                 # Force reload environment to pick up any changes
                 refresh_env_cache()
@@ -380,9 +384,10 @@ class TestEnvUtilsE2E:
                 print(f".env path: {os.path.abspath('.env')}")
                 print(f".env content: {open('.env').read() if os.path.exists('.env') else 'File not found'}")
                 
-                # Update the dotenv_path to match our current directory
+                # Update the environment to use current directory
                 import quickscale.utils.env_utils
-                quickscale.utils.env_utils.dotenv_path = os.path.join(os.getcwd(), '.env')
+                # Call initialize_env to update the environment with current directory
+                quickscale.utils.env_utils.initialize_env()
                 
                 # Force reload environment to pick up changes from the .env file in this directory
                 refresh_env_cache()
@@ -413,8 +418,11 @@ class TestEnvUtilsE2E:
                 env_content = open(env_path).read()
                 print(f"Current .env file contents:\n{env_content}")
                 
-                # Update the dotenv_path in env_utils.py to ensure it's pointing to the right file
-                from quickscale.utils.env_utils import dotenv_path as current_dotenv_path
+                # Initialize the environment to ensure it's pointing to the right file
+                import quickscale.utils.env_utils
+                quickscale.utils.env_utils.initialize_env()
+                # Get the current dotenv_path for logging
+                current_dotenv_path = quickscale.utils.env_utils.dotenv_path
                 print(f"Current dotenv_path: {current_dotenv_path}")
                 print(f"Actual .env path: {env_path}")
                 
@@ -436,10 +444,12 @@ class TestEnvUtilsE2E:
                     if k.startswith('TEST_'):
                         print(f"  {k}: {_env_vars_from_file.get(k)}")
                 
-                # Make sure the current dotenv_path is updated to reflect the test directory
-                # This manually sets the value for the test
+                # We need to change directory so initialize_env picks up the right path
+                os.chdir(os.path.dirname(env_path))
+                
+                # Now initialize the environment to use the correct directory
                 import quickscale.utils.env_utils
-                quickscale.utils.env_utils.dotenv_path = str(env_path)
+                quickscale.utils.env_utils.initialize_env()
                 
                 # Reload one more time with correct path
                 refresh_env_cache()

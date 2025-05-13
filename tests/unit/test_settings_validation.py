@@ -4,6 +4,10 @@ from unittest.mock import patch, MagicMock
 # Import these functions to make patching work correctly
 from quickscale.utils.env_utils import get_env, is_feature_enabled, refresh_env_cache, debug_env_cache
 
+# Import directly from the module we're testing to improve test coverage
+from quickscale.config.settings import validate_production_settings as actual_validate_production_settings
+from quickscale.config.settings import REQUIRED_VARS as actual_REQUIRED_VARS
+
 # Define the validation functions and REQUIRED_VARS locally for testing
 # This way we won't rely on imports from quickscale.config.settings
 
@@ -31,6 +35,10 @@ def validate_production_settings():
             raise ValueError("Production requires a secure SECRET_KEY")
         if '*' in get_env('ALLOWED_HOSTS', '').split(','):
             raise ValueError("Production requires specific ALLOWED_HOSTS")
+        if get_env('DB_PASSWORD') in ['postgres', 'admin', 'adminpasswd', 'password', 'root']:
+            raise ValueError("Production requires a secure database password")
+        if not is_feature_enabled(get_env('EMAIL_USE_TLS', 'True')):
+            raise ValueError("Production requires TLS for email")
 
 class TestSettingsValidation(unittest.TestCase):
     
@@ -50,6 +58,32 @@ class TestSettingsValidation(unittest.TestCase):
         with patch('tests.unit.test_settings_validation.get_env', return_value=None):
             with self.assertRaisesRegex(ValueError, "Missing required variables for web: WEB_PORT, SECRET_KEY"):
                 validate_required_vars('web')
+
+    def test_validate_required_vars_non_existent_component(self):
+        """Test validate_required_vars with a component that doesn't exist."""
+        # This tests for a component that isn't in REQUIRED_VARS
+        with patch('tests.unit.test_settings_validation.get_env', return_value=None):
+            # Should not raise an error since there are no required vars
+            validate_required_vars('nonexistent')
+    
+    def test_validate_required_vars_partial_missing(self):
+        """Test validate_required_vars with only some variables missing."""
+        # Mock to return values for some vars but not others
+        def mock_get_env(var):
+            return var == 'WEB_PORT'  # Only return value for WEB_PORT
+        
+        with patch('tests.unit.test_settings_validation.get_env', side_effect=mock_get_env):
+            with self.assertRaisesRegex(ValueError, "Missing required variables for web: SECRET_KEY"):
+                validate_required_vars('web')
+                
+    def test_validate_required_vars_all_present(self):
+        """Test validate_required_vars when all variables are present."""
+        with patch('tests.unit.test_settings_validation.get_env', return_value='somevalue'):
+            # Should not raise an error
+            validate_required_vars('web')
+            validate_required_vars('db')
+            validate_required_vars('email')
+            validate_required_vars('stripe')
 
     def test_validate_production_settings_insecure_secret_key(self):
         """Test validate_production_settings raises error with insecure SECRET_KEY in production."""
@@ -78,7 +112,9 @@ class TestSettingsValidation(unittest.TestCase):
         test_env = {
             'IS_PRODUCTION': 'True', 
             'SECRET_KEY': 'a-secure-key', 
-            'ALLOWED_HOSTS': 'example.com'
+            'ALLOWED_HOSTS': 'example.com',
+            'DB_PASSWORD': 'secure-complex-password',
+            'EMAIL_USE_TLS': 'True'
         }
         with patch('quickscale.utils.env_utils._env_vars', test_env):
             try:
@@ -133,10 +169,83 @@ class TestSettingsValidation(unittest.TestCase):
         test_env = {
             'IS_PRODUCTION': 'True',
             'SECRET_KEY': 'a-secure-key',
-            'ALLOWED_HOSTS': 'example.com'
+            'ALLOWED_HOSTS': 'example.com',
+            'DB_PASSWORD': 'secure-complex-password',
+            'EMAIL_USE_TLS': 'True'
         }
         with patch('quickscale.utils.env_utils._env_vars', test_env):
             try:
                 validate_production_settings()
             except ValueError as e:
                 self.fail(f"validate_production_settings should not raise error with specific hosts: {e}")
+                
+    def test_validate_production_settings_insecure_db_password(self):
+        """Test validate_production_settings raises error with insecure DB_PASSWORD in production."""
+        for insecure_password in ['postgres', 'admin', 'adminpasswd', 'password', 'root']:
+            test_env = {
+                'IS_PRODUCTION': 'True', 
+                'SECRET_KEY': 'a-secure-key', 
+                'ALLOWED_HOSTS': 'example.com',
+                'DB_PASSWORD': insecure_password
+            }
+            with patch('quickscale.utils.env_utils._env_vars', test_env):
+                with self.assertRaisesRegex(ValueError, "Production requires a secure database password"):
+                    validate_production_settings()
+    
+    def test_validate_production_settings_without_email_tls(self):
+        """Test validate_production_settings raises error when EMAIL_USE_TLS is disabled in production."""
+        test_env = {
+            'IS_PRODUCTION': 'True', 
+            'SECRET_KEY': 'a-secure-key', 
+            'ALLOWED_HOSTS': 'example.com',
+            'DB_PASSWORD': 'secure-complex-password',
+            'EMAIL_USE_TLS': 'False'
+        }
+        with patch('quickscale.utils.env_utils._env_vars', test_env):
+            with self.assertRaisesRegex(ValueError, "Production requires TLS for email"):
+                validate_production_settings()
+    
+    def test_required_vars_by_component(self):
+        """Test that REQUIRED_VARS dictionary has expected components and variables."""
+        self.assertIn('web', REQUIRED_VARS)
+        self.assertIn('db', REQUIRED_VARS)
+        self.assertIn('email', REQUIRED_VARS)
+        self.assertIn('stripe', REQUIRED_VARS)
+        
+        self.assertIn('WEB_PORT', REQUIRED_VARS['web'])
+        self.assertIn('SECRET_KEY', REQUIRED_VARS['web'])
+        
+        self.assertIn('DB_USER', REQUIRED_VARS['db'])
+        self.assertIn('DB_PASSWORD', REQUIRED_VARS['db'])
+        self.assertIn('DB_NAME', REQUIRED_VARS['db'])
+        
+        self.assertIn('EMAIL_HOST', REQUIRED_VARS['email'])
+        self.assertIn('EMAIL_HOST_USER', REQUIRED_VARS['email'])
+        self.assertIn('EMAIL_HOST_PASSWORD', REQUIRED_VARS['email'])
+        
+        self.assertIn('STRIPE_PUBLIC_KEY', REQUIRED_VARS['stripe'])
+        self.assertIn('STRIPE_SECRET_KEY', REQUIRED_VARS['stripe'])
+        self.assertIn('STRIPE_WEBHOOK_SECRET', REQUIRED_VARS['stripe'])
+    
+    def test_actual_module_validate_production_settings(self):
+        """Test the actual module's validate_production_settings function."""
+        test_env = {
+            'IS_PRODUCTION': 'True', 
+            'SECRET_KEY': 'a-secure-key', 
+            'ALLOWED_HOSTS': 'example.com',
+            'DB_PASSWORD': 'secure-complex-password',
+            'EMAIL_USE_TLS': 'True'
+        }
+        
+        with patch('quickscale.utils.env_utils._env_vars', test_env):
+            try:
+                actual_validate_production_settings()
+            except ValueError as e:
+                self.fail(f"validate_production_settings raised ValueError unexpectedly: {e}")
+    
+    def test_actual_module_REQUIRED_VARS(self):
+        """Test that the actual module's REQUIRED_VARS matches our test copy."""
+        self.assertEqual(set(actual_REQUIRED_VARS.keys()), set(REQUIRED_VARS.keys()))
+        
+        for component in actual_REQUIRED_VARS:
+            self.assertEqual(set(actual_REQUIRED_VARS[component]), set(REQUIRED_VARS[component]))
