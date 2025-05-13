@@ -22,11 +22,19 @@ class TestServiceCommandErrorHandling:
         
         with patch('quickscale.commands.project_manager.ProjectManager.get_project_state',
                   return_value={'has_project': True}), \
-             patch.object(cmd, '_check_port_availability', return_value={}), \
-             patch('subprocess.run', side_effect=error), \
-             patch.object(cmd, 'handle_error') as mock_handle_error, \
-             patch.object(cmd, '_find_available_ports', return_value={}), \
-             patch.object(cmd, '_update_docker_compose_ports'):
+             patch.object(cmd, '_prepare_environment_and_ports', return_value=({}, {})), \
+             patch.object(cmd, '_start_services_with_retry') as mock_start_services, \
+             patch.object(cmd, 'handle_error') as mock_handle_error:
+            
+            # Make _start_services_with_retry call handle_error with our error
+            def side_effect(max_retries):
+                cmd.handle_error(
+                    error,
+                    context={"action": "starting services"},
+                    recovery="Check if Docker is running"
+                )
+            
+            mock_start_services.side_effect = side_effect
             
             cmd.execute()
             

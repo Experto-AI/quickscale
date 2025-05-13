@@ -1,62 +1,19 @@
-"""Django settings configuration for QuickScale project."""
+"""Django settings for QuickScale."""
 import os
 import logging
+import sys
 from pathlib import Path
-from typing import Dict, List
 
-import django
-from dotenv import load_dotenv, find_dotenv
+from dotenv import load_dotenv
+import dj_database_url
+
 from .env_utils import get_env, is_feature_enabled
 
+# Include email settings
+from .email_settings import *
+
+# Load environment variables
 load_dotenv()
-
-# Log .env loading status and key environment variables for debugging
-env_path = find_dotenv()
-if env_path and os.path.exists(env_path):
-    logging.info(f"Loaded .env file from: {env_path}")
-else:
-    logging.warning("No .env file found or loaded.")
-
-# Show a few key environment variables (never log secrets)
-logging.info(f"PROJECT_NAME={os.environ.get('PROJECT_NAME')}")
-logging.info(f"LOG_LEVEL={os.environ.get('LOG_LEVEL')}")
-
-# Import email settings
-try:
-    from .email_settings import *
-except ImportError:
-    pass  # Email settings will use defaults defined below
-
-# Environment validation
-REQUIRED_VARS: Dict[str, List[str]] = {
-    'web': ['WEB_PORT', 'SECRET_KEY'],
-    'db': ['DB_USER', 'DB_PASSWORD', 'DB_NAME'],
-    'email': ['EMAIL_HOST', 'EMAIL_HOST_USER', 'EMAIL_HOST_PASSWORD'],
-    'stripe': ['STRIPE_PUBLIC_KEY', 'STRIPE_SECRET_KEY', 'STRIPE_WEBHOOK_SECRET']
-}
-
-def validate_required_vars(component: str) -> None:
-    """Validate required variables for a component."""
-    missing = []
-    for var in REQUIRED_VARS.get(component, []):
-        if not get_env(var):
-            missing.append(var)
-    if missing:
-        raise ValueError(f"Missing required variables for {component}: {', '.join(missing)}")
-
-def validate_production_settings() -> None:
-    """Validate settings for production environment."""
-    if get_env('IS_PRODUCTION', 'False').lower() == 'true':  # Only validate in production
-        if get_env('SECRET_KEY') == 'dev-only-dummy-key-replace-in-production':
-            raise ValueError("Production requires a secure SECRET_KEY")
-        allowed_hosts = get_env('ALLOWED_HOSTS', '').split(',')
-        if '*' in allowed_hosts:
-            raise ValueError("Production requires specific ALLOWED_HOSTS")
-        if get_env('DB_PASSWORD') == 'adminpasswd':
-            raise ValueError("Production requires a secure database password")
-        stripe_enabled = is_feature_enabled(get_env('STRIPE_ENABLED', 'False'))
-        if stripe_enabled:
-            validate_required_vars('stripe')
 
 # Set logging level from environment variable early
 LOG_LEVEL = get_env('LOG_LEVEL', 'INFO').upper()
@@ -78,13 +35,11 @@ PROJECT_NAME: str = get_env('PROJECT_NAME', 'QuickScale')
 # Core settings
 SECRET_KEY: str = get_env('SECRET_KEY', 'dev-only-dummy-key-replace-in-production')
 IS_PRODUCTION: bool = is_feature_enabled(get_env('IS_PRODUCTION', 'False'))
+DEBUG: bool = not IS_PRODUCTION
 ALLOWED_HOSTS: list[str] = get_env('ALLOWED_HOSTS', '*').split(',')
 
-# Validate core components
-validate_required_vars('web')
-validate_required_vars('db')
-if IS_PRODUCTION:  # In production, validate all settings
-    validate_production_settings()
+# Import security settings
+from .security_settings import *
 
 # Logging directory configuration
 LOG_DIR = get_env('LOG_DIR', '/app/logs')
@@ -134,7 +89,6 @@ if stripe_enabled_flag:
         STRIPE_PUBLIC_KEY = get_env('STRIPE_PUBLIC_KEY', '')
         STRIPE_SECRET_KEY = get_env('STRIPE_SECRET_KEY', '')
         DJSTRIPE_WEBHOOK_SECRET = get_env('STRIPE_WEBHOOK_SECRET', '')
-        validate_required_vars('stripe')  # Validate Stripe settings if enabled
         if isinstance(INSTALLED_APPS, tuple):
             INSTALLED_APPS = list(INSTALLED_APPS)
         if 'djstripe' not in INSTALLED_APPS:
@@ -188,13 +142,22 @@ TEMPLATES[0]['OPTIONS']['context_processors'].append('core.context_processors.pr
 DATABASES = {
     'default': {
         'ENGINE': 'django.db.backends.postgresql',
-        'NAME': get_env('DB_NAME', 'admin'),
+        'NAME': get_env('DB_NAME', 'quickscale'),
         'USER': get_env('DB_USER', 'admin'),
         'PASSWORD': get_env('DB_PASSWORD', 'adminpasswd'),
         'HOST': get_env('DB_HOST', 'db'),
         'PORT': get_env('DB_PORT', '5432'),
     }
 }
+
+# Log database connection information for debugging
+if get_env('LOG_LEVEL', 'INFO').upper() == 'DEBUG':
+    print("Database connection settings:")
+    print(f"NAME: {DATABASES['default']['NAME']}")
+    print(f"USER: {DATABASES['default']['USER']}")
+    print(f"HOST: {DATABASES['default']['HOST']}")
+    print(f"PORT: {DATABASES['default']['PORT']}")
+    print(f"DATABASE_URL: {os.environ.get('DATABASE_URL', 'Not set')}")
 
 # Custom User Model
 AUTH_USER_MODEL = 'users.CustomUser'
@@ -209,17 +172,17 @@ STATICFILES_STORAGE = 'whitenoise.storage.CompressedManifestStaticFilesStorage'
 MEDIA_URL = '/media/'
 MEDIA_ROOT = os.path.join(BASE_DIR, 'media')
 
-# Email Configuration
-EMAIL_BACKEND = 'django.core.mail.backends.smtp.EmailBackend'
-EMAIL_HOST = get_env('EMAIL_HOST', 'smtp.example.com')
-EMAIL_PORT = int(get_env('EMAIL_PORT', '587'))
-EMAIL_HOST_USER = get_env('EMAIL_HOST_USER', '')
-EMAIL_HOST_PASSWORD = get_env('EMAIL_HOST_PASSWORD', '')
-EMAIL_USE_TLS = is_feature_enabled(get_env('EMAIL_USE_TLS', 'True'))
-EMAIL_USE_SSL = is_feature_enabled(get_env('EMAIL_USE_SSL', 'False'))
-DEFAULT_FROM_EMAIL = get_env('DEFAULT_FROM_EMAIL', 'noreply@example.com')
-SERVER_EMAIL = get_env('SERVER_EMAIL', 'server@example.com')
+# Authentication settings
+LOGIN_URL = 'users:login'
+LOGIN_REDIRECT_URL = '/'
+LOGOUT_REDIRECT_URL = '/'
 
-# If email verification is required, validate email settings
-if get_env('ACCOUNT_EMAIL_VERIFICATION', 'mandatory') == 'mandatory':
-    validate_required_vars('email')
+# Django Debug Toolbar - only in development
+if DEBUG:
+    try:
+        import debug_toolbar
+        INSTALLED_APPS.append('debug_toolbar')
+        MIDDLEWARE.insert(0, 'debug_toolbar.middleware.DebugToolbarMiddleware')
+        INTERNAL_IPS = ['127.0.0.1']
+    except ImportError:
+        pass

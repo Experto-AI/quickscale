@@ -8,6 +8,7 @@ import string
 from contextlib import contextmanager
 from pathlib import Path
 import shutil
+import json
 
 def is_port_open(host, port):
     """Check if a port is open on the given host."""
@@ -35,56 +36,61 @@ def find_available_ports(count=2, start_port=8000, end_port=9000):
         
     return available_ports if len(available_ports) == count else None
 
-def wait_for_port(host, port, timeout=60, interval=1.0):
-    """
-    Wait for a port to be open on the given host with enhanced logging and diagnostics.
-    
-    Args:
-        host: Hostname or IP address
-        port: Port number
-        timeout: Maximum time to wait in seconds
-        interval: Time between checks in seconds
+def _check_port_connection(host, port):
+    """Attempt to connect to a port and return the result code."""
+    try:
+        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
+            sock.settimeout(2)
+            return sock.connect_ex((host, int(port)))
+    except socket.error as e:
+        print(f"Socket error when checking {host}:{port} - {e}")
+        return -1
+
+def _log_connection_attempt(host, port, result, attempt):
+    """Log detailed information about connection attempts."""
+    if result == 0:
+        print(f"✅ Port {port} is now open on {host}")
+        return
         
-    Returns:
-        bool: True if port becomes available, False otherwise
-    """
+    if attempt % 5 == 0:  # Log details every 5 attempts
+        if result == 111:  # Connection refused
+            print(f"⌛ Attempt {attempt}: Connection refused at {host}:{port}")
+        elif result == 110:  # Connection timed out
+            print(f"⌛ Attempt {attempt}: Connection timed out at {host}:{port}")
+        else:
+            print(f"⌛ Attempt {attempt}: Port {port} not available on {host} (code: {result})")
+        
+        # Try to get more information about what might be using the port
+        _check_port_usage(port)
+
+def _check_port_usage(port):
+    """Check what might be using a specific port on Unix systems."""
+    if os.name == 'posix':  # Unix/Linux/macOS
+        try:
+            lsof = subprocess.run(
+                ['lsof', '-i', f':{port}'],
+                capture_output=True, text=True, check=False
+            )
+            if lsof.stdout:
+                print(f"Port {port} usage information:\n{lsof.stdout}")
+        except:
+            pass  # lsof might not be available
+
+def wait_for_port(host, port, timeout=60, interval=1.0):
+    """Wait for a port to be open on the given host with enhanced logging and diagnostics."""
     start_time = time.time()
     attempt = 1
     
     print(f"Waiting for {host}:{port} to become available (timeout: {timeout}s)")
     
     while time.time() - start_time < timeout:
-        try:
-            with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
-                sock.settimeout(2)
-                result = sock.connect_ex((host, int(port)))
-                if result == 0:
-                    print(f"✅ Port {port} is now open on {host} (after {time.time() - start_time:.1f}s)")
-                    return True
-                
-                # Provide more detailed error information based on result code
-                if attempt % 5 == 0:  # Log details every 5 attempts
-                    if result == 111:  # Connection refused
-                        print(f"⌛ Attempt {attempt}: Connection refused at {host}:{port}")
-                    elif result == 110:  # Connection timed out
-                        print(f"⌛ Attempt {attempt}: Connection timed out at {host}:{port}")
-                    else:
-                        print(f"⌛ Attempt {attempt}: Port {port} not available on {host} (code: {result})")
-                    
-                    # Try to get more information about what might be using the port
-                    if os.name == 'posix':  # Unix/Linux/macOS
-                        try:
-                            lsof = subprocess.run(
-                                ['lsof', '-i', f':{port}'],
-                                capture_output=True, text=True, check=False
-                            )
-                            if lsof.stdout:
-                                print(f"Port {port} usage information:\n{lsof.stdout}")
-                        except:
-                            pass  # lsof might not be available
-        except socket.error as e:
-            print(f"Socket error when checking {host}:{port} - {e}")
-            
+        result = _check_port_connection(host, port)
+        if result == 0:
+            elapsed = time.time() - start_time
+            print(f"✅ Port {port} is now open on {host} (after {elapsed:.1f}s)")
+            return True
+        
+        _log_connection_attempt(host, port, result, attempt)
         attempt += 1
         time.sleep(interval)
     
@@ -105,11 +111,7 @@ def is_docker_service_running(service_name):
         return False
 
 def wait_for_docker_service(service_name, timeout=30, interval=0.5):
-    """
-    Wait for a Docker service to be running.
-    
-    Handles both naming conventions: with underscores (service_name) and with hyphens (service-name).
-    """
+    """Wait for a Docker service to be running."""
     start_time = time.time()
     
     # Try both naming conventions (Docker Compose v1 vs v2)
@@ -146,15 +148,7 @@ def wait_for_docker_service(service_name, timeout=30, interval=0.5):
     return False
 
 def is_container_healthy(container_name):
-    """
-    Check if a Docker container is healthy based on health status, with enhanced error handling.
-    
-    Args:
-        container_name: Name or ID of the container
-        
-    Returns:
-        bool: True if container is healthy, False otherwise
-    """
+    """Check if a Docker container is healthy based on health status, with enhanced error handling."""
     try:
         # Try with v1 naming first
         result = subprocess.run(
@@ -187,18 +181,59 @@ def is_container_healthy(container_name):
         print(f"Error checking container health: {e}")
         return False
 
-def wait_for_container_health(container_name, timeout=60, interval=1.0):
-    """
-    Wait for a Docker container to be healthy with enhanced diagnostics.
-    
-    Args:
-        container_name: Name or ID of the container
-        timeout: Maximum time to wait in seconds
-        interval: Time between checks in seconds
+def _try_container_health_check(container_name, alternative_name):
+    """Try to check if a container is healthy with both original and alternative names."""
+    # Try original name
+    if is_container_healthy(container_name):
+        return container_name
         
-    Returns:
-        bool: True if container becomes healthy, False otherwise
-    """
+    # Try alternative name
+    if alternative_name != container_name and is_container_healthy(alternative_name):
+        return alternative_name
+    
+    return None
+
+def _log_container_health_details(container_name, alternative_name, attempt):
+    """Log detailed information about container health on specific attempts."""
+    if attempt % 5 != 0:
+        return
+        
+    print(f"⌛ Attempt {attempt}: Container not yet healthy, checking status...")
+    
+    # Try to get container state with original name
+    _check_and_log_container_state(container_name)
+    
+    # Try with alternative name if different
+    if alternative_name != container_name:
+        _check_and_log_container_state(alternative_name)
+
+def _check_and_log_container_state(container_name):
+    """Check and log detailed container state information."""
+    try:
+        inspect_cmd = ['docker', 'inspect', '--format', '{{json .State}}', container_name]
+        result = subprocess.run(inspect_cmd, capture_output=True, text=True, check=False)
+        
+        if result.returncode == 0 and result.stdout.strip():
+            print(f"Container state: {result.stdout.strip()}")
+            
+            # Check logs if container exists
+            logs = get_container_logs(container_name, tail=10)
+            if logs:
+                print(f"Recent container logs:\n{logs}")
+    except Exception as e:
+        print(f"Error getting container details: {e}")
+
+def _log_final_timeout_info():
+    """Log detailed container information after timeout."""
+    try:
+        # List all containers
+        ps_result = subprocess.run(['docker', 'ps', '-a'], capture_output=True, text=True, check=False)
+        print(f"Current Docker containers:\n{ps_result.stdout}")
+    except Exception as e:
+        print(f"Error listing containers: {e}")
+
+def wait_for_container_health(container_name, timeout=60, interval=1.0):
+    """Wait for a Docker container to be healthy with enhanced diagnostics."""
     start_time = time.time()
     attempt = 1
     
@@ -208,73 +243,25 @@ def wait_for_container_health(container_name, timeout=60, interval=1.0):
     alternative_name = container_name.replace('_', '-')
     
     while time.time() - start_time < timeout:
-        # Try original name
-        if is_container_healthy(container_name):
-            print(f"✅ Container '{container_name}' is healthy (after {time.time() - start_time:.1f}s)")
-            return True
-            
-        # Try alternative name
-        if alternative_name != container_name and is_container_healthy(alternative_name):
-            print(f"✅ Container '{alternative_name}' is healthy (after {time.time() - start_time:.1f}s)")
+        healthy_container = _try_container_health_check(container_name, alternative_name)
+        
+        if healthy_container:
+            elapsed = time.time() - start_time
+            print(f"✅ Container '{healthy_container}' is healthy (after {elapsed:.1f}s)")
             return True
         
-        # Provide more details every few attempts
-        if attempt % 5 == 0:
-            print(f"⌛ Attempt {attempt}: Container not yet healthy, checking status...")
-            
-            # Get container state information
-            try:
-                inspect_cmd = ['docker', 'inspect', '--format', '{{json .State}}', container_name]
-                result = subprocess.run(inspect_cmd, capture_output=True, text=True, check=False)
-                
-                if result.returncode == 0 and result.stdout.strip():
-                    print(f"Container state: {result.stdout.strip()}")
-                    
-                    # Check logs if container exists
-                    logs = get_container_logs(container_name, tail=10)
-                    if logs:
-                        print(f"Recent container logs:\n{logs}")
-                else:
-                    # Try with alternative name
-                    inspect_cmd = ['docker', 'inspect', '--format', '{{json .State}}', alternative_name]
-                    result = subprocess.run(inspect_cmd, capture_output=True, text=True, check=False)
-                    
-                    if result.returncode == 0 and result.stdout.strip():
-                        print(f"Container state (alternative name): {result.stdout.strip()}")
-                        
-                        # Check logs if container exists
-                        logs = get_container_logs(alternative_name, tail=10)
-                        if logs:
-                            print(f"Recent container logs (alternative name):\n{logs}")
-            except Exception as e:
-                print(f"Error getting container details: {e}")
+        _log_container_health_details(container_name, alternative_name, attempt)
         
         attempt += 1
         time.sleep(interval)
     
     print(f"❌ Timeout: Container '{container_name}' not healthy after {timeout}s")
+    _log_final_timeout_info()
     
-    # One final attempt to get detailed information
-    try:
-        # List all containers
-        ps_result = subprocess.run(['docker', 'ps', '-a'], capture_output=True, text=True, check=False)
-        print(f"Current Docker containers:\n{ps_result.stdout}")
-    except Exception as e:
-        print(f"Error listing containers: {e}")
-        
     return False
 
 def get_container_logs(container_name, tail=None):
-    """
-    Get logs from a Docker container with enhanced error handling.
-    
-    Args:
-        container_name: Name or ID of the container
-        tail: Number of lines to retrieve from the end (None for all)
-        
-    Returns:
-        str: Container logs or empty string if an error occurred
-    """
+    """Get logs from a Docker container with enhanced error handling."""
     try:
         cmd = ['docker', 'logs', container_name]
         if tail:
@@ -330,7 +317,12 @@ services:
           memory: 512M
     environment:
       - DJANGO_SETTINGS_MODULE=core.settings
-      - DATABASE_URL=postgres://postgres:password@db:5432/postgres
+      - DATABASE_URL=postgres://${DB_USER:-postgres}:${DB_PASSWORD:-password}@${DB_HOST:-db}:${DB_PORT:-5432}/${DB_NAME:-postgres}
+      - DB_NAME=${DB_NAME:-postgres}
+      - DB_USER=${DB_USER:-postgres}
+      - DB_PASSWORD=${DB_PASSWORD:-password}
+      - DB_HOST=${DB_HOST:-db}
+      - DB_PORT=${DB_PORT:-5432}
       - PYTHONUNBUFFERED=1
     # Healthcheck to verify web container is working
     healthcheck:
@@ -352,12 +344,13 @@ services:
     ports:
       - '${PG_PORT:-5432}:5432'
     environment:
-      POSTGRES_PASSWORD: password
-      POSTGRES_USER: postgres
-      POSTGRES_DB: postgres
+      # Map DB_* variables to POSTGRES_* for PostgreSQL container
+      - POSTGRES_DB=${DB_NAME:-postgres}
+      - POSTGRES_USER=${DB_USER:-postgres}
+      - POSTGRES_PASSWORD=${DB_PASSWORD:-password}
     # Healthcheck to verify database is working
     healthcheck:
-      test: ["CMD", "pg_isready", "-U", "postgres"]
+      test: ["CMD", "pg_isready", "-U", "${DB_USER:-postgres}", "-d", "${DB_NAME:-postgres}"]
       interval: 10s
       timeout: 5s
       retries: 3
@@ -481,11 +474,11 @@ TEMPLATES = [
 DATABASES = {
     'default': {
         'ENGINE': 'django.db.backends.postgresql',
-        'NAME': 'postgres',
-        'USER': 'postgres',
-        'PASSWORD': 'password',
-        'HOST': 'db',
-        'PORT': '5432',
+        'NAME': os.environ.get('DB_NAME', 'postgres'),
+        'USER': os.environ.get('DB_USER', 'postgres'),
+        'PASSWORD': os.environ.get('DB_PASSWORD', 'password'),
+        'HOST': os.environ.get('DB_HOST', 'db'),
+        'PORT': os.environ.get('DB_PORT', '5432'),
     }
 }
 
@@ -605,21 +598,8 @@ def get_service_logs(service_name):
     except (subprocess.SubprocessError, FileNotFoundError):
         return ""
 
-def run_quickscale_command(*args, capture_output=True, check=False, timeout=None, env=None):
-    """Run a QuickScale command with the given arguments.
-    
-    Args will be flattened if they contain lists, ensuring proper command structure.
-    
-    Args:
-        *args: Command arguments
-        capture_output: Whether to capture command output
-        check: Whether to check the return code
-        timeout: Timeout in seconds
-        env: Environment variables to pass to the command
-    
-    Returns:
-        subprocess.CompletedProcess: The completed process
-    """
+def _prepare_quickscale_command_args(args):
+    """Prepare and flatten command arguments."""
     flat_args = []
     for arg in args:
         if isinstance(arg, list):
@@ -627,10 +607,13 @@ def run_quickscale_command(*args, capture_output=True, check=False, timeout=None
         else:
             flat_args.append(arg)
     
-    cmd = ['quickscale'] + flat_args
+    return ['quickscale'] + flat_args
+
+def _prepare_subprocess_kwargs(capture_output, env, timeout):
+    """Prepare kwargs for subprocess.run."""
+    kwargs = {'text': True}
     
     # Handle capture_output parameter correctly for subprocess.run
-    kwargs = {}
     if capture_output:
         kwargs['stdout'] = subprocess.PIPE
         kwargs['stderr'] = subprocess.PIPE
@@ -639,84 +622,95 @@ def run_quickscale_command(*args, capture_output=True, check=False, timeout=None
     if env:
         kwargs['env'] = env
     
-    kwargs['text'] = True  # Use text=True instead of universal_newlines
-    
     # Handle timeout properly, ensuring it's numeric
     if timeout is not None:
         if not isinstance(timeout, (int, float)):
             raise TypeError(f"timeout must be a number, got {type(timeout)}")
         kwargs['timeout'] = timeout
+        
+    return kwargs
+
+def _log_command_output(process_result):
+    """Log command output if captured."""
+    print(f"Return code: {process_result.returncode}")
+    if process_result.stdout and len(process_result.stdout) > 0:
+        print(f"STDOUT summary: {process_result.stdout[:100]}...")
+    if process_result.stderr and len(process_result.stderr) > 0:
+        print(f"STDERR summary: {process_result.stderr[:100]}...")
+
+def _handle_process_error(e, capture_output):
+    """Handle CalledProcessError and return a CompletedProcess object."""
+    print(f"Command failed with CalledProcessError: {' '.join(e.cmd)} - Return Code: {e.returncode}")
+    # Log the full stdout and stderr if captured
+    actual_stdout = getattr(e, 'stdout', "")
+    actual_stderr = getattr(e, 'stderr', "")
+    if capture_output:
+        print(f"Failed command STDOUT:\n{actual_stdout}")
+        print(f"Failed command STDERR:\n{actual_stderr}")
+    
+    # Return a CompletedProcess with the original details from CalledProcessError
+    return subprocess.CompletedProcess(
+        args=e.cmd,
+        returncode=e.returncode,
+        stdout=actual_stdout,
+        stderr=actual_stderr
+    )
+
+def _handle_timeout_error(e, cmd, timeout):
+    """Handle TimeoutExpired and return a CompletedProcess object."""
+    print(f"Command timed out after {timeout}s: {' '.join(cmd)}")
+    
+    # Attempt to get any output produced before timeout
+    stdout_val = getattr(e, 'stdout', "")
+    stderr_val = getattr(e, 'stderr', "")
+    
+    # Ensure they are strings and append timeout info
+    stdout_val = str(stdout_val or "") + f"\nCommand timed out after {timeout}s."
+    stderr_val = str(stderr_val or "") + f"\nTimeoutExpired: {str(e)}"
+
+    return subprocess.CompletedProcess(
+        args=cmd,
+        returncode=-1, # Custom code for timeout
+        stdout=stdout_val,
+        stderr=stderr_val
+    )
+
+def _handle_os_error(e, cmd):
+    """Handle OSError and return a CompletedProcess object."""
+    print(f"OSError running command: {' '.join(cmd)} - {e}")
+    return subprocess.CompletedProcess(
+        args=cmd,
+        returncode=-3, # Custom code for OSError
+        stdout="",
+        stderr=str(e)
+    )
+
+def run_quickscale_command(*args, capture_output=True, check=False, timeout=None, env=None):
+    """Run a QuickScale command with given arguments, flattening list arguments."""
+    cmd = _prepare_quickscale_command_args(args)
+    kwargs = _prepare_subprocess_kwargs(capture_output, env, timeout)
     
     try:
         # Run the command and return the completed process object
         print(f"Running command: {' '.join(cmd)}")
-        # The 'check' parameter here is the one passed to run_quickscale_command
-        process_result = subprocess.run(cmd, **kwargs, check=check) # 'check' is from args
+        process_result = subprocess.run(cmd, **kwargs, check=check)
         
         # For debugging, print the command output if captured
         if capture_output:
-            print(f"Return code: {process_result.returncode}")
-            if process_result.stdout and len(process_result.stdout) > 0:
-                print(f"STDOUT summary: {process_result.stdout[:100]}...")
-            if process_result.stderr and len(process_result.stderr) > 0:
-                print(f"STDERR summary: {process_result.stderr[:100]}...")
+            _log_command_output(process_result)
         return process_result
 
     except subprocess.CalledProcessError as e:
-        # This block is hit if 'check=True' was effectively used in subprocess.run AND the command failed.
-        print(f"Command failed with CalledProcessError: {' '.join(e.cmd)} - Return Code: {e.returncode}")
-        # Log the full stdout and stderr if captured
-        actual_stdout = getattr(e, 'stdout', "")
-        actual_stderr = getattr(e, 'stderr', "")
-        if capture_output:
-            print(f"Failed command STDOUT:\\n{actual_stdout}")
-            print(f"Failed command STDERR:\\n{actual_stderr}")
-        
-        # Return a CompletedProcess with the original details from CalledProcessError
-        return subprocess.CompletedProcess(
-            args=e.cmd,
-            returncode=e.returncode,
-            stdout=actual_stdout,
-            stderr=actual_stderr
-        )
+        return _handle_process_error(e, capture_output)
         
     except subprocess.TimeoutExpired as e:
-        timeout_duration = kwargs.get('timeout', 'N/A')
-        print(f"Command timed out after {timeout_duration}s: {' '.join(cmd)}")
+        return _handle_timeout_error(e, cmd, kwargs.get('timeout', 'N/A'))
         
-        # Attempt to get any output produced before timeout
-        stdout_val = getattr(e, 'stdout', "")
-        stderr_val = getattr(e, 'stderr', "")
-        
-        # Ensure they are strings and append timeout info
-        # Convert to string in case they are None
-        stdout_val = str(stdout_val or "") + f"\\nCommand timed out after {timeout_duration}s."
-        stderr_val = str(stderr_val or "") + f"\\nTimeoutExpired: {str(e)}"
-
-        return subprocess.CompletedProcess(
-            args=cmd,
-            returncode=-1, # Custom code for timeout
-            stdout=stdout_val,
-            stderr=stderr_val
-        )
-        
-    except OSError as e: # For errors like "No such file or directory"
-        print(f"OSError running command: {' '.join(cmd)} - {e}")
-        return subprocess.CompletedProcess(
-            args=cmd,
-            returncode=-3, # Custom code for OSError
-            stdout="",
-            stderr=str(e)
-        )
+    except OSError as e:
+        return _handle_os_error(e, cmd)
 
 def is_docker_available():
-    """
-    Check if Docker is available and running on the system.
-    
-    Instead of returning False when Docker is not available, this function
-    will print a warning message and return True to allow tests to run, which
-    will help identify missing Docker dependencies during test execution.
-    """
+    """Check if Docker is available and running on the system."""
     try:
         result = subprocess.run(
             ['docker', 'info'],
@@ -740,23 +734,9 @@ def is_docker_available():
         print("\033[31m" + "=" * 80 + "\033[0m\n")
         return True  # Always return True to force tests to run 
 
-def check_docker_health():
-    """
-    Comprehensive Docker health check that identifies common issues.
-    
-    This function tests various aspects of Docker functionality to help
-    diagnose common issues:
-    1. Checks if Docker is installed and daemon is running
-    2. Verifies Docker socket is accessible
-    3. Tests if the user has permission to run Docker commands
-    4. Ensures basic Docker operations (pull, run, stop, rm) work
-    
-    Returns:
-        tuple: (healthy, issues) where healthy is a boolean and issues is a list of error messages
-    """
+def _check_docker_installation():
+    """Check if Docker CLI exists and is accessible."""
     issues = []
-    
-    # Check if Docker CLI exists
     try:
         subprocess.run(
             ['docker', '--version'],
@@ -767,9 +747,11 @@ def check_docker_health():
         )
     except (subprocess.SubprocessError, FileNotFoundError):
         issues.append("Docker is not installed or not found in PATH")
-        return False, issues
-    
-    # Check if Docker daemon is running
+    return issues
+
+def _check_docker_daemon():
+    """Check if Docker daemon is running and accessible."""
+    issues = []
     try:
         info_result = subprocess.run(
             ['docker', 'info'],
@@ -780,18 +762,21 @@ def check_docker_health():
         )
         
         if info_result.returncode != 0:
-            if "permission denied" in info_result.stderr.lower():
+            stderr = info_result.stderr.decode().lower() if hasattr(info_result.stderr, 'decode') else info_result.stderr.lower()
+            if "permission denied" in stderr:
                 issues.append("Permission denied when accessing Docker socket. User may need to be added to 'docker' group")
-            elif "connection refused" in info_result.stderr.lower():
+            elif "connection refused" in stderr:
                 issues.append("Docker daemon is not running or socket is not accessible")
             else:
-                issues.append(f"Docker daemon issue: {info_result.stderr.decode().strip()}")
-            return False, issues
+                error_text = info_result.stderr.decode().strip() if hasattr(info_result.stderr, 'decode') else info_result.stderr
+                issues.append(f"Docker daemon issue: {error_text}")
     except subprocess.TimeoutExpired:
         issues.append("Docker daemon connection timed out")
-        return False, issues
-    
-    # Check if Docker can pull images
+    return issues
+
+def _check_docker_pull():
+    """Check if Docker can pull images from registry."""
+    issues = []
     try:
         # Use a small image for testing
         pull_result = subprocess.run(
@@ -803,11 +788,15 @@ def check_docker_health():
         )
         
         if pull_result.returncode != 0:
-            issues.append(f"Cannot pull Docker images: {pull_result.stderr.decode().strip()}")
+            error_text = pull_result.stderr.decode().strip() if hasattr(pull_result.stderr, 'decode') else pull_result.stderr
+            issues.append(f"Cannot pull Docker images: {error_text}")
     except subprocess.TimeoutExpired:
         issues.append("Docker pull operation timed out. Network issue or registry unavailable")
-    
-    # Check if Docker can run containers
+    return issues
+
+def _check_docker_run():
+    """Check if Docker can run containers."""
+    issues = []
     container_id = None
     try:
         run_result = subprocess.run(
@@ -819,14 +808,19 @@ def check_docker_health():
         )
         
         if run_result.returncode != 0:
-            issues.append(f"Cannot run Docker containers: {run_result.stderr.decode().strip()}")
+            error_text = run_result.stderr.decode().strip() if hasattr(run_result.stderr, 'decode') else run_result.stderr
+            issues.append(f"Cannot run Docker containers: {error_text}")
         else:
             # Container ID is in the output if successful
-            container_id = run_result.stdout.decode().strip()
+            container_id = run_result.stdout.decode().strip() if hasattr(run_result.stdout, 'decode') else run_result.stdout.strip()
     except subprocess.TimeoutExpired:
         issues.append("Docker run operation timed out")
     
-    # Clean up container if it's still running
+    return issues, container_id
+
+def _cleanup_test_container(container_id):
+    """Clean up the test container if it's still running."""
+    issues = []
     if container_id:
         try:
             subprocess.run(
@@ -845,25 +839,207 @@ def check_docker_health():
             )
         except (subprocess.SubprocessError, subprocess.TimeoutExpired):
             issues.append("Failed to clean up test container")
-    
-    return len(issues) == 0, issues
+    return issues
 
-def capture_container_debug_info(container_name, output_dir=None):
+def check_docker_health():
+    """Comprehensive Docker health check that identifies common issues."""
+    all_issues = []
+    
+    # Step 1: Check Docker installation
+    install_issues = _check_docker_installation()
+    all_issues.extend(install_issues)
+    
+    # If Docker isn't installed, no need to check further
+    if install_issues:
+        return False, all_issues
+    
+    # Step 2: Check Docker daemon
+    daemon_issues = _check_docker_daemon()
+    all_issues.extend(daemon_issues)
+    
+    # If daemon isn't running, no need to check further
+    if daemon_issues:
+        return False, all_issues
+    
+    # Step 3: Check if Docker can pull images
+    pull_issues = _check_docker_pull()
+    all_issues.extend(pull_issues)
+    
+    # Step 4: Check if Docker can run containers
+    run_issues, container_id = _check_docker_run()
+    all_issues.extend(run_issues)
+    
+    # Step 5: Clean up any test containers
+    cleanup_issues = _cleanup_test_container(container_id)
+    all_issues.extend(cleanup_issues)
+    
+    return len(all_issues) == 0, all_issues
+
+def _get_container_inspect_info(container_name):
+    """Get docker inspect data for a container."""
+    debug_info = ["=== CONTAINER INSPECT DATA ==="]
+    try:
+        inspect_result = subprocess.run(
+            ["docker", "inspect", container_name],
+            capture_output=True, text=True, check=False, timeout=30
+        )
+        if inspect_result.returncode == 0:
+            try:
+                inspect_data = json.loads(inspect_result.stdout)
+                debug_info.append(json.dumps(inspect_data, indent=2))
+            except json.JSONDecodeError:
+                debug_info.append(inspect_result.stdout)
+        else:
+            debug_info.append(f"Error getting inspect data: {inspect_result.stderr}")
+    except Exception as e:
+        debug_info.append(f"Exception during inspect: {str(e)}")
+    return debug_info
+
+def _get_container_logs(container_name, timestamps=True):
+    """Get docker logs for a container."""
+    debug_info = [f"=== CONTAINER LOGS ({'WITH TIMESTAMPS' if timestamps else 'WITHOUT TIMESTAMPS'}) ==="]
+    try:
+        command = ["docker", "logs"]
+        if timestamps:
+            command.append("--timestamps")
+        command.append(container_name)
+        
+        logs_result = subprocess.run(
+            command,
+            capture_output=True, text=True, check=False, timeout=30
+        )
+        if logs_result.returncode == 0:
+            debug_info.append(logs_result.stdout)
+        else:
+            debug_info.append(f"Error getting container logs: {logs_result.stderr}")
+    except Exception as e:
+        debug_info.append(f"Exception during logs: {str(e)}")
+    return debug_info
+
+def _get_container_error_logs(container_name):
+    """Get filtered error logs for a container."""
+    debug_info = ["=== CONTAINER ERROR LOGS ==="]
+    try:
+        # Use shell=True for the pipe and grep, but be mindful of shell injection if container_name wasn't trusted
+        # In this test utility context, container_name comes from controlled sources.
+        command = f'docker logs {container_name} 2>&1 | grep -i "error\\|exception\\|fatal\\|failed\\|killed"'
+        err_logs_result = subprocess.run(
+            command,
+            shell=True, capture_output=True, text=True, check=False, timeout=30
+        )
+        # Don't check return code as grep might return non-zero if no matches
+        debug_info.append(err_logs_result.stdout)
+    except Exception as e:
+        debug_info.append(f"Exception during error logs: {str(e)}")
+    return debug_info
+
+def _get_container_stats(container_name):
+    """Get resource usage stats for a container.
     """
-    Capture comprehensive debugging information for a container and save to file.
-    
-    This function collects logs, inspect data, stats, and other diagnostic information
-    for a container that's experiencing issues, especially containers in restart loops.
-    
-    Args:
-        container_name: Name or ID of the Docker container
-        output_dir: Directory to save logs to (defaults to current directory)
-    
-    Returns:
-        str: Path to the created log file
+    debug_info = ["=== CONTAINER STATS (SNAPSHOT) ==="]
+    try:
+        stats_result = subprocess.run(
+            ["docker", "stats", "--no-stream", container_name],
+            capture_output=True, text=True, check=False, timeout=30
+        )
+        if stats_result.returncode == 0:
+            debug_info.append(stats_result.stdout)
+        else:
+            debug_info.append(f"Error getting container stats: {stats_result.stderr}")
+    except Exception as e:
+        debug_info.append(f"Exception during stats: {str(e)}")
+    return debug_info
+
+def _get_related_container_status(container_name):
+    """Get status of related containers based on project name.
+    """
+    debug_info = ["=== ALL RELATED CONTAINERS STATUS ==="]
+    try:
+        # Extract project name to find related containers
+        project_name = container_name.split('_')[0] if '_' in container_name else container_name.split('-')[0]
+        ps_result = subprocess.run(
+            ["docker", "ps", "-a", "--filter", f"name={project_name}"],
+            capture_output=True, text=True, check=False, timeout=30
+        )
+        if ps_result.returncode == 0:
+            debug_info.append(ps_result.stdout)
+        else:
+            debug_info.append(f"Error getting container list: {ps_result.stderr}")
+    except Exception as e:
+        debug_info.append(f"Exception during container listing: {str(e)}")
+    return debug_info
+
+def _get_container_top_processes(container_name):
+    """Get top processes running in a container.
+    """
+    debug_info = ["=== CONTAINER PROCESSES ==="]
+    try:
+        top_result = subprocess.run(
+            ["docker", "top", container_name],
+            capture_output=True, text=True, check=False, timeout=30
+        )
+        if top_result.returncode == 0:
+            debug_info.append(top_result.stdout)
+        else:
+            debug_info.append(f"Error getting container processes: {top_result.stderr}")
+    except Exception as e:
+        debug_info.append(f"Exception during top: {str(e)}")
+    return debug_info
+
+def _get_container_events(container_name, since_minutes=5):
+    """Get recent events for a container.
     """
     import datetime
-    import json
+    debug_info = [f"=== CONTAINER EVENTS (LAST {since_minutes} MINUTES) ==="]
+    try:
+        since_time = datetime.datetime.now() - datetime.timedelta(minutes=since_minutes)
+        since_str = since_time.strftime("%Y-%m-%dT%H:%M:%S")
+        events_result = subprocess.run(
+            ["docker", "events", "--filter", f"container={container_name}", "--since", since_str, "--until", "now"],
+            capture_output=True, text=True, check=False, timeout=10
+        )
+        debug_info.append(events_result.stdout)
+    except Exception as e:
+        debug_info.append(f"Exception during events: {str(e)}")
+    return debug_info
+
+def _get_container_restart_history(container_name):
+    """Get restart history and last exit state for a container.
+    """
+    debug_info = ["=== CONTAINER RESTART HISTORY ==="]
+    try:
+        restart_info = subprocess.run(
+            ["docker", "inspect", "--format", "{{.RestartCount}} restarts. Last exit: {{.State.Error}}", container_name],
+            capture_output=True, text=True, check=False, timeout=10
+        )
+        if restart_info.returncode == 0:
+            debug_info.append(f"Restart information: {restart_info.stdout}")
+        else:
+            debug_info.append(f"Error getting restart info: {restart_info.stderr}")
+    except Exception as e:
+        debug_info.append(f"Exception during restart history: {str(e)}")
+    return debug_info
+
+def _get_host_system_info():
+    """Get docker host system information.
+    """
+    debug_info = ["=== HOST SYSTEM INFORMATION ==="]
+    try:
+        sys_info = subprocess.run(
+            ["docker", "info"],
+            capture_output=True, text=True, check=False, timeout=30
+        )
+        if sys_info.returncode == 0:
+            debug_info.append(sys_info.stdout)
+        else:
+            debug_info.append(f"Error getting system info: {sys_info.stderr}")
+    except Exception as e:
+        debug_info.append(f"Exception during system info: {str(e)}")
+    return debug_info
+
+def capture_container_debug_info(container_name, output_dir=None):
+    """Capture comprehensive debugging information for a container and save to file."""
+    import datetime
     from pathlib import Path
     
     # Default to current directory if not specified
@@ -886,148 +1062,39 @@ def capture_container_debug_info(container_name, output_dir=None):
     debug_info.append("")
     
     # 1. Basic container info
-    debug_info.append("=== CONTAINER INSPECT DATA ===")
-    try:
-        inspect_result = subprocess.run(
-            ["docker", "inspect", container_name],
-            capture_output=True, text=True, check=False, timeout=30
-        )
-        if inspect_result.returncode == 0:
-            # Parse and format JSON for better readability
-            try:
-                inspect_data = json.loads(inspect_result.stdout)
-                debug_info.append(json.dumps(inspect_data, indent=2))
-            except json.JSONDecodeError:
-                # Fall back to raw output if JSON parsing fails
-                debug_info.append(inspect_result.stdout)
-        else:
-            debug_info.append(f"Error getting inspect data: {inspect_result.stderr}")
-    except Exception as e:
-        debug_info.append(f"Exception during inspect: {str(e)}")
+    debug_info.extend(_get_container_inspect_info(container_name))
     debug_info.append("")
     
     # 2. Container logs with timestamps
-    debug_info.append("=== CONTAINER LOGS (WITH TIMESTAMPS) ===")
-    try:
-        logs_result = subprocess.run(
-            ["docker", "logs", "--timestamps", container_name],
-            capture_output=True, text=True, check=False, timeout=30
-        )
-        if logs_result.returncode == 0:
-            debug_info.append(logs_result.stdout)
-        else:
-            debug_info.append(f"Error getting container logs: {logs_result.stderr}")
-    except Exception as e:
-        debug_info.append(f"Exception during logs: {str(e)}")
+    debug_info.extend(_get_container_logs(container_name, timestamps=True))
     debug_info.append("")
     
     # 3. Get error logs specifically
-    debug_info.append("=== CONTAINER ERROR LOGS ===")
-    try:
-        err_logs_result = subprocess.run(
-            ["docker", "logs", container_name, "2>&1", "|", "grep", "-i", "'error\\|exception\\|fatal\\|failed\\|killed'"],
-            shell=True, capture_output=True, text=True, check=False, timeout=30
-        )
-        # Don't check return code as grep might return non-zero if no matches
-        debug_info.append(err_logs_result.stdout)
-    except Exception as e:
-        debug_info.append(f"Exception during error logs: {str(e)}")
+    debug_info.extend(_get_container_error_logs(container_name))
     debug_info.append("")
     
     # 4. Container stats (resource usage)
-    debug_info.append("=== CONTAINER STATS (SNAPSHOT) ===")
-    try:
-        # Using no-stream to get a single snapshot
-        stats_result = subprocess.run(
-            ["docker", "stats", "--no-stream", container_name],
-            capture_output=True, text=True, check=False, timeout=30
-        )
-        if stats_result.returncode == 0:
-            debug_info.append(stats_result.stdout)
-        else:
-            debug_info.append(f"Error getting container stats: {stats_result.stderr}")
-    except Exception as e:
-        debug_info.append(f"Exception during stats: {str(e)}")
+    debug_info.extend(_get_container_stats(container_name))
     debug_info.append("")
     
     # 5. Current status of all containers
-    debug_info.append("=== ALL RELATED CONTAINERS STATUS ===")
-    try:
-        # Extract project name to find related containers
-        project_name = container_name.split('_')[0] if '_' in container_name else container_name.split('-')[0]
-        ps_result = subprocess.run(
-            ["docker", "ps", "-a", "--filter", f"name={project_name}"],
-            capture_output=True, text=True, check=False, timeout=30
-        )
-        if ps_result.returncode == 0:
-            debug_info.append(ps_result.stdout)
-        else:
-            debug_info.append(f"Error getting container list: {ps_result.stderr}")
-    except Exception as e:
-        debug_info.append(f"Exception during container listing: {str(e)}")
+    debug_info.extend(_get_related_container_status(container_name))
     debug_info.append("")
     
     # 6. Container top processes
-    debug_info.append("=== CONTAINER PROCESSES ===")
-    try:
-        top_result = subprocess.run(
-            ["docker", "top", container_name],
-            capture_output=True, text=True, check=False, timeout=30
-        )
-        if top_result.returncode == 0:
-            debug_info.append(top_result.stdout)
-        else:
-            debug_info.append(f"Error getting container processes: {top_result.stderr}")
-    except Exception as e:
-        debug_info.append(f"Exception during top: {str(e)}")
+    debug_info.extend(_get_container_top_processes(container_name))
     debug_info.append("")
     
     # 7. Container events
-    debug_info.append("=== CONTAINER EVENTS (LAST 5 MINUTES) ===")
-    try:
-        # Get events from the last 5 minutes
-        since_time = datetime.datetime.now() - datetime.timedelta(minutes=5)
-        since_str = since_time.strftime("%Y-%m-%dT%H:%M:%S")
-        events_result = subprocess.run(
-            ["docker", "events", "--filter", f"container={container_name}", "--since", since_str, "--until", "now"],
-            capture_output=True, text=True, check=False, timeout=10
-        )
-        # This might time out as it watches for events
-        debug_info.append(events_result.stdout)
-    except Exception as e:
-        debug_info.append(f"Exception during events: {str(e)}")
+    debug_info.extend(_get_container_events(container_name, since_minutes=5))
     debug_info.append("")
     
     # 8. Container history (start/stop/restart events)
-    debug_info.append("=== CONTAINER RESTART HISTORY ===")
-    try:
-        # Using docker inspect to get restart count and last state
-        restart_info = subprocess.run(
-            ["docker", "inspect", "--format", "{{.RestartCount}} restarts. Last exit: {{.State.Error}}", container_name],
-            capture_output=True, text=True, check=False, timeout=10
-        )
-        if restart_info.returncode == 0:
-            debug_info.append(f"Restart information: {restart_info.stdout}")
-        else:
-            debug_info.append(f"Error getting restart info: {restart_info.stderr}")
-    except Exception as e:
-        debug_info.append(f"Exception during restart history: {str(e)}")
+    debug_info.extend(_get_container_restart_history(container_name))
     debug_info.append("")
     
     # 9. System information (host)
-    debug_info.append("=== HOST SYSTEM INFORMATION ===")
-    try:
-        # Docker info provides system-wide information
-        sys_info = subprocess.run(
-            ["docker", "info"],
-            capture_output=True, text=True, check=False, timeout=30
-        )
-        if sys_info.returncode == 0:
-            debug_info.append(sys_info.stdout)
-        else:
-            debug_info.append(f"Error getting system info: {sys_info.stderr}")
-    except Exception as e:
-        debug_info.append(f"Exception during system info: {str(e)}")
+    debug_info.extend(_get_host_system_info())
     debug_info.append("")
     
     # Write all collected information to log file
@@ -1038,18 +1105,7 @@ def capture_container_debug_info(container_name, output_dir=None):
     return str(log_file)
 
 def init_test_project(tmp_path, project_name, env=None, check=True):
-    """
-    Initialize a test project using quickscale init command.
-    
-    Args:
-        tmp_path: Path to create the project in
-        project_name: Name of the project
-        env: Optional environment variables to pass to the command
-        check: Whether to check the return code
-        
-    Returns:
-        Tuple of (project_dir, result)
-    """
+    """Initialize a test project using quickscale init command."""
     # Store original directory
     original_dir = os.getcwd()
     

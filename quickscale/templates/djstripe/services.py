@@ -319,6 +319,108 @@ class ProductService:
         return (created, updated, failed)
     
     @staticmethod
+    def _check_stripe_availability():
+        """Check if Stripe is available and enabled."""
+        if not is_feature_enabled(get_env('STRIPE_ENABLED', 'False')):
+            logger.warning("Stripe is not enabled. Skipping product sync from Stripe.")
+            return None
+            
+        stripe = get_stripe()
+        if not stripe:
+            logger.error("Stripe API not available. Cannot sync products.")
+            return None
+            
+        return stripe
+    
+    @staticmethod
+    def _get_all_stripe_products(stripe):
+        """Get all products (active and inactive) from Stripe."""
+        # Retrieve all active products from Stripe
+        stripe_products = stripe.Product.list(limit=100, active=True)
+        
+        # Also get inactive products
+        stripe_inactive_products = stripe.Product.list(limit=100, active=False)
+        
+        # Combine the lists
+        return list(stripe_products.auto_paging_iter()) + list(stripe_inactive_products.auto_paging_iter())
+    
+    @staticmethod
+    def _update_existing_product(product, stripe_product, stripe):
+        """Update an existing product with data from Stripe."""
+        product.name = stripe_product.name
+        product.description = stripe_product.description or ""
+        product.status = Product.ACTIVE if stripe_product.active else Product.INACTIVE
+        
+        # Set default values if not already populated
+        if not product.base_price or not product.currency:
+            # Get the price for this product
+            prices = stripe.Price.list(product=stripe_product.id, active=True, limit=1)
+            if prices and prices.data:
+                price = prices.data[0]
+                product.base_price = price.unit_amount / 100.0  # Convert cents to dollars
+                product.currency = price.currency.upper()
+        
+        if product.metadata is None:
+            product.metadata = {}
+            
+        # Store additional Stripe data in metadata
+        product.metadata.update({
+            'stripe_updated': stripe_product.updated,
+            'price_count': len(stripe.Price.list(product=stripe_product.id, limit=100).data)
+        })
+        
+        product.save()
+        logger.info(f"Updated product from Stripe: {stripe_product.id}")
+        return True
+    
+    @staticmethod
+    def _create_new_product(stripe_product, stripe):
+        """Create a new product from Stripe data."""
+        # Get the price for this product
+        prices = stripe.Price.list(product=stripe_product.id, active=True, limit=1)
+        
+        if prices and prices.data:
+            price = prices.data[0]
+            
+            # Create new product
+            product = Product(
+                name=stripe_product.name,
+                description=stripe_product.description or "",
+                status=Product.ACTIVE if stripe_product.active else Product.INACTIVE,
+                stripe_product_id=stripe_product.id,
+                base_price=price.unit_amount / 100.0,  # Convert cents to dollars
+                currency=price.currency.upper(),
+                metadata={
+                    'stripe_created': stripe_product.created,
+                    'stripe_updated': stripe_product.updated,
+                    'stripe_price_id': price.id,
+                    'price_count': len(stripe.Price.list(product=stripe_product.id, limit=100).data)
+                }
+            )
+            product.save()
+            logger.info(f"Created product from Stripe: {stripe_product.id}")
+            return True
+        else:
+            # Skip products without active prices
+            logger.warning(f"Skipped product without active prices: {stripe_product.id}")
+            return False
+    
+    @staticmethod
+    def _process_stripe_product(stripe_product, stripe):
+        """Process a single product from Stripe."""
+        try:
+            # Try to find corresponding product in database
+            try:
+                product = Product.objects.get(stripe_product_id=stripe_product.id)
+                return ProductService._update_existing_product(product, stripe_product, stripe)
+            except Product.DoesNotExist:
+                return ProductService._create_new_product(stripe_product, stripe)
+            
+        except Exception as e:
+            logger.error(f"Error processing Stripe product {stripe_product.id}: {str(e)}")
+            return False
+    
+    @staticmethod
     def sync_all_from_stripe() -> int:
         """
         Sync all products from Stripe to the local database.
@@ -329,95 +431,20 @@ class ProductService:
         Returns:
             The number of products successfully synced
         """
-        if not is_feature_enabled(get_env('STRIPE_ENABLED', 'False')):
-            logger.warning("Stripe is not enabled. Skipping product sync from Stripe.")
-            return 0
-            
-        stripe = get_stripe()
+        stripe = ProductService._check_stripe_availability()
         if not stripe:
-            logger.error("Stripe API not available. Cannot sync products.")
             return 0
             
         try:
             stripe.api_key = settings.STRIPE_SECRET_KEY
             
-            # Retrieve all active products from Stripe
-            stripe_products = stripe.Product.list(limit=100, active=True)
-            
-            # Also get inactive products
-            stripe_inactive_products = stripe.Product.list(limit=100, active=False)
-            
-            # Combine the lists
-            all_stripe_products = list(stripe_products.auto_paging_iter()) + list(stripe_inactive_products.auto_paging_iter())
-            
+            all_stripe_products = ProductService._get_all_stripe_products(stripe)
             synced_count = 0
             
             # Process each Stripe product
             for stripe_product in all_stripe_products:
-                try:
-                    # Try to find corresponding product in database
-                    try:
-                        product = Product.objects.get(stripe_product_id=stripe_product.id)
-                        # Product exists, update its details
-                        product.name = stripe_product.name
-                        product.description = stripe_product.description or ""
-                        product.status = Product.ACTIVE if stripe_product.active else Product.INACTIVE
-                        
-                        # Set default values if not already populated
-                        if not product.base_price or not product.currency:
-                            # Get the price for this product
-                            prices = stripe.Price.list(product=stripe_product.id, active=True, limit=1)
-                            if prices and prices.data:
-                                price = prices.data[0]
-                                product.base_price = price.unit_amount / 100.0  # Convert cents to dollars
-                                product.currency = price.currency.upper()
-                        
-                        if product.metadata is None:
-                            product.metadata = {}
-                            
-                        # Store additional Stripe data in metadata
-                        product.metadata.update({
-                            'stripe_updated': stripe_product.updated,
-                            'price_count': len(stripe.Price.list(product=stripe_product.id, limit=100).data)
-                        })
-                        
-                        product.save()
-                        logger.info(f"Updated product from Stripe: {stripe_product.id}")
-                        
-                    except Product.DoesNotExist:
-                        # Product doesn't exist in database, create it
-                        # Get the price for this product
-                        prices = stripe.Price.list(product=stripe_product.id, active=True, limit=1)
-                        
-                        if prices and prices.data:
-                            price = prices.data[0]
-                            
-                            # Create new product
-                            product = Product(
-                                name=stripe_product.name,
-                                description=stripe_product.description or "",
-                                status=Product.ACTIVE if stripe_product.active else Product.INACTIVE,
-                                stripe_product_id=stripe_product.id,
-                                base_price=price.unit_amount / 100.0,  # Convert cents to dollars
-                                currency=price.currency.upper(),
-                                metadata={
-                                    'stripe_created': stripe_product.created,
-                                    'stripe_updated': stripe_product.updated,
-                                    'stripe_price_id': price.id,
-                                    'price_count': len(stripe.Price.list(product=stripe_product.id, limit=100).data)
-                                }
-                            )
-                            product.save()
-                            logger.info(f"Created product from Stripe: {stripe_product.id}")
-                        else:
-                            # Skip products without active prices
-                            logger.warning(f"Skipped product without active prices: {stripe_product.id}")
-                            continue
-                    
+                if ProductService._process_stripe_product(stripe_product, stripe):
                     synced_count += 1
-                    
-                except Exception as e:
-                    logger.error(f"Error processing Stripe product {stripe_product.id}: {str(e)}")
             
             logger.info(f"Synced {synced_count} products from Stripe")
             return synced_count

@@ -15,12 +15,7 @@ class ShellCommand(Command):
     """Opens an interactive shell in the web container."""
     
     def execute(self, django_shell: bool = False, command: Optional[str] = None) -> None:
-        """Enter a shell in the web container.
-        
-        Args:
-            django_shell: If True, open Django shell instead of bash
-            command: Optional command to run non-interactively
-        """
+        """Enter a shell in the web container with optional command execution."""
         state = ProjectManager.get_project_state()
         # If we're in help mode or not in a project directory, show usage
         if not state['has_project'] or command == '--help':

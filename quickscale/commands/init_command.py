@@ -35,26 +35,12 @@ class InitCommand(Command):
             raise ProjectError(f"Directory {project_name} already exists")
             
     def _generate_secret_key(self, length: int = 50) -> str:
-        """Generate a cryptographically secure secret key.
-        
-        Args:
-            length: Length of the secret key
-            
-        Returns:
-            Generated secret key
-        """
+        """Generate a cryptographically secure secret key with specified length."""
         alphabet = string.ascii_letters + string.digits + "!@#$%^&*(-_=+)"
         return ''.join(secrets.choice(alphabet) for _ in range(length))
     
     def _get_template_variables(self, project_name: str) -> dict:
-        """Get template variables for rendering project templates.
-        
-        Args:
-            project_name: Name of the project
-            
-        Returns:
-            Dictionary of template variables
-        """
+        """Get template variables for rendering project templates based on project name."""
         return {
             "project_name": project_name,
             "project_name_upper": project_name.upper(),
@@ -64,16 +50,7 @@ class InitCommand(Command):
         }
         
     def _sync_template_modules(self, project_dir: Path, project_name: str) -> None:
-        """Synchronize modules from source code to the generated project.
-        
-        This ensures that certain utilities are always up to date by copying them
-        directly from the source code during project initialization rather than
-        maintaining duplicated templates.
-        
-        Args:
-            project_dir: The path to the generated project directory
-            project_name: Name of the project
-        """
+        """Synchronize modules from source code to the generated project for consistency."""
         # Get quickscale source directory
         quickscale_dir = Path(__file__).parent.parent
         
@@ -96,17 +73,7 @@ class InitCommand(Command):
     _verify_web_service = _verify_web_service
 
     def execute(self, project_name: str, **kwargs) -> None:
-        """Execute the init command.
-        
-        Args:
-            project_name: Name of the project to create
-            **kwargs: Additional arguments (unused)
-        
-        Raises:
-            ValidationError: If project name is invalid
-            ProjectError: If project directory already exists
-            OSError: If file operations fail
-        """
+        """Create a new QuickScale project with the specified name."""
         self.logger.info(f"Initializing new project: {project_name}")
         
         # Validate project name
@@ -149,6 +116,10 @@ To get started:
 
 Access your project at:
 http://localhost:8000
+
+Default accounts available after startup:
+- Regular User: user@test.com / userpasswd
+- Administrator: admin@test.com / adminpasswd
 
 Documentation available at:
 ./docs/

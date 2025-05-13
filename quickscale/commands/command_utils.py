@@ -118,8 +118,11 @@ def wait_for_postgres(
     
     for attempt in range(1, max_attempts + 1):
         try:
+            # Get database name from environment variables or use default
+            db_name = os.environ.get('DB_NAME', 'quickscale')
+            
             result = subprocess.run(
-                [DOCKER_COMPOSE_COMMAND, "exec", "-e", f"PGUSER={pg_user}", "db", "pg_isready", "-U", pg_user],
+                [DOCKER_COMPOSE_COMMAND, "exec", "-e", f"PGUSER={pg_user}", "db", "pg_isready", "-U", pg_user, "-d", db_name],
                 check=False,
                 capture_output=True,
                 text=True,
@@ -177,19 +180,7 @@ def fix_permissions(
         raise
 
 def find_available_port(start_port: int = 8000, max_attempts: int = 100) -> int:
-    """Find an available port starting from start_port.
-    
-    This function tries to find an available port by checking a range of ports.
-    It first tries the requested port, then tries consecutive ports,
-    and finally random ports if needed.
-    
-    Args:
-        start_port: Port number to start checking from
-        max_attempts: Maximum number of ports to check
-        
-    Returns:
-        An available port number, or the original start_port as a last resort
-    """
+    """Find an available port by checking consecutive and then random ports if needed."""
     import socket
     import random
     import logging
@@ -244,50 +235,59 @@ def find_available_port(start_port: int = 8000, max_attempts: int = 100) -> int:
     logger.warning(f"Could not find available port after {max_attempts} attempts. Using random port {fallback_port}.")
     return fallback_port
 
-def find_available_ports(count: int = 2, start_port: int = 8000, max_attempts: int = 500) -> List[int]:
-    """Find multiple available ports.
-    
-    Args:
-        count: Number of ports to find
-        start_port: Starting port number to check from
-        max_attempts: Maximum number of attempts to find ports
-        
-    Returns:
-        List of available port numbers
-    """
-    import logging
+def _check_port_availability(port: int, timeout: float = 0.5) -> bool:
+    """Check if a specific port is available for binding."""
     import socket
-    import random
+    try:
+        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
+            sock.settimeout(timeout)
+            sock.bind(('127.0.0.1', port))
+            return True
+    except (OSError, socket.error):
+        return False
+
+def _find_available_port_in_range(start: int, end: int, timeout: float = 0.5) -> Optional[int]:
+    """Find an available port within a specific range."""
+    import socket
     
-    logger = logging.getLogger(__name__)
-    available_ports = []
-    attempts = 0
-    
-    # First try standard port ranges
-    attempts_per_strategy = max(100, max_attempts // 3)
-    
-    # Strategy 1: Try sequential ports starting from start_port
-    current_port = start_port
+    for port in range(start, end + 1):
+        if _check_port_availability(port, timeout):
+            return port
+    return None
+
+def _find_port_in_sequential_range(
+    start_port: int, 
+    count: int, 
+    available_ports: List[int], 
+    attempts_limit: int, 
+    logger: logging.Logger
+) -> List[int]:
+    """Strategy 1: Try to find ports sequentially starting from start_port."""
     logger.debug(f"Strategy 1: Trying sequential ports from {start_port}")
+    attempts = 0
+    current_port = start_port
     
-    while len(available_ports) < count and attempts < attempts_per_strategy:
+    while len(available_ports) < count and attempts < attempts_limit:
         attempts += 1
-        try:
-            with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
-                sock.settimeout(0.5)
-                sock.bind(('127.0.0.1', current_port))
-                if current_port not in available_ports:
-                    available_ports.append(current_port)
-                    logger.debug(f"Found available port: {current_port}")
-        except (OSError, socket.error):
-            pass
+        if _check_port_availability(current_port):
+            if current_port not in available_ports:
+                available_ports.append(current_port)
+                logger.debug(f"Found available port: {current_port}")
         current_port += 1
-        
-    # If we found all ports, return early
-    if len(available_ports) >= count:
-        return available_ports[:count]
-        
-    # Strategy 2: Try common alternative port ranges
+    
+    return available_ports
+
+def _find_port_in_common_ranges(
+    count: int, 
+    available_ports: List[int], 
+    attempts_limit: int, 
+    current_attempts: int,
+    logger: logging.Logger
+) -> Tuple[List[int], int]:
+    """Strategy 2: Try common alternative port ranges."""
+    logger.debug("Strategy 2: Trying common port ranges")
+    attempts = current_attempts
+    
     common_port_ranges = [
         range(3000, 3100),  # Node.js/React range
         range(8080, 8180),  # Alternative web range
@@ -295,32 +295,37 @@ def find_available_ports(count: int = 2, start_port: int = 8000, max_attempts: i
         range(9000, 9100),  # Another common web range
     ]
     
-    logger.debug("Strategy 2: Trying common port ranges")
-    
     for port_range in common_port_ranges:
         for port in port_range:
-            if attempts >= 2 * attempts_per_strategy:
-                break
+            if attempts >= attempts_limit:
+                return available_ports, attempts
                 
             attempts += 1
-            try:
-                with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
-                    sock.settimeout(0.5)
-                    sock.bind(('127.0.0.1', port))
-                    if port not in available_ports:
-                        available_ports.append(port)
-                        logger.debug(f"Found available port: {port}")
-                        if len(available_ports) >= count:
-                            return available_ports[:count]
-            except (OSError, socket.error):
-                pass
+            if _check_port_availability(port):
+                if port not in available_ports:
+                    available_ports.append(port)
+                    logger.debug(f"Found available port: {port}")
+                    if len(available_ports) >= count:
+                        return available_ports, attempts
     
-    # Strategy 3: Try random high ports
+    return available_ports, attempts
+
+def _find_port_in_random_ranges(
+    count: int, 
+    available_ports: List[int], 
+    attempts_limit: int, 
+    current_attempts: int,
+    logger: logging.Logger
+) -> List[int]:
+    """Strategy 3: Try random high ports."""
+    import random
+    
     logger.debug("Strategy 3: Trying random high ports")
     high_port_ranges = [(10000, 20000), (20000, 30000), (30000, 40000), (40000, 50000)]
     checked_ports = set(available_ports)
+    attempts = current_attempts
     
-    while len(available_ports) < count and attempts < max_attempts:
+    while len(available_ports) < count and attempts < attempts_limit:
         port_range = random.choice(high_port_ranges)
         port = random.randint(*port_range)
         
@@ -330,25 +335,68 @@ def find_available_ports(count: int = 2, start_port: int = 8000, max_attempts: i
         checked_ports.add(port)
         attempts += 1
         
-        try:
-            with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
-                sock.settimeout(0.5)
-                sock.bind(('127.0.0.1', port))
-                available_ports.append(port)
-                logger.debug(f"Found available port: {port}")
-        except (OSError, socket.error):
-            pass
+        if _check_port_availability(port):
+            available_ports.append(port)
+            logger.debug(f"Found available port: {port}")
+    
+    return available_ports
+
+def _add_random_high_ports(
+    count: int, 
+    available_ports: List[int],
+    logger: logging.Logger
+) -> List[int]:
+    """Last resort: Generate random numbers in the higher range without checking."""
+    import random
+    
+    logger.warning(f"Could only find {len(available_ports)} of {count} ports through standard methods")
+    logger.warning("Generating random high ports without checking - may fail later")
+    
+    while len(available_ports) < count:
+        # Pick an unused high port
+        port = random.randint(20000, 65000)
+        if port not in available_ports:
+            available_ports.append(port)
+            logger.debug(f"Added random high port without checking: {port}")
+    
+    return available_ports
+
+def find_available_ports(count: int = 2, start_port: int = 8000, max_attempts: int = 500) -> List[int]:
+    """Find multiple available ports using different strategies."""
+    import logging
+    import random
+    
+    logger = logging.getLogger(__name__)
+    available_ports = []
+    
+    # Divide attempts among strategies
+    attempts_per_strategy = max(100, max_attempts // 3)
+    
+    # Strategy 1: Try sequential ports starting from start_port
+    available_ports = _find_port_in_sequential_range(
+        start_port, count, available_ports, attempts_per_strategy, logger
+    )
+    
+    # If we found all ports, return early
+    if len(available_ports) >= count:
+        return available_ports[:count]
+    
+    # Strategy 2: Try common alternative port ranges
+    available_ports, attempts = _find_port_in_common_ranges(
+        count, available_ports, 2 * attempts_per_strategy, 0, logger
+    )
+    
+    # If we found all ports, return early
+    if len(available_ports) >= count:
+        return available_ports[:count]
+    
+    # Strategy 3: Try random high ports
+    available_ports = _find_port_in_random_ranges(
+        count, available_ports, max_attempts, attempts, logger
+    )
     
     # Last resort: Generate random numbers in the higher range
     if len(available_ports) < count:
-        logger.warning(f"Could only find {len(available_ports)} of {count} ports through standard methods")
-        logger.warning("Generating random high ports without checking - may fail later")
-        
-        while len(available_ports) < count:
-            # Pick an unused high port
-            port = random.randint(20000, 65000)
-            if port not in available_ports:
-                available_ports.append(port)
-                logger.debug(f"Added random high port without checking: {port}")
+        available_ports = _add_random_high_ports(count, available_ports, logger)
     
     return available_ports[:count]

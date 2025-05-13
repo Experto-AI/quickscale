@@ -1,0 +1,54 @@
+{% extends "admin/base_site.html" %}
+{% load i18n %}
+
+{% block title %}Admin Test Page{% endblock %}
+
+{% block content %}
+<div class="container">
+  <h1>Admin Test Page</h1>
+  <p>This page is a test for Django admin CSRF functionality.</p>
+  
+  <div class="module">
+    <h2>Test Form</h2>
+    <form method="post" action="/admin/login/?next=/admin/">
+      {% csrf_token %}
+      <div>
+        <label for="id_username">Username:</label>
+        <input type="text" name="username" id="id_username" required />
+      </div>
+      <div>
+        <label for="id_password">Password:</label>
+        <input type="password" name="password" id="id_password" required />
+      </div>
+      <div>
+        <button type="submit">Test Login</button>
+      </div>
+    </form>
+  </div>
+  
+  <div class="module">
+    <h2>Debugging Information</h2>
+    <p>Cookie settings:</p>
+    <ul>
+      <li>CSRF_COOKIE_SECURE: {{ settings.CSRF_COOKIE_SECURE }}</li>
+      <li>CSRF_COOKIE_HTTPONLY: {{ settings.CSRF_COOKIE_HTTPONLY }}</li>
+      <li>SESSION_COOKIE_SECURE: {{ settings.SESSION_COOKIE_SECURE }}</li>
+    </ul>
+    
+    <p>CSRF Trusted Origins:</p>
+    <ul>
+      {% for origin in settings.CSRF_TRUSTED_ORIGINS %}
+        <li>{{ origin }}</li>
+      {% endfor %}
+    </ul>
+    
+    <p>Host Information:</p>
+    <ul>
+      <li>Request host: {{ request.get_host }}</li>
+      <li>HTTP_HOST: {{ request.META.HTTP_HOST }}</li>
+      <li>SERVER_NAME: {{ request.META.SERVER_NAME }}</li>
+      <li>REMOTE_ADDR: {{ request.META.REMOTE_ADDR }}</li>
+    </ul>
+  </div>
+</div>
+{% endblock %} 

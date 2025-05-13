@@ -51,13 +51,7 @@ def copy_sync_modules(
     quickscale_dir: Path, 
     logger: logging.Logger
 ) -> None:
-    """Copy modules that should be synced from source to the project.
-    
-    Args:
-        project_dir: Path to the generated project directory
-        quickscale_dir: Path to the quickscale source directory
-        logger: Logger instance for logging
-    """
+    """Copy modules that should be synced from source to the generated project."""
     for source_path, target_path in SYNCED_MODULES.items():
         source_file = quickscale_dir / source_path
         target_file = project_dir / target_path
@@ -72,14 +66,7 @@ def copy_sync_modules(
             logger.warning(f"Source file {source_file} not found for syncing")
 
 def is_binary_file(file_path: Path) -> bool:
-    """Detect if a file is binary based on extension or content.
-    
-    Args:
-        file_path: Path to the file to check
-        
-    Returns:
-        True if file is binary, False otherwise
-    """
+    """Detect if a file is binary based on its extension or content analysis."""
     # Check by extension first
     if any(file_path.name.endswith(ext) for ext in BINARY_EXTENSIONS):
         return True
@@ -94,15 +81,7 @@ def is_binary_file(file_path: Path) -> bool:
         return True
 
 def render_template(content: str, variables: Dict[str, Any]) -> str:
-    """Render a template string with the given variables.
-    
-    Args:
-        content: Template content string
-        variables: Dictionary of variables to replace in the template
-        
-    Returns:
-        Rendered template string
-    """
+    """Render a template string by replacing placeholders with variable values."""
     # Use a simple replacement approach instead of string.Template
     rendered = content
     for key, value in variables.items():
@@ -115,13 +94,7 @@ def process_file_templates(
     template_variables: Dict[str, Any],
     logger: logging.Logger
 ) -> None:
-    """Process template files in the project directory.
-    
-    Args:
-        project_dir: Path to the project directory
-        template_variables: Variables to use for template rendering
-        logger: Logger instance for logging
-    """
+    """Replace template placeholders in all appropriate files within the project directory."""
     import fnmatch
     
     # Walk through all files in the project directory
@@ -158,80 +131,106 @@ def process_file_templates(
                 except Exception as e:
                     logger.warning(f"Failed to render template {file_path}: {str(e)}")
 
+def _calculate_relative_import_path(target_module_path: Path, file_directory: str) -> str:
+    """Calculate the relative import path from a file to a target module."""
+    rel_path = os.path.relpath(
+        target_module_path,
+        file_directory
+    )
+    
+    if rel_path == '.':
+        return "from .env_utils"
+    else:
+        # Convert path to import format
+        rel_import = '.'.join(rel_path.split(os.sep))
+        if rel_import.startswith('.'):
+            return f"from {rel_import}.env_utils"
+        else:
+            return f"from {rel_import}.env_utils"
+
+def _update_import_in_file(
+    file_path: str, 
+    import_pattern: str,
+    target_module_path: Path,
+    logger: logging.Logger
+) -> bool:
+    """Update imports in a single file and return whether the file was modified."""
+    try:
+        with open(file_path, 'r', encoding='utf-8') as f:
+            content = f.read()
+        
+        if import_pattern not in content:
+            return False
+            
+        logger.debug(f"Fixing imports in {file_path}")
+        
+        # Calculate the relative import path
+        new_import = _calculate_relative_import_path(
+            target_module_path, 
+            os.path.dirname(file_path)
+        )
+        
+        # Replace the import
+        updated_content = content.replace(import_pattern, new_import)
+        
+        # Write back the file
+        with open(file_path, 'w', encoding='utf-8') as f:
+            f.write(updated_content)
+        
+        return True
+    except Exception as e:
+        logger.warning(f"Failed to fix imports in {file_path}: {str(e)}")
+        return False
+
+def _should_process_file(file_path: str, target_file_path: str, processed_files: Set[str]) -> bool:
+    """Determine if a file should be processed for import fixes."""
+    # Skip non-Python files
+    if not file_path.endswith('.py'):
+        return False
+        
+    # Skip already processed files
+    if file_path in processed_files:
+        return False
+    
+    # Skip the synced module itself
+    if target_file_path and os.path.exists(target_file_path) and os.path.samefile(file_path, target_file_path):
+        return False
+        
+    return True
+
 def fix_imports(
     project_dir: Path,
     logger: logging.Logger
 ) -> None:
-    """Fix imports in the project to use proper relative imports.
-    
-    Args:
-        project_dir: Path to the generated project directory
-        logger: Logger instance for logging
-    """
+    """Fix imports in the project to use proper relative paths between modules."""
     processed_files: Set[str] = set()
     
     for source_module, import_patterns in MODULES_WITH_IMPORTS.items():
+        target_file_path = str(project_dir / SYNCED_MODULES.get(source_module, ''))
+        
         for import_pattern, target_module in import_patterns:
-            target_path = project_dir / target_module
+            target_module_path = project_dir / target_module
             
             # Find all Python files in the project
             for root, _, files in os.walk(project_dir):
-                for file in files:
-                    if not file.endswith('.py'):
+                for file_name in files:
+                    file_path = os.path.join(root, file_name)
+                    
+                    if not _should_process_file(file_path, target_file_path, processed_files):
                         continue
                     
-                    file_path = os.path.join(root, file)
+                    file_updated = _update_import_in_file(
+                        file_path, 
+                        import_pattern, 
+                        target_module_path, 
+                        logger
+                    )
                     
-                    # Skip already processed files
-                    if file_path in processed_files:
-                        continue
-                    
-                    # Skip the synced module itself
-                    target_file_path = str(project_dir / SYNCED_MODULES.get(source_module, ''))
-                    if target_file_path and os.path.samefile(file_path, target_file_path):
-                        continue
-                    
-                    try:
-                        with open(file_path, 'r', encoding='utf-8') as f:
-                            content = f.read()
-                        
-                        if import_pattern in content:
-                            logger.debug(f"Fixing imports in {file_path}")
-                            
-                            # Calculate the relative import path
-                            rel_path = os.path.relpath(
-                                project_dir / target_module, 
-                                os.path.dirname(file_path)
-                            )
-                            
-                            if rel_path == '.':
-                                new_import = "from .env_utils"
-                            else:
-                                # Convert path to import format
-                                rel_import = '.'.join(rel_path.split(os.sep))
-                                if rel_import.startswith('.'):
-                                    new_import = f"from {rel_import}.env_utils"
-                                else:
-                                    new_import = f"from {rel_import}.env_utils"
-                            
-                            # Replace the import
-                            updated_content = content.replace(import_pattern, new_import)
-                            
-                            # Write back the file
-                            with open(file_path, 'w', encoding='utf-8') as f:
-                                f.write(updated_content)
-                            
-                            processed_files.add(file_path)
-                    except Exception as e:
-                        logger.warning(f"Failed to fix imports in {file_path}: {str(e)}")
-                        
+                    if file_updated:
+                        processed_files.add(file_path)
+
 def remove_duplicated_templates(project_dir: Path, logger: logging.Logger) -> None:
-    """Remove template files that have been replaced by synced modules.
-    
-    Args:
-        project_dir: Path to the project directory
-        logger: Logger instance for logging
-    """
+    """Remove any template files that have been replaced by synced modules to avoid duplication."""
     # Identify duplicated templates that should be removed
     for source_path, target_path in SYNCED_MODULES.items():
         # Check if there's an original template file that should be removed
