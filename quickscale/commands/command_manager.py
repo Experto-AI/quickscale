@@ -30,6 +30,10 @@ class CommandManager:
             
             # System commands
             'check': CheckCommand(),
+            
+            # Info commands - these are handled specially
+            'help': None,  # Will be handled by _handle_info_commands
+            'version': None,  # Will be handled by _handle_info_commands
         }
     
     def execute_command(self, command_name: str, *args: Any, **kwargs: Any) -> Any:
@@ -90,12 +94,8 @@ class CommandManager:
         """Get list of available command names."""
         return list(self._commands.keys())
     
-    def handle_command(self, command_name: str, args: Any) -> Any:
-        """Dispatch commands from CLI to appropriate handlers."""
-        # Django management commands
-        if command_name == 'manage':
-            return self.run_manage_command(args.args)
-        # Service commands
+    def _handle_service_commands(self, command_name: str, args: Any) -> Any:
+        """Handle service-related commands."""
         if command_name == 'up':
             return self.start_services()
         if command_name == 'down':
@@ -110,44 +110,79 @@ class CommandManager:
             )
         if command_name == 'ps':
             return self.check_services_status()
-        # Project commands
+        return None
+    
+    def _handle_project_commands(self, command_name: str, args: Any) -> Any:
+        """Handle project-related commands."""
         if command_name == 'init':
             return self.init_project(getattr(args, 'name'))
         if command_name == 'destroy':
             return self.destroy_project()
         if command_name == 'check':
             return self.check_requirements(print_info=True)
-        # Shell commands
+        return None
+    
+    def _handle_shell_commands(self, command_name: str, args: Any) -> Any:
+        """Handle shell-related commands."""
         if command_name == 'shell':
             cmd = getattr(args, 'cmd', None)
             return self.open_shell(command=cmd)
         if command_name == 'django-shell':
             return self.open_shell(django_shell=True)
-        # Help and version commands
+        if command_name == 'manage':
+            return self.run_manage_command(args.args)
+        return None
+    
+    def _display_help(self, topic: Optional[str] = None) -> None:
+        """Display help information."""
+        from quickscale.utils.help_manager import show_manage_help
+        from quickscale.utils.message_manager import MessageManager
+        
+        if topic == 'manage':
+            show_manage_help()
+        else:
+            # Show general help with usage instructions
+            MessageManager.info("usage: quickscale [command] [options]")
+            MessageManager.info("\nAvailable commands:")
+            MessageManager.info("  init           - Initialize a new QuickScale project")
+            MessageManager.info("  up             - Start the project services")
+            MessageManager.info("  down           - Stop the project services")
+            MessageManager.info("  logs           - View project logs")
+            MessageManager.info("  ps             - Show status of running services")
+            MessageManager.info("  shell          - Open a shell in the web container")
+            MessageManager.info("  django-shell   - Open Django shell")
+            MessageManager.info("  manage         - Run Django management commands")
+            MessageManager.info("  help           - Show this help message")
+            MessageManager.info("  version        - Show the current version of QuickScale")
+            MessageManager.info("\nUse 'quickscale help manage' for Django management help.")
+    
+    def _handle_info_commands(self, command_name: str, args: Any) -> Any:
+        """Handle informational commands."""
+        from quickscale.utils.message_manager import MessageManager
+        
         if command_name == 'help':
-            from quickscale.utils.help_manager import show_manage_help
             topic = getattr(args, 'topic', None)
-            if topic == 'manage':
-                show_manage_help()
-            else:
-                # Show general help with usage instructions
-                print("usage: quickscale [command] [options]")
-                print("\nAvailable commands:")
-                print("  init           - Initialize a new QuickScale project")
-                print("  up             - Start the project services")
-                print("  down           - Stop the project services")
-                print("  logs           - View project logs")
-                print("  ps             - Show status of running services")
-                print("  shell          - Open a shell in the web container")
-                print("  django-shell   - Open Django shell")
-                print("  manage         - Run Django management commands")
-                print("  help           - Show this help message")
-                print("  version        - Show the current version of QuickScale")
-                print("\nUse 'quickscale help manage' for Django management help.")
+            self._display_help(topic)
             return
         if command_name == 'version':
             from quickscale import __version__
-            print(f"QuickScale version {__version__}")
+            MessageManager.info(f"QuickScale version {__version__}")
             return
-        # Fallback for unknown commands
-        raise KeyError(f"Command '{command_name}' not found")
+        return None
+    
+    def handle_command(self, command_name: str, args: Any) -> Any:
+        """Dispatch commands from CLI to appropriate handlers."""
+        # First check if the command exists in our registry
+        if command_name not in self._commands:
+            raise KeyError(f"Command '{command_name}' not found")
+            
+        # Try each command category in sequence
+        result = (
+            self._handle_service_commands(command_name, args) or
+            self._handle_project_commands(command_name, args) or
+            self._handle_shell_commands(command_name, args) or
+            self._handle_info_commands(command_name, args)
+        )
+        
+        # Return the result (might be None for success with no output)
+        return result

@@ -30,35 +30,31 @@ except ImportError:
     logger.warning("Stripe package not available. Webhook handling will be disabled.")
 
 
-@csrf_exempt
-@require_POST
-def stripe_webhook(request):
-    """Process incoming Stripe webhook events and route to appropriate handlers."""
-    # Feature flag allows disabling Stripe in environments without API keys
+def _check_stripe_enabled():
+    """Check if Stripe is enabled in the current environment."""
     if not is_feature_enabled(get_env('STRIPE_ENABLED', 'False')):
         logger.warning("Stripe is not enabled. Webhook event ignored.")
-        return HttpResponse(status=400)
-        
+        return False
+    return True
+
+def _validate_webhook_configuration():
+    """Validate that Stripe and webhook configurations are properly set up."""
     # Use utility to handle both real and mock Stripe environments
     stripe = get_stripe()
     if not stripe:
         logger.error("Stripe API not available. Cannot process webhook.")
-        return HttpResponse(status=500)
+        return None
         
     # Validate webhook secret to prevent unauthorized webhook calls
     webhook_secret = settings.DJSTRIPE_WEBHOOK_SECRET
     if not webhook_secret:
         logger.error("Webhook secret not configured. Cannot validate webhook events.")
-        return HttpResponse(status=500)
+        return None
         
-    # Extract required data for signature verification
-    payload = request.body
-    sig_header = request.META.get('HTTP_STRIPE_SIGNATURE')
-    
-    if not sig_header:
-        logger.error("No Stripe signature found in request headers")
-        return HttpResponse(status=400)
-        
+    return stripe, webhook_secret
+
+def _verify_webhook_signature(stripe, payload, sig_header, webhook_secret):
+    """Verify the webhook signature from Stripe."""
     try:
         # Set API key for every request to handle token expiration or config changes
         stripe.api_key = settings.STRIPE_SECRET_KEY
@@ -67,58 +63,85 @@ def stripe_webhook(request):
         event = stripe.Webhook.construct_event(
             payload, sig_header, webhook_secret
         )
-        
-        # Route events to specific handlers based on type for modular processing
-        event_type = event['type']
-        logger.info(f"Processing Stripe webhook event: {event_type}")
-        
-        # Customer lifecycle events
-        if event_type == 'customer.created':
-            handle_customer_created(event)
-            
-        elif event_type == 'customer.updated':
-            handle_customer_updated(event)
-            
-        elif event_type == 'customer.deleted':
-            handle_customer_deleted(event)
-            
-        # Subscription events - grouped by prefix for maintainability
-        elif event_type.startswith('customer.subscription.'):
-            handle_subscription_event(event)
-            
-        # Payment events - grouped for consistent handling
-        elif event_type.startswith('payment_'):
-            handle_payment_event(event)
-            
-        # Product events
-        elif event_type == 'product.created':
-            handle_product_created(event)
-            
-        elif event_type == 'product.updated':
-            handle_product_updated(event)
-            
-        elif event_type == 'product.deleted':
-            handle_product_deleted(event)
-            
-        # Price events
-        elif event_type == 'price.created':
-            handle_price_created(event)
-            
-        elif event_type == 'price.updated':
-            handle_price_updated(event)
-            
-        elif event_type == 'price.deleted':
-            handle_price_deleted(event)
-            
-        # Log other events for monitoring without cluttering error logs
-        else:
-            logger.info(f"Unhandled Stripe webhook event type: {event_type}")
-            
-        return HttpResponse(status=200)
-            
+        return event
     except stripe.error.SignatureVerificationError:
         logger.error("Invalid signature in Stripe webhook request")
+        return None
+    except Exception as e:
+        logger.error(f"Error verifying webhook signature: {str(e)}")
+        return None
+
+def _get_webhook_handler(event_type):
+    """Get the appropriate handler function for a given event type."""
+    # Direct mappings for specific event types
+    EVENT_HANDLERS = {
+        'customer.created': handle_customer_created,
+        'customer.updated': handle_customer_updated,
+        'customer.deleted': handle_customer_deleted,
+        'product.created': handle_product_created,
+        'product.updated': handle_product_updated,
+        'product.deleted': handle_product_deleted,
+        'price.created': handle_price_created,
+        'price.updated': handle_price_updated,
+        'price.deleted': handle_price_deleted,
+    }
+    
+    # Check for direct match first
+    if event_type in EVENT_HANDLERS:
+        return EVENT_HANDLERS[event_type]
+    
+    # Check for prefix matches
+    if event_type.startswith('customer.subscription.'):
+        return handle_subscription_event
+    elif event_type.startswith('payment_'):
+        return handle_payment_event
+    
+    # No handler for this event type
+    return None
+
+def _route_webhook_event(event):
+    """Route webhook events to the appropriate handler based on event type."""
+    event_type = event['type']
+    logger.info(f"Processing Stripe webhook event: {event_type}")
+    
+    handler = _get_webhook_handler(event_type)
+    if handler:
+        handler(event)
+    else:
+        logger.info(f"Unhandled Stripe webhook event type: {event_type}")
+
+@csrf_exempt
+@require_POST
+def stripe_webhook(request):
+    """Process incoming Stripe webhook events and route to appropriate handlers."""
+    # Check if Stripe is enabled
+    if not _check_stripe_enabled():
         return HttpResponse(status=400)
+    
+    # Validate configuration
+    config_result = _validate_webhook_configuration()
+    if not config_result:
+        return HttpResponse(status=500)
+    
+    stripe, webhook_secret = config_result
+    
+    # Extract required data for signature verification
+    payload = request.body
+    sig_header = request.META.get('HTTP_STRIPE_SIGNATURE')
+    
+    if not sig_header:
+        logger.error("No Stripe signature found in request headers")
+        return HttpResponse(status=400)
+    
+    # Verify webhook signature
+    event = _verify_webhook_signature(stripe, payload, sig_header, webhook_secret)
+    if not event:
+        return HttpResponse(status=400)
+    
+    try:
+        # Route event to appropriate handler
+        _route_webhook_event(event)
+        return HttpResponse(status=200)
     except Exception as e:
         logger.error(f"Error processing Stripe webhook: {str(e)}")
         return HttpResponse(status=500)

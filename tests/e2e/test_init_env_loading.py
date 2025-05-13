@@ -78,7 +78,9 @@ PROJECT_NAME=test_project
         
         # Force reload environment variables
         refresh_env_cache()
-        importlib.reload(__import__('quickscale.utils.env_utils'))
+        env_utils_module = importlib.reload(__import__('quickscale.utils.env_utils'))
+        # Explicitly initialize the environment after reload
+        env_utils_module.initialize_env()
         
         # Verify environment variables are loaded correctly
         debug_value = get_env('DEBUG')

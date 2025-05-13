@@ -1,11 +1,11 @@
-"""Integration tests for project settings and context processors."""
+# Integration tests for project settings and context processors.
 import os
 import pytest
 from unittest import mock, TestCase
 from django.template import Context, Template
 from django.http import HttpResponse
 
-# Mock Django settings class
+# Mock Django settings class.
 class MockSettings:
     """Mock Django settings class."""
     PROJECT_NAME = 'QuickScale'
@@ -19,7 +19,7 @@ class MockSettings:
     }]
     ALLOWED_HOSTS = ['testserver']
 
-# Mock response with context
+# Mock response with a context dictionary.
 class MockResponse(HttpResponse):
     """Mock response with a context dictionary."""
     def __init__(self, *args, **kwargs):

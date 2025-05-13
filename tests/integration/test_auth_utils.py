@@ -5,11 +5,7 @@ import types
 
 
 def patch_django_for_e2e_testing():
-    """
-    Apply critical patches to Django to fix bytes/string handling issues.
-    
-    This is needed due to a type mismatch between bytes and strings in the WSGI environment.
-    """
+    """Apply critical patches to Django to fix bytes/string handling issues."""
     # Step 1: Patch the get_path_info function to ensure it returns strings
     from django.core.handlers.wsgi import get_path_info as original_get_path_info
     
@@ -32,11 +28,7 @@ def patch_django_for_e2e_testing():
         
         # Create a new implementation that doesn't call the original method
         def fixed_should_handle(self, path):
-            """
-            New implementation that handles both string and bytes paths.
-            
-            This avoids calling the original method, which would cause infinite recursion.
-            """
+            """New implementation that handles both string and bytes paths."""
             if isinstance(path, bytes):
                 path = path.decode('utf-8')
                 

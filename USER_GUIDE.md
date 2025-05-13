@@ -216,7 +216,7 @@ The simplest way to run tests is using the `run_tests.sh` script:
 # Run integration tests
 ./run_tests.sh -i
 
-# Run edn to end tests
+# Run end to end tests
 ./run_tests.sh -e
 
 # Run with coverage report
@@ -237,7 +237,10 @@ quickscale manage test
 - [Roadmap](./ROADMAP.md)
 - [Changelog](./CHANGELOG.md)
 - [HomePage](https://github.com/Experto-AI/quickscale)
-
+- Other documentation links:
+  - [DATABASE_VARIABLES.md](./docs/DATABASE_VARIABLES.md) Database Environment Variables. 
+  - [MESSAGE_MANAGER.md](./docs/MESSAGE_MANAGER.md) Message Manager Utility.
+  
 ---
 
 Thank you for using QuickScale! 🚀

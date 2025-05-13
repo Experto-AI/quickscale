@@ -10,6 +10,7 @@ from pathlib import Path
 from unittest.mock import patch
 import django
 from django.test.testcases import LiveServerTestCase
+from typing import Optional
 
 # Add tests directory to Python path to make tests/core and tests/users importable
 tests_dir = os.path.dirname(os.path.abspath(__file__))
@@ -160,20 +161,171 @@ def wait_for_service():
     
     return _wait_for
 
-@pytest.fixture(scope="module")
-def real_project_fixture(tmp_path_factory):
-    """Create a real QuickScale project fixture that's properly cleaned up."""
-    from tests.utils import find_available_ports
-    
-    tmp_path = tmp_path_factory.mktemp("quickscale_real_test")
-    project_dir = None
-    
-    with chdir(tmp_path):
-        project_name = "real_test_project"
+def _cleanup_previous_instances(project_name: str) -> None:
+    """Clean up any previous test instances with the same project name."""
+    try:
+        # Try to clean up any potential previous instances
+        subprocess.run(
+            ['docker', 'rm', '-f', f"{project_name}_web", f"{project_name}_db", f"{project_name}-web-1", f"{project_name}-db-1"],
+            capture_output=True,
+            check=False,
+            timeout=30
+        )
         
-        # First, ensure no existing containers with the same name exist
+        # Also remove any networks
+        subprocess.run(
+            ['docker', 'network', 'rm', f"{project_name}_default", f"{project_name.replace('_', '-')}_default"],
+            capture_output=True,
+            check=False,
+            timeout=10
+        )
+    except (subprocess.SubprocessError, FileNotFoundError) as e:
+        print(f"Cleanup of previous instances warning (safe to ignore): {e}")
+
+def _initialize_test_project(project_name: str, tmp_path: Path) -> Optional[Path]:
+    """Initialize a new QuickScale test project and return its directory."""
+    try:
+        print(f"\nCreating test project: {project_name} in {tmp_path}")
+        build_result = subprocess.run(
+            ['quickscale', 'init', project_name],
+            capture_output=True, 
+            text=True,
+            check=False,
+            timeout=180  # Increased timeout to 3 minutes
+        )
+        
+        if build_result.returncode != 0:
+            print(f"Project initialization failed: {build_result.stderr}")
+            print(f"Initialization stdout: {build_result.stdout}")
+            pytest.skip(f"Project initialization failed with returncode {build_result.returncode}")
+            return None
+            
+        return tmp_path / project_name
+    except subprocess.SubprocessError as e:
+        print(f"Build failed with exception: {e}")
+        pytest.skip(f"Build failed: {e}")
+        return None
+
+def _start_project_services(project_dir: Path, web_port: int) -> bool:
+    """Start the QuickScale project services and verify they're running."""
+    with chdir(project_dir):
+        print(f"Starting services from project directory: {project_dir}")
+        # Start services
+        up_result = subprocess.run(
+            ['quickscale', 'up'],
+            capture_output=True,
+            text=True,
+            check=False,
+            timeout=60
+        )
+        
+        if up_result.returncode != 0:
+            print(f"Service startup failed: {up_result.stderr}")
+            print(f"Service startup stdout: {up_result.stdout}")
+            return False
+        
+        print("Services started successfully")
+        
+        # Wait a bit for services to fully start
+        time.sleep(5)
+
+        # Wait for the web port to be open
+        from tests.utils import wait_for_port
+        
+        print(f"Waiting for web service to be ready on port {web_port}...")
+        web_ready = wait_for_port('127.0.0.1', web_port, timeout=60)
+        
+        if not web_ready:
+            print(f"Web service on port {web_port} not ready after 60 seconds.")
+            _get_web_container_logs(project_dir.name)
+            pytest.skip(f"Web service on port {web_port} not ready.")
+            return False
+        
+        print(f"Web service on port {web_port} is ready.")
+        return True
+
+def _get_web_container_logs(project_name: str) -> None:
+    """Get and print logs from the web container."""
+    print("Attempting to fetch web container logs...")
+    container_logs = ""  # Placeholder
+    # Try potential container names
+    web_container_names = [f"{project_name}_web", f"{project_name}-web-1"]
+    
+    from tests.utils import get_container_logs
+    for name in web_container_names:
+        logs = get_container_logs(name)
+        if logs:
+            container_logs += f"\n--- Logs for {name} ---\n{logs}"
+
+    if container_logs:
+        print("--- START WEB CONTAINER LOGS ---")
+        print(container_logs)
+        print("--- END WEB CONTAINER LOGS ---")
+    else:
+        print("Could not retrieve web container logs.")
+
+def _verify_containers_running(project_name: str) -> bool:
+    """Verify that the required containers are running."""
+    # Check if containers are running
+    check_result = subprocess.run(
+        ['docker', 'ps', '--format', '{{.Names}}'],
+        capture_output=True,
+        text=True,
+        check=False,
+        timeout=10
+    )
+    
+    print(f"Docker containers after build: {check_result.stdout}")
+    
+    # Verify web container is running
+    web_running = False
+    web_container_names = [f"{project_name}_web", f"{project_name}-web-1"]
+    
+    for name in web_container_names:
+        if name in check_result.stdout:
+            web_running = True
+            print(f"Found running web container: {name}")
+            break
+            
+    if not web_running:
+        print(f"Web container not running after build. Checking Docker logs...")
+        # Get logs from container
+        for name in web_container_names:
+            try:
+                log_result = subprocess.run(
+                    ['docker', 'logs', name],
+                    capture_output=True,
+                    text=True,
+                    check=False,
+                    timeout=10
+                )
+                print(f"Logs for {name}: {log_result.stdout}")
+            except (subprocess.SubprocessError, FileNotFoundError):
+                pass
+    
+    return web_running
+
+def _cleanup_project(project_dir: Path) -> None:
+    """Clean up the project directory and associated Docker resources."""
+    project_name = project_dir.name
+    
+    if project_dir and project_dir.exists():
+        with chdir(project_dir):
+            try:
+                # Try to stop any running containers
+                print(f"Cleaning up from project directory: {project_dir}")
+                subprocess.run(
+                    ['quickscale', 'down'], 
+                    capture_output=True,
+                    check=False,
+                    timeout=30
+                )
+            except (subprocess.SubprocessError, FileNotFoundError) as e:
+                print(f"Cleanup warning (safe to ignore): {e}")
+        
+        # Also cleanup using Docker commands directly
         try:
-            # Try to clean up any potential previous instances
+            # Try to remove containers directly
             subprocess.run(
                 ['docker', 'rm', '-f', f"{project_name}_web", f"{project_name}_db", f"{project_name}-web-1", f"{project_name}-db-1"],
                 capture_output=True,
@@ -189,7 +341,27 @@ def real_project_fixture(tmp_path_factory):
                 timeout=10
             )
         except (subprocess.SubprocessError, FileNotFoundError) as e:
-            print(f"Cleanup of previous instances warning (safe to ignore): {e}")
+            print(f"Docker cleanup warning (safe to ignore): {e}")
+        
+        # Remove the project directory
+        try:
+            shutil.rmtree(project_dir)
+        except (OSError, PermissionError) as e:
+            print(f"Warning: Failed to clean up {project_dir}: {e}")
+
+@pytest.fixture(scope="module")
+def real_project_fixture(tmp_path_factory):
+    """Create a real QuickScale project fixture that's properly cleaned up."""
+    from tests.utils import find_available_ports
+    
+    tmp_path = tmp_path_factory.mktemp("quickscale_real_test")
+    project_dir = None
+    
+    with chdir(tmp_path):
+        project_name = "real_test_project"
+        
+        # Clean up any previous instances
+        _cleanup_previous_instances(project_name)
         
         # Find available ports for the web and db services
         ports = find_available_ports(count=2, start_port=8000, end_port=9000)
@@ -205,168 +377,27 @@ def real_project_fixture(tmp_path_factory):
         os.environ["PORT"] = str(web_port)
         os.environ["PG_PORT"] = str(db_port)
         
-        # Run actual quickscale build command with increased timeout
-        try:
-            print(f"\nCreating test project: {project_name} in {tmp_path}")
-            build_result = subprocess.run(
-                ['quickscale', 'init', project_name],
-                capture_output=True, 
-                text=True,
-                check=False,
-                timeout=180  # Increased timeout to 3 minutes
-            )
-            
-            if build_result.returncode != 0:
-                print(f"Project initialization failed: {build_result.stderr}")
-                print(f"Initialization stdout: {build_result.stdout}")
-                pytest.skip(f"Project initialization failed with returncode {build_result.returncode}")
-                yield None
-                return
-                
-            project_dir = tmp_path / project_name
-            
-            # Important: Run the initial 'up' command from the project directory to ensure
-            # services start correctly
-            with chdir(project_dir):
-                print(f"Starting services from project directory: {project_dir}")
-                # Start services
-                up_result = subprocess.run(
-                    ['quickscale', 'up'],
-                    capture_output=True,
-                    text=True,
-                    check=False,
-                    timeout=60
-                )
-                
-                if up_result.returncode != 0:
-                    print(f"Service startup failed: {up_result.stderr}")
-                    print(f"Service startup stdout: {up_result.stdout}")
-                else:
-                    print("Services started successfully")
-                
-                # Wait a bit for services to fully start
-                time.sleep(5)
-
-                # *** ADDED: Wait for the web port to be open ***
-                from tests.utils import wait_for_port, get_container_logs
-                
-                print(f"Waiting for web service to be ready on port {web_port}...")
-                web_ready = wait_for_port('127.0.0.1', web_port, timeout=60)
-
-                if not web_ready:
-                    print(f"Web service on port {web_port} not ready after 60 seconds.")
-                    # *** ADDED: Attempt to get container logs before skipping ***
-                    print("Attempting to fetch web container logs...")
-                    container_logs = "" # Placeholder
-                    # Try potential container names
-                    web_container_names = [f"{project_name}_web", f"{project_name}-web-1"]
-                    for name in web_container_names:
-                         logs = get_container_logs(name)
-                         if logs:
-                              container_logs += f"\n--- Logs for {name} ---\n{logs}"
-
-                    if container_logs:
-                         print("--- START WEB CONTAINER LOGS ---")
-                         print(container_logs)
-                         print("--- END WEB CONTAINER LOGS ---")
-                    else:
-                         print("Could not retrieve web container logs.")
-                    # *** END ADDED ***
-                    pytest.skip(f"Web service on port {web_port} not ready.")
-                else:
-                    print(f"Web service on port {web_port} is ready.")
-                # *** END ADDED ***
-            
-            # Check if containers are running
-            check_result = subprocess.run(
-                ['docker', 'ps', '--format', '{{.Names}}'],
-                capture_output=True,
-                text=True,
-                check=False,
-                timeout=10
-            )
-            
-            print(f"Docker containers after build: {check_result.stdout}")
-            
-            # Verify web container is running
-            web_running = False
-            web_container_names = [f"{project_name}_web", f"{project_name}-web-1"]
-            
-            for name in web_container_names:
-                if name in check_result.stdout:
-                    web_running = True
-                    print(f"Found running web container: {name}")
-                    break
-                    
-            if not web_running:
-                print(f"Web container not running after build. Checking Docker logs...")
-                # Get logs from container
-                for name in web_container_names:
-                    try:
-                        log_result = subprocess.run(
-                            ['docker', 'logs', name],
-                            capture_output=True,
-                            text=True,
-                            check=False,
-                            timeout=10
-                        )
-                        print(f"Logs for {name}: {log_result.stdout}")
-                    except (subprocess.SubprocessError, FileNotFoundError):
-                        pass
-                
-            yield project_dir
-            
-        except subprocess.SubprocessError as e:
-            print(f"Build failed with exception: {e}")
-            pytest.skip(f"Build failed: {e}")
+        # Initialize the test project
+        project_dir = _initialize_test_project(project_name, tmp_path)
+        if not project_dir:
             yield None
-        finally:
-            # Always attempt cleanup
-            if project_dir and project_dir.exists():
-                with chdir(project_dir):
-                    try:
-                        # Try to stop any running containers
-                        print(f"Cleaning up from project directory: {project_dir}")
-                        subprocess.run(
-                            ['quickscale', 'down'], 
-                            capture_output=True,
-                            check=False,
-                            timeout=30
-                        )
-                    except (subprocess.SubprocessError, FileNotFoundError) as e:
-                        print(f"Cleanup warning (safe to ignore): {e}")
-                
-                # Also cleanup using Docker commands directly
-                try:
-                    # Try to remove containers directly
-                    subprocess.run(
-                        ['docker', 'rm', '-f', f"{project_name}_web", f"{project_name}_db", f"{project_name}-web-1", f"{project_name}-db-1"],
-                        capture_output=True,
-                        check=False,
-                        timeout=30
-                    )
-                    
-                    # Also remove any networks
-                    subprocess.run(
-                        ['docker', 'network', 'rm', f"{project_name}_default", f"{project_name.replace('_', '-')}_default"],
-                        capture_output=True,
-                        check=False,
-                        timeout=10
-                    )
-                except (subprocess.SubprocessError, FileNotFoundError) as e:
-                    print(f"Docker cleanup warning (safe to ignore): {e}")
-                
-                # Remove the project directory
-                try:
-                    shutil.rmtree(project_dir)
-                except (OSError, PermissionError) as e:
-                    print(f"Warning: Failed to clean up {project_dir}: {e}")
-                    
-            # Clear environment variables
-            if "PORT" in os.environ:
-                del os.environ["PORT"]
-            if "PG_PORT" in os.environ:
-                del os.environ["PG_PORT"]
+            return
+            
+        # Start services and verify they're running
+        services_started = _start_project_services(project_dir, web_port)
+        if not services_started:
+            yield None
+            return
+            
+        # Verify containers are running
+        _verify_containers_running(project_name)
+        
+        # Yield the project directory for tests to use
+        yield project_dir
+        
+    # Clean up after tests are done
+    if project_dir:
+        _cleanup_project(project_dir)
 
 @pytest.fixture
 def mock_docker():

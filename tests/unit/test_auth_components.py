@@ -9,47 +9,49 @@ from users.adapters import AccountAdapter, SocialAccountAdapter
 from django.core.exceptions import ValidationError, PermissionDenied
 
 
-# Mock the imports instead of directly importing
+class _PasswordStrengthValidator:
+    """Actual implementation of the mock validator."""
+    def __init__(self, min_length=8, require_uppercase=True, require_lowercase=True,
+                 require_digit=True, require_special=True):
+        self.min_length = min_length
+        self.require_uppercase = require_uppercase
+        self.require_lowercase = require_lowercase
+        self.require_digit = require_digit
+        self.require_special = require_special
+
+    def validate(self, password, user=None):
+        """Validate the password."""
+        if len(password) < self.min_length:
+            raise ValueError(f"Password must be at least {self.min_length} characters long.")
+        if self.require_uppercase and not any(c.isupper() for c in password):
+            raise ValueError("Password must contain at least one uppercase letter.")
+        if self.require_lowercase and not any(c.islower() for c in password):
+            raise ValueError("Password must contain at least one lowercase letter.")
+        if self.require_digit and not any(c.isdigit() for c in password):
+            raise ValueError("Password must contain at least one digit.")
+        if self.require_special and all(c.isalnum() for c in password):
+            raise ValueError("Password must contain at least one special character.")
+
+    def get_help_text(self):
+        """Get help text for the validator."""
+        help_texts = [
+            f"Your password must be at least {self.min_length} characters long."
+        ]
+        if self.require_uppercase:
+            help_texts.append("Your password must contain at least one uppercase letter.")
+        if self.require_lowercase:
+            help_texts.append("Your password must contain at least one lowercase letter.")
+        if self.require_digit:
+            help_texts.append("Your password must contain at least one digit.")
+        if self.require_special:
+            help_texts.append("Your password must contain at least one special character.")
+        return " ".join(help_texts)
+
+
 @pytest.fixture
 def MockPasswordStrengthValidator():
     """Mock for PasswordStrengthValidator."""
-    class MockValidator:
-        def __init__(self, min_length=8, require_uppercase=True, require_lowercase=True,
-                    require_digit=True, require_special=True):
-            self.min_length = min_length
-            self.require_uppercase = require_uppercase
-            self.require_lowercase = require_lowercase
-            self.require_digit = require_digit
-            self.require_special = require_special
-
-        def validate(self, password, user=None):
-            errors = []
-            if len(password) < self.min_length:
-                raise ValueError(f"Password must be at least {self.min_length} characters long.")
-            if self.require_uppercase and not any(c.isupper() for c in password):
-                raise ValueError("Password must contain at least one uppercase letter.")
-            if self.require_lowercase and not any(c.islower() for c in password):
-                raise ValueError("Password must contain at least one lowercase letter.")
-            if self.require_digit and not any(c.isdigit() for c in password):
-                raise ValueError("Password must contain at least one digit.")
-            if self.require_special and all(c.isalnum() for c in password):
-                raise ValueError("Password must contain at least one special character.")
-
-        def get_help_text(self):
-            help_texts = [
-                f"Your password must be at least {self.min_length} characters long."
-            ]
-            if self.require_uppercase:
-                help_texts.append("Your password must contain at least one uppercase letter.")
-            if self.require_lowercase:
-                help_texts.append("Your password must contain at least one lowercase letter.")
-            if self.require_digit:
-                help_texts.append("Your password must contain at least one digit.")
-            if self.require_special:
-                help_texts.append("Your password must contain at least one special character.")
-            return " ".join(help_texts)
-    
-    return MockValidator
+    return _PasswordStrengthValidator
 
 @pytest.fixture
 def MockBreachedPasswordValidator():

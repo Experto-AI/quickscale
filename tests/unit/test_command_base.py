@@ -99,11 +99,12 @@ class TestCommandBase:
         
         with patch('builtins.print') as mock_print, \
              patch('sys.exit') as mock_exit, \
-             patch.object(cmd.logger, 'error') as mock_log:
+             patch.object(cmd.logger, 'error') as mock_log, \
+             patch('quickscale.utils.message_manager.MessageManager.error') as mock_manager_error:
              
             cmd._exit_with_error("Test error message")
             
             # Verify error was logged, printed, and sys.exit was called
             mock_log.assert_called_once_with("Test error message")
-            mock_print.assert_called_once_with("Error: Test error message")
+            mock_manager_error.assert_called_once_with("Test error message", cmd.logger)
             mock_exit.assert_called_once_with(1)

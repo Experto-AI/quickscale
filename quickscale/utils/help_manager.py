@@ -2,10 +2,12 @@
 
 def show_manage_help() -> None:
     """Display Django management command help information."""
-    print("QuickScale Django Management Commands")
-    print("=====================================")
-    print("\nThe 'manage' command allows you to run any Django management command.")
-    print("\nCommon commands:")
+    from quickscale.utils.message_manager import MessageManager
+    
+    MessageManager.info("QuickScale Django Management Commands")
+    MessageManager.info("=====================================")
+    MessageManager.info("\nThe 'manage' command allows you to run any Django management command.")
+    MessageManager.info("\nCommon commands:")
     
     commands = [
         ("Database:", ""),
@@ -41,10 +43,10 @@ def show_manage_help() -> None:
     
     for cmd, desc in commands:
         if desc:
-            print(f"{cmd.ljust(20)} {desc}")
+            MessageManager.info(f"{cmd.ljust(20)} {desc}")
         else:
-            print(f"\n{cmd}")
+            MessageManager.info(f"\n{cmd}")
     
-    print("\nDjango docs: https://docs.djangoproject.com/en/stable/ref/django-admin/")
-    print("\nExample usage:\n  quickscale manage migrate")
-    print("  quickscale manage test users")
+    MessageManager.info("\nDjango docs: https://docs.djangoproject.com/en/stable/ref/django-admin/")
+    MessageManager.info("\nExample usage:\n  quickscale manage migrate")
+    MessageManager.info("  quickscale manage test users")
