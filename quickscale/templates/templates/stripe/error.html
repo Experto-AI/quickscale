@@ -1,0 +1,17 @@
+{% extends "base/base.html" %}
+
+{% block title %}Stripe Error{% endblock %}
+
+{% block content %}
+<section class="section">
+  <div class="container">
+    <h1 class="title">Error</h1>
+    <div class="notification is-danger">
+      {{ error }}
+    </div>
+    <a href="{% url 'stripe:status' %}" class="button is-primary">
+      Return to Stripe Status
+    </a>
+  </div>
+</section>
+{% endblock %} 

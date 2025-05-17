@@ -1,28 +1,39 @@
 """Staff dashboard views."""
 from django.contrib.auth.decorators import login_required, user_passes_test
 from django.http import HttpRequest, HttpResponse, JsonResponse
-from django.shortcuts import render
+from django.shortcuts import render, get_object_or_404
 from django.core.paginator import Paginator
 from core.env_utils import get_env, is_feature_enabled
 
 # Check if Stripe is enabled using the same logic as in settings.py
 stripe_enabled = is_feature_enabled(get_env('STRIPE_ENABLED', 'False'))
-STRIPE_AVAILABLE = False
-Product = None
-ProductService = None
 
-# Only attempt to import from djstripe if Stripe is enabled
+# Only attempt to import if Stripe is enabled and properly configured
 if stripe_enabled:
-    try:
-        # Import Product model and service from djstripe app
-        from djstripe.models import Product
-        from djstripe.services import ProductService
-        STRIPE_AVAILABLE = True
-    except ImportError:
-        # Fallback when Stripe isn't available
-        Product = None
-        ProductService = None
-        STRIPE_AVAILABLE = False
+    from stripe_manager.stripe_manager import StripeManager, StripeConfigurationError
+
+STRIPE_AVAILABLE = False
+stripe_manager = None
+missing_api_keys = False
+
+# Only attempt to import if Stripe is enabled and properly configured
+if stripe_enabled:
+    # Also check that all required settings are present
+    stripe_public_key = get_env('STRIPE_PUBLIC_KEY', '')
+    stripe_secret_key = get_env('STRIPE_SECRET_KEY', '')
+    stripe_webhook_secret = get_env('STRIPE_WEBHOOK_SECRET', '')
+    
+    if not stripe_public_key or not stripe_secret_key or not stripe_webhook_secret:
+        missing_api_keys = True
+    elif stripe_public_key and stripe_secret_key and stripe_webhook_secret:
+        try:
+            # Get Stripe manager
+            stripe_manager = StripeManager.get_instance()
+            STRIPE_AVAILABLE = True
+        except (ImportError, StripeConfigurationError):
+            # Fallback when Stripe isn't available
+            stripe_manager = None
+            STRIPE_AVAILABLE = False
 
 @login_required
 @user_passes_test(lambda u: u.is_staff)
@@ -34,32 +45,29 @@ def index(request: HttpRequest) -> HttpResponse:
 @user_passes_test(lambda u: u.is_staff)
 def product_admin(request: HttpRequest) -> HttpResponse:
     """
-    Display the product management dashboard.
+    Display product management page with list of all products.
     
-    This view shows all products synced with Stripe and provides
-    read-only access to product details with links to Stripe dashboard.
+    Args:
+        request: The HTTP request
+        
+    Returns:
+        Rendered product management template
     """
     # Check if Stripe is enabled
     stripe_enabled = is_feature_enabled(get_env('STRIPE_ENABLED', 'False'))
     
-    # Default empty context
     context = {
         'stripe_enabled': stripe_enabled,
         'stripe_available': STRIPE_AVAILABLE,
+        'missing_api_keys': missing_api_keys,
         'products': []
     }
     
-    # Only proceed with product fetching if Stripe is enabled and available
-    if stripe_enabled and STRIPE_AVAILABLE and Product is not None:
+    # Only proceed with product listing if Stripe is enabled and available
+    if stripe_enabled and STRIPE_AVAILABLE and stripe_manager is not None:
         try:
-            # Get products with pagination
-            product_list = Product.objects.all().order_by('-updated')
-            
-            # Paginate the results
-            page = request.GET.get('page', 1)
-            paginator = Paginator(product_list, 10)  # Show 10 products per page
-            products = paginator.get_page(page)
-            
+            # Get products from Stripe
+            products = stripe_manager.list_products(active=None)  # Get all products, regardless of status
             context['products'] = products
         except Exception as e:
             context['error'] = str(e)
@@ -81,22 +89,66 @@ def product_admin_refresh(request: HttpRequest) -> JsonResponse:
     # Check if Stripe is enabled
     stripe_enabled = is_feature_enabled(get_env('STRIPE_ENABLED', 'False'))
     
-    if not stripe_enabled or not STRIPE_AVAILABLE or ProductService is None:
+    if not stripe_enabled or not STRIPE_AVAILABLE or stripe_manager is None:
         return JsonResponse({
             'success': False,
             'error': 'Stripe integration is not enabled or available'
         }, status=400)
     
     try:
-        # Use ProductService to sync all products from Stripe
-        synced_count = ProductService.sync_all_from_stripe()
+        # Use StripeManager to sync all products from Stripe
+        # Since we're moving away from the Django model, we need to use a different approach
+        # Just fetch all products from Stripe and count them
+        products = stripe_manager.list_products(active=None)
+        synced_count = len(products) if products else 0
         
         return JsonResponse({
             'success': True,
-            'message': f'Successfully synced {synced_count} products from Stripe'
+            'message': f'Successfully retrieved {synced_count} products from Stripe'
         })
     except Exception as e:
         return JsonResponse({
             'success': False,
             'error': str(e)
         }, status=500)
+
+@login_required
+@user_passes_test(lambda u: u.is_staff)
+def product_detail(request: HttpRequest, product_id: str) -> HttpResponse:
+    """
+    Display detailed information for a specific product.
+    
+    Args:
+        request: The HTTP request
+        product_id: The product ID to retrieve details for
+        
+    Returns:
+        Rendered product detail template
+    """
+    # Check if Stripe is enabled
+    stripe_enabled = is_feature_enabled(get_env('STRIPE_ENABLED', 'False'))
+    
+    context = {
+        'stripe_enabled': stripe_enabled,
+        'stripe_available': STRIPE_AVAILABLE,
+        'missing_api_keys': missing_api_keys,
+        'product_id': product_id,
+        'product': None,
+        'prices': []
+    }
+    
+    # Only proceed with product fetching if Stripe is enabled and available
+    if stripe_enabled and STRIPE_AVAILABLE and stripe_manager is not None:
+        try:
+            # Get product details from Stripe
+            product = stripe_manager.retrieve_product(product_id)
+            context['product'] = product
+            
+            # Get product prices
+            prices = stripe_manager.get_product_prices(product_id)
+            context['prices'] = prices
+            
+        except Exception as e:
+            context['error'] = str(e)
+    
+    return render(request, 'dashboard/product_detail.html', context)

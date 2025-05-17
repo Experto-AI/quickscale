@@ -303,7 +303,7 @@ class ServiceUpCommand(Command):
                 )
         return updated_ports
 
-    def _prepare_environment_and_ports(self) -> Tuple[Dict, Dict[str, int]]:
+    def _prepare_environment_and_ports(self, no_cache: bool = False) -> Tuple[Dict, Dict[str, int]]:
         """Prepare environment variables and check for port availability."""
         # Get environment variables for docker-compose
         env = os.environ.copy()
@@ -326,7 +326,7 @@ class ServiceUpCommand(Command):
             
         return env, updated_ports
         
-    def _find_ports_for_retry(self, retry_count: int, max_retries: int) -> Dict[str, int]:
+    def _find_ports_for_retry(self, retry_count: int, max_retries: int, no_cache: bool = False) -> Dict[str, int]:
         """Find available ports for retry attempts."""
         self.logger.info(f"Port conflict detected (attempt {retry_count+1}/{max_retries}). Finding new ports in higher ranges...")
         
@@ -348,10 +348,13 @@ class ServiceUpCommand(Command):
             
         return updated_ports
         
-    def _start_docker_services(self, env: Dict) -> None:
+    def _start_docker_services(self, env: Dict, no_cache: bool = False) -> None:
         """Start the Docker services using docker-compose."""
         try:
-            result = subprocess.run([DOCKER_COMPOSE_COMMAND, "up", "--build", "-d"], check=True, env=env, capture_output=True, text=True)
+            command = [DOCKER_COMPOSE_COMMAND, "up", "--build", "-d"]
+            if no_cache:
+                command.append("--no-cache")
+            result = subprocess.run(command, check=True, env=env, capture_output=True, text=True)
             self.logger.info("Services started successfully.")
         except subprocess.CalledProcessError as e:
             self._handle_docker_process_error(e, env)
@@ -493,7 +496,7 @@ class ServiceUpCommand(Command):
                 MessageManager.get_template("db_port_internal", port=db_port)
             ])
     
-    def _handle_retry_attempt(self, retry_count: int, max_retries: int, env: Dict, updated_ports: Dict[str, int]) -> Dict[str, int]:
+    def _handle_retry_attempt(self, retry_count: int, max_retries: int, env: Dict, updated_ports: Dict[str, int], no_cache: bool = False) -> Dict[str, int]:
         """Handle a retry attempt for starting services."""
         # For first attempt, try to find multiple available ports at once to be proactive
         if retry_count == 0:
@@ -506,7 +509,7 @@ class ServiceUpCommand(Command):
                 updated_ports = self._update_env_file_ports(env)
         else:
             # For retries, use our comprehensive multi-port finder with higher ranges
-            updated_ports = self._find_ports_for_retry(retry_count, max_retries)
+            updated_ports = self._find_ports_for_retry(retry_count, max_retries, no_cache)
             
             # If we couldn't find ports with the retry method, try proactive port finding as a fallback
             if not updated_ports:
@@ -524,14 +527,14 @@ class ServiceUpCommand(Command):
         
         return updated_ports
 
-    def _start_services_with_retry(self, max_retries: int) -> None:
+    def _start_services_with_retry(self, max_retries: int, no_cache: bool = False) -> None:
         """Attempt to start services with multiple retries if needed."""
         retry_count = 0
         last_error = None
         
         try:
             # Prepare initial environment and check port availability
-            env, updated_ports = self._prepare_environment_and_ports()
+            env, updated_ports = self._prepare_environment_and_ports(no_cache)
         except ServiceError:
             # Error already logged and printed in _prepare_environment_and_ports
             return
@@ -539,12 +542,12 @@ class ServiceUpCommand(Command):
         while retry_count < max_retries:
             try:
                 # Handle retry attempt and get updated ports
-                updated_ports = self._handle_retry_attempt(retry_count, max_retries, env, updated_ports)
+                updated_ports = self._handle_retry_attempt(retry_count, max_retries, env, updated_ports, no_cache)
             
                 self.logger.info(f"Starting services (attempt {retry_count+1}/{max_retries})...")
                 
-                # Start docker services
-                self._start_docker_services(env)
+                # Start docker services, passing the no_cache flag
+                self._start_docker_services(env, no_cache=no_cache)
                 
                 # Add a delay to allow services to start properly
                 self.logger.info("Waiting for services to stabilize...")
@@ -577,7 +580,7 @@ class ServiceUpCommand(Command):
         MessageManager.error(error_message)
         MessageManager.print_recovery_suggestion("custom", suggestion="Try again with ports that are not in use, or check Docker logs for more details.")
     
-    def execute(self) -> None:
+    def execute(self, no_cache: bool = False) -> None:
         """Start the project services."""
         from quickscale.utils.message_manager import MessageManager
         
@@ -587,8 +590,8 @@ class ServiceUpCommand(Command):
             MessageManager.error(ProjectManager.PROJECT_NOT_FOUND_MESSAGE, self.logger)
             return
         
-        # Start services with retry mechanism
-        self._start_services_with_retry(max_retries=3)
+        # Start services with retry mechanism, passing the no_cache flag
+        self._start_services_with_retry(max_retries=3, no_cache=no_cache)
 
 class ServiceDownCommand(Command):
     """Stops project services."""

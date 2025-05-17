@@ -25,7 +25,7 @@ class StripeConfigurationTests(unittest.TestCase):
 
     def test_stripe_disabled_by_default(self):
         """Test that Stripe integration is disabled by default."""
-        # Create mock settings without djstripe in INSTALLED_APPS
+        # Create mock settings without Stripe app in INSTALLED_APPS
         mock_installed_apps = [
             'django.contrib.auth',
             'django.contrib.contenttypes',
@@ -41,11 +41,11 @@ class StripeConfigurationTests(unittest.TestCase):
             )
             
             # Without patching settings.INSTALLED_APPS directly, we can verify our logic:
-            # Assume we have a function that determines if djstripe should be in INSTALLED_APPS based on STRIPE_ENABLED
-            def should_include_djstripe():
+            # Assume we have a function that determines if Stripe app should be in INSTALLED_APPS based on STRIPE_ENABLED
+            def should_include_stripe_app():
                 return is_feature_enabled(get_env('STRIPE_ENABLED', 'False'))
             
-            self.assertFalse(should_include_djstripe(), "djstripe should not be included when STRIPE_ENABLED is False")
+            self.assertFalse(should_include_stripe_app(), "stripe.apps.StripeConfig should not be included when STRIPE_ENABLED is False")
 
     def test_stripe_settings_with_flag_enabled(self):
         """Test that enabling Stripe loads the correct settings."""
@@ -70,8 +70,8 @@ class StripeConfigurationTests(unittest.TestCase):
                 self.assertEqual(get_env('STRIPE_WEBHOOK_SECRET'), 'whsec_example')
                 
                 # Without patching settings.INSTALLED_APPS directly, we can verify our logic:
-                # Assume we have a function that determines if djstripe should be in INSTALLED_APPS based on STRIPE_ENABLED
-                def should_include_djstripe():
+                # Assume we have a function that determines if Stripe app should be in INSTALLED_APPS based on STRIPE_ENABLED
+                def should_include_stripe_app():
                     return is_feature_enabled(get_env('STRIPE_ENABLED', 'False'))
                 
-                self.assertTrue(should_include_djstripe(), "djstripe should be included when STRIPE_ENABLED is True")
+                self.assertTrue(should_include_stripe_app(), "stripe.apps.StripeConfig should be included when STRIPE_ENABLED is True")

@@ -31,15 +31,23 @@
 
         {% if not stripe_enabled %}
         <div class="notification is-warning">
-            <p>Stripe integration is not enabled. To enable Stripe, set STRIPE_ENABLED=True in your environment.</p>
+            <p>Stripe integration is not enabled. To enable Stripe, set STRIPE_ENABLED=true in your environment.</p>
         </div>
         {% elif not stripe_available %}
         <div class="notification is-danger">
-            <p>Stripe library is not available. Please install the required dependencies.</p>
+            <p>Stripe API is not available. Make sure you have installed the Stripe package with: pip install stripe</p>
+        </div>
+        {% elif missing_api_keys %}
+        <div class="notification is-danger">
+            <p>Stripe API keys are missing. Configure STRIPE_PUBLIC_KEY, STRIPE_SECRET_KEY, and STRIPE_WEBHOOK_SECRET in your environment.</p>
         </div>
         {% elif error %}
         <div class="notification is-danger">
             <p>Error loading products: {{ error }}</p>
+        </div>
+        {% elif products|length == 0 %}
+        <div class="notification is-info">
+            <p>No products found in your Stripe account. Create products in the Stripe dashboard or using the Stripe API.</p>
         </div>
         {% else %}
 
@@ -47,7 +55,7 @@
         <div class="field is-grouped mb-5">
             <div class="control">
                 <div class="select">
-                    <select id="status-filter">
+                    <select id="filter-status">
                         <option value="all">All Products</option>
                         <option value="active">Active Only</option>
                         <option value="inactive">Inactive Only</option>
@@ -55,9 +63,12 @@
                 </div>
             </div>
             <div class="control">
-                <button class="button is-primary" id="refresh-products">
+                <input class="input" type="text" id="search-products" placeholder="Search products...">
+            </div>
+            <div class="control">
+                <button class="button is-primary" id="sync-products">
                     <span class="icon"><i class="fas fa-sync"></i></span>
-                    <span>Refresh from Stripe</span>
+                    <span>Sync from Stripe</span>
                 </button>
             </div>
         </div>
@@ -67,160 +78,149 @@
             <table class="table is-fullwidth is-striped is-hoverable">
                 <thead>
                     <tr>
-                        <th>Name</th>
+                        <th>Product</th>
+                        <th>Description</th>
                         <th>Price</th>
                         <th>Status</th>
-                        <th>Created</th>
-                        <th>Stripe ID</th>
                         <th>Actions</th>
                     </tr>
                 </thead>
                 <tbody id="products-table-body">
-                    {% if products %}
-                        {% for product in products %}
-                            <tr data-status="{{ product.status }}">
-                                <td>
-                                    <div class="is-flex is-align-items-center">
-                                        {% if product.image %}
-                                            <figure class="image is-48x48 mr-2">
-                                                <img src="{{ product.image.url }}" alt="{{ product.name }}">
-                                            </figure>
-                                        {% endif %}
-                                        <div>
-                                            <p class="has-text-weight-bold">{{ product.name }}</p>
-                                            <p class="is-size-7">{{ product.description|truncatechars:50 }}</p>
-                                        </div>
+                    {% for product in products %}
+                    <tr data-product-id="{{ product.id }}" data-product-status="{{ product.active|yesno:'active,inactive' }}">
+                        <td>
+                            <div class="is-flex is-align-items-center">
+                                {% if product.images and product.images|length > 0 %}
+                                <figure class="image is-48x48 mr-2">
+                                    <img src="{{ product.images.0 }}" alt="{{ product.name }}">
+                                </figure>
+                                {% else %}
+                                <figure class="image is-48x48 mr-2">
+                                    <div class="has-background-grey-lighter is-flex is-align-items-center is-justify-content-center" style="width: 48px; height: 48px;">
+                                        <span class="icon"><i class="fas fa-box"></i></span>
                                     </div>
-                                </td>
-                                <td>{{ product.get_formatted_price }}</td>
-                                <td>
-                                    {% if product.status == 'active' %}
-                                        <span class="tag is-success">Active</span>
+                                </figure>
+                                {% endif %}
+                                <div>
+                                    <p class="has-text-weight-bold">{{ product.name }}</p>
+                                    <p class="is-size-7 has-text-grey">ID: {{ product.id }}</p>
+                                </div>
+                            </div>
+                        </td>
+                        <td>{{ product.description|default:"No description" }}</td>
+                        <td>
+                            {% if product.prices.data %}
+                                {% with price=product.prices.data.0 %}
+                                    {% if price.unit_amount_decimal %}
+                                        {% with amount=price.unit_amount_decimal|floatformat:2 currency=price.currency|upper %}
+                                            {% if price.currency == 'usd' %}${% elif price.currency == 'eur' %}€{% elif price.currency == 'gbp' %}£{% else %}{{ currency }} {% endif %}{{ amount }}
+                                            {% if price.recurring %}
+                                                /{% if price.recurring.interval_count > 1 %}{{ price.recurring.interval_count }} {% endif %}{{ price.recurring.interval }}{% if price.recurring.interval_count > 1 %}s{% endif %}
+                                            {% endif %}
+                                        {% endwith %}
+                                    {% elif price.unit_amount %}
+                                        {% with amount=price.unit_amount|floatformat:2 currency=price.currency|upper %}
+                                            {% if price.currency == 'usd' %}${% elif price.currency == 'eur' %}€{% elif price.currency == 'gbp' %}£{% else %}{{ currency }} {% endif %}{{ amount }}
+                                            {% if price.recurring %}
+                                                /{% if price.recurring.interval_count > 1 %}{{ price.recurring.interval_count }} {% endif %}{{ price.recurring.interval }}{% if price.recurring.interval_count > 1 %}s{% endif %}
+                                            {% endif %}
+                                        {% endwith %}
                                     {% else %}
-                                        <span class="tag is-danger">Inactive</span>
+                                        <span class="tag is-warning">Invalid price</span>
                                     {% endif %}
-                                </td>
-                                <td>{{ product.created|date:"M d, Y" }}</td>
-                                <td>
-                                    {% if product.stripe_product_id %}
-                                        <code class="is-size-7">{{ product.stripe_product_id }}</code>
-                                    {% else %}
-                                        <span class="tag is-warning">Not synced</span>
-                                    {% endif %}
-                                </td>
-                                <td>
-                                    <div class="buttons are-small">
-                                        <a href="{% url 'djstripe:product_detail' product.id %}" class="button is-info">
-                                            <span class="icon"><i class="fas fa-eye"></i></span>
-                                            <span>View</span>
-                                        </a>
-                                        {% if product.stripe_product_id %}
-                                            <a href="https://dashboard.stripe.com/products/{{ product.stripe_product_id }}" target="_blank" class="button is-link">
-                                                <span class="icon"><i class="fas fa-external-link-alt"></i></span>
-                                                <span>Stripe</span>
-                                            </a>
-                                        {% endif %}
-                                    </div>
-                                </td>
-                            </tr>
-                        {% endfor %}
-                    {% else %}
-                        <tr>
-                            <td colspan="6" class="has-text-centered">
-                                <p class="has-text-grey my-5">No products found. Create products in your Stripe dashboard.</p>
-                            </td>
-                        </tr>
-                    {% endif %}
+                                {% endwith %}
+                            {% else %}
+                                <span class="tag is-warning">No price</span>
+                            {% endif %}
+                        </td>
+                        <td>
+                            {% if product.active %}
+                            <span class="tag is-success">Active</span>
+                            {% else %}
+                            <span class="tag is-warning">Inactive</span>
+                            {% endif %}
+                        </td>
+                        <td>
+                            <div class="buttons are-small">
+                                <a href="{% url 'dashboard:product_detail' product.id %}" class="button is-info">
+                                    <span class="icon"><i class="fas fa-eye"></i></span>
+                                    <span>View</span>
+                                </a>
+                                <a href="https://dashboard.stripe.com/products/{{ product.id }}" target="_blank" class="button is-light">
+                                    <span class="icon"><i class="fas fa-external-link-alt"></i></span>
+                                    <span>Stripe</span>
+                                </a>
+                            </div>
+                        </td>
+                    </tr>
+                    {% endfor %}
                 </tbody>
             </table>
         </div>
-
-        <!-- Pagination -->
-        {% if products.has_other_pages %}
-            <nav class="pagination is-centered mt-5" role="navigation" aria-label="pagination">
-                {% if products.has_previous %}
-                    <a href="?page={{ products.previous_page_number }}" class="pagination-previous">Previous</a>
-                {% else %}
-                    <a class="pagination-previous" disabled>Previous</a>
-                {% endif %}
-
-                {% if products.has_next %}
-                    <a href="?page={{ products.next_page_number }}" class="pagination-next">Next</a>
-                {% else %}
-                    <a class="pagination-next" disabled>Next</a>
-                {% endif %}
-
-                <ul class="pagination-list">
-                    {% for i in products.paginator.page_range %}
-                        {% if products.number == i %}
-                            <li><a class="pagination-link is-current" aria-current="page">{{ i }}</a></li>
-                        {% else %}
-                            <li><a href="?page={{ i }}" class="pagination-link">{{ i }}</a></li>
-                        {% endif %}
-                    {% endfor %}
-                </ul>
-            </nav>
-        {% endif %}
         {% endif %}
     </div>
 </section>
 
-{% block extra_js %}
+{% if stripe_enabled and stripe_available and not error %}
 <script>
     document.addEventListener('DOMContentLoaded', function() {
-        // Filter products by status
-        const statusFilter = document.getElementById('status-filter');
-        const productRows = document.querySelectorAll('#products-table-body tr');
+        // Product filtering
+        const filterStatus = document.getElementById('filter-status');
+        const searchInput = document.getElementById('search-products');
+        const tableBody = document.getElementById('products-table-body');
+        const rows = Array.from(tableBody.querySelectorAll('tr'));
         
-        if (statusFilter) {
-            statusFilter.addEventListener('change', function() {
-                const status = this.value;
+        // Filter products function
+        function filterProducts() {
+            const statusFilter = filterStatus.value;
+            const searchTerm = searchInput.value.toLowerCase();
+            
+            rows.forEach(row => {
+                const productName = row.querySelector('td:first-child p.has-text-weight-bold').textContent.toLowerCase();
+                const productDescription = row.querySelector('td:nth-child(2)').textContent.toLowerCase();
+                const productStatus = row.getAttribute('data-product-status');
                 
-                productRows.forEach(function(row) {
-                    if (status === 'all') {
-                        row.style.display = '';
-                    } else {
-                        const productStatus = row.getAttribute('data-status');
-                        row.style.display = (productStatus === status) ? '' : 'none';
-                    }
-                });
+                const matchesStatus = statusFilter === 'all' || productStatus === statusFilter;
+                const matchesSearch = productName.includes(searchTerm) || productDescription.includes(searchTerm);
+                
+                row.style.display = matchesStatus && matchesSearch ? '' : 'none';
             });
         }
         
-        // Refresh products button - uses HTMX to reload the product list
-        const refreshButton = document.getElementById('refresh-products');
-        if (refreshButton) {
-            refreshButton.addEventListener('click', function() {
-                // Add spinner to button
-                this.classList.add('is-loading');
-                
-                // Make a request to refresh products
-                fetch('{% url "dashboard:product_admin_refresh" %}', {
-                    method: 'POST',
-                    headers: {
-                        'X-CSRFToken': '{{ csrf_token }}',
-                        'Content-Type': 'application/json'
-                    }
-                })
-                .then(response => {
-                    if (response.ok) {
-                        // Reload the page to show updated products
-                        window.location.reload();
-                    } else {
-                        throw new Error('Failed to refresh products');
-                    }
-                })
-                .catch(error => {
-                    console.error('Error:', error);
-                    alert('Error refreshing products from Stripe');
-                })
-                .finally(() => {
-                    this.classList.remove('is-loading');
-                });
+        // Add event listeners
+        filterStatus.addEventListener('change', filterProducts);
+        searchInput.addEventListener('input', filterProducts);
+        
+        // Sync button
+        const syncButton = document.getElementById('sync-products');
+        syncButton.addEventListener('click', function() {
+            // Show loading state
+            syncButton.classList.add('is-loading');
+            
+            // Call sync endpoint
+            fetch('/dashboard/products/refresh/', {
+                method: 'POST',
+                headers: {
+                    'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]').value
+                }
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    // Reload page to show updated products
+                    window.location.reload();
+                } else {
+                    // Show error message
+                    alert(`Sync failed: ${data.error}`);
+                    syncButton.classList.remove('is-loading');
+                }
+            })
+            .catch(error => {
+                alert(`Sync failed: ${error.message}`);
+                syncButton.classList.remove('is-loading');
             });
-        }
+        });
     });
 </script>
-{% endblock %}
-
+{% endif %}
 {% endblock %} 

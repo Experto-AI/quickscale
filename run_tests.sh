@@ -440,6 +440,9 @@ if [[ $EXITFIRST -eq 1 ]]; then
     CMD="$CMD --exitfirst"
 fi
 
+# Add flag to show skipped tests with reasons
+CMD="$CMD -rsx"
+
 if [[ $SELECTED_TESTS -eq 1 ]]; then
     # User selected specific tests
     if [[ $RUN_UNIT -eq 1 ]]; then
