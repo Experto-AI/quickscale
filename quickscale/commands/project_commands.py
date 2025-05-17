@@ -6,6 +6,7 @@ import shutil
 from pathlib import Path
 from typing import Dict, Any
 from quickscale.utils.logging_manager import LoggingManager
+from quickscale.utils.message_manager import MessageManager
 from .project_manager import ProjectManager
 from .command_base import Command
 
@@ -65,9 +66,9 @@ class DestroyProjectCommand(Command):
             
         except subprocess.SubprocessError as e:
             self.logger.error(f"Container operation error: {e}")
-            print(f"[ERROR] Container operation error: {e}")
+            MessageManager.error(f"Container operation error: {e}")
             return {'success': False, 'reason': 'subprocess_error', 'error': str(e)}
         except Exception as e:
             self.logger.error(f"Project destruction error: {e}")
-            print(f"[ERROR] Project destruction error: {e}")
+            MessageManager.error(f"Project destruction error: {e}")
             return {'success': False, 'reason': 'error', 'error': str(e)}

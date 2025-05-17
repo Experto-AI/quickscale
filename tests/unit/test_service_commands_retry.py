@@ -65,7 +65,7 @@ class TestServiceCommandRetryHandling:
             )
             
             # Should call the correct method for retry_count=1
-            mock_find_retry.assert_called_once_with(1, 3)
+            mock_find_retry.assert_called_once_with(1, 3, False)
             
             # Should return new ports from _find_ports_for_retry
             assert new_ports == {'PORT': 8002, 'PG_PORT': 5433}
@@ -95,7 +95,7 @@ class TestServiceCommandRetryHandling:
             )
             
             # Should call _find_ports_for_retry with correct values
-            mock_find_ports.assert_called_once_with(1, 3)
+            mock_find_ports.assert_called_once_with(1, 3, False)
             
             # Should return ports when found
             assert new_ports == {'PORT': 8002, 'PG_PORT': 5433}
@@ -141,9 +141,9 @@ class TestServiceCommandRetryHandling:
 
         # Simplified side effect for _handle_retry_attempt mock
         # retry_count_arg is the 'attempt' variable from the loop in _start_services_with_retry
-        def custom_handle_retry_side_effect(retry_count_arg, max_retries_arg, env_arg, updated_ports_arg_from_code):
+        def custom_handle_retry_side_effect(retry_count_arg, max_retries_arg, env_arg, updated_ports_arg_from_code, is_initial):
             if retry_count_arg == 0: # Initial call (attempt=0)
-                return {} 
+                return {}
             elif retry_count_arg == 1: # First retry action (attempt=1)
                 return handle_retry_results[0]
             elif retry_count_arg == 2: # Second retry action (attempt=2)
@@ -168,11 +168,11 @@ class TestServiceCommandRetryHandling:
             
             # Check arguments for _handle_retry_attempt calls based on how current_ports_from_code should evolve
             # Attempt 0: current_ports_from_code is initial {} from _prepare_environment_and_ports
-            actual_mock_handle_retry.assert_any_call(0, 3, {}, {})
+            actual_mock_handle_retry.assert_any_call(0, 3, {}, {}, False)
             # Attempt 1: current_ports_from_code is still {} as _handle_retry_attempt(0,...) returned {}
-            actual_mock_handle_retry.assert_any_call(1, 3, {}, {}) 
+            actual_mock_handle_retry.assert_any_call(1, 3, {}, {}, False)
             # Attempt 2: current_ports_from_code should be handle_retry_results[0] from _handle_retry_attempt(1,...)
-            actual_mock_handle_retry.assert_any_call(2, 3, {}, handle_retry_results[0])
+            actual_mock_handle_retry.assert_any_call(2, 3, {}, handle_retry_results[0], False)
             
             # Based on the failing test (AssertionError: assert 0 == 2), 
             # _update_docker_compose_ports is not being called as previously expected.
@@ -250,8 +250,8 @@ class TestServiceCommandRetryHandling:
             
             cmd.execute()
             
-            # Verify _start_services_with_retry was called with default max_retries
-            mock_start.assert_called_once_with(max_retries=3)
+            # Verify start_services_with_retry was called with correct arguments
+            mock_start.assert_called_once_with(max_retries=3, no_cache=False)
     
     def test_execute_without_project(self):
         """Test execute method when no project exists."""

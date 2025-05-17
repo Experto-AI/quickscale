@@ -26,7 +26,7 @@ def get_expected_structure_from_docs():
         'quickscale/utils',
         'tests',
         'tests/core',
-        'tests/core/djstripe',
+        'tests/core/stripe',
         'tests/e2e',
         'tests/e2e/support',
         'tests/e2e/support/test_project_template',
@@ -225,7 +225,7 @@ def get_django_app_structure_from_docs():
         r'dashboard\/', 
         r'public\/', 
         r'users\/',
-        r'djstripe\/'  # Add djstripe as a known app
+        r'stripe\/'  # Add stripe as a known app
     ]
     
     for pattern in app_patterns:
@@ -240,6 +240,10 @@ def is_django_app(directory_path):
     """Check if a directory is a Django app by looking for typical Django files."""
     django_files = ['models.py', 'views.py', 'urls.py', 'apps.py', 'admin.py']
     
+    # Exclude directories within quickscale/templates/
+    if "quickscale/templates" in str(directory_path):
+        return False
+
     try:
         files = os.listdir(directory_path)
         

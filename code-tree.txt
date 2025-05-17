@@ -1,4 +1,7 @@
 quickscale
+├── dist
+│   ├── quickscale-0.8.0-py3-none-any.whl
+│   └── quickscale-0.8.0.tar.gz
 ├── docs
 │   ├── contrib
 │   │   ├── 01_ai_programming_assistant.md
@@ -183,9 +186,9 @@ quickscale
 │   │   │   │   ├── _is_feature_enabled(self, env_value)
 │   │   │   │   ├── _update_docker_compose_ports(self, updated_ports)
 │   │   │   │   ├── _check_port_availability(self, env)
-│   │   │   │   ├── _prepare_environment_and_ports(self)
-│   │   │   │   ├── _find_ports_for_retry(self, retry_count, max_retries)
-│   │   │   │   ├── _start_docker_services(self, env)
+│   │   │   │   ├── _prepare_environment_and_ports(self, no_cache)
+│   │   │   │   ├── _find_ports_for_retry(self, retry_count, max_retries, no_cache)
+│   │   │   │   ├── _start_docker_services(self, env, no_cache)
 │   │   │   │   ├── _handle_docker_process_error(self, e, env)
 │   │   │   │   ├── _get_docker_compose_logs(self, env)
 │   │   │   │   ├── _check_if_services_running_despite_error(self, e, env)
@@ -193,9 +196,9 @@ quickscale
 │   │   │   │   ├── _start_stopped_containers(self)
 │   │   │   │   ├── _start_container(self, container_name, status)
 │   │   │   │   ├── _print_service_info(self, updated_ports)
-│   │   │   │   ├── _handle_retry_attempt(self, retry_count, max_retries, env, updated_ports)
-│   │   │   │   ├── _start_services_with_retry(self, max_retries)
-│   │   │   │   └── execute(self)
+│   │   │   │   ├── _handle_retry_attempt(self, retry_count, max_retries, env, updated_ports, no_cache)
+│   │   │   │   ├── _start_services_with_retry(self, max_retries, no_cache)
+│   │   │   │   └── execute(self, no_cache)
 │   │   │   ├── ServiceDownCommand {}
 │   │   │   │   ├── __init__(self)
 │   │   │   │   └── execute(self)
@@ -232,9 +235,6 @@ quickscale
 │   │   │   ├── urls.py
 │   │   │   └── views.py
 │   │   ├── core
-│   │   │   ├── djstripe
-│   │   │   │   ├── __init__.py
-│   │   │   │   └── settings.py
 │   │   │   ├── migrations
 │   │   │   │   ├── 0001_update_site_domain.py
 │   │   │   │   │   ├── update_site_forward(apps, schema_editor)
@@ -265,23 +265,35 @@ quickscale
 │   │   │   │   │   └── Migration {}
 │   │   │   │   └── __init__.py
 │   │   │   ├── templates
+│   │   │   ├── templatetags
+│   │   │   │   └── __init__.py
 │   │   │   ├── tests
 │   │   │   │   ├── __init__.py
 │   │   │   │   ├── test_product_admin.py
-│   │   │   │   │   └── ProductAdminTestCase {}
-│   │   │   │   │       ├── setUpClass(cls)
-│   │   │   │   │       ├── tearDownClass(cls)
-│   │   │   │   │       ├── test_product_admin_page_requires_staff(self, mock_getenv)
-│   │   │   │   │       ├── test_product_admin_displays_products(self, mock_getenv)
-│   │   │   │   │       ├── test_product_admin_refresh_functionality(self, mock_sync, mock_getenv)
-│   │   │   │   │       └── test_product_admin_refresh_requires_post(self, mock_getenv)
+│   │   │   │   │   ├── ProductAdminTestCase {}
+│   │   │   │   │   │   ├── setUpClass(cls)
+│   │   │   │   │   │   ├── tearDownClass(cls)
+│   │   │   │   │   │   ├── test_product_admin_page_requires_staff(self, mock_getenv)
+│   │   │   │   │   │   ├── test_product_admin_displays_products(self, mock_list_products, mock_getenv)
+│   │   │   │   │   │   ├── test_product_admin_refresh_functionality(self, mock_sync, mock_getenv)
+│   │   │   │   │   │   └── test_product_admin_refresh_requires_post(self, mock_getenv)
+│   │   │   │   │   ├── TestProductAdminTemplateRendering {}
+│   │   │   │   │   │   ├── setUp(self)
+│   │   │   │   │   │   ├── tearDown(self)
+│   │   │   │   │   │   ├── test_product_admin_stripe_disabled(self, mock_get_env, mock_is_enabled)
+│   │   │   │   │   │   └── test_product_admin_view_stripe_disabled(self, mock_view)
+│   │   │   │   │   └── TestProductAdminLoadingStripeTagsConditionally {}
+│   │   │   │   │       └── test_template_handles_conditional_loading(self)
 │   │   │   │   └── test_views_no_stripe.py
 │   │   │   │       └── DashboardWithoutStripeTestCase {}
 │   │   │   │           ├── setUpClass(cls)
 │   │   │   │           ├── tearDownClass(cls)
 │   │   │   │           ├── test_dashboard_index_loads_without_stripe(self, mock_is_feature_enabled)
 │   │   │   │           ├── test_product_admin_loads_without_stripe(self, mock_is_feature_enabled)
-│   │   │   │           └── test_product_admin_refresh_error_without_stripe(self, mock_is_feature_enabled)
+│   │   │   │           ├── test_product_admin_refresh_error_without_stripe(self, mock_is_feature_enabled)
+│   │   │   │           ├── test_product_sync_error_without_stripe(self, mock_is_feature_enabled)
+│   │   │   │           ├── test_product_admin_shows_missing_api_keys(self, mock_get_stripe_manager, mock_is_feature_enabled)
+│   │   │   │           └── test_product_admin_handles_missing_stripe_package(self, mock_get_stripe_manager, mock_is_feature_enabled)
 │   │   │   ├── apps.py
 │   │   │   │   └── DashboardConfig {}
 │   │   │   ├── tests_product_admin.py
@@ -295,192 +307,9 @@ quickscale
 │   │   │   └── views.py
 │   │   │       ├── index(request)
 │   │   │       ├── product_admin(request)
-│   │   │       └── product_admin_refresh(request)
-│   │   ├── djstripe
-│   │   │   ├── management
-│   │   │   │   ├── commands
-│   │   │   │   │   ├── __init__.py
-│   │   │   │   │   └── sync_products_with_stripe.py
-│   │   │   │   │       └── Command {}
-│   │   │   │   │           ├── add_arguments(self, parser)
-│   │   │   │   │           ├── handle(self)
-│   │   │   │   │           ├── _get_products_for_push(self, product_id, all_products)
-│   │   │   │   │           ├── _process_product_update(self, product, verbosity)
-│   │   │   │   │           ├── _process_product_creation(self, product, verbosity)
-│   │   │   │   │           ├── push_to_stripe(self, options, verbosity)
-│   │   │   │   │           ├── _sync_specific_product(self, product_id, stripe)
-│   │   │   │   │           ├── _process_stripe_product(self, stripe_product, verbosity, stripe)
-│   │   │   │   │           ├── _sync_all_products(self, all_products, verbosity, stripe)
-│   │   │   │   │           └── pull_from_stripe(self, options, verbosity)
-│   │   │   │   └── __init__.py
-│   │   │   ├── migrations
-│   │   │   │   ├── 0001_initial.py
-│   │   │   │   │   └── Migration {}
-│   │   │   │   ├── 0006_webhookendpoint_stripe_data.py
-│   │   │   │   │   └── Migration {}
-│   │   │   │   └── __init__.py
-│   │   │   ├── templates
-│   │   │   │   └── djstripe
-│   │   │   │       ├── __init__.py
-│   │   │   │       ├── product_detail.html
-│   │   │   │       ├── product_list.html
-│   │   │   │       └── status.html
-│   │   │   ├── tests
-│   │   │   │   ├── __init__.py
-│   │   │   │   ├── test_mock_stripe.py
-│   │   │   │   │   ├── MockStripeObjectTest {}
-│   │   │   │   │   │   ├── test_dict_access(self)
-│   │   │   │   │   │   ├── test_attribute_access(self)
-│   │   │   │   │   │   └── test_nested_lists(self)
-│   │   │   │   │   ├── MockStripeCustomerTest {}
-│   │   │   │   │   │   └── test_create(self)
-│   │   │   │   │   ├── MockStripeSubscriptionTest {}
-│   │   │   │   │   │   └── test_create(self)
-│   │   │   │   │   ├── MockStripeAPITest {}
-│   │   │   │   │   │   ├── test_initialization(self)
-│   │   │   │   │   │   ├── test_customer_creation(self)
-│   │   │   │   │   │   ├── test_subscription_creation(self)
-│   │   │   │   │   │   └── test_reset_mocks(self)
-│   │   │   │   │   ├── GetStripeTest {}
-│   │   │   │   │   │   ├── test_test_mode(self)
-│   │   │   │   │   │   └── test_real_mode(self)
-│   │   │   │   │   └── MockWebhookEventTest {}
-│   │   │   │   │       └── test_create_event(self)
-│   │   │   │   ├── test_product_model.py
-│   │   │   │   │   └── ProductModelTests {}
-│   │   │   │   │       ├── setUp(self)
-│   │   │   │   │       ├── test_product_creation(self)
-│   │   │   │   │       ├── test_product_string_representation(self)
-│   │   │   │   │       ├── test_is_active_method(self)
-│   │   │   │   │       ├── test_get_formatted_price_usd(self)
-│   │   │   │   │       ├── test_get_formatted_price_eur(self)
-│   │   │   │   │       ├── test_get_formatted_price_jpy(self)
-│   │   │   │   │       ├── test_get_formatted_price_unknown_currency(self)
-│   │   │   │   │       ├── test_ordering(self)
-│   │   │   │   │       └── test_metadata_field(self)
-│   │   │   │   ├── test_product_stripe_integration.py
-│   │   │   │   │   └── ProductStripeIntegrationTest {}
-│   │   │   │   │       ├── setUp(self)
-│   │   │   │   │       ├── tearDown(self)
-│   │   │   │   │       ├── test_create_in_stripe(self)
-│   │   │   │   │       ├── test_update_in_stripe(self)
-│   │   │   │   │       ├── test_sync_from_stripe(self)
-│   │   │   │   │       ├── test_delete_from_stripe(self)
-│   │   │   │   │       ├── test_sync_all_to_stripe(self)
-│   │   │   │   │       ├── test_product_save_signal(self, mock_thread)
-│   │   │   │   │       ├── test_product_delete_signal(self, mock_delete)
-│   │   │   │   │       ├── test_webhook_product_created(self)
-│   │   │   │   │       ├── test_sync_to_stripe_method(self)
-│   │   │   │   │       └── test_delete_from_stripe_method(self)
-│   │   │   │   ├── test_product_views.py
-│   │   │   │   │   └── ProductViewsTests {}
-│   │   │   │   │       ├── setUp(self)
-│   │   │   │   │       ├── test_product_list_view(self)
-│   │   │   │   │       ├── test_product_list_view_with_inactive(self)
-│   │   │   │   │       ├── test_product_detail_view(self)
-│   │   │   │   │       ├── test_product_detail_view_authenticated(self)
-│   │   │   │   │       ├── test_inactive_product_detail_view(self)
-│   │   │   │   │       └── test_nonexistent_product_detail_view(self)
-│   │   │   │   ├── test_signals.py
-│   │   │   │   │   └── StripeCustomerSignalTest {}
-│   │   │   │   │       ├── setUp(self)
-│   │   │   │   │       ├── tearDown(self)
-│   │   │   │   │       ├── test_customer_created_on_user_creation(self)
-│   │   │   │   │       ├── test_customer_not_created_when_stripe_disabled(self)
-│   │   │   │   │       ├── test_customer_not_created_when_stripe_unavailable(self, mock_get_stripe)
-│   │   │   │   │       └── test_customer_links_to_user(self)
-│   │   │   │   └── test_webhooks.py
-│   │   │   │       ├── StripeWebhookTest {}
-│   │   │   │       │   ├── setUp(self)
-│   │   │   │       │   ├── tearDown(self)
-│   │   │   │       │   ├── test_webhook_processing(self)
-│   │   │   │       │   ├── test_webhook_disabled_stripe(self)
-│   │   │   │       │   ├── test_webhook_missing_signature(self)
-│   │   │   │       │   ├── test_webhook_invalid_signature(self)
-│   │   │   │       │   └── test_handle_customer_created(self)
-│   │   │   │       └── CreateMockWebhookEventTest {}
-│   │   │   │           ├── test_customer_created_event(self)
-│   │   │   │           └── test_subscription_updated_event(self)
-│   │   │   ├── README.md
-│   │   │   ├── __init__.py
-│   │   │   ├── admin.py
-│   │   │   │   └── ProductAdmin {}
-│   │   │   │       ├── get_queryset(self, request)
-│   │   │   │       ├── stripe_status(self, obj)
-│   │   │   │       ├── sync_selected_to_stripe(self, request, queryset)
-│   │   │   │       ├── sync_selected_from_stripe(self, request, queryset)
-│   │   │   │       └── mark_selected_as_inactive(self, request, queryset)
-│   │   │   ├── apps.py
-│   │   │   │   └── DjStripeAppConfig {}
-│   │   │   │       └── ready(self)
-│   │   │   ├── forms.py
-│   │   │   ├── models.py
-│   │   │   │   ├── Product {}
-│   │   │   │   │   ├── Meta {}
-│   │   │   │   │   ├── __str__(self)
-│   │   │   │   │   ├── is_active(self)
-│   │   │   │   │   ├── get_formatted_price(self)
-│   │   │   │   │   ├── sync_to_stripe(self)
-│   │   │   │   │   └── delete_from_stripe(self)
-│   │   │   │   ├── product_post_save(sender, instance, created)
-│   │   │   │   └── product_pre_delete(sender, instance)
-│   │   │   ├── services.py
-│   │   │   │   └── ProductService {}
-│   │   │   │       ├── create_in_stripe(product)
-│   │   │   │       ├── update_in_stripe(product)
-│   │   │   │       ├── sync_from_stripe(stripe_product_id)
-│   │   │   │       ├── delete_from_stripe(product)
-│   │   │   │       ├── sync_all_to_stripe()
-│   │   │   │       ├── _check_stripe_availability()
-│   │   │   │       ├── _get_all_stripe_products(stripe)
-│   │   │   │       ├── _update_existing_product(product, stripe_product, stripe)
-│   │   │   │       ├── _create_new_product(stripe_product, stripe)
-│   │   │   │       ├── _process_stripe_product(stripe_product, stripe)
-│   │   │   │       └── sync_all_from_stripe()
-│   │   │   ├── settings.py
-│   │   │   ├── signals.py
-│   │   │   │   └── create_stripe_customer(sender, instance, created)
-│   │   │   ├── tests.py
-│   │   │   │   └── DjStripeConfigTests {}
-│   │   │   │       ├── test_stripe_disabled_by_default(self)
-│   │   │   │       └── test_stripe_enabled_configuration(self)
-│   │   │   ├── urls.py
-│   │   │   ├── utils.py
-│   │   │   │   ├── MockStripeObject {}
-│   │   │   │   │   ├── __init__(self, data)
-│   │   │   │   │   └── __getattr__(self, key)
-│   │   │   │   ├── MockStripeCustomer {}
-│   │   │   │   │   └── create(cls)
-│   │   │   │   ├── MockStripeSubscription {}
-│   │   │   │   │   └── create(cls)
-│   │   │   │   ├── MockStripeAPI {}
-│   │   │   │   │   ├── __init__(self)
-│   │   │   │   │   └── reset_mocks(self)
-│   │   │   │   ├── get_stripe()
-│   │   │   │   └── create_mock_webhook_event(event_type, object_data)
-│   │   │   ├── views.py
-│   │   │   │   ├── stripe_status(request)
-│   │   │   │   ├── create_customer(request)
-│   │   │   │   ├── product_list(request)
-│   │   │   │   └── product_detail(request, product_id)
-│   │   │   └── webhooks.py
-│   │   │       ├── _check_stripe_enabled()
-│   │   │       ├── _validate_webhook_configuration()
-│   │   │       ├── _verify_webhook_signature(stripe, payload, sig_header, webhook_secret)
-│   │   │       ├── _get_webhook_handler(event_type)
-│   │   │       ├── _route_webhook_event(event)
-│   │   │       ├── stripe_webhook(request)
-│   │   │       ├── handle_customer_created(event)
-│   │   │       ├── handle_customer_updated(event)
-│   │   │       ├── handle_customer_deleted(event)
-│   │   │       ├── handle_subscription_event(event)
-│   │   │       ├── handle_payment_event(event)
-│   │   │       ├── handle_product_created(event)
-│   │   │       ├── handle_product_updated(event)
-│   │   │       ├── handle_product_deleted(event)
-│   │   │       ├── handle_price_created(event)
-│   │   │       ├── handle_price_updated(event)
-│   │   │       └── handle_price_deleted(event)
+│   │   │       ├── product_admin_refresh(request)
+│   │   │       ├── product_detail(request, product_id)
+│   │   │       └── product_sync(request)
 │   │   ├── docs
 │   │   │   ├── auth_templates.md
 │   │   │   ├── styling_guidelines.md
@@ -531,6 +360,133 @@ quickscale
 │   │   │   ├── favicon.ico
 │   │   │   ├── favicon.svg
 │   │   │   └── generate_favicon.sh
+│   │   ├── stripe_manager
+│   │   │   ├── apps
+│   │   │   ├── templatetags
+│   │   │   │   ├── __init__.py
+│   │   │   │   └── stripe_tags.py
+│   │   │   │       ├── format_stripe_price(price)
+│   │   │   │       ├── get_stripe_product_name(product)
+│   │   │   │       ├── get_stripe_product_status(product)
+│   │   │   │       └── get_stripe_price(product, currency)
+│   │   │   ├── tests
+│   │   │   │   ├── __init__.py
+│   │   │   │   ├── mock_env_utils.py
+│   │   │   │   │   ├── get_env(key, default)
+│   │   │   │   │   └── is_feature_enabled(value)
+│   │   │   │   ├── test_app_registration.py
+│   │   │   │   │   ├── TestStripeAppRegistration {}
+│   │   │   │   │   │   ├── test_app_in_installed_apps(self)
+│   │   │   │   │   │   └── test_app_config_loads_correctly(self)
+│   │   │   │   │   └── TestStripeTemplateTagsRegistration {}
+│   │   │   │   │       ├── test_template_tags_load_when_stripe_enabled(self, mock_is_enabled)
+│   │   │   │   │       ├── test_template_tags_not_needed_when_stripe_disabled(self, mock_is_enabled)
+│   │   │   │   │       ├── test_format_stripe_price_filter_registered(self)
+│   │   │   │   │       └── test_conditional_loading_in_template(self)
+│   │   │   │   ├── test_stripe_manager.py
+│   │   │   │   │   └── StripeManagerTest {}
+│   │   │   │   │       ├── setUp(self)
+│   │   │   │   │       ├── tearDown(self)
+│   │   │   │   │       ├── test_get_instance_singleton(self)
+│   │   │   │   │       ├── test_stripe_disabled_raises_error(self)
+│   │   │   │   │       ├── test_api_key_missing_raises_error(self)
+│   │   │   │   │       ├── test_stripe_package_not_available_raises_error(self)
+│   │   │   │   │       ├── test_stripe_property(self)
+│   │   │   │   │       ├── test_create_customer(self)
+│   │   │   │   │       ├── test_retrieve_customer(self)
+│   │   │   │   │       ├── test_create_product(self)
+│   │   │   │   │       ├── test_retrieve_product(self)
+│   │   │   │   │       ├── test_list_products(self)
+│   │   │   │   │       ├── test_update_product(self)
+│   │   │   │   │       ├── test_get_product_prices(self)
+│   │   │   │   │       ├── test_create_price(self)
+│   │   │   │   │       ├── test_error_handling(self)
+│   │   │   │   │       ├── test_initialization_exceptions(self)
+│   │   │   │   │       └── test_double_initialization(self)
+│   │   │   │   ├── test_template_tags.py
+│   │   │   │   │   ├── MockPrice {}
+│   │   │   │   │   │   └── __init__(self, unit_amount, currency, recurring)
+│   │   │   │   │   ├── MockRecurring {}
+│   │   │   │   │   │   └── __init__(self, interval, interval_count)
+│   │   │   │   │   ├── MockProduct {}
+│   │   │   │   │   │   └── __init__(self, name, active, prices)
+│   │   │   │   │   ├── MockPrices {}
+│   │   │   │   │   │   └── __init__(self, data)
+│   │   │   │   │   ├── TestStripeTagsNonFormatting {}
+│   │   │   │   │   │   ├── setUp(self)
+│   │   │   │   │   │   ├── test_get_stripe_product_name_attribute_access(self)
+│   │   │   │   │   │   ├── test_get_stripe_product_name_dictionary_access(self)
+│   │   │   │   │   │   ├── test_get_stripe_product_status_attribute_access(self)
+│   │   │   │   │   │   ├── test_get_stripe_product_status_dictionary_access(self)
+│   │   │   │   │   │   ├── test_get_stripe_price_attribute_access(self)
+│   │   │   │   │   │   └── test_get_stripe_price_dictionary_access(self)
+│   │   │   │   │   ├── test_format_stripe_price()
+│   │   │   │   │   └── test_template_tag_conditional_loading()
+│   │   │   │   ├── test_webhooks.py
+│   │   │   │   │   ├── MockStripeManagerModule {}
+│   │   │   │   │   ├── StripeWebhookTest {}
+│   │   │   │   │   │   ├── setUp(self)
+│   │   │   │   │   │   ├── tearDown(self)
+│   │   │   │   │   │   ├── test_webhook_processing(self)
+│   │   │   │   │   │   ├── test_webhook_method_not_allowed(self)
+│   │   │   │   │   │   ├── test_webhook_missing_signature(self)
+│   │   │   │   │   │   ├── test_webhook_invalid_signature(self)
+│   │   │   │   │   │   └── test_webhook_products_processing(self)
+│   │   │   │   │   └── MockStripeCustomerTest {}
+│   │   │   │   │       ├── test_create_with_defaults(self)
+│   │   │   │   │       └── test_create_with_custom_values(self)
+│   │   │   │   └── utils.py
+│   │   │   │       ├── create_mock_webhook_event(event_type, object_data)
+│   │   │   │       ├── create_mock_product(id, name, description, active, metadata)
+│   │   │   │       ├── create_mock_price(id, product_id, unit_amount, currency, active, metadata)
+│   │   │   │       └── create_mock_products_with_prices(count)
+│   │   │   ├── __init__.py
+│   │   │   ├── apps.py
+│   │   │   │   └── StripeConfig {}
+│   │   │   │       └── ready(self)
+│   │   │   ├── stripe_manager.py
+│   │   │   │   ├── StripeConfigurationError {}
+│   │   │   │   └── StripeManager {}
+│   │   │   │       ├── get_instance(cls)
+│   │   │   │       ├── _initialize(self)
+│   │   │   │       ├── client(self)
+│   │   │   │       ├── create_customer(self, email, name, metadata)
+│   │   │   │       ├── retrieve_customer(self, customer_id)
+│   │   │   │       ├── get_customer_by_user(self, user)
+│   │   │   │       ├── create_product(self, name, description, metadata)
+│   │   │   │       ├── create_product_with_price(self, name, price_amount, currency, description, metadata)
+│   │   │   │       ├── retrieve_product(self, product_id)
+│   │   │   │       ├── list_products(self, active)
+│   │   │   │       ├── create_price(self, product_id, unit_amount, currency, recurring_interval, metadata)
+│   │   │   │       ├── retrieve_price(self, price_id)
+│   │   │   │       ├── list_prices(self, product_id, active)
+│   │   │   │       ├── create_subscription(self, customer_id, price_id, quantity, metadata)
+│   │   │   │       ├── retrieve_subscription(self, subscription_id)
+│   │   │   │       ├── update_subscription(self, subscription_id, items, proration_behavior, metadata)
+│   │   │   │       ├── cancel_subscription(self, subscription_id)
+│   │   │   │       ├── list_subscriptions(self, customer_id, price_id, status, limit)
+│   │   │   │       ├── create_invoice(self, customer_id, days_until_due, metadata)
+│   │   │   │       ├── retrieve_invoice(self, invoice_id)
+│   │   │   │       ├── finalize_invoice(self, invoice_id)
+│   │   │   │       ├── create_invoice_item(self, customer_id, price_id, invoice_id, quantity, metadata)
+│   │   │   │       ├── create_payment_intent(self, amount, currency, customer_id, metadata)
+│   │   │   │       ├── retrieve_payment_intent(self, payment_intent_id)
+│   │   │   │       ├── confirm_payment_intent(self, payment_intent_id, payment_method)
+│   │   │   │       ├── cancel_payment_intent(self, payment_intent_id)
+│   │   │   │       ├── list_payment_intents(self, customer_id, limit)
+│   │   │   │       ├── create_refund(self, payment_intent_id, amount, reason, metadata)
+│   │   │   │       ├── sync_product_to_stripe(self, product_obj)
+│   │   │   │       ├── sync_product_from_stripe(self, stripe_product_id, product_model)
+│   │   │   │       └── sync_products_from_stripe(self, product_model)
+│   │   │   ├── urls.py
+│   │   │   ├── utils.py
+│   │   │   │   └── MockStripeCustomer {}
+│   │   │   │       └── create(cls, id, email, name, metadata)
+│   │   │   └── views.py
+│   │   │       ├── status(request)
+│   │   │       ├── product_list(request)
+│   │   │       ├── product_detail(request, product_id)
+│   │   │       └── webhook(request)
 │   │   ├── templates
 │   │   │   ├── account
 │   │   │   │   ├── email
@@ -568,12 +524,18 @@ quickscale
 │   │   │   │   └── navbar.html
 │   │   │   ├── dashboard
 │   │   │   │   ├── index.html
-│   │   │   │   └── product_admin.html
+│   │   │   │   ├── product_admin.html
+│   │   │   │   └── product_detail.html
 │   │   │   ├── public
 │   │   │   │   ├── about.html
 │   │   │   │   ├── contact.html
 │   │   │   │   ├── home.html
 │   │   │   │   └── index.html
+│   │   │   ├── stripe
+│   │   │   │   ├── error.html
+│   │   │   │   ├── product_detail.html
+│   │   │   │   ├── product_list.html
+│   │   │   │   └── status.html
 │   │   │   ├── users
 │   │   │   │   ├── login.html
 │   │   │   │   ├── login_form.html
@@ -805,7 +767,7 @@ quickscale
 │   └── top_level.txt
 ├── tests
 │   ├── core
-│   │   ├── djstripe
+│   │   ├── stripe
 │   │   │   ├── __init__.py
 │   │   │   └── settings.py
 │   │   ├── __init__.py
@@ -989,8 +951,8 @@ quickscale
 │   │   │   │       ├── test_execute_with_containers_only(self, mock_get_state, mock_stop, mock_input)
 │   │   │   │       ├── test_execute_with_containers_only_cancelled(self, mock_get_state, mock_input)
 │   │   │   │       ├── test_execute_with_no_project_or_containers(self, mock_get_state, mock_print)
-│   │   │   │       ├── test_execute_with_subprocess_error(self, mock_get_state, mock_get_logger, mock_print)
-│   │   │   │       └── test_execute_with_general_exception(self, mock_get_state, mock_get_logger, mock_print)
+│   │   │   │       ├── test_execute_with_subprocess_error(self, mock_get_state, mock_get_logger, mock_message_manager_error)
+│   │   │   │       └── test_execute_with_general_exception(self, mock_get_state, mock_get_logger, mock_message_manager_error)
 │   │   │   ├── test_environment_validation.py
 │   │   │   │   ├── TestEnvironmentValidation {}
 │   │   │   │   │   ├── init_command(self)
@@ -1055,7 +1017,7 @@ quickscale
 │   │   │   │       └── test_debug_env_cache(self, mock_logger, mock_get_env)
 │   │   │   ├── test_help_manager.py
 │   │   │   │   └── TestHelpManager {}
-│   │   │   │       └── test_show_manage_help(self, mock_print)
+│   │   │   │       └── test_show_manage_help(self, mock_info)
 │   │   │   ├── test_log_scanner.py
 │   │   │   │   ├── TestLogPattern {}
 │   │   │   │   │   ├── test_pattern_initialization(self)
@@ -1125,6 +1087,7 @@ quickscale
 │   │   │           ├── test_format_message_without_color_with_icon(self, mock_stdout_not_tty)
 │   │   │           └── test_format_message_without_color_without_icon(self, mock_stdout_not_tty)
 │   │   ├── __init__.py
+│   │   ├── pytest_setup.py
 │   │   ├── test_auth_components.py
 │   │   │   ├── _PasswordStrengthValidator {}
 │   │   │   │   ├── __init__(self, min_length, require_uppercase, require_lowercase, require_digit, require_special)
@@ -1270,9 +1233,6 @@ quickscale
 │   │   │       ├── test_manage_command_without_project(self)
 │   │   │       ├── test_manage_command_no_args(self)
 │   │   │       └── test_manage_command_success(self)
-│   │   ├── test_djstripe_import.py
-│   │   │   ├── test_djstripe_import()
-│   │   │   └── test_stripe_import()
 │   │   ├── test_env_template.py
 │   │   │   ├── load_env_file_to_environ(env_file_path)
 │   │   │   └── TestEnvTemplate {}
@@ -1426,7 +1386,9 @@ quickscale
 │   │   │       ├── test_is_feature_enabled_truthy_values(self)
 │   │   │       ├── test_is_feature_enabled_falsy_values(self)
 │   │   │       ├── test_port_fallback_with_various_boolean_formats(self)
-│   │   │       └── test_is_feature_enabled_with_inline_comments(self)
+│   │   │       ├── test_is_feature_enabled_with_inline_comments(self)
+│   │   │       ├── test_service_up_command_no_cache(self, mock_check_port_availability, mock_print_service_info, mock_verify_services_running, mock_start_docker_services, mock_prepare_environment_and_ports, mock_get_project_state)
+│   │   │       └── test_service_up_command_default_cache(self, mock_check_port_availability, mock_print_service_info, mock_verify_services_running, mock_start_docker_services, mock_prepare_environment_and_ports, mock_get_project_state)
 │   │   ├── test_service_commands_docker_compose.py
 │   │   │   └── TestServiceCommandDockerComposePortHandling {}
 │   │   │       ├── test_extract_port_values_custom(self)
@@ -1604,6 +1566,73 @@ quickscale
 │   │   │       ├── test_string_representation(self, mock_user)
 │   │   │       ├── test_user_relationship(self, mock_user)
 │   │   │       └── test_required_fields(self)
+│   │   ├── test_stripe_direct_api.py
+│   │   │   ├── MockResponse {}
+│   │   │   │   ├── __init__(self, data, status_code)
+│   │   │   │   └── json(self)
+│   │   │   └── TestStripeDirectAPI {}
+│   │   │       ├── setUp(self)
+│   │   │       ├── tearDown(self)
+│   │   │       ├── test_stripe_manager_singleton(self)
+│   │   │       ├── test_stripe_manager_create_customer(self)
+│   │   │       ├── test_stripe_manager_retrieve_customer(self)
+│   │   │       ├── test_stripe_manager_create_product(self)
+│   │   │       ├── test_stripe_manager_retrieve_product(self)
+│   │   │       ├── test_stripe_manager_list_products(self)
+│   │   │       ├── test_stripe_manager_update_product(self)
+│   │   │       ├── test_stripe_manager_get_product_prices(self)
+│   │   │       ├── test_stripe_manager_create_price(self)
+│   │   │       ├── test_webhook_processing(self)
+│   │   │       ├── test_webhook_method_not_allowed(self)
+│   │   │       └── test_webhook_missing_signature(self)
+│   │   ├── test_stripe_import.py
+│   │   │   ├── test_stripe_import()
+│   │   │   ├── test_custom_stripe_app_import(mock_is_feature_enabled, mock_get_env)
+│   │   │   └── test_stripe_manager_init(mock_is_feature_enabled, mock_get_env)
+│   │   ├── test_stripe_migration.py
+│   │   │   └── TestStripeMigration {}
+│   │   │       ├── setUp(self)
+│   │   │       ├── tearDown(self)
+│   │   │       ├── test_stripe_manager_initialization(self, mock_get_env, mock_is_feature_enabled)
+│   │   │       ├── test_stripe_manager_direct_api_calls(self, mock_get_env, mock_is_feature_enabled)
+│   │   │       └── test_compatibility_layer(self, mock_get_env, mock_is_feature_enabled)
+│   │   ├── test_stripe_real_api.py
+│   │   │   ├── StripeManager {}
+│   │   │   │   ├── __init__(self)
+│   │   │   │   ├── get_instance(cls)
+│   │   │   │   ├── stripe(self)
+│   │   │   │   ├── is_mock_mode(self)
+│   │   │   │   ├── create_customer(self, email, name, metadata)
+│   │   │   │   ├── retrieve_customer(self, customer_id)
+│   │   │   │   ├── create_product(self, name, description, metadata)
+│   │   │   │   ├── retrieve_product(self, product_id)
+│   │   │   │   ├── list_products(self, active)
+│   │   │   │   ├── update_product(self, product_id, name, description, metadata, active)
+│   │   │   │   ├── get_product_prices(self, product_id, active)
+│   │   │   │   └── create_price(self, product_id, unit_amount, currency, metadata)
+│   │   │   ├── get_stripe_manager()
+│   │   │   ├── webhook_endpoint(request)
+│   │   │   ├── JsonResponse {}
+│   │   │   │   └── __init__(self, data, status)
+│   │   │   ├── stripe_test_mode()
+│   │   │   └── TestStripeRealAPI {}
+│   │   │       ├── setUp(self)
+│   │   │       ├── tearDown(self)
+│   │   │       ├── test_stripe_manager_initialization(self)
+│   │   │       ├── test_create_customer_calls_real_api(self, mock_create)
+│   │   │       ├── test_create_product_calls_real_api(self, mock_create)
+│   │   │       ├── test_create_price_calls_real_api(self, mock_create)
+│   │   │       ├── test_retrieve_product_calls_real_api(self, mock_retrieve)
+│   │   │       ├── test_list_products_calls_real_api(self, mock_list)
+│   │   │       └── test_webhook_handling(self, mock_construct_event)
+│   │   ├── test_stripe_settings_validation.py
+│   │   │   └── StripeSettingsValidationTest {}
+│   │   │       ├── setUp(self)
+│   │   │       ├── tearDown(self)
+│   │   │       ├── test_stripe_disabled_by_default(self)
+│   │   │       ├── test_settings_validation_with_missing_settings(self, mock_warning)
+│   │   │       ├── test_settings_validation_with_valid_settings(self, mock_info)
+│   │   │       └── test_settings_validation_with_partial_settings(self, mock_warning)
 │   │   ├── test_system_commands.py
 │   │   │   └── TestCheckCommand {}
 │   │   │       ├── test_check_docker_compose_found(self)
@@ -1652,10 +1681,13 @@ quickscale
 │   │   │   ├── CustomUserManager {}
 │   │   │   │   ├── create_user(self, email, password)
 │   │   │   │   └── create_superuser(self, email, password)
-│   │   │   └── CustomUser {}
+│   │   │   ├── CustomUser {}
+│   │   │   │   ├── Meta {}
+│   │   │   │   ├── __str__(self)
+│   │   │   │   └── get_full_name(self)
+│   │   │   └── StripeCustomer {}
 │   │   │       ├── Meta {}
-│   │   │       ├── __str__(self)
-│   │   │       └── get_full_name(self)
+│   │   │       └── __str__(self)
 │   │   └── validators.py
 │   │       ├── PasswordStrengthValidator {}
 │   │       │   ├── __init__(self, min_length, require_uppercase, require_lowercase, require_digit, require_special)

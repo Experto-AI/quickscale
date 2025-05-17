@@ -55,6 +55,10 @@ QuickScale provides a CLI for managing your project. Below are the most common c
   ```bash
   quickscale up
   ```
+  To rebuild the Docker images without using the cache, use the `--no-cache` flag:
+  ```bash
+  quickscale up --no-cache
+  ```
 - **Stop Services**:
   ```bash
   quickscale down

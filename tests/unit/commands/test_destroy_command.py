@@ -186,10 +186,10 @@ class TestDestroyProjectCommand(unittest.TestCase):
         self.assertFalse(result['success'])
         self.assertEqual(result['reason'], 'no_project')
     
-    @patch('builtins.print')
+    @patch('quickscale.utils.message_manager.MessageManager.error')
     @patch('quickscale.utils.logging_manager.LoggingManager.get_logger')
     @patch('quickscale.commands.project_manager.ProjectManager.get_project_state')
-    def test_execute_with_subprocess_error(self, mock_get_state, mock_get_logger, mock_print):
+    def test_execute_with_subprocess_error(self, mock_get_state, mock_get_logger, mock_message_manager_error):
         """Test executing destroy command with a subprocess error."""
         # Setup mock to throw a subprocess error
         mock_get_state.return_value = {
@@ -208,18 +208,18 @@ class TestDestroyProjectCommand(unittest.TestCase):
                       side_effect=subprocess.SubprocessError('Command failed')):
                 result = self.command.execute()
         
-        # Verify the error message was printed
-        mock_print.assert_any_call('[ERROR] Container operation error: Command failed')
+        # Verify the error message was passed to MessageManager.error
+        mock_message_manager_error.assert_called_with('Container operation error: Command failed')
         
         # Verify the result
         self.assertFalse(result['success'])
         self.assertEqual(result['reason'], 'subprocess_error')
         self.assertEqual(result['error'], 'Command failed')
     
-    @patch('builtins.print')
+    @patch('quickscale.utils.message_manager.MessageManager.error')
     @patch('quickscale.utils.logging_manager.LoggingManager.get_logger')
     @patch('quickscale.commands.project_manager.ProjectManager.get_project_state')
-    def test_execute_with_general_exception(self, mock_get_state, mock_get_logger, mock_print):
+    def test_execute_with_general_exception(self, mock_get_state, mock_get_logger, mock_message_manager_error):
         """Test executing destroy command with a general exception."""
         # Setup mock to throw a general exception
         mock_get_state.side_effect = Exception('Something went wrong')
@@ -229,8 +229,8 @@ class TestDestroyProjectCommand(unittest.TestCase):
         
         result = self.command.execute()
         
-        # Verify the error message was printed
-        mock_print.assert_any_call('[ERROR] Project destruction error: Something went wrong')
+        # Verify the error message was passed to MessageManager.error
+        mock_message_manager_error.assert_called_with('Project destruction error: Something went wrong')
         
         # Verify the result
         self.assertFalse(result['success'])

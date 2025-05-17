@@ -1,0 +1,79 @@
+{% extends "base/base.html" %}
+{% if stripe_enabled %}
+{% load stripe_tags %}
+{% endif %}
+
+{% block title %}{{ product|get_stripe_product_name }}{% endblock %}
+
+{% block content %}
+<section class="section">
+  <div class="container">
+    <h1 class="title">{{ product|get_stripe_product_name }}</h1>
+    
+    <div class="box">
+      <div class="columns">
+        <div class="column is-8">
+          {% if product.description %}
+            <p class="subtitle">{{ product.description }}</p>
+          {% endif %}
+          
+          <table class="table is-fullwidth">
+            <tbody>
+              <tr>
+                <th>ID</th>
+                <td>{{ product.id }}</td>
+              </tr>
+              <tr>
+                <th>Status</th>
+                <td>{{ product|get_stripe_product_status|title }}</td>
+              </tr>
+              {% if product.metadata %}
+                <tr>
+                  <th>Metadata</th>
+                  <td>
+                    <ul>
+                      {% for key, value in product.metadata.items %}
+                        <li><strong>{{ key }}:</strong> {{ value }}</li>
+                      {% endfor %}
+                    </ul>
+                  </td>
+                </tr>
+              {% endif %}
+            </tbody>
+          </table>
+        </div>
+        
+        <div class="column is-4">
+          <div class="box">
+            <h3 class="title is-4">Pricing</h3>
+            {% if product.prices.data %}
+              <div class="content">
+                {% for price in product.prices.data %}
+                  <div class="notification is-primary">
+                    <p class="title is-3">{{ price|format_stripe_price }}</p>
+                    {% if price.recurring %}
+                      <p>{{ price.recurring.interval|title }} billing</p>
+                    {% else %}
+                      <p>One-time payment</p>
+                    {% endif %}
+                  </div>
+                {% endfor %}
+              </div>
+            {% else %}
+              <div class="notification is-warning">
+                No pricing available
+              </div>
+            {% endif %}
+          </div>
+        </div>
+      </div>
+    </div>
+    
+    <div class="buttons">
+      <a href="{% url 'stripe:product_list' %}" class="button is-primary">
+        Back to Products
+      </a>
+    </div>
+  </div>
+</section>
+{% endblock %} 

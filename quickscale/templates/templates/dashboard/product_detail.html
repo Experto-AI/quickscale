@@ -1,0 +1,174 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block title %}{{ product.name }} - Product Details{% endblock %}
+
+{% block content %}
+<section class="hero is-primary is-small">
+    <div class="hero-body">
+        <p class="title">Product Details</p>
+        <p class="subtitle">Viewing {{ product.name }}</p>
+    </div>
+</section>
+
+<section class="section">
+    <div class="container">
+        <!-- Back to products link -->
+        <div class="mb-5">
+            <a href="{% url 'dashboard:product_admin' %}" class="button is-light">
+                <span class="icon"><i class="fas fa-arrow-left"></i></span>
+                <span>Back to Products</span>
+            </a>
+        </div>
+
+        {% if not stripe_enabled %}
+        <div class="notification is-warning">
+            <p>Stripe integration is not enabled. To enable Stripe, set STRIPE_ENABLED=true in your environment.</p>
+        </div>
+        {% elif not stripe_available %}
+        <div class="notification is-danger">
+            <p>Stripe API is not available. Make sure you have installed the Stripe package with: pip install stripe</p>
+        </div>
+        {% elif missing_api_keys %}
+        <div class="notification is-danger">
+            <p>Stripe API keys are missing. Configure STRIPE_PUBLIC_KEY, STRIPE_SECRET_KEY, and STRIPE_WEBHOOK_SECRET in your environment.</p>
+        </div>
+        {% elif error %}
+        <div class="notification is-danger">
+            <p>Error loading product: {{ error }}</p>
+        </div>
+        {% elif not product %}
+        <div class="notification is-danger">
+            <p>Product not found with ID: {{ product_id }}</p>
+        </div>
+        {% else %}
+
+        <!-- Product details -->
+        <div class="box">
+            <div class="columns">
+                <div class="column is-8">
+                    <h2 class="title is-3">{{ product.name }}</h2>
+                    {% if product.description %}
+                    <p class="subtitle is-5">{{ product.description }}</p>
+                    {% endif %}
+                    
+                    <hr>
+                    
+                    <div class="content">
+                        <div class="columns is-multiline">
+                            <div class="column is-6">
+                                <h3 class="title is-5">Status</h3>
+                                {% if product.active %}
+                                <span class="tag is-success is-medium">Active</span>
+                                {% else %}
+                                <span class="tag is-warning is-medium">Inactive</span>
+                                {% endif %}
+                            </div>
+                            
+                            <div class="column is-6">
+                                <h3 class="title is-5">Product ID</h3>
+                                <code>{{ product.id }}</code>
+                            </div>
+                            
+                            {% if product.metadata %}
+                            <div class="column is-12">
+                                <h3 class="title is-5">Metadata</h3>
+                                <table class="table is-bordered is-striped is-narrow">
+                                    <thead>
+                                        <tr>
+                                            <th>Key</th>
+                                            <th>Value</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        {% for key, value in product.metadata.items %}
+                                        <tr>
+                                            <td>{{ key }}</td>
+                                            <td>{{ value }}</td>
+                                        </tr>
+                                        {% empty %}
+                                        <tr>
+                                            <td colspan="2">No metadata</td>
+                                        </tr>
+                                        {% endfor %}
+                                    </tbody>
+                                </table>
+                            </div>
+                            {% endif %}
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="column is-4">
+                    <div class="box">
+                        <h3 class="title is-4">Pricing</h3>
+                        {% if prices %}
+                            <div class="content">
+                                {% for price in prices %}
+                                <div class="notification is-primary">
+                                    <p class="title is-3">
+                                        {% if price.unit_amount_decimal %}
+                                            {% if price.currency == 'usd' %}${% elif price.currency == 'eur' %}€{% elif price.currency == 'gbp' %}£{% else %}{{ price.currency|upper }} {% endif %}{{ price.unit_amount_decimal|floatformat:2 }}
+                                        {% else %}
+                                            {% if price.currency == 'usd' %}${% elif price.currency == 'eur' %}€{% elif price.currency == 'gbp' %}£{% else %}{{ price.currency|upper }} {% endif %}{{ price.unit_amount|default:0|floatformat:2 }}
+                                        {% endif %}
+                                    </p>
+                                    {% if price.recurring %}
+                                        <p>
+                                            {% if price.recurring.interval_count > 1 %}
+                                                {{ price.recurring.interval_count }} {{ price.recurring.interval|title }}s billing
+                                            {% else %}
+                                                {{ price.recurring.interval|title }} billing
+                                            {% endif %}
+                                        </p>
+                                    {% else %}
+                                        <p>One-time payment</p>
+                                    {% endif %}
+                                    
+                                    <p class="is-size-7">Price ID: {{ price.id }}</p>
+                                </div>
+                                {% endfor %}
+                            </div>
+                        {% else %}
+                            <div class="notification is-warning">
+                                No pricing available
+                            </div>
+                        {% endif %}
+                    </div>
+                    
+                    <div class="box">
+                        <h3 class="title is-5">Actions</h3>
+                        <div class="buttons">
+                            <a href="https://dashboard.stripe.com/products/{{ product.id }}" target="_blank" class="button is-info is-fullwidth">
+                                <span class="icon"><i class="fas fa-external-link-alt"></i></span>
+                                <span>View in Stripe Dashboard</span>
+                            </a>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        {% if product.images and product.images|length > 0 %}
+        <div class="box mt-5">
+            <h3 class="title is-4">Product Images</h3>
+            <div class="columns is-multiline">
+                {% for image in product.images %}
+                <div class="column is-3">
+                    <div class="card">
+                        <div class="card-image">
+                            <figure class="image is-4by3">
+                                <img src="{{ image }}" alt="{{ product.name }}">
+                            </figure>
+                        </div>
+                    </div>
+                </div>
+                {% endfor %}
+            </div>
+        </div>
+        {% endif %}
+        
+        {% endif %}
+    </div>
+</section>
+{% endblock %} 

@@ -21,22 +21,34 @@ from quickscale.utils.env_utils import get_env, is_feature_enabled
 stripe_enabled_flag = is_feature_enabled(get_env('STRIPE_ENABLED', 'False'))
 if stripe_enabled_flag:
     try:
-        from .djstripe.settings import (
-            DJSTRIPE_USE_NATIVE_JSONFIELD,
-            DJSTRIPE_FOREIGN_KEY_TO_FIELD,
+        from .stripe.settings import (
+            STRIPE_LIVE_MODE,
+            STRIPE_PUBLIC_KEY,
+            STRIPE_SECRET_KEY,
+            STRIPE_WEBHOOK_SECRET,
         )
-        STRIPE_LIVE_MODE = False  # Always false in development/test
-        STRIPE_PUBLIC_KEY = get_env('STRIPE_PUBLIC_KEY', '')
-        STRIPE_SECRET_KEY = get_env('STRIPE_SECRET_KEY', '')
-        DJSTRIPE_WEBHOOK_SECRET = get_env('STRIPE_WEBHOOK_SECRET', '')
-        if isinstance(INSTALLED_APPS, tuple):
-            INSTALLED_APPS = list(INSTALLED_APPS)  # Ensure INSTALLED_APPS is mutable
-        if 'djstripe' not in INSTALLED_APPS:
-            INSTALLED_APPS.append('djstripe')
-    except ImportError as e:
-        pass
-    except Exception as e:
-        pass
+        
+        # Check if all required Stripe settings are provided
+        missing_settings = []
+        if not STRIPE_PUBLIC_KEY:
+            missing_settings.append('STRIPE_PUBLIC_KEY')
+        if not STRIPE_SECRET_KEY:
+            missing_settings.append('STRIPE_SECRET_KEY')
+        if not STRIPE_WEBHOOK_SECRET:
+            missing_settings.append('STRIPE_WEBHOOK_SECRET')
+            
+        if missing_settings:
+            # Just log the warning in test settings but don't fail
+            print(f"Warning: Stripe integration is enabled but missing required settings: {', '.join(missing_settings)}")
+            print("Stripe integration will be disabled for tests. Please provide all required settings.")
+        else:
+            # Only add stripe to INSTALLED_APPS if all required settings are available
+            if isinstance(INSTALLED_APPS, tuple):
+                INSTALLED_APPS = list(INSTALLED_APPS)  # Ensure INSTALLED_APPS is mutable
+            if 'stripe.apps.StripeConfig' not in INSTALLED_APPS:
+                INSTALLED_APPS.append('stripe.apps.StripeConfig')
+    except ImportError:
+        print("Warning: Could not import Stripe settings. Stripe integration will be disabled for tests.")
 
 MIDDLEWARE = [
     'django.middleware.security.SecurityMiddleware',

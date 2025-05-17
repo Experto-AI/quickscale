@@ -2,6 +2,20 @@
 
 All notable changes to this project will be documented in this file.
 
+## v0.9.0 (2025-05-17)
+-feat: Migrate to official Stripe API and implement plan synchronization
+- Completed the migration of the Stripe integration from the dj-stripe library to the official Stripe Python API, fulfilling Session 1 of the Sprint 2 roadmap.
+- Key changes include:
+- Removed the dj-stripe dependency and updated settings to use the official Stripe API.
+- Introduced a new StripeManager class to handle API interactions and configuration.
+- Updated views, templates, and tests to align with the new Stripe integration structure.
+- Removed the deprecated djstripe directory and related files.
+- Added utility functions and template tags for enhanced Stripe data handling.
+- Implemented functionality to synchronize Stripe plan and product data with the application's database, completing part of Session 2.
+- Enhanced product management views and templates to support the new synchronization and display Stripe data.
+- Added comprehensive unit tests for the migrated Stripe functionality and synchronization process.
+- Updated documentation, including the .env.example and technical documentation, to reflect the changes.
+
 ## v0.8.0 (2025-05-13)
 - v0.8.0 feat: Comprehensive CLI improvements and enhanced system reliability
 - Implemented MessageManager for consistent CLI output with color and icon support

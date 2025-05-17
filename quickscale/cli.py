@@ -149,13 +149,16 @@ Examples:
 
 def setup_service_parsers(subparsers: argparse._SubParsersAction) -> None:
     """Set up service management command parsers."""
-    subparsers.add_parser("up", 
+    up_parser = subparsers.add_parser("up", 
         help="Start the project services in local development mode",
         description="""
 Start all Docker containers for the current QuickScale project.
 This will start both the web and database services.
 You can access the web application at http://localhost:8000.
         """)
+    up_parser.add_argument("--no-cache", 
+        action="store_true",
+        help="Build images without using the cache")
         
     subparsers.add_parser("down", 
         help="Stop the project services in local development mode",

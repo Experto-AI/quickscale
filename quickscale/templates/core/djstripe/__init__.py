@@ -1,1 +1,0 @@
-"""Django Stripe configuration package.""" 

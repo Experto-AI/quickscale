@@ -486,7 +486,7 @@ class TestRealLifecycle:
             self.assert_containers_running(project_name)
 
             # Run the Django test command through quickscale, expecting success
-            # Specify just the public app to avoid issues with djstripe tests
+            # Specify just the public app to avoid issues with custom stripe tests
             cmd_args_for_test = ['manage', 'test', 'public', '--noinput']
             try:
                 # Increased timeout as tests might take time

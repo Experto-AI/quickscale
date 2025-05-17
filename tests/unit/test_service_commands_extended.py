@@ -358,7 +358,7 @@ class TestServiceUpCommandExtended:
             cmd._start_services_with_retry(3)
             
             # Verify _handle_retry_attempt called once (first attempt)
-            cmd._handle_retry_attempt.assert_called_once_with(0, 3, env, updated_ports)
+            cmd._handle_retry_attempt.assert_called_once_with(0, 3, env, updated_ports, False)
     
     def test_start_services_with_retry_multiple_attempts(self):
         """Test _start_services_with_retry with multiple attempts before success."""
@@ -459,7 +459,7 @@ class TestServiceUpCommandExtended:
             result = cmd._handle_retry_attempt(1, 3, env, updated_ports)
             
             # Should try to find new ports
-            mock_find_ports.assert_called_once_with(1, 3)
+            mock_find_ports.assert_called_once_with(1, 3, False)
             
             # Should update docker-compose.yml
             mock_update_compose.assert_called_once_with(new_ports)

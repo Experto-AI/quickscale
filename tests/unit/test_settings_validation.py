@@ -15,7 +15,7 @@ REQUIRED_VARS = {
     'web': ['WEB_PORT', 'SECRET_KEY'],
     'db': ['DB_USER', 'DB_PASSWORD', 'DB_NAME'],
     'email': ['EMAIL_HOST', 'EMAIL_HOST_USER', 'EMAIL_HOST_PASSWORD'],
-    'stripe': ['STRIPE_PUBLIC_KEY', 'STRIPE_SECRET_KEY', 'STRIPE_WEBHOOK_SECRET']
+    'stripe': ['STRIPE_PUBLIC_KEY', 'STRIPE_SECRET_KEY', 'STRIPE_WEBHOOK_SECRET', 'STRIPE_API_VERSION']
 }
 
 # The test will patch this imported get_env function
