@@ -313,7 +313,7 @@ class TestServiceCommandRetryHandlingFixed:
             
             # Verify _find_ports_for_retry was called with correct parameters
             # Use positional arguments to match how the method is actually called
-            mock_find_ports.assert_called_once_with(1, 3)
+            mock_find_ports.assert_called_once_with(1, 3, False)
             
             # Verify correct ports were returned
             assert new_ports == {'PORT': 8100, 'PG_PORT': 5500}
@@ -336,7 +336,7 @@ class TestServiceCommandRetryHandlingFixed:
              patch.object(cmd, '_find_ports_for_retry') as mock_find_ports:
                 
             # Configure _find_ports_for_retry to return different values based on retry count
-            def mock_ports_side_effect(retry_count, max_retries):
+            def mock_ports_side_effect(retry_count, max_retries, no_cache):
                 if retry_count == 1:
                     return {'PORT': 8200, 'PG_PORT': 5600}
                 else:
@@ -360,8 +360,8 @@ class TestServiceCommandRetryHandlingFixed:
             # Verify _find_ports_for_retry was called with later retry counts
             assert mock_find_ports.call_count == 2
             mock_find_ports.assert_has_calls([
-                call(1, 3),
-                call(2, 3)
+                call(1, 3, False),
+                call(2, 3, False)
             ])
     
     def test_handle_retry_attempt_with_proactive_port_finding(self):
@@ -466,11 +466,11 @@ class TestServiceCommandRetryHandlingFixed:
         def track_call(name):
             mock_history.append(name)
             
-        def prepare_side_effect():
+        def prepare_side_effect(no_cache):
             track_call('prepare')
             return ({}, {})
             
-        def start_side_effect(*args):
+        def start_side_effect(*args, no_cache=False):
             track_call('start')
             raise error
             
@@ -558,7 +558,7 @@ class TestServiceCommandRetryHandlingFixed:
             cmd.execute()
             
             # Check that _start_services_with_retry was called with the default retry count
-            mock_start.assert_called_once_with(max_retries=3)
+            mock_start.assert_called_once_with(max_retries=3, no_cache=False)
             
     def test_execute_with_custom_retry_count_from_env(self):
         """Test execute method with custom retry count from environment variable."""
@@ -578,4 +578,4 @@ class TestServiceCommandRetryHandlingFixed:
             cmd.execute()
             
             # Default max_retries=3 should be used despite RETRY_MAX=5 in environment
-            mock_start.assert_called_once_with(max_retries=3)
+            mock_start.assert_called_once_with(max_retries=3, no_cache=False)

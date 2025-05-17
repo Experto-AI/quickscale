@@ -109,7 +109,7 @@ class TestServiceCommandsMessageManager:
         
         # Mock _start_services_with_retry to set an error message but not raise an exception
         # This matches the current implementation which handles errors internally
-        def mock_start_services_with_retry(max_retries):
+        def mock_start_services_with_retry(max_retries, no_cache):
             # Call MessageManager.error directly as the implementation does
             from quickscale.utils.message_manager import MessageManager
             error_message = "Failed to start services after 3 attempts. Last error: Service start failed"

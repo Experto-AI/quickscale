@@ -1,0 +1,708 @@
+"""Stripe API Manager that provides direct interaction with the Stripe API."""
+
+import logging
+import os
+import importlib.metadata
+from typing import Dict, Any, Optional, Union, List, Tuple
+from django.conf import settings
+from core.env_utils import get_env, is_feature_enabled
+# from stripe import StripeClient # Move this import
+
+logger = logging.getLogger(__name__)
+
+class StripeConfigurationError(Exception):
+    """Raised when Stripe is not properly configured or the version is incompatible."""
+    pass
+
+
+class StripeManager:
+    """Manages Stripe API interactions and configuration."""
+
+    _instance = None
+    _initialized = False
+    _client: Optional['StripeClient'] = None # Add type hint for the client instance
+
+    @classmethod
+    def get_instance(cls) -> 'StripeManager':
+        """Get the singleton instance of StripeManager."""
+        if cls._instance is None:
+            cls._instance = cls()
+            cls._instance._initialize()
+
+        return cls._instance
+
+    def _initialize(self) -> None:
+        """Initialize the Stripe API client with appropriate keys and verify version."""
+        # Check if already initialized to prevent multiple initializations
+        if self.__class__._initialized:
+            return
+
+        stripe_enabled = is_feature_enabled(get_env('STRIPE_ENABLED', 'False'))
+
+        if not stripe_enabled:
+            logger.warning("Stripe API is not enabled. Enable STRIPE_ENABLED in .env.")
+            raise StripeConfigurationError("Stripe integration is not enabled")
+
+        # Move the import here, inside the conditional block
+        try:
+            from stripe import StripeClient # StripeClient from v8+
+        except ImportError:
+            logger.error("Stripe library not found. Install with pip install stripe.")
+            raise StripeConfigurationError("Stripe library not installed")
+
+        # Log the installed Stripe package version here, inside _initialize
+        try:
+            stripe_package_version = importlib.metadata.version('stripe')
+            logger.info(f"Detected Stripe package version (from metadata): {stripe_package_version}")
+        except importlib.metadata.PackageNotFoundError:
+            logger.warning("Stripe package metadata not found.")
+        except Exception as e:
+            logger.warning(f"Error retrieving Stripe package version from metadata: {e}")
+
+        # Get API key configuration
+        api_key = getattr(settings, 'STRIPE_SECRET_KEY', None)
+        if not api_key:
+            logger.error("Stripe secret key not configured. Configure STRIPE_SECRET_KEY IN .env.")
+            raise StripeConfigurationError("Stripe secret key not configured")
+
+        # Set API version from environment or default to a modern version
+        stripe_api_version = os.environ.get('STRIPE_API_VERSION', None)
+
+        # Configure Stripe API client using StripeClient
+        try:
+            self._client = StripeClient(api_key=api_key)
+
+            logger.info(f"StripeClient initialized with API version: {stripe_api_version}")
+
+            # Add a basic API call to confirm initialization and version compatibility
+            try:
+                # Attempt to list a small number of customers as a test
+                logger.info("Attempting a basic Stripe API call (list customers) to confirm connectivity and version compatibility...")
+                # Use the client instance
+                self._client.customers.list()
+                logger.info("Basic Stripe API call successful.")
+            except Exception as e:
+                # If the basic API call fails, raise a configuration error
+                logger.error(f"Basic Stripe API call failed with exception: {e}", exc_info=True)
+                # Re-raise as a configuration error as it indicates a setup problem
+                raise StripeConfigurationError(f"Failed to connect to Stripe API with configured key and version: {e}") from e
+
+
+        except Exception as e: # This except block now correctly closes the outer try
+            logger.error(f"Error initializing Stripe client: {e}", exc_info=True)
+            # Re-raise as a configuration error if initialization fails
+            raise StripeConfigurationError(f"Failed to initialize Stripe: {e}") from e
+
+        # This line should be outside the try...except block
+        self.__class__._initialized = True
+        logger.info("Stripe integration enabled and initialized successfully.")
+
+    @property
+    def client(self) -> 'StripeClient':
+        """Get the Stripe API client instance."""
+        # Ensure initialization has happened
+        if not self.__class__._initialized or self._client is None:
+             # Re-run initialization if needed, which includes the version check
+             self._initialize()
+        return self._client
+
+    # Customer operations
+
+    def create_customer(self,
+                       email: str,
+                       name: Optional[str] = None,
+                       metadata: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+        """Create a new customer in Stripe using the v12+ API."""
+        customer_data = {'email': email}
+        if name:
+            customer_data['name'] = name
+        if metadata:
+            customer_data['metadata'] = metadata
+
+        try:
+            # Use StripeClient instance and the new pattern
+            return self.client.customers.create(params=customer_data)
+        except Exception as e:
+            logger.error(f"Error creating Stripe customer: {e}")
+            raise
+
+    def retrieve_customer(self, customer_id: str) -> Dict[str, Any]:
+        """Retrieve a customer from Stripe by ID using the v12+ API."""
+        try:
+            # Use StripeClient instance and the new pattern
+            return self.client.customers.retrieve(customer_id)
+        except Exception as e:
+            logger.error(f"Error retrieving Stripe customer {customer_id}: {e}")
+            raise
+
+    def get_customer_by_user(self, user) -> Optional[Dict[str, Any]]:
+        """Get a Stripe customer by Django user."""
+        if not hasattr(user, 'stripe_customer'):
+            return None
+
+        try:
+            customer_record = user.stripe_customer
+            if not customer_record or not customer_record.stripe_id:
+                return None
+
+            return self.retrieve_customer(customer_record.stripe_id)
+        except Exception as e:
+            logger.error(f"Error retrieving Stripe customer for user {user.email}: {e}")
+            return None
+
+    # Product operations
+
+    def create_product(self,
+                      name: str,
+                      description: Optional[str] = None,
+                      metadata: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+        """Create a new product in Stripe using the v12+ API."""
+        product_data = {'name': name}
+        if description:
+            product_data['description'] = description
+        if metadata:
+            product_data['metadata'] = metadata
+
+        try:
+            # Use StripeClient instance and the new pattern
+            return self.client.products.create(params=product_data)
+        except Exception as e:
+            logger.error(f"Error creating Stripe product: {e}")
+            raise
+
+    def create_product_with_price(self,
+                                 name: str,
+                                 price_amount: int,
+                                 currency: str = 'usd',
+                                 description: Optional[str] = None,
+                                 metadata: Optional[Dict[str, Any]] = None) -> Tuple[Dict[str, Any], Dict[str, Any]]:
+        """Create a new product with price in Stripe using the v12+ API."""
+        try:
+            # Create product using the updated method
+            product = self.create_product(name, description, metadata)
+
+            # Create price for the product using StripeClient instance and the new pattern
+            price_data = {
+                'product': product['id'],
+                'unit_amount': price_amount,
+                'currency': currency.lower(),
+                'recurring': {'interval': 'month'}, # Assuming a monthly subscription model, adjust if needed
+            }
+            price = self.client.prices.create(params=price_data)
+
+            return product, price
+        except Exception as e:
+            logger.error(f"Error creating Stripe product with price: {e}")
+            raise
+
+    def retrieve_product(self, product_id: str) -> Dict[str, Any]:
+        """Retrieve a product from Stripe by ID using the v12+ API."""
+        try:
+            # Use StripeClient instance and the new pattern
+            return self.client.products.retrieve(product_id)
+        except Exception as e:
+            logger.error(f"Error retrieving Stripe product {product_id}: {e}")
+            raise
+
+    def list_products(self, active: Optional[bool] = True) -> List[Dict[str, Any]]:
+        """List products from Stripe using the v12+ API."""
+        try:
+            params = {}
+            if active is not None:
+                params['active'] = active
+
+            # Use StripeClient instance and the new pattern
+            response = self.client.products.list(params=params)
+            return response.data # Return the data list directly
+        except Exception as e:
+            logger.error(f"Error listing Stripe products: {e}")
+            raise
+
+    # Price operations
+
+    def create_price(self,
+                    product_id: str,
+                    unit_amount: int,
+                    currency: str = 'usd',
+                    recurring_interval: Optional[str] = None,
+                    metadata: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+        """Create a new price in Stripe using the v12+ API."""
+        price_data = {
+            'product': product_id,
+            'unit_amount': unit_amount,
+            'currency': currency.lower(),
+        }
+        if recurring_interval:
+            price_data['recurring'] = {'interval': recurring_interval}
+        if metadata:
+            price_data['metadata'] = metadata
+
+        try:
+            # Use StripeClient instance and the new pattern
+            return self.client.prices.create(params=price_data)
+        except Exception as e:
+            logger.error(f"Error creating Stripe price: {e}")
+            raise
+
+    def get_product_prices(self, product_id: str, active: Optional[bool] = True) -> List[Dict[str, Any]]:
+        """Get prices for a specific product from Stripe using the v12+ API."""
+        try:
+            params = {'product': product_id}
+            if active is not None:
+                params['active'] = active
+
+            # Use StripeClient instance and the new pattern
+            response = self.client.prices.list(params=params)
+            return response.data # Return the data list directly
+        except Exception as e:
+            logger.error(f"Error listing prices for product {product_id}: {e}")
+            raise
+
+    # Subscription operations
+
+    def create_subscription(self,
+                            customer_id: str,
+                            price_id: str,
+                            quantity: int = 1,
+                            metadata: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+        """Create a new subscription in Stripe using the v12+ API."""
+        subscription_data = {
+            'customer': customer_id,
+            'items': [{'price': price_id, 'quantity': quantity}],
+        }
+        if metadata:
+            subscription_data['metadata'] = metadata
+
+        try:
+            # Use StripeClient instance and the new pattern
+            return self.client.subscriptions.create(params=subscription_data)
+        except Exception as e:
+            logger.error(f"Error creating Stripe subscription: {e}")
+            raise
+
+    def retrieve_subscription(self, subscription_id: str) -> Dict[str, Any]:
+        """Retrieve a subscription from Stripe by ID using the v12+ API."""
+        try:
+            # Use StripeClient instance and the new pattern
+            return self.client.subscriptions.retrieve(subscription_id)
+        except Exception as e:
+            logger.error(f"Error retrieving Stripe subscription {subscription_id}: {e}")
+            raise
+
+    def update_subscription(self,
+                            subscription_id: str,
+                            items: Optional[List[Dict[str, Any]]] = None, # Use List[Dict[str, Any]] based on API docs
+                            proration_behavior: Optional[str] = None,
+                            metadata: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+        """Update a subscription in Stripe using the v12+ API."""
+        update_data = {}
+        if items is not None: # Check for None specifically as an empty list is valid
+             update_data['items'] = items
+        if proration_behavior:
+            update_data['proration_behavior'] = proration_behavior
+        if metadata:
+            update_data['metadata'] = metadata
+
+        try:
+            # Use StripeClient instance and the new pattern
+            return self.client.subscriptions.update(subscription_id, params=update_data)
+        except Exception as e:
+            logger.error(f"Error updating Stripe subscription {subscription_id}: {e}")
+            raise
+
+    def cancel_subscription(self, subscription_id: str) -> Dict[str, Any]:
+        """Cancel a subscription in Stripe using the v12+ API."""
+        try:
+            # Use StripeClient instance and the new pattern
+            return self.client.subscriptions.cancel(subscription_id)
+        except Exception as e:
+            logger.error(f"Error canceling Stripe subscription {subscription_id}: {e}")
+            raise
+
+    def list_subscriptions(self,
+                           customer_id: Optional[str] = None,
+                           price_id: Optional[str] = None,
+                           status: Optional[str] = None,
+                           limit: Optional[int] = None) -> List[Dict[str, Any]]:
+        """List subscriptions from Stripe using the v12+ API."""
+        try:
+            params = {}
+            if customer_id:
+                params['customer'] = customer_id
+            if price_id:
+                params['price'] = price_id
+            if status:
+                params['status'] = status
+            if limit:
+                params['limit'] = limit
+
+            # Use StripeClient instance and the new pattern
+            response = self.client.subscriptions.list(params=params)
+            return response.data # Return the data list directly
+        except Exception as e:
+            logger.error(f"Error listing Stripe subscriptions: {e}")
+            raise
+
+    # Invoice operations
+
+    def create_invoice(self,
+                       customer_id: str,
+                       days_until_due: Optional[int] = None,
+                       metadata: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+        """Create a new invoice in Stripe using the v12+ API."""
+        invoice_data = {'customer': customer_id}
+        if days_until_due is not None:
+            invoice_data['days_until_due'] = days_until_due
+        if metadata:
+            invoice_data['metadata'] = metadata
+
+        try:
+            # Use StripeClient instance and the new pattern
+            return self.client.invoices.create(params=invoice_data)
+        except Exception as e:
+            logger.error(f"Error creating Stripe invoice: {e}")
+            raise
+
+    def retrieve_invoice(self, invoice_id: str) -> Dict[str, Any]:
+        """Retrieve an invoice from Stripe by ID using the v12+ API."""
+        try:
+            # Use StripeClient instance and the new pattern
+            return self.client.invoices.retrieve(invoice_id)
+        except Exception as e:
+            logger.error(f"Error retrieving Stripe invoice {invoice_id}: {e}")
+            raise
+
+    def finalize_invoice(self, invoice_id: str) -> Dict[str, Any]:
+        """Finalize an invoice in Stripe using the v12+ API."""
+        try:
+            # Use StripeClient instance and the new pattern
+            return self.client.invoices.finalize_invoice(invoice_id)
+        except Exception as e:
+            logger.error(f"Error finalizing Stripe invoice {invoice_id}: {e}")
+            raise
+
+    def create_invoice_item(self,
+                            customer_id: str,
+                            price_id: str,
+                            invoice_id: Optional[str] = None,
+                            quantity: int = 1,
+                            metadata: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+        """Create a new invoice item in Stripe using the v12+ API."""
+        invoice_item_data = {
+            'customer': customer_id,
+            'price': price_id,
+            'quantity': quantity,
+        }
+        if invoice_id:
+            invoice_item_data['invoice'] = invoice_id
+        if metadata:
+            invoice_item_data['metadata'] = metadata
+
+        try:
+            # Use StripeClient instance and the new pattern
+            return self.client.invoice_items.create(params=invoice_item_data)
+        except Exception as e:
+            logger.error(f"Error creating Stripe invoice item: {e}")
+            raise
+
+    # Payment Intent operations
+
+    def create_payment_intent(self,
+                              amount: int,
+                              currency: str,
+                              customer_id: Optional[str] = None,
+                              metadata: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+        """Create a new payment intent in Stripe using the v12+ API."""
+        payment_intent_data = {
+            'amount': amount,
+            'currency': currency.lower(),
+        }
+        if customer_id:
+            payment_intent_data['customer'] = customer_id
+        if metadata:
+            payment_intent_data['metadata'] = metadata
+
+        try:
+            # Use StripeClient instance and the new pattern
+            return self.client.payment_intents.create(params=payment_intent_data)
+        except Exception as e:
+            logger.error(f"Error creating Stripe payment intent: {e}")
+            raise
+
+    def retrieve_payment_intent(self, payment_intent_id: str) -> Dict[str, Any]:
+        """Retrieve a payment intent from Stripe by ID using the v12+ API."""
+        try:
+            # Use StripeClient instance and the new pattern
+            return self.client.payment_intents.retrieve(payment_intent_id)
+        except Exception as e:
+            logger.error(f"Error retrieving Stripe payment intent {payment_intent_id}: {e}")
+            raise
+
+    def confirm_payment_intent(self, payment_intent_id: str, payment_method: Optional[str] = None) -> Dict[str, Any]:
+        """Confirm a payment intent in Stripe using the v12+ API."""
+        confirm_data = {}
+        if payment_method:
+            confirm_data['payment_method'] = payment_method
+
+        try:
+            # Use StripeClient instance and the new pattern
+            return self.client.payment_intents.confirm(payment_intent_id, params=confirm_data)
+        except Exception as e:
+            logger.error(f"Error confirming Stripe payment intent {payment_intent_id}: {e}")
+            raise
+
+    def cancel_payment_intent(self, payment_intent_id: str) -> Dict[str, Any]:
+        """Cancel a payment intent in Stripe using the v12+ API."""
+        try:
+            # Use StripeClient instance and the new pattern
+            return self.client.payment_intents.cancel(payment_intent_id)
+        except Exception as e:
+            logger.error(f"Error canceling Stripe payment intent {payment_intent_id}: {e}")
+            raise
+
+    def list_payment_intents(self,
+                             customer_id: Optional[str] = None,
+                             limit: Optional[int] = None) -> List[Dict[str, Any]]:
+        """List payment intents from Stripe using the v12+ API."""
+        try:
+            params = {}
+            if customer_id:
+                params['customer'] = customer_id
+            if limit:
+                params['limit'] = limit
+
+            # Use StripeClient instance and the new pattern
+            response = self.client.payment_intents.list(params=params)
+            return response.data # Return the data list directly
+        except Exception as e:
+            logger.error(f"Error listing Stripe payment intents: {e}")
+            raise
+
+    # Refund operations
+
+    def create_refund(self,
+                      payment_intent_id: str,
+                      amount: Optional[int] = None,
+                      reason: Optional[str] = None,
+                      metadata: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+        """Create a new refund in Stripe using the v12+ API."""
+        refund_data = {'payment_intent': payment_intent_id}
+        if amount is not None:
+            refund_data['amount'] = amount
+        if reason:
+            refund_data['reason'] = reason
+        if metadata:
+            refund_data['metadata'] = metadata
+
+        try:
+            # Use StripeClient instance and the new pattern
+            return self.client.refunds.create(params=refund_data)
+        except Exception as e:
+            logger.error(f"Error creating Stripe refund: {e}")
+            raise
+
+    # Sync operations (Product model specific, might need adjustment based on your actual Product model)
+
+    def sync_product_to_stripe(self, product_obj) -> Optional[str]:
+        """
+        Syncs a local product object to Stripe.
+        Creates or updates the product and its price in Stripe.
+        Returns the Stripe Product ID on success, None otherwise.
+        """
+
+        if not is_feature_enabled(get_env('STRIPE_ENABLED', 'False')):
+            logger.warning("Stripe integration is not enabled, skipping product sync.")
+            return None
+
+        try:
+            # Check if the product already exists in Stripe by looking for a stripe_id on the local object
+            stripe_product_id = getattr(product_obj, 'stripe_id', None)
+            stripe_price_id = getattr(product_obj, 'stripe_price_id', None)
+
+            product_data = {
+                'name': product_obj.name,
+                'description': getattr(product_obj, 'description', None),
+                'active': getattr(product_obj, 'active', True),
+                # Add any other relevant fields from your Product model
+            }
+            # Add metadata, ensuring it's a dictionary
+            if hasattr(product_obj, 'metadata') and isinstance(product_obj.metadata, dict):
+                 product_data['metadata'] = product_obj.metadata
+
+
+            price_data = {
+                 'unit_amount': int(product_obj.price * 100), # Assuming price is a Decimal/float, convert to cents
+                 'currency': getattr(product_obj, 'currency', 'usd').lower(),
+                 'recurring': {'interval': getattr(product_obj, 'recurring_interval', 'month')} # Assuming subscription
+            }
+            # Add metadata for the price, ensuring it's a dictionary
+            if hasattr(product_obj, 'price_metadata') and isinstance(product_obj.price_metadata, dict):
+                price_data['metadata'] = product_obj.price_metadata
+
+            if stripe_product_id:
+                # Product exists, update it
+                logger.info(f"Updating existing Stripe Product: {stripe_product_id}")
+                stripe_product = self.client.products.update(stripe_product_id, params=product_data)
+                logger.info(f"Stripe Product updated: {stripe_product.id}")
+
+                if stripe_price_id:
+                    # Price exists, update it (Note: Prices are often immutable, updating might mean creating a new one and archiving the old.
+                    # This simplified example assumes a direct update is possible or handles immutability by creating a new price.)
+                    # A common pattern for price changes is to create a new price and update subscriptions.
+                    # For simplicity, let's assume we create a new price and update the product's default_price if necessary.
+                    logger.info(f"Creating a new Price for Product: {stripe_product_id}")
+                    new_stripe_price = self.client.prices.create(params={'product': stripe_product_id, **price_data})
+                    logger.info(f"New Stripe Price created: {new_stripe_price.id}")
+
+                    # Optionally, update the product's default_price to the new price ID
+                    if getattr(product_obj, 'set_as_default_price', True): # Assuming a flag to control default price
+                         logger.info(f"Setting new price {new_stripe_price.id} as default for product {stripe_product_id}")
+                         self.client.products.update(stripe_product_id, params={'default_price': new_stripe_price.id})
+
+                    # You might want to store the new_stripe_price.id on your local product_obj and save it
+                    # product_obj.stripe_price_id = new_stripe_price.id
+                    # product_obj.save() # Make sure your model has these fields
+
+                    # A more robust approach for price updates would involve:
+                    # 1. Creating the new price.
+                    # 2. Optionally, setting it as the default price on the Product.
+                    # 3. Updating any active subscriptions to use the new price (this is a separate operation).
+                    # 4. Optionally, deactivating the old price.
+                    # This simplified sync assumes creating a new price on product update.
+                    # For a real application, consider the subscription update flow.
+
+                    # For this refactor, we'll focus on the API calls. The logic for handling old prices/subscriptions
+                    # would need to be implemented based on your application's requirements.
+                    # For now, we'll just return the product ID. The price handling here is simplified.
+                    return stripe_product.id
+
+                else:
+                    # Product exists, but no price associated in local DB (or first time syncing price for existing product)
+                    logger.info(f"Creating Price for existing Stripe Product: {stripe_product_id}")
+                    stripe_price = self.client.prices.create(params={'product': stripe_product_id, **price_data})
+                    logger.info(f"Stripe Price created: {stripe_price.id}")
+                     # You would likely want to store stripe_price.id on your local product_obj
+                    # product_obj.stripe_price_id = stripe_price.id
+                    # product_obj.save()
+
+                    # Optionally, set this new price as the default on the product
+                    if getattr(product_obj, 'set_as_default_price', True):
+                         logger.info(f"Setting new price {stripe_price.id} as default for product {stripe_product_id}")
+                         self.client.products.update(stripe_product_id, params={'default_price': stripe_price.id})
+
+
+                    return stripe_product.id
+
+
+            else:
+                # Product does not exist, create it and its price
+                logger.info("Creating new Stripe Product with Price")
+
+                # Create product
+                stripe_product = self.client.products.create(params=product_data)
+                logger.info(f"Stripe Product created: {stripe_product.id}")
+
+                # Create price for the new product
+                stripe_price = self.client.prices.create(params={'product': stripe_product.id, **price_data})
+                logger.info(f"Stripe Price created: {stripe_price.id}")
+
+                # Optionally, set this new price as the default on the product
+                if getattr(product_obj, 'set_as_default_price', True):
+                     logger.info(f"Setting new price {stripe_price.id} as default for product {stripe_product.id}")
+                     self.client.products.update(stripe_product.id, params={'default_price': stripe_price.id})
+
+
+                # You would likely want to store stripe_product.id and stripe_price.id on your local product_obj
+                # product_obj.stripe_id = stripe_product.id
+                # product_obj.stripe_price_id = stripe_price.id
+                # product_obj.save()
+
+                return stripe_product.id
+
+        except Exception as e:
+            logger.error(f"Error syncing product {getattr(product_obj, 'id', 'N/A')} to Stripe: {e}", exc_info=True)
+            # Depending on your error handling strategy, you might want to return None or re-raise
+            return None
+
+
+    def sync_product_from_stripe(self, stripe_product_id: str, product_model):
+        """
+        Syncs a Stripe product to a local product object.
+        Creates or updates the local product object.
+        Assumes product_model is your Django Product model or similar.
+        """
+
+
+        if not is_feature_enabled(get_env('STRIPE_ENABLED', 'False')):
+            logger.warning("Stripe integration is not enabled, skipping product sync.")
+            return None
+
+        try:
+            logger.info(f"Syncing Stripe Product {stripe_product_id} to local database")
+            stripe_product = self.client.products.retrieve(stripe_product_id)
+
+            # Find or create the local product object
+            product_obj, created = product_model.objects.get_or_create(stripe_id=stripe_product.id)
+
+            # Update local product object with data from Stripe
+            product_obj.name = stripe_product.name
+            product_obj.description = stripe_product.description
+            product_obj.active = stripe_product.active
+            # Map other relevant fields from stripe_product to your product_obj
+
+            # Sync price (Stripe products can have multiple prices, this sync might need refinement)
+            # For simplicity, let's assume we sync the default price if it exists
+            stripe_price_id = stripe_product.default_price
+            if stripe_price_id:
+                try:
+                    stripe_price = self.client.prices.retrieve(stripe_price_id)
+                    product_obj.price = stripe_price.unit_amount / 100 # Convert cents to your local currency unit
+                    product_obj.currency = stripe_price.currency
+                    product_obj.recurring_interval = stripe_price.recurring['interval'] if stripe_price.recurring else None
+                    product_obj.stripe_price_id = stripe_price.id # Store the synced price ID
+                    # Map other relevant price fields
+
+                except Exception as price_e:
+                    logger.warning(f"Could not retrieve default price {stripe_price_id} for product {stripe_product.id}: {price_e}")
+                    # Decide how to handle missing or unretrievable price data
+
+            # Update metadata if your model supports it
+            if hasattr(product_obj, 'metadata') and isinstance(stripe_product.metadata, dict):
+                 product_obj.metadata = stripe_product.metadata
+
+            # Save the local product object
+            product_obj.save()
+            logger.info(f"Synced Stripe Product {stripe_product.id} to local product object {product_obj.id}")
+
+        except Exception as e:
+            logger.error(f"Error syncing Stripe product {stripe_product_id} from Stripe: {e}", exc_info=True)
+            # Decide how to handle sync errors (e.g., log, raise, ignore)
+
+
+    def sync_products_from_stripe(self, product_model) -> int:
+        """
+        Syncs all products from Stripe to local product objects.
+        Creates or updates local product objects based on Stripe data.
+        Returns the number of products synced.
+        """
+
+        if not is_feature_enabled(get_env('STRIPE_ENABLED', 'False')):
+            logger.warning("Stripe integration is not enabled, skipping product sync.")
+            return 0
+
+        synced_count = 0
+        try:
+            logger.info("Starting full sync of products from Stripe...")
+            # List all products from Stripe using auto-pagination
+            # Use StripeClient instance and the new pattern with auto_paging_iter()
+            for stripe_product in self.client.products.list().auto_paging_iter():
+                self.sync_product_from_stripe(stripe_product.id, product_model)
+                synced_count += 1
+
+            logger.info(f"Finished full sync. Synced {synced_count} products from Stripe.")
+            return synced_count
+
+        except Exception as e:
+            logger.error(f"Error during full product sync from Stripe: {e}", exc_info=True)
+            return synced_count # Return count of successfully synced before the error
+

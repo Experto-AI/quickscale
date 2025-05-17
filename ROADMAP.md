@@ -46,21 +46,16 @@ For more details refer to the [CHANGELOG](CHANGELOG.md).
 
 ## Projected Development Sprints
 
- ### Sprint 2: Subscription Plans (v0.9.0)
-- [ ] **Session 1: Subscription Plan Configuration**
-  - [ ] **Step 1: Define Subscription Plans in Stripe**
-    - [ ] Configure pay-as-you-go credit package in manually in Stripe
-    - [ ] Configure two monthly subscription plans with credit allocations manually in Stripe
-    - [ ] Add synchronization for plan data in the application
-    - [ ] Test plan configuration and synchronization
+### Sprint 3: Checkout (v0.10.0)
+- [ ] **Session 1: Credit System Foundation**
   - [ ] **Step 2: Credit System Foundation**
     - [ ] Create credit balance model tied to user accounts
     - [ ] Implement credit transaction ledger for tracking usage
     - [ ] Add automated credit allocation for subscription plans
     - [ ] Test credit model and basic operations
 
-### Sprint 3: Checkout (v0.10.0)
--- [ ] **Session 1: Checkout Workflow**
+### Sprint 4: Checkout (v0.11.0)
+- [ ] **Session 1: Checkout Workflow**
   - [ ] **Step 1: Plan Selection Interface**
     - [ ] Create plan comparison and selection page
     - [ ] Implement plan details display with credit information
@@ -72,7 +67,7 @@ For more details refer to the [CHANGELOG](CHANGELOG.md).
     - [ ] Create subscription activation flow
     - [ ] Test end-to-end checkout process
 
-### Sprint 4: User Credit Management (v0.11.0)
+### Sprint 5: User Credit Management (v0.12.0)
 - [ ] **Session 1: User Credit Dashboard**
   - [ ] **Step 1: Credit Status UI**
     - [ ] Add credit balance display to user dashboard
@@ -85,7 +80,7 @@ For more details refer to the [CHANGELOG](CHANGELOG.md).
     - [ ] Create cancellation and renewal flows
     - [ ] Test subscription management functionality
 
-### Sprint 5: User Credit History (v0.12.0)
+### Sprint 6: User Credit History (v0.13.0)
 - [ ] **Session 2: Credit Usage and History**
   - [ ] **Step 1: Credit Consumption**
     - [ ] Implement credit deduction for service usage
@@ -98,7 +93,7 @@ For more details refer to the [CHANGELOG](CHANGELOG.md).
     - [ ] Implement receipt generation for payments
     - [ ] Test transaction history functionality
 
-### Sprint 6: Admin Management Interface (v0.13.0)
+### Sprint 7: Admin Management Interface (v0.14.0)
 - [ ] **Session 1: Admin Payment Dashboard**
   - [ ] **Step 1: User Subscription Overview**
     - [ ] Create user subscription listing and status view
@@ -111,7 +106,7 @@ For more details refer to the [CHANGELOG](CHANGELOG.md).
     - [ ] Implement basic revenue reporting
     - [ ] Test payment management functionality
 
-### Sprint 7: Admin Management Interface (v0.14.0)
+### Sprint 8: Admin Management Interface (v0.15.0)
 - [ ] **Session 1: Customer Support Tools**
   - [ ] **Step 1: User Credit Management**
     - [ ] Add admin tools for viewing user credit status
@@ -124,7 +119,7 @@ For more details refer to the [CHANGELOG](CHANGELOG.md).
     - [ ] Implement user communication features
     - [ ] Test support action functionality
 
-### Sprint 8: System Optimization and Security (v0.15.0)
+### Sprint 9: System Optimization and Security (v0.16.0)
 - [ ] **Session 1: Security and Compliance**
   - [ ] **Step 1: Payment Security**
     - [ ] Add enhanced security for payment endpoints
@@ -137,7 +132,7 @@ For more details refer to the [CHANGELOG](CHANGELOG.md).
     - [ ] Implement clear user guidance for payment issues
     - [ ] Test error scenarios systematically
 
-### Sprint 9: System Optimization and Security (v0.16.0)
+### Sprint 10: System Optimization and Security (v0.17.0)
 - [ ] **Session 1: Performance and Scalability**
   - [ ] **Step 1: Optimization**
     - [ ] Optimize credit transaction handling for scale
@@ -150,7 +145,7 @@ For more details refer to the [CHANGELOG](CHANGELOG.md).
     - [ ] Create data consistency checks for credit balances
     - [ ] Test system resilience
 
-### Sprint 10: Storage and Real Time API (v0.17.0)
+### Sprint 11: Storage and Real Time API (v0.18.0)
 - [ ] **Session 1: Storage**
   - [ ] **Step 1: Django-storages**
     - [ ] Implement Django-storages
@@ -158,7 +153,7 @@ For more details refer to the [CHANGELOG](CHANGELOG.md).
   - [ ] **Step 1: Django-channels**
     - [ ] Implement Django-channels
 
-### Sprint 11: Refactor codebase to follow CONTRIBUTING.md (v0.18.0)
+### Sprint 12: Refactor codebase to follow CONTRIBUTING.md (v0.19.0)
 - [ ] **Session 1: Incorporate the 12factor.net principles**
   - [ ] Implement the 12factor.net principles in the project
 - [ ] **Session 2: Refactor codebase to follow CONTRIBUTING.md**

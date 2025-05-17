@@ -42,7 +42,7 @@ class TestCliMessageConsistency:
         command_manager = CommandManager()
         
         # Execute version command
-        with patch('quickscale.commands.command_manager.__version__', '1.0.0'):
+        with patch('quickscale.__version__', '1.0.0'):
             command_manager._handle_info_commands('version', None)
         
         # Verify MessageManager methods were called
@@ -56,16 +56,20 @@ class TestCliMessageConsistency:
         mock_args = MagicMock()
         mock_args.command = "nonexistent_command"
         
-        # Simulate KeyError exception
-        with pytest.raises(SystemExit):
-            # Mock sys.exit to prevent actual exit
-            with patch('sys.exit'):
-                cli.main = MagicMock(side_effect=KeyError("Command not found"))
+        # Patch CommandManager.execute_command to raise KeyError
+        with patch('quickscale.commands.command_manager.CommandManager.execute_command', 
+                  side_effect=KeyError("nonexistent_command")), \
+             patch('sys.exit'), \
+             patch('sys.argv', ['quickscale', 'nonexistent_command']):
+            
+            # Call main and catch the SystemExit that will be raised
+            try:
                 cli.main()
+            except SystemExit:
+                pass
         
-        # Since we can't easily test the exception handler directly without modifying the code,
-        # let's at least ensure the MessageManager has the expected error method
-        assert hasattr(MessageManager, 'error')
+        # Verify that MessageManager.error was called with an error message
+        mock_message_manager['error'].assert_called()
         
     def test_handle_log_scan_output_uses_message_manager(self, mock_message_manager):
         """Test that log scan output handling uses MessageManager."""

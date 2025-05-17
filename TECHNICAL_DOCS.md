@@ -16,7 +16,7 @@ Project configuration is managed through environment variables with secure defau
     - dj-database-url 2.1.0+ (database URL configuration)
     - django-allauth 0.52.0+ (authentication)
     - Uvicorn 0.27.0+ (ASGI server)
-    - dj-stripe 2.9.0 (with stripe 8.0.0+) for payment processing
+    - stripe 12.1.0+ for payment processing
 - HTMX (frontend to backend communication for CRUD operations with the simplicity of HTML)
 - Alpine.js (simple vanilla JS library for DOM manipulation)
 - Bulma CSS (simple CSS styling without JavaScript) - Do not mix Tailwind or another alternatives
@@ -44,13 +44,12 @@ quickscale/
 │   │   ├── migrations/       # Pre-generated migrations
 │   │   └── templates/        # App-specific templates
 │   │   └── tests/            # App-specific tests
-│   ├── djstripe/             # Django Stripe integration
+│   ├── stripe_manager/               # Stripe integration app
 │   │   ├── management/       # Management commands
 │   │   │   └── commands/     # Custom commands
-│   │   ├── migrations/       # Pre-generated migrations
 │   │   ├── templates/        # App-specific templates
-│   │   │   └── djstripe/     # DjStripe templates
-│   │   └── tests/            # DjStripe tests
+│   │   │   └── stripe_manager/       # Stripe templates
+│   │   └── tests/            # Stripe tests
 │   ├── docs/                 # Documentation files
 │   ├── js/                   # JavaScript assets
 │   ├── logs/                 # Log files directory
@@ -76,7 +75,7 @@ quickscale/
 
 tests/
 ├── core/                     # Core functionality tests
-│   └── djstripe/             # Stripe integration tests
+│   └── stripe_manager/               # Stripe integration tests
 ├── e2e/                      # End-to-end tests
 │   └── support/              # E2E test support files
 │       └── test_project_template/ # Test template
@@ -99,7 +98,7 @@ PROJECT_NAME/
 ├── common/                 # Common Django app (shared models, utils)
 ├── core/                   # Core Django project settings and configurations
 ├── dashboard/              # User dashboard app
-├── djstripe/               # Stripe integration app
+├── stripe_manager/              # Stripe integration app
 ├── docs/                   # Project-specific documentation
 ├── js/                     # JavaScript source files (e.g., Alpine.js components)
 ├── logs/                   # Log files directory
@@ -163,7 +162,7 @@ flowchart TD
         django_core["Django Core"]
         database["PostgreSQL"]
         auth["Authentication<br>(django-allauth)"]
-        djstripe["DjStripe<br>(Payments)"]
+        stripe_manager["Stripe<br>(Payments)"]
         Apps
   end
     user_input["User Input (CLI Commands)"] --> cli
@@ -173,7 +172,7 @@ flowchart TD
     command_base --> project_commands & service_commands & dev_commands & system_commands & error_manager & logging_manager
     templates --> style_templates & js_templates
     project_commands --> templates
-    django_core --- database & auth & djstripe & Apps
+    django_core --- database & auth & stripe_manager & Apps
     templates -- generates --> Generated
     Generated -- runs with --> docker["Docker Services<br>(web, db)"]
     service_commands --> docker
@@ -223,11 +222,11 @@ flowchart TD
         dash_views["views.py<br>Dashboard UI"]
         dash_urls["urls.py<br>Dashboard Routes"]
   end
- subgraph Payments["djstripe/"]
+ subgraph Payments["stripe_manager/"]
     direction TB
-        payment_models["models.py<br>Subscription Models"]
+        payment_models["stripe_manager.py<br>Stripe API Integration"]
         payment_views["views.py<br>Payment Views"]
-        webhook["webhooks.py<br>Stripe Webhooks"]
+        webhook["webhook_handler.py<br>Stripe Webhooks"]
   end
  subgraph Apps["Django Apps"]
     direction TB
@@ -266,15 +265,13 @@ flowchart TD
     direction TB
         users_table["users_customuser"]
         profile_table["users_profile"]
-        subscription_table["djstripe_subscription"]
-        customer_table["djstripe_customer"]
+        stripe_customer_table["stripe_customer"]
   end
     settings --> urls & wsgi & asgi
     dockerfile --> compose
     env --> compose
     entrypoint --> dockerfile
-    users_table --> profile_table & customer_table
-    customer_table --> subscription_table
+    users_table --> profile_table & stripe_customer_table
     Django --> Apps
     Apps --> Frontend
     Frontend --> Infrastructure
@@ -374,7 +371,7 @@ flowchart TD
  subgraph External["External Services"]
     direction TB
         smtp["SMTP Server<br>Email Delivery<br>(Transactional Emails)"]
-        stripe["Stripe API<br>Payment Processing<br>(Subscriptions &amp; Payments)"]
+        stripe_manager["Stripe API<br>Payment Processing<br>(Subscriptions &amp; Payments)"]
   end
     web -- CRUD<br>Operations --> db
     Client --> Host
@@ -383,13 +380,13 @@ flowchart TD
     browser -- HTTPS<br>Requests --> nginx
     nginx -- Proxies to<br>port 8000 --> web
     web -- Emails --> smtp
-    web -- Payment<br>Processing --> stripe
-    stripe -- Webhooks --> web
+    web -- Payment<br>Processing --> stripe_manager
+    stripe_manager -- Webhooks --> web
      browser:::client
      web:::container
      db:::container
      smtp:::external
-     stripe:::external
+     stripe_manager:::external
     classDef container fill:#e1f5fe,stroke:#01579b,stroke-width:1px
     classDef external fill:#fff8e1,stroke:#ff6f00,stroke-width:1px
     classDef client fill:#f1f8e9,stroke:#33691e,stroke-width:1px
@@ -509,33 +506,12 @@ erDiagram
         avatar string
     }
     
-    CUSTOMERS {
+    STRIPE_CUSTOMERS {
         id int PK
         user_id int FK
         stripe_id string
         livemode boolean
-        account_balance int
         created datetime
-    }
-    
-    %% Subscription related entities
-    SUBSCRIPTIONS {
-        id int PK
-        customer_id int FK
-        stripe_id string
-        status string
-        current_period_start datetime
-        current_period_end datetime
-        plan_id int FK
-    }
-    
-    PLANS {
-        id int PK
-        stripe_id string
-        name string
-        amount int
-        interval string
-        trial_period_days int
     }
     
     PAYMENT_METHODS {
@@ -549,10 +525,8 @@ erDiagram
     
     %% Entity relationships - arranged for better vertical flow
     USERS ||--o{ PROFILES : "has one"
-    USERS ||--o{ CUSTOMERS : "has one"
-    CUSTOMERS ||--o{ PAYMENT_METHODS : "can have many"
-    CUSTOMERS ||--o{ SUBSCRIPTIONS : "can have many"
-    SUBSCRIPTIONS }o--|| PLANS : "belongs to"
+    USERS ||--o{ STRIPE_CUSTOMERS : "has one"
+    STRIPE_CUSTOMERS ||--o{ PAYMENT_METHODS : "can have many"
 ```
 
 ## AUTHENTICATION
@@ -564,6 +538,7 @@ erDiagram
 - **Social authentication disabled**: No social login options (Google, Facebook, etc.)
 - **Custom email templates**: Customized email templates for all authentication emails
 - **Powered by django-allauth**: The authentication system is implemented using `django-allauth` for robust and extensible functionality.
+- **Stripe Integration App**: The `stripe_manager` app handles Stripe integration.
 
 ### Configuration
 
@@ -684,7 +659,7 @@ REQUIRED_VARS = {
     'web': ['WEB_PORT', 'SECRET_KEY'],
     'db': ['DB_USER', 'DB_PASSWORD', 'DB_NAME'],
     'email': ['EMAIL_HOST', 'EMAIL_HOST_USER', 'EMAIL_HOST_PASSWORD'],
-    'stripe': ['STRIPE_PUBLIC_KEY', 'STRIPE_SECRET_KEY', 'STRIPE_WEBHOOK_SECRET']
+    'stripe_manager': ['STRIPE_PUBLIC_KEY', 'STRIPE_SECRET_KEY', 'STRIPE_WEBHOOK_SECRET']
 }
 
 # Production environment validation

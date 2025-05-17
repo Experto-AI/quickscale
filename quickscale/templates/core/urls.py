@@ -8,6 +8,7 @@ from django.shortcuts import render
 from django.views.decorators.csrf import ensure_csrf_cookie
 import os
 from .env_utils import get_env, is_feature_enabled
+from django.views.generic import RedirectView
 
 # Simple health check view for Docker healthcheck
 def health_check(request):
@@ -23,6 +24,7 @@ def admin_test(request):
 
 urlpatterns = [
     path('admin/', admin.site.urls),
+    # Include public app URLs, but at the root level
     path('', include('public.urls')),
     path('users/', include('users.urls')),
     path('dashboard/', include('dashboard.urls')),
@@ -32,9 +34,20 @@ urlpatterns = [
     path('admin-test/', admin_test, name='admin_test'),  # Admin CSRF test page
 ] + static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)
 
-# Include djstripe URLs only if Stripe is enabled
+# Include stripe URLs only if Stripe is enabled AND fully configured
 stripe_enabled = is_feature_enabled(get_env('STRIPE_ENABLED', 'False'))
 if stripe_enabled:
-    urlpatterns += [
-        path('stripe/', include('djstripe.urls')),
-    ]
+    # Also check that all required settings are present
+    stripe_public_key = get_env('STRIPE_PUBLIC_KEY', '')
+    stripe_secret_key = get_env('STRIPE_SECRET_KEY', '')
+    stripe_webhook_secret = get_env('STRIPE_WEBHOOK_SECRET', '')
+    
+    if stripe_public_key and stripe_secret_key and stripe_webhook_secret:
+        urlpatterns += [
+            path('stripe/', include('stripe_manager.urls', namespace='stripe')),
+        ]
+
+# Static and media files for development environment
+if settings.DEBUG:
+    urlpatterns += static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)
+    urlpatterns += static(settings.STATIC_URL, document_root=settings.STATIC_ROOT)
