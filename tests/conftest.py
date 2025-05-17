@@ -479,5 +479,5 @@ def mock_stripe_enabled():
 @pytest.fixture
 def mock_stripe_unavailable():
     """Mock the Stripe module as unavailable."""
-    with patch.dict('sys.modules', {'djstripe': None}):
+    with patch.dict('sys.modules', {'stripe': None}):
         yield

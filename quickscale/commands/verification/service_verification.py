@@ -110,7 +110,7 @@ try:
     print('Connection successful')
 except Exception as e:
     print(f"Connection error: {{str(e)}}")
-    exit(1)
+    raise SystemExit(1)
 """
         
         # Execute the script with docker-compose

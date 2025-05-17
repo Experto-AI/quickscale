@@ -1,0 +1,44 @@
+{% extends "base/base.html" %}
+
+{% block title %}Stripe Status{% endblock %}
+
+{% block content %}
+<section class="section">
+  <div class="container">
+    <h1 class="title">Stripe Integration Status</h1>
+    
+    <div class="box">
+      <table class="table is-fullwidth">
+        <tbody>
+          <tr>
+            <th>Stripe Enabled</th>
+            <td>{{ stripe_enabled|yesno:"Yes,No" }}</td>
+          </tr>
+          <tr>
+            <th>Stripe Public Key</th>
+            <td>{{ stripe_public_key }}</td>
+          </tr>
+          <tr>
+            <th>Stripe Secret Key</th>
+            <td>{{ stripe_secret_key_set|yesno:"Set,Not set" }}</td>
+          </tr>
+          <tr>
+            <th>Stripe Webhook Secret</th>
+            <td>{{ stripe_webhook_secret_set|yesno:"Set,Not set" }}</td>
+          </tr>
+          <tr>
+            <th>Stripe Live Mode</th>
+            <td>{{ stripe_live_mode|yesno:"Yes,No" }}</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="buttons">
+      <a href="{% url 'stripe:product_list' %}" class="button is-primary">
+        View Products
+      </a>
+    </div>
+  </div>
+</section>
+{% endblock %} 

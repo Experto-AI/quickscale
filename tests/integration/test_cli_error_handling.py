@@ -16,7 +16,7 @@ class TestCLIErrorHandling:
                 main()
             
         captured = capsys.readouterr()
-        assert "Error:" in captured.out
+        assert "❌" in captured.out  # Check for error emoji instead of "Error:" text
         assert "Unknown command" in captured.out or "invalid choice" in captured.out
         assert "Suggestion:" in captured.out
     
@@ -42,7 +42,9 @@ class TestCLIErrorHandling:
                     main()
                 
         captured = capsys.readouterr()
-        assert "Error: No active project found" in captured.out
+        # Check for either error format (emoji or text)
+        assert "❌" in captured.out or "Error:" in captured.out
+        assert "No active project found" in captured.out
         assert "Suggestion:" in captured.out
     
     def test_validation_error_empty_manage(self, capsys):
@@ -54,7 +56,9 @@ class TestCLIErrorHandling:
                     main()
                 
         captured = capsys.readouterr()
-        assert "Error: No Django management command specified" in captured.out
+        # Check for either error format (emoji or text)
+        assert "❌" in captured.out or "Error:" in captured.out
+        assert "No Django management command specified" in captured.out
         assert "Suggestion:" in captured.out
 
 

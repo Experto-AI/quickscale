@@ -27,7 +27,7 @@ class TestServiceCommandErrorHandling:
              patch.object(cmd, 'handle_error') as mock_handle_error:
             
             # Make _start_services_with_retry call handle_error with our error
-            def side_effect(max_retries):
+            def side_effect(max_retries, no_cache=False, *args, **kwargs):
                 cmd.handle_error(
                     error,
                     context={"action": "starting services"},
@@ -288,7 +288,10 @@ class TestServiceCommandErrorHandling:
              patch.object(cmd, '_check_port_availability') as mock_check_ports, \
              patch('subprocess.run', return_value=MagicMock(returncode=0)), \
              patch.object(cmd, '_find_available_ports', return_value={}), \
-             patch.object(cmd, '_update_docker_compose_ports'):
+             patch.object(cmd, '_update_docker_compose_ports'), \
+             patch.object(cmd, '_start_docker_services'), \
+             patch.object(cmd, '_verify_services_running'), \
+             patch.object(cmd, '_print_service_info'):
             
             # Set up port check results
             mock_check_ports.return_value = {'WEB_PORT': 8001, 'DB_PORT_EXTERNAL': 5433}
@@ -383,3 +386,43 @@ class TestServiceCommandErrorHandling:
         ]
         for value in falsy_with_comments:
             assert cmd._is_feature_enabled(value) is False, f"Value '{value}' should be False despite comment"
+
+    @patch('quickscale.commands.project_manager.ProjectManager.get_project_state', return_value={'has_project': True})
+    @patch.object(ServiceUpCommand, '_prepare_environment_and_ports', return_value=({'WEB_PORT': '8000', 'DB_PORT_EXTERNAL': '5432', 'DB_PORT': '5432', 'PORT': '8001', 'PG_PORT': '8002'}, {}))
+    @patch.object(ServiceUpCommand, '_start_docker_services')
+    @patch.object(ServiceUpCommand, '_verify_services_running')
+    @patch.object(ServiceUpCommand, '_print_service_info')
+    def test_service_up_command_no_cache(self, mock_print_service_info, mock_verify_services_running, mock_start_docker_services, mock_prepare_environment_and_ports, mock_get_project_state):
+        """Test that the service up command with no cache calls the correct methods."""
+        cmd = ServiceUpCommand()
+        cmd.execute(no_cache=True)
+
+        # Assertions remain the same as _prepare_environment_and_ports provides the expected ports
+        mock_get_project_state.assert_called_once()
+        mock_prepare_environment_and_ports.assert_called_once()
+        mock_start_docker_services.assert_called_once_with(
+            {'WEB_PORT': '8000', 'DB_PORT_EXTERNAL': '5432', 'DB_PORT': '5432', 'PORT': '8001', 'PG_PORT': '8002'},
+            no_cache=True
+        )
+        mock_verify_services_running.assert_called_once()
+        mock_print_service_info.assert_called_once()
+
+    @patch('quickscale.commands.project_manager.ProjectManager.get_project_state', return_value={'has_project': True})
+    @patch.object(ServiceUpCommand, '_prepare_environment_and_ports', return_value=({'WEB_PORT': '8000', 'DB_PORT_EXTERNAL': '5432', 'DB_PORT': '5432', 'PORT': '8001', 'PG_PORT': '8002'}, {}))
+    @patch.object(ServiceUpCommand, '_start_docker_services')
+    @patch.object(ServiceUpCommand, '_verify_services_running')
+    @patch.object(ServiceUpCommand, '_print_service_info')
+    def test_service_up_command_default_cache(self, mock_print_service_info, mock_verify_services_running, mock_start_docker_services, mock_prepare_environment_and_ports, mock_get_project_state):
+        """Test that the service up command with default cache calls the correct methods."""
+        cmd = ServiceUpCommand()
+        cmd.execute()
+
+        # Update the assertion to expect the ports returned by the mock _prepare_environment_and_ports
+        mock_get_project_state.assert_called_once()
+        mock_prepare_environment_and_ports.assert_called_once()
+        mock_start_docker_services.assert_called_once_with(
+            {'WEB_PORT': '8000', 'DB_PORT_EXTERNAL': '5432', 'DB_PORT': '5432', 'PORT': '8001', 'PG_PORT': '8002'},
+            no_cache=False
+        )
+        mock_verify_services_running.assert_called_once()
+        mock_print_service_info.assert_called_once()
