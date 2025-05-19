@@ -8,6 +8,8 @@ app_name = 'dashboard'
 urlpatterns = [
     path('', views.index, name='index'),
     path('products/', views.product_admin, name='product_admin'),
-    path('products/refresh/', views.product_admin_refresh, name='product_admin_refresh'),
+    path('products/sync/', views.sync_products, name='sync_products'),
+    path('products/<str:product_id>/sync/', views.product_sync, name='product_sync'),
+    path('products/<int:product_id>/update_order/', views.update_product_order, name='update_product_order'),
     path('products/<str:product_id>/', views.product_detail, name='product_detail'),
 ]
