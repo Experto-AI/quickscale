@@ -67,7 +67,7 @@
                             
                             <div class="column is-6">
                                 <h3 class="title is-5">Product ID</h3>
-                                <code>{{ product.id }}</code>
+                                <code>{{ product.stripe_id }}</code>
                             </div>
                             
                             {% if product.metadata %}
@@ -102,10 +102,32 @@
                 <div class="column is-4">
                     <div class="box">
                         <h3 class="title is-4">Pricing</h3>
+                        <!-- Database Product Price -->
+                        <div class="notification is-info mb-4">
+                            <p class="title is-5">Database Price</p>
+                            <p class="title is-3">
+                                {% if product.currency == 'usd' %}${% elif product.currency == 'eur' %}€{% elif product.currency == 'gbp' %}£{% else %}{{ product.currency|upper }} {% endif %}{{ product.price|floatformat:2 }}
+                            </p>
+                            <p>
+                                {% if product.interval == 'month' %}
+                                    Monthly billing
+                                {% elif product.interval == 'year' %}
+                                    Yearly billing
+                                {% else %}
+                                    One-time payment
+                                {% endif %}
+                            </p>
+                            {% if product.stripe_price_id %}
+                                <p class="is-size-7">Price ID: {{ product.stripe_price_id }}</p>
+                            {% endif %}
+                        </div>
+                        
+                        <!-- Stripe API Prices -->
                         {% if prices %}
+                            <p class="title is-5">All Stripe Prices</p>
                             <div class="content">
                                 {% for price in prices %}
-                                <div class="notification is-primary">
+                                <div class="notification is-primary{% if price.id == product.stripe_price_id %} is-light{% endif %}">
                                     <p class="title is-3">
                                         {% if price.unit_amount_decimal %}
                                             {% if price.currency == 'usd' %}${% elif price.currency == 'eur' %}€{% elif price.currency == 'gbp' %}£{% else %}{{ price.currency|upper }} {% endif %}{{ price.unit_amount_decimal|floatformat:2 }}
@@ -126,23 +148,52 @@
                                     {% endif %}
                                     
                                     <p class="is-size-7">Price ID: {{ price.id }}</p>
+                                    {% if price.id == product.stripe_price_id %}
+                                        <span class="tag is-success">Current Price</span>
+                                    {% endif %}
                                 </div>
                                 {% endfor %}
                             </div>
                         {% else %}
                             <div class="notification is-warning">
-                                No pricing available
+                                No additional pricing available from Stripe API
                             </div>
                         {% endif %}
                     </div>
                     
                     <div class="box">
                         <h3 class="title is-5">Actions</h3>
-                        <div class="buttons">
-                            <a href="https://dashboard.stripe.com/products/{{ product.id }}" target="_blank" class="button is-info is-fullwidth">
+                        <div class="buttons is-flex is-flex-direction-column">
+                            <a href="https://dashboard.stripe.com/products/{{ product.stripe_id }}" target="_blank" class="button is-info is-fullwidth mb-2">
                                 <span class="icon"><i class="fas fa-external-link-alt"></i></span>
                                 <span>View in Stripe Dashboard</span>
                             </a>
+                            
+                            <form method="post" action="{% url 'dashboard:product_sync' product.stripe_id %}" class="is-fullwidth mb-2">
+                                {% csrf_token %}
+                                <button type="submit" class="button is-warning is-fullwidth">
+                                    <span class="icon"><i class="fas fa-sync-alt"></i></span>
+                                    <span>Sync from Stripe</span>
+                                </button>
+                            </form>
+                            
+                            {% if stripe_product and stripe_product.updated and product.updated_at %}
+                                <div class="notification is-light is-small p-2">
+                                    <p class="has-text-centered">
+                                        {% if stripe_product.updated > product.updated_at|date:"U"|add:"0" %}
+                                            <span class="has-text-warning">
+                                                <span class="icon"><i class="fas fa-exclamation-circle"></i></span>
+                                                Stripe data is newer
+                                            </span>
+                                        {% else %}
+                                            <span class="has-text-success">
+                                                <span class="icon"><i class="fas fa-check-circle"></i></span>
+                                                Database is up to date
+                                            </span>
+                                        {% endif %}
+                                    </p>
+                                </div>
+                            {% endif %}
                         </div>
                     </div>
                 </div>

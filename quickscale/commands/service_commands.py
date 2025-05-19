@@ -544,7 +544,8 @@ class ServiceUpCommand(Command):
                 # Handle retry attempt and get updated ports
                 updated_ports = self._handle_retry_attempt(retry_count, max_retries, env, updated_ports, no_cache)
             
-                self.logger.info(f"Starting services (attempt {retry_count+1}/{max_retries})...")
+                # self.logger.info(f"Starting services (attempt {retry_count+1}/{max_retries})...")
+                self.logger.info(f"Starting services...")
                 
                 # Start docker services, passing the no_cache flag
                 self._start_docker_services(env, no_cache=no_cache)
@@ -552,13 +553,13 @@ class ServiceUpCommand(Command):
                 # Add a delay to allow services to start properly
                 self.logger.info("Waiting for services to stabilize...")
                 time.sleep(15)  # Give containers time to fully start and register
-                
+
                 # Verify services are actually running
                 self._verify_services_running(env)
-                
+
                 # Print service information for the user
                 self._print_service_info(updated_ports)
-                
+
                 self.logger.info("Services started successfully.")
                 return
                 
@@ -581,17 +582,15 @@ class ServiceUpCommand(Command):
         MessageManager.print_recovery_suggestion("custom", suggestion="Try again with ports that are not in use, or check Docker logs for more details.")
     
     def execute(self, no_cache: bool = False) -> None:
-        """Start the project services."""
-        from quickscale.utils.message_manager import MessageManager
-        
-        state = ProjectManager.get_project_state()
-        if not state['has_project']:
-            # Only use MessageManager.error which already logs the error
-            MessageManager.error(ProjectManager.PROJECT_NOT_FOUND_MESSAGE, self.logger)
-            return
-        
-        # Start services with retry mechanism, passing the no_cache flag
-        self._start_services_with_retry(max_retries=3, no_cache=no_cache)
+        """Executes the command to start services."""
+        try:
+            ProjectManager.get_project_state()
+            # Start services with retry mechanism
+            self._start_services_with_retry(max_retries=3, no_cache=no_cache)
+        except ServiceError as e:
+            handle_command_error(e)
+        except Exception as e:
+            self.handle_error(e, exit_on_error=True)
 
 class ServiceDownCommand(Command):
     """Stops project services."""

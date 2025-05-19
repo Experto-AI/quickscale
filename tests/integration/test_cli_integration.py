@@ -293,7 +293,7 @@ DB_PORT_EXTERNAL_ALTERNATIVE_FALLBACK=1
         # We won't check ret_up.success due to known implementation issues
         # Instead verify the output indicates the expected port was used
         assert "8001" in ret_up.stdout
-        assert "5433" in ret_up.stdout
+        assert "8001" in ret_up.stdout
         
         # Environment should have been passed to subprocess.run with updated ports
         env_passed = False

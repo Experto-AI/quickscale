@@ -37,28 +37,59 @@ quickscale/
 ├── templates/                # Project template files
 │   ├── common/               # Common Django app
 │   │   ├── migrations/       # Pre-generated migrations
-│   │   └── templates/        # App-specific templates
+│   │   ├── templates/        # App-specific templates
+│   │   ├── apps.py           # App configuration
+│   │   ├── urls.py           # URL routing
+│   │   └── views.py          # View logic
 │   ├── core/                 # Core Django project
-│   │   └── migrations/       # Pre-generated migrations
+│   │   ├── migrations/       # Pre-generated migrations
+│   │   ├── settings.py       # Main settings
+│   │   ├── urls.py           # Main URL routing
+│   │   ├── wsgi.py           # WSGI configuration
+│   │   ├── asgi.py           # ASGI configuration
+│   │   ├── email_settings.py # Email configuration
+│   │   ├── security_settings.py  # Security settings
+│   │   ├── context_processors.py # Context processors
+│   │   ├── test_settings.py  # Test configuration
+│   │   └── test_runner.py    # Custom test runner
 │   ├── dashboard/            # Dashboard Django app
 │   │   ├── migrations/       # Pre-generated migrations
-│   │   └── templates/        # App-specific templates
-│   │   └── tests/            # App-specific tests
-│   ├── stripe_manager/               # Stripe integration app
+│   │   ├── templates/        # App-specific templates
+│   │   ├── tests/            # App-specific tests
+│   │   ├── templatetags/     # Custom template tags
+│   │   ├── apps.py           # App configuration
+│   │   ├── urls.py           # URL routing
+│   │   ├── views.py          # View logic
+│   │   ├── tests_product_admin.py   # Product admin tests
+│   │   └── tests_views_no_stripe.py # View tests without Stripe
+│   ├── stripe_manager/       # Stripe integration app
 │   │   ├── management/       # Management commands
 │   │   │   └── commands/     # Custom commands
 │   │   ├── templates/        # App-specific templates
-│   │   │   └── stripe_manager/       # Stripe templates
-│   │   └── tests/            # Stripe tests
+│   │   ├── tests/            # Stripe tests
+│   │   ├── templatetags/     # Custom template tags
+│   │   ├── apps/             # Additional app modules
+│   │   ├── __init__.py       # Package initialization
+│   │   ├── apps.py           # App configuration
+│   │   ├── urls.py           # URL routing
+│   │   ├── views.py          # View logic & webhooks
+│   │   ├── utils.py          # Stripe utilities
+│   │   └── stripe_manager.py # Stripe API integration
 │   ├── docs/                 # Documentation files
 │   ├── js/                   # JavaScript assets
 │   ├── logs/                 # Log files directory
 │   ├── public/               # Public Django app
 │   │   ├── migrations/       # Pre-generated migrations
-│   │   └── templates/        # App-specific templates
+│   │   ├── templates/        # App-specific templates
+│   │   ├── apps.py           # App configuration
+│   │   ├── urls.py           # URL routing
+│   │   └── views.py          # View logic
 │   ├── static/               # Static files
 │   │   ├── css/              # CSS files
-│   │   └── js/               # JavaScript files
+│   │   ├── js/               # JavaScript files
+│   │   ├── favicon.svg       # SVG favicon
+│   │   ├── favicon.ico       # ICO favicon
+│   │   └── generate_favicon.sh # Favicon generation script
 │   ├── templates/            # Global templates
 │   │   ├── account/          # Authentication templates
 │   │   │   └── email/        # Email templates
@@ -69,13 +100,23 @@ quickscale/
 │   │   └── users/            # User templates
 │   ├── tests/                # Template tests
 │   └── users/                # Users Django app
-│       └── migrations/       # Pre-generated migrations
+│       ├── migrations/       # Pre-generated migrations
+│       ├── management/       # Management commands
+│       ├── tests/            # User tests
+│       ├── apps.py           # App configuration
+│       ├── urls.py           # URL routing
+│       ├── views.py          # View logic
+│       ├── models.py         # Custom user model
+│       ├── forms.py          # Authentication forms
+│       ├── adapters.py       # Auth adapters
+│       ├── admin.py          # Admin configuration
+│       └── validators.py     # Custom validators
 ├── tests/                    # Test suite
 └── utils/                    # Utility functions
 
 tests/
 ├── core/                     # Core functionality tests
-│   └── stripe_manager/               # Stripe integration tests
+│   └── stripe_manager/       # Stripe integration tests
 ├── e2e/                      # End-to-end tests
 │   └── support/              # E2E test support files
 │       └── test_project_template/ # Test template
@@ -98,7 +139,7 @@ PROJECT_NAME/
 ├── common/                 # Common Django app (shared models, utils)
 ├── core/                   # Core Django project settings and configurations
 ├── dashboard/              # User dashboard app
-├── stripe_manager/              # Stripe integration app
+├── stripe_manager/         # Stripe integration app
 ├── docs/                   # Project-specific documentation
 ├── js/                     # JavaScript source files (e.g., Alpine.js components)
 ├── logs/                   # Log files directory
@@ -208,9 +249,9 @@ flowchart TD
   end
  subgraph Common["common/"]
     direction TB
-        common_models["models.py<br>Shared Models"]
-        common_middleware["middleware.py<br>Request Processing"]
-        common_utils["utils.py<br>Shared Utilities"]
+        common_apps["apps.py<br>App Configuration"]
+        common_urls["urls.py<br>URL Routing"]
+        common_views["views.py<br>View Logic"]
   end
  subgraph Public["public/"]
     direction TB
@@ -225,8 +266,8 @@ flowchart TD
  subgraph Payments["stripe_manager/"]
     direction TB
         payment_models["stripe_manager.py<br>Stripe API Integration"]
-        payment_views["views.py<br>Payment Views"]
-        webhook["webhook_handler.py<br>Stripe Webhooks"]
+        payment_views["views.py<br>Payment Views & Webhooks"]
+        payment_utils["utils.py<br>Stripe Utilities"]
   end
  subgraph Apps["Django Apps"]
     direction TB
@@ -247,7 +288,7 @@ flowchart TD
     direction TB
         css["css/<br>Bulma Styles"]
         js["js/<br>Alpine + HTMX"]
-        images["images/<br>UI Assets"]
+        favicon["favicon.svg<br>Site Icon"]
   end
  subgraph Frontend["Frontend Assets"]
     direction TB
