@@ -4,7 +4,7 @@ import os
 from decimal import Decimal
 from unittest.mock import patch, MagicMock
 
-from django.test import TestCase
+from django.test import TestCase, Client
 from django.urls import reverse
 from django.contrib.auth import get_user_model
 from django.conf import settings
@@ -12,6 +12,7 @@ from django.conf import settings
 from core.env_utils import get_env, is_feature_enabled
 from users.models import CustomUser
 from stripe_manager.stripe_manager import StripeManager
+from stripe_manager.models import StripeProduct
 
 # Check if Stripe is enabled using the same logic as in settings.py
 stripe_enabled = is_feature_enabled(get_env('STRIPE_ENABLED', 'False'))
@@ -193,6 +194,252 @@ class ProductAdminTestCase(TestCase):
             {'error': 'Method not allowed'}
         )
 
+    # New test to verify product_admin loads from local DB and respects display_order
+    def test_product_admin_displays_products_from_db(self, mock_getenv) -> None:
+        """Test that the product admin page displays products from the local database ordered by display_order."""
+        # Skip if Stripe is not available, but still test DB loading logic if possible
+        if not STRIPE_AVAILABLE and not is_feature_enabled(get_env('STRIPE_ENABLED', 'False')):
+             self.skipTest("Stripe integration is not enabled or available")
+
+        # Create some local StripeProduct instances with different display orders
+        product_db_1 = StripeProduct.objects.create(
+            stripe_id='prod_db1',
+            name='DB Product 1',
+            description='This is DB product 1',
+            active=True,
+            price=10.00,
+            currency='USD',
+            display_order=2
+        )
+        product_db_2 = StripeProduct.objects.create(
+            stripe_id='prod_db2',
+            name='DB Product 2',
+            description='This is DB product 2',
+            active=True,
+            price=20.00,
+            currency='USD',
+            display_order=1
+        )
+
+        # Login as admin
+        self.client.login(email='admin@test.com', password='adminpassword')
+
+        # Access the product admin page
+        response = self.client.get(reverse('dashboard:product_admin'))
+
+        # Check status code and template
+        self.assertEqual(response.status_code, 200)
+        self.assertTemplateUsed(response, 'dashboard/product_admin.html')
+
+        # Check that products are in the context, ordered by display_order
+        products_in_context = list(response.context['products'])
+        self.assertEqual(len(products_in_context), 2)
+        self.assertEqual(products_in_context[0].stripe_id, 'prod_db2') # display_order 1
+        self.assertEqual(products_in_context[1].stripe_id, 'prod_db1') # display_order 2
+
+        # Check that both products are displayed in the correct order
+        self.assertContains(response, 'DB Product 2')
+        self.assertContains(response, 'DB Product 1')
+
+    @patch('stripe_manager.stripe_manager.StripeManager.sync_products_from_stripe')
+    # New test to verify product_admin_refresh saves to local DB
+    def test_product_admin_refresh_saves_to_db(self, mock_sync, mock_getenv) -> None:
+        """Test that product_admin_refresh saves synced products to the local database."""
+        # Skip if Stripe is not available
+        if not STRIPE_AVAILABLE:
+            self.skipTest("Stripe is not available")
+
+        # Mock Stripe API response for list_products
+        mock_stripe_products = [
+            MagicMock(
+                id='prod_sync1',
+                name='Synced Product 1',
+                description='Desc 1',
+                active=True,
+                prices=[MagicMock(unit_amount=1500, currency='usd', recurring=None)],
+                metadata={}
+            ),
+            MagicMock(
+                id='prod_sync2',
+                name='Synced Product 2',
+                description='Desc 2',
+                active=False,
+                prices=[MagicMock(unit_amount=2500, currency='usd', recurring=MagicMock(interval='month'))],
+                metadata={}
+            ),
+        ]
+
+        # Mock the list_products method to return our test products
+        mock_sync.return_value = mock_stripe_products # sync_products_from_stripe returns the list now
+
+        # Login as admin
+        self.client.login(email='admin@test.com', password='adminpassword')
+
+        # Call the refresh endpoint
+        response = self.client.post(
+            reverse('dashboard:product_admin_refresh'),
+            content_type='application/json'
+        )
+
+        # Check the response
+        self.assertEqual(response.status_code, 200)
+        # Check that the local database was updated
+        self.assertEqual(StripeProduct.objects.count(), len(mock_stripe_products))
+
+        product1_in_db = StripeProduct.objects.get(stripe_id='prod_sync1')
+        self.assertEqual(product1_in_db.name, 'Synced Product 1')
+        self.assertEqual(product1_in_db.active, True)
+        self.assertEqual(product1_in_db.price, Decimal('15.00'))
+        self.assertEqual(product1_in_db.currency, 'usd')
+        self.assertEqual(product1_in_db.interval, 'one-time')
+
+        product2_in_db = StripeProduct.objects.get(stripe_id='prod_sync2')
+        self.assertEqual(product2_in_db.name, 'Synced Product 2')
+        self.assertEqual(product2_in_db.active, False)
+        self.assertEqual(product2_in_db.price, Decimal('25.00'))
+        self.assertEqual(product2_in_db.currency, 'usd')
+        self.assertEqual(product2_in_db.interval, 'month')
+
+    @patch('stripe_manager.stripe_manager.StripeManager.retrieve_product')
+    @patch('stripe_manager.stripe_manager.StripeManager.get_product_prices')
+    # New test for product_detail view
+    def test_product_detail_view(self, mock_get_prices, mock_retrieve_product, mock_getenv) -> None:
+        """Test that the product detail view displays product details and prices."""
+        # Skip if Stripe is not available
+        if not STRIPE_AVAILABLE:
+            self.skipTest("Stripe is not available")
+
+        # Mock Stripe API responses
+        mock_product = MagicMock(
+            id='prod_detail_test',
+            name='Detail Test Product',
+            description='Detailed description.',
+            active=True,
+            metadata={}
+        )
+        mock_prices = [
+            MagicMock(id='price_1', unit_amount=1000, currency='usd', recurring=None),
+            MagicMock(id='price_2', unit_amount=5000, currency='usd', recurring=MagicMock(interval='year')),
+        ]
+        mock_retrieve_product.return_value = mock_product
+        mock_get_prices.return_value = mock_prices
+
+        # Login as admin
+        self.client.login(email='admin@test.com', password='adminpassword')
+
+        # Access the product detail page
+        response = self.client.get(reverse('dashboard:product_detail', args=['prod_detail_test']))
+
+        # Check status code and template
+        self.assertEqual(response.status_code, 200)
+        self.assertTemplateUsed(response, 'dashboard/product_detail.html')
+
+        # Check that product and prices are in the context
+        self.assertIn('product', response.context)
+        self.assertIn('prices', response.context)
+        self.assertEqual(response.context['product'].id, 'prod_detail_test')
+        self.assertEqual(len(response.context['prices']), 2)
+
+        # Check that product details are displayed
+        self.assertContains(response, 'Detail Test Product')
+        self.assertContains(response, 'Detailed description.')
+
+    # New test for update_product_order view
+    def test_update_product_order_view(self, mock_getenv) -> None:
+        """Test that the update_product_order view updates the display order and returns the product list partial."""
+        # Skip if Stripe is not available, but still test DB update logic
+        if not STRIPE_AVAILABLE and not is_feature_enabled(get_env('STRIPE_ENABLED', 'False')):
+             self.skipTest("Stripe integration is not enabled or available")
+             
+        # Create a local StripeProduct instance
+        product = StripeProduct.objects.create(
+            stripe_id='prod_order_test',
+            name='Orderable Product',
+            description='Desc',
+            active=True,
+            price=30.00,
+            currency='USD',
+            display_order=1
+        )
+
+        # Login as admin
+        self.client.login(email='admin@test.com', password='adminpassword')
+
+        # Send a POST request to update the display order
+        new_order_value = 5
+        response = self.client.post(
+            reverse('dashboard:update_product_order', args=[product.id]),
+            {'display_order': new_order_value}
+        )
+
+        # Check the response status code (should be 200 OK for HTMX partial update)
+        self.assertEqual(response.status_code, 200)
+
+        # Check that the product's display_order was updated in the database
+        product.refresh_from_db()
+        self.assertEqual(product.display_order, new_order_value)
+
+        # Check that the response contains the rendered product list partial
+        # This is a basic check, could be more specific depending on partial content
+        self.assertTemplateUsed(response, 'dashboard/partials/product_list.html')
+
+    # Add tests for error cases in update_product_order
+    def test_update_product_order_invalid_method(self, mock_getenv) -> None:
+        """Test that update_product_order only accepts POST requests."""
+        if not STRIPE_AVAILABLE and not is_feature_enabled(get_env('STRIPE_ENABLED', 'False')):
+             self.skipTest("Stripe integration is not enabled or available")
+             
+        product = StripeProduct.objects.create(
+            stripe_id='prod_order_test_method',
+            name='Method Test Product',
+            description='Desc',
+            active=True,
+            price=40.00,
+            currency='USD',
+            display_order=1
+        )
+        self.client.login(email='admin@test.com', password='adminpassword')
+
+        response = self.client.get(reverse('dashboard:update_product_order', args=[product.id]))
+        self.assertEqual(response.status_code, 405)
+        self.assertContains(response, "Method not allowed")
+
+    def test_update_product_order_invalid_id(self, mock_getenv) -> None:
+        """Test that update_product_order returns 404 for invalid product ID."""
+        if not STRIPE_AVAILABLE and not is_feature_enabled(get_env('STRIPE_ENABLED', 'False')):
+             self.skipTest("Stripe integration is not enabled or available")
+
+        self.client.login(email='admin@test.com', password='adminpassword')
+
+        response = self.client.post(
+            reverse('dashboard:update_product_order', args=[9999]), # Non-existent ID
+            {'display_order': 10}
+        )
+        self.assertEqual(response.status_code, 404)
+
+    def test_update_product_order_invalid_display_order(self, mock_getenv) -> None:
+        """Test that update_product_order handles non-integer display_order."""
+        if not STRIPE_AVAILABLE and not is_feature_enabled(get_env('STRIPE_ENABLED', 'False')):
+             self.skipTest("Stripe integration is not enabled or available")
+             
+        product = StripeProduct.objects.create(
+            stripe_id='prod_order_test_invalid',
+            name='Invalid Order Product',
+            description='Desc',
+            active=True,
+            price=50.00,
+            currency='USD',
+            display_order=1
+        )
+        self.client.login(email='admin@test.com', password='adminpassword')
+
+        response = self.client.post(
+            reverse('dashboard:update_product_order', args=[product.id]),
+            {'display_order': 'abc'}
+        )
+        self.assertEqual(response.status_code, 400)
+        self.assertContains(response, "Invalid display order")
+
 
 class TestProductAdminTemplateRendering(TestCase):
     """Test the product_admin.html template rendering with and without Stripe enabled."""
@@ -201,7 +448,7 @@ class TestProductAdminTemplateRendering(TestCase):
         """Set up test environment."""
         self.client = Client()
         # Mock the authentication status
-        self.patcher = mock.patch('django.contrib.auth.decorators.user_passes_test', 
+        self.patcher = patch('django.contrib.auth.decorators.user_passes_test', 
                                   return_value=lambda x: x)
         self.mock_auth = self.patcher.start()
         
@@ -209,8 +456,8 @@ class TestProductAdminTemplateRendering(TestCase):
         """Clean up test environment."""
         self.patcher.stop()
     
-    @mock.patch('dashboard.views.is_feature_enabled')
-    @mock.patch('dashboard.views.get_env')
+    @patch('dashboard.views.is_feature_enabled')
+    @patch('dashboard.views.get_env')
     def test_product_admin_stripe_disabled(self, mock_get_env, mock_is_enabled):
         """Test that the product admin page loads correctly when Stripe is disabled."""
         # Mock stripe being disabled
@@ -254,7 +501,7 @@ class TestProductAdminTemplateRendering(TestCase):
             else:
                 raise
     
-    @mock.patch('dashboard.views.product_admin')
+    @patch('dashboard.views.product_admin')
     def test_product_admin_view_stripe_disabled(self, mock_view):
         """Test that the product_admin view correctly handles Stripe being disabled."""
         # Mock the view to return a response with context
@@ -264,7 +511,7 @@ class TestProductAdminTemplateRendering(TestCase):
             'products': []
         }
         
-        with mock.patch('core.env_utils.is_feature_enabled', return_value=False):
+        with patch('core.env_utils.is_feature_enabled', return_value=False):
             # This view should work without error even if Stripe is disabled
             response = self.client.get(reverse('dashboard:product_admin'))
             self.assertEqual(response.status_code, 200)

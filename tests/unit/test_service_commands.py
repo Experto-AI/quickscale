@@ -388,41 +388,51 @@ class TestServiceCommandErrorHandling:
             assert cmd._is_feature_enabled(value) is False, f"Value '{value}' should be False despite comment"
 
     @patch('quickscale.commands.project_manager.ProjectManager.get_project_state', return_value={'has_project': True})
-    @patch.object(ServiceUpCommand, '_prepare_environment_and_ports', return_value=({'WEB_PORT': '8000', 'DB_PORT_EXTERNAL': '5432', 'DB_PORT': '5432', 'PORT': '8001', 'PG_PORT': '8002'}, {}))
-    @patch.object(ServiceUpCommand, '_start_docker_services')
     @patch.object(ServiceUpCommand, '_verify_services_running')
     @patch.object(ServiceUpCommand, '_print_service_info')
-    def test_service_up_command_no_cache(self, mock_print_service_info, mock_verify_services_running, mock_start_docker_services, mock_prepare_environment_and_ports, mock_get_project_state):
+    @patch('quickscale.utils.env_utils.get_env', return_value='False') # Mock get_env to return 'False' for port fallback checks
+    def test_service_up_command_no_cache(self, mock_get_env_value, mock_print_service_info, mock_verify_services_running, mock_get_project_state):
         """Test that the service up command with no cache calls the correct methods."""
         cmd = ServiceUpCommand()
-        cmd.execute(no_cache=True)
+        
+        # Setup the expected environment and ports
+        env = {
+            'WEB_PORT': '8000', 
+            'DB_PORT_EXTERNAL': '5432',
+            'DB_PORT': '5432'
+        }
+        ports = {
+            'PORT': '8001', 
+            'PG_PORT': '8002'
+        }
+        
+        # Mock the methods being called
+        with patch.object(cmd, '_prepare_environment_and_ports', return_value=(env, ports)) as mock_prepare_environment_and_ports, \
+             patch.object(cmd, '_start_docker_services') as mock_start_docker_services:
+            cmd.execute(no_cache=True)
+        
+            # Assertions
+            mock_get_project_state.assert_called_once()
+            mock_prepare_environment_and_ports.assert_called_once()
+            mock_start_docker_services.assert_called_once_with(
+                {'WEB_PORT': '8000', 'DB_PORT_EXTERNAL': '5432', 'DB_PORT': '5432', 'PORT': '8001', 'PG_PORT': '8002'},
+                no_cache=True
+            )
+            mock_verify_services_running.assert_called_once()
+            mock_print_service_info.assert_called_once()
 
-        # Assertions remain the same as _prepare_environment_and_ports provides the expected ports
-        mock_get_project_state.assert_called_once()
-        mock_prepare_environment_and_ports.assert_called_once()
-        mock_start_docker_services.assert_called_once_with(
-            {'WEB_PORT': '8000', 'DB_PORT_EXTERNAL': '5432', 'DB_PORT': '5432', 'PORT': '8001', 'PG_PORT': '8002'},
-            no_cache=True
-        )
-        mock_verify_services_running.assert_called_once()
-        mock_print_service_info.assert_called_once()
-
-    @patch('quickscale.commands.project_manager.ProjectManager.get_project_state', return_value={'has_project': True})
-    @patch.object(ServiceUpCommand, '_prepare_environment_and_ports', return_value=({'WEB_PORT': '8000', 'DB_PORT_EXTERNAL': '5432', 'DB_PORT': '5432', 'PORT': '8001', 'PG_PORT': '8002'}, {}))
-    @patch.object(ServiceUpCommand, '_start_docker_services')
-    @patch.object(ServiceUpCommand, '_verify_services_running')
-    @patch.object(ServiceUpCommand, '_print_service_info')
-    def test_service_up_command_default_cache(self, mock_print_service_info, mock_verify_services_running, mock_start_docker_services, mock_prepare_environment_and_ports, mock_get_project_state):
+    @patch('quickscale.commands.project_manager.ProjectManager.check_project_exists')
+    @patch('quickscale.utils.env_utils.get_env', return_value='False') # Mock get_env to return 'False' for port fallback checks
+    def test_service_up_command_default_cache(self, mock_get_env_value, mock_check_project_exists):
         """Test that the service up command with default cache calls the correct methods."""
         cmd = ServiceUpCommand()
-        cmd.execute()
-
-        # Update the assertion to expect the ports returned by the mock _prepare_environment_and_ports
-        mock_get_project_state.assert_called_once()
-        mock_prepare_environment_and_ports.assert_called_once()
-        mock_start_docker_services.assert_called_once_with(
-            {'WEB_PORT': '8000', 'DB_PORT_EXTERNAL': '5432', 'DB_PORT': '5432', 'PORT': '8001', 'PG_PORT': '8002'},
-            no_cache=False
-        )
-        mock_verify_services_running.assert_called_once()
-        mock_print_service_info.assert_called_once()
+        
+        # Create a mock for the _start_services_with_retry method
+        with patch.object(cmd, '_start_services_with_retry') as mock_start_services:
+            cmd.execute()
+        
+        # Verify check_project_exists was called
+        mock_check_project_exists.assert_called_once()
+        
+        # Verify _start_services_with_retry was called with correct args
+        mock_start_services.assert_called_once_with(max_retries=3, no_cache=False)

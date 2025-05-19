@@ -16,6 +16,7 @@ RUN apt-get update && apt-get install -y \
     postgresql-client \
     netcat-openbsd \
     curl \
+    iputils-ping --no-install-recommends \
     && rm -rf /var/lib/apt/lists/*
 
 # Create quickscale user and group with a home directory

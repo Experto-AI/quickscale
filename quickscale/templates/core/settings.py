@@ -79,12 +79,16 @@ INSTALLED_APPS = [
     'dashboard.apps.DashboardConfig',
     'users.apps.UsersConfig',
     'common.apps.CommonConfig',
+    'stripe_manager.apps.StripeConfig',  # Always include for migrations
 ]
 
 # Stripe configuration
-stripe_enabled_flag = is_feature_enabled(get_env('STRIPE_ENABLED', 'False'))
-if stripe_enabled_flag:
-    try:
+stripe_enabled_from_env = is_feature_enabled(get_env('STRIPE_ENABLED', 'False'))
+STRIPE_ENABLED = False  # Will be set to True only if properly configured
+
+try:
+    # Only attempt to configure Stripe if it's enabled in the environment
+    if stripe_enabled_from_env:
         # Direct Stripe integration settings
         STRIPE_LIVE_MODE = is_feature_enabled(get_env('STRIPE_LIVE_MODE', 'False'))
         STRIPE_PUBLIC_KEY = get_env('STRIPE_PUBLIC_KEY', '')
@@ -105,15 +109,17 @@ if stripe_enabled_flag:
         if missing_settings:
             logging.warning(f"Stripe integration is enabled but missing required settings: {', '.join(missing_settings)}")
             logging.warning("Stripe integration will be disabled. Please provide all required settings.")
+            # Keep the app in INSTALLED_APPS for migrations but STRIPE_ENABLED remains False
         else:
             if isinstance(INSTALLED_APPS, tuple):
                 INSTALLED_APPS = list(INSTALLED_APPS)
-            INSTALLED_APPS.append('stripe_manager.apps.StripeConfig')
-            logging.info("Stripe integration enabled.")
-    except Exception as e:
-        logging.error(f"Failed to configure Stripe: {e}")
-else:
-    logging.info("Stripe integration is disabled by configuration.")
+            logging.info("Stripe integration enabled and properly configured.")
+            STRIPE_ENABLED = True
+    else:
+        logging.info("Stripe integration is disabled in configuration.")
+except Exception as e:
+    logging.error(f"Failed to configure Stripe: {e}")
+    # Keep the app in INSTALLED_APPS for migrations but STRIPE_ENABLED remains False
 
 # django-allauth requires the sites framework
 SITE_ID = 1

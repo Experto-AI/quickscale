@@ -1,7 +1,7 @@
 quickscale
 ├── dist
-│   ├── quickscale-0.8.0-py3-none-any.whl
-│   └── quickscale-0.8.0.tar.gz
+│   ├── quickscale-0.9.0-py3-none-any.whl
+│   └── quickscale-0.9.0.tar.gz
 ├── docs
 │   ├── contrib
 │   │   ├── 01_ai_programming_assistant.md
@@ -276,7 +276,14 @@ quickscale
 │   │   │   │   │   │   ├── test_product_admin_page_requires_staff(self, mock_getenv)
 │   │   │   │   │   │   ├── test_product_admin_displays_products(self, mock_list_products, mock_getenv)
 │   │   │   │   │   │   ├── test_product_admin_refresh_functionality(self, mock_sync, mock_getenv)
-│   │   │   │   │   │   └── test_product_admin_refresh_requires_post(self, mock_getenv)
+│   │   │   │   │   │   ├── test_product_admin_refresh_requires_post(self, mock_getenv)
+│   │   │   │   │   │   ├── test_product_admin_displays_products_from_db(self, mock_getenv)
+│   │   │   │   │   │   ├── test_product_admin_refresh_saves_to_db(self, mock_sync, mock_getenv)
+│   │   │   │   │   │   ├── test_product_detail_view(self, mock_get_prices, mock_retrieve_product, mock_getenv)
+│   │   │   │   │   │   ├── test_update_product_order_view(self, mock_getenv)
+│   │   │   │   │   │   ├── test_update_product_order_invalid_method(self, mock_getenv)
+│   │   │   │   │   │   ├── test_update_product_order_invalid_id(self, mock_getenv)
+│   │   │   │   │   │   └── test_update_product_order_invalid_display_order(self, mock_getenv)
 │   │   │   │   │   ├── TestProductAdminTemplateRendering {}
 │   │   │   │   │   │   ├── setUp(self)
 │   │   │   │   │   │   ├── tearDown(self)
@@ -307,9 +314,9 @@ quickscale
 │   │   │   └── views.py
 │   │   │       ├── index(request)
 │   │   │       ├── product_admin(request)
-│   │   │       ├── product_admin_refresh(request)
 │   │   │       ├── product_detail(request, product_id)
-│   │   │       └── product_sync(request)
+│   │   │       ├── update_product_order(request, product_id)
+│   │   │       └── product_sync(request, product_id)
 │   │   ├── docs
 │   │   │   ├── auth_templates.md
 │   │   │   ├── styling_guidelines.md
@@ -362,6 +369,11 @@ quickscale
 │   │   │   └── generate_favicon.sh
 │   │   ├── stripe_manager
 │   │   │   ├── apps
+│   │   │   ├── migrations
+│   │   │   │   ├── 0001_initial.py
+│   │   │   │   │   └── Migration {}
+│   │   │   │   ├── README.md
+│   │   │   │   └── __init__.py
 │   │   │   ├── templatetags
 │   │   │   │   ├── __init__.py
 │   │   │   │   └── stripe_tags.py
@@ -441,9 +453,23 @@ quickscale
 │   │   │   │       ├── create_mock_price(id, product_id, unit_amount, currency, active, metadata)
 │   │   │   │       └── create_mock_products_with_prices(count)
 │   │   │   ├── __init__.py
+│   │   │   ├── admin.py
+│   │   │   │   └── StripeProductAdmin {}
+│   │   │   │       ├── get_urls(self)
+│   │   │   │       ├── sync_product(self, request, object_id)
+│   │   │   │       ├── get_actions(self, request)
+│   │   │   │       ├── sync_selected(self, request, queryset)
+│   │   │   │       ├── sync_all_products_view(self, request)
+│   │   │   │       └── changelist_view(self, request, extra_context)
 │   │   │   ├── apps.py
 │   │   │   │   └── StripeConfig {}
 │   │   │   │       └── ready(self)
+│   │   │   ├── models.py
+│   │   │   │   └── StripeProduct {}
+│   │   │   │       ├── Meta {}
+│   │   │   │       ├── __str__(self)
+│   │   │   │       ├── sync_with_stripe(self)
+│   │   │   │       └── clean(self)
 │   │   │   ├── stripe_manager.py
 │   │   │   │   ├── StripeConfigurationError {}
 │   │   │   │   └── StripeManager {}
@@ -458,8 +484,7 @@ quickscale
 │   │   │   │       ├── retrieve_product(self, product_id)
 │   │   │   │       ├── list_products(self, active)
 │   │   │   │       ├── create_price(self, product_id, unit_amount, currency, recurring_interval, metadata)
-│   │   │   │       ├── retrieve_price(self, price_id)
-│   │   │   │       ├── list_prices(self, product_id, active)
+│   │   │   │       ├── get_product_prices(self, product_id, active)
 │   │   │   │       ├── create_subscription(self, customer_id, price_id, quantity, metadata)
 │   │   │   │       ├── retrieve_subscription(self, subscription_id)
 │   │   │   │       ├── update_subscription(self, subscription_id, items, proration_behavior, metadata)
@@ -516,6 +541,10 @@ quickscale
 │   │   │   │   ├── signup.html
 │   │   │   │   ├── verification_sent.html
 │   │   │   │   └── verified_email_required.html
+│   │   │   ├── admin
+│   │   │   │   └── stripe_manager
+│   │   │   │       └── stripeproduct
+│   │   │   │           └── change_list.html
 │   │   │   ├── base
 │   │   │   │   └── base.html
 │   │   │   ├── components
@@ -546,6 +575,27 @@ quickscale
 │   │   │   ├── admin_test.html
 │   │   │   └── base.html
 │   │   ├── tests
+│   │   │   ├── stripe_manager
+│   │   │   │   ├── test_admin.py
+│   │   │   │   │   └── StripeProductAdminTest {}
+│   │   │   │   │       ├── setUp(self)
+│   │   │   │   │       ├── test_list_display(self)
+│   │   │   │   │       ├── test_search(self)
+│   │   │   │   │       ├── test_filter(self)
+│   │   │   │   │       ├── test_edit_form(self)
+│   │   │   │   │       ├── test_fieldset_organization(self)
+│   │   │   │   │       ├── test_sync_action(self)
+│   │   │   │   │       └── test_bulk_sync_action(self)
+│   │   │   │   └── test_models.py
+│   │   │   │       └── StripeProductModelTest {}
+│   │   │   │           ├── setUp(self)
+│   │   │   │           ├── test_create_product(self)
+│   │   │   │           ├── test_product_ordering(self)
+│   │   │   │           ├── test_negative_price_validation(self)
+│   │   │   │           ├── test_invalid_currency(self)
+│   │   │   │           ├── test_invalid_interval(self)
+│   │   │   │           ├── test_duplicate_stripe_id(self)
+│   │   │   │           └── test_str_representation(self)
 │   │   │   ├── __init__.py
 │   │   │   └── test_sample.py
 │   │   │       └── SampleTestCase {}
@@ -765,6 +815,20 @@ quickscale
 │   ├── entry_points.txt
 │   ├── requires.txt
 │   └── top_level.txt
+├── templates
+│   └── dashboard
+│       ├── partials
+│       │   └── product_list.html
+│       ├── templates
+│       │   ├── product_admin.html
+│       │   └── product_detail.html
+│       └── views.py
+│           ├── index(request)
+│           ├── product_admin(request)
+│           ├── sync_products(request)
+│           ├── product_detail(request, product_id)
+│           ├── update_product_order(request, product_id)
+│           └── product_sync(request, product_id)
 ├── tests
 │   ├── core
 │   │   ├── stripe
@@ -1202,6 +1266,22 @@ quickscale
 │   │   │       ├── test_validate_config_with_invalid_data(self)
 │   │   │       ├── test_find_default_config(self)
 │   │   │       └── test_find_default_config_current_directory(self)
+│   │   ├── test_dashboard_templates.py
+│   │   │   └── DashboardTemplateTests {}
+│   │   │       ├── setUp(self)
+│   │   │       ├── test_product_admin_template_exists(self)
+│   │   │       ├── test_product_detail_template_exists(self)
+│   │   │       ├── test_urls_file_exists(self)
+│   │   │       ├── test_views_file_exists(self)
+│   │   │       ├── test_sync_products_url_in_urls_file(self)
+│   │   │       ├── test_product_sync_url_in_urls_file(self)
+│   │   │       ├── test_product_sync_view_exists(self)
+│   │   │       ├── test_product_sync_view_has_redirect(self)
+│   │   │       ├── test_sync_button_in_product_admin_template(self)
+│   │   │       ├── test_sync_form_in_product_detail_template(self)
+│   │   │       ├── test_csrf_token_in_product_admin_template(self)
+│   │   │       ├── test_js_fetch_uses_csrf_token(self)
+│   │   │       └── test_product_sync_view_handles_stripe_api(self)
 │   │   ├── test_dashboard_views.py
 │   │   │   ├── DashboardViewsWithStripeDisabledTests {}
 │   │   │   │   ├── setUp(self)
@@ -1387,8 +1467,8 @@ quickscale
 │   │   │       ├── test_is_feature_enabled_falsy_values(self)
 │   │   │       ├── test_port_fallback_with_various_boolean_formats(self)
 │   │   │       ├── test_is_feature_enabled_with_inline_comments(self)
-│   │   │       ├── test_service_up_command_no_cache(self, mock_check_port_availability, mock_print_service_info, mock_verify_services_running, mock_start_docker_services, mock_prepare_environment_and_ports, mock_get_project_state)
-│   │   │       └── test_service_up_command_default_cache(self, mock_check_port_availability, mock_print_service_info, mock_verify_services_running, mock_start_docker_services, mock_prepare_environment_and_ports, mock_get_project_state)
+│   │   │       ├── test_service_up_command_no_cache(self, mock_get_env_value, mock_print_service_info, mock_verify_services_running, mock_start_docker_services, mock_prepare_environment_and_ports, mock_get_project_state)
+│   │   │       └── test_service_up_command_default_cache(self, mock_get_env_value, mock_start_docker_services, mock_check_project_exists)
 │   │   ├── test_service_commands_docker_compose.py
 │   │   │   └── TestServiceCommandDockerComposePortHandling {}
 │   │   │       ├── test_extract_port_values_custom(self)

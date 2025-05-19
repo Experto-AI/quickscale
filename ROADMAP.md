@@ -47,25 +47,94 @@ For more details refer to the [CHANGELOG](CHANGELOG.md).
 ## Projected Development Sprints
 
 ### Sprint 3: Checkout (v0.10.0)
+- [x] **Session 1: Admin Product Management (Web UI)**
+  - [x] **Step 1: Implement Web Admin Interface for Stripe Products**
+    - [x] Create new view(s) in templates/dashboard/views.py (or similar) for managing Stripe Products:
+      - [x] Add view for listing Stripe products with admin privileges
+      - [x] Add view for listing Stripe product details
+    - [x] Create corresponding templates in templates/dashboard/templates/:
+      - [x] product_admin.html: Display products with edit/sync actions
+      - [x] product_detail.html: Form for editing product details
+    - [x] Implement functionality in views/templates:
+      - [x] Add sync button/action to trigger Stripe sync (save in our DB)
+      - [x] Implement manual ordering functionality for 'display_order' (input field in product_list.html, save in our DB)
+    - [x] Create tests for web admin interface:
+      - [x] Test product listing and detail views
+      - [x] Test sync functionality
+      - [x] Test display order management
+
+- [ ] **Session 2: Checkout Workflow**
+  - [ ] **Step 1: Plan Selection Interface**
+    - [ ] Create plan selection view in templates/stripe_manager/views.py:
+      - [ ] Add PlanListView for displaying available plans
+      - [ ] Add PlanDetailView for individual plan details
+      - [ ] Implement HTMX for dynamic plan loading
+    - [ ] Create templates in templates/stripe_manager/templates:
+      - [ ] plan_list.html: Grid/list view of available plans
+      - [ ] plan_detail.html: Detailed plan information
+      - [ ] plan_comparison.html: Side-by-side plan comparison
+    - [ ] Add Alpine.js components in templates/js:
+      - [ ] plan_selection.js: Plan selection toggles
+      - [ ] price_calculator.js: Price calculation
+      - [ ] feature_comparison.js: Feature comparison
+    - [ ] Implement user flow:
+      - [ ] New user signup during plan selection
+      - [ ] Existing user plan upgrade/downgrade
+      - [ ] Guest user to registered user conversion
+    - [ ] Create tests in templates/tests/stripe_manager:
+      - [ ] Test plan listing and detail views
+      - [ ] Test user flow scenarios
+      - [ ] Test HTMX interactions
+
+  - [ ] **Step 2: Checkout Process**
+    - [ ] Implement Stripe Checkout in templates/stripe_manager/views.py:
+      - [ ] Create CheckoutView for initiating Stripe Checkout
+      - [ ] Add webhook handler for checkout completion
+      - [ ] Implement success/failure redirects
+    - [ ] Add checkout templates in templates/stripe_manager/templates:
+      - [ ] checkout.html: Checkout page with Stripe Elements
+      - [ ] checkout_success.html: Success confirmation
+      - [ ] checkout_error.html: Error handling
+    - [ ] Create subscription management:
+      - [ ] Add subscription model in templates/stripe_manager/models.py
+      - [ ] Implement subscription status tracking
+      - [ ] Add subscription lifecycle hooks
+    - [ ] Implement payment processing:
+      - [ ] Add payment method handling
+      - [ ] Implement payment confirmation
+      - [ ] Add payment error handling
+    - [ ] Create tests in templates/tests/stripe_manager:
+      - [ ] Test checkout flow
+      - [ ] Test webhook handling
+      - [ ] Test subscription creation
+      - [ ] Test payment processing
+      - [ ] Test error scenarios
+
+  - [ ] **Step 3: Integration and Testing**
+    - [ ] End-to-end testing:
+      - [ ] Test complete user journey
+      - [ ] Test error recovery
+      - [ ] Test edge cases
+    - [ ] Performance testing:
+      - [ ] Test checkout page load times
+      - [ ] Test webhook handling under load
+    - [ ] Security testing:
+      - [ ] Test payment data handling
+      - [ ] Test user authentication
+      - [ ] Test webhook security
+    - [ ] Documentation:
+      - [ ] Update API documentation in docs/
+      - [ ] Add deployment notes
+      - [ ] Update user guide
+
+
+### Sprint 4: Credit System Foundation (v0.11.0)
 - [ ] **Session 1: Credit System Foundation**
   - [ ] **Step 2: Credit System Foundation**
     - [ ] Create credit balance model tied to user accounts
     - [ ] Implement credit transaction ledger for tracking usage
     - [ ] Add automated credit allocation for subscription plans
     - [ ] Test credit model and basic operations
-
-### Sprint 4: Checkout (v0.11.0)
-- [ ] **Session 1: Checkout Workflow**
-  - [ ] **Step 1: Plan Selection Interface**
-    - [ ] Create plan comparison and selection page
-    - [ ] Implement plan details display with credit information
-    - [ ] Add sign-up/conversion flow for new and existing users
-    - [ ] Test plan selection interface
-  - [ ] **Step 2: Checkout Process**
-    - [ ] Implement Stripe Checkout integration for plans
-    - [ ] Add payment confirmation and success/failure handling
-    - [ ] Create subscription activation flow
-    - [ ] Test end-to-end checkout process
 
 ### Sprint 5: User Credit Management (v0.12.0)
 - [ ] **Session 1: User Credit Dashboard**

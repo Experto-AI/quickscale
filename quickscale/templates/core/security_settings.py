@@ -34,17 +34,27 @@ else:
 
 # CSRF Trusted Origins - Domains that are trusted to make POST requests
 # This is critical for admin and CSRF protected actions when behind reverse proxies
-CSRF_TRUSTED_ORIGINS = [
-    f"http://{host}" for host in get_env('ALLOWED_HOSTS', 'localhost,127.0.0.1').split(',') if host != '*'
-] + [
-    f"https://{host}" for host in get_env('ALLOWED_HOSTS', 'localhost,127.0.0.1').split(',') if host != '*'
+CSRF_TRUSTED_ORIGINS = []
+
+# Add all allowed hosts to trusted origins
+for host in get_env('ALLOWED_HOSTS', 'localhost,127.0.0.1').split(','):
+    if host == '*':
+        continue
+    CSRF_TRUSTED_ORIGINS.extend([f"http://{host}", f"https://{host}"])
+
+# Always include common development hosts in trusted origins
+DEVELOPMENT_HOSTS = [
+    'localhost',
+    '127.0.0.1',
+    'web',  # Docker container name
+    'host.docker.internal',  # Docker host machine
 ]
 
-# Always include localhost in trusted origins for development
-if 'http://localhost' not in CSRF_TRUSTED_ORIGINS:
-    CSRF_TRUSTED_ORIGINS.append('http://localhost')
-if 'http://127.0.0.1' not in CSRF_TRUSTED_ORIGINS:
-    CSRF_TRUSTED_ORIGINS.append('http://127.0.0.1')
+for host in DEVELOPMENT_HOSTS:
+    if f'http://{host}' not in CSRF_TRUSTED_ORIGINS:
+        CSRF_TRUSTED_ORIGINS.append(f'http://{host}')
+    if f'https://{host}' not in CSRF_TRUSTED_ORIGINS:
+        CSRF_TRUSTED_ORIGINS.append(f'https://{host}')
 
 # Handle HTTP_X_FORWARDED_PROTO when behind a proxy/load balancer
 SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')

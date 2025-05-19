@@ -1,0 +1,1 @@
+"""Stripe Manager migrations package."""

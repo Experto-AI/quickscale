@@ -557,7 +557,7 @@ class TestServiceCommandRetryHandlingFixed:
             # Execute with default retry count
             cmd.execute()
             
-            # Check that _start_services_with_retry was called with the default retry count
+            # Check that _start_services_with_retry was called with the default retry count (3)
             mock_start.assert_called_once_with(max_retries=3, no_cache=False)
             
     def test_execute_with_custom_retry_count_from_env(self):
