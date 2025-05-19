@@ -199,10 +199,21 @@ class StripeManager:
         """Retrieve a product from Stripe by ID using the v12+ API."""
         try:
             # Use StripeClient instance and the new pattern
-            return self.client.products.retrieve(product_id)
+            product = self.client.products.retrieve(product_id)
+            
+            # Also fetch prices for this product
+            try:
+                prices = self.get_product_prices(product_id)
+                product['prices'] = {'data': prices}
+            except Exception as price_e:
+                logger.error(f"Error fetching prices for product {product_id}: {price_e}")
+                product['prices'] = {'data': []}
+                
+            return product
         except Exception as e:
             logger.error(f"Error retrieving Stripe product {product_id}: {e}")
-            raise
+            # Return None instead of raising to prevent UI errors
+            return None
 
     def list_products(self, active: Optional[bool] = True) -> List[Dict[str, Any]]:
         """List products from Stripe using the v12+ API."""
@@ -210,13 +221,29 @@ class StripeManager:
             params = {}
             if active is not None:
                 params['active'] = active
-
+            
+            # Add expand parameter to include prices with the products
+            params['expand'] = ['data.default_price']
+            
             # Use StripeClient instance and the new pattern
             response = self.client.products.list(params=params)
-            return response.data # Return the data list directly
+            products = response.data
+            
+            # For each product, fetch prices and add to the product object
+            for product in products:
+                try:
+                    prices = self.get_product_prices(product['id'])
+                    product['prices'] = {'data': prices}
+                except Exception as price_e:
+                    logger.error(f"Error fetching prices for product {product['id']}: {price_e}")
+                    # Create empty prices object to prevent errors in templates
+                    product['prices'] = {'data': []}
+            
+            return products
         except Exception as e:
             logger.error(f"Error listing Stripe products: {e}")
-            raise
+            # Return empty list instead of raising to prevent UI errors
+            return []
 
     # Price operations
 
@@ -256,7 +283,8 @@ class StripeManager:
             return response.data # Return the data list directly
         except Exception as e:
             logger.error(f"Error listing prices for product {product_id}: {e}")
-            raise
+            # Return empty list instead of raising to prevent UI errors
+            return []
 
     # Subscription operations
 
@@ -630,8 +658,14 @@ class StripeManager:
         Syncs a Stripe product to a local product object.
         Creates or updates the local product object.
         Assumes product_model is your Django Product model or similar.
+        
+        Args:
+            stripe_product_id: The Stripe product ID to sync
+            product_model: The Django model class to sync to (e.g., StripeProduct)
+            
+        Returns:
+            The synced product model instance or None if sync failed
         """
-
 
         if not is_feature_enabled(get_env('STRIPE_ENABLED', 'False')):
             logger.warning("Stripe integration is not enabled, skipping product sync.")
@@ -639,51 +673,122 @@ class StripeManager:
 
         try:
             logger.info(f"Syncing Stripe Product {stripe_product_id} to local database")
-            stripe_product = self.client.products.retrieve(stripe_product_id)
-
+            # Get the product with prices included
+            stripe_product = self.retrieve_product(stripe_product_id)
+            
+            if not stripe_product:
+                logger.error(f"Could not retrieve product {stripe_product_id} from Stripe")
+                return None
+                
             # Find or create the local product object
-            product_obj, created = product_model.objects.get_or_create(stripe_id=stripe_product.id)
-
+            try:
+                product_obj = product_model.objects.get(stripe_id=stripe_product['id'])
+                created = False
+                # Store the current display_order to preserve it
+                current_display_order = product_obj.display_order
+            except product_model.DoesNotExist:
+                product_obj = product_model(stripe_id=stripe_product['id'])
+                created = True
+                # For new products, set a default display order
+                current_display_order = 0
+            
             # Update local product object with data from Stripe
-            product_obj.name = stripe_product.name
-            product_obj.description = stripe_product.description
-            product_obj.active = stripe_product.active
-            # Map other relevant fields from stripe_product to your product_obj
-
-            # Sync price (Stripe products can have multiple prices, this sync might need refinement)
-            # For simplicity, let's assume we sync the default price if it exists
-            stripe_price_id = stripe_product.default_price
-            if stripe_price_id:
+            product_obj.name = stripe_product['name']
+            product_obj.description = stripe_product.get('description', '')
+            product_obj.active = stripe_product['active']
+            # Preserve the display_order
+            product_obj.display_order = current_display_order
+            
+            # Save images if the model supports it
+            if hasattr(product_obj, 'images') and stripe_product.get('images'):
+                product_obj.images = stripe_product['images']
+            
+            # Get prices
+            prices_data = []
+            if stripe_product.get('prices') and stripe_product['prices'].get('data'):
+                prices_data = stripe_product['prices']['data']
+            elif stripe_product.get('default_price'):
+                # If we have a default price but no prices array, fetch it
                 try:
-                    stripe_price = self.client.prices.retrieve(stripe_price_id)
-                    product_obj.price = stripe_price.unit_amount / 100 # Convert cents to your local currency unit
-                    product_obj.currency = stripe_price.currency
-                    product_obj.recurring_interval = stripe_price.recurring['interval'] if stripe_price.recurring else None
-                    product_obj.stripe_price_id = stripe_price.id # Store the synced price ID
-                    # Map other relevant price fields
-
-                except Exception as price_e:
-                    logger.warning(f"Could not retrieve default price {stripe_price_id} for product {stripe_product.id}: {price_e}")
-                    # Decide how to handle missing or unretrievable price data
-
-            # Update metadata if your model supports it
-            if hasattr(product_obj, 'metadata') and isinstance(stripe_product.metadata, dict):
-                 product_obj.metadata = stripe_product.metadata
+                    default_price = self.client.prices.retrieve(stripe_product['default_price'])
+                    prices_data = [default_price]
+                except Exception as e:
+                    logger.warning(f"Could not retrieve default price {stripe_product['default_price']}: {e}")
+            
+            # Handle pricing data if we have any prices
+            if prices_data:
+                # For simplicity, use the default price or first price
+                default_price = None
+                
+                # First check for the default price in the product
+                if stripe_product.get('default_price'):
+                    for price in prices_data:
+                        if price['id'] == stripe_product['default_price']:
+                            default_price = price
+                            break
+                
+                # If no default price found, use the first price
+                if not default_price and prices_data:
+                    default_price = prices_data[0]
+                
+                if default_price:
+                    # Get price amount in dollars (Stripe stores in cents)
+                    unit_amount = default_price.get('unit_amount')
+                    unit_amount_decimal = default_price.get('unit_amount_decimal')
+                    
+                    # Use unit_amount_decimal if available for precision, otherwise use unit_amount
+                    if unit_amount_decimal:
+                        price_value = float(unit_amount_decimal) / 100
+                    elif unit_amount:
+                        price_value = float(unit_amount) / 100
+                    else:
+                        price_value = 0
+                        
+                    product_obj.price = price_value
+                    product_obj.currency = default_price.get('currency', 'usd')
+                    
+                    # Set interval for recurring prices
+                    if default_price.get('recurring'):
+                        interval = default_price['recurring'].get('interval', 'month')
+                        # Map to the choices in the model
+                        if interval in ['month', 'year']:
+                            product_obj.interval = interval
+                        else:
+                            product_obj.interval = 'month'  # Default to month if unknown interval
+                    else:
+                        product_obj.interval = 'one-time'
+                        
+                    # Store the price ID if the model has this field
+                    if hasattr(product_obj, 'stripe_price_id'):
+                        product_obj.stripe_price_id = default_price['id']
+            
+            # Update metadata if the model supports it
+            if hasattr(product_obj, 'metadata') and stripe_product.get('metadata'):
+                product_obj.metadata = stripe_product['metadata']
 
             # Save the local product object
             product_obj.save()
-            logger.info(f"Synced Stripe Product {stripe_product.id} to local product object {product_obj.id}")
+            
+            action = "Created" if created else "Updated"
+            logger.info(f"{action} local product {product_obj} from Stripe product {stripe_product['id']}")
+            
+            return product_obj
 
         except Exception as e:
             logger.error(f"Error syncing Stripe product {stripe_product_id} from Stripe: {e}", exc_info=True)
-            # Decide how to handle sync errors (e.g., log, raise, ignore)
-
+            return None
 
     def sync_products_from_stripe(self, product_model) -> int:
         """
         Syncs all products from Stripe to local product objects.
         Creates or updates local product objects based on Stripe data.
-        Returns the number of products synced.
+        Returns the number of products successfully synced.
+        
+        Args:
+            product_model: The Django model class to sync to (e.g., StripeProduct)
+            
+        Returns:
+            int: The number of products successfully synced
         """
 
         if not is_feature_enabled(get_env('STRIPE_ENABLED', 'False')):
@@ -691,18 +796,47 @@ class StripeManager:
             return 0
 
         synced_count = 0
+        failed_count = 0
+        synced_products = []
+        failed_products = []
+        
         try:
             logger.info("Starting full sync of products from Stripe...")
-            # List all products from Stripe using auto-pagination
-            # Use StripeClient instance and the new pattern with auto_paging_iter()
-            for stripe_product in self.client.products.list().auto_paging_iter():
-                self.sync_product_from_stripe(stripe_product.id, product_model)
-                synced_count += 1
+            
+            # List all products from Stripe
+            products = self.list_products(active=None)  # Get all products, not just active ones
+            
+            if not products:
+                logger.warning("No products found in Stripe account or error occurred while fetching products.")
+                return 0
+                
+            total_products = len(products)
+            logger.info(f"Found {total_products} products in Stripe account")
+            
+            # Process each product
+            for stripe_product in products:
+                try:
+                    product_obj = self.sync_product_from_stripe(stripe_product['id'], product_model)
+                    if product_obj:
+                        synced_count += 1
+                        synced_products.append(stripe_product['id'])
+                    else:
+                        failed_count += 1
+                        failed_products.append(stripe_product['id'])
+                except Exception as product_e:
+                    logger.error(f"Error syncing individual product {stripe_product['id']}: {product_e}")
+                    failed_count += 1
+                    failed_products.append(stripe_product['id'])
 
-            logger.info(f"Finished full sync. Synced {synced_count} products from Stripe.")
+            logger.info(f"Finished full sync. Successfully synced {synced_count} products from Stripe.")
+            if failed_count:
+                logger.warning(f"Failed to sync {failed_count} products: {', '.join(failed_products)}")
+                
             return synced_count
 
         except Exception as e:
             logger.error(f"Error during full product sync from Stripe: {e}", exc_info=True)
-            return synced_count # Return count of successfully synced before the error
+            if synced_count > 0:
+                logger.info(f"Partially successful sync, {synced_count} products were synced: {', '.join(synced_products)}")
+            return synced_count  # Return count of successfully synced before the error
 

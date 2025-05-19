@@ -17,20 +17,25 @@
             <div class="card">
               <div class="card-content">
                 <p class="title is-4">{{ product|get_stripe_product_name }}</p>
-                <p class="subtitle is-6">{{ product|get_stripe_product_status|title }}</p>
+                <p class="subtitle is-6">
+                  <span class="tag {% if product.active %}is-success{% else %}is-danger{% endif %}">
+                    {{ product|get_stripe_product_status|title }}
+                  </span>
+                  <span class="tag is-info ml-2">{{ product.get_interval_display }}</span>
+                </p>
                 
-                {% if product.prices.data %}
-                  <div class="content">
-                    {% for price in product.prices.data %}
-                      <p>
-                        <strong>{{ price|format_stripe_price }}</strong>
-                        {% if price.recurring %}
-                          / {{ price.recurring.interval }}
-                        {% endif %}
-                      </p>
-                    {% endfor %}
-                  </div>
+                {% if product.description %}
+                  <p class="content">{{ product.description|truncatechars:100 }}</p>
                 {% endif %}
+                
+                <div class="content">
+                  <p class="title is-5">
+                    {{ product.price|floatformat:2 }} {{ product.currency }}
+                    {% if product.interval != 'one-time' %}
+                      / {{ product.get_interval_display }}
+                    {% endif %}
+                  </p>
+                </div>
               </div>
               <footer class="card-footer">
                 <a href="{% url 'stripe:product_detail' product.id %}" class="card-footer-item">

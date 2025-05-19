@@ -2,6 +2,29 @@
 
 All notable changes to this project will be documented in this file.
 
+## v0.10.0 (2025-05-19)
+v0.10.0 feat: Implement Admin Product Management for Stripe
+
+- Stripe Product Model and Admin:
+  - Introduced the `StripeProduct` model to store product details from Stripe.
+  - Added a Django admin interface for managing these products, including fields for name, description, price, currency, billing interval, and display order.
+- Web Admin Interface for Stripe Products:
+  - Created views and templates for listing Stripe products (`product_admin.html`) and viewing/editing product details (`product_detail.html`) within the admin dashboard.
+- Stripe Sync Functionality:
+  - Implemented functionality to sync products from Stripe to the local database.
+  - Added a `product_sync` view for syncing individual products.
+  - Introduced a `sync_all_products` view in the admin interface for bulk synchronization.
+  - Updated product management views and templates to include sync actions.
+- Display Order Management:
+  - Implemented functionality for manually setting the `display_order` of products.
+- Testing:
+  - Added comprehensive tests for the `StripeProduct` model, admin interface, and dashboard templates, covering product listing, detail views, sync functionality, and display order management.
+- Other improvements:
+  - Updated service commands, reducing retry attempts for starting services and improving logging.
+  - Added `iputils-ping` to the Dockerfile for network diagnostics.
+
+These changes provide administrators with the necessary tools to manage Stripe products directly within the application's admin interface, including synchronization with Stripe and control over product display order.
+
 ## v0.9.0 (2025-05-17)
 -feat: Migrate to official Stripe API and implement plan synchronization
 - Completed the migration of the Stripe integration from the dj-stripe library to the official Stripe Python API, fulfilling Session 1 of the Sprint 2 roadmap.

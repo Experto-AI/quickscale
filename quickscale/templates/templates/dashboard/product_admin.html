@@ -4,6 +4,7 @@
 {% block title %}Product Management - Admin Dashboard{% endblock %}
 
 {% block content %}
+{% csrf_token %}
 <section class="hero is-primary is-small">
     <div class="hero-body">
         <p class="title">Product Management</p>
@@ -65,12 +66,7 @@
             <div class="control">
                 <input class="input" type="text" id="search-products" placeholder="Search products...">
             </div>
-            <div class="control">
-                <button class="button is-primary" id="sync-products">
-                    <span class="icon"><i class="fas fa-sync"></i></span>
-                    <span>Sync from Stripe</span>
-                </button>
-            </div>
+            
         </div>
 
         <!-- Products table -->
@@ -82,6 +78,7 @@
                         <th>Description</th>
                         <th>Price</th>
                         <th>Status</th>
+                        <th>Display Order</th>
                         <th>Actions</th>
                     </tr>
                 </thead>
@@ -103,30 +100,17 @@
                                 {% endif %}
                                 <div>
                                     <p class="has-text-weight-bold">{{ product.name }}</p>
-                                    <p class="is-size-7 has-text-grey">ID: {{ product.id }}</p>
+                                    <p class="is-size-7 has-text-grey">ID: {{ product.stripe_id }}</p>
                                 </div>
                             </div>
                         </td>
                         <td>{{ product.description|default:"No description" }}</td>
                         <td>
-                            {% if product.prices.data %}
-                                {% with price=product.prices.data.0 %}
-                                    {% if price.unit_amount_decimal %}
-                                        {% with amount=price.unit_amount_decimal|floatformat:2 currency=price.currency|upper %}
-                                            {% if price.currency == 'usd' %}${% elif price.currency == 'eur' %}€{% elif price.currency == 'gbp' %}£{% else %}{{ currency }} {% endif %}{{ amount }}
-                                            {% if price.recurring %}
-                                                /{% if price.recurring.interval_count > 1 %}{{ price.recurring.interval_count }} {% endif %}{{ price.recurring.interval }}{% if price.recurring.interval_count > 1 %}s{% endif %}
-                                            {% endif %}
-                                        {% endwith %}
-                                    {% elif price.unit_amount %}
-                                        {% with amount=price.unit_amount|floatformat:2 currency=price.currency|upper %}
-                                            {% if price.currency == 'usd' %}${% elif price.currency == 'eur' %}€{% elif price.currency == 'gbp' %}£{% else %}{{ currency }} {% endif %}{{ amount }}
-                                            {% if price.recurring %}
-                                                /{% if price.recurring.interval_count > 1 %}{{ price.recurring.interval_count }} {% endif %}{{ price.recurring.interval }}{% if price.recurring.interval_count > 1 %}s{% endif %}
-                                            {% endif %}
-                                        {% endwith %}
-                                    {% else %}
-                                        <span class="tag is-warning">Invalid price</span>
+                            {% if product.price %}
+                                {% with amount=product.price|floatformat:2 currency=product.currency|upper %}
+                                    {% if product.currency|lower == 'usd' %}${% elif product.currency|lower == 'eur' %}€{% elif product.currency|lower == 'gbp' %}£{% else %}{{ currency }} {% endif %}{{ amount }}
+                                    {% if product.interval != 'one-time' %}
+                                        /{{ product.get_interval_display }}
                                     {% endif %}
                                 {% endwith %}
                             {% else %}
@@ -141,12 +125,15 @@
                             {% endif %}
                         </td>
                         <td>
+                            <span class="has-text-grey">{{ product.display_order|default:0 }}</span>
+                        </td>
+                        <td>
                             <div class="buttons are-small">
-                                <a href="{% url 'dashboard:product_detail' product.id %}" class="button is-info">
+                                <a href="{% url 'dashboard:product_detail' product.stripe_id %}" class="button is-info">
                                     <span class="icon"><i class="fas fa-eye"></i></span>
                                     <span>View</span>
                                 </a>
-                                <a href="https://dashboard.stripe.com/products/{{ product.id }}" target="_blank" class="button is-light">
+                                <a href="https://dashboard.stripe.com/products/{{ product.stripe_id }}" target="_blank" class="button is-light">
                                     <span class="icon"><i class="fas fa-external-link-alt"></i></span>
                                     <span>Stripe</span>
                                 </a>
@@ -192,34 +179,6 @@
         searchInput.addEventListener('input', filterProducts);
         
         // Sync button
-        const syncButton = document.getElementById('sync-products');
-        syncButton.addEventListener('click', function() {
-            // Show loading state
-            syncButton.classList.add('is-loading');
-            
-            // Call sync endpoint
-            fetch('/dashboard/products/refresh/', {
-                method: 'POST',
-                headers: {
-                    'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]').value
-                }
-            })
-            .then(response => response.json())
-            .then(data => {
-                if (data.success) {
-                    // Reload page to show updated products
-                    window.location.reload();
-                } else {
-                    // Show error message
-                    alert(`Sync failed: ${data.error}`);
-                    syncButton.classList.remove('is-loading');
-                }
-            })
-            .catch(error => {
-                alert(`Sync failed: ${error.message}`);
-                syncButton.classList.remove('is-loading');
-            });
-        });
     });
 </script>
 {% endif %}
