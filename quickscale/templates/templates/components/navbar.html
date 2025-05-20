@@ -16,6 +16,11 @@
 
     <div class="navbar-menu" :class="{ 'is-active': mobileMenu }">
         <div class="navbar-start">
+            {% if stripe_enabled %}
+            <a class="navbar-item" href="{% url 'stripe:plan_comparison' %}" hx-boost="true">
+                Plans
+            </a>
+            {% endif %}
             <a class="navbar-item" href="{% url 'public:about' %}" hx-boost="true">
                 About
             </a>

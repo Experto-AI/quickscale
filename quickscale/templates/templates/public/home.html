@@ -1,0 +1,28 @@
+{% extends 'base/base.html' %}
+
+{% block title %}Home{% endblock %}
+
+{% block content %}
+<section class="hero is-primary is-medium">
+    <div class="hero-body">
+        <div class="container has-text-centered">
+            <p class="title">
+                Welcome to QuickScale!
+            </p>
+            <p class="subtitle">
+                Your fast track to launching a SaaS application with Django.
+            </p>
+            {% if not user.is_authenticated %}
+                <div class="mt-5">
+                    <a href="{% url 'stripe:plan_comparison' %}" class="button is-light is-medium">
+                        View Our Plans
+                    </a>
+                </div>
+            {% endif %}
+        </div>
+    </div>
+</section>
+
+{# TODO: Add more sections like features, testimonials, etc. #}
+
+{% endblock %}

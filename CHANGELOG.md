@@ -2,6 +2,18 @@
 
 All notable changes to this project will be documented in this file.
 
+## v0.11.0 (2025-05-20)
+v0.11.0 feat: Implement Public Plan Selection Interface
+
+- Implemented the plan selection view (`PublicPlanListView`) to display available plans from the database.
+- Created the `plan_comparison.html` template with a 3-column layout to showcase pricing tiers and features.
+- Updated navigation to include a link to the new plan selection page.
+- Added unit tests (`Test_PlanViews`) for plan listing and views, covering different user scenarios.
+- Refactored the plan selection interface to remove the Alpine.js billing toggle component, simplifying the pricing display and user flow for plan selection.
+- Updated the roadmap and project version to v0.11.0.
+
+These changes provide users with a clear interface to view and compare subscription plans as the first step in the checkout workflow.
+
 ## v0.10.0 (2025-05-19)
 v0.10.0 feat: Implement Admin Product Management for Stripe
 
