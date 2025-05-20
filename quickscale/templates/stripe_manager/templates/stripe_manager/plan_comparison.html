@@ -1,0 +1,67 @@
+{% extends 'base/base.html' %}
+{% load static %}
+
+{% block title %}Plan Comparison{% endblock %}
+
+{% block extra_head %}
+{# Removed plan_selection.js as toggle functionality is removed #}
+{# <script src="{% static 'js/plan_selection.js' %}" defer></script> #}
+{% endblock %}
+
+{% block content %}
+<div class="container" {# Removed x-data="planSelection" #}>
+    <h1 class="title has-text-centered my-5">Choose Your Plan</h1>
+    
+    {% if stripe_enabled %}
+        {# Removed Billing toggle section #}
+    
+        <div class="columns">
+            {% for plan in plans %}
+                <div class="column">
+                    <div class="card">
+                        <div class="card-header">
+                            <p class="card-header-title">{{ plan.name }}</p>
+                        </div>
+                        <div class="card-content">
+                            <div class="content">
+                                <h2 class="subtitle">Pricing</h2>
+                                <div class="pricing-section has-text-centered">
+                                    {# Simplified price display without toggle #}
+                                    <p class="price-display">
+                                        <span class="is-size-1">{{ plan.price|floatformat:2 }}</span>
+                                        <span class="is-size-5">{{ plan.currency|upper }}</span>
+                                        <span class="is-size-6">{% if plan.interval == 'month' %}/month{% elif plan.interval == 'year' %}/year{% else %}{{ plan.interval }}{% endif %}</span>
+                                    </p>
+                                </div>
+
+                                <h2 class="subtitle">Features</h2>
+                                <div class="description">
+                                    <p>{{ plan.description }}</p>
+                                </div>
+
+                                <div class="has-text-centered mt-5">
+                                    <button class="button is-primary is-medium select-plan-button" 
+                                            data-plan-id="{{ plan.stripe_id }}">
+                                        Select Plan
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            {% empty %}
+                <div class="column">
+                    <div class="notification is-info">
+                        <p>No plans available at this time.</p>
+                    </div>
+                </div>
+            {% endfor %}
+        </div>
+    {% else %}
+        <div class="notification is-warning">
+            Stripe integration is currently disabled. Plan comparison is not available.
+        </div>
+    {% endif %}
+</div>
+
+{% endblock %}

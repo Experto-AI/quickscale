@@ -14,3 +14,6 @@ def project_settings(request):
         'project_name': settings.PROJECT_NAME,
         'stripe_enabled': getattr(settings, 'STRIPE_ENABLED', False),
     }
+
+def settings_context(request):
+    return {'settings': settings}
