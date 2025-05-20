@@ -4,6 +4,10 @@ from django.shortcuts import render, get_object_or_404
 from django.views.decorators.csrf import csrf_exempt
 from django.contrib.auth.decorators import login_required
 from core.env_utils import get_env, is_feature_enabled
+from django.views.generic import ListView
+
+# Import the StripeProduct model
+from .models import StripeProduct
 
 # Check if Stripe is enabled
 stripe_enabled = is_feature_enabled(get_env('STRIPE_ENABLED', 'False'))
@@ -104,4 +108,29 @@ def webhook(request: HttpRequest) -> HttpResponse:
         return JsonResponse({'error': 'Invalid signature'}, status=400)
     except Exception as e:
         # Other error
-        return JsonResponse({'error': str(e)}, status=500) 
+        return JsonResponse({'error': str(e)}, status=500)
+
+class PublicPlanListView(ListView):
+    """
+    Displays a list of available Stripe plans for public viewing.
+    Uses the local StripeProduct model for better performance.
+    """
+    template_name = 'stripe_manager/plan_comparison.html'
+    context_object_name = 'plans'
+
+    def get_queryset(self):
+        """
+        Fetch active products from the local database.
+        """
+        try:
+            # Get active products sorted by display_order
+            return StripeProduct.objects.filter(active=True).order_by('display_order')
+        except Exception as e:
+            # Log the error and return an empty list
+            print(f"Error fetching plans from database: {e}") # TODO: Use proper logging
+            return []
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        context['stripe_enabled'] = stripe_enabled
+        return context 

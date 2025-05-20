@@ -1,7 +1,7 @@
 quickscale
 ├── dist
-│   ├── quickscale-0.9.0-py3-none-any.whl
-│   └── quickscale-0.9.0.tar.gz
+│   ├── quickscale-0.10.0-py3-none-any.whl
+│   └── quickscale-0.10.0.tar.gz
 ├── docs
 │   ├── contrib
 │   │   ├── 01_ai_programming_assistant.md
@@ -316,7 +316,8 @@ quickscale
 │   │   │       ├── product_admin(request)
 │   │   │       ├── product_detail(request, product_id)
 │   │   │       ├── update_product_order(request, product_id)
-│   │   │       └── product_sync(request, product_id)
+│   │   │       ├── product_sync(request, product_id)
+│   │   │       └── sync_products(request)
 │   │   ├── docs
 │   │   │   ├── auth_templates.md
 │   │   │   ├── styling_guidelines.md
@@ -815,20 +816,6 @@ quickscale
 │   ├── entry_points.txt
 │   ├── requires.txt
 │   └── top_level.txt
-├── templates
-│   └── dashboard
-│       ├── partials
-│       │   └── product_list.html
-│       ├── templates
-│       │   ├── product_admin.html
-│       │   └── product_detail.html
-│       └── views.py
-│           ├── index(request)
-│           ├── product_admin(request)
-│           ├── sync_products(request)
-│           ├── product_detail(request, product_id)
-│           ├── update_product_order(request, product_id)
-│           └── product_sync(request, product_id)
 ├── tests
 │   ├── core
 │   │   ├── stripe
@@ -1467,8 +1454,8 @@ quickscale
 │   │   │       ├── test_is_feature_enabled_falsy_values(self)
 │   │   │       ├── test_port_fallback_with_various_boolean_formats(self)
 │   │   │       ├── test_is_feature_enabled_with_inline_comments(self)
-│   │   │       ├── test_service_up_command_no_cache(self, mock_get_env_value, mock_print_service_info, mock_verify_services_running, mock_start_docker_services, mock_prepare_environment_and_ports, mock_get_project_state)
-│   │   │       └── test_service_up_command_default_cache(self, mock_get_env_value, mock_start_docker_services, mock_check_project_exists)
+│   │   │       ├── test_service_up_command_no_cache(self, mock_get_env_value, mock_print_service_info, mock_verify_services_running, mock_get_project_state)
+│   │   │       └── test_service_up_command_default_cache(self, mock_get_env_value, mock_check_project_exists)
 │   │   ├── test_service_commands_docker_compose.py
 │   │   │   └── TestServiceCommandDockerComposePortHandling {}
 │   │   │       ├── test_extract_port_values_custom(self)
