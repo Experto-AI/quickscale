@@ -9,4 +9,5 @@ urlpatterns = [
     path('status/', views.status, name='status'),
     path('products/', views.product_list, name='product_list'),
     path('products/<str:product_id>/', views.product_detail, name='product_detail'),
+    path('plans/compare/', views.PublicPlanListView.as_view(), name='plan_comparison'),
 ] 
