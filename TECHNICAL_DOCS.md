@@ -14,7 +14,7 @@ Project configuration is managed through environment variables with secure defau
     - Psycopg2-binary 2.9.9+ (PostgreSQL adapter)
     - Python-dotenv 1.0.0+ (environment variables)
     - dj-database-url 2.1.0+ (database URL configuration)
-    - django-allauth 0.52.0+ (authentication)
+    - django-allauth 0.61.0+ (authentication)
     - Uvicorn 0.27.0+ (ASGI server)
     - stripe 12.1.0+ for payment processing
 - HTMX (frontend to backend communication for CRUD operations with the simplicity of HTML)
@@ -34,6 +34,7 @@ This is the typical directory structure in the QuickScale project generator repo
 quickscale/
 ├── commands/                 # Command system implementation
 ├── config/                   # Configuration management
+├── cli.py                    # CLI Entry Point
 ├── templates/                # Project template files
 │   ├── common/               # Common Django app
 │   │   ├── migrations/       # Pre-generated migrations
@@ -99,18 +100,24 @@ quickscale/
 │   │   ├── public/           # Public templates
 │   │   └── users/            # User templates
 │   ├── tests/                # Template tests
-│   └── users/                # Users Django app
-│       ├── migrations/       # Pre-generated migrations
-│       ├── management/       # Management commands
-│       ├── tests/            # User tests
-│       ├── apps.py           # App configuration
-│       ├── urls.py           # URL routing
-│       ├── views.py          # View logic
-│       ├── models.py         # Custom user model
-│       ├── forms.py          # Authentication forms
-│       ├── adapters.py       # Auth adapters
-│       ├── admin.py          # Admin configuration
-│       └── validators.py     # Custom validators
+│   ├── users/                # Users Django app
+│   │   ├── migrations/       # Pre-generated migrations
+│   │   ├── management/       # Management commands
+│   │   ├── tests/            # User tests
+│   │   ├── apps.py           # App configuration
+│   │   ├── urls.py           # URL routing
+│   │   ├── views.py          # View logic
+│   │   ├── models.py         # Custom user model
+│   │   ├── forms.py          # Authentication forms
+│   │   ├── adapters.py       # Auth adapters
+│   │   ├── admin.py          # Admin configuration
+│   │   └── validators.py     # Custom validators
+│   ├── Dockerfile            # Dockerfile for the web service
+│   ├── docker-compose.yml    # Docker Compose file
+│   ├── requirements.txt      # Python dependencies
+│   ├── entrypoint.sh         # Container entrypoint script
+│   ├── manage.py             # Django management script
+│   └── .dockerignore         # Docker ignore file
 ├── tests/                    # Test suite
 └── utils/                    # Utility functions
 
@@ -595,15 +602,15 @@ The authentication system is configured in multiple files:
 
 ### Key django-allauth Settings
 
-- `ACCOUNT_AUTHENTICATION_METHOD`: Set to `email` for email-only authentication.
-- `ACCOUNT_EMAIL_VERIFICATION`: Set to `mandatory` to enforce email verification.
+- `ACCOUNT_LOGIN_METHODS`: Set to `{'email'}` for email-only authentication. (Replaces `ACCOUNT_AUTHENTICATION_METHOD` in newer versions)
+- `ACCOUNT_EMAIL_VERIFICATION`: Set to `mandatory` to enforce email verification in production. It is set to `optional` in development mode.
 - `ACCOUNT_USERNAME_REQUIRED`: Set to `False` as usernames are not used.
 - `ACCOUNT_ADAPTER`: Custom adapter located in `users.adapters.AccountAdapter`.
 - `ACCOUNT_FORMS`: Custom forms for login, signup, and password management located in `users.forms`.
 
 ### Customizations
 
-- **Custom User Model**: The `CustomUser` model in `users.models` replaces the default Django user model.
+- **Custom User Model**: The `CustomUser` model in `users.models` replaces the default Django user model and includes additional fields for user profiles such as bio, contact information, social media links, and notification preferences.
 - **Custom Adapters**: The `AccountAdapter` and `SocialAccountAdapter` in `users.adapters` handle custom logic for email-only authentication and disable social login.
 - **Custom Forms**: Forms in `users.forms` provide additional styling and validation for login, signup, and password reset.
 - **Custom Templates**: All templates under `templates/account/` are customized for the QuickScale branding and user experience.

@@ -62,6 +62,13 @@ class StripeProduct(models.Model):
         unique=True,
         help_text=_('Stripe product ID')
     )
+    stripe_price_id = models.CharField(
+        _('Stripe Price ID'),
+        max_length=255,
+        blank=True,
+        default='',
+        help_text=_('Stripe price ID')
+    )
     created_at = models.DateTimeField(
         _('Created At'),
         auto_now_add=True
@@ -92,11 +99,18 @@ class StripeProduct(models.Model):
         stripe_manager = StripeManager.get_instance()
         
         # Sync this product to Stripe
-        stripe_product_id = stripe_manager.sync_product_to_stripe(self)
+        result = stripe_manager.sync_product_to_stripe(self)
         
-        # If successful, ensure the local object has the Stripe ID
-        if stripe_product_id and self.stripe_id != stripe_product_id:
-            self.stripe_id = stripe_product_id
+        if result:
+            stripe_product_id, stripe_price_id = result
+            
+            # If successful, ensure the local object has the Stripe IDs
+            if stripe_product_id and self.stripe_id != stripe_product_id:
+                self.stripe_id = stripe_product_id
+            
+            if stripe_price_id and self.stripe_price_id != stripe_price_id:
+                self.stripe_price_id = stripe_price_id
+                
             self.save()
 
     def clean(self):

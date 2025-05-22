@@ -50,18 +50,20 @@ To create a new project, use the `quickscale init` command:
 
 QuickScale provides a CLI for managing your project. Below are the most common commands:
 
-### **3.2. Starting and Stopping Services**
-- **Start Services**:
+### **3.1. Help**
+- **Initialize a Project**:
   ```bash
-  quickscale up
+  quickscale help
   ```
-  To rebuild the Docker images without using the cache, use the `--no-cache` flag:
-  ```bash
-  quickscale up --no-cache
-  ```
+
+### **3.2. Stopping and Starting Services**
 - **Stop Services**:
   ```bash
   quickscale down
+  ```
+- **Start Services (Again)**:
+  ```bash
+  quickscale up
   ```
 
 ### **3.3. Viewing Logs**
@@ -233,6 +235,17 @@ For Django application tests, you can use the Django test runner through the Qui
 # Run all Django tests
 quickscale manage test
 ```
+
+### **5.5. Automatic Port Fallback**
+
+QuickScale can automatically find and use alternative ports if the default `WEB_PORT` (8000) or `DB_PORT_EXTERNAL` (5432) are already in use on your system. This feature is controlled by environment variables in your project's `.env` file:
+
+- `WEB_PORT_ALTERNATIVE_FALLBACK`: Set to `yes` to enable automatic fallback for the web server port.
+- `DB_PORT_EXTERNAL_ALTERNATIVE_FALLBACK`: Set to `yes` to enable automatic fallback for the PostgreSQL database external port.
+
+If fallback is enabled and a port conflict is detected when you run `quickscale up`, QuickScale will attempt to find an available port in a nearby range. The new port will be displayed in the console output.
+
+If fallback is disabled (default) and a port conflict occurs, `quickscale up` will fail with a clear error message instructing you to free the port, specify a different port manually, or enable the fallback feature.
 
 ## **6. Additional Resources**
 

@@ -1,0 +1,17 @@
+{% extends 'base/base.html' %}
+{% load static %}
+
+{% block title %}Payment Successful{% endblock %}
+
+{% block content %}
+<div class="container">
+    <h1 class="title has-text-centered my-5">Payment Successful!</h1>
+    <div class="box">
+        <p>Your payment was processed successfully.</p>
+        <p>Thank you for your purchase.</p>
+        <div class="has-text-centered mt-4">
+            <a href="{% url 'dashboard:index' %}" class="button is-primary">Go to Dashboard</a>
+        </div>
+    </div>
+</div>
+{% endblock %} 

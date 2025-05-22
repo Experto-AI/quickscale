@@ -1,7 +1,7 @@
 quickscale
 ├── dist
-│   ├── quickscale-0.10.0-py3-none-any.whl
-│   └── quickscale-0.10.0.tar.gz
+│   ├── quickscale-0.11.0-py3-none-any.whl
+│   └── quickscale-0.11.0.tar.gz
 ├── docs
 │   ├── contrib
 │   │   ├── 01_ai_programming_assistant.md
@@ -244,7 +244,8 @@ quickscale
 │   │   │   │   └── __init__.py
 │   │   │   ├── asgi.py
 │   │   │   ├── context_processors.py
-│   │   │   │   └── project_settings(request)
+│   │   │   │   ├── project_settings(request)
+│   │   │   │   └── settings_context(request)
 │   │   │   ├── email_settings.py
 │   │   │   ├── security_settings.py
 │   │   │   ├── settings.py
@@ -323,12 +324,16 @@ quickscale
 │   │   │   ├── styling_guidelines.md
 │   │   │   └── template_customization_examples.md
 │   │   ├── js
-│   │   │   └── password_validation.js
-│   │   │       ├── addEventListener('DOMContentLoaded', function()
-│   │   │       ├── checkPasswordStrength(password)
-│   │   │       ├── updateUI()
-│   │   │       ├── validatePassword(password)
-│   │   │       └── score(()
+│   │   │   ├── password_validation.js
+│   │   │   │   ├── addEventListener('DOMContentLoaded', function()
+│   │   │   │   ├── checkPasswordStrength(password)
+│   │   │   │   ├── updateUI()
+│   │   │   │   ├── validatePassword(password)
+│   │   │   │   └── score(()
+│   │   │   └── plan_selection.js
+│   │   │       ├── addEventListener('DOMContentLoaded', ()
+│   │   │       └── forEach(button => {
+        button.addEventListener('click', function()
 │   │   ├── logs
 │   │   ├── public
 │   │   │   ├── migrations
@@ -375,6 +380,11 @@ quickscale
 │   │   │   │   │   └── Migration {}
 │   │   │   │   ├── README.md
 │   │   │   │   └── __init__.py
+│   │   │   ├── templates
+│   │   │   │   └── stripe_manager
+│   │   │   │       ├── checkout_error.html
+│   │   │   │       ├── checkout_success.html
+│   │   │   │       └── plan_comparison.html
 │   │   │   ├── templatetags
 │   │   │   │   ├── __init__.py
 │   │   │   │   └── stripe_tags.py
@@ -500,6 +510,7 @@ quickscale
 │   │   │   │       ├── confirm_payment_intent(self, payment_intent_id, payment_method)
 │   │   │   │       ├── cancel_payment_intent(self, payment_intent_id)
 │   │   │   │       ├── list_payment_intents(self, customer_id, limit)
+│   │   │   │       ├── create_checkout_session(self, price_id, quantity, success_url, cancel_url, customer_email, metadata)
 │   │   │   │       ├── create_refund(self, payment_intent_id, amount, reason, metadata)
 │   │   │   │       ├── sync_product_to_stripe(self, product_obj)
 │   │   │   │       ├── sync_product_from_stripe(self, stripe_product_id, product_model)
@@ -512,7 +523,14 @@ quickscale
 │   │   │       ├── status(request)
 │   │   │       ├── product_list(request)
 │   │   │       ├── product_detail(request, product_id)
-│   │   │       └── webhook(request)
+│   │   │       ├── webhook(request)
+│   │   │       ├── PublicPlanListView {}
+│   │   │       │   ├── get_queryset(self)
+│   │   │       │   └── get_context_data(self)
+│   │   │       ├── CheckoutView {}
+│   │   │       │   └── post(self, request)
+│   │   │       ├── checkout_success_view(request)
+│   │   │       └── checkout_cancel_view(request)
 │   │   ├── templates
 │   │   │   ├── account
 │   │   │   │   ├── email
@@ -587,16 +605,26 @@ quickscale
 │   │   │   │   │       ├── test_fieldset_organization(self)
 │   │   │   │   │       ├── test_sync_action(self)
 │   │   │   │   │       └── test_bulk_sync_action(self)
-│   │   │   │   └── test_models.py
-│   │   │   │       └── StripeProductModelTest {}
-│   │   │   │           ├── setUp(self)
-│   │   │   │           ├── test_create_product(self)
-│   │   │   │           ├── test_product_ordering(self)
-│   │   │   │           ├── test_negative_price_validation(self)
-│   │   │   │           ├── test_invalid_currency(self)
-│   │   │   │           ├── test_invalid_interval(self)
-│   │   │   │           ├── test_duplicate_stripe_id(self)
-│   │   │   │           └── test_str_representation(self)
+│   │   │   │   ├── test_models.py
+│   │   │   │   │   └── StripeProductModelTest {}
+│   │   │   │   │       ├── setUp(self)
+│   │   │   │   │       ├── test_create_product(self)
+│   │   │   │   │       ├── test_product_ordering(self)
+│   │   │   │   │       ├── test_negative_price_validation(self)
+│   │   │   │   │       ├── test_invalid_currency(self)
+│   │   │   │   │       ├── test_invalid_interval(self)
+│   │   │   │   │       ├── test_duplicate_stripe_id(self)
+│   │   │   │   │       └── test_str_representation(self)
+│   │   │   │   ├── test_plan_views.py
+│   │   │   │   │   └── PlanViewsTest {}
+│   │   │   │   │       ├── setUpTestData(cls)
+│   │   │   │   │       ├── test_plan_comparison_view_displays_active_plans(self)
+│   │   │   │   │       └── test_plan_comparison_view_when_stripe_disabled(self)
+│   │   │   │   └── test_user_flows.py
+│   │   │   │       └── UserFlowsTest {}
+│   │   │   │           ├── setUpTestData(cls)
+│   │   │   │           ├── test_authenticated_user_can_view_plans(self)
+│   │   │   │           └── test_unauthenticated_user_can_view_plans(self)
 │   │   │   ├── __init__.py
 │   │   │   └── test_sample.py
 │   │   │       └── SampleTestCase {}
