@@ -2,6 +2,27 @@
 
 All notable changes to this project will be documented in this file.
 
+## v0.12.0 (2025-05-22)
+v0.12.0 feat: Implement Basic Stripe Checkout Flow 
+
+- Integrated Stripe Checkout session creation with the create_checkout_session method in StripeManager
+- Implemented user authentication verification before allowing checkout initiation:
+- Redirects unauthenticated users to login/signup with clear messaging
+- Seamlessly proceeds to checkout for authenticated users
+- Created CheckoutView for handling checkout requests with proper HTMX support
+- Added success and error templates for post-checkout user feedback:
+- checkout_success.html for successful payments
+- checkout_error.html for handling declined/failed payments
+- Updated plan_comparison.html to include checkout initiation buttons
+- Enhanced the StripeProduct model with stripe_price_id for better product management
+- Implemented webhook handler for processing checkout completion events
+- Refactored the project roadmap to separate completed work from future sprints:
+- Completed core checkout functionality
+- Moved subscription model and advanced features to next sprint
+
+This PR completes all core checkout functionality, providing users with a secure and straightforward way to purchase subscriptions. The implementation uses Stripe's hosted checkout page for maximum security and simplicity, with full integration into our authentication system.
+The remaining subscription management functionality (subscription model, lifecycle hooks, and comprehensive testing) has been moved to next sprint in the roadmap.
+
 ## v0.11.0 (2025-05-20)
 v0.11.0 feat: Implement Public Plan Selection Interface
 
