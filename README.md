@@ -20,7 +20,7 @@ Ideal for **solo developers** or small teams looking to turn their ideas into pr
 
 ## KEY FEATURES
 
-- **Complete SaaS Foundation**: Authentication, user management, and billing integration
+- **Complete SaaS Foundation**: Authentication, user management, and **Stripe** billing integration (**in progress**)
 - **Ready-to-Use Pages**: Landing, dashboard, login, signup, profile, and more
 - **Modern Frontend**: HTMX and Alpine.js for dynamic interactions without complex JavaScript
 - **Containerized**: Docker setup for consistent development and deployment
@@ -97,4 +97,6 @@ quickscale down                   # Stop the services
   Cursor, Windsurf and GitHub Coplitot rules are linked to this file.
 - [Roadmap](./ROADMAP.md) - Future plans and features for QuickScale
 - [Changelog](./CHANGELOG.md) - Release notes and version history
+- [Database Variables](./docs/DATABASE_VARIABLES.md) - Database environment variables and configuration
+- [Message Manager](./docs/MESSAGE_MANAGER.md) - Utility for standardized CLI output
 - [HomePage](https://github.com/Experto-AI/quickscale)

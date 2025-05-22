@@ -506,6 +506,61 @@ class StripeManager:
             logger.error(f"Error listing Stripe payment intents: {e}")
             raise
 
+    def create_checkout_session(self,
+                                price_id: str,
+                                quantity: int,
+                                success_url: str,
+                                cancel_url: str,
+                                customer_email: Optional[str] = None,
+                                metadata: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+        """Create a new Stripe Checkout session using the v12+ API."""
+        line_items = [
+            {
+                'price': price_id,
+                'quantity': quantity,
+            },
+        ]
+
+        # Determine if the price is recurring by retrieving the price details
+        try:
+            price = self.client.prices.retrieve(price_id)
+            # If the price has a recurring component, set mode to subscription
+            if price.get('recurring'):
+                mode = 'subscription'
+                logger.info(f"Price {price_id} is recurring with interval: {price.get('recurring', {}).get('interval')}. Using subscription mode.")
+            else:
+                mode = 'payment'
+                logger.info(f"Price {price_id} is a one-time payment. Using payment mode.")
+        except Exception as e:
+            logger.warning(f"Error retrieving price details to determine mode: {e}. Using payment mode by default.")
+            mode = 'payment'
+
+        checkout_session_data = {
+            'line_items': line_items,
+            'mode': mode,  # Set dynamically based on price type
+            'success_url': success_url,
+            'cancel_url': cancel_url,
+        }
+
+        if customer_email:
+            checkout_session_data['customer_email'] = customer_email
+
+        if metadata:
+            checkout_session_data['metadata'] = metadata
+
+        logger.info(f"Creating Stripe checkout session with mode: {mode}, price_id: {price_id}")
+        
+        try:
+            # Use StripeClient instance
+            session = self.client.checkout.sessions.create(
+                params=checkout_session_data
+            )
+            logger.info(f"Successfully created checkout session: {session.id} with mode: {mode}")
+            return session
+        except Exception as e:
+            logger.error(f"Error creating Stripe Checkout session: {e}")
+            raise
+
     # Refund operations
 
     def create_refund(self,
@@ -531,11 +586,11 @@ class StripeManager:
 
     # Sync operations (Product model specific, might need adjustment based on your actual Product model)
 
-    def sync_product_to_stripe(self, product_obj) -> Optional[str]:
+    def sync_product_to_stripe(self, product_obj) -> Optional[Tuple[str, str]]:
         """
         Syncs a local product object to Stripe.
         Creates or updates the product and its price in Stripe.
-        Returns the Stripe Product ID on success, None otherwise.
+        Returns a tuple of (stripe_product_id, stripe_price_id) on success, None otherwise.
         """
 
         if not is_feature_enabled(get_env('STRIPE_ENABLED', 'False')):
@@ -587,40 +642,22 @@ class StripeManager:
                          logger.info(f"Setting new price {new_stripe_price.id} as default for product {stripe_product_id}")
                          self.client.products.update(stripe_product_id, params={'default_price': new_stripe_price.id})
 
-                    # You might want to store the new_stripe_price.id on your local product_obj and save it
-                    # product_obj.stripe_price_id = new_stripe_price.id
-                    # product_obj.save() # Make sure your model has these fields
-
-                    # A more robust approach for price updates would involve:
-                    # 1. Creating the new price.
-                    # 2. Optionally, setting it as the default price on the Product.
-                    # 3. Updating any active subscriptions to use the new price (this is a separate operation).
-                    # 4. Optionally, deactivating the old price.
-                    # This simplified sync assumes creating a new price on product update.
-                    # For a real application, consider the subscription update flow.
-
-                    # For this refactor, we'll focus on the API calls. The logic for handling old prices/subscriptions
-                    # would need to be implemented based on your application's requirements.
-                    # For now, we'll just return the product ID. The price handling here is simplified.
-                    return stripe_product.id
+                    # Return both the product ID and the new price ID
+                    return (stripe_product.id, new_stripe_price.id)
 
                 else:
                     # Product exists, but no price associated in local DB (or first time syncing price for existing product)
                     logger.info(f"Creating Price for existing Stripe Product: {stripe_product_id}")
                     stripe_price = self.client.prices.create(params={'product': stripe_product_id, **price_data})
                     logger.info(f"Stripe Price created: {stripe_price.id}")
-                     # You would likely want to store stripe_price.id on your local product_obj
-                    # product_obj.stripe_price_id = stripe_price.id
-                    # product_obj.save()
 
                     # Optionally, set this new price as the default on the product
                     if getattr(product_obj, 'set_as_default_price', True):
                          logger.info(f"Setting new price {stripe_price.id} as default for product {stripe_product_id}")
                          self.client.products.update(stripe_product_id, params={'default_price': stripe_price.id})
 
-
-                    return stripe_product.id
-
+                    # Return both the product ID and the price ID
+                    return (stripe_product.id, stripe_price.id)
 
             else:
                 # Product does not exist, create it and its price
@@ -639,13 +676,8 @@ class StripeManager:
                      logger.info(f"Setting new price {stripe_price.id} as default for product {stripe_product.id}")
                      self.client.products.update(stripe_product.id, params={'default_price': stripe_price.id})
 
-
-                # You would likely want to store stripe_product.id and stripe_price.id on your local product_obj
-                # product_obj.stripe_id = stripe_product.id
-                # product_obj.stripe_price_id = stripe_price.id
-                # product_obj.save()
-
-                return stripe_product.id
+                # Return both the product ID and the price ID
+                return (stripe_product.id, stripe_price.id)
 
         except Exception as e:
             logger.error(f"Error syncing product {getattr(product_obj, 'id', 'N/A')} to Stripe: {e}", exc_info=True)

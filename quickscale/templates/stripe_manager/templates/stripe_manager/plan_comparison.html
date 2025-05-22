@@ -40,10 +40,19 @@
                                 </div>
 
                                 <div class="has-text-centered mt-5">
-                                    <button class="button is-primary is-medium select-plan-button" 
-                                            data-plan-id="{{ plan.stripe_id }}">
-                                        Select Plan
-                                    </button>
+                                    <form action="{% url 'stripe:create_checkout_session' %}" 
+                                          method="POST"
+                                          hx-post="{% url 'stripe:create_checkout_session' %}" {# Use hx-post for HTMX submission #}
+                                          hx-trigger="submit" {# Trigger on form submission #}
+                                          hx-target="this" {# Target self, we only need the response data #}
+                                    >
+                                        {% csrf_token %}
+                                        <input type="hidden" name="price_id" value="{{ plan.stripe_price_id }}">
+                                        <button class="button is-primary is-medium select-plan-button" 
+                                                type="submit">
+                                            Select Plan
+                                        </button>
+                                    </form>
                                 </div>
                             </div>
                         </div>

@@ -24,6 +24,7 @@ class Migration(migrations.Migration):
                 ('interval', models.CharField(choices=[('month', 'Monthly'), ('year', 'Yearly'), ('one-time', 'One Time')], default='month', help_text='Billing interval for subscription products', max_length=20, verbose_name='Billing Interval')),
                 ('display_order', models.IntegerField(default=0, help_text='Order in which to display this product', verbose_name='Display Order')),
                 ('stripe_id', models.CharField(help_text='Stripe product ID', max_length=255, unique=True, verbose_name='Stripe ID')),
+                ('stripe_price_id', models.CharField(blank=True, default='', help_text='Stripe price ID', max_length=255, verbose_name='Stripe Price ID')),
                 ('created_at', models.DateTimeField(auto_now_add=True, verbose_name='Created At')),
                 ('updated_at', models.DateTimeField(auto_now=True, verbose_name='Updated At')),
             ],
