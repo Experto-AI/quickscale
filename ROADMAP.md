@@ -38,32 +38,37 @@ For more details refer to the [CHANGELOG](CHANGELOG.md).
      - ✅ Basic customer management (create, link to user)
      - ✅ Product listing and viewing
      - ✅ Basic product management in admin
+     - ✅ Basic checkout flow
      - ❌ Subscription management system
-     - ❌ Payment processing flow
-     - ❌ Webhook handling for events
+     - 🔄 Advanced webhook handling for events
    - ❌ Credit system for usage tracking
    - ❌ File upload/storage system with secure access controls
 
 ## Projected Development Sprints
 
-### Sprint 2: Checkout (v0.12.0)
-- [ ] **Checkout Workflow - Checkout Process**
-  - [ ] Implement Stripe Checkout in templates/stripe_manager/views.py:
-    - [ ] Create CheckoutView for initiating Stripe Checkout
-    - [ ] Add webhook handler for checkout completion
-    - [ ] Implement success/failure redirects
-  - [ ] Add checkout templates in templates/stripe_manager/templates:
-    - [ ] checkout.html: Checkout page with Stripe Elements
-    - [ ] checkout_success.html: Success confirmation
-    - [ ] checkout_error.html: Error handling
+### Sprint 2: Basic Checkout (v0.12.0)
+- ✅ **Checkout Workflow - Core Implementation**
+  - ✅ Implement check if user is logged in before initiating Stripe Checkout
+    - ✅ If not logged in, prevent redirect and display message prompting registration/login
+    - ✅ If logged in, proceed with Stripe Checkout initiation
+  - ✅ Implement Stripe Checkout in templates/stripe_manager/views.py:
+    - ✅ Create CheckoutView for initiating Stripe Checkout
+    - ✅ Add webhook handler for checkout completion
+    - ✅ Implement success/failure redirects
+  - ✅ Add checkout templates in templates/stripe_manager/templates:
+    - ✅ checkout_success.html: Success confirmation
+    - ✅ checkout_error.html: Error handling
+  - ✅ Implement payment processing:
+    - ✅ Add payment method handling
+    - ✅ Implement payment confirmation
+    - ✅ Add payment error handling
+
+### Sprint 3: Subscription Management (v0.13.0)
+- [ ] **Subscription System**
   - [ ] Create subscription management:
     - [ ] Add subscription model in templates/stripe_manager/models.py
     - [ ] Implement subscription status tracking
     - [ ] Add subscription lifecycle hooks
-  - [ ] Implement payment processing:
-    - [ ] Add payment method handling
-    - [ ] Implement payment confirmation
-    - [ ] Add payment error handling
   - [ ] Create tests in templates/tests/stripe_manager:
     - [ ] Test checkout flow
     - [ ] Test webhook handling
@@ -71,7 +76,7 @@ For more details refer to the [CHANGELOG](CHANGELOG.md).
     - [ ] Test payment processing
     - [ ] Test error scenarios
 
-### Sprint 3: Checkout (v0.13.0)
+### Sprint 4: Checkout Integration and Testing (v0.14.0)
 - [ ] **Checkout - Integration and Testing**
   - [ ] End-to-end testing:
     - [ ] Test complete user journey
@@ -89,15 +94,15 @@ For more details refer to the [CHANGELOG](CHANGELOG.md).
     - [ ] Add deployment notes
     - [ ] Update user guide
 
-### Sprint 4: Credit System Foundation (v0.14.0)
-- [ ] **Credit System Foundation - Credit System Foundation**
+### Sprint 5: Credit System Foundation (v0.15.0)
+- [ ] **Credit System Foundation**
   - [ ] Create credit balance model tied to user accounts
   - [ ] Implement credit transaction ledger for tracking usage
   - [ ] Add automated credit allocation for subscription plans
   - [ ] Test credit model and basic operations
 
-### Sprint 5: User Credit Management (v0.15.0)
-- [ ] **User Credit Management - User Credit Dashboard**
+### Sprint 6: User Credit Management (v0.16.0)
+- [ ] **User Credit Dashboard**
   - [ ] **Step 1: Credit Status UI**
     - [ ] Add credit balance display to user dashboard
     - [ ] Create subscription status and renewal information
@@ -109,7 +114,7 @@ For more details refer to the [CHANGELOG](CHANGELOG.md).
     - [ ] Create cancellation and renewal flows
     - [ ] Test subscription management functionality
 
-### Sprint 6: User Credit History (v0.16.0)
+### Sprint 7: User Credit History (v0.17.0)
 - [ ] **Credit Usage and History**
   - [ ] **Step 1: Credit Consumption**
     - [ ] Implement credit deduction for service usage
@@ -122,7 +127,7 @@ For more details refer to the [CHANGELOG](CHANGELOG.md).
     - [ ] Implement receipt generation for payments
     - [ ] Test transaction history functionality
 
-### Sprint 7: Admin Management Interface (v0.17.0)
+### Sprint 8: Admin Management Interface (v0.18.0)
 - [ ] **Admin Payment Dashboard**
   - [ ] **Step 1: User Subscription Overview**
     - [ ] Create user subscription listing and status view
@@ -135,7 +140,7 @@ For more details refer to the [CHANGELOG](CHANGELOG.md).
     - [ ] Implement basic revenue reporting
     - [ ] Test payment management functionality
 
-### Sprint 8: Admin Management Interface (v0.18.0)
+### Sprint 9: Customer Support Tools (v0.19.0)
 - [ ] **Customer Support Tools**
   - [ ] **Step 1: User Credit Management**
     - [ ] Add admin tools for viewing user credit status
@@ -148,7 +153,7 @@ For more details refer to the [CHANGELOG](CHANGELOG.md).
     - [ ] Implement user communication features
     - [ ] Test support action functionality
 
-### Sprint 9: System Optimization and Security (v0.19.0)
+### Sprint 10: Security and Compliance (v0.20.0)
 - [ ] **Security and Compliance**
   - [ ] **Step 1: Payment Security**
     - [ ] Add enhanced security for payment endpoints
@@ -161,7 +166,7 @@ For more details refer to the [CHANGELOG](CHANGELOG.md).
     - [ ] Implement clear user guidance for payment issues
     - [ ] Test error scenarios systematically
 
-### Sprint 10: System Optimization and Security (v0.20.0)
+### Sprint 11: Performance and Scalability (v0.21.0)
 - [ ] **Performance and Scalability**
   - [ ] **Step 1: Optimization**
     - [ ] Optimize credit transaction handling for scale
@@ -174,13 +179,13 @@ For more details refer to the [CHANGELOG](CHANGELOG.md).
     - [ ] Create data consistency checks for credit balances
     - [ ] Test system resilience
 
-### Sprint 11: Storage and Real Time API (v0.21.0)
+### Sprint 12: Storage and Real Time API (v0.22.0)
 - [ ] **Storage - Django-storages**
   - [ ] Implement Django-storages
 - [ ] **Real Time API - Django-channels**
   - [ ] Implement Django-channels
 
-### Sprint 12: Refactor codebase to follow CONTRIBUTING.md (v0.22.0)
+### Sprint 13: Refactor codebase to follow CONTRIBUTING.md (v0.23.0)
 - [ ] **Step 1: Incorporate the 12factor.net principles**
   - [ ] Implement the 12factor.net principles in the project
 - [ ] **Step 2: Refactor codebase to follow CONTRIBUTING.md**
