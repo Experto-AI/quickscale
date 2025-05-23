@@ -40,6 +40,28 @@ if stripe_enabled:
             STRIPE_AVAILABLE = False
 
 @login_required
+def user_dashboard(request: HttpRequest) -> HttpResponse:
+    """Display the user dashboard with credits info and quick actions."""
+    # Import here to avoid circular imports
+    from credits.models import CreditAccount
+    
+    # Get or create credit account for the user
+    credit_account = CreditAccount.get_or_create_for_user(request.user)
+    current_balance = credit_account.get_balance()
+    
+    # Get recent transactions (limited to 3 for dashboard overview)
+    recent_transactions = request.user.credit_transactions.all()[:3]
+    
+    context = {
+        'credit_account': credit_account,
+        'current_balance': current_balance,
+        'recent_transactions': recent_transactions,
+        'stripe_enabled': stripe_enabled,
+    }
+    
+    return render(request, 'dashboard/user_dashboard.html', context)
+
+@login_required
 @user_passes_test(lambda u: u.is_staff)
 def index(request: HttpRequest) -> HttpResponse:
     """Display the staff dashboard."""

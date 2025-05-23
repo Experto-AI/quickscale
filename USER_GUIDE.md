@@ -255,6 +255,7 @@ If fallback is disabled (default) and a port conflict occurs, `quickscale up` wi
 - [Changelog](./CHANGELOG.md)
 - [HomePage](https://github.com/Experto-AI/quickscale)
 - Other documentation links:
+  - [CREDIT_SYSTEM.md](./docs/CREDIT_SYSTEM.md) Credit System Documentation.
   - [DATABASE_VARIABLES.md](./docs/DATABASE_VARIABLES.md) Database Environment Variables. 
   - [MESSAGE_MANAGER.md](./docs/MESSAGE_MANAGER.md) Message Manager Utility.
   

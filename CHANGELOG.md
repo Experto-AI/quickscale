@@ -2,6 +2,29 @@
 
 All notable changes to this project will be documented in this file.
 
+## v0.13.0 (2025-05-23)
+v0.13.0 feat: Implement Basic Credit Account Foundation
+
+- Backend:
+  - Created `CreditAccount` model linked to users with a single balance field.
+  - Created `CreditTransaction` model with basic fields (amount, description, user, timestamp).
+  - Added simple credit balance calculation method.
+  - Created basic credit operations: `add_credits()` and `get_balance()`.
+  - Included admin interfaces for managing credit accounts and transactions.
+- Frontend:
+  - Created `/dashboard/credits/` page showing current credit balance and recent 5 credit transactions.
+  - Added credits section to main dashboard with balance display.
+  - Updated dashboard templates with new links and settings adjustments.
+- Testing:
+  - Unit tests for credit models and basic operations.
+  - Integration test for credit dashboard page.
+  - Test credit balance calculation.
+- Documentation:
+  - Updated `README.md` and `USER_GUIDE.md` with new Credit System documentation.
+  - Introduced `CREDIT_SYSTEM.md` for detailed information on the credit system.
+
+This PR implements the Basic Credit Account Foundation, introducing a credit system to the application. Users can now view their credit balance and recent transaction history on a dedicated page and the main dashboard. This set of changes provides a foundational credit management system, enhancing user experience and preparing for future credit-related features.
+
 ## v0.12.0 (2025-05-22)
 v0.12.0 feat: Implement Basic Stripe Checkout Flow 
 
