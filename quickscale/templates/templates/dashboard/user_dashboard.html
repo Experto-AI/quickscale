@@ -1,0 +1,151 @@
+{% extends "base.html" %}
+
+{% block title %}Dashboard - {{ project_name }}{% endblock %}
+
+{% block content %}
+<section class="hero is-info is-small">
+    <div class="hero-body">
+        <p class="title">My Dashboard</p>
+        <p class="subtitle">Welcome back, {{ user.email }}</p>
+    </div>
+</section>
+
+<section class="section">
+    <div class="container">
+        <div class="columns is-multiline is-mobile">
+            
+            <!-- Credits Section -->
+            <div class="column is-half">
+                <div class="card">
+                    <div class="card-content">
+                        <div class="level">
+                            <div class="level-left">
+                                <div class="level-item">
+                                    <div>
+                                        <p class="title is-4">
+                                            <span class="icon">
+                                                <i class="fas fa-coins"></i>
+                                            </span>
+                                            Credits
+                                        </p>
+                                        <p class="subtitle is-6">Your current balance</p>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="level-right">
+                                <div class="level-item">
+                                    <span class="tag is-large is-primary">{{ current_balance }} credits</span>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        {% if recent_transactions %}
+                            <div class="content">
+                                <p class="has-text-weight-semibold">Recent Activity:</p>
+                                {% for transaction in recent_transactions %}
+                                    <div class="level is-mobile">
+                                        <div class="level-left">
+                                            <small>{{ transaction.description }}</small>
+                                        </div>
+                                        <div class="level-right">
+                                            <span class="tag is-small {% if transaction.amount >= 0 %}is-success{% else %}is-danger{% endif %}">
+                                                {% if transaction.amount >= 0 %}+{% endif %}{{ transaction.amount }}
+                                            </span>
+                                        </div>
+                                    </div>
+                                {% endfor %}
+                            </div>
+                        {% else %}
+                            <div class="content">
+                                <p class="has-text-grey">No credit transactions yet.</p>
+                            </div>
+                        {% endif %}
+                    </div>
+                    <footer class="card-footer">
+                        <a href="{% url 'credits:dashboard' %}" class="card-footer-item">View Details</a>
+                        <span class="card-footer-item has-text-grey">Buy Credits (Soon)</span>
+                    </footer>
+                </div>
+            </div>
+            
+            <!-- Account Section -->
+            <div class="column is-half">
+                <div class="card">
+                    <div class="card-content">
+                        <p class="title is-4">
+                            <span class="icon">
+                                <i class="fas fa-user"></i>
+                            </span>
+                            Account
+                        </p>
+                        <p class="subtitle is-6">Manage your profile</p>
+                        <div class="content">
+                            <ul>
+                                <li>Update profile information</li>
+                                <li>Change password</li>
+                                <li>Email preferences</li>
+                            </ul>
+                        </div>
+                    </div>
+                    <footer class="card-footer">
+                        <a href="{% url 'users:profile' %}" class="card-footer-item">Edit Profile</a>
+                        <a href="{% url 'account_change_password' %}" class="card-footer-item">Change Password</a>
+                    </footer>
+                </div>
+            </div>
+            
+            {% if stripe_enabled %}
+            <!-- Services Section -->
+            <div class="column is-half">
+                <div class="card">
+                    <div class="card-content">
+                        <p class="title is-4">
+                            <span class="icon">
+                                <i class="fas fa-cogs"></i>
+                            </span>
+                            Services
+                        </p>
+                        <p class="subtitle is-6">Available features</p>
+                        <div class="content">
+                            <ul>
+                                <li>AI-powered tools</li>
+                                <li>Data processing</li>
+                                <li>Premium features</li>
+                            </ul>
+                        </div>
+                    </div>
+                    <footer class="card-footer">
+                        <span class="card-footer-item has-text-grey">Coming Soon</span>
+                    </footer>
+                </div>
+            </div>
+            
+            <!-- Billing Section -->
+            <div class="column is-half">
+                <div class="card">
+                    <div class="card-content">
+                        <p class="title is-4">
+                            <span class="icon">
+                                <i class="fas fa-receipt"></i>
+                            </span>
+                            Billing
+                        </p>
+                        <p class="subtitle is-6">Payment history</p>
+                        <div class="content">
+                            <ul>
+                                <li>View invoices</li>
+                                <li>Update payment methods</li>
+                                <li>Subscription status</li>
+                            </ul>
+                        </div>
+                    </div>
+                    <footer class="card-footer">
+                        <span class="card-footer-item has-text-grey">Coming Soon</span>
+                    </footer>
+                </div>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+</section>
+{% endblock %} 

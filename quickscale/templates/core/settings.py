@@ -79,6 +79,7 @@ INSTALLED_APPS = [
     'dashboard.apps.DashboardConfig',
     'users.apps.UsersConfig',
     'common.apps.CommonConfig',
+    'credits.apps.CreditsConfig',
     'stripe_manager.apps.StripeConfig',  # Always include for migrations
 ]
 

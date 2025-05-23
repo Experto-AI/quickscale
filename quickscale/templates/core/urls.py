@@ -28,6 +28,7 @@ urlpatterns = [
     path('', include('public.urls')),
     path('users/', include('users.urls')),
     path('dashboard/', include('dashboard.urls')),
+    path('dashboard/credits/', include('credits.urls', namespace='credits')),
     path('common/', include('common.urls')),
     path('accounts/', include('allauth.urls')),  # django-allauth URLs
     path('health/', health_check, name='health_check'),  # Health check endpoint
