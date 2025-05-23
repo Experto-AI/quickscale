@@ -97,6 +97,8 @@ quickscale down                   # Stop the services
   Cursor, Windsurf and GitHub Coplitot rules are linked to this file.
 - [Roadmap](./ROADMAP.md) - Future plans and features for QuickScale
 - [Changelog](./CHANGELOG.md) - Release notes and version history
-- [Database Variables](./docs/DATABASE_VARIABLES.md) - Database environment variables and configuration
-- [Message Manager](./docs/MESSAGE_MANAGER.md) - Utility for standardized CLI output
 - [HomePage](https://github.com/Experto-AI/quickscale)
+- Other documentation links:
+  - [CREDIT_SYSTEM.md](./docs/CREDIT_SYSTEM.md) Credit System Documentation.
+  - [DATABASE_VARIABLES.md](./docs/DATABASE_VARIABLES.md) Database Environment Variables. 
+  - [MESSAGE_MANAGER.md](./docs/MESSAGE_MANAGER.md) Message Manager Utility.

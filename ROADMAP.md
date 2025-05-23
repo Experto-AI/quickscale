@@ -29,179 +29,270 @@
    - ✅ User settings
    - ✅ Bulma CSS for styling
 
+4. **Payment Foundation**:
+   - ✅ Basic Stripe integration
+   - ✅ Basic customer management (create, link to user)
+   - ✅ Product listing and viewing
+   - ✅ Basic product management in admin
+   - ✅ Basic checkout flow
+   - ✅ Payment confirmation
+   - ✅ Stripe webhook handling (basic structure)
+   - ✅ Checkout success/error pages
+   - ❌ Subscription management system
+   - ❌ Advanced webhook event processing
+   - ❌ Payment method management
+   - ❌ Customer billing history
+
 For more details refer to the [CHANGELOG](CHANGELOG.md).
 
-## Components To Be Implemented/In Progress
+## System Architecture Overview
 
-1. **Foundation Components**:
-   - 🔄 Payment processing (Stripe):
-     - ✅ Basic customer management (create, link to user)
-     - ✅ Product listing and viewing
-     - ✅ Basic product management in admin
-     - ✅ Basic checkout flow
-     - ❌ Subscription management system
-     - 🔄 Advanced webhook handling for events
-   - ❌ Credit system for usage tracking
-   - ❌ File upload/storage system with secure access controls
+The QuickScale credit system supports multiple payment models and credit types with flexible billing options. For complete details about the credit system architecture, consumption logic, and technical implementation, see the [Credit System Documentation](docs/CREDIT_SYSTEM.md).
 
-## Projected Development Sprints
+**Key Features:**
+- **Two Credit Types**: Pay-as-you-go (never expire) and subscription credits (monthly expiration)
+- **Three Purchase Options**: Basic plan, Pro plan, and one-time credit purchases
+- **Smart Consumption**: Subscription credits consumed first, then pay-as-you-go credits
+- **Variable Costs**: Each service/product consumes configurable credit amounts
+- **Real-time Tracking**: Complete usage and payment history for users and admins
 
-### Sprint 2: Basic Checkout (v0.12.0)
-- ✅ **Checkout Workflow - Core Implementation**
-  - ✅ Implement check if user is logged in before initiating Stripe Checkout
-    - ✅ If not logged in, prevent redirect and display message prompting registration/login
-    - ✅ If logged in, proceed with Stripe Checkout initiation
-  - ✅ Implement Stripe Checkout in templates/stripe_manager/views.py:
-    - ✅ Create CheckoutView for initiating Stripe Checkout
-    - ✅ Add webhook handler for checkout completion
-    - ✅ Implement success/failure redirects
-  - ✅ Add checkout templates in templates/stripe_manager/templates:
-    - ✅ checkout_success.html: Success confirmation
-    - ✅ checkout_error.html: Error handling
-  - ✅ Implement payment processing:
-    - ✅ Add payment method handling
-    - ✅ Implement payment confirmation
-    - ✅ Add payment error handling
+## Development Sprints
 
-### Sprint 3: Subscription Management (v0.13.0)
-- [ ] **Subscription System**
-  - [ ] Create subscription management:
-    - [ ] Add subscription model in templates/stripe_manager/models.py
-    - [ ] Implement subscription status tracking
-    - [ ] Add subscription lifecycle hooks
-  - [ ] Create tests in templates/tests/stripe_manager:
-    - [ ] Test checkout flow
-    - [ ] Test webhook handling
-    - [ ] Test subscription creation
-    - [ ] Test payment processing
-    - [ ] Test error scenarios
+### Sprint 1: Basic Credit Account Foundation (v0.13.0)
+**Goal**: Create basic credit account system with display page
 
-### Sprint 4: Checkout Integration and Testing (v0.14.0)
-- [ ] **Checkout - Integration and Testing**
-  - [ ] End-to-end testing:
-    - [ ] Test complete user journey
-    - [ ] Test error recovery
-    - [ ] Test edge cases
-  - [ ] Performance testing:
-    - [ ] Test checkout page load times
-    - [ ] Test webhook handling under load
-  - [ ] Security testing:
-    - [ ] Test payment data handling
-    - [ ] Test user authentication
-    - [ ] Test webhook security
-  - [ ] Documentation:
-    - [ ] Update API documentation in docs/
-    - [ ] Add deployment notes
-    - [ ] Update user guide
+**Backend Implementation:**
+- [X] Create `CreditAccount` model linked to users with single balance field
+- [X] Create `CreditTransaction` model with basic fields (amount, description, user, timestamp)
+- [X] Add simple credit balance calculation method
+- [X] Create basic credit operations: `add_credits()` and `get_balance()`
 
-### Sprint 5: Credit System Foundation (v0.15.0)
-- [ ] **Credit System Foundation**
-  - [ ] Create credit balance model tied to user accounts
-  - [ ] Implement credit transaction ledger for tracking usage
-  - [ ] Add automated credit allocation for subscription plans
-  - [ ] Test credit model and basic operations
+**Frontend Implementation:**
+- [X] Create `/dashboard/credits/` page showing current credit balance
+- [X] Add credits section to main dashboard with balance display
+- [X] Show recent 5 credit transactions with simple list
 
-### Sprint 6: User Credit Management (v0.16.0)
-- [ ] **User Credit Dashboard**
-  - [ ] **Step 1: Credit Status UI**
-    - [ ] Add credit balance display to user dashboard
-    - [ ] Create subscription status and renewal information
-    - [ ] Implement credit usage visualization
-    - [ ] Test credit status interface
-  - [ ] **Step 2: Subscription Management**
-    - [ ] Add subscription plan viewing and management
-    - [ ] Implement plan upgrade/downgrade options
-    - [ ] Create cancellation and renewal flows
-    - [ ] Test subscription management functionality
+**Testing:**
+- [X] Unit tests for credit models and basic operations
+- [X] Integration test for credit dashboard page
+- [X] Test credit balance calculation
 
-### Sprint 7: User Credit History (v0.17.0)
-- [ ] **Credit Usage and History**
-  - [ ] **Step 1: Credit Consumption**
-    - [ ] Implement credit deduction for service usage
-    - [ ] Add credit checking before service operations
-    - [ ] Create low-balance notifications and alerts
-    - [ ] Test credit consumption flows
-  - [ ] **Step 2: Transaction History**
-    - [ ] Create transaction history view for users
-    - [ ] Add filtering and categorization for transactions
-    - [ ] Implement receipt generation for payments
-    - [ ] Test transaction history functionality
+**Validation**: User can view their credit balance on a dedicated page
 
-### Sprint 8: Admin Management Interface (v0.18.0)
-- [ ] **Admin Payment Dashboard**
-  - [ ] **Step 1: User Subscription Overview**
-    - [ ] Create user subscription listing and status view
-    - [ ] Add basic reporting for active subscriptions
-    - [ ] Implement subscription search and filtering
-    - [ ] Test admin subscription dashboard
-  - [ ] **Step 2: Payment Management**
-    - [ ] Add payment transaction viewing for admins
-    - [ ] Create tools for handling payment issues
-    - [ ] Implement basic revenue reporting
-    - [ ] Test payment management functionality
+---
 
-### Sprint 9: Customer Support Tools (v0.19.0)
-- [ ] **Customer Support Tools**
-  - [ ] **Step 1: User Credit Management**
-    - [ ] Add admin tools for viewing user credit status
-    - [ ] Create interface for manual credit adjustments
-    - [ ] Implement audit logging for all credit changes
-    - [ ] Test admin credit management tools
-  - [ ] **Step 2: Support Actions**
-    - [ ] Add subscription management capabilities for support
-    - [ ] Create tools for helping users with payment issues
-    - [ ] Implement user communication features
-    - [ ] Test support action functionality
+### Sprint 2: Manual Credit Management (v0.13.1) 
+**Goal**: Admin can manually add/remove credits for testing
 
-### Sprint 10: Security and Compliance (v0.20.0)
-- [ ] **Security and Compliance**
-  - [ ] **Step 1: Payment Security**
-    - [ ] Add enhanced security for payment endpoints
-    - [ ] Implement comprehensive audit logging for financial transactions
-    - [ ] Add PCI compliance measures for payment data
-    - [ ] Test security implementation
-  - [ ] **Step 2: Error Handling**
-    - [ ] Add robust error handling for payments and credit operations
-    - [ ] Create recovery flows for failed transactions
-    - [ ] Implement clear user guidance for payment issues
-    - [ ] Test error scenarios systematically
+**Backend Implementation:**
+- [ ] Add admin interface for `CreditAccount` and `CreditTransaction`
+- [ ] Create admin action to add/remove credits with reason
+- [ ] Add basic validation for credit operations
 
-### Sprint 11: Performance and Scalability (v0.21.0)
-- [ ] **Performance and Scalability**
-  - [ ] **Step 1: Optimization**
-    - [ ] Optimize credit transaction handling for scale
-    - [ ] Implement caching for subscription and plan data
-    - [ ] Add monitoring for payment and credit operations
-    - [ ] Test system under load
-  - [ ] **Step 2: Reliability**
-    - [ ] Implement retry mechanisms for critical operations
-    - [ ] Add transaction isolation for credit operations
-    - [ ] Create data consistency checks for credit balances
-    - [ ] Test system resilience
+**Frontend Implementation:**
+- [ ] Enhance admin interface with credit management tools
+- [ ] Add "Add Credits" form in admin with amount and reason fields
+- [ ] Show admin credit operations in transaction history
 
-### Sprint 12: Storage and Real Time API (v0.22.0)
-- [ ] **Storage - Django-storages**
-  - [ ] Implement Django-storages
-- [ ] **Real Time API - Django-channels**
-  - [ ] Implement Django-channels
+**Testing:**
+- [ ] Tests for admin credit operations
+- [ ] Test credit addition/removal through admin interface
 
-### Sprint 13: Refactor codebase to follow CONTRIBUTING.md (v0.23.0)
-- [ ] **Step 1: Incorporate the 12factor.net principles**
-  - [ ] Implement the 12factor.net principles in the project
-- [ ] **Step 2: Refactor codebase to follow CONTRIBUTING.md**
-  - [ ] Docstrings
-  - [ ] Code complexity (McCabe < 10)
-- [ ] **Step 3: Refactor codebase to follow CONTRIBUTING.md**
-  - [ ] Unit tests, coverage > 80%
-  - [ ] Comments
-- [ ] **Step 4: Refactor codebase to follow CONTRIBUTING.md**
-  - [ ] DRY
-  - [ ] Error handling
-  - [ ] Logging
-- [ ] **Step 5: Refactor codebase to follow CONTRIBUTING.md**
-  - [ ] Autodescriptive class names (iterate over code-tree)
-  - [ ] Autodescriptive function names (iterate over code-tree)
-  - [ ] Autodescriptive variable names, specially in parameters (iterate over code-tree)
-- [ ] **Step 6: Better user experience**
-  - [ ] Better CLI command messages
-  - [ ] Test all CLI commands messages
+**Validation**: Admin can add credits to any user account and user can see the updated balance
+
+---
+
+### Sprint 3: Basic Service Credit Consumption (v0.13.2)
+**Goal**: Create services that consume credits with validation
+
+**Backend Implementation:**
+- [ ] Create `Service` model with name, description, and credit_cost fields
+- [ ] Implement `consume_credits()` method with validation
+- [ ] Add insufficient credits error handling
+- [ ] Create basic service usage tracking
+
+**Frontend Implementation:**
+- [ ] Create `/services/` page listing available services with credit costs
+- [ ] Add "Use Service" buttons that consume credits
+- [ ] Show success/error messages for service usage
+- [ ] Display updated credit balance after service usage
+
+**Testing:**
+- [ ] Tests for credit consumption logic
+- [ ] Tests for insufficient credits scenarios
+- [ ] Integration tests for service usage flow
+
+**Validation**: User can use services that consume credits, see updated balance, and get blocked when insufficient credits
+
+---
+
+### Sprint 4: Pay-as-You-Go Credit Purchase (v0.14.0)
+**Goal**: Users can buy credits that never expire
+
+**Backend Implementation:**
+- [ ] Add `credit_type` field to `CreditTransaction` (PURCHASE, CONSUMPTION, ADMIN)
+- [ ] Create credit purchase packages (100, 500, 1000 credits)
+- [ ] Integrate Stripe Checkout for one-time payments
+- [ ] Add webhook handling for successful payments
+- [ ] Automatic credit allocation on payment success
+
+**Frontend Implementation:**
+- [ ] Create `/dashboard/buy-credits/` page with package options
+- [ ] Add Stripe Checkout integration with package selection
+- [ ] Create payment success/failure pages
+- [ ] Show purchase history in credit transactions
+
+**Testing:**
+- [ ] Tests for credit purchase flow
+- [ ] Tests for Stripe webhook processing
+- [ ] Integration tests for complete purchase process
+
+**Validation**: User can purchase credits with real money and immediately see updated balance
+
+---
+
+### Sprint 5: Basic Monthly Subscription (v0.14.1)
+**Goal**: Implement Basic subscription plan with monthly credits
+
+**Backend Implementation:**
+- [ ] Create `SubscriptionPlan` model (Basic plan: 1000 credits/month)
+- [ ] Create `UserSubscription` model with status and billing date
+- [ ] Add `credit_type` field: SUBSCRIPTION vs PAY_AS_YOU_GO
+- [ ] Create Stripe subscription product for Basic plan
+- [ ] Add subscription webhook handling
+
+**Frontend Implementation:**
+- [ ] Create `/dashboard/subscription/` page showing current plan
+- [ ] Add "Subscribe to Basic" button with Stripe Checkout
+- [ ] Show subscription status and next billing date
+- [ ] Display credit breakdown (subscription vs pay-as-you-go)
+
+**Testing:**
+- [ ] Tests for subscription creation
+- [ ] Tests for subscription credit allocation
+- [ ] Integration tests for subscription flow
+
+**Validation**: User can subscribe to Basic plan and receive monthly credits automatically
+
+---
+
+### Sprint 6: Credit Type Priority System (v0.14.2)
+**Goal**: Implement subscription credits consumed first, then pay-as-you-go
+
+**Backend Implementation:**
+- [ ] Add credit expiration logic for subscription credits
+- [ ] Implement priority consumption (subscription credits first)
+- [ ] Update `consume_credits()` method with priority logic
+- [ ] Add credit expiration handling on billing cycle
+
+**Frontend Implementation:**
+- [ ] Update credit balance display to show breakdown by type
+- [ ] Add expiration dates for subscription credits
+- [ ] Show which credit type is being consumed during service usage
+
+**Testing:**
+- [ ] Tests for credit priority consumption
+- [ ] Tests for credit expiration logic
+- [ ] Integration tests for mixed credit scenarios
+
+**Validation**: User with both credit types sees subscription credits consumed first
+
+---
+
+### Sprint 7: Pro Subscription Plan (v0.14.3)
+**Goal**: Add Pro plan with more credits at better rate
+
+**Backend Implementation:**
+- [ ] Add Pro plan to `SubscriptionPlan` (2500 credits/month, better rate)
+- [ ] Create Stripe subscription product for Pro plan
+- [ ] Add plan upgrade/downgrade logic
+- [ ] Handle prorated billing for plan changes
+
+**Frontend Implementation:**
+- [ ] Add Pro plan option to subscription page
+- [ ] Create plan comparison table (Basic vs Pro)
+- [ ] Add upgrade/downgrade buttons for existing subscribers
+- [ ] Show savings calculation for Pro plan
+
+**Testing:**
+- [ ] Tests for Pro plan subscription
+- [ ] Tests for plan upgrades/downgrades
+- [ ] Integration tests for multiple plan types
+
+**Validation**: User can choose between Basic and Pro plans and upgrade/downgrade
+
+---
+
+### Sprint 8: Payment History & Receipts (v0.15.0)
+**Goal**: Complete payment tracking and receipt system
+
+**Backend Implementation:**
+- [ ] Create `Payment` model for all payment tracking
+- [ ] Link payments to credit transactions and subscriptions
+- [ ] Generate receipt data for all payment types
+- [ ] Add payment status tracking (success, failed, refunded)
+
+**Frontend Implementation:**
+- [ ] Create `/dashboard/payments/` page with payment history
+- [ ] Show detailed payment information (amount, date, type, status)
+- [ ] Add downloadable receipts for each payment
+- [ ] Separate views for subscription payments vs credit purchases
+
+**Testing:**
+- [ ] Tests for payment tracking
+- [ ] Tests for receipt generation
+- [ ] Integration tests for payment history display
+
+**Validation**: User can view complete payment history with downloadable receipts
+
+---
+
+### Sprint 9: Admin Support Dashboard (v0.15.1)
+**Goal**: Admin tools to help users with credit/subscription issues
+
+**Backend Implementation:**
+- [ ] Create admin views to search and view any user's account
+- [ ] Add admin tools for manual credit adjustments
+- [ ] Create audit logging for all admin actions
+- [ ] Add user account override capabilities
+
+**Frontend Implementation:**
+- [ ] Create admin dashboard with user search
+- [ ] Show complete user credit status (same view as user dashboard)
+- [ ] Add admin tools for credit adjustments and subscription changes
+- [ ] Display admin action history and audit logs
+
+**Testing:**
+- [ ] Tests for admin user account access
+- [ ] Tests for admin credit operations
+- [ ] Tests for audit logging
+
+**Validation**: Admin can search any user, view their complete credit status, and make adjustments
+
+---
+
+### Sprint 10: Basic Analytics Dashboard (v0.16.0)
+**Goal**: Simple revenue and user analytics for business insights
+
+**Backend Implementation:**
+- [ ] Create basic analytics calculations (total revenue, active subscriptions)
+- [ ] Add user count metrics (total, active subscribers, credit purchasers)
+- [ ] Calculate most popular services by credit consumption
+- [ ] Add monthly revenue tracking
+
+**Frontend Implementation:**
+- [ ] Create `/admin/analytics/` page with key metrics
+- [ ] Show total revenue, subscription revenue, credit purchase revenue
+- [ ] Display user counts and subscription plan distribution
+- [ ] Add simple charts for monthly revenue trends
+
+**Testing:**
+- [ ] Tests for analytics calculations
+- [ ] Tests for analytics dashboard display
+- [ ] Integration tests for real-time metrics
+
+**Validation**: Admin can view business metrics and revenue analytics
+
+---
+
+
