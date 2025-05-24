@@ -1,0 +1,143 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}Available Services{% endblock %}
+
+{% block content %}
+<div class="container">
+    <div class="columns">
+        <div class="column is-12">
+            <h1 class="title">Available Services</h1>
+            
+            <!-- Current Balance Section -->
+            <div class="box">
+                <div class="level">
+                    <div class="level-left">
+                        <div class="level-item">
+                            <div>
+                                <p class="heading">Current Balance</p>
+                                <p class="title is-4" id="credit-balance">{{ current_balance }} credits</p>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="level-right">
+                        <div class="level-item">
+                            <a href="{% url 'credits:dashboard' %}" class="button is-link">
+                                <span class="icon">
+                                    <i class="fas fa-chart-line"></i>
+                                </span>
+                                <span>Credits Dashboard</span>
+                            </a>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Services Section -->
+            {% if services %}
+                <div class="columns is-multiline">
+                    {% for service in services %}
+                    <div class="column is-6-tablet is-4-desktop">
+                        <div class="card">
+                            <div class="card-content">
+                                <div class="media">
+                                    <div class="media-content">
+                                        <p class="title is-5">{{ service.name }}</p>
+                                        <p class="subtitle is-6">
+                                            <span class="tag is-primary">{{ service.credit_cost }} credits</span>
+                                        </p>
+                                    </div>
+                                </div>
+
+                                <div class="content">
+                                    <p>{{ service.description }}</p>
+                                    
+                                    {% if service.user_usage_count > 0 %}
+                                        <p class="has-text-grey-dark">
+                                            <small>
+                                                <span class="icon is-small">
+                                                    <i class="fas fa-history"></i>
+                                                </span>
+                                                Used {{ service.user_usage_count }} time{{ service.user_usage_count|pluralize }}
+                                            </small>
+                                        </p>
+                                    {% endif %}
+                                </div>
+                            </div>
+                            
+                            <footer class="card-footer">
+                                {% if current_balance >= service.credit_cost %}
+                                    <form method="post" action="{% url 'credits:use_service' service.id %}" class="card-footer-item"
+                                          x-data="{ loading: false }"
+                                          x-on:submit="loading = true">
+                                        {% csrf_token %}
+                                        <button type="submit" class="button is-success is-fullwidth" 
+                                                x-bind:class="{ 'is-loading': loading }"
+                                                x-bind:disabled="loading">
+                                            <span class="icon">
+                                                <i class="fas fa-play"></i>
+                                            </span>
+                                            <span>Use Service</span>
+                                        </button>
+                                    </form>
+                                {% else %}
+                                    <div class="card-footer-item">
+                                        <button class="button is-danger is-fullwidth" disabled title="Insufficient credits">
+                                            <span class="icon">
+                                                <i class="fas fa-ban"></i>
+                                            </span>
+                                            <span>Insufficient Credits</span>
+                                        </button>
+                                    </div>
+                                {% endif %}
+                            </footer>
+                        </div>
+                    </div>
+                    {% endfor %}
+                </div>
+            {% else %}
+                <div class="box">
+                    <div class="notification is-info is-light">
+                        <p><strong>No services available!</strong></p>
+                        <p>There are currently no services available for use. Please check back later or contact support.</p>
+                    </div>
+                </div>
+            {% endif %}
+
+            <!-- Information Section -->
+            <div class="box">
+                <h2 class="subtitle">How It Works</h2>
+                <div class="content">
+                    <ul>
+                        <li><strong>Select a Service:</strong> Choose from the available services above</li>
+                        <li><strong>Check Credits:</strong> Make sure you have enough credits for the service</li>
+                        <li><strong>Use Service:</strong> Click "Use Service" to consume credits and access the functionality</li>
+                        <li><strong>Track Usage:</strong> View your usage history in the Credits Dashboard</li>
+                    </ul>
+                </div>
+                
+                {% if current_balance == 0 %}
+                <div class="notification is-warning is-light">
+                    <p><strong>No credits available!</strong></p>
+                    <p>You need credits to use services. Visit the <a href="{% url 'credits:dashboard' %}">Credits Dashboard</a> to learn how to get credits.</p>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    // Auto-refresh credit balance every 30 seconds
+    setInterval(function() {
+        fetch('{% url "credits:balance_api" %}')
+            .then(response => response.json())
+            .then(data => {
+                document.getElementById('credit-balance').textContent = data.formatted_balance;
+            })
+            .catch(error => console.log('Error refreshing balance:', error));
+    }, 30000);
+});
+</script>
+{% endblock %} 
