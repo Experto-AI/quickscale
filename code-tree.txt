@@ -1,7 +1,7 @@
 quickscale
 ├── dist
-│   ├── quickscale-0.12.0-py3-none-any.whl
-│   └── quickscale-0.12.0.tar.gz
+│   ├── quickscale-0.13.0-py3-none-any.whl
+│   └── quickscale-0.13.0.tar.gz
 ├── docs
 │   ├── contrib
 │   │   ├── 01_ai_programming_assistant.md
@@ -13,6 +13,7 @@ quickscale
 │   │   └── 07_task_focus_and_ai_workflow.md
 │   ├── CREDIT_SYSTEM.md
 │   ├── DATABASE_VARIABLES.md
+│   ├── MANUAL_CREDIT_MANAGEMENT.md
 │   └── MESSAGE_MANAGER.md
 ├── htmlcov
 │   ├── class_index.html
@@ -272,10 +273,23 @@ quickscale
 │   │   │   ├── __init__.py
 │   │   │   ├── admin.py
 │   │   │   │   ├── CreditAccountAdmin {}
-│   │   │   │   │   └── get_balance(self, obj)
+│   │   │   │   │   ├── get_balance(self, obj)
+│   │   │   │   │   ├── credit_actions(self, obj)
+│   │   │   │   │   ├── get_urls(self)
+│   │   │   │   │   ├── add_credits_view(self, request, account_id)
+│   │   │   │   │   ├── remove_credits_view(self, request, account_id)
+│   │   │   │   │   └── bulk_add_credits(self, request, queryset)
 │   │   │   │   └── CreditTransactionAdmin {}
+│   │   │   │       ├── transaction_type(self, obj)
+│   │   │   │       ├── has_add_permission(self, request)
+│   │   │   │       ├── has_change_permission(self, request, obj)
+│   │   │   │       └── has_delete_permission(self, request, obj)
 │   │   │   ├── apps.py
 │   │   │   │   └── CreditsConfig {}
+│   │   │   ├── forms.py
+│   │   │   │   └── AdminCreditAdjustmentForm {}
+│   │   │   │       ├── clean_amount(self)
+│   │   │   │       └── clean_reason(self)
 │   │   │   ├── models.py
 │   │   │   │   ├── CreditAccount {}
 │   │   │   │   │   ├── Meta {}
@@ -593,6 +607,9 @@ quickscale
 │   │   │   │   ├── verification_sent.html
 │   │   │   │   └── verified_email_required.html
 │   │   │   ├── admin
+│   │   │   │   ├── credits
+│   │   │   │   │   ├── bulk_credit_adjustment.html
+│   │   │   │   │   └── credit_adjustment.html
 │   │   │   │   └── stripe_manager
 │   │   │   │       └── stripeproduct
 │   │   │   │           └── change_list.html
@@ -1007,27 +1024,21 @@ quickscale
 │   │   │       ├── test_handle_init_command_uses_message_manager(self, mock_message_manager)
 │   │   │       └── test_handle_check_command_output_uses_message_manager(self, mock_message_manager)
 │   │   ├── test_credits_system.py
+│   │   │   ├── temp_project_dir()
 │   │   │   ├── TestCreditsSystemIntegration {}
-│   │   │   │   ├── temp_project_dir(self)
 │   │   │   │   ├── credits_project(self, temp_project_dir)
 │   │   │   │   ├── test_credits_app_structure_in_generated_project(self, credits_project)
 │   │   │   │   ├── test_credits_configuration_in_settings(self, credits_project)
 │   │   │   │   ├── test_credits_urls_in_main_config(self, credits_project)
 │   │   │   │   ├── test_dashboard_integration_with_credits(self, credits_project)
 │   │   │   │   └── test_dashboard_template_shows_credits(self, credits_project)
-│   │   │   ├── TestCreditsSystemFunctionality {}
-│   │   │   │   ├── test_credit_models_structure(self)
-│   │   │   │   ├── test_credit_views_structure(self)
-│   │   │   │   ├── test_credit_urls_structure(self)
-│   │   │   │   ├── test_credit_admin_structure(self)
-│   │   │   │   ├── test_credit_migration_structure(self)
-│   │   │   │   └── test_credit_template_structure(self)
-│   │   │   └── TestCreditsSystemWithDatabase {}
-│   │   │       ├── django_project_with_db(self, temp_project_dir)
-│   │   │       ├── test_credit_account_creation(self, django_project_with_db)
-│   │   │       ├── test_credit_transaction_creation(self, django_project_with_db)
-│   │   │       ├── test_balance_calculation(self, django_project_with_db)
-│   │   │       └── test_dashboard_view_rendering(self, django_project_with_db)
+│   │   │   └── TestCreditsSystemFunctionality {}
+│   │   │       ├── test_credit_models_structure(self)
+│   │   │       ├── test_credit_views_structure(self)
+│   │   │       ├── test_credit_urls_structure(self)
+│   │   │       ├── test_credit_admin_structure(self)
+│   │   │       ├── test_credit_migration_structure(self)
+│   │   │       └── test_credit_template_structure(self)
 │   │   ├── test_init_integration.py
 │   │   │   └── TestInitIntegration {}
 │   │   │       ├── test_init_command_basics(self, script_runner, tmp_path)
@@ -1336,6 +1347,27 @@ quickscale
 │   │   │       ├── test_validate_config_with_invalid_data(self)
 │   │   │       ├── test_find_default_config(self)
 │   │   │       └── test_find_default_config_current_directory(self)
+│   │   ├── test_credits_admin_sprint2.py
+│   │   │   ├── Sprint2AdminTemplateTests {}
+│   │   │   │   ├── setUp(self)
+│   │   │   │   ├── test_admin_templates_exist(self)
+│   │   │   │   ├── test_forms_py_exists(self)
+│   │   │   │   ├── test_admin_credit_adjustment_form_exists(self)
+│   │   │   │   ├── test_enhanced_admin_configuration(self)
+│   │   │   │   ├── test_credit_account_admin_enhancements(self)
+│   │   │   │   ├── test_credit_transaction_admin_enhancements(self)
+│   │   │   │   ├── test_credit_adjustment_template_structure(self)
+│   │   │   │   ├── test_bulk_credit_adjustment_template_structure(self)
+│   │   │   │   ├── test_admin_url_patterns(self)
+│   │   │   │   ├── test_form_validation_and_security(self)
+│   │   │   │   ├── test_admin_operation_attribution(self)
+│   │   │   │   ├── test_balance_validation_logic(self)
+│   │   │   │   └── test_success_message_configuration(self)
+│   │   │   └── Sprint2IntegrationTests {}
+│   │   │       ├── setUp(self)
+│   │   │       ├── test_admin_forms_integration(self)
+│   │   │       ├── test_models_admin_integration(self)
+│   │   │       └── test_complete_sprint2_implementation(self)
 │   │   ├── test_credits_templates.py
 │   │   │   ├── CreditsTemplateTests {}
 │   │   │   │   ├── setUp(self)

@@ -1,0 +1,137 @@
+{% extends "admin/base_site.html" %}
+{% load i18n admin_urls static admin_modify %}
+
+{% block title %}{{ title }}{% endblock %}
+
+{% block breadcrumbs %}
+<div class="breadcrumbs">
+    <a href="{% url 'admin:index' %}">{% trans 'Home' %}</a>
+    &rsaquo; <a href="{% url 'admin:app_list' app_label='credits' %}">{% trans 'Credits' %}</a>
+    &rsaquo; <a href="{% url 'admin:credits_creditaccount_changelist' %}">{% trans 'Credit accounts' %}</a>
+    &rsaquo; {{ title }}
+</div>
+{% endblock %}
+
+{% block content %}
+<h1>{{ title }}</h1>
+
+<div class="module aligned">
+    <h2>Account Information</h2>
+    <div class="form-row">
+        <div class="field-box">
+            <strong>User:</strong> {{ account.user.email }}
+            {% if account.user.first_name or account.user.last_name %}
+                ({{ account.user.first_name }} {{ account.user.last_name }})
+            {% endif %}
+        </div>
+    </div>
+    <div class="form-row">
+        <div class="field-box">
+            <strong>Current Balance:</strong> 
+            <span style="font-size: 1.2em; font-weight: bold; color: #007cba;">
+                {{ current_balance }} credits
+            </span>
+        </div>
+    </div>
+</div>
+
+<form method="post">
+    {% csrf_token %}
+    
+    <div class="module aligned">
+        <h2>{{ action_type }} Credits</h2>
+        
+        {% if form.errors %}
+            <div class="errornote">
+                <p>Please correct the error{{ form.errors|pluralize }} below.</p>
+                {{ form.errors }}
+            </div>
+        {% endif %}
+
+        <div class="form-row">
+            <div class="field-box">
+                {{ form.amount.label_tag }}
+                {{ form.amount }}
+                {% if form.amount.help_text %}
+                    <p class="help">{{ form.amount.help_text }}</p>
+                {% endif %}
+                {% if form.amount.errors %}
+                    <ul class="errorlist">
+                        {% for error in form.amount.errors %}
+                            <li>{{ error }}</li>
+                        {% endfor %}
+                    </ul>
+                {% endif %}
+            </div>
+        </div>
+
+        <div class="form-row">
+            <div class="field-box">
+                {{ form.reason.label_tag }}
+                {{ form.reason }}
+                {% if form.reason.help_text %}
+                    <p class="help">{{ form.reason.help_text }}</p>
+                {% endif %}
+                {% if form.reason.errors %}
+                    <ul class="errorlist">
+                        {% for error in form.reason.errors %}
+                            <li>{{ error }}</li>
+                        {% endfor %}
+                    </ul>
+                {% endif %}
+            </div>
+        </div>
+
+        {% if action_type == 'Remove' %}
+            <div class="form-row">
+                <div class="field-box">
+                    <p class="help" style="color: #ba2121; font-weight: bold;">
+                        ⚠️ Warning: This will remove credits from the user's account. 
+                        Current balance: {{ current_balance }} credits.
+                    </p>
+                </div>
+            </div>
+        {% endif %}
+    </div>
+
+    <div class="submit-row">
+        <input type="submit" value="{% if action_type == 'Add' %}Add Credits{% else %}Remove Credits{% endif %}" class="default" />
+        <a href="{% url 'admin:credits_creditaccount_changelist' %}" class="button cancel-link">Cancel</a>
+    </div>
+</form>
+
+<style>
+    .field-box {
+        margin-bottom: 15px;
+    }
+    .field-box label {
+        display: block;
+        font-weight: bold;
+        margin-bottom: 5px;
+    }
+    .field-box input, .field-box textarea {
+        width: 100%;
+        max-width: 400px;
+        padding: 6px 8px;
+        border: 1px solid #ccc;
+        border-radius: 4px;
+    }
+    .help {
+        font-size: 11px;
+        color: #666;
+        margin-top: 5px;
+    }
+    .cancel-link {
+        margin-left: 10px;
+        padding: 8px 15px;
+        background: #f8f8f8;
+        border: 1px solid #ccc;
+        text-decoration: none;
+        color: #333;
+        border-radius: 4px;
+    }
+    .cancel-link:hover {
+        background: #e8e8e8;
+    }
+</style>
+{% endblock %} 
