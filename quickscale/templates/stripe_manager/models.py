@@ -1,6 +1,57 @@
 from django.db import models
 from django.core.validators import MinValueValidator
 from django.utils.translation import gettext_lazy as _
+from django.contrib.auth import get_user_model
+
+User = get_user_model()
+
+
+class StripeCustomer(models.Model):
+    """Model for linking Django users with Stripe customers."""
+    
+    user = models.OneToOneField(
+        User,
+        on_delete=models.CASCADE,
+        related_name='stripe_customer',
+        verbose_name=_('User')
+    )
+    stripe_id = models.CharField(
+        _('Stripe Customer ID'),
+        max_length=255,
+        unique=True,
+        blank=True,
+        help_text=_('Stripe customer ID')
+    )
+    email = models.EmailField(
+        _('Email'),
+        help_text=_('Email address used in Stripe')
+    )
+    name = models.CharField(
+        _('Name'),
+        max_length=255,
+        blank=True,
+        help_text=_('Customer name in Stripe')
+    )
+    created_at = models.DateTimeField(
+        _('Created At'),
+        auto_now_add=True
+    )
+    updated_at = models.DateTimeField(
+        _('Updated At'),
+        auto_now=True
+    )
+
+    class Meta:
+        verbose_name = _('Stripe Customer')
+        verbose_name_plural = _('Stripe Customers')
+        indexes = [
+            models.Index(fields=['stripe_id']),
+            models.Index(fields=['user']),
+        ]
+
+    def __str__(self):
+        return f"{self.user.email} ({self.stripe_id or 'No Stripe ID'})"
+
 
 class StripeProduct(models.Model):
     """Model for storing Stripe products with display configuration."""
@@ -48,6 +99,14 @@ class StripeProduct(models.Model):
         help_text=_('Billing interval for subscription products')
     )
 
+    # Credit Configuration
+    credit_amount = models.IntegerField(
+        _('Credit Amount'),
+        validators=[MinValueValidator(1)],
+        default=1000,
+        help_text=_('Number of credits provided by this product')
+    )
+
     # Display
     display_order = models.IntegerField(
         _('Display Order'),
@@ -90,6 +149,23 @@ class StripeProduct(models.Model):
 
     def __str__(self):
         return f"{self.name} ({self.get_interval_display()})"
+
+    @property
+    def price_per_credit(self):
+        """Calculate price per credit for this product."""
+        if self.credit_amount and self.credit_amount > 0 and self.price:
+            return self.price / self.credit_amount
+        return 0
+
+    @property
+    def is_subscription(self):
+        """Check if this is a subscription product."""
+        return self.interval in ['month', 'year']
+
+    @property
+    def is_one_time(self):
+        """Check if this is a one-time purchase product."""
+        return self.interval == 'one-time'
 
     def sync_with_stripe(self):
         """Sync product data with Stripe."""

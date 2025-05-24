@@ -1,7 +1,7 @@
 quickscale
 ├── dist
-│   ├── quickscale-0.13.0-py3-none-any.whl
-│   └── quickscale-0.13.0.tar.gz
+│   ├── quickscale-0.15.0-py3-none-any.whl
+│   └── quickscale-0.15.0.tar.gz
 ├── docs
 │   ├── contrib
 │   │   ├── 01_ai_programming_assistant.md
@@ -266,10 +266,20 @@ quickscale
 │   │   │   ├── migrations
 │   │   │   │   ├── 0001_initial.py
 │   │   │   │   │   └── Migration {}
+│   │   │   │   ├── 0002_add_services.py
+│   │   │   │   │   └── Migration {}
+│   │   │   │   ├── 0003_add_credit_type.py
+│   │   │   │   │   └── Migration {}
+│   │   │   │   ├── 0004_add_credit_purchase_package.py
+│   │   │   │   │   └── Migration {}
+│   │   │   │   ├── 0005_remove_credit_purchase_package.py
+│   │   │   │   │   └── Migration {}
 │   │   │   │   └── __init__.py
 │   │   │   ├── templates
 │   │   │   │   └── credits
-│   │   │   │       └── dashboard.html
+│   │   │   │       ├── buy_credits.html
+│   │   │   │       ├── dashboard.html
+│   │   │   │       └── services.html
 │   │   │   ├── __init__.py
 │   │   │   ├── admin.py
 │   │   │   │   ├── CreditAccountAdmin {}
@@ -279,8 +289,15 @@ quickscale
 │   │   │   │   │   ├── add_credits_view(self, request, account_id)
 │   │   │   │   │   ├── remove_credits_view(self, request, account_id)
 │   │   │   │   │   └── bulk_add_credits(self, request, queryset)
-│   │   │   │   └── CreditTransactionAdmin {}
-│   │   │   │       ├── transaction_type(self, obj)
+│   │   │   │   ├── CreditTransactionAdmin {}
+│   │   │   │   │   ├── transaction_type(self, obj)
+│   │   │   │   │   ├── has_add_permission(self, request)
+│   │   │   │   │   ├── has_change_permission(self, request, obj)
+│   │   │   │   │   └── has_delete_permission(self, request, obj)
+│   │   │   │   ├── ServiceAdmin {}
+│   │   │   │   │   └── usage_count(self, obj)
+│   │   │   │   └── ServiceUsageAdmin {}
+│   │   │   │       ├── get_credit_cost(self, obj)
 │   │   │   │       ├── has_add_permission(self, request)
 │   │   │   │       ├── has_change_permission(self, request, obj)
 │   │   │   │       └── has_delete_permission(self, request, obj)
@@ -291,20 +308,38 @@ quickscale
 │   │   │   │       ├── clean_amount(self)
 │   │   │   │       └── clean_reason(self)
 │   │   │   ├── models.py
+│   │   │   │   ├── Service {}
+│   │   │   │   │   ├── Meta {}
+│   │   │   │   │   └── __str__(self)
 │   │   │   │   ├── CreditAccount {}
 │   │   │   │   │   ├── Meta {}
 │   │   │   │   │   ├── __str__(self)
 │   │   │   │   │   ├── get_balance(self)
-│   │   │   │   │   ├── add_credits(self, amount, description)
+│   │   │   │   │   ├── add_credits(self, amount, description, credit_type)
+│   │   │   │   │   ├── consume_credits(self, amount, description)
 │   │   │   │   │   └── get_or_create_for_user(cls, user)
-│   │   │   │   └── CreditTransaction {}
-│   │   │   │       ├── Meta {}
-│   │   │   │       ├── __str__(self)
-│   │   │   │       └── transactions(self)
+│   │   │   │   ├── CreditTransaction {}
+│   │   │   │   │   ├── Meta {}
+│   │   │   │   │   ├── __str__(self)
+│   │   │   │   │   ├── transactions(self)
+│   │   │   │   │   ├── is_purchase(self)
+│   │   │   │   │   ├── is_consumption(self)
+│   │   │   │   │   └── is_admin_adjustment(self)
+│   │   │   │   ├── ServiceUsage {}
+│   │   │   │   │   ├── Meta {}
+│   │   │   │   │   └── __str__(self)
+│   │   │   │   └── InsufficientCreditsError {}
 │   │   │   ├── urls.py
 │   │   │   └── views.py
 │   │   │       ├── credits_dashboard(request)
-│   │   │       └── credit_balance_api(request)
+│   │   │       ├── buy_credits(request)
+│   │   │       ├── create_checkout_session(request)
+│   │   │       ├── purchase_success(request)
+│   │   │       ├── purchase_cancel(request)
+│   │   │       ├── credit_balance_api(request)
+│   │   │       ├── services_list(request)
+│   │   │       ├── use_service(request, service_id)
+│   │   │       └── service_usage_api(request, service_id)
 │   │   ├── dashboard
 │   │   │   ├── migrations
 │   │   │   │   ├── 0001_initial.py
@@ -424,6 +459,10 @@ quickscale
 │   │   │   ├── migrations
 │   │   │   │   ├── 0001_initial.py
 │   │   │   │   │   └── Migration {}
+│   │   │   │   ├── 0002_add_stripe_customer.py
+│   │   │   │   │   └── Migration {}
+│   │   │   │   ├── 0003_add_credit_amount.py
+│   │   │   │   │   └── Migration {}
 │   │   │   │   ├── README.md
 │   │   │   │   └── __init__.py
 │   │   │   ├── templates
@@ -511,7 +550,10 @@ quickscale
 │   │   │   │       └── create_mock_products_with_prices(count)
 │   │   │   ├── __init__.py
 │   │   │   ├── admin.py
+│   │   │   │   ├── StripeCustomerAdmin {}
+│   │   │   │   │   └── get_readonly_fields(self, request, obj)
 │   │   │   │   └── StripeProductAdmin {}
+│   │   │   │       ├── price_per_credit_display(self, obj)
 │   │   │   │       ├── get_urls(self)
 │   │   │   │       ├── sync_product(self, request, object_id)
 │   │   │   │       ├── get_actions(self, request)
@@ -522,9 +564,15 @@ quickscale
 │   │   │   │   └── StripeConfig {}
 │   │   │   │       └── ready(self)
 │   │   │   ├── models.py
+│   │   │   │   ├── StripeCustomer {}
+│   │   │   │   │   ├── Meta {}
+│   │   │   │   │   └── __str__(self)
 │   │   │   │   └── StripeProduct {}
 │   │   │   │       ├── Meta {}
 │   │   │   │       ├── __str__(self)
+│   │   │   │       ├── price_per_credit(self)
+│   │   │   │       ├── is_subscription(self)
+│   │   │   │       ├── is_one_time(self)
 │   │   │   │       ├── sync_with_stripe(self)
 │   │   │   │       └── clean(self)
 │   │   │   ├── stripe_manager.py
@@ -556,7 +604,7 @@ quickscale
 │   │   │   │       ├── confirm_payment_intent(self, payment_intent_id, payment_method)
 │   │   │   │       ├── cancel_payment_intent(self, payment_intent_id)
 │   │   │   │       ├── list_payment_intents(self, customer_id, limit)
-│   │   │   │       ├── create_checkout_session(self, price_id, quantity, success_url, cancel_url, customer_email, metadata)
+│   │   │   │       ├── create_checkout_session(self, price_id, quantity, success_url, cancel_url, customer_email, customer_id, metadata)
 │   │   │   │       ├── create_refund(self, payment_intent_id, amount, reason, metadata)
 │   │   │   │       ├── sync_product_to_stripe(self, product_obj)
 │   │   │   │       ├── sync_product_from_stripe(self, stripe_product_id, product_model)
@@ -695,8 +743,6 @@ quickscale
 │   │   │   │   │   └── Migration {}
 │   │   │   │   ├── 0003_alter_customuser_options.py
 │   │   │   │   │   └── Migration {}
-│   │   │   │   ├── 0004_stripecustomer.py
-│   │   │   │   │   └── Migration {}
 │   │   │   │   └── __init__.py
 │   │   │   ├── tests
 │   │   │   │   ├── __init__.py
@@ -739,13 +785,10 @@ quickscale
 │   │   │   │   ├── CustomUserManager {}
 │   │   │   │   │   ├── create_user(self, email, password)
 │   │   │   │   │   └── create_superuser(self, email, password)
-│   │   │   │   ├── CustomUser {}
-│   │   │   │   │   ├── Meta {}
-│   │   │   │   │   ├── __str__(self)
-│   │   │   │   │   └── get_full_name(self)
-│   │   │   │   └── StripeCustomer {}
+│   │   │   │   └── CustomUser {}
 │   │   │   │       ├── Meta {}
-│   │   │   │       └── __str__(self)
+│   │   │   │       ├── __str__(self)
+│   │   │   │       └── get_full_name(self)
 │   │   │   ├── signup.html
 │   │   │   ├── urls.py
 │   │   │   ├── validators.py
@@ -1023,6 +1066,22 @@ quickscale
 │   │   │       ├── test_handle_log_scan_output_uses_message_manager(self, mock_message_manager)
 │   │   │       ├── test_handle_init_command_uses_message_manager(self, mock_message_manager)
 │   │   │       └── test_handle_check_command_output_uses_message_manager(self, mock_message_manager)
+│   │   ├── test_credits_sprint3_integration.py
+│   │   │   └── Sprint3IntegrationTests {}
+│   │   │       ├── setUpClass(cls)
+│   │   │       ├── tearDownClass(cls)
+│   │   │       ├── test_credits_app_files_exist(self)
+│   │   │       ├── test_service_models_in_generated_project(self)
+│   │   │       ├── test_service_views_in_generated_project(self)
+│   │   │       ├── test_service_urls_in_generated_project(self)
+│   │   │       ├── test_service_admin_in_generated_project(self)
+│   │   │       ├── test_services_template_in_generated_project(self)
+│   │   │       ├── test_dashboard_template_updated_in_generated_project(self)
+│   │   │       ├── test_migrations_are_valid(self)
+│   │   │       ├── test_credits_app_in_settings(self)
+│   │   │       ├── test_credits_urls_in_main_urls(self)
+│   │   │       ├── test_project_can_be_built(self)
+│   │   │       └── test_migrations_can_be_made(self)
 │   │   ├── test_credits_system.py
 │   │   │   ├── temp_project_dir()
 │   │   │   ├── TestCreditsSystemIntegration {}
@@ -1368,6 +1427,96 @@ quickscale
 │   │   │       ├── test_admin_forms_integration(self)
 │   │   │       ├── test_models_admin_integration(self)
 │   │   │       └── test_complete_sprint2_implementation(self)
+│   │   ├── test_credits_migration_fix.py
+│   │   │   ├── CreditTypeMigrationFixTests {}
+│   │   │   │   ├── test_credit_transaction_model_template_has_credit_type_field(self)
+│   │   │   │   ├── test_credit_type_field_in_model_indexes(self)
+│   │   │   │   ├── test_migration_file_exists_for_credit_type(self)
+│   │   │   │   ├── test_migration_dependencies_are_correct(self)
+│   │   │   │   ├── test_credit_transaction_meta_class_has_correct_indexes(self)
+│   │   │   │   ├── test_credit_transaction_admin_template_handles_credit_type(self)
+│   │   │   │   ├── test_no_duplicate_stripe_customer_models(self)
+│   │   │   │   └── test_no_stripe_customer_migration_in_users_app(self)
+│   │   │   └── CreditTransactionTemplateConsistencyTests {}
+│   │   │       ├── test_credit_type_choices_consistency(self)
+│   │   │       └── test_migration_matches_model_definition(self)
+│   │   ├── test_credits_sprint3.py
+│   │   │   ├── ServiceModelTests {}
+│   │   │   │   ├── setUp(self)
+│   │   │   │   ├── test_service_model_exists(self)
+│   │   │   │   ├── test_service_model_validation(self)
+│   │   │   │   ├── test_service_model_meta_options(self)
+│   │   │   │   └── test_service_model_string_representation(self)
+│   │   │   ├── ServiceUsageModelTests {}
+│   │   │   │   ├── setUp(self)
+│   │   │   │   ├── test_service_usage_model_exists(self)
+│   │   │   │   ├── test_service_usage_model_relationships(self)
+│   │   │   │   └── test_service_usage_model_meta_options(self)
+│   │   │   ├── CreditConsumptionTests {}
+│   │   │   │   ├── setUp(self)
+│   │   │   │   ├── test_consume_credits_method_exists(self)
+│   │   │   │   ├── test_insufficient_credits_error_exists(self)
+│   │   │   │   └── test_atomic_transaction_usage(self)
+│   │   │   ├── ServiceViewsTests {}
+│   │   │   │   ├── setUp(self)
+│   │   │   │   ├── test_services_list_view_exists(self)
+│   │   │   │   ├── test_use_service_view_exists(self)
+│   │   │   │   ├── test_use_service_error_handling(self)
+│   │   │   │   └── test_service_usage_api_view_exists(self)
+│   │   │   ├── ServiceUrlsTests {}
+│   │   │   │   ├── setUp(self)
+│   │   │   │   └── test_service_urls_exist(self)
+│   │   │   ├── ServiceAdminTests {}
+│   │   │   │   ├── setUp(self)
+│   │   │   │   ├── test_service_admin_exists(self)
+│   │   │   │   └── test_service_usage_admin_exists(self)
+│   │   │   ├── ServiceTemplatesTests {}
+│   │   │   │   ├── setUp(self)
+│   │   │   │   ├── test_services_template_exists(self)
+│   │   │   │   ├── test_services_template_structure(self)
+│   │   │   │   └── test_dashboard_template_updated(self)
+│   │   │   └── ServiceMigrationTests {}
+│   │   │       ├── setUp(self)
+│   │   │       ├── test_services_migration_exists(self)
+│   │   │       └── test_services_migration_structure(self)
+│   │   ├── test_credits_sprint4.py
+│   │   │   ├── StripeProductCreditEnhancementTests {}
+│   │   │   │   ├── setUp(self)
+│   │   │   │   ├── test_stripe_product_credit_amount_field(self)
+│   │   │   │   ├── test_stripe_product_credit_methods(self)
+│   │   │   │   └── test_stripe_product_admin_credit_display(self)
+│   │   │   ├── CreditTransactionTypeTests {}
+│   │   │   │   ├── setUp(self)
+│   │   │   │   ├── test_credit_type_field_exists(self)
+│   │   │   │   └── test_credit_type_properties(self)
+│   │   │   ├── CreditAccountMethodTests {}
+│   │   │   │   ├── setUp(self)
+│   │   │   │   ├── test_add_credits_method_updated(self)
+│   │   │   │   ├── test_consume_credits_method_updated(self)
+│   │   │   │   └── test_credit_purchase_package_removed(self)
+│   │   │   ├── CreditPurchaseViewsTests {}
+│   │   │   │   ├── setUp(self)
+│   │   │   │   ├── test_buy_credits_view_uses_stripe_product(self)
+│   │   │   │   ├── test_create_checkout_session_view_updated(self)
+│   │   │   │   └── test_purchase_success_view_updated(self)
+│   │   │   ├── CreditPurchaseTemplateTests {}
+│   │   │   │   ├── setUp(self)
+│   │   │   │   ├── test_buy_credits_template_exists(self)
+│   │   │   │   └── test_buy_credits_template_uses_products(self)
+│   │   │   ├── StripeCustomerModelTests {}
+│   │   │   │   ├── setUp(self)
+│   │   │   │   ├── test_stripe_customer_model_exists(self)
+│   │   │   │   └── test_stripe_customer_relationships(self)
+│   │   │   ├── WebhookHandlingTests {}
+│   │   │   │   ├── setUp(self)
+│   │   │   │   └── test_webhook_credit_product_handling(self)
+│   │   │   ├── AdminIntegrationTests {}
+│   │   │   │   ├── setUp(self)
+│   │   │   │   ├── test_credit_purchase_package_admin_removed(self)
+│   │   │   │   └── test_stripe_product_admin_enhanced(self)
+│   │   │   └── MigrationTests {}
+│   │   │       ├── setUp(self)
+│   │   │       └── test_removal_migration_exists(self)
 │   │   ├── test_credits_templates.py
 │   │   │   ├── CreditsTemplateTests {}
 │   │   │   │   ├── setUp(self)

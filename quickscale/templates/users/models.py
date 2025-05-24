@@ -91,37 +91,3 @@ class CustomUser(AbstractUser):
         if self.first_name and self.last_name:
             return f"{self.first_name} {self.last_name}"
         return self.email 
-
-class StripeCustomer(models.Model):
-    """
-    Model representing a Stripe customer linked to a user.
-    
-    This model stores the relationship between a Django user and their
-    corresponding Stripe customer ID, allowing the application to track
-    which user is associated with which Stripe customer.
-    """
-    user = models.OneToOneField(
-        CustomUser, 
-        on_delete=models.CASCADE,
-        related_name='stripe_customer',
-        verbose_name=_('user')
-    )
-    stripe_id = models.CharField(
-        _('stripe customer ID'),
-        max_length=255,
-        help_text=_('Stripe customer identifier')
-    )
-    created = models.DateTimeField(
-        _('created'),
-        auto_now_add=True,
-        help_text=_('Date and time when the customer was created')
-    )
-    
-    class Meta:
-        app_label = "users"
-        verbose_name = _('stripe customer')
-        verbose_name_plural = _('stripe customers')
-    
-    def __str__(self):
-        """Return string representation of the customer."""
-        return f"{self.user.email} ({self.stripe_id})" 

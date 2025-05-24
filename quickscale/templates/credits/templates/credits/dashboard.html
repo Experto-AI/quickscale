@@ -32,6 +32,96 @@
                     </div>
                 </div>
             </div>
+            
+            <!-- Recent Purchase Details -->
+            {% if purchase_transaction_data and not purchase_transaction_data.error and not purchase_transaction_data.no_session %}
+            <div class="box has-background-success-light">
+                <h2 class="subtitle has-text-success">
+                    <span class="icon">
+                        <i class="fas fa-check-circle"></i>
+                    </span>
+                    Recent Purchase Completed Successfully!
+                </h2>
+                
+                <div class="columns">
+                    <div class="column">
+                        <table class="table is-fullwidth">
+                            <tbody>
+                                {% if purchase_transaction_data.payment_intent_id %}
+                                <tr>
+                                    <td><strong>Payment ID</strong></td>
+                                    <td><code>{{ purchase_transaction_data.payment_intent_id }}</code></td>
+                                </tr>
+                                {% endif %}
+                                
+                                {% if purchase_transaction_data.amount_total %}
+                                <tr>
+                                    <td><strong>Amount Paid</strong></td>
+                                    <td>{{ purchase_transaction_data.currency }} {{ purchase_transaction_data.amount_total|floatformat:2 }}</td>
+                                </tr>
+                                {% endif %}
+                                
+                                {% if purchase_transaction_data.credit_amount %}
+                                <tr>
+                                    <td><strong>Credits Added</strong></td>
+                                    <td>
+                                        <span class="tag is-success is-large">+{{ purchase_transaction_data.credit_amount }} credits</span>
+                                    </td>
+                                </tr>
+                                {% endif %}
+                                
+                                {% if purchase_transaction_data.new_balance %}
+                                <tr>
+                                    <td><strong>New Balance</strong></td>
+                                    <td><strong>{{ purchase_transaction_data.new_balance }} credits</strong></td>
+                                </tr>
+                                {% endif %}
+                            </tbody>
+                        </table>
+                    </div>
+                    
+                    <div class="column">
+                        {% if purchase_transaction_data.product_name %}
+                        <div class="box has-background-info-light">
+                            <h4 class="title is-6">Product Details</h4>
+                            <p><strong>{{ purchase_transaction_data.product_name }}</strong></p>
+                            
+                            {% if purchase_transaction_data.product_description %}
+                            <p class="is-size-7">{{ purchase_transaction_data.product_description }}</p>
+                            {% endif %}
+                            
+                            {% if purchase_transaction_data.price_per_credit %}
+                            <p><strong>Price per Credit:</strong> {{ purchase_transaction_data.currency }} {{ purchase_transaction_data.price_per_credit|floatformat:4 }}</p>
+                            {% endif %}
+                            
+                            {% if purchase_transaction_data.credit_type %}
+                            <p><strong>Credit Type:</strong> {{ purchase_transaction_data.credit_type }}</p>
+                            {% endif %}
+                        </div>
+                        {% endif %}
+                        
+                        {% if purchase_transaction_data.duplicate_processing %}
+                        <div class="notification is-warning is-light">
+                            <p><strong>Note:</strong> This payment was already processed. No duplicate credits were added.</p>
+                        </div>
+                        {% endif %}
+                    </div>
+                </div>
+                
+                {% if purchase_transaction_data.session_id %}
+                <div class="notification is-info is-light">
+                    <p class="is-size-7"><strong>Transaction Reference:</strong> <code>{{ purchase_transaction_data.session_id }}</code></p>
+                </div>
+                {% endif %}
+            </div>
+            {% elif purchase_transaction_data.error %}
+            <div class="box has-background-warning-light">
+                <div class="notification is-warning">
+                    <strong>Purchase completed with limited details</strong>
+                    <p>{{ purchase_transaction_data.error }}</p>
+                </div>
+            </div>
+            {% endif %}
 
             <!-- Recent Transactions Section -->
             <div class="box">
@@ -45,6 +135,7 @@
                                     <th>Date</th>
                                     <th>Amount</th>
                                     <th>Description</th>
+                                    <th>Type</th>
                                 </tr>
                             </thead>
                             <tbody>
@@ -57,6 +148,11 @@
                                         </span>
                                     </td>
                                     <td>{{ transaction.description }}</td>
+                                    <td>
+                                        <span class="tag is-light">
+                                            {{ transaction.get_credit_type_display }}
+                                        </span>
+                                    </td>
                                 </tr>
                                 {% endfor %}
                             </tbody>
@@ -80,12 +176,12 @@
                         </span>
                         <span>Use Services</span>
                     </a>
-                    <button class="button is-info" disabled>
+                    <a href="{% url 'credits:buy_credits' %}" class="button is-info">
                         <span class="icon">
                             <i class="fas fa-shopping-cart"></i>
                         </span>
-                        <span>Buy Credits (Coming Soon)</span>
-                    </button>
+                        <span>Buy Credits</span>
+                    </a>
                     <button class="button is-warning" disabled>
                         <span class="icon">
                             <i class="fas fa-star"></i>
