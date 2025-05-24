@@ -2,6 +2,32 @@
 
 All notable changes to this project will be documented in this file.
 
+## v0.14.0 (2025-05-24)
+v0.14.0 feat: Implement Manual Credit Management System
+
+- Backend:
+  - Enhanced `CreditAccountAdmin` with custom actions and individual credit adjustment views.
+  - Created `AdminCreditAdjustmentForm` with comprehensive validation and input sanitization.
+  - Implemented bulk credit addition action for multiple users simultaneously.
+  - Added transaction attribution to track admin operations with user attribution.
+  - Made credit transactions read-only to preserve audit trail integrity.
+- Frontend:
+  - Created credit adjustment templates with responsive form layouts and current balance display.
+  - Added bulk credit adjustment interface with confirmation workflows.
+  - Enhanced admin interface with credit action buttons and validation warnings.
+  - Implemented comprehensive error message handling and form validation feedback.
+- Testing:
+  - Created comprehensive test suite with 16 tests covering all Sprint 2 functionality.
+  - Added template structure validation and admin configuration tests.
+  - Implemented form validation and integration tests.
+  - Ensured no regression with existing credit and dashboard functionality (44 total tests passed).
+- Documentation:
+  - Created MANUAL_CREDIT_MANAGEMENT.md with complete implementation documentation.
+  - Updated ROADMAP.md marking completed work.
+  - Documented admin credit management workflows and validation procedures.
+
+This PR implements comprehensive manual credit management functionality for administrators. Admins can now add/remove credits to any user account with complete audit trails, validation, and bulk operations support. The implementation includes security validation, transaction attribution, and maintains complete data integrity for compliance and testing purposes.
+
 ## v0.13.0 (2025-05-23)
 v0.13.0 feat: Implement Basic Credit Account Foundation
 
