@@ -9,7 +9,7 @@ from django.utils.decorators import method_decorator
 from django.views.decorators.http import require_http_methods
 from django.utils.html import format_html
 from decimal import Decimal
-from .models import CreditAccount, CreditTransaction
+from .models import CreditAccount, CreditTransaction, Service, ServiceUsage
 from .forms import AdminCreditAdjustmentForm
 
 
@@ -213,4 +213,68 @@ class CreditTransactionAdmin(admin.ModelAdmin):
 
     def has_delete_permission(self, request, obj=None):
         """Disable deletion of transactions through admin for data integrity."""
+        return False
+
+
+@admin.register(Service)
+class ServiceAdmin(admin.ModelAdmin):
+    """Admin interface for Service model."""
+    
+    list_display = ('name', 'credit_cost', 'is_active', 'usage_count', 'created_at', 'updated_at')
+    list_filter = ('is_active', 'created_at', 'credit_cost')
+    search_fields = ('name', 'description')
+    readonly_fields = ('created_at', 'updated_at', 'usage_count')
+    ordering = ('name',)
+    
+    fieldsets = (
+        (_('Service Details'), {
+            'fields': ('name', 'description', 'credit_cost', 'is_active'),
+        }),
+        (_('System Information'), {
+            'fields': ('created_at', 'updated_at', 'usage_count'),
+            'classes': ('collapse',),
+        }),
+    )
+
+    def usage_count(self, obj):
+        """Display the total number of times this service has been used."""
+        return obj.usages.count()
+    usage_count.short_description = _('Total Usage')
+
+
+@admin.register(ServiceUsage)
+class ServiceUsageAdmin(admin.ModelAdmin):
+    """Admin interface for ServiceUsage model."""
+    
+    list_display = ('user', 'service', 'get_credit_cost', 'created_at')
+    list_filter = ('service', 'created_at')
+    search_fields = ('user__email', 'user__first_name', 'user__last_name', 'service__name')
+    readonly_fields = ('created_at', 'get_credit_cost')
+    ordering = ('-created_at',)
+    
+    fieldsets = (
+        (_('Usage Details'), {
+            'fields': ('user', 'service', 'credit_transaction', 'get_credit_cost'),
+        }),
+        (_('System Information'), {
+            'fields': ('created_at',),
+            'classes': ('collapse',),
+        }),
+    )
+
+    def get_credit_cost(self, obj):
+        """Display the credit cost from the transaction."""
+        return f"{abs(obj.credit_transaction.amount)} credits"
+    get_credit_cost.short_description = _('Credits Used')
+
+    def has_add_permission(self, request):
+        """Disable direct addition of service usage through admin."""
+        return False
+
+    def has_change_permission(self, request, obj=None):
+        """Disable editing of service usage through admin."""
+        return False
+
+    def has_delete_permission(self, request, obj=None):
+        """Disable deletion of service usage through admin for data integrity."""
         return False 

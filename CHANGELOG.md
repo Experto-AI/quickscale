@@ -2,6 +2,28 @@
 
 All notable changes to this project will be documented in this file.
 
+## v0.15.0 (2025-05-24)
+v0.15.0 feat: Implement Basic Service Credit Consumption
+
+- Backend:
+  - Created `Service` model with name, description, and credit_cost fields.
+  - Implemented `consume_credits()` method with validation and insufficient credits error handling.
+  - Enhanced `CreditAccount` with service usage tracking functionality.
+  - Added service admin interface for managing available services.
+- Frontend:
+  - Created `/services/` page listing available services with credit costs and descriptions.
+  - Added "Use Service" buttons that consume credits with real-time feedback.
+  - Implemented success/error message display for service usage attempts.
+  - Enhanced credit dashboard to display updated balance after service usage.
+- Testing:
+  - Created comprehensive test suite covering credit consumption logic and insufficient credits scenarios.
+  - Added integration tests for complete service usage flow and user experience.
+  - Ensured no regression with existing credit and dashboard functionality.
+- Documentation:
+  - Updated version to v0.15.0 and marked sprint as completed in ROADMAP.md.
+
+This PR implements comprehensive service credit consumption functionality. Users can now view available services, use services that consume credits with validation, see updated balances in real-time, and receive clear feedback when insufficient credits are available. The implementation includes proper error handling, transaction tracking, and maintains complete audit trail integrity for compliance and testing purposes.
+
 ## v0.14.0 (2025-05-24)
 v0.14.0 feat: Implement Manual Credit Management System
 
