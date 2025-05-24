@@ -43,6 +43,10 @@
    - ❌ Payment method management
    - ❌ Customer billing history
 
+5. **Credit System Foundation**:
+   - ✅ Basic credit account system (Sprint 1)
+   - ✅ Manual credit management for admins (Sprint 2)
+
 For more details refer to the [CHANGELOG](CHANGELOG.md).
 
 ## System Architecture Overview
@@ -58,7 +62,7 @@ The QuickScale credit system supports multiple payment models and credit types w
 
 ## Development Sprints
 
-### Sprint 1: Basic Credit Account Foundation (v0.13.0)
+### Sprint 1: Basic Credit Account Foundation (v0.13.0) ✅ COMPLETED
 **Goal**: Create basic credit account system with display page
 
 **Backend Implementation:**
@@ -81,28 +85,28 @@ The QuickScale credit system supports multiple payment models and credit types w
 
 ---
 
-### Sprint 2: Manual Credit Management (v0.13.1) 
+### Sprint 2: Manual Credit Management (v0.14.0) ✅ COMPLETED
 **Goal**: Admin can manually add/remove credits for testing
 
 **Backend Implementation:**
-- [ ] Add admin interface for `CreditAccount` and `CreditTransaction`
-- [ ] Create admin action to add/remove credits with reason
-- [ ] Add basic validation for credit operations
+- [X] Add admin interface for `CreditAccount` and `CreditTransaction`
+- [X] Create admin action to add/remove credits with reason
+- [X] Add basic validation for credit operations
 
 **Frontend Implementation:**
-- [ ] Enhance admin interface with credit management tools
-- [ ] Add "Add Credits" form in admin with amount and reason fields
-- [ ] Show admin credit operations in transaction history
+- [X] Enhance admin interface with credit management tools
+- [X] Add "Add Credits" form in admin with amount and reason fields
+- [X] Show admin credit operations in transaction history
 
 **Testing:**
-- [ ] Tests for admin credit operations
-- [ ] Test credit addition/removal through admin interface
+- [X] Tests for admin credit operations
+- [X] Test credit addition/removal through admin interface
 
-**Validation**: Admin can add credits to any user account and user can see the updated balance
+**Validation**: Admin can add credits to any user account and user can see the updated balance ✅
 
 ---
 
-### Sprint 3: Basic Service Credit Consumption (v0.13.2)
+### Sprint 3: Basic Service Credit Consumption (v0.15.0)
 **Goal**: Create services that consume credits with validation
 
 **Backend Implementation:**
@@ -126,7 +130,7 @@ The QuickScale credit system supports multiple payment models and credit types w
 
 ---
 
-### Sprint 4: Pay-as-You-Go Credit Purchase (v0.14.0)
+### Sprint 4: Pay-as-You-Go Credit Purchase (v0.16.0)
 **Goal**: Users can buy credits that never expire
 
 **Backend Implementation:**
@@ -151,7 +155,7 @@ The QuickScale credit system supports multiple payment models and credit types w
 
 ---
 
-### Sprint 5: Basic Monthly Subscription (v0.14.1)
+### Sprint 5: Basic Monthly Subscription (v0.17.0)
 **Goal**: Implement Basic subscription plan with monthly credits
 
 **Backend Implementation:**
@@ -176,7 +180,7 @@ The QuickScale credit system supports multiple payment models and credit types w
 
 ---
 
-### Sprint 6: Credit Type Priority System (v0.14.2)
+### Sprint 6: Credit Type Priority System (v0.18.0)
 **Goal**: Implement subscription credits consumed first, then pay-as-you-go
 
 **Backend Implementation:**
@@ -199,7 +203,7 @@ The QuickScale credit system supports multiple payment models and credit types w
 
 ---
 
-### Sprint 7: Pro Subscription Plan (v0.14.3)
+### Sprint 7: Pro Subscription Plan (v0.19.0)
 **Goal**: Add Pro plan with more credits at better rate
 
 **Backend Implementation:**
@@ -223,7 +227,7 @@ The QuickScale credit system supports multiple payment models and credit types w
 
 ---
 
-### Sprint 8: Payment History & Receipts (v0.15.0)
+### Sprint 8: Payment History & Receipts (v0.20.0)
 **Goal**: Complete payment tracking and receipt system
 
 **Backend Implementation:**
@@ -247,7 +251,7 @@ The QuickScale credit system supports multiple payment models and credit types w
 
 ---
 
-### Sprint 9: Admin Support Dashboard (v0.15.1)
+### Sprint 9: Admin Support Dashboard (v0.21.0)
 **Goal**: Admin tools to help users with credit/subscription issues
 
 **Backend Implementation:**
@@ -271,7 +275,7 @@ The QuickScale credit system supports multiple payment models and credit types w
 
 ---
 
-### Sprint 10: Basic Analytics Dashboard (v0.16.0)
+### Sprint 10: Basic Analytics Dashboard (v0.22.0)
 **Goal**: Simple revenue and user analytics for business insights
 
 **Backend Implementation:**
