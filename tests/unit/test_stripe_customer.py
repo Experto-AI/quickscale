@@ -46,7 +46,7 @@ class TestStripeCustomerModel:
     def test_model_attributes(self):
         """Test that StripeCustomer model has the expected fields."""
         # Check if the model file exists
-        model_path = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), 'quickscale/templates/users/models.py')
+        model_path = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), 'quickscale/templates/stripe_manager/models.py')
         assert os.path.exists(model_path), "StripeCustomer model file not found"
         
         # Read the file content
@@ -60,18 +60,17 @@ class TestStripeCustomerModel:
         field_patterns = {
             'user': r'user\s*=\s*models\.OneToOneField',
             'stripe_id': r'stripe_id\s*=\s*models\.CharField',
-            'created': r'created\s*=\s*models\.DateTimeField'
+            'created_at': r'created_at\s*=\s*models\.DateTimeField'
         }
         
         for field_name, pattern in field_patterns.items():
             assert re.search(pattern, content), f"Field {field_name} missing or not defined correctly"
         
-        # Check for auto_now_add in created field separately
-        assert 'auto_now_add=True' in content, "created field should have auto_now_add=True"
+        # Check for auto_now_add in created_at field separately
+        assert 'auto_now_add=True' in content, "created_at field should have auto_now_add=True"
         
         # Check for proper Meta class
         assert 'class Meta:' in content, "Meta class not defined"
-        assert "app_label = \"users\"" in content, "app_label not set to 'users'"
         
         # Check for __str__ method
         assert "def __str__" in content, "__str__ method not defined"

@@ -3,25 +3,55 @@ from django.utils.translation import gettext_lazy as _
 from django.urls import path, reverse
 from django.http import HttpResponseRedirect
 from django.contrib import messages
-from .models import StripeProduct
+from .models import StripeProduct, StripeCustomer
+
+@admin.register(StripeCustomer)
+class StripeCustomerAdmin(admin.ModelAdmin):
+    """Admin interface for StripeCustomer model."""
+    
+    list_display = ('user', 'email', 'name', 'stripe_id', 'created_at', 'updated_at')
+    list_filter = ('created_at', 'updated_at')
+    search_fields = ('user__email', 'user__first_name', 'user__last_name', 'email', 'name', 'stripe_id')
+    readonly_fields = ('created_at', 'updated_at')
+    ordering = ('-created_at',)
+    
+    fieldsets = (
+        (_('User Information'), {
+            'fields': ('user', 'email', 'name'),
+        }),
+        (_('Stripe Information'), {
+            'fields': ('stripe_id',),
+        }),
+        (_('System Information'), {
+            'fields': ('created_at', 'updated_at'),
+            'classes': ('collapse',),
+        }),
+    )
+
+    def get_readonly_fields(self, request, obj=None):
+        """Make user field readonly when editing existing customer."""
+        readonly_fields = list(self.readonly_fields)
+        if obj:  # Editing existing object
+            readonly_fields.append('user')
+        return readonly_fields
 
 @admin.register(StripeProduct)
 class StripeProductAdmin(admin.ModelAdmin):
     """Admin interface for StripeProduct model."""
     
-    list_display = ('name', 'price', 'currency', 'interval', 'active', 'display_order')
+    list_display = ('name', 'price', 'credit_amount', 'price_per_credit_display', 'currency', 'interval', 'active', 'display_order')
     list_filter = ('active', 'interval', 'currency')
     search_fields = ('name', 'description', 'stripe_id')
     ordering = ('display_order', 'name')
-    readonly_fields = ('stripe_id', 'created_at', 'updated_at')
+    readonly_fields = ('stripe_id', 'price_per_credit_display', 'created_at', 'updated_at')
     
     fieldsets = (
         (_('Basic Information'), {
             'fields': ('name', 'description', 'active'),
             'classes': ('wide',),
         }),
-        (_('Pricing'), {
-            'fields': ('price', 'currency', 'interval'),
+        (_('Pricing & Credits'), {
+            'fields': ('price', 'currency', 'interval', 'credit_amount', 'price_per_credit_display'),
             'classes': ('wide',),
         }),
         (_('Display Settings'), {
@@ -29,10 +59,15 @@ class StripeProductAdmin(admin.ModelAdmin):
             'classes': ('wide',),
         }),
         (_('System Information'), {
-            'fields': ('stripe_id', 'created_at', 'updated_at'),
+            'fields': ('stripe_id', 'stripe_price_id', 'created_at', 'updated_at'),
             'classes': ('collapse',),
         }),
     )
+
+    def price_per_credit_display(self, obj):
+        """Display price per credit for this product."""
+        return f"${obj.price_per_credit:.3f}" if obj.price_per_credit else "N/A"
+    price_per_credit_display.short_description = _('Price per Credit')
 
     def get_urls(self):
         """Add custom URLs for sync functionality."""

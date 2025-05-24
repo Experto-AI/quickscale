@@ -46,6 +46,8 @@
 5. **Credit System Foundation**:
    - ✅ Basic credit account system (Sprint 1)
    - ✅ Manual credit management for admins (Sprint 2)
+   - ✅ Basic service credit consumption (Sprint 3)
+   - ✅ Pay-as-you-go credit purchase (Sprint 4)
 
 For more details refer to the [CHANGELOG](CHANGELOG.md).
 
@@ -130,32 +132,56 @@ The QuickScale credit system supports multiple payment models and credit types w
 
 ---
 
-### Sprint 4: Pay-as-You-Go Credit Purchase (v0.16.0)
+### Sprint 4: Pay-as-You-Go Credit Purchase (v0.16.0) ✅ COMPLETED
 **Goal**: Users can buy credits that never expire
 
 **Backend Implementation:**
-- [ ] Add `credit_type` field to `CreditTransaction` (PURCHASE, CONSUMPTION, ADMIN)
-- [ ] Create credit purchase packages (100, 500, 1000 credits)
-- [ ] Integrate Stripe Checkout for one-time payments
-- [ ] Add webhook handling for successful payments
-- [ ] Automatic credit allocation on payment success
+- [X] Add `credit_type` field to `CreditTransaction` (PURCHASE, CONSUMPTION, ADMIN)
+- [X] Create credit purchase packages (100, 500, 1000 credits)
+- [X] Integrate Stripe Checkout for one-time payments
+- [X] Add webhook handling for successful payments
+- [X] Automatic credit allocation on payment success
 
 **Frontend Implementation:**
-- [ ] Create `/dashboard/buy-credits/` page with package options
-- [ ] Add Stripe Checkout integration with package selection
-- [ ] Create payment success/failure pages
-- [ ] Show purchase history in credit transactions
+- [X] Create `/dashboard/buy-credits/` page with package options
+- [X] Add Stripe Checkout integration with package selection
+- [X] Create payment success/failure pages
+- [X] Show purchase history in credit transactions
 
 **Testing:**
-- [ ] Tests for credit purchase flow
-- [ ] Tests for Stripe webhook processing
-- [ ] Integration tests for complete purchase process
+- [X] Tests for credit purchase flow
+- [X] Tests for Stripe webhook processing
+- [X] Integration tests for complete purchase process
 
-**Validation**: User can purchase credits with real money and immediately see updated balance
+**Validation**: User can purchase credits with real money and immediately see updated balance ✅
+
+**FIXED**:
+- [X] Refactor, use Synced STRIPE INTERGRATION -> STRIPE PRODUCTS instead of CREDITS -> CREDIT PURCHASES PACKAGES
+- [X] Clarify CREDIT SYSTEM docs for that
 
 ---
 
-### Sprint 5: Basic Monthly Subscription (v0.17.0)
+### Sprint 5: Refactor and Maintenance (v0.17.0)
+**Goal**: Improve code quality, user flow and maintainability
+
+**Django Admin:**
+- [ ] Remove ADD STRIPE PRODUCT button in STRIPE INTEGRATION -> STRIPE PRODUCTS
+- [ ] Analyze if ACCOUNTS -> Email Address could be grouped with USERS -> Customs Users
+- [ ] Analyze if also STRIPE INTEGRATION -> STRIPE USERS could be grouped.
+- [ ] Fix credits synced from Stripe for each plan (are all 1000?)
+
+**Backend and Frontend Implementation:**
+- [ ] Admin: rename Dashboard to Admin Dashboard to differentiate user dashboard ("My Dashboard")
+- [ ] Group all migrations into one file
+
+**Testing:**
+- [ ] Update all unit tests to reflect changes
+
+**Validation**: Refactor completed, user flows improved, and codebase more maintainable
+
+---
+
+### Sprint 6: Basic Monthly Subscription (v0.18.0)
 **Goal**: Implement Basic subscription plan with monthly credits
 
 **Backend Implementation:**
@@ -180,7 +206,7 @@ The QuickScale credit system supports multiple payment models and credit types w
 
 ---
 
-### Sprint 6: Credit Type Priority System (v0.18.0)
+### Sprint 7: Credit Type Priority System (v0.19.0)
 **Goal**: Implement subscription credits consumed first, then pay-as-you-go
 
 **Backend Implementation:**
@@ -203,7 +229,7 @@ The QuickScale credit system supports multiple payment models and credit types w
 
 ---
 
-### Sprint 7: Pro Subscription Plan (v0.19.0)
+### Sprint 8: Pro Subscription Plan (v0.20.0)
 **Goal**: Add Pro plan with more credits at better rate
 
 **Backend Implementation:**
@@ -227,7 +253,7 @@ The QuickScale credit system supports multiple payment models and credit types w
 
 ---
 
-### Sprint 8: Payment History & Receipts (v0.20.0)
+### Sprint 9: Payment History & Receipts (v0.21.0)
 **Goal**: Complete payment tracking and receipt system
 
 **Backend Implementation:**
@@ -251,7 +277,7 @@ The QuickScale credit system supports multiple payment models and credit types w
 
 ---
 
-### Sprint 9: Admin Support Dashboard (v0.21.0)
+### Sprint 10: Admin Support Dashboard (v0.22.0)
 **Goal**: Admin tools to help users with credit/subscription issues
 
 **Backend Implementation:**
@@ -275,7 +301,7 @@ The QuickScale credit system supports multiple payment models and credit types w
 
 ---
 
-### Sprint 10: Basic Analytics Dashboard (v0.22.0)
+### Sprint 11: Basic Analytics Dashboard (v0.23.0)
 **Goal**: Simple revenue and user analytics for business insights
 
 **Backend Implementation:**
@@ -295,7 +321,7 @@ The QuickScale credit system supports multiple payment models and credit types w
 - [ ] Tests for analytics dashboard display
 - [ ] Integration tests for real-time metrics
 
-**Validation**: Admin can view business metrics and revenue analytics
+**Validation**: Admin can view business metrics and revenue analyticds
 
 ---
 

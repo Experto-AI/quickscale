@@ -2,6 +2,31 @@
 
 All notable changes to this project will be documented in this file.
 
+## v0.16.0 (2025-05-24)
+feat: Implement Pay-as-You-Go Credit Purchase System
+
+- Backend:
+    - Added `credit_type` field to `CreditTransaction` (PURCHASE, CONSUMPTION, ADMIN).
+    - Created credit purchase packages (100, 500, 1000 credits) and integrated Stripe Checkout for one-time payments.
+    - Implemented webhook handling for successful payments and automatic credit allocation.
+    - Refactored credit purchase system to use Stripe products instead of `CreditPurchasePackage`.
+    - Introduced `StripeCustomer` model to link Django users with Stripe customers.
+- Frontend:
+    - Created `/dashboard/buy-credits/` page with package options.
+    - Added Stripe Checkout integration with package selection.
+    - Created payment success/failure pages.
+    - Updated dashboard template to display recent purchase details.
+    - Enhanced credit transaction history to show purchase records.
+- Testing:
+    - Tests for credit purchase flow.
+    - Tests for Stripe webhook processing.
+    - Integration tests for complete purchase process.
+- Documentation:
+    - Updated ROADMAP.md to mark sprint as completed.
+    - Clarified `CREDIT_SYSTEM.md` documentation regarding the use of Stripe Products for credit purchases.
+
+This PR implements the pay-as-you-go credit purchase functionality. Users can now buy credits that never expire using Stripe Checkout. Successful payments trigger automatic credit allocation, and the system maintains a comprehensive transaction history. The implementation uses Stripe Products for managing credit packages, ensuring a streamlined and robust credit purchasing experience.
+
 ## v0.15.0 (2025-05-24)
 v0.15.0 feat: Implement Basic Service Credit Consumption
 

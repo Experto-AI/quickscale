@@ -48,7 +48,9 @@ class Service(models.Model):
 
     def __str__(self):
         """Return string representation of the service."""
-        return f"{self.name} ({self.credit_cost} credits)"
+        name = self.name or "Unnamed Service"
+        credit_cost = self.credit_cost or 0
+        return f"{name} ({credit_cost} credits)"
 
 
 class CreditAccount(models.Model):
@@ -75,7 +77,9 @@ class CreditAccount(models.Model):
 
     def __str__(self):
         """Return string representation of the credit account."""
-        return f"{self.user.email} - {self.get_balance()} credits"
+        user_email = self.user.email if self.user else "No User"
+        balance = self.get_balance()
+        return f"{user_email} - {balance} credits"
 
     def get_balance(self) -> Decimal:
         """Calculate and return the current credit balance."""
@@ -84,7 +88,7 @@ class CreditAccount(models.Model):
         )['balance']
         return total or Decimal('0.00')
 
-    def add_credits(self, amount: Decimal, description: str) -> 'CreditTransaction':
+    def add_credits(self, amount: Decimal, description: str, credit_type: str = 'ADMIN') -> 'CreditTransaction':
         """Add credits to the account and return the transaction."""
         if amount <= 0:
             raise ValueError("Amount must be positive")
@@ -93,7 +97,8 @@ class CreditAccount(models.Model):
             credit_transaction = CreditTransaction.objects.create(
                 user=self.user,
                 amount=amount,
-                description=description
+                description=description,
+                credit_type=credit_type
             )
             self.updated_at = models.functions.Now()
             self.save(update_fields=['updated_at'])
@@ -114,7 +119,8 @@ class CreditAccount(models.Model):
             credit_transaction = CreditTransaction.objects.create(
                 user=self.user,
                 amount=-amount,  # Negative amount for consumption
-                description=description
+                description=description,
+                credit_type='CONSUMPTION'
             )
             self.updated_at = models.functions.Now()
             self.save(update_fields=['updated_at'])
@@ -122,13 +128,19 @@ class CreditAccount(models.Model):
 
     @classmethod
     def get_or_create_for_user(cls, user):
-        """Get or create a credit account for a user."""
+        """Get or create a credit account for the given user."""
         account, created = cls.objects.get_or_create(user=user)
         return account
 
 
 class CreditTransaction(models.Model):
     """Model representing individual credit transactions."""
+    
+    CREDIT_TYPE_CHOICES = [
+        ('PURCHASE', _('Purchase')),
+        ('CONSUMPTION', _('Consumption')),
+        ('ADMIN', _('Admin Adjustment')),
+    ]
     
     user = models.ForeignKey(
         User,
@@ -147,6 +159,13 @@ class CreditTransaction(models.Model):
         max_length=255,
         help_text=_('Description of the transaction')
     )
+    credit_type = models.CharField(
+        _('credit type'),
+        max_length=20,
+        choices=CREDIT_TYPE_CHOICES,
+        default='ADMIN',
+        help_text=_('Type of credit transaction')
+    )
     created_at = models.DateTimeField(
         _('created at'),
         auto_now_add=True
@@ -159,16 +178,35 @@ class CreditTransaction(models.Model):
         indexes = [
             models.Index(fields=['user', '-created_at']),
             models.Index(fields=['-created_at']),
+            models.Index(fields=['credit_type']),
         ]
 
     def __str__(self):
         """Return string representation of the transaction."""
-        return f"{self.user.email}: {self.amount} credits - {self.description}"
+        user_email = self.user.email if self.user else "No User"
+        amount = self.amount or Decimal('0.00')
+        description = self.description or "No description"
+        return f"{user_email}: {amount} credits - {description}"
 
     @property
     def transactions(self):
         """Return related transactions for balance calculation."""
         return CreditTransaction.objects.filter(user=self.user)
+
+    @property
+    def is_purchase(self):
+        """Check if this is a purchase transaction."""
+        return self.credit_type == 'PURCHASE'
+
+    @property
+    def is_consumption(self):
+        """Check if this is a consumption transaction."""
+        return self.credit_type == 'CONSUMPTION'
+
+    @property
+    def is_admin_adjustment(self):
+        """Check if this is an admin adjustment transaction."""
+        return self.credit_type == 'ADMIN'
 
 
 class ServiceUsage(models.Model):
@@ -208,7 +246,9 @@ class ServiceUsage(models.Model):
 
     def __str__(self):
         """Return string representation of the service usage."""
-        return f"{self.user.email} used {self.service.name}"
+        user_email = self.user.email if self.user else "No User"
+        service_name = self.service.name if self.service else "No Service"
+        return f"{user_email} used {service_name}"
 
 
 class InsufficientCreditsError(Exception):
