@@ -17,15 +17,16 @@ from quickscale.commands.init_command import InitCommand
 from tests.utils import wait_for_docker_service
 
 
+@pytest.fixture
+def temp_project_dir():
+    """Create a temporary directory for project generation."""
+    temp_dir = tempfile.mkdtemp()
+    yield temp_dir
+    shutil.rmtree(temp_dir)
+
+
 class TestCreditsSystemIntegration:
     """Integration tests for credits system in generated projects."""
-    
-    @pytest.fixture
-    def temp_project_dir(self):
-        """Create a temporary directory for project generation."""
-        temp_dir = tempfile.mkdtemp()
-        yield temp_dir
-        shutil.rmtree(temp_dir)
     
     @pytest.fixture
     def credits_project(self, temp_project_dir):
@@ -36,9 +37,16 @@ class TestCreditsSystemIntegration:
         # Initialize project using QuickScale
         init_command = InitCommand()
         try:
-            init_command.execute(project_name, str(temp_project_dir))
+            # Change to temp directory before creating project
+            original_cwd = os.getcwd()
+            os.chdir(temp_project_dir)
+            init_command.execute(project_name)
+            os.chdir(original_cwd)
             yield project_path
         except Exception as e:
+            # Ensure we restore original directory on error
+            if 'original_cwd' in locals():
+                os.chdir(original_cwd)
             pytest.skip(f"Could not generate test project: {e}")
     
     def test_credits_app_structure_in_generated_project(self, credits_project):
@@ -236,36 +244,4 @@ class TestCreditsSystemFunctionality:
         # Test conditional content
         assert "{% if recent_transactions %}" in template_content
         assert "{% else %}" in template_content
-        assert "No transactions yet" in template_content
-
-
-@pytest.mark.slow
-class TestCreditsSystemWithDatabase:
-    """Test credits system with actual database operations."""
-    
-    @pytest.fixture
-    def django_project_with_db(self, temp_project_dir):
-        """Create a Django project with database for testing."""
-        # This would set up a test Django environment
-        # For now, we'll test the structure only
-        pytest.skip("Database testing requires Django environment setup")
-    
-    def test_credit_account_creation(self, django_project_with_db):
-        """Test credit account creation with database."""
-        # This would test actual model operations
-        pass
-    
-    def test_credit_transaction_creation(self, django_project_with_db):
-        """Test credit transaction creation with database."""
-        # This would test actual model operations
-        pass
-    
-    def test_balance_calculation(self, django_project_with_db):
-        """Test balance calculation with actual data."""
-        # This would test balance calculation with real transactions
-        pass
-    
-    def test_dashboard_view_rendering(self, django_project_with_db):
-        """Test dashboard view rendering with real data."""
-        # This would test view rendering with actual request/response
-        pass 
+        assert "No transactions yet" in template_content 
