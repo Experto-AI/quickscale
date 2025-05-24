@@ -83,8 +83,8 @@ class ServiceModelTests(unittest.TestCase):
         with open(self.models_py, 'r') as f:
             models_content = f.read()
         
-        # Check for __str__ method
-        service_str_pattern = r'def __str__\(self\):\s*""".*?"""\s*return f"{self\.name} \({self\.credit_cost} credits\)"'
+        # Check for __str__ method with defensive programming
+        service_str_pattern = r'def __str__\(self\):\s*""".*?"""\s*name = self\.name or ".*?"\s*credit_cost = self\.credit_cost or \d+\s*return f"{name} \({credit_cost} credits\)"'
         self.assertRegex(models_content, service_str_pattern, 
                         "Service __str__ method not properly implemented")
 

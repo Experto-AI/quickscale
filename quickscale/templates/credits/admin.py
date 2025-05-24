@@ -66,7 +66,8 @@ class CreditAccountAdmin(admin.ModelAdmin):
                 try:
                     transaction = account.add_credits(
                         amount=amount,
-                        description=f"Admin Credit Addition: {reason} (by {request.user.email})"
+                        description=f"Admin Credit Addition: {reason} (by {request.user.email})",
+                        credit_type='ADMIN'
                     )
                     messages.success(
                         request, 
@@ -109,7 +110,8 @@ class CreditAccountAdmin(admin.ModelAdmin):
                     try:
                         transaction = account.add_credits(
                             amount=-amount,
-                            description=f"Admin Credit Removal: {reason} (by {request.user.email})"
+                            description=f"Admin Credit Removal: {reason} (by {request.user.email})",
+                            credit_type='ADMIN'
                         )
                         messages.success(
                             request, 
@@ -144,7 +146,8 @@ class CreditAccountAdmin(admin.ModelAdmin):
                     try:
                         account.add_credits(
                             amount=amount,
-                            description=f"Bulk Admin Credit Addition: {reason} (by {request.user.email})"
+                            description=f"Bulk Admin Credit Addition: {reason} (by {request.user.email})",
+                            credit_type='ADMIN'
                         )
                         updated_count += 1
                     except ValueError:
@@ -173,15 +176,15 @@ class CreditAccountAdmin(admin.ModelAdmin):
 class CreditTransactionAdmin(admin.ModelAdmin):
     """Admin interface for CreditTransaction model."""
     
-    list_display = ('user', 'amount', 'description', 'created_at', 'transaction_type')
-    list_filter = ('created_at', 'amount')
+    list_display = ('user', 'amount', 'description', 'credit_type', 'created_at', 'transaction_type')
+    list_filter = ('created_at', 'credit_type', 'amount')
     search_fields = ('user__email', 'user__first_name', 'user__last_name', 'description')
     readonly_fields = ('created_at',)
     ordering = ('-created_at',)
     
     fieldsets = (
         (_('Transaction Details'), {
-            'fields': ('user', 'amount', 'description'),
+            'fields': ('user', 'amount', 'description', 'credit_type'),
         }),
         (_('System Information'), {
             'fields': ('created_at',),
@@ -191,12 +194,19 @@ class CreditTransactionAdmin(admin.ModelAdmin):
 
     def transaction_type(self, obj):
         """Display transaction type based on description and amount."""
-        if 'Admin Credit Addition' in obj.description:
-            return "Admin Addition"
-        elif 'Admin Credit Removal' in obj.description:
-            return "Admin Removal"
-        elif 'Bulk Admin Credit Addition' in obj.description:
-            return "Bulk Admin Addition"
+        if obj.credit_type == 'PURCHASE':
+            return "Credit Purchase"
+        elif obj.credit_type == 'CONSUMPTION':
+            return "Service Usage"
+        elif obj.credit_type == 'ADMIN':
+            if 'Admin Credit Addition' in obj.description:
+                return "Admin Addition"
+            elif 'Admin Credit Removal' in obj.description:
+                return "Admin Removal"
+            elif 'Bulk Admin Credit Addition' in obj.description:
+                return "Bulk Admin Addition"
+            else:
+                return "Admin Adjustment"
         elif obj.amount > 0:
             return "Credit Addition"
         else:
@@ -204,15 +214,15 @@ class CreditTransactionAdmin(admin.ModelAdmin):
     transaction_type.short_description = _('Transaction Type')
 
     def has_add_permission(self, request):
-        """Disable direct addition of transactions through admin."""
+        """Disable manual transaction creation."""
         return False
 
     def has_change_permission(self, request, obj=None):
-        """Disable editing of transactions through admin."""
+        """Disable transaction editing."""
         return False
 
     def has_delete_permission(self, request, obj=None):
-        """Disable deletion of transactions through admin for data integrity."""
+        """Disable transaction deletion."""
         return False
 
 

@@ -4,34 +4,59 @@
 
 The QuickScale credit system is a flexible billing and usage tracking system that supports multiple payment models and credit types. Users can purchase credits through different methods, and these credits are consumed when using various services and products within the platform.
 
+**Important**: Stripe Products serve as the **source of truth** for all pricing and plan information. The system syncs from Stripe to maintain consistency and uses Stripe Products for both subscription plans and pay-as-you-go credit purchases.
+
 ## Credit Types
 
 ### 1. Pay-as-You-Go Credits
-- **Purchase**: One-time payment
+- **Purchase**: One-time payment via Stripe Products (interval = 'one-time')
 - **Expiration**: Never expire
 - **Consumption Priority**: Consumed **after** subscription credits are exhausted
 - **Use Case**: Perfect for occasional users or as backup credits for subscription users
+- **Implementation**: Stripe Products with `interval='one-time'` and credit amounts in metadata
 
 ### 2. Subscription Credits
-- **Purchase**: Monthly subscription (Basic or Pro plan)
+- **Purchase**: Monthly subscription via Stripe Products (interval = 'month')
 - **Expiration**: Expire at the end of each billing period
 - **Consumption Priority**: Consumed **first** before pay-as-you-go credits
 - **Renewal**: Automatically allocated each billing cycle
 - **Rollover**: Unused credits do NOT roll over to the next period
+- **Implementation**: Stripe Products with `interval='month'` and monthly credit allocations
 
 ## Subscription Plans
 
 ### Basic Plan
-- **Billing**: Monthly subscription
-- **Credits**: Standard monthly credit allocation
+- **Billing**: Monthly subscription (Stripe Product with interval='month')
+- **Credits**: Standard monthly credit allocation (defined in Stripe Product metadata)
 - **Price**: Standard per-credit rate
 - **Target**: Regular users with predictable usage
 
 ### Pro Plan
-- **Billing**: Monthly subscription
-- **Credits**: Higher monthly credit allocation
+- **Billing**: Monthly subscription (Stripe Product with interval='month')  
+- **Credits**: Higher monthly credit allocation (defined in Stripe Product metadata)
 - **Price**: Lower per-credit rate (bulk discount)
 - **Target**: Power users with high usage requirements
+
+## Stripe Integration Architecture
+
+### Stripe as Source of Truth
+- **All pricing information** is maintained in Stripe Products
+- **Credit amounts** are stored in Stripe Product metadata
+- **Local StripeProduct model** syncs from Stripe API to cache data locally
+- **User interface** displays information from local StripeProduct models
+- **Purchases** are processed through Stripe Checkout using Stripe Product/Price IDs
+
+### Product Configuration
+- **Subscription Plans**: Stripe Products with `interval='month'` 
+- **Pay-as-You-Go**: Stripe Products with `interval='one-time'`
+- **Credit Metadata**: Credit amounts stored in Stripe Product metadata
+- **Pricing**: Handled entirely through Stripe Price objects
+
+### Synchronization
+- **Admin Interface**: Provides "Sync from Stripe" functionality
+- **Automatic Sync**: Webhook handling keeps local data current
+- **Manual Sync**: Admin actions for bulk synchronization
+- **Error Handling**: Graceful fallback when Stripe is unavailable
 
 ## Credit Consumption Logic
 
@@ -137,19 +162,33 @@ Admins can:
 ### Database Models
 - **CreditAccount**: User's credit balance and account info
 - **CreditTransaction**: Ledger of all credit movements
-- **SubscriptionPlan**: Plan definitions and pricing
+- **StripeProduct**: Local cache of Stripe products (subscriptions and pay-as-you-go)
+- **StripeCustomer**: User linkage to Stripe customer records
 - **UserSubscription**: User's subscription status and billing
-- **Service/Product**: Service definitions and credit costs
+- **Service**: Service definitions and credit costs
+
+### Stripe Integration Models
+- **StripeProduct**: Mirrors Stripe Products with local caching
+  - Stores product information (name, description, pricing)
+  - Contains metadata for credit amounts and billing intervals
+  - Syncs bidirectionally with Stripe API
+  - Supports both subscription (`interval='month'`) and one-time (`interval='one-time'`) products
+- **StripeCustomer**: Links Django users to Stripe customer records
+  - Maintains customer ID mapping for payment processing
+  - Stores customer metadata and billing preferences
 
 ### Credit Operations
 - **Atomic Transactions**: All credit operations use database transactions
 - **Balance Calculation**: Real-time balance calculation from transaction history
 - **Expiration Handling**: Automated expiration of subscription credits
 - **Priority Logic**: Implemented in credit consumption methods
+- **Stripe Sync**: Automatic synchronization with Stripe products and prices
 
 ### Integration Points
-- **Stripe Integration**: Handles all payment processing
-- **Webhook Handling**: Real-time processing of payment events
+- **Stripe Products API**: Primary source for all product and pricing data
+- **Stripe Checkout**: Unified checkout experience for all purchase types
+- **Webhook Handling**: Real-time processing of payment and subscription events
+- **Product Synchronization**: Bidirectional sync between local and Stripe data
 - **Email Notifications**: Automated notifications for billing events
 - **API Endpoints**: RESTful API for credit operations
 
