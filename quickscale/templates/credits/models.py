@@ -7,6 +7,50 @@ from decimal import Decimal
 User = get_user_model()
 
 
+class Service(models.Model):
+    """Model representing services that consume credits."""
+    
+    name = models.CharField(
+        _('name'),
+        max_length=100,
+        unique=True,
+        help_text=_('Name of the service')
+    )
+    description = models.TextField(
+        _('description'),
+        help_text=_('Description of what this service does')
+    )
+    credit_cost = models.DecimalField(
+        _('credit cost'),
+        max_digits=10,
+        decimal_places=2,
+        validators=[MinValueValidator(Decimal('0.01'))],
+        help_text=_('Number of credits required to use this service')
+    )
+    is_active = models.BooleanField(
+        _('is active'),
+        default=True,
+        help_text=_('Whether this service is currently available for use')
+    )
+    created_at = models.DateTimeField(
+        _('created at'),
+        auto_now_add=True
+    )
+    updated_at = models.DateTimeField(
+        _('updated at'),
+        auto_now=True
+    )
+
+    class Meta:
+        verbose_name = _('service')
+        verbose_name_plural = _('services')
+        ordering = ['name']
+
+    def __str__(self):
+        """Return string representation of the service."""
+        return f"{self.name} ({self.credit_cost} credits)"
+
+
 class CreditAccount(models.Model):
     """Model representing a user's credit account with balance management."""
     
@@ -49,6 +93,27 @@ class CreditAccount(models.Model):
             credit_transaction = CreditTransaction.objects.create(
                 user=self.user,
                 amount=amount,
+                description=description
+            )
+            self.updated_at = models.functions.Now()
+            self.save(update_fields=['updated_at'])
+            return credit_transaction
+
+    def consume_credits(self, amount: Decimal, description: str) -> 'CreditTransaction':
+        """Consume credits from the account and return the transaction."""
+        if amount <= 0:
+            raise ValueError("Amount must be positive")
+        
+        with transaction.atomic():
+            current_balance = self.get_balance()
+            if current_balance < amount:
+                raise InsufficientCreditsError(
+                    f"Insufficient credits. Current balance: {current_balance}, Required: {amount}"
+                )
+            
+            credit_transaction = CreditTransaction.objects.create(
+                user=self.user,
+                amount=-amount,  # Negative amount for consumption
                 description=description
             )
             self.updated_at = models.functions.Now()
@@ -103,4 +168,49 @@ class CreditTransaction(models.Model):
     @property
     def transactions(self):
         """Return related transactions for balance calculation."""
-        return CreditTransaction.objects.filter(user=self.user) 
+        return CreditTransaction.objects.filter(user=self.user)
+
+
+class ServiceUsage(models.Model):
+    """Model for tracking service usage by users."""
+    
+    user = models.ForeignKey(
+        User,
+        on_delete=models.CASCADE,
+        related_name='service_usages',
+        verbose_name=_('user')
+    )
+    service = models.ForeignKey(
+        Service,
+        on_delete=models.CASCADE,
+        related_name='usages',
+        verbose_name=_('service')
+    )
+    credit_transaction = models.ForeignKey(
+        CreditTransaction,
+        on_delete=models.CASCADE,
+        related_name='service_usage',
+        verbose_name=_('credit transaction')
+    )
+    created_at = models.DateTimeField(
+        _('created at'),
+        auto_now_add=True
+    )
+
+    class Meta:
+        verbose_name = _('service usage')
+        verbose_name_plural = _('service usages')
+        ordering = ['-created_at']
+        indexes = [
+            models.Index(fields=['user', '-created_at']),
+            models.Index(fields=['service', '-created_at']),
+        ]
+
+    def __str__(self):
+        """Return string representation of the service usage."""
+        return f"{self.user.email} used {self.service.name}"
+
+
+class InsufficientCreditsError(Exception):
+    """Custom exception for insufficient credits."""
+    pass 
