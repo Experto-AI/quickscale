@@ -1,0 +1,149 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}Buy Credits - {{ project_name }}{% endblock %}
+
+{% block content %}
+<div class="container">
+    <div class="columns">
+        <div class="column is-8 is-offset-2">
+            <!-- Header -->
+            <div class="box">
+                <h1 class="title is-2 has-text-centered">Buy Credits</h1>
+                <div class="has-text-centered">
+                    <p class="subtitle is-5">
+                        Purchase pay-as-you-go credits that never expire
+                    </p>
+                    <div class="tags is-centered">
+                        <span class="tag is-info is-large">
+                            Current Balance: {{ current_balance }} credits
+                        </span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Credit Products -->
+            <div class="columns is-multiline">
+                {% for product in products %}
+                <div class="column is-one-third">
+                    <div class="card credit-package" 
+                         x-data="{ loading: false }"
+                         style="height: 100%;">
+                        <div class="card-content">
+                            <div class="has-text-centered">
+                                <h3 class="title is-4">{{ product.name }}</h3>
+                                <div class="has-text-grey-light">
+                                    <span class="is-size-1 has-text-weight-bold has-text-primary">
+                                        {{ product.credit_amount }}
+                                    </span>
+                                    <span class="is-size-5">credits</span>
+                                </div>
+                                <div class="mt-2 mb-4">
+                                    <span class="tag is-success is-large">
+                                        ${{ product.price }}
+                                    </span>
+                                </div>
+                                <p class="has-text-grey">
+                                    ${{ product.price_per_credit|floatformat:3 }} per credit
+                                </p>
+                                <p class="has-text-grey-light is-size-7 mt-2">
+                                    ✓ Never expires<br>
+                                    ✓ Pay-as-you-go usage<br>
+                                    ✓ Instant activation
+                                </p>
+                            </div>
+                        </div>
+                        
+                        <footer class="card-footer">
+                            <div class="card-footer-item">
+                                <button class="button is-primary is-fullwidth"
+                                        x-bind:class="{ 'is-loading': loading }"
+                                        x-bind:disabled="loading"
+                                        x-on:click="loading = true; purchaseCredits({{ product.id }}, $el)">
+                                    <span class="icon">
+                                        <i class="fas fa-shopping-cart"></i>
+                                    </span>
+                                    <span>Purchase Credits</span>
+                                </button>
+                            </div>
+                        </footer>
+                    </div>
+                </div>
+                {% empty %}
+                <div class="column">
+                    <div class="notification is-warning">
+                        <p class="has-text-centered">
+                            No credit products are currently available.
+                        </p>
+                    </div>
+                </div>
+                {% endfor %}
+            </div>
+
+            <!-- Information Section -->
+            <div class="box mt-5">
+                <h3 class="title is-4">About Pay-as-You-Go Credits</h3>
+                <div class="content">
+                    <ul>
+                        <li><strong>Never Expire:</strong> Your credits will remain in your account indefinitely</li>
+                        <li><strong>Flexible Usage:</strong> Use credits only when you need services</li>
+                        <li><strong>No Subscriptions:</strong> One-time purchase with no recurring charges</li>
+                        <li><strong>Instant Access:</strong> Credits are added to your account immediately after payment</li>
+                        <li><strong>Secure Payment:</strong> All payments are processed securely through Stripe</li>
+                    </ul>
+                </div>
+            </div>
+
+            <!-- Navigation -->
+            <div class="has-text-centered mt-5">
+                <a href="{% url 'credits:dashboard' %}" class="button is-light">
+                    <span class="icon">
+                        <i class="fas fa-arrow-left"></i>
+                    </span>
+                    <span>Back to Dashboard</span>
+                </a>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Stripe Checkout Script -->
+<script src="https://js.stripe.com/v3/"></script>
+<script>
+// Purchase credits function with simplified Alpine.js integration
+async function purchaseCredits(productId, buttonElement) {
+    try {
+        // Create checkout session
+        const response = await fetch('{% url "credits:create_checkout" %}', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/x-www-form-urlencoded',
+                'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]').value
+            },
+            body: `product_id=${productId}`
+        });
+        
+        const data = await response.json();
+        
+        if (response.ok && data.checkout_url) {
+            // Redirect to Stripe checkout
+            window.location.href = data.checkout_url;
+        } else {
+            // Handle error and reset loading state
+            console.error('Checkout error:', data);
+            alert(`Error: ${data.error || 'Failed to create checkout session'}`);
+            // Reset loading state via Alpine.js
+            buttonElement._x_dataStack[0].loading = false;
+        }
+    } catch (error) {
+        console.error('Error creating checkout session:', error);
+        alert('An error occurred. Please try again.');
+        // Reset loading state via Alpine.js
+        buttonElement._x_dataStack[0].loading = false;
+    }
+}
+</script>
+
+<!-- CSRF Token -->
+{% csrf_token %}
+{% endblock %} 

@@ -512,6 +512,7 @@ class StripeManager:
                                 success_url: str,
                                 cancel_url: str,
                                 customer_email: Optional[str] = None,
+                                customer_id: Optional[str] = None,
                                 metadata: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
         """Create a new Stripe Checkout session using the v12+ API."""
         line_items = [
@@ -542,7 +543,9 @@ class StripeManager:
             'cancel_url': cancel_url,
         }
 
-        if customer_email:
+        if customer_id:
+            checkout_session_data['customer'] = customer_id
+        elif customer_email:
             checkout_session_data['customer_email'] = customer_email
 
         if metadata:
@@ -559,6 +562,54 @@ class StripeManager:
             return session
         except Exception as e:
             logger.error(f"Error creating Stripe Checkout session: {e}")
+            raise
+
+    def retrieve_checkout_session(self, session_id: str, include_line_items: bool = True) -> Dict[str, Any]:
+        """Retrieve a Stripe Checkout session with detailed transaction information."""
+        try:
+            # First retrieve the basic session
+            session = self.client.checkout.sessions.retrieve(session_id)
+            
+            # Convert to dictionary for easier manipulation
+            session_data = dict(session)
+            
+            # Retrieve payment intent details if available
+            if session_data.get('payment_intent'):
+                try:
+                    payment_intent = self.retrieve_payment_intent(session_data['payment_intent'])
+                    session_data['payment_intent_details'] = payment_intent
+                    
+                    # Add payment method information if available
+                    if payment_intent.get('payment_method'):
+                        try:
+                            payment_method = self.client.payment_methods.retrieve(payment_intent['payment_method'])
+                            session_data['payment_method_details'] = payment_method
+                        except Exception as e:
+                            logger.warning(f"Could not retrieve payment method details: {e}")
+                            
+                except Exception as e:
+                    logger.warning(f"Could not retrieve payment intent details: {e}")
+            
+            # Retrieve line items if requested
+            if include_line_items:
+                try:
+                    line_items = self.client.checkout.sessions.list_line_items(session_id)
+                    session_data['line_items_details'] = line_items
+                except Exception as e:
+                    logger.warning(f"Could not retrieve line items for session {session_id}: {e}")
+            
+            # Retrieve customer details if available
+            if session_data.get('customer'):
+                try:
+                    customer = self.retrieve_customer(session_data['customer'])
+                    session_data['customer_details_full'] = customer
+                except Exception as e:
+                    logger.warning(f"Could not retrieve customer details: {e}")
+            
+            return session_data
+            
+        except Exception as e:
+            logger.error(f"Error retrieving Stripe Checkout session {session_id}: {e}")
             raise
 
     # Refund operations
