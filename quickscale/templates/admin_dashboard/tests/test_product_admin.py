@@ -93,12 +93,12 @@ class ProductAdminTestCase(TestCase):
         
         # Try accessing as regular user
         self.client.login(email='user@test.com', password='userpassword')
-        response = self.client.get(reverse('dashboard:product_admin'))
+        response = self.client.get(reverse('admin_dashboard:product_admin'))
         self.assertEqual(response.status_code, 302)  # Should redirect to login
         
         # Try accessing as admin user
         self.client.login(email='admin@test.com', password='adminpassword')
-        response = self.client.get(reverse('dashboard:product_admin'))
+        response = self.client.get(reverse('admin_dashboard:product_admin'))
         self.assertEqual(response.status_code, 200)  # Should load successfully
     
     @patch('stripe_manager.stripe_manager.StripeManager.list_products')
@@ -130,7 +130,7 @@ class ProductAdminTestCase(TestCase):
         self.client.login(email='admin@test.com', password='adminpassword')
         
         # Access the product admin page
-        response = self.client.get(reverse('dashboard:product_admin'))
+        response = self.client.get(reverse('admin_dashboard:product_admin'))
         
         # Check that products are in the context
         self.assertIn('products', response.context)
@@ -161,7 +161,7 @@ class ProductAdminTestCase(TestCase):
         
         # Test the refresh endpoint
         response = self.client.post(
-            reverse('dashboard:product_admin_refresh'),
+            reverse('admin_dashboard:product_admin_refresh'),
             content_type='application/json'
         )
         
@@ -185,7 +185,7 @@ class ProductAdminTestCase(TestCase):
         self.client.login(email='admin@test.com', password='adminpassword')
         
         # Try a GET request
-        response = self.client.get(reverse('dashboard:product_admin_refresh'))
+        response = self.client.get(reverse('admin_dashboard:product_admin_refresh'))
         
         # Should return 405 Method Not Allowed
         self.assertEqual(response.status_code, 405)
@@ -225,7 +225,7 @@ class ProductAdminTestCase(TestCase):
         self.client.login(email='admin@test.com', password='adminpassword')
 
         # Access the product admin page
-        response = self.client.get(reverse('dashboard:product_admin'))
+        response = self.client.get(reverse('admin_dashboard:product_admin'))
 
         # Check status code and template
         self.assertEqual(response.status_code, 200)
@@ -277,7 +277,7 @@ class ProductAdminTestCase(TestCase):
 
         # Call the refresh endpoint
         response = self.client.post(
-            reverse('dashboard:product_admin_refresh'),
+            reverse('admin_dashboard:product_admin_refresh'),
             content_type='application/json'
         )
 
@@ -328,7 +328,7 @@ class ProductAdminTestCase(TestCase):
         self.client.login(email='admin@test.com', password='adminpassword')
 
         # Access the product detail page
-        response = self.client.get(reverse('dashboard:product_detail', args=['prod_detail_test']))
+        response = self.client.get(reverse('admin_dashboard:product_detail', args=['prod_detail_test']))
 
         # Check status code and template
         self.assertEqual(response.status_code, 200)
@@ -368,7 +368,7 @@ class ProductAdminTestCase(TestCase):
         # Send a POST request to update the display order
         new_order_value = 5
         response = self.client.post(
-            reverse('dashboard:update_product_order', args=[product.id]),
+            reverse('admin_dashboard:update_product_order', args=[product.id]),
             {'display_order': new_order_value}
         )
 
@@ -400,7 +400,7 @@ class ProductAdminTestCase(TestCase):
         )
         self.client.login(email='admin@test.com', password='adminpassword')
 
-        response = self.client.get(reverse('dashboard:update_product_order', args=[product.id]))
+        response = self.client.get(reverse('admin_dashboard:update_product_order', args=[product.id]))
         self.assertEqual(response.status_code, 405)
         self.assertContains(response, "Method not allowed")
 
@@ -412,7 +412,7 @@ class ProductAdminTestCase(TestCase):
         self.client.login(email='admin@test.com', password='adminpassword')
 
         response = self.client.post(
-            reverse('dashboard:update_product_order', args=[9999]), # Non-existent ID
+            reverse('admin_dashboard:update_product_order', args=[9999]), # Non-existent ID
             {'display_order': 10}
         )
         self.assertEqual(response.status_code, 404)
@@ -434,7 +434,7 @@ class ProductAdminTestCase(TestCase):
         self.client.login(email='admin@test.com', password='adminpassword')
 
         response = self.client.post(
-            reverse('dashboard:update_product_order', args=[product.id]),
+            reverse('admin_dashboard:update_product_order', args=[product.id]),
             {'display_order': 'abc'}
         )
         self.assertEqual(response.status_code, 400)
@@ -513,7 +513,7 @@ class TestProductAdminTemplateRendering(TestCase):
         
         with patch('core.env_utils.is_feature_enabled', return_value=False):
             # This view should work without error even if Stripe is disabled
-            response = self.client.get(reverse('dashboard:product_admin'))
+            response = self.client.get(reverse('admin_dashboard:product_admin'))
             self.assertEqual(response.status_code, 200)
 
 

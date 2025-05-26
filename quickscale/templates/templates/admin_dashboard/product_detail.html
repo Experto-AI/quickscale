@@ -15,7 +15,7 @@
     <div class="container">
         <!-- Back to products link -->
         <div class="mb-5">
-            <a href="{% url 'dashboard:product_admin' %}" class="button is-light">
+            <a href="{% url 'admin_dashboard:product_admin' %}" class="button is-light">
                 <span class="icon"><i class="fas fa-arrow-left"></i></span>
                 <span>Back to Products</span>
             </a>
@@ -169,7 +169,7 @@
                                 <span>View in Stripe Dashboard</span>
                             </a>
                             
-                            <form method="post" action="{% url 'dashboard:product_sync' product.stripe_id %}" class="is-fullwidth mb-2">
+                            <form method="post" action="{% url 'admin_dashboard:product_sync' product.stripe_id %}" class="is-fullwidth mb-2">
                                 {% csrf_token %}
                                 <button type="submit" class="button is-warning is-fullwidth">
                                     <span class="icon"><i class="fas fa-sync-alt"></i></span>

@@ -1,11 +1,11 @@
 {% extends "base.html" %}
 
-{% block title %}Dashboard - {{ project_name }}{% endblock %}
+{% block title %}Admin Dashboard - {{ project_name }}{% endblock %}
 
 {% block content %}
 <section class="hero is-primary is-small">
     <div class="hero-body">
-        <p class="title">Dashboard</p>
+        <p class="title">Admin Dashboard</p>
         <p class="subtitle">Admin control panel for your application</p>
     </div>
 </section>
@@ -85,7 +85,7 @@
                         </div>
                     </div>
                     <footer class="card-footer">
-                        <a href="{% url 'dashboard:product_admin' %}" class="card-footer-item">Manage Products</a>
+                        <a href="{% url 'admin_dashboard:product_admin' %}" class="card-footer-item">Manage Products</a>
                     </footer>
                 </div>
             </div>

@@ -71,29 +71,31 @@ class StripeManager:
         # Configure Stripe API client using StripeClient
         try:
             self._client = StripeClient(api_key=api_key)
-
             logger.info(f"StripeClient initialized with API version: {stripe_api_version}")
 
-            # Add a basic API call to confirm initialization and version compatibility
-            try:
-                # Attempt to list a small number of customers as a test
-                logger.info("Attempting a basic Stripe API call (list customers) to confirm connectivity and version compatibility...")
-                # Use the client instance
-                self._client.customers.list()
-                logger.info("Basic Stripe API call successful.")
-            except Exception as e:
-                # If the basic API call fails, raise a configuration error
-                logger.error(f"Basic Stripe API call failed with exception: {e}", exc_info=True)
-                # Re-raise as a configuration error as it indicates a setup problem
-                raise StripeConfigurationError(f"Failed to connect to Stripe API with configured key and version: {e}") from e
+            # Optional connectivity test - don't fail initialization if this fails
+            # This allows the app to start even when Stripe is temporarily unavailable
+            connectivity_test_enabled = is_feature_enabled(get_env('STRIPE_CONNECTIVITY_TEST', 'True'))
+            
+            if connectivity_test_enabled:
+                try:
+                    logger.info("Attempting a basic Stripe API call (list customers) to confirm connectivity and version compatibility...")
+                    # Use the client instance with a minimal request
+                    self._client.customers.list(limit=1)
+                    logger.info("Basic Stripe API call successful - Stripe connectivity confirmed.")
+                except Exception as e:
+                    # Log the error but don't fail initialization - allow app to start
+                    logger.warning(f"Stripe connectivity test failed, but continuing with initialization: {e}")
+                    logger.warning("Stripe operations may fail until connectivity is restored. Check network connection and Stripe service status.")
+            else:
+                logger.info("Stripe connectivity test disabled - skipping API connectivity verification.")
 
-
-        except Exception as e: # This except block now correctly closes the outer try
+        except Exception as e:
             logger.error(f"Error initializing Stripe client: {e}", exc_info=True)
             # Re-raise as a configuration error if initialization fails
             raise StripeConfigurationError(f"Failed to initialize Stripe: {e}") from e
 
-        # This line should be outside the try...except block
+        # Mark as initialized regardless of connectivity test result
         self.__class__._initialized = True
         logger.info("Stripe integration enabled and initialized successfully.")
 
@@ -105,6 +107,28 @@ class StripeManager:
              # Re-run initialization if needed, which includes the version check
              self._initialize()
         return self._client
+
+    def is_stripe_available(self) -> bool:
+        """Check if Stripe API is available and reachable."""
+        if not self.__class__._initialized or self._client is None:
+            return False
+        
+        try:
+            # Minimal API call to test connectivity
+            self._client.customers.list(limit=1)
+            return True
+        except Exception as e:
+            logger.warning(f"Stripe connectivity check failed: {e}")
+            return False
+
+    def ensure_stripe_available(self):
+        """Ensure Stripe is available before performing operations, raise helpful error if not."""
+        if not self.is_stripe_available():
+            raise StripeConfigurationError(
+                "Stripe API is not available. This could be due to network connectivity issues, "
+                "invalid API keys, or Stripe service being temporarily unavailable. "
+                "Please check your network connection and Stripe configuration."
+            )
 
     # Customer operations
 
@@ -659,9 +683,19 @@ class StripeManager:
                 'active': getattr(product_obj, 'active', True),
                 # Add any other relevant fields from your Product model
             }
-            # Add metadata, ensuring it's a dictionary
+            
+            # Prepare metadata for the product
+            metadata = {}
             if hasattr(product_obj, 'metadata') and isinstance(product_obj.metadata, dict):
-                 product_data['metadata'] = product_obj.metadata
+                metadata.update(product_obj.metadata)
+            
+            # Include credit amount in metadata
+            if hasattr(product_obj, 'credit_amount'):
+                metadata['credit_amount'] = str(product_obj.credit_amount)
+                
+            # Add metadata to product data if we have any
+            if metadata:
+                product_data['metadata'] = metadata
 
 
             price_data = {
@@ -762,6 +796,9 @@ class StripeManager:
             if not stripe_product:
                 logger.error(f"Could not retrieve product {stripe_product_id} from Stripe")
                 return None
+            
+            # Log the full Stripe response for debugging
+            logger.info(f"Full Stripe product response for {stripe_product_id}: {stripe_product}")
                 
             # Find or create the local product object
             try:
@@ -779,8 +816,27 @@ class StripeManager:
             product_obj.name = stripe_product['name']
             product_obj.description = stripe_product.get('description', '')
             product_obj.active = stripe_product['active']
-            # Preserve the display_order
-            product_obj.display_order = current_display_order
+            
+            # Handle display_order from metadata or preserve existing
+            if hasattr(product_obj, 'display_order') and stripe_product.get('metadata'):
+                metadata = stripe_product['metadata']
+                display_order_str = metadata.get('display_order')
+                
+                if display_order_str:
+                    try:
+                        display_order = int(display_order_str)
+                        product_obj.display_order = display_order
+                        logger.info(f"Set display_order from Stripe metadata: {display_order} for product {stripe_product['id']}")
+                    except (ValueError, TypeError) as e:
+                        logger.warning(f"Could not parse display_order from Stripe metadata '{display_order_str}' for product {stripe_product['id']}: {e}")
+                        # Preserve the current display_order
+                        product_obj.display_order = current_display_order
+                else:
+                    # Preserve the current display_order if no metadata
+                    product_obj.display_order = current_display_order
+            else:
+                # Preserve the current display_order if no metadata support
+                product_obj.display_order = current_display_order
             
             # Save images if the model supports it
             if hasattr(product_obj, 'images') and stripe_product.get('images'):
@@ -848,6 +904,30 @@ class StripeManager:
             # Update metadata if the model supports it
             if hasattr(product_obj, 'metadata') and stripe_product.get('metadata'):
                 product_obj.metadata = stripe_product['metadata']
+
+            # Extract credit amount from Stripe metadata - fail gracefully without defaults
+            if hasattr(product_obj, 'credit_amount') and stripe_product.get('metadata'):
+                metadata = stripe_product['metadata']
+                credit_amount_str = metadata.get('credit_amount')
+                
+                if credit_amount_str:
+                    try:
+                        credit_amount = int(credit_amount_str)
+                        if credit_amount > 0:
+                            product_obj.credit_amount = credit_amount
+                            logger.info(f"Set credit amount from Stripe metadata: {credit_amount} credits for product {stripe_product['id']}")
+                        else:
+                            logger.error(f"Invalid credit amount in Stripe metadata: {credit_amount_str} for product {stripe_product['id']} - credit amount must be positive")
+                            return None
+                    except (ValueError, TypeError) as e:
+                        logger.error(f"Could not parse credit amount from Stripe metadata '{credit_amount_str}' for product {stripe_product['id']}: {e}")
+                        return None
+                else:
+                    logger.error(f"No credit_amount found in Stripe metadata for product {stripe_product['id']} - this field is required for sync")
+                    return None
+            elif hasattr(product_obj, 'credit_amount'):
+                logger.error(f"Product {stripe_product['id']} has no metadata or missing credit_amount - this field is required for sync")
+                return None
 
             # Save the local product object
             product_obj.save()

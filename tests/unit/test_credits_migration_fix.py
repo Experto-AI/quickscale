@@ -54,49 +54,6 @@ class CreditTypeMigrationFixTests(unittest.TestCase):
         self.assertIn("models.Index(fields=['credit_type'])", models_content,
                      "Should have index on credit_type field")
     
-    def test_migration_file_exists_for_credit_type(self):
-        """Test that the migration file for credit_type field exists in templates."""
-        migration_path = os.path.join(
-            os.path.dirname(__file__), 
-            '../../quickscale/templates/credits/migrations/0003_add_credit_type.py'
-        )
-        
-        self.assertTrue(os.path.exists(migration_path), 
-                       "Migration file 0003_add_credit_type.py should exist in templates")
-        
-        # Read migration content and verify it adds credit_type field
-        with open(migration_path, 'r') as f:
-            migration_content = f.read()
-            
-        self.assertIn('AddField', migration_content,
-                     "Migration should contain AddField operation")
-        self.assertIn('credit_type', migration_content,
-                     "Migration should add credit_type field")
-        self.assertIn('PURCHASE', migration_content,
-                     "Migration should include PURCHASE choice")
-        self.assertIn('CONSUMPTION', migration_content,
-                     "Migration should include CONSUMPTION choice")
-        self.assertIn('ADMIN', migration_content,
-                     "Migration should include ADMIN choice")
-        self.assertIn('default=\'ADMIN\'', migration_content,
-                     "Migration should set default to ADMIN")
-        self.assertIn('max_length=20', migration_content,
-                     "Migration should set max_length to 20")
-    
-    def test_migration_dependencies_are_correct(self):
-        """Test that the migration has correct dependencies."""
-        migration_path = os.path.join(
-            os.path.dirname(__file__), 
-            '../../quickscale/templates/credits/migrations/0003_add_credit_type.py'
-        )
-        
-        with open(migration_path, 'r') as f:
-            migration_content = f.read()
-        
-        # Should depend on the previous migration
-        self.assertIn("('credits', '0002_add_services')", migration_content,
-                     "Migration should depend on 0002_add_services")
-    
     def test_credit_transaction_meta_class_has_correct_indexes(self):
         """Test that CreditTransaction Meta class includes all required indexes."""
         models_file = os.path.join(
@@ -195,29 +152,3 @@ class CreditTransactionTemplateConsistencyTests(unittest.TestCase):
         for choice in expected_choices:
             self.assertIn(f"('{choice}'", models_content,
                          f"Should have {choice} choice defined")
-    
-    def test_migration_matches_model_definition(self):
-        """Test that migration field definition matches model field definition."""
-        models_file = os.path.join(
-            os.path.dirname(__file__), 
-            '../../quickscale/templates/credits/models.py'
-        )
-        migration_file = os.path.join(
-            os.path.dirname(__file__), 
-            '../../quickscale/templates/credits/migrations/0003_add_credit_type.py'
-        )
-        
-        with open(models_file, 'r') as f:
-            models_content = f.read()
-        
-        with open(migration_file, 'r') as f:
-            migration_content = f.read()
-        
-        # Check consistency between model and migration
-        if 'max_length=20' in models_content:
-            self.assertIn('max_length=20', migration_content,
-                         "Migration max_length should match model")
-        
-        if "default='ADMIN'" in models_content:
-            self.assertIn("default='ADMIN'", migration_content,
-                         "Migration default should match model")

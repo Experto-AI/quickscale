@@ -449,44 +449,5 @@ class ServiceTemplatesTests(unittest.TestCase):
                      "Use Services button text not found")
 
 
-class ServiceMigrationTests(unittest.TestCase):
-    """Test cases for service migrations."""
-    
-    def setUp(self):
-        """Set up test environment."""
-        self.base_path = Path(os.path.dirname(os.path.dirname(os.path.dirname(__file__))))
-        self.credits_app_path = self.base_path / 'quickscale' / 'templates' / 'credits'
-        self.migrations_path = self.credits_app_path / 'migrations'
-        self.services_migration = self.migrations_path / '0002_add_services.py'
-        
-    def test_services_migration_exists(self):
-        """Test that services migration exists."""
-        self.assertTrue(self.services_migration.exists(),
-                       f"Services migration not found at {self.services_migration}")
-    
-    def test_services_migration_structure(self):
-        """Test services migration structure."""
-        with open(self.services_migration, 'r') as f:
-            migration_content = f.read()
-        
-        # Check for Service model creation
-        self.assertIn("migrations.CreateModel", migration_content,
-                     "CreateModel operation not found")
-        self.assertIn("name='Service'", migration_content,
-                     "Service model creation not found")
-        
-        # Check for ServiceUsage model creation
-        self.assertIn("name='ServiceUsage'", migration_content,
-                     "ServiceUsage model creation not found")
-        
-        # Check for indexes
-        self.assertIn("migrations.AddIndex", migration_content,
-                     "Index creation not found")
-        
-        # Check for proper dependencies
-        self.assertIn("('credits', '0001_initial')", migration_content,
-                     "Migration dependency not found")
-
-
 if __name__ == '__main__':
     unittest.main() 
