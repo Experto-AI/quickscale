@@ -160,6 +160,10 @@ class StripeProductAdmin(admin.ModelAdmin):
         # Redirect back to the changelist view
         return HttpResponseRedirect("../")
 
+    def has_add_permission(self, request):
+        """Disable adding products manually - they should be synced from Stripe."""
+        return False
+
     def changelist_view(self, request, extra_context=None):
         """Add sync all button to changelist view."""
         if extra_context is None:

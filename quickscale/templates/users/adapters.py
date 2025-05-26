@@ -23,7 +23,7 @@ class AccountAdapter(DefaultAccountAdapter):
         """Return the URL to redirect to after successful login."""
         # You can customize the redirect URL based on user or other conditions
         if request.user.is_staff:
-            return reverse('dashboard:admin')
+            return reverse('admin_dashboard:index')
         return settings.LOGIN_REDIRECT_URL
     
     def send_mail(self, template_prefix, email, context):

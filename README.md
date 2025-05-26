@@ -69,11 +69,11 @@ quickscale down                   # Stop the services
   - About: Project information
   - Navigation Bar: Site navigation
 - User Private: 
-  - Dashboard: User dashboard
+  - Dashboard: User dashboard ("My Dashboard")
   - Profile: User profile management
   - Settings: User settings
 - Admin Private: 
-  - Dashboard: Admin dashboard
+  - Dashboard: Admin dashboard for staff users
   - Profile: Admin profile
   - Settings: System settings
   - Users CRUD: User management

@@ -1,4 +1,4 @@
-"""Initial migration for dashboard app."""
+"""Initial migration for admin dashboard app."""
 from django.db import migrations
 
 

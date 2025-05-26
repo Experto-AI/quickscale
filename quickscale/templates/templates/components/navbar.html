@@ -36,7 +36,7 @@
                 </div>
                 <div class="navbar-item">
                     <div class="buttons">
-                        <a class="button is-success is-small" href="{% url 'dashboard:user_dashboard' %}">
+                        <a class="button is-success is-small" href="{% url 'admin_dashboard:user_dashboard' %}">
                             My Dashboard
                         </a>
                         <a class="button is-primary is-small" href="{% url 'users:profile' %}">
@@ -53,8 +53,8 @@
                 </div>
                 {% if user.is_staff %}
                 <div class="navbar-item">
-                    <a class="button is-info is-small" href="{% url 'dashboard:index' %}">
-                        Dashboard
+                    <a class="button is-info is-small" href="{% url 'admin_dashboard:index' %}">
+                        Admin Dashboard
                     </a>
                 </div>
                 {% endif %}

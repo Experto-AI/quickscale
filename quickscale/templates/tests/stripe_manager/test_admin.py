@@ -86,4 +86,29 @@ class StripeProductAdminTest(TestCase):
             '_selected_action': [self.product.id]
         }
         response = self.client.post(url, data)
-        self.assertEqual(response.status_code, 302)  # Redirect after sync 
+        self.assertEqual(response.status_code, 302)  # Redirect after sync
+
+    def test_add_permission_disabled(self):
+        """Test that ADD permission is disabled for StripeProduct admin."""
+        from django.contrib.admin import site
+        from ..admin import StripeProductAdmin
+        
+        admin_instance = StripeProductAdmin(StripeProduct, site)
+        
+        # Mock request object
+        class MockRequest:
+            def __init__(self):
+                self.user = self.admin_user
+        
+        request = MockRequest()
+        request.user = self.admin_user
+        
+        # Test that add permission returns False
+        self.assertFalse(admin_instance.has_add_permission(request))
+
+    def test_add_url_redirects(self):
+        """Test that accessing the add URL redirects since ADD is disabled."""
+        url = reverse('admin:stripe_manager_stripeproduct_add')
+        response = self.client.get(url)
+        # Should redirect to changelist since add permission is disabled
+        self.assertEqual(response.status_code, 403)

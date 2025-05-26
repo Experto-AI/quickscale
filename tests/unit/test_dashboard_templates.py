@@ -1,7 +1,7 @@
 """
-Tests for dashboard templates.
+Tests for admin dashboard templates.
 
-These tests verify that the dashboard templates have proper URLs configured
+These tests verify that the admin dashboard templates have proper URLs configured
 and that the sync button functionality for Stripe products is properly set up.
 """
 
@@ -10,23 +10,23 @@ import unittest
 import re
 from pathlib import Path
 
-class DashboardTemplateTests(unittest.TestCase):
-    """Test cases for dashboard templates."""
+class AdminDashboardTemplateTests(unittest.TestCase):
+    """Test cases for admin dashboard templates."""
     
     def setUp(self):
         """Set up test environment."""
         # Locate the template files
         self.base_path = Path(os.path.dirname(os.path.dirname(os.path.dirname(__file__))))
-        # self.templates_path = self.base_path / 'templates' / 'dashboard' / 'templates' # Old path
-        self.quickscale_templates_path = self.base_path / 'quickscale' / 'templates' / 'templates' / 'dashboard'
+        # self.templates_path = self.base_path / 'templates' / 'admin_dashboard' / 'templates' # Old path
+        self.quickscale_templates_path = self.base_path / 'quickscale' / 'templates' / 'templates' / 'admin_dashboard'
         
         # Template files
         self.product_admin_template = self.quickscale_templates_path / 'product_admin.html' # Corrected path
         self.product_detail_template = self.quickscale_templates_path / 'product_detail.html' # Corrected path
         
         # URLs and views files
-        self.urls_path = self.base_path / 'quickscale' / 'templates' / 'dashboard' / 'urls.py'
-        self.views_path = self.base_path / 'quickscale' / 'templates' / 'dashboard' / 'views.py'
+        self.urls_path = self.base_path / 'quickscale' / 'templates' / 'admin_dashboard' / 'urls.py'
+        self.views_path = self.base_path / 'quickscale' / 'templates' / 'admin_dashboard' / 'views.py'
     
     def test_product_admin_template_exists(self):
         """Test that the product admin template exists."""
@@ -82,7 +82,7 @@ class DashboardTemplateTests(unittest.TestCase):
             views_content = f.read()
         
         # Look for the redirect in the product_sync view
-        redirect_pattern = r'return\s+redirect\s*\(\s*[\'"]dashboard:product_detail[\'"]\s*,\s*product_id=product_id\s*\)'
+        redirect_pattern = r'return\s+redirect\s*\(\s*[\'"]admin_dashboard:product_detail[\'"]\s*,\s*product_id=product_id\s*\)'
         self.assertRegex(views_content, redirect_pattern,
                         "product_sync view does not redirect to product_detail")
     
@@ -102,7 +102,7 @@ class DashboardTemplateTests(unittest.TestCase):
             template_content = f.read()
         
         # Look for the sync form with the correct URL
-        sync_form_pattern = r'action="{% url \'dashboard:product_sync\' product.stripe_id %}"'
+        sync_form_pattern = r'action="{% url \'admin_dashboard:product_sync\' product.stripe_id %}"'
         self.assertRegex(template_content, sync_form_pattern,
                         "Sync form with correct URL not found in product_detail.html")
     

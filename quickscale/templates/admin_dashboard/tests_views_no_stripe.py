@@ -31,16 +31,16 @@ class DashboardWithoutStripeTestCase(TestCase):
     @override_settings(STRIPE_ENABLED=False)
     def test_dashboard_loads_without_stripe(self):
         """Test that the dashboard loads properly without Stripe."""
-        response = self.client.get(reverse('dashboard:home'))
+        response = self.client.get(reverse('admin_dashboard:index'))
         self.assertEqual(response.status_code, 200)
-        self.assertTemplateUsed(response, 'dashboard/home.html')
+        self.assertTemplateUsed(response, 'admin_dashboard/index.html')
         # Check that Stripe elements are not in the response
         self.assertNotContains(response, 'stripe-')
     
     @override_settings(STRIPE_ENABLED=False)
     def test_subscription_page_without_stripe(self):
         """Test that the subscription page works properly without Stripe."""
-        response = self.client.get(reverse('dashboard:subscription'))
+        response = self.client.get(reverse('admin_dashboard:user_dashboard'))
         self.assertEqual(response.status_code, 200)
         # Should display a message that subscriptions are not available
         self.assertContains(response, 'not available')

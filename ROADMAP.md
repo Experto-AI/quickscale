@@ -64,72 +64,6 @@ The QuickScale credit system supports multiple payment models and credit types w
 
 ## Development Sprints
 
-### Sprint 1: Basic Credit Account Foundation (v0.13.0) ✅ COMPLETED
-**Goal**: Create basic credit account system with display page
-
-**Backend Implementation:**
-- [X] Create `CreditAccount` model linked to users with single balance field
-- [X] Create `CreditTransaction` model with basic fields (amount, description, user, timestamp)
-- [X] Add simple credit balance calculation method
-- [X] Create basic credit operations: `add_credits()` and `get_balance()`
-
-**Frontend Implementation:**
-- [X] Create `/dashboard/credits/` page showing current credit balance
-- [X] Add credits section to main dashboard with balance display
-- [X] Show recent 5 credit transactions with simple list
-
-**Testing:**
-- [X] Unit tests for credit models and basic operations
-- [X] Integration test for credit dashboard page
-- [X] Test credit balance calculation
-
-**Validation**: User can view their credit balance on a dedicated page
-
----
-
-### Sprint 2: Manual Credit Management (v0.14.0) ✅ COMPLETED
-**Goal**: Admin can manually add/remove credits for testing
-
-**Backend Implementation:**
-- [X] Add admin interface for `CreditAccount` and `CreditTransaction`
-- [X] Create admin action to add/remove credits with reason
-- [X] Add basic validation for credit operations
-
-**Frontend Implementation:**
-- [X] Enhance admin interface with credit management tools
-- [X] Add "Add Credits" form in admin with amount and reason fields
-- [X] Show admin credit operations in transaction history
-
-**Testing:**
-- [X] Tests for admin credit operations
-- [X] Test credit addition/removal through admin interface
-
-**Validation**: Admin can add credits to any user account and user can see the updated balance ✅
-
----
-
-### Sprint 3: Basic Service Credit Consumption (v0.15.0) ✅ COMPLETED
-**Goal**: Create services that consume credits with validation
-
-**Backend Implementation:**
-- [X] Create `Service` model with name, description, and credit_cost fields
-- [X] Implement `consume_credits()` method with validation
-- [X] Add insufficient credits error handling
-- [X] Create basic service usage tracking
-
-**Frontend Implementation:**
-- [X] Create `/services/` page listing available services with credit costs
-- [X] Add "Use Service" buttons that consume credits
-- [X] Show success/error messages for service usage
-- [X] Display updated credit balance after service usage
-
-**Testing:**
-- [X] Tests for credit consumption logic
-- [X] Tests for insufficient credits scenarios
-- [X] Integration tests for service usage flow
-
-**Validation**: User can use services that consume credits, see updated balance, and get blocked when insufficient credits ✅
-
 ---
 
 ### Sprint 4: Pay-as-You-Go Credit Purchase (v0.16.0) ✅ COMPLETED
@@ -165,17 +99,26 @@ The QuickScale credit system supports multiple payment models and credit types w
 **Goal**: Improve code quality, user flow and maintainability
 
 **Django Admin:**
-- [ ] Remove ADD STRIPE PRODUCT button in STRIPE INTEGRATION -> STRIPE PRODUCTS
-- [ ] Analyze if ACCOUNTS -> Email Address could be grouped with USERS -> Customs Users
-- [ ] Analyze if also STRIPE INTEGRATION -> STRIPE USERS could be grouped.
-- [ ] Fix credits synced from Stripe for each plan (are all 1000?)
+- [X] Update Technical DOCs, each diagram should be updated to reflect the new structure
+- [X] Fix credits synced from Stripe for each plan (are all 1000?)
+   - [X] Code created in sync_product_from_stripe, sync metadata credit_amount.
+   - [X] Also sync metadata display_order.
+   - [X] Fail gracefully by default, do not create defaults.
+   - [X] Human test
+- [X] Remove Django Admin ADD STRIPE PRODUCT button in STRIPE INTEGRATION -> STRIPE PRODUCTS
+   - [X] Human test
+- [X] Analyze if Django Admin ACCOUNTS -> Email Address could be grouped with USERS -> Customs Users
+   - [X] Human test
+- [X] Analyze if also Django Admin STRIPE INTEGRATION -> STRIPE USERS could be grouped.
+      Not DONE, is not convenient.
 
 **Backend and Frontend Implementation:**
-- [ ] Admin: rename Dashboard to Admin Dashboard to differentiate user dashboard ("My Dashboard")
-- [ ] Group all migrations into one file
+- [X] Admin: rename Dashboard to Admin Dashboard to differentiate user dashboard ("My Dashboard")
+      In codebase, backend and frontend.
+- [X] Group all migrations into one file
 
 **Testing:**
-- [ ] Update all unit tests to reflect changes
+- [X] Update all unit tests to reflect changes
 
 **Validation**: Refactor completed, user flows improved, and codebase more maintainable
 
@@ -192,7 +135,7 @@ The QuickScale credit system supports multiple payment models and credit types w
 - [ ] Add subscription webhook handling
 
 **Frontend Implementation:**
-- [ ] Create `/dashboard/subscription/` page showing current plan
+- [ ] Create `/admin_dashboard/subscription/` page showing current plan
 - [ ] Add "Subscribe to Basic" button with Stripe Checkout
 - [ ] Show subscription status and next billing date
 - [ ] Display credit breakdown (subscription vs pay-as-you-go)
@@ -263,7 +206,7 @@ The QuickScale credit system supports multiple payment models and credit types w
 - [ ] Add payment status tracking (success, failed, refunded)
 
 **Frontend Implementation:**
-- [ ] Create `/dashboard/payments/` page with payment history
+- [ ] Create `/admin_dashboard/payments/` page with payment history
 - [ ] Show detailed payment information (amount, date, type, status)
 - [ ] Add downloadable receipts for each payment
 - [ ] Separate views for subscription payments vs credit purchases
@@ -325,4 +268,9 @@ The QuickScale credit system supports multiple payment models and credit types w
 
 ---
 
+### Sprint 12: Refactor and Maintenance (v0.24.0)
+**Goal**: Refactor and maintain codebase
 
+**Backend Implementation:**
+- [ ] Iterate code-tree and remove all unused functions and classes
+- [ ] Iterate code-tree and check each file for CONTRIBUTING rules
