@@ -60,7 +60,7 @@ class DashboardWithoutStripeTestCase(TestCase):
         self.client.login(email='admin@test.com', password='adminpassword')
         
         # Access the dashboard index
-        response = self.client.get(reverse('dashboard:index'))
+        response = self.client.get(reverse('admin_dashboard:index'))
         
         # Should load successfully
         self.assertEqual(response.status_code, 200)
@@ -72,7 +72,7 @@ class DashboardWithoutStripeTestCase(TestCase):
         self.client.login(email='admin@test.com', password='adminpassword')
         
         # Access the product admin page
-        response = self.client.get(reverse('dashboard:product_admin'))
+        response = self.client.get(reverse('admin_dashboard:product_admin'))
         
         # Should load successfully
         self.assertEqual(response.status_code, 200)
@@ -93,7 +93,7 @@ class DashboardWithoutStripeTestCase(TestCase):
         
         # Try to refresh products
         response = self.client.post(
-            reverse('dashboard:product_admin_refresh'),
+            reverse('admin_dashboard:product_admin_refresh'),
             content_type='application/json'
         )
         
@@ -115,7 +115,7 @@ class DashboardWithoutStripeTestCase(TestCase):
         
         # Try to sync products
         response = self.client.post(
-            reverse('dashboard:product_sync'),
+            reverse('admin_dashboard:product_sync'),
             content_type='application/json'
         )
         
@@ -137,7 +137,7 @@ class DashboardWithoutStripeTestCase(TestCase):
         self.client.login(email='admin@test.com', password='adminpassword')
         
         # Access the product admin page
-        response = self.client.get(reverse('dashboard:product_admin'))
+        response = self.client.get(reverse('admin_dashboard:product_admin'))
         
         # Should load successfully
         self.assertEqual(response.status_code, 200)
@@ -161,7 +161,7 @@ class DashboardWithoutStripeTestCase(TestCase):
         self.client.login(email='admin@test.com', password='adminpassword')
         
         # Access the product admin page
-        response = self.client.get(reverse('dashboard:product_admin'))
+        response = self.client.get(reverse('admin_dashboard:product_admin'))
         
         # Should load successfully
         self.assertEqual(response.status_code, 200)

@@ -76,7 +76,7 @@ INSTALLED_APPS = [
     
     # Local apps
     'public.apps.PublicConfig',
-    'dashboard.apps.DashboardConfig',
+    'admin_dashboard.apps.AdminDashboardConfig',
     'users.apps.UsersConfig',
     'common.apps.CommonConfig',
     'credits.apps.CreditsConfig',

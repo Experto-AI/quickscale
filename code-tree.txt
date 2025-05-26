@@ -1,7 +1,7 @@
 quickscale
 ├── dist
-│   ├── quickscale-0.15.0-py3-none-any.whl
-│   └── quickscale-0.15.0.tar.gz
+│   ├── quickscale-0.16.0-py3-none-any.whl
+│   └── quickscale-0.16.0.tar.gz
 ├── docs
 │   ├── contrib
 │   │   ├── 01_ai_programming_assistant.md
@@ -226,6 +226,66 @@ quickscale
 │   │   └── settings.py
 │   │       └── validate_production_settings()
 │   ├── templates
+│   │   ├── admin_dashboard
+│   │   │   ├── migrations
+│   │   │   │   ├── 0001_initial.py
+│   │   │   │   │   └── Migration {}
+│   │   │   │   └── __init__.py
+│   │   │   ├── templates
+│   │   │   ├── templatetags
+│   │   │   │   └── __init__.py
+│   │   │   ├── tests
+│   │   │   │   ├── __init__.py
+│   │   │   │   ├── test_product_admin.py
+│   │   │   │   │   ├── ProductAdminTestCase {}
+│   │   │   │   │   │   ├── setUpClass(cls)
+│   │   │   │   │   │   ├── tearDownClass(cls)
+│   │   │   │   │   │   ├── test_product_admin_page_requires_staff(self, mock_getenv)
+│   │   │   │   │   │   ├── test_product_admin_displays_products(self, mock_list_products, mock_getenv)
+│   │   │   │   │   │   ├── test_product_admin_refresh_functionality(self, mock_sync, mock_getenv)
+│   │   │   │   │   │   ├── test_product_admin_refresh_requires_post(self, mock_getenv)
+│   │   │   │   │   │   ├── test_product_admin_displays_products_from_db(self, mock_getenv)
+│   │   │   │   │   │   ├── test_product_admin_refresh_saves_to_db(self, mock_sync, mock_getenv)
+│   │   │   │   │   │   ├── test_product_detail_view(self, mock_get_prices, mock_retrieve_product, mock_getenv)
+│   │   │   │   │   │   ├── test_update_product_order_view(self, mock_getenv)
+│   │   │   │   │   │   ├── test_update_product_order_invalid_method(self, mock_getenv)
+│   │   │   │   │   │   ├── test_update_product_order_invalid_id(self, mock_getenv)
+│   │   │   │   │   │   └── test_update_product_order_invalid_display_order(self, mock_getenv)
+│   │   │   │   │   ├── TestProductAdminTemplateRendering {}
+│   │   │   │   │   │   ├── setUp(self)
+│   │   │   │   │   │   ├── tearDown(self)
+│   │   │   │   │   │   ├── test_product_admin_stripe_disabled(self, mock_get_env, mock_is_enabled)
+│   │   │   │   │   │   └── test_product_admin_view_stripe_disabled(self, mock_view)
+│   │   │   │   │   └── TestProductAdminLoadingStripeTagsConditionally {}
+│   │   │   │   │       └── test_template_handles_conditional_loading(self)
+│   │   │   │   └── test_views_no_stripe.py
+│   │   │   │       └── DashboardWithoutStripeTestCase {}
+│   │   │   │           ├── setUpClass(cls)
+│   │   │   │           ├── tearDownClass(cls)
+│   │   │   │           ├── test_dashboard_index_loads_without_stripe(self, mock_is_feature_enabled)
+│   │   │   │           ├── test_product_admin_loads_without_stripe(self, mock_is_feature_enabled)
+│   │   │   │           ├── test_product_admin_refresh_error_without_stripe(self, mock_is_feature_enabled)
+│   │   │   │           ├── test_product_sync_error_without_stripe(self, mock_is_feature_enabled)
+│   │   │   │           ├── test_product_admin_shows_missing_api_keys(self, mock_get_stripe_manager, mock_is_feature_enabled)
+│   │   │   │           └── test_product_admin_handles_missing_stripe_package(self, mock_get_stripe_manager, mock_is_feature_enabled)
+│   │   │   ├── apps.py
+│   │   │   │   └── AdminDashboardConfig {}
+│   │   │   ├── tests_product_admin.py
+│   │   │   ├── tests_views_no_stripe.py
+│   │   │   │   └── DashboardWithoutStripeTestCase {}
+│   │   │   │       ├── setUpTestData(cls)
+│   │   │   │       ├── setUp(self)
+│   │   │   │       ├── test_dashboard_loads_without_stripe(self)
+│   │   │   │       └── test_subscription_page_without_stripe(self)
+│   │   │   ├── urls.py
+│   │   │   └── views.py
+│   │   │       ├── user_dashboard(request)
+│   │   │       ├── index(request)
+│   │   │       ├── product_admin(request)
+│   │   │       ├── product_detail(request, product_id)
+│   │   │       ├── update_product_order(request, product_id)
+│   │   │       ├── product_sync(request, product_id)
+│   │   │       └── sync_products(request)
 │   │   ├── common
 │   │   │   ├── migrations
 │   │   │   │   ├── 0001_initial.py
@@ -265,14 +325,6 @@ quickscale
 │   │   ├── credits
 │   │   │   ├── migrations
 │   │   │   │   ├── 0001_initial.py
-│   │   │   │   │   └── Migration {}
-│   │   │   │   ├── 0002_add_services.py
-│   │   │   │   │   └── Migration {}
-│   │   │   │   ├── 0003_add_credit_type.py
-│   │   │   │   │   └── Migration {}
-│   │   │   │   ├── 0004_add_credit_purchase_package.py
-│   │   │   │   │   └── Migration {}
-│   │   │   │   ├── 0005_remove_credit_purchase_package.py
 │   │   │   │   │   └── Migration {}
 │   │   │   │   └── __init__.py
 │   │   │   ├── templates
@@ -340,66 +392,6 @@ quickscale
 │   │   │       ├── services_list(request)
 │   │   │       ├── use_service(request, service_id)
 │   │   │       └── service_usage_api(request, service_id)
-│   │   ├── dashboard
-│   │   │   ├── migrations
-│   │   │   │   ├── 0001_initial.py
-│   │   │   │   │   └── Migration {}
-│   │   │   │   └── __init__.py
-│   │   │   ├── templates
-│   │   │   ├── templatetags
-│   │   │   │   └── __init__.py
-│   │   │   ├── tests
-│   │   │   │   ├── __init__.py
-│   │   │   │   ├── test_product_admin.py
-│   │   │   │   │   ├── ProductAdminTestCase {}
-│   │   │   │   │   │   ├── setUpClass(cls)
-│   │   │   │   │   │   ├── tearDownClass(cls)
-│   │   │   │   │   │   ├── test_product_admin_page_requires_staff(self, mock_getenv)
-│   │   │   │   │   │   ├── test_product_admin_displays_products(self, mock_list_products, mock_getenv)
-│   │   │   │   │   │   ├── test_product_admin_refresh_functionality(self, mock_sync, mock_getenv)
-│   │   │   │   │   │   ├── test_product_admin_refresh_requires_post(self, mock_getenv)
-│   │   │   │   │   │   ├── test_product_admin_displays_products_from_db(self, mock_getenv)
-│   │   │   │   │   │   ├── test_product_admin_refresh_saves_to_db(self, mock_sync, mock_getenv)
-│   │   │   │   │   │   ├── test_product_detail_view(self, mock_get_prices, mock_retrieve_product, mock_getenv)
-│   │   │   │   │   │   ├── test_update_product_order_view(self, mock_getenv)
-│   │   │   │   │   │   ├── test_update_product_order_invalid_method(self, mock_getenv)
-│   │   │   │   │   │   ├── test_update_product_order_invalid_id(self, mock_getenv)
-│   │   │   │   │   │   └── test_update_product_order_invalid_display_order(self, mock_getenv)
-│   │   │   │   │   ├── TestProductAdminTemplateRendering {}
-│   │   │   │   │   │   ├── setUp(self)
-│   │   │   │   │   │   ├── tearDown(self)
-│   │   │   │   │   │   ├── test_product_admin_stripe_disabled(self, mock_get_env, mock_is_enabled)
-│   │   │   │   │   │   └── test_product_admin_view_stripe_disabled(self, mock_view)
-│   │   │   │   │   └── TestProductAdminLoadingStripeTagsConditionally {}
-│   │   │   │   │       └── test_template_handles_conditional_loading(self)
-│   │   │   │   └── test_views_no_stripe.py
-│   │   │   │       └── DashboardWithoutStripeTestCase {}
-│   │   │   │           ├── setUpClass(cls)
-│   │   │   │           ├── tearDownClass(cls)
-│   │   │   │           ├── test_dashboard_index_loads_without_stripe(self, mock_is_feature_enabled)
-│   │   │   │           ├── test_product_admin_loads_without_stripe(self, mock_is_feature_enabled)
-│   │   │   │           ├── test_product_admin_refresh_error_without_stripe(self, mock_is_feature_enabled)
-│   │   │   │           ├── test_product_sync_error_without_stripe(self, mock_is_feature_enabled)
-│   │   │   │           ├── test_product_admin_shows_missing_api_keys(self, mock_get_stripe_manager, mock_is_feature_enabled)
-│   │   │   │           └── test_product_admin_handles_missing_stripe_package(self, mock_get_stripe_manager, mock_is_feature_enabled)
-│   │   │   ├── apps.py
-│   │   │   │   └── DashboardConfig {}
-│   │   │   ├── tests_product_admin.py
-│   │   │   ├── tests_views_no_stripe.py
-│   │   │   │   └── DashboardWithoutStripeTestCase {}
-│   │   │   │       ├── setUpTestData(cls)
-│   │   │   │       ├── setUp(self)
-│   │   │   │       ├── test_dashboard_loads_without_stripe(self)
-│   │   │   │       └── test_subscription_page_without_stripe(self)
-│   │   │   ├── urls.py
-│   │   │   └── views.py
-│   │   │       ├── user_dashboard(request)
-│   │   │       ├── index(request)
-│   │   │       ├── product_admin(request)
-│   │   │       ├── product_detail(request, product_id)
-│   │   │       ├── update_product_order(request, product_id)
-│   │   │       ├── product_sync(request, product_id)
-│   │   │       └── sync_products(request)
 │   │   ├── docs
 │   │   │   ├── auth_templates.md
 │   │   │   ├── styling_guidelines.md
@@ -459,10 +451,6 @@ quickscale
 │   │   │   ├── migrations
 │   │   │   │   ├── 0001_initial.py
 │   │   │   │   │   └── Migration {}
-│   │   │   │   ├── 0002_add_stripe_customer.py
-│   │   │   │   │   └── Migration {}
-│   │   │   │   ├── 0003_add_credit_amount.py
-│   │   │   │   │   └── Migration {}
 │   │   │   │   ├── README.md
 │   │   │   │   └── __init__.py
 │   │   │   ├── templates
@@ -491,6 +479,19 @@ quickscale
 │   │   │   │   │       ├── test_template_tags_not_needed_when_stripe_disabled(self, mock_is_enabled)
 │   │   │   │   │       ├── test_format_stripe_price_filter_registered(self)
 │   │   │   │   │       └── test_conditional_loading_in_template(self)
+│   │   │   │   ├── test_credit_sync.py
+│   │   │   │   │   ├── MockStripeProduct {}
+│   │   │   │   │   │   ├── __init__(self)
+│   │   │   │   │   │   └── save(self)
+│   │   │   │   │   ├── MockDoesNotExist {}
+│   │   │   │   │   ├── create_mock_model(return_instance)
+│   │   │   │   │   └── TestStripeCreditSync {}
+│   │   │   │   │       ├── setUp(self)
+│   │   │   │   │       ├── test_sync_product_from_stripe_reads_credit_amount_from_metadata(self)
+│   │   │   │   │       ├── test_sync_product_from_stripe_different_metadata_keys(self)
+│   │   │   │   │       ├── test_sync_product_from_stripe_invalid_credit_amount(self)
+│   │   │   │   │       ├── test_sync_product_from_stripe_no_metadata(self)
+│   │   │   │   │       └── test_sync_product_to_stripe_includes_credit_amount_in_metadata(self)
 │   │   │   │   ├── test_stripe_manager.py
 │   │   │   │   │   └── StripeManagerTest {}
 │   │   │   │   │       ├── setUp(self)
@@ -559,6 +560,7 @@ quickscale
 │   │   │   │       ├── get_actions(self, request)
 │   │   │   │       ├── sync_selected(self, request, queryset)
 │   │   │   │       ├── sync_all_products_view(self, request)
+│   │   │   │       ├── has_add_permission(self, request)
 │   │   │   │       └── changelist_view(self, request, extra_context)
 │   │   │   ├── apps.py
 │   │   │   │   └── StripeConfig {}
@@ -581,6 +583,8 @@ quickscale
 │   │   │   │       ├── get_instance(cls)
 │   │   │   │       ├── _initialize(self)
 │   │   │   │       ├── client(self)
+│   │   │   │       ├── is_stripe_available(self)
+│   │   │   │       ├── ensure_stripe_available(self)
 │   │   │   │       ├── create_customer(self, email, name, metadata)
 │   │   │   │       ├── retrieve_customer(self, customer_id)
 │   │   │   │       ├── get_customer_by_user(self, user)
@@ -605,6 +609,7 @@ quickscale
 │   │   │   │       ├── cancel_payment_intent(self, payment_intent_id)
 │   │   │   │       ├── list_payment_intents(self, customer_id, limit)
 │   │   │   │       ├── create_checkout_session(self, price_id, quantity, success_url, cancel_url, customer_email, customer_id, metadata)
+│   │   │   │       ├── retrieve_checkout_session(self, session_id, include_line_items)
 │   │   │   │       ├── create_refund(self, payment_intent_id, amount, reason, metadata)
 │   │   │   │       ├── sync_product_to_stripe(self, product_obj)
 │   │   │   │       ├── sync_product_from_stripe(self, stripe_product_id, product_model)
@@ -661,17 +666,17 @@ quickscale
 │   │   │   │   └── stripe_manager
 │   │   │   │       └── stripeproduct
 │   │   │   │           └── change_list.html
+│   │   │   ├── admin_dashboard
+│   │   │   │   ├── index.html
+│   │   │   │   ├── product_admin.html
+│   │   │   │   ├── product_detail.html
+│   │   │   │   └── user_dashboard.html
 │   │   │   ├── base
 │   │   │   │   └── base.html
 │   │   │   ├── components
 │   │   │   │   ├── footer.html
 │   │   │   │   ├── messages.html
 │   │   │   │   └── navbar.html
-│   │   │   ├── dashboard
-│   │   │   │   ├── index.html
-│   │   │   │   ├── product_admin.html
-│   │   │   │   ├── product_detail.html
-│   │   │   │   └── user_dashboard.html
 │   │   │   ├── public
 │   │   │   │   ├── about.html
 │   │   │   │   ├── contact.html
@@ -702,7 +707,9 @@ quickscale
 │   │   │   │   │       ├── test_edit_form(self)
 │   │   │   │   │       ├── test_fieldset_organization(self)
 │   │   │   │   │       ├── test_sync_action(self)
-│   │   │   │   │       └── test_bulk_sync_action(self)
+│   │   │   │   │       ├── test_bulk_sync_action(self)
+│   │   │   │   │       ├── test_add_permission_disabled(self)
+│   │   │   │   │       └── test_add_url_redirects(self)
 │   │   │   │   ├── test_models.py
 │   │   │   │   │   └── StripeProductModelTest {}
 │   │   │   │   │       ├── setUp(self)
@@ -739,18 +746,22 @@ quickscale
 │   │   │   ├── migrations
 │   │   │   │   ├── 0001_initial.py
 │   │   │   │   │   └── Migration {}
-│   │   │   │   ├── 0002_extend_user_profile.py
-│   │   │   │   │   └── Migration {}
-│   │   │   │   ├── 0003_alter_customuser_options.py
-│   │   │   │   │   └── Migration {}
 │   │   │   │   └── __init__.py
 │   │   │   ├── tests
 │   │   │   │   ├── __init__.py
-│   │   │   │   └── test_create_default_users.py
-│   │   │   │       └── CreateDefaultUsersTest {}
-│   │   │   │           ├── test_command_creates_users(self)
-│   │   │   │           ├── test_command_skips_existing_users(self)
-│   │   │   │           └── test_command_force_recreates_users(self)
+│   │   │   │   ├── test_create_default_users.py
+│   │   │   │   │   └── CreateDefaultUsersTest {}
+│   │   │   │   │       ├── test_command_creates_users(self)
+│   │   │   │   │       ├── test_command_skips_existing_users(self)
+│   │   │   │   │       └── test_command_force_recreates_users(self)
+│   │   │   │   └── test_user_admin_grouping.py
+│   │   │   │       └── UserAdminGroupingTest {}
+│   │   │   │           ├── test_email_address_not_registered_separately(self)
+│   │   │   │           ├── test_custom_user_admin_has_email_inline(self)
+│   │   │   │           ├── test_email_address_inline_configuration(self)
+│   │   │   │           ├── test_custom_user_admin_includes_email_status(self)
+│   │   │   │           ├── test_email_verified_status_method(self)
+│   │   │   │           └── test_admin_fieldsets_include_all_user_fields(self)
 │   │   │   ├── adapters.py
 │   │   │   │   ├── AccountAdapter {}
 │   │   │   │   │   ├── is_open_for_signup(self, request)
@@ -763,7 +774,11 @@ quickscale
 │   │   │   │       ├── pre_social_login(self, request, sociallogin)
 │   │   │   │       └── populate_user(self, request, sociallogin, data)
 │   │   │   ├── admin.py
+│   │   │   │   ├── EmailAddressInline {}
+│   │   │   │   │   ├── has_add_permission(self, request, obj)
+│   │   │   │   │   └── has_delete_permission(self, request, obj)
 │   │   │   │   └── CustomUserAdmin {}
+│   │   │   │       └── email_verified_status(self, obj)
 │   │   │   ├── apps.py
 │   │   │   │   └── UsersConfig {}
 │   │   │   ├── forms.py
@@ -1538,7 +1553,7 @@ quickscale
 │   │   │       ├── test_dashboard_urls_include_user_dashboard(self)
 │   │   │       └── test_user_dashboard_template_exists(self)
 │   │   ├── test_dashboard_templates.py
-│   │   │   └── DashboardTemplateTests {}
+│   │   │   └── AdminDashboardTemplateTests {}
 │   │   │       ├── setUp(self)
 │   │   │       ├── test_product_admin_template_exists(self)
 │   │   │       ├── test_product_detail_template_exists(self)

@@ -4,13 +4,15 @@ This is a pre-generated migration file to avoid memory issues during project cre
 Instead of dynamically generating migrations during the build process, we include
 pre-created migration files in the templates, which significantly reduces memory usage
 and eliminates Out-of-Memory errors that could occur on systems with limited resources.
+
+This consolidated migration includes all CustomUser fields and options.
 """
 from django.db import migrations, models
 import django.utils.timezone
 
 
 class Migration(migrations.Migration):
-    """Initial migration for CustomUser model."""
+    """Initial migration for CustomUser model with all profile fields."""
 
     initial = True
 
@@ -34,13 +36,23 @@ class Migration(migrations.Migration):
                 ('username', models.CharField(blank=True, help_text='Optional. 150 characters or fewer. Letters, digits and @/./+/-/_ only.', max_length=150, null=True, verbose_name='username')),
                 ('email', models.EmailField(error_messages={'unique': 'A user with that email already exists.'}, max_length=254, unique=True, verbose_name='email address')),
                 ('bio', models.TextField(blank=True, verbose_name='bio')),
+                ('phone_number', models.CharField(blank=True, max_length=20, verbose_name='phone number')),
+                ('profile_picture', models.ImageField(blank=True, null=True, upload_to='profile_pictures', verbose_name='profile picture')),
+                ('job_title', models.CharField(blank=True, max_length=100, verbose_name='job title')),
+                ('company', models.CharField(blank=True, max_length=100, verbose_name='company')),
+                ('website', models.URLField(blank=True, verbose_name='website')),
+                ('location', models.CharField(blank=True, max_length=100, verbose_name='location')),
+                ('twitter', models.CharField(blank=True, help_text='Twitter username', max_length=100, verbose_name='twitter')),
+                ('linkedin', models.CharField(blank=True, help_text='LinkedIn username', max_length=100, verbose_name='linkedin')),
+                ('github', models.CharField(blank=True, help_text='GitHub username', max_length=100, verbose_name='github')),
+                ('email_notifications', models.BooleanField(default=True, verbose_name='email notifications')),
                 ('groups', models.ManyToManyField(blank=True, help_text='The groups this user belongs to. A user will get all permissions granted to each of their groups.', related_name='user_set', related_query_name='user', to='auth.group', verbose_name='groups')),
                 ('user_permissions', models.ManyToManyField(blank=True, help_text='Specific permissions for this user.', related_name='user_set', related_query_name='user', to='auth.permission', verbose_name='user permissions')),
             ],
             options={
-                'verbose_name': 'user',
-                'verbose_name_plural': 'users',
-                'abstract': False,
+                'verbose_name': 'User',
+                'verbose_name_plural': 'Users',
+                'app_label': 'users',
             },
         ),
     ] 
