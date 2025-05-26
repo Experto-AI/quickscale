@@ -1,4 +1,4 @@
-"""Staff dashboard views."""
+"""Admin dashboard views."""
 from django.contrib.auth.decorators import login_required, user_passes_test
 from django.http import HttpRequest, HttpResponse, JsonResponse
 from django.shortcuts import render, get_object_or_404, redirect
@@ -59,13 +59,13 @@ def user_dashboard(request: HttpRequest) -> HttpResponse:
         'stripe_enabled': stripe_enabled,
     }
     
-    return render(request, 'dashboard/user_dashboard.html', context)
+    return render(request, 'admin_dashboard/user_dashboard.html', context)
 
 @login_required
 @user_passes_test(lambda u: u.is_staff)
 def index(request: HttpRequest) -> HttpResponse:
-    """Display the staff dashboard."""
-    return render(request, 'dashboard/index.html')
+    """Display the admin dashboard."""
+    return render(request, 'admin_dashboard/index.html')
 
 @login_required
 @user_passes_test(lambda u: u.is_staff)
@@ -95,7 +95,7 @@ def product_admin(request: HttpRequest) -> HttpResponse:
         # No need to fetch from Stripe directly in this view anymore
         pass # Keep the if block structure in case we add other checks later
     
-    return render(request, 'dashboard/product_admin.html', context)
+    return render(request, 'admin_dashboard/product_admin.html', context)
 
 @login_required
 @user_passes_test(lambda u: u.is_staff)
@@ -143,7 +143,7 @@ def product_detail(request: HttpRequest, product_id: str) -> HttpResponse:
         except Exception as e:
             context['error'] = str(e)
     
-    return render(request, 'dashboard/product_detail.html', context)
+    return render(request, 'admin_dashboard/product_detail.html', context)
 
 @login_required
 @user_passes_test(lambda u: u.is_staff)
@@ -161,7 +161,7 @@ def update_product_order(request: HttpRequest, product_id: int) -> HttpResponse:
     """
     # Simply return the current product list without making any changes
     products = StripeProduct.objects.all().order_by('display_order')
-    return render(request, 'dashboard/partials/product_list.html', {'products': products})
+    return render(request, 'admin_dashboard/partials/product_list.html', {'products': products})
 
 @login_required
 @user_passes_test(lambda u: u.is_staff)
@@ -177,14 +177,14 @@ def product_sync(request: HttpRequest, product_id: str) -> HttpResponse:
         Redirects back to the product detail page
     """
     if request.method != 'POST':
-        return redirect('dashboard:product_detail', product_id=product_id)
+        return redirect('admin_dashboard:product_detail', product_id=product_id)
     
     # Check if Stripe is enabled
     stripe_enabled = is_feature_enabled(get_env('STRIPE_ENABLED', 'False'))
     
     if not stripe_enabled or not STRIPE_AVAILABLE or stripe_manager is None:
         messages.error(request, 'Stripe integration is not enabled or available')
-        return redirect('dashboard:product_detail', product_id=product_id)
+        return redirect('admin_dashboard:product_detail', product_id=product_id)
     
     try:
         # Get the product from Stripe
@@ -192,7 +192,7 @@ def product_sync(request: HttpRequest, product_id: str) -> HttpResponse:
         
         if not stripe_product:
             messages.error(request, f'Product {product_id} not found in Stripe')
-            return redirect('dashboard:product_detail', product_id=product_id)
+            return redirect('admin_dashboard:product_detail', product_id=product_id)
         
         # Try to get existing product to preserve display_order
         existing_product = None
@@ -245,7 +245,7 @@ def product_sync(request: HttpRequest, product_id: str) -> HttpResponse:
     except Exception as e:
         messages.error(request, f'Error syncing product: {str(e)}')
     
-    return redirect('dashboard:product_detail', product_id=product_id)
+    return redirect('admin_dashboard:product_detail', product_id=product_id)
 
 @login_required
 @user_passes_test(lambda u: u.is_staff)
@@ -273,7 +273,7 @@ def sync_products(request: HttpRequest) -> HttpResponse:
         
         # Return the updated product list partial
         products = StripeProduct.objects.all().order_by('display_order')
-        return render(request, 'dashboard/partials/product_list.html', {'products': products})
+        return render(request, 'admin_dashboard/partials/product_list.html', {'products': products})
         
     except Exception as e:
         messages.error(request, f'Error syncing products: {str(e)}')

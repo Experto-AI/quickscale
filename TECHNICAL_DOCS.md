@@ -16,7 +16,7 @@ Project configuration is managed through environment variables with secure defau
     - dj-database-url 2.1.0+ (database URL configuration)
     - django-allauth 0.61.0+ (authentication)
     - Uvicorn 0.27.0+ (ASGI server)
-    - stripe 12.1.0+ for payment processing
+    - stripe 12.1.0+ (payment processing and billing)
 - HTMX (frontend to backend communication for CRUD operations with the simplicity of HTML)
 - Alpine.js (simple vanilla JS library for DOM manipulation)
 - Bulma CSS (simple CSS styling without JavaScript) - Do not mix Tailwind or another alternatives
@@ -53,7 +53,16 @@ quickscale/
 │   │   ├── context_processors.py # Context processors
 │   │   ├── test_settings.py  # Test configuration
 │   │   └── test_runner.py    # Custom test runner
-│   ├── dashboard/            # Dashboard Django app
+│   ├── credits/              # Credit system Django app
+│   │   ├── migrations/       # Pre-generated migrations
+│   │   ├── templates/        # App-specific templates
+│   │   ├── apps.py           # App configuration
+│   │   ├── models.py         # Credit models (CreditAccount, CreditTransaction, Service)
+│   │   ├── views.py          # Credit views and Stripe checkout
+│   │   ├── urls.py           # URL routing
+│   │   ├── admin.py          # Admin interface for credit management
+│   │   └── forms.py          # Admin forms for credit operations
+│   ├── admin_dashboard/      # Admin AdminDashboard Django app
 │   │   ├── migrations/       # Pre-generated migrations
 │   │   ├── templates/        # App-specific templates
 │   │   ├── tests/            # App-specific tests
@@ -72,6 +81,7 @@ quickscale/
 │   │   ├── apps/             # Additional app modules
 │   │   ├── __init__.py       # Package initialization
 │   │   ├── apps.py           # App configuration
+│   │   ├── models.py         # Stripe models (StripeProduct, StripeCustomer)
 │   │   ├── urls.py           # URL routing
 │   │   ├── views.py          # View logic & webhooks
 │   │   ├── utils.py          # Stripe utilities
@@ -96,7 +106,7 @@ quickscale/
 │   │   │   └── email/        # Email templates
 │   │   ├── base/             # Base templates
 │   │   ├── components/       # Reusable components
-│   │   ├── dashboard/        # Dashboard templates
+│   │   ├── admin_dashboard/  # Admin AdminDashboard templates
 │   │   ├── public/           # Public templates
 │   │   └── users/            # User templates
 │   ├── tests/                # Template tests
@@ -145,7 +155,8 @@ This is the typical directory structure created when you run `quickscale init`:
 PROJECT_NAME/
 ├── common/                 # Common Django app (shared models, utils)
 ├── core/                   # Core Django project settings and configurations
-├── dashboard/              # User dashboard app
+├── credits/                # Credit system app (account management, transactions)
+├── admin_dashboard/        # Admin dashboard app
 ├── stripe_manager/         # Stripe integration app
 ├── docs/                   # Project-specific documentation
 ├── js/                     # JavaScript source files (e.g., Alpine.js components)
@@ -156,7 +167,8 @@ PROJECT_NAME/
 │   ├── account/            # Authentication templates (allauth)
 │   ├── base/               # Base layout templates
 │   ├── components/         # Reusable UI components (navbar, footer)
-│   ├── dashboard/          # Dashboard specific templates
+│   ├── credits/            # Credit system templates
+│   ├── admin_dashboard/    # Admin AdminDashboard specific templates
 │   ├── public/             # Public page templates
 │   └── users/              # User profile and settings templates
 ├── tests/                  # Project tests
@@ -202,15 +214,18 @@ flowchart TD
     direction TB
         public_app["Public App"]
         users_app["Users App"]
-        dashboard_app["Dashboard App"]
+        admin_dashboard_app["Admin AdminDashboard App"]
         common_app["Common App"]
+        credits_app["Credits App<br>(Accounts, Transactions, Services)"]
+        stripe_app["Stripe Manager App<br>(Customer, Products, Webhooks)"]
   end
  subgraph Generated["Generated Project"]
     direction TB
         django_core["Django Core"]
         database["PostgreSQL"]
         auth["Authentication<br>(django-allauth)"]
-        stripe_manager["Stripe<br>(Payments)"]
+        stripe_manager["Stripe Integration<br>(Payments & Billing)"]
+        credit_system["Credit System<br>(Pay-as-you-go & Subscriptions)"]
         Apps
   end
     user_input["User Input (CLI Commands)"] --> cli
@@ -265,23 +280,31 @@ flowchart TD
         public_views["views.py<br>Public Pages"]
         public_urls["urls.py<br>Public Routes"]
   end
- subgraph Dashboard["dashboard/"]
+ subgraph AdminDashboard["admin_dashboard/"]
     direction TB
-        dash_views["views.py<br>Dashboard UI"]
-        dash_urls["urls.py<br>Dashboard Routes"]
+        admin_dash_views["views.py<br>Admin Dashboard UI"]
+        admin_dash_urls["urls.py<br>Admin Dashboard Routes"]
+  end
+ subgraph Credits["credits/"]
+    direction TB
+        credit_models["models.py<br>CreditAccount, CreditTransaction, Service"]
+        credit_views["views.py<br>Credit Dashboard & Purchase"]
+        credit_admin["admin.py<br>Credit Management"]
   end
  subgraph Payments["stripe_manager/"]
     direction TB
-        payment_models["stripe_manager.py<br>Stripe API Integration"]
+        stripe_models["models.py<br>StripeCustomer, StripeProduct"]
         payment_views["views.py<br>Payment Views & Webhooks"]
         payment_utils["utils.py<br>Stripe Utilities"]
+        stripe_integration["stripe_manager.py<br>Stripe API Integration"]
   end
  subgraph Apps["Django Apps"]
     direction TB
         Users
         Common
         Public
-        Dashboard
+        AdminDashboard
+        Credits
         Payments
   end
  subgraph Templates["templates/"]
@@ -289,7 +312,8 @@ flowchart TD
         base["base.html<br>Base Template"]
         components["components/<br>Reusable UI"]
         acct_templates["account/<br>Auth Pages"]
-        dash_templates["dashboard/<br>Dashboard UI"]
+        admin_dash_templates["admin_dashboard/<br>Admin Dashboard UI"]
+        credit_templates["credits/<br>Credit Dashboard & Purchase"]
   end
  subgraph Static["static/"]
     direction TB
@@ -324,10 +348,10 @@ flowchart TD
     Apps --> Frontend
     Frontend --> Infrastructure
     Infrastructure --> Database
-    urls -- includes --> Public & Dashboard & Payments
-    Users -- authenticates --> Dashboard
-    Common -- supports --> Public & Dashboard
-    Payments -- enables --> Dashboard
+    urls -- includes --> Public & AdminDashboard & Payments
+    Users -- authenticates --> AdminDashboard
+    Common -- supports --> Public & AdminDashboard
+    Payments -- enables --> AdminDashboard
 ```
 
 ### Command Execution Sequence
@@ -419,7 +443,13 @@ flowchart TD
  subgraph External["External Services"]
     direction TB
         smtp["SMTP Server<br>Email Delivery<br>(Transactional Emails)"]
-        stripe_manager["Stripe API<br>Payment Processing<br>(Subscriptions &amp; Payments)"]
+        stripe_api["Stripe API<br>Payment Processing<br>(Products & Subscriptions)"]
+  end
+ subgraph CreditSystem["Credit System Flow"]
+    direction TB
+        credit_purchase["Credit Purchase<br>(Pay-as-you-go & Subscriptions)"]
+        credit_validation["Credit Validation<br>(Service Usage)"]
+        credit_accounting["Credit Accounting<br>(Transactions & Balance)"]
   end
     web -- CRUD<br>Operations --> db
     Client --> Host
@@ -428,8 +458,10 @@ flowchart TD
     browser -- HTTPS<br>Requests --> nginx
     nginx -- Proxies to<br>port 8000 --> web
     web -- Emails --> smtp
-    web -- Payment<br>Processing --> stripe_manager
-    stripe_manager -- Webhooks --> web
+    web -- Credit Purchase<br>& Webhooks --> stripe_api
+    stripe_api -- Payment Webhooks<br>& Product Sync --> web
+    web -- Credit Operations --> CreditSystem
+    CreditSystem -- Credit Data --> db
      browser:::client
      web:::container
      db:::container
@@ -554,12 +586,65 @@ erDiagram
         avatar string
     }
     
+    %% Credit System Entities
+    CREDIT_ACCOUNTS {
+        id int PK
+        user_id int FK
+        created_at datetime
+        updated_at datetime
+    }
+    
+    CREDIT_TRANSACTIONS {
+        id int PK
+        user_id int FK
+        amount decimal
+        description string
+        credit_type string
+        created_at datetime
+    }
+    
+    SERVICES {
+        id int PK
+        name string
+        description text
+        credit_cost decimal
+        is_active boolean
+        created_at datetime
+        updated_at datetime
+    }
+    
+    SERVICE_USAGE {
+        id int PK
+        user_id int FK
+        service_id int FK
+        credits_consumed decimal
+        created_at datetime
+    }
+    
+    %% Stripe Integration Entities
     STRIPE_CUSTOMERS {
         id int PK
         user_id int FK
         stripe_id string
-        livemode boolean
-        created datetime
+        email string
+        name string
+        created_at datetime
+        updated_at datetime
+    }
+    
+    STRIPE_PRODUCTS {
+        id int PK
+        name string
+        description text
+        price decimal
+        currency string
+        interval string
+        credit_amount int
+        active boolean
+        stripe_id string
+        stripe_price_id string
+        created_at datetime
+        updated_at datetime
     }
     
     PAYMENT_METHODS {
@@ -573,7 +658,11 @@ erDiagram
     
     %% Entity relationships - arranged for better vertical flow
     USERS ||--o{ PROFILES : "has one"
+    USERS ||--o{ CREDIT_ACCOUNTS : "has one"
+    USERS ||--o{ CREDIT_TRANSACTIONS : "has many"
+    USERS ||--o{ SERVICE_USAGE : "has many"
     USERS ||--o{ STRIPE_CUSTOMERS : "has one"
+    SERVICES ||--o{ SERVICE_USAGE : "consumed by"
     STRIPE_CUSTOMERS ||--o{ PAYMENT_METHODS : "can have many"
 ```
 
@@ -611,6 +700,7 @@ The authentication system is configured in multiple files:
 ### Customizations
 
 - **Custom User Model**: The `CustomUser` model in `users.models` replaces the default Django user model and includes additional fields for user profiles such as bio, contact information, social media links, and notification preferences.
+- **Credit System Integration**: Each user automatically gets a linked `CreditAccount` model through a OneToOne relationship, enabling credit-based billing and service usage tracking.
 - **Custom Adapters**: The `AccountAdapter` and `SocialAccountAdapter` in `users.adapters` handle custom logic for email-only authentication and disable social login.
 - **Custom Forms**: Forms in `users.forms` provide additional styling and validation for login, signup, and password reset.
 - **Custom Templates**: All templates under `templates/account/` are customized for the QuickScale branding and user experience.
@@ -707,7 +797,8 @@ REQUIRED_VARS = {
     'web': ['WEB_PORT', 'SECRET_KEY'],
     'db': ['DB_USER', 'DB_PASSWORD', 'DB_NAME'],
     'email': ['EMAIL_HOST', 'EMAIL_HOST_USER', 'EMAIL_HOST_PASSWORD'],
-    'stripe_manager': ['STRIPE_PUBLIC_KEY', 'STRIPE_SECRET_KEY', 'STRIPE_WEBHOOK_SECRET']
+    'stripe': ['STRIPE_PUBLIC_KEY', 'STRIPE_SECRET_KEY', 'STRIPE_WEBHOOK_SECRET'],
+    'credits': ['CREDIT_SYSTEM_ENABLED']
 }
 
 # Production environment validation
@@ -774,6 +865,25 @@ def validate_production_settings():
 | STRIPE_ENABLED            | Enable Stripe integration    | False               |
 | STRIPE_LIVE_MODE          | Use Stripe live mode        | False               |
 | ACCOUNT_EMAIL_VERIFICATION| Email verification required  | mandatory           |
+
+### Stripe Payment Variables
+
+| Variable                  | Description                       | Default              |
+|---------------------------|-----------------------------------|---------------------|
+| STRIPE_PUBLIC_KEY         | Stripe publishable key            | pk_test_dummy       |
+| STRIPE_SECRET_KEY         | Stripe secret key                 | sk_test_dummy       |
+| STRIPE_WEBHOOK_SECRET     | Stripe webhook endpoint secret    | whsec_dummy         |
+| STRIPE_SUCCESS_URL        | Payment success redirect URL      | /credits/success/   |
+| STRIPE_CANCEL_URL         | Payment cancel redirect URL       | /credits/cancel/    |
+
+### Credit System Variables
+
+| Variable                  | Description                       | Default              |
+|---------------------------|-----------------------------------|---------------------|
+| CREDIT_SYSTEM_ENABLED     | Enable credit system features     | True                |
+| DEFAULT_CREDIT_BALANCE    | Initial credit balance for users   | 0                   |
+| MIN_CREDIT_PURCHASE       | Minimum credit purchase amount     | 10                  |
+| MAX_CREDIT_PURCHASE       | Maximum credit purchase amount     | 1000                |
 
 ### Port Fallback Configuration Variables
 
@@ -853,7 +963,7 @@ The project uses Docker and Docker Compose for containerization:
 HTMX is used for dynamic content loading and form submissions without full page reloads:
 
 1. **Form submissions**: Login, signup, and contact forms
-2. **Dynamic content loading**: Dashboard components
+2. **Dynamic content loading**: AdminDashboard components
 3. **Real-time updates**: Notifications and messages
 
 ## ALPINE.JS INTEGRATION
@@ -882,3 +992,41 @@ Alpine.js is used for all client-side interactivity and state management:
 
 - **Authentication**: Powered by `django-allauth`, QuickScale provides secure email-only authentication with mandatory email verification. Social login is explicitly disabled for simplicity and security.
 - **Custom User Model**: The `CustomUser` model supports email-based login and removes the need for usernames.
+- **Credit System**: Comprehensive credit-based monetization system supporting both pay-as-you-go and subscription models with Stripe integration.
+- **Payment Processing**: Full Stripe integration for handling one-time credit purchases and recurring subscription billing.
+- **Service Management**: Configurable services with credit cost validation and usage tracking.
+- **Admin AdminDashboard**: Built-in admin interface for credit management, user account oversight, and service configuration.
+- **Modern Frontend**: Alpine.js and HTMX for interactive UI components without complex JavaScript frameworks.
+- **Docker Ready**: Complete Docker configuration for development and production deployment.
+- **Email Integration**: Transactional email support with customizable templates for authentication and notifications.
+
+### Credit System Features
+
+The credit system provides a flexible foundation for SaaS monetization:
+
+#### Core Credit Features
+- **Pay-as-you-go Credits**: Never-expiring credits purchased through one-time Stripe payments
+- **Subscription Credits**: Monthly credits with automatic renewal through Stripe subscriptions  
+- **Real-time Balance**: Live credit balance tracking and validation before service usage
+- **Transaction History**: Complete audit trail of all credit transactions and service consumption
+- **Service Validation**: Automatic credit validation before allowing service access
+
+#### Stripe Integration Features
+- **Product Synchronization**: Automatic sync of Stripe products with local credit products
+- **Webhook Processing**: Real-time processing of Stripe payment and subscription events
+- **Customer Management**: Seamless customer creation and management between Django and Stripe
+- **Payment Security**: Secure payment processing with Stripe's industry-standard security
+- **Multiple Payment Methods**: Support for cards, digital wallets, and other Stripe payment methods
+
+#### Administrative Features
+- **Credit Management**: Admin tools for credit adjustment, refunds, and account management
+- **Service Configuration**: Easy setup of new services with customizable credit costs
+- **Usage Analytics**: Detailed reporting on service usage and credit consumption patterns
+- **User Account Management**: Comprehensive user management with credit balance oversight
+- **Bulk Operations**: Admin tools for bulk credit operations and user management
+
+#### Developer Features
+- **Template Integration**: Pre-built templates for credit dashboard, purchase flows, and account management
+- **API-Ready Structure**: Clean model architecture ready for API expansion
+- **Extensible Design**: Modular design allowing easy addition of new service types and billing models
+- **Test Coverage**: Comprehensive test suite for credit operations and Stripe integration

@@ -224,7 +224,7 @@ class CreditsIntegrationTests(unittest.TestCase):
         """Set up test environment."""
         self.base_path = Path(os.path.dirname(os.path.dirname(os.path.dirname(__file__))))
         self.credits_app_path = self.base_path / 'quickscale' / 'templates' / 'credits'
-        self.dashboard_app_path = self.base_path / 'quickscale' / 'templates' / 'dashboard'
+        self.dashboard_app_path = self.base_path / 'quickscale' / 'templates' / 'admin_dashboard'
     
     def test_dashboard_integration_with_credits(self):
         """Test that dashboard views integrate with credits."""
@@ -257,8 +257,7 @@ class CreditsIntegrationTests(unittest.TestCase):
     
     def test_user_dashboard_template_exists(self):
         """Test that user dashboard template exists."""
-        user_dashboard_template = (self.base_path / 'quickscale' / 'templates' / 
-                                 'templates' / 'dashboard' / 'user_dashboard.html')
+        user_dashboard_template = self.base_path / 'quickscale' / 'templates' / 'templates' / 'admin_dashboard' / 'user_dashboard.html'
         
         self.assertTrue(user_dashboard_template.exists(),
                        f"User dashboard template not found at {user_dashboard_template}")

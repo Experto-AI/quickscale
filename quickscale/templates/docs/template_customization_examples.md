@@ -44,7 +44,7 @@ If not specified in the environment, these defaults are used:
 </a>
 
 <!-- In dashboard/index.html -->
-{% block title %}Dashboard - {{ project_name }}{% endblock %}
+{% block title %}Admin Dashboard - {{ project_name }}{% endblock %}
 ```
 
 ## Customizing the Login Form

@@ -2,8 +2,27 @@
 
 All notable changes to this project will be documented in this file.
 
+## v0.17.0 (2025-05-26)
+v0.17.0 refactor: Refactor and Maintenance 
+
+This PR implements the tasks focusing on improving code quality, user flow, and maintainability.
+
+- Django Admin:
+  - Updated technical documentation diagrams to reflect the new structure.
+  - Fixed synchronization of credit amounts and display order from Stripe product metadata.
+  - Ensured graceful failure when Stripe metadata is missing, avoiding default creation.
+  - Removed the manual "ADD STRIPE PRODUCT" button from the Stripe Products admin section.
+  - Analyzed the grouping of Email Address and Custom Users in Django Admin.
+- Backend and Frontend Implementation:
+  - Renamed the 'dashboard' app and related components to 'admin_dashboard' for clarity and to distinguish from the user dashboard ("My Dashboard").
+  - Consolidated credit system and stripe manager initial migrations into one file.
+- Testing:
+  - Updated unit and integration tests to reflect the changes in app names, migration structure, and Stripe integration.
+
+This sprint focused on refining existing features and the codebase structure, ensuring accurate data synchronization from Stripe, clarifying naming conventions, and streamlining initial project migrations for improved maintainability and a better user experience.
+
 ## v0.16.0 (2025-05-24)
-feat: Implement Pay-as-You-Go Credit Purchase System
+v0.16.0 feat: Implement Pay-as-You-Go Credit Purchase System
 
 - Backend:
     - Added `credit_type` field to `CreditTransaction` (PURCHASE, CONSUMPTION, ADMIN).
