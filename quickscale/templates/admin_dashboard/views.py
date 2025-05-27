@@ -49,7 +49,7 @@ def user_dashboard(request: HttpRequest) -> HttpResponse:
     # Get or create credit account for the user
     credit_account = CreditAccount.get_or_create_for_user(request.user)
     current_balance = credit_account.get_balance()
-    balance_breakdown = credit_account.get_balance_by_type()
+    balance_breakdown = credit_account.get_balance_by_type_available()
     
     # Get recent transactions (limited to 3 for dashboard overview)
     recent_transactions = request.user.credit_transactions.all()[:3]

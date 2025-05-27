@@ -425,9 +425,14 @@ class ServiceTemplatesTests(unittest.TestCase):
         self.assertIn("{{ service.credit_cost }}", template_content,
                      "Service credit cost not displayed")
         
-        # Check for use service form
-        self.assertIn("{% url 'credits:use_service' service.id %}", template_content,
-                     "Use service URL not found")
+        # Check for use service form (Sprint 7 uses priority consumption)
+        # Accept either the old URL or the new priority URL
+        has_use_service_url = (
+            "{% url 'credits:use_service' service.id %}" in template_content or
+            "{% url 'credits:use_service_with_priority' service.id %}" in template_content
+        )
+        self.assertTrue(has_use_service_url,
+                       "Use service URL (either basic or priority) not found")
         
         # Check for insufficient credits handling
         self.assertIn("{% if current_balance >= service.credit_cost %}", template_content,
