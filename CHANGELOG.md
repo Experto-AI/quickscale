@@ -2,6 +2,42 @@
 
 All notable changes to this project will be documented in this file.
 
+## v0.19.0 (2025-05-27)
+v0.19.0 feat: Implement Credit Type Priority System
+
+This PR implements subscription credits consumed first, then pay-as-you-go credits, enhancing the credit system with intelligent consumption priority logic.
+
+- Backend Implementation:
+  - Introduced new credit consumption method that prioritizes subscription credits over pay-as-you-go credits.
+  - Updated `CreditAccount` model with methods for calculating available balance and balance breakdown by credit type.
+  - Enhanced service usage functionality to reflect the new priority consumption logic.
+  - Implemented credit expiration logic for subscription credits with proper billing cycle handling.
+  - Updated `consume_credits()` method with priority logic ensuring subscription credits are consumed first.
+- Frontend Implementation:
+  - Updated credit balance display to show breakdown by credit type (subscription vs pay-as-you-go).
+  - Enhanced templates to display credit breakdown and consumption details clearly.
+  - Added visual indicators showing which credit type is being consumed during service usage.
+  - Implemented expiration date display for subscription credits.
+- Testing:
+  - Added comprehensive tests for credit priority consumption logic.
+  - Created tests for credit expiration logic and billing cycle handling.
+  - Implemented integration tests for mixed credit scenarios to ensure proper priority handling.
+  - Added tests to ensure correct implementation of balance calculations by credit type.
+
+This PRenhances the credit system by implementing a priority consumption model where subscription credits are consumed before pay-as-you-go credits, improving user experience and providing clear visibility into credit usage patterns. The implementation ensures users maximize value from their subscription credits while preserving their never-expiring pay-as-you-go credits as backup.
+
+## v0.18.0 (2025-05-27)
+v0.18.0 feat: Implement Basic Monthly Subscription System
+
+- Added `UserSubscription` model to manage user subscriptions and billing information.
+- Integrated Stripe for subscription management, including product creation and webhook handling.
+- Updated user dashboard to display subscription status and balance breakdown.
+- Created subscription management page with options to subscribe and view plans.
+- Implemented success and cancellation pages for subscription checkout.
+- Added tests for subscription functionality and credit allocation.
+  
+This commit completes the implementation of the Basic Monthly Subscription feature, allowing sers to subscribe and receive monthly credits automatically.
+
 ## v0.17.0 (2025-05-26)
 v0.17.0 refactor: Refactor and Maintenance 
 

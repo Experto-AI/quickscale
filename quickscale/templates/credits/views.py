@@ -371,8 +371,8 @@ def use_service(request, service_id):
     
     try:
         with transaction.atomic():
-            # Consume credits from user account
-            credit_transaction = credit_account.consume_credits(
+            # Consume credits from user account using priority system
+            credit_transaction = credit_account.consume_credits_with_priority(
                 amount=service.credit_cost,
                 description=f"Used service: {service.name}"
             )
@@ -387,7 +387,7 @@ def use_service(request, service_id):
             messages.success(
                 request,
                 f"Successfully used {service.name}! {service.credit_cost} credits consumed. "
-                f"Remaining balance: {credit_account.get_balance()} credits."
+                f"Remaining balance: {credit_account.get_available_balance()} credits."
             )
             
     except InsufficientCreditsError as e:
@@ -395,9 +395,84 @@ def use_service(request, service_id):
             request,
             f"Insufficient credits to use {service.name}. "
             f"Required: {service.credit_cost} credits, "
-            f"Available: {credit_account.get_balance()} credits."
+            f"Available: {credit_account.get_available_balance()} credits."
         )
     except Exception as e:
+        messages.error(
+            request,
+            f"An error occurred while using {service.name}: {str(e)}"
+        )
+    
+    return redirect('credits:services')
+
+
+@login_required
+@require_http_methods(["POST"])
+def use_service_with_priority(request, service_id):
+    """Use a service and consume credits with priority system (subscription first)."""
+    service = get_object_or_404(Service, id=service_id, is_active=True)
+    credit_account = CreditAccount.get_or_create_for_user(request.user)
+    
+    # Add logging for debugging
+    logger.info(f"User {request.user.email} attempting to use service {service.name} (cost: {service.credit_cost})")
+    
+    try:
+        with transaction.atomic():
+            # Get balance breakdown before consumption
+            balance_before = credit_account.get_balance_by_type_available()
+            logger.info(f"Balance before consumption: {balance_before}")
+            
+            # Consume credits using priority system
+            credit_transaction = credit_account.consume_credits_with_priority(
+                amount=service.credit_cost,
+                description=f"Used service: {service.name} (priority consumption)"
+            )
+            logger.info(f"Created credit transaction: ID={credit_transaction.id}, Amount={credit_transaction.amount}")
+            
+            # Get balance breakdown after consumption
+            balance_after = credit_account.get_balance_by_type_available()
+            logger.info(f"Balance after consumption: {balance_after}")
+            
+            # Calculate what was consumed from each type
+            subscription_consumed = balance_before['subscription'] - balance_after['subscription']
+            payg_consumed = balance_before['pay_as_you_go'] - balance_after['pay_as_you_go']
+            
+            # Create service usage record
+            service_usage = ServiceUsage.objects.create(
+                user=request.user,
+                service=service,
+                credit_transaction=credit_transaction
+            )
+            logger.info(f"Created service usage record: ID={service_usage.id}")
+            
+            # Create detailed success message
+            consumption_details = []
+            if subscription_consumed > 0:
+                consumption_details.append(f"{subscription_consumed} subscription credits")
+            if payg_consumed > 0:
+                consumption_details.append(f"{payg_consumed} pay-as-you-go credits")
+            
+            consumption_msg = " + ".join(consumption_details) if consumption_details else f"{service.credit_cost} credits"
+            
+            messages.success(
+                request,
+                f"Successfully used {service.name}! Consumed {consumption_msg}. "
+                f"Remaining balance: {credit_account.get_available_balance()} credits "
+                f"({balance_after['subscription']} subscription + {balance_after['pay_as_you_go']} pay-as-you-go)."
+            )
+            
+    except InsufficientCreditsError as e:
+        balance_breakdown = credit_account.get_balance_by_type_available()
+        logger.warning(f"Insufficient credits for user {request.user.email}: {e}")
+        messages.error(
+            request,
+            f"Insufficient credits to use {service.name}. "
+            f"Required: {service.credit_cost} credits, "
+            f"Available: {balance_breakdown['total']} credits "
+            f"({balance_breakdown['subscription']} subscription + {balance_breakdown['pay_as_you_go']} pay-as-you-go)."
+        )
+    except Exception as e:
+        logger.error(f"Error using service {service.name} for user {request.user.email}: {e}")
         messages.error(
             request,
             f"An error occurred while using {service.name}: {str(e)}"

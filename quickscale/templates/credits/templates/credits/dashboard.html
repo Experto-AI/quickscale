@@ -9,7 +9,7 @@
         <div class="column is-12">
             <h1 class="title">Credits Dashboard</h1>
             
-            <!-- Current Balance Section -->
+            <!-- Current Balance Section with Credit Breakdown -->
             <div class="box">
                 <div class="level">
                     <div class="level-left">
@@ -30,6 +30,65 @@
                             </a>
                         </div>
                     </div>
+                </div>
+                
+                <!-- Credit Breakdown by Type -->
+                <div class="columns">
+                    <div class="column is-6">
+                        <div class="box has-background-info-light">
+                            <h4 class="subtitle is-6">
+                                <span class="icon">
+                                    <i class="fas fa-calendar-alt"></i>
+                                </span>
+                                Subscription Credits
+                            </h4>
+                            <p class="title is-4" id="subscription-balance">
+                                {% with balance_details=credit_account.get_balance_details %}
+                                    {{ balance_details.subscription.amount }} credits
+                                {% endwith %}
+                            </p>
+                            {% with balance_details=credit_account.get_balance_details %}
+                                {% if balance_details.subscription.expires_at %}
+                                    <p class="has-text-warning">
+                                        <span class="icon">
+                                            <i class="fas fa-clock"></i>
+                                        </span>
+                                        Expires: {{ balance_details.subscription.expires_at|date:"M d, Y" }}
+                                    </p>
+                                {% else %}
+                                    <p class="has-text-grey">No expiration date</p>
+                                {% endif %}
+                            {% endwith %}
+                            <p class="is-size-7 has-text-grey">Monthly credits from subscription plan</p>
+                        </div>
+                    </div>
+                    <div class="column is-6">
+                        <div class="box has-background-success-light">
+                            <h4 class="subtitle is-6">
+                                <span class="icon">
+                                    <i class="fas fa-infinity"></i>
+                                </span>
+                                Pay-as-You-Go Credits
+                            </h4>
+                            <p class="title is-4" id="payg-balance">
+                                {% with balance_details=credit_account.get_balance_details %}
+                                    {{ balance_details.pay_as_you_go.amount }} credits
+                                {% endwith %}
+                            </p>
+                            <p class="has-text-success">
+                                <span class="icon">
+                                    <i class="fas fa-check"></i>
+                                </span>
+                                Never expire
+                            </p>
+                            <p class="is-size-7 has-text-grey">Credits purchased individually</p>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- Credit Consumption Priority Info -->
+                <div class="notification is-info is-light">
+                    <p><strong>Credit Usage Priority:</strong> Subscription credits are consumed first, then pay-as-you-go credits.</p>
                 </div>
             </div>
             
@@ -136,6 +195,7 @@
                                     <th>Amount</th>
                                     <th>Description</th>
                                     <th>Type</th>
+                                    <th>Expiration</th>
                                 </tr>
                             </thead>
                             <tbody>
@@ -152,6 +212,17 @@
                                         <span class="tag is-light">
                                             {{ transaction.get_credit_type_display }}
                                         </span>
+                                    </td>
+                                    <td>
+                                        {% if transaction.expires_at %}
+                                            {% if transaction.is_expired %}
+                                                <span class="tag is-danger">Expired</span>
+                                            {% else %}
+                                                <span class="tag is-warning">{{ transaction.expires_at|date:"M d, Y" }}</span>
+                                            {% endif %}
+                                        {% else %}
+                                            <span class="tag is-success">Never</span>
+                                        {% endif %}
                                     </td>
                                 </tr>
                                 {% endfor %}
