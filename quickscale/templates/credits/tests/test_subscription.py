@@ -290,14 +290,14 @@ class CreditBalanceBreakdownTest(TestCase):
     
     def test_balance_breakdown_empty(self):
         """Test balance breakdown with no transactions."""
-        breakdown = self.credit_account.get_balance_by_type()
+        breakdown = self.credit_account.get_balance_by_type_available()
         
         self.assertEqual(breakdown['subscription'], Decimal('0.00'))
         self.assertEqual(breakdown['pay_as_you_go'], Decimal('0.00'))
         self.assertEqual(breakdown['total'], Decimal('0.00'))
     
     def test_balance_breakdown_with_transactions(self):
-        """Test balance breakdown with different transaction types."""
+        """Test balance breakdown with different transaction types using priority consumption logic."""
         # Add subscription credits
         CreditTransaction.objects.create(
             user=self.user,
@@ -330,8 +330,11 @@ class CreditBalanceBreakdownTest(TestCase):
             credit_type='CONSUMPTION'
         )
         
-        breakdown = self.credit_account.get_balance_by_type()
+        breakdown = self.credit_account.get_balance_by_type_available()
         
-        self.assertEqual(breakdown['subscription'], Decimal('1000'))
-        self.assertEqual(breakdown['pay_as_you_go'], Decimal('600'))  # 500 + 100 (consumption is separate)
-        self.assertEqual(breakdown['total'], Decimal('1600'))  # 1000 + 600 (consumption affects overall balance separately) 
+        # With priority consumption, consumption comes from subscription credits first
+        # Subscription: 1000 - 200 = 800 remaining
+        # Pay-as-you-go: 500 + 100 = 600 (untouched)
+        self.assertEqual(breakdown['subscription'], Decimal('800'))  # 1000 - 200 consumption
+        self.assertEqual(breakdown['pay_as_you_go'], Decimal('600'))  # 500 + 100 (not consumed yet)
+        self.assertEqual(breakdown['total'], Decimal('1400'))  # 800 + 600 

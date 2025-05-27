@@ -261,17 +261,17 @@ class CreditAccount(models.Model):
             return credit_transaction
 
     def consume_credits(self, amount: Decimal, description: str) -> 'CreditTransaction':
-        """Consume credits from the account and return the transaction."""
+        """Consume credits from the account (simple version for backward compatibility)."""
         if amount <= 0:
             raise ValueError("Amount must be positive")
         
+        current_balance = self.get_balance()
+        if current_balance < amount:
+            raise InsufficientCreditsError(
+                f"Insufficient credits. Current balance: {current_balance}, Required: {amount}"
+            )
+        
         with transaction.atomic():
-            current_balance = self.get_balance()
-            if current_balance < amount:
-                raise InsufficientCreditsError(
-                    f"Insufficient credits. Current balance: {current_balance}, Required: {amount}"
-                )
-            
             credit_transaction = CreditTransaction.objects.create(
                 user=self.user,
                 amount=-amount,  # Negative amount for consumption
@@ -281,6 +281,164 @@ class CreditAccount(models.Model):
             self.updated_at = models.functions.Now()
             self.save(update_fields=['updated_at'])
             return credit_transaction
+
+    def consume_credits_with_priority(self, amount: Decimal, description: str) -> 'CreditTransaction':
+        """Consume credits with priority: subscription credits first, then pay-as-you-go."""
+        if amount <= 0:
+            raise ValueError("Amount must be positive")
+        
+        with transaction.atomic():
+            # Check if user has enough available balance
+            available_balance = self.get_available_balance()
+            if available_balance < amount:
+                raise InsufficientCreditsError(
+                    f"Insufficient credits. Current balance: {available_balance}, Required: {amount}"
+                )
+            
+            # Create the consumption transaction
+            # This is the simple, correct approach - just record the consumption as a single transaction
+            # The balance calculation methods already handle the priority logic correctly
+            credit_transaction = CreditTransaction.objects.create(
+                user=self.user,
+                amount=-amount,  # Negative amount for consumption
+                description=description,
+                credit_type='CONSUMPTION'
+            )
+            
+            # Update account timestamp
+            self.updated_at = models.functions.Now()
+            self.save(update_fields=['updated_at'])
+            
+            return credit_transaction
+
+    def get_available_balance(self) -> Decimal:
+        """Get available balance excluding expired subscription credits."""
+        from django.db.models import Sum, Q
+        
+        # Get all positive transactions (credits added)
+        positive_transactions = self.user.credit_transactions.filter(amount__gt=0)
+        
+        # Filter out expired subscription credits
+        available_transactions = positive_transactions.filter(
+            Q(credit_type__in=['PURCHASE', 'ADMIN']) |  # Pay-as-you-go never expire
+            Q(credit_type='SUBSCRIPTION', expires_at__isnull=True) |  # No expiration set
+            Q(credit_type='SUBSCRIPTION', expires_at__gt=timezone.now())  # Not expired yet
+        )
+        
+        # Calculate total available credits
+        available_credits = available_transactions.aggregate(
+            total=Sum('amount')
+        )['total'] or Decimal('0.00')
+        
+        # Subtract all consumption
+        consumed_credits = self.user.credit_transactions.filter(
+            amount__lt=0
+        ).aggregate(total=Sum('amount'))['total'] or Decimal('0.00')
+        
+        return available_credits + consumed_credits  # consumed_credits is negative
+
+    def get_balance_by_type_available(self) -> dict:
+        """Get balance breakdown by credit type, applying priority consumption logic."""
+        from django.db.models import Sum, Q
+        
+        # Get all subscription credits (non-expired only) 
+        subscription_credits = self.user.credit_transactions.filter(
+            credit_type='SUBSCRIPTION',
+            amount__gt=0
+        ).filter(
+            Q(expires_at__isnull=True) | Q(expires_at__gt=timezone.now())
+        ).aggregate(total=Sum('amount'))['total'] or Decimal('0.00')
+        
+        # Get all pay-as-you-go credits (never expire)
+        payg_credits = self.user.credit_transactions.filter(
+            credit_type__in=['PURCHASE', 'ADMIN'],
+            amount__gt=0
+        ).aggregate(total=Sum('amount'))['total'] or Decimal('0.00')
+        
+        # Get total consumed credits
+        total_consumed = abs(self.user.credit_transactions.filter(
+            credit_type='CONSUMPTION',
+            amount__lt=0
+        ).aggregate(total=Sum('amount'))['total'] or Decimal('0.00'))
+        
+        # Apply consumption with priority: subscription credits first, then pay-as-you-go
+        remaining_consumption = total_consumed
+        
+        # First consume from subscription credits
+        subscription_consumed = min(subscription_credits, remaining_consumption)
+        subscription_balance = subscription_credits - subscription_consumed
+        remaining_consumption -= subscription_consumed
+        
+        # Then consume from pay-as-you-go credits
+        payg_consumed = min(payg_credits, remaining_consumption)
+        payg_balance = payg_credits - payg_consumed
+        
+        return {
+            'subscription': subscription_balance,
+            'pay_as_you_go': payg_balance,
+            'total': subscription_balance + payg_balance
+        }
+
+    def get_balance_details(self) -> dict:
+        """Get detailed balance breakdown with expiration information using priority consumption logic."""
+        from django.db.models import Sum, Q
+        
+        # Get subscription credits with expiration info
+        subscription_transactions = self.user.credit_transactions.filter(
+            credit_type='SUBSCRIPTION',
+            amount__gt=0
+        ).filter(
+            Q(expires_at__isnull=True) | Q(expires_at__gt=timezone.now())
+        )
+        
+        subscription_amount = subscription_transactions.aggregate(
+            total=Sum('amount')
+        )['total'] or Decimal('0.00')
+        
+        # Get earliest expiration date for subscription credits
+        subscription_expiry = None
+        if subscription_transactions.exists():
+            earliest_expiry = subscription_transactions.filter(
+                expires_at__isnull=False
+            ).order_by('expires_at').first()
+            if earliest_expiry:
+                subscription_expiry = earliest_expiry.expires_at
+        
+        # Get pay-as-you-go credits (never expire)
+        pay_as_you_go_amount = self.user.credit_transactions.filter(
+            credit_type__in=['PURCHASE', 'ADMIN'],
+            amount__gt=0
+        ).aggregate(total=Sum('amount'))['total'] or Decimal('0.00')
+        
+        # Get total consumed credits
+        total_consumption = abs(self.user.credit_transactions.filter(
+            credit_type='CONSUMPTION',
+            amount__lt=0
+        ).aggregate(total=Sum('amount'))['total'] or Decimal('0.00'))
+        
+        # Apply consumption with priority: subscription credits first, then pay-as-you-go
+        remaining_consumption = total_consumption
+        
+        # First consume from subscription credits
+        subscription_consumed = min(subscription_amount, remaining_consumption)
+        subscription_balance = subscription_amount - subscription_consumed
+        remaining_consumption -= subscription_consumed
+        
+        # Then consume from pay-as-you-go credits
+        payg_consumed = min(pay_as_you_go_amount, remaining_consumption)
+        pay_as_you_go_balance = pay_as_you_go_amount - payg_consumed
+        
+        return {
+            'subscription': {
+                'amount': subscription_balance,
+                'expires_at': subscription_expiry
+            },
+            'pay_as_you_go': {
+                'amount': pay_as_you_go_balance,
+                'expires_at': None
+            },
+            'total': subscription_balance + pay_as_you_go_balance
+        }
 
     @classmethod
     def get_or_create_for_user(cls, user):

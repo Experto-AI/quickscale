@@ -167,6 +167,10 @@ The QuickScale credit system supports multiple payment models and credit types w
 - [ ] Tests for credit expiration logic, check them
 - [ ] Integration tests for mixed credit scenarios, check them
 
+**Notes**:
+- We don't need backward compatibility for credit types.
+- We don't need django migrations, we could replace previous tables.
+
 **Validation**: User with both credit types sees subscription credits consumed first
 
 ---

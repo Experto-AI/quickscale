@@ -82,7 +82,7 @@ class CreditAccountAdmin(admin.ModelAdmin):
 
     def get_balance_breakdown(self, obj):
         """Display balance breakdown by credit type."""
-        breakdown = obj.get_balance_by_type()
+        breakdown = obj.get_balance_by_type_available()
         return format_html(
             "Subscription: {} credits<br>Pay-as-you-go: {} credits<br><strong>Total: {} credits</strong>",
             breakdown['subscription'],
