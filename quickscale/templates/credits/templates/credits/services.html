@@ -9,7 +9,7 @@
         <div class="column is-12">
             <h1 class="title">Available Services</h1>
             
-            <!-- Current Balance Section -->
+            <!-- Current Balance Section with Credit Breakdown -->
             <div class="box">
                 <div class="level">
                     <div class="level-left">
@@ -28,6 +28,42 @@
                                 </span>
                                 <span>Credits Dashboard</span>
                             </a>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- Credit Breakdown Display -->
+                <div class="columns">
+                    <div class="column is-6">
+                        <div class="box has-background-info-light">
+                            <p class="subtitle is-6">
+                                <span class="icon">
+                                    <i class="fas fa-calendar-alt"></i>
+                                </span>
+                                Subscription Credits
+                            </p>
+                            <p class="title is-5" id="subscription-balance">
+                                {% with balance_details=credit_account.get_balance_details %}
+                                    {{ balance_details.subscription.amount }} credits
+                                {% endwith %}
+                            </p>
+                            <p class="is-size-7 has-text-grey">Used first (priority consumption)</p>
+                        </div>
+                    </div>
+                    <div class="column is-6">
+                        <div class="box has-background-success-light">
+                            <p class="subtitle is-6">
+                                <span class="icon">
+                                    <i class="fas fa-infinity"></i>
+                                </span>
+                                Pay-as-You-Go Credits
+                            </p>
+                            <p class="title is-5" id="payg-balance">
+                                {% with balance_details=credit_account.get_balance_details %}
+                                    {{ balance_details.pay_as_you_go.amount }} credits
+                                {% endwith %}
+                            </p>
+                            <p class="is-size-7 has-text-grey">Used after subscription credits</p>
                         </div>
                     </div>
                 </div>
@@ -62,6 +98,24 @@
                                             </small>
                                         </p>
                                     {% endif %}
+                                    
+                                    <!-- Credit Type Consumption Info -->
+                                    {% with balance_details=credit_account.get_balance_details %}
+                                        {% if service.credit_cost <= balance_details.total %}
+                                            <div class="notification is-info is-light is-small">
+                                                <p class="is-size-7">
+                                                    <strong>Credit consumption:</strong>
+                                                    {% if service.credit_cost <= balance_details.subscription.amount %}
+                                                        Will use {{ service.credit_cost }} subscription credits
+                                                    {% elif balance_details.subscription.amount > 0 %}
+                                                        Will use {{ balance_details.subscription.amount }} subscription + {{ service.credit_cost|add:balance_details.subscription.amount|add:"-"|add:balance_details.subscription.amount }} pay-as-you-go credits
+                                                    {% else %}
+                                                        Will use {{ service.credit_cost }} pay-as-you-go credits
+                                                    {% endif %}
+                                                </p>
+                                            </div>
+                                        {% endif %}
+                                    {% endwith %}
                                 </div>
                             </div>
                             
@@ -106,13 +160,13 @@
 
             <!-- Information Section -->
             <div class="box">
-                <h2 class="subtitle">How It Works</h2>
+                <h2 class="subtitle">How Credit Priority Works</h2>
                 <div class="content">
                     <ul>
-                        <li><strong>Select a Service:</strong> Choose from the available services above</li>
-                        <li><strong>Check Credits:</strong> Make sure you have enough credits for the service</li>
-                        <li><strong>Use Service:</strong> Click "Use Service" to consume credits and access the functionality</li>
-                        <li><strong>Track Usage:</strong> View your usage history in the Credits Dashboard</li>
+                        <li><strong>Priority System:</strong> Subscription credits are always consumed first</li>
+                        <li><strong>Fallback:</strong> Pay-as-you-go credits are used when subscription credits are insufficient</li>
+                        <li><strong>Expiration:</strong> Subscription credits expire monthly, pay-as-you-go credits never expire</li>
+                        <li><strong>Smart Usage:</strong> The system automatically chooses the best credit type for each service</li>
                     </ul>
                 </div>
                 
@@ -122,6 +176,10 @@
                     <p>You need credits to use services. Visit the <a href="{% url 'credits:dashboard' %}">Credits Dashboard</a> to learn how to get credits.</p>
                 </div>
                 {% endif %}
+                
+                <div class="notification is-success is-light">
+                    <p><strong>Tip:</strong> Services will show you exactly which credit types will be consumed before you use them!</p>
+                </div>
             </div>
         </div>
     </div>

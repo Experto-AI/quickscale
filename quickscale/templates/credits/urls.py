@@ -12,5 +12,6 @@ urlpatterns = [
     path('cancel/', views.purchase_cancel, name='purchase_cancel'),
     path('services/', views.services_list, name='services'),
     path('services/<int:service_id>/use/', views.use_service, name='use_service'),
+    path('services/<int:service_id>/use-priority/', views.use_service_with_priority, name='use_service_with_priority'),
     path('services/<int:service_id>/api/', views.service_usage_api, name='service_usage_api'),
 ] 
