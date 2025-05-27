@@ -9,18 +9,69 @@ from django.utils.decorators import method_decorator
 from django.views.decorators.http import require_http_methods
 from django.utils.html import format_html
 from decimal import Decimal
-from .models import CreditAccount, CreditTransaction, Service, ServiceUsage
+from .models import CreditAccount, CreditTransaction, Service, ServiceUsage, UserSubscription
 from .forms import AdminCreditAdjustmentForm
+
+
+@admin.register(UserSubscription)
+class UserSubscriptionAdmin(admin.ModelAdmin):
+    """Admin interface for UserSubscription model."""
+    
+    list_display = ('user', 'status', 'get_stripe_product_name', 'current_period_start', 'current_period_end', 'cancel_at_period_end', 'days_until_renewal')
+    list_filter = ('status', 'cancel_at_period_end', 'current_period_start', 'current_period_end')
+    search_fields = ('user__email', 'user__first_name', 'user__last_name', 'stripe_subscription_id', 'stripe_product_id')
+    readonly_fields = ('created_at', 'updated_at', 'days_until_renewal', 'get_stripe_product_name')
+    ordering = ('-updated_at',)
+    
+    fieldsets = (
+        (_('User Information'), {
+            'fields': ('user',),
+        }),
+        (_('Subscription Details'), {
+            'fields': ('status', 'stripe_subscription_id', 'stripe_product_id', 'get_stripe_product_name'),
+        }),
+        (_('Billing Information'), {
+            'fields': ('current_period_start', 'current_period_end', 'days_until_renewal'),
+        }),
+        (_('Cancellation'), {
+            'fields': ('cancel_at_period_end', 'canceled_at'),
+        }),
+        (_('System Information'), {
+            'fields': ('created_at', 'updated_at'),
+            'classes': ('collapse',),
+        }),
+    )
+
+    def get_stripe_product_name(self, obj):
+        """Display the Stripe product name for this subscription."""
+        stripe_product = obj.get_stripe_product()
+        if stripe_product:
+            return stripe_product.name
+        return "Unknown Product"
+    get_stripe_product_name.short_description = _('Product Name')
+
+    def days_until_renewal(self, obj):
+        """Display days until next billing period."""
+        days = obj.days_until_renewal
+        if days is None:
+            return "No renewal date"
+        elif days == 0:
+            return "Expires today"
+        elif days < 0:
+            return "Expired"
+        else:
+            return f"{days} days"
+    days_until_renewal.short_description = _('Days Until Renewal')
 
 
 @admin.register(CreditAccount)
 class CreditAccountAdmin(admin.ModelAdmin):
     """Admin interface for CreditAccount model."""
     
-    list_display = ('user', 'get_balance', 'created_at', 'updated_at', 'credit_actions')
+    list_display = ('user', 'get_balance', 'get_subscription_status', 'created_at', 'updated_at', 'credit_actions')
     list_filter = ('created_at', 'updated_at')
     search_fields = ('user__email', 'user__first_name', 'user__last_name')
-    readonly_fields = ('created_at', 'updated_at', 'get_balance')
+    readonly_fields = ('created_at', 'updated_at', 'get_balance', 'get_balance_breakdown', 'get_subscription_status')
     ordering = ('-updated_at',)
     actions = ['bulk_add_credits']
 
@@ -28,6 +79,29 @@ class CreditAccountAdmin(admin.ModelAdmin):
         """Display the current credit balance."""
         return f"{obj.get_balance()} credits"
     get_balance.short_description = _('Current Balance')
+
+    def get_balance_breakdown(self, obj):
+        """Display balance breakdown by credit type."""
+        breakdown = obj.get_balance_by_type()
+        return format_html(
+            "Subscription: {} credits<br>Pay-as-you-go: {} credits<br><strong>Total: {} credits</strong>",
+            breakdown['subscription'],
+            breakdown['pay_as_you_go'],
+            breakdown['total']
+        )
+    get_balance_breakdown.short_description = _('Balance Breakdown')
+
+    def get_subscription_status(self, obj):
+        """Display user's subscription status."""
+        try:
+            subscription = obj.user.subscription
+            if subscription.is_active:
+                return format_html('<span style="color: green;">Active ({})</span>', subscription.get_status_display())
+            else:
+                return format_html('<span style="color: red;">{}</span>', subscription.get_status_display())
+        except UserSubscription.DoesNotExist:
+            return "No subscription"
+    get_subscription_status.short_description = _('Subscription Status')
 
     def credit_actions(self, obj):
         """Display action buttons for credit management."""
@@ -176,15 +250,18 @@ class CreditAccountAdmin(admin.ModelAdmin):
 class CreditTransactionAdmin(admin.ModelAdmin):
     """Admin interface for CreditTransaction model."""
     
-    list_display = ('user', 'amount', 'description', 'credit_type', 'created_at', 'transaction_type')
-    list_filter = ('created_at', 'credit_type', 'amount')
+    list_display = ('user', 'amount', 'description', 'credit_type', 'expires_at', 'created_at', 'transaction_type')
+    list_filter = ('created_at', 'credit_type', 'amount', 'expires_at')
     search_fields = ('user__email', 'user__first_name', 'user__last_name', 'description')
-    readonly_fields = ('created_at',)
+    readonly_fields = ('created_at', 'is_expired')
     ordering = ('-created_at',)
     
     fieldsets = (
         (_('Transaction Details'), {
             'fields': ('user', 'amount', 'description', 'credit_type'),
+        }),
+        (_('Expiration'), {
+            'fields': ('expires_at', 'is_expired'),
         }),
         (_('System Information'), {
             'fields': ('created_at',),
@@ -196,33 +273,38 @@ class CreditTransactionAdmin(admin.ModelAdmin):
         """Display transaction type based on description and amount."""
         if obj.credit_type == 'PURCHASE':
             return "Credit Purchase"
+        elif obj.credit_type == 'SUBSCRIPTION':
+            return "Subscription Credits"
         elif obj.credit_type == 'CONSUMPTION':
             return "Service Usage"
         elif obj.credit_type == 'ADMIN':
-            if 'Admin Credit Addition' in obj.description:
+            if obj.amount > 0:
                 return "Admin Addition"
-            elif 'Admin Credit Removal' in obj.description:
-                return "Admin Removal"
-            elif 'Bulk Admin Credit Addition' in obj.description:
-                return "Bulk Admin Addition"
             else:
-                return "Admin Adjustment"
-        elif obj.amount > 0:
-            return "Credit Addition"
-        else:
-            return "Credit Consumption"
+                return "Admin Removal"
+        return "Unknown"
     transaction_type.short_description = _('Transaction Type')
 
+    def is_expired(self, obj):
+        """Display if the credits have expired."""
+        if obj.expires_at:
+            if obj.is_expired:
+                return format_html('<span style="color: red;">Expired</span>')
+            else:
+                return format_html('<span style="color: green;">Valid</span>')
+        return "No expiration"
+    is_expired.short_description = _('Expiration Status')
+
     def has_add_permission(self, request):
-        """Disable manual transaction creation."""
+        """Disable adding transactions through admin."""
         return False
 
     def has_change_permission(self, request, obj=None):
-        """Disable transaction editing."""
+        """Disable changing transactions through admin."""
         return False
 
     def has_delete_permission(self, request, obj=None):
-        """Disable transaction deletion."""
+        """Disable deleting transactions through admin."""
         return False
 
 
@@ -237,19 +319,23 @@ class ServiceAdmin(admin.ModelAdmin):
     ordering = ('name',)
     
     fieldsets = (
-        (_('Service Details'), {
+        (_('Service Information'), {
             'fields': ('name', 'description', 'credit_cost', 'is_active'),
         }),
+        (_('Statistics'), {
+            'fields': ('usage_count',),
+            'classes': ('collapse',),
+        }),
         (_('System Information'), {
-            'fields': ('created_at', 'updated_at', 'usage_count'),
+            'fields': ('created_at', 'updated_at'),
             'classes': ('collapse',),
         }),
     )
 
     def usage_count(self, obj):
-        """Display the total number of times this service has been used."""
+        """Display the number of times this service has been used."""
         return obj.usages.count()
-    usage_count.short_description = _('Total Usage')
+    usage_count.short_description = _('Usage Count')
 
 
 @admin.register(ServiceUsage)
@@ -263,7 +349,7 @@ class ServiceUsageAdmin(admin.ModelAdmin):
     ordering = ('-created_at',)
     
     fieldsets = (
-        (_('Usage Details'), {
+        (_('Usage Information'), {
             'fields': ('user', 'service', 'credit_transaction', 'get_credit_cost'),
         }),
         (_('System Information'), {
@@ -273,18 +359,18 @@ class ServiceUsageAdmin(admin.ModelAdmin):
     )
 
     def get_credit_cost(self, obj):
-        """Display the credit cost from the transaction."""
+        """Display the credit cost for this service usage."""
         return f"{abs(obj.credit_transaction.amount)} credits"
     get_credit_cost.short_description = _('Credits Used')
 
     def has_add_permission(self, request):
-        """Disable direct addition of service usage through admin."""
+        """Disable adding service usage through admin."""
         return False
 
     def has_change_permission(self, request, obj=None):
-        """Disable editing of service usage through admin."""
+        """Disable changing service usage through admin."""
         return False
 
     def has_delete_permission(self, request, obj=None):
-        """Disable deletion of service usage through admin for data integrity."""
+        """Disable deleting service usage through admin."""
         return False 

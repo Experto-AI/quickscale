@@ -1,0 +1,99 @@
+{% extends "base.html" %}
+
+{% block title %}Subscription Canceled - {{ project_name }}{% endblock %}
+
+{% block content %}
+<section class="hero is-warning is-medium">
+    <div class="hero-body">
+        <div class="container has-text-centered">
+            <div class="columns is-centered">
+                <div class="column is-half">
+                    <span class="icon is-large has-text-white">
+                        <i class="fas fa-times-circle fa-3x"></i>
+                    </span>
+                    <h1 class="title is-2 has-text-white">
+                        Subscription Canceled
+                    </h1>
+                    <h2 class="subtitle is-4 has-text-white">
+                        No charges were made to your account
+                    </h2>
+                </div>
+            </div>
+        </div>
+    </div>
+</section>
+
+<section class="section">
+    <div class="container">
+        <div class="columns is-centered">
+            <div class="column is-two-thirds">
+                <div class="card">
+                    <div class="card-content">
+                        <div class="content has-text-centered">
+                            <h3 class="title is-4">Subscription process was canceled</h3>
+                            <p>You canceled the subscription checkout process. No payment was processed and no subscription was created.</p>
+                            
+                            <div class="content">
+                                <h4 class="title is-5">What would you like to do next?</h4>
+                                <div class="columns">
+                                    <div class="column">
+                                        <div class="box">
+                                            <span class="icon has-text-primary">
+                                                <i class="fas fa-calendar-alt fa-2x"></i>
+                                            </span>
+                                            <p class="has-text-weight-semibold">Try Again</p>
+                                            <p class="is-size-7">Return to the subscription page to choose a plan and try the checkout process again.</p>
+                                        </div>
+                                    </div>
+                                    <div class="column">
+                                        <div class="box">
+                                            <span class="icon has-text-info">
+                                                <i class="fas fa-coins fa-2x"></i>
+                                            </span>
+                                            <p class="has-text-weight-semibold">Buy Credits</p>
+                                            <p class="is-size-7">Purchase pay-as-you-go credits instead of subscribing to a monthly plan.</p>
+                                        </div>
+                                    </div>
+                                    <div class="column">
+                                        <div class="box">
+                                            <span class="icon has-text-success">
+                                                <i class="fas fa-tachometer-alt fa-2x"></i>
+                                            </span>
+                                            <p class="has-text-weight-semibold">Dashboard</p>
+                                            <p class="is-size-7">Return to your dashboard to explore other features and options.</p>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                            
+                            <div class="notification is-info is-light">
+                                <p><strong>Need help?</strong> If you experienced any issues during checkout or have questions about our subscription plans, please contact our support team.</p>
+                            </div>
+                        </div>
+                    </div>
+                    <footer class="card-footer">
+                        <a href="{% url 'admin_dashboard:subscription' %}" class="card-footer-item">
+                            <span class="icon">
+                                <i class="fas fa-calendar-alt"></i>
+                            </span>
+                            <span>Try Subscription Again</span>
+                        </a>
+                        <a href="{% url 'credits:buy_credits' %}" class="card-footer-item">
+                            <span class="icon">
+                                <i class="fas fa-coins"></i>
+                            </span>
+                            <span>Buy Credits Instead</span>
+                        </a>
+                        <a href="{% url 'admin_dashboard:user_dashboard' %}" class="card-footer-item">
+                            <span class="icon">
+                                <i class="fas fa-tachometer-alt"></i>
+                            </span>
+                            <span>Go to Dashboard</span>
+                        </a>
+                    </footer>
+                </div>
+            </div>
+        </div>
+    </div>
+</section>
+{% endblock %} 

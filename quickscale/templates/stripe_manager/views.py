@@ -106,12 +106,81 @@ def webhook(request: HttpRequest) -> HttpResponse:
             # Price created - nothing to do here as we fetch from API
             pass
         elif event_type == 'checkout.session.completed':
-            # Handle completed checkout session for credit purchases
+            # Handle completed checkout session for both credit purchases and subscriptions
             session = event['data']['object']
             metadata = session.get('metadata', {})
             
+            # Check if this is a subscription checkout
+            if metadata.get('purchase_type') == 'subscription':
+                try:
+                    from django.contrib.auth import get_user_model
+                    from credits.models import UserSubscription, CreditAccount
+                    from django.utils import timezone
+                    
+                    User = get_user_model()
+                    user_id = metadata.get('user_id')
+                    product_id = metadata.get('product_id')
+                    
+                    if user_id and product_id:
+                        user = User.objects.get(id=user_id)
+                        product = StripeProduct.objects.get(id=product_id)
+                        
+                        # Get subscription ID from the session
+                        subscription_id = session.get('subscription')
+                        if subscription_id:
+                            # Check if user already has a subscription
+                            existing_subscription = UserSubscription.objects.filter(user=user).first()
+                            
+                            if existing_subscription:
+                                # Update existing subscription
+                                existing_subscription.stripe_subscription_id = subscription_id
+                                existing_subscription.stripe_product_id = product.stripe_id
+                                existing_subscription.status = 'active'
+                                existing_subscription.save()
+                                subscription = existing_subscription
+                                created = False
+                                logger.info(f"Updated existing subscription for user {user.email}")
+                            else:
+                                # Create new subscription
+                                subscription = UserSubscription.objects.create(
+                                    user=user,
+                                    stripe_subscription_id=subscription_id,
+                                    stripe_product_id=product.stripe_id,
+                                    status='active'
+                                )
+                                created = True
+                                logger.info(f"Created new subscription for user {user.email}")
+                            
+                            # Allocate initial subscription credits for the first period
+                            if created:
+                                credit_account = CreditAccount.get_or_create_for_user(user)
+                                description = f"Initial subscription credits - {product.name} (Subscription: {subscription_id})"
+                                
+                                credit_account.add_credits(
+                                    amount=product.credit_amount,
+                                    description=description,
+                                    credit_type='SUBSCRIPTION'
+                                )
+                                
+                                logger.info(
+                                    f"Allocated initial {product.credit_amount} subscription credits to user {user.email} "
+                                    f"for subscription {subscription_id}"
+                                )
+                            
+                            logger.info(
+                                f"{'Created' if created else 'Updated'} subscription for user {user.email}: "
+                                f"Subscription ID: {subscription_id}, Product: {product.name}"
+                            )
+                        else:
+                            logger.error(f"No subscription ID found in checkout session: {session.get('id', '')}")
+                    else:
+                        logger.error(f"Missing user_id or product_id in subscription webhook metadata: {metadata}")
+                        
+                except Exception as e:
+                    logger.error(f"Error processing subscription checkout webhook: {e}")
+            
             # Check if this is a credit product purchase
-            if metadata.get('purchase_type') == 'credit_product':
+            elif metadata.get('purchase_type') == 'credit_product':
                 try:
                     from django.contrib.auth import get_user_model
                     from credits.models import CreditAccount, CreditTransaction
@@ -177,8 +246,33 @@ def webhook(request: HttpRequest) -> HttpResponse:
                 except Exception as e:
                     logger.error(f"Error processing credit purchase webhook: {e}")
             else:
-                # Handle other types of checkout sessions (subscriptions, etc.)
-                logger.info(f"Received checkout.session.completed for non-credit purchase: {metadata}")
+                # Handle other types of checkout sessions
+                logger.info(f"Received checkout.session.completed for unknown purchase type: {metadata}")
+        
+        elif event_type == 'customer.subscription.created':
+            # Handle subscription creation
+            subscription = event['data']['object']
+            _handle_subscription_event(subscription, 'created')
+        
+        elif event_type == 'customer.subscription.updated':
+            # Handle subscription updates (status changes, etc.)
+            subscription = event['data']['object']
+            _handle_subscription_event(subscription, 'updated')
+        
+        elif event_type == 'customer.subscription.deleted':
+            # Handle subscription cancellation
+            subscription = event['data']['object']
+            _handle_subscription_event(subscription, 'deleted')
+        
+        elif event_type == 'invoice.payment_succeeded':
+            # Handle successful subscription payments and allocate monthly credits
+            invoice = event['data']['object']
+            _handle_invoice_payment_succeeded(invoice)
+        
+        elif event_type == 'invoice.payment_failed':
+            # Handle failed subscription payments
+            invoice = event['data']['object']
+            _handle_invoice_payment_failed(invoice)
         
         # Return success response
         return JsonResponse({'status': 'success'})
@@ -190,6 +284,233 @@ def webhook(request: HttpRequest) -> HttpResponse:
         # Invalid signature or other error
         logger.error(f"Webhook processing error: {e}")
         return JsonResponse({'error': 'Invalid signature'}, status=400)
+
+
+def _handle_subscription_event(subscription_data, event_action):
+    """Handle subscription webhook events."""
+    try:
+        from django.contrib.auth import get_user_model
+        from credits.models import UserSubscription
+        from stripe_manager.models import StripeCustomer
+        from django.utils import timezone
+        from datetime import datetime
+        
+        User = get_user_model()
+        
+        # Get customer ID and find the user
+        customer_id = subscription_data.get('customer')
+        if not customer_id:
+            logger.error(f"No customer ID in subscription {event_action} event")
+            return
+        
+        try:
+            stripe_customer = StripeCustomer.objects.get(stripe_id=customer_id)
+            user = stripe_customer.user
+        except StripeCustomer.DoesNotExist:
+            logger.error(f"StripeCustomer not found for customer ID: {customer_id}")
+            return
+        
+        subscription_id = subscription_data.get('id')
+        status = subscription_data.get('status')
+        
+        # Convert timestamps
+        current_period_start = None
+        current_period_end = None
+        canceled_at = None
+        
+        if subscription_data.get('current_period_start'):
+            current_period_start = timezone.datetime.fromtimestamp(
+                subscription_data['current_period_start'], tz=timezone.utc
+            )
+        
+        if subscription_data.get('current_period_end'):
+            current_period_end = timezone.datetime.fromtimestamp(
+                subscription_data['current_period_end'], tz=timezone.utc
+            )
+        
+        if subscription_data.get('canceled_at'):
+            canceled_at = timezone.datetime.fromtimestamp(
+                subscription_data['canceled_at'], tz=timezone.utc
+            )
+        
+        # Get product ID from subscription items
+        stripe_product_id = None
+        items = subscription_data.get('items', {}).get('data', [])
+        if items:
+            price = items[0].get('price', {})
+            stripe_product_id = price.get('product')
+        
+        if event_action == 'deleted':
+            # Mark subscription as canceled
+            try:
+                subscription = UserSubscription.objects.get(
+                    user=user,
+                    stripe_subscription_id=subscription_id
+                )
+                subscription.status = 'canceled'
+                subscription.canceled_at = canceled_at or timezone.now()
+                subscription.save()
+                
+                logger.info(f"Marked subscription as canceled for user {user.email}: {subscription_id}")
+            except UserSubscription.DoesNotExist:
+                logger.warning(f"UserSubscription not found for deletion: {subscription_id}")
+        else:
+            # Create or update subscription
+            existing_subscription = UserSubscription.objects.filter(user=user).first()
+            
+            if existing_subscription:
+                # Update existing subscription
+                existing_subscription.stripe_subscription_id = subscription_id
+                existing_subscription.stripe_product_id = stripe_product_id or ''
+                existing_subscription.status = status
+                existing_subscription.current_period_start = current_period_start
+                existing_subscription.current_period_end = current_period_end
+                existing_subscription.cancel_at_period_end = subscription_data.get('cancel_at_period_end', False)
+                existing_subscription.canceled_at = canceled_at
+                existing_subscription.save()
+                subscription = existing_subscription
+                created = False
+            else:
+                # Create new subscription
+                subscription = UserSubscription.objects.create(
+                    user=user,
+                    stripe_subscription_id=subscription_id,
+                    stripe_product_id=stripe_product_id or '',
+                    status=status,
+                    current_period_start=current_period_start,
+                    current_period_end=current_period_end,
+                    cancel_at_period_end=subscription_data.get('cancel_at_period_end', False),
+                    canceled_at=canceled_at,
+                )
+                created = True
+            
+            logger.info(
+                f"{'Created' if created else 'Updated'} subscription for user {user.email}: "
+                f"ID: {subscription_id}, Status: {status}, Action: {event_action}"
+            )
+    
+    except Exception as e:
+        logger.error(f"Error handling subscription {event_action} event: {e}")
+
+
+def _handle_invoice_payment_succeeded(invoice_data):
+    """Handle successful invoice payments and allocate monthly credits."""
+    try:
+        from django.contrib.auth import get_user_model
+        from credits.models import UserSubscription, CreditAccount
+        from stripe_manager.models import StripeCustomer
+        from django.utils import timezone
+        from datetime import datetime, timedelta
+        
+        User = get_user_model()
+        
+        # Get customer ID and find the user
+        customer_id = invoice_data.get('customer')
+        subscription_id = invoice_data.get('subscription')
+        
+        if not customer_id or not subscription_id:
+            logger.error(f"Missing customer_id or subscription_id in invoice payment succeeded event")
+            return
+        
+        try:
+            stripe_customer = StripeCustomer.objects.get(stripe_id=customer_id)
+            user = stripe_customer.user
+        except StripeCustomer.DoesNotExist:
+            logger.error(f"StripeCustomer not found for customer ID: {customer_id}")
+            return
+        
+        # Find the user's subscription
+        try:
+            subscription = UserSubscription.objects.get(
+                user=user,
+                stripe_subscription_id=subscription_id
+            )
+        except UserSubscription.DoesNotExist:
+            logger.error(f"UserSubscription not found for subscription ID: {subscription_id}")
+            return
+        
+        # Get the Stripe product to determine credit amount
+        stripe_product = subscription.get_stripe_product()
+        if not stripe_product:
+            logger.error(f"StripeProduct not found for subscription: {subscription_id}")
+            return
+        
+        # Check if this is a recurring payment (not the first payment)
+        # First payments are handled by checkout.session.completed
+        billing_reason = invoice_data.get('billing_reason')
+        if billing_reason == 'subscription_cycle':
+            # This is a recurring payment - allocate monthly credits
+            credit_account = CreditAccount.get_or_create_for_user(user)
+            
+            # Set expiration date for subscription credits (end of current period)
+            expires_at = subscription.current_period_end
+            
+            # Create credit transaction with expiration
+            description = f"Monthly subscription credits - {stripe_product.name} (Invoice: {invoice_data.get('id', '')})"
+            transaction = credit_account.add_credits(
+                amount=stripe_product.credit_amount,
+                description=description,
+                credit_type='SUBSCRIPTION'
+            )
+            
+            # Set expiration date
+            if expires_at:
+                transaction.expires_at = expires_at
+                transaction.save()
+            
+            logger.info(
+                f"Allocated {stripe_product.credit_amount} subscription credits to user {user.email} "
+                f"for subscription {subscription_id}, expires: {expires_at}"
+            )
+        else:
+            logger.info(f"Skipping credit allocation for billing reason: {billing_reason}")
+    
+    except Exception as e:
+        logger.error(f"Error handling invoice payment succeeded event: {e}")
+
+
+def _handle_invoice_payment_failed(invoice_data):
+    """Handle failed invoice payments."""
+    try:
+        from django.contrib.auth import get_user_model
+        from credits.models import UserSubscription
+        from stripe_manager.models import StripeCustomer
+        
+        User = get_user_model()
+        
+        # Get customer ID and find the user
+        customer_id = invoice_data.get('customer')
+        subscription_id = invoice_data.get('subscription')
+        
+        if not customer_id or not subscription_id:
+            logger.error(f"Missing customer_id or subscription_id in invoice payment failed event")
+            return
+        
+        try:
+            stripe_customer = StripeCustomer.objects.get(stripe_id=customer_id)
+            user = stripe_customer.user
+        except StripeCustomer.DoesNotExist:
+            logger.error(f"StripeCustomer not found for customer ID: {customer_id}")
+            return
+        
+        # Find the user's subscription and update status if needed
+        try:
+            subscription = UserSubscription.objects.get(
+                user=user,
+                stripe_subscription_id=subscription_id
+            )
+            
+            # Update subscription status to past_due if not already
+            if subscription.status != 'past_due':
+                subscription.status = 'past_due'
+                subscription.save()
+                
+                logger.info(f"Updated subscription status to past_due for user {user.email}: {subscription_id}")
+        except UserSubscription.DoesNotExist:
+            logger.error(f"UserSubscription not found for subscription ID: {subscription_id}")
+    
+    except Exception as e:
+        logger.error(f"Error handling invoice payment failed event: {e}")
 
 class PublicPlanListView(ListView):
     """
@@ -286,9 +607,25 @@ class CheckoutView(View):
             
             # Check if this is a credit product purchase
             is_credit_product = False
+            is_subscription = False
+            
             if credit_product:
-                # Check if it's a credit product (has credit_amount and is one-time)
+                # Check if it's a subscription product (has credit_amount and is monthly)
                 if (credit_product.credit_amount and 
+                    hasattr(credit_product, 'interval') and 
+                    credit_product.interval == 'month'):
+                    is_subscription = True
+                    
+                    metadata.update({
+                        'product_id': str(credit_product.id),
+                        'credit_amount': str(credit_product.credit_amount),
+                        'purchase_type': 'subscription',
+                    })
+                    # Use admin dashboard subscription success URL for subscriptions
+                    success_url = request.build_absolute_uri(reverse('admin_dashboard:subscription_success'))
+                    
+                # Check if it's a credit product (has credit_amount and is one-time)
+                elif (credit_product.credit_amount and 
                     hasattr(credit_product, 'interval') and 
                     credit_product.interval == 'one-time'):
                     is_credit_product = True
@@ -300,22 +637,12 @@ class CheckoutView(View):
                     })
                     # Use credit-specific success URL for better handling
                     success_url = request.build_absolute_uri(reverse('credits:purchase_success'))
-                elif credit_product.credit_amount:
-                    # Could be a subscription with credits
-                    is_credit_product = True
-                    metadata.update({
-                        'product_id': str(credit_product.id),
-                        'credit_amount': str(credit_product.credit_amount),
-                        'purchase_type': 'credit_product',
-                    })
-                    # For now, also route to credit success URL
-                    success_url = request.build_absolute_uri(reverse('credits:purchase_success'))
             
-            # If we couldn't identify as credit product locally, still add the price_id 
+            # If we couldn't identify as credit product or subscription locally, still add the price_id 
             # to metadata so the success handler can try to identify it
-            if not is_credit_product:
+            if not is_credit_product and not is_subscription:
                 # The success handler will try to identify credit products by price_id
-                logger.info(f"Could not identify credit product for price_id {price_id}, success handler will attempt detection")
+                logger.info(f"Could not identify product type for price_id {price_id}, success handler will attempt detection")
 
             # Implement the actual Stripe API call here
             checkout_session = stripe_manager.create_checkout_session(

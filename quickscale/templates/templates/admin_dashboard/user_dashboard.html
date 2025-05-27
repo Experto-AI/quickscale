@@ -39,6 +39,27 @@
                             </div>
                         </div>
                         
+                        <!-- Credit Balance Breakdown -->
+                        {% if balance_breakdown %}
+                            <div class="content">
+                                <p class="has-text-weight-semibold">Balance Breakdown:</p>
+                                <div class="columns is-mobile">
+                                    <div class="column">
+                                        <div class="has-text-centered">
+                                            <p class="title is-6 has-text-primary">{{ balance_breakdown.subscription }}</p>
+                                            <p class="is-size-7">Subscription</p>
+                                        </div>
+                                    </div>
+                                    <div class="column">
+                                        <div class="has-text-centered">
+                                            <p class="title is-6 has-text-info">{{ balance_breakdown.pay_as_you_go }}</p>
+                                            <p class="is-size-7">Pay-as-you-go</p>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        {% endif %}
+                        
                         {% if recent_transactions %}
                             <div class="content">
                                 <p class="has-text-weight-semibold">Recent Activity:</p>
@@ -64,6 +85,86 @@
                     <footer class="card-footer">
                         <a href="{% url 'credits:dashboard' %}" class="card-footer-item">View Details</a>
                         <a href="{% url 'credits:buy_credits' %}" class="card-footer-item">Buy Credits</a>
+                    </footer>
+                </div>
+            </div>
+            
+            <!-- Subscription Section -->
+            <div class="column is-half">
+                <div class="card">
+                    <div class="card-content">
+                        <div class="level">
+                            <div class="level-left">
+                                <div class="level-item">
+                                    <div>
+                                        <p class="title is-4">
+                                            <span class="icon">
+                                                <i class="fas fa-calendar-alt"></i>
+                                            </span>
+                                            Subscription
+                                        </p>
+                                        <p class="subtitle is-6">Monthly plan status</p>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="level-right">
+                                <div class="level-item">
+                                    {% if subscription and subscription.is_active %}
+                                        <span class="tag is-large is-success">Active</span>
+                                    {% else %}
+                                        <span class="tag is-large is-light">No Subscription</span>
+                                    {% endif %}
+                                </div>
+                            </div>
+                        </div>
+                        
+                        {% if subscription and subscription.is_active %}
+                            <div class="content">
+                                {% with stripe_product=subscription.get_stripe_product %}
+                                    {% if stripe_product %}
+                                        <p><strong>Plan:</strong> {{ stripe_product.name }}</p>
+                                        <p><strong>Monthly Credits:</strong> {{ stripe_product.credit_amount }} credits</p>
+                                        <p><strong>Price:</strong> ${{ stripe_product.price }}/month</p>
+                                    {% else %}
+                                        <p><strong>Plan:</strong> Active subscription</p>
+                                    {% endif %}
+                                {% endwith %}
+                                
+                                {% if subscription.days_until_renewal is not None %}
+                                    {% if subscription.days_until_renewal > 0 %}
+                                        <p><strong>Next Billing:</strong> {{ subscription.days_until_renewal }} days</p>
+                                    {% elif subscription.days_until_renewal == 0 %}
+                                        <p><strong>Next Billing:</strong> Today</p>
+                                    {% else %}
+                                        <p><strong>Status:</strong> Billing period expired</p>
+                                    {% endif %}
+                                {% endif %}
+                                
+                                {% if subscription.cancel_at_period_end %}
+                                    <div class="notification is-warning is-light is-small">
+                                        <p class="is-size-7"><strong>Canceling:</strong> Ends {{ subscription.current_period_end|date:"M d" }}</p>
+                                    </div>
+                                {% endif %}
+                            </div>
+                        {% else %}
+                            <div class="content">
+                                <p>No active subscription. Subscribe to get monthly credits automatically.</p>
+                                <ul>
+                                    <li>Better value than pay-as-you-go</li>
+                                    <li>Automatic monthly credits</li>
+                                    <li>Cancel anytime</li>
+                                </ul>
+                            </div>
+                        {% endif %}
+                    </div>
+                    <footer class="card-footer">
+                        <a href="{% url 'admin_dashboard:subscription' %}" class="card-footer-item">
+                            {% if subscription and subscription.is_active %}
+                                Manage Subscription
+                            {% else %}
+                                View Plans
+                            {% endif %}
+                        </a>
                     </footer>
                 </div>
             </div>
