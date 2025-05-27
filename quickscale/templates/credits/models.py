@@ -3,6 +3,8 @@ from django.contrib.auth import get_user_model
 from django.core.validators import MinValueValidator
 from django.utils.translation import gettext_lazy as _
 from decimal import Decimal
+from datetime import datetime, timedelta
+from django.utils import timezone
 
 User = get_user_model()
 
@@ -53,6 +55,142 @@ class Service(models.Model):
         return f"{name} ({credit_cost} credits)"
 
 
+class UserSubscription(models.Model):
+    """Model representing a user's subscription status and billing information."""
+    
+    STATUS_CHOICES = [
+        ('active', _('Active')),
+        ('canceled', _('Canceled')),
+        ('past_due', _('Past Due')),
+        ('unpaid', _('Unpaid')),
+        ('incomplete', _('Incomplete')),
+        ('incomplete_expired', _('Incomplete Expired')),
+        ('trialing', _('Trialing')),
+        ('paused', _('Paused')),
+    ]
+    
+    user = models.OneToOneField(
+        User,
+        on_delete=models.CASCADE,
+        related_name='subscription',
+        verbose_name=_('user')
+    )
+    stripe_subscription_id = models.CharField(
+        _('stripe subscription id'),
+        max_length=255,
+        unique=True,
+        blank=True,
+        null=True,
+        help_text=_('Stripe subscription ID')
+    )
+    stripe_product_id = models.CharField(
+        _('stripe product id'),
+        max_length=255,
+        blank=True,
+        help_text=_('Stripe product ID for this subscription')
+    )
+    status = models.CharField(
+        _('status'),
+        max_length=20,
+        choices=STATUS_CHOICES,
+        default='incomplete',
+        help_text=_('Current subscription status')
+    )
+    current_period_start = models.DateTimeField(
+        _('current period start'),
+        null=True,
+        blank=True,
+        help_text=_('Start of the current billing period')
+    )
+    current_period_end = models.DateTimeField(
+        _('current period end'),
+        null=True,
+        blank=True,
+        help_text=_('End of the current billing period')
+    )
+    cancel_at_period_end = models.BooleanField(
+        _('cancel at period end'),
+        default=False,
+        help_text=_('Whether the subscription will cancel at the end of the current period')
+    )
+    canceled_at = models.DateTimeField(
+        _('canceled at'),
+        null=True,
+        blank=True,
+        help_text=_('When the subscription was canceled')
+    )
+    created_at = models.DateTimeField(
+        _('created at'),
+        auto_now_add=True
+    )
+    updated_at = models.DateTimeField(
+        _('updated at'),
+        auto_now=True
+    )
+
+    class Meta:
+        verbose_name = _('user subscription')
+        verbose_name_plural = _('user subscriptions')
+        indexes = [
+            models.Index(fields=['stripe_subscription_id']),
+            models.Index(fields=['status']),
+            models.Index(fields=['current_period_end']),
+        ]
+
+    def __str__(self):
+        """Return string representation of the subscription."""
+        user_email = self.user.email if self.user else "No User"
+        status = self.get_status_display()
+        return f"{user_email} - {status}"
+
+    @property
+    def is_active(self):
+        """Check if the subscription is currently active."""
+        return self.status in ['active', 'trialing']
+
+    @property
+    def days_until_renewal(self):
+        """Calculate days until next billing period."""
+        if not self.current_period_end:
+            return None
+        
+        now = timezone.now()
+        if self.current_period_end > now:
+            delta = self.current_period_end - now
+            return delta.days
+        return 0
+
+    def get_stripe_product(self):
+        """Get the associated StripeProduct for this subscription."""
+        if not self.stripe_product_id:
+            return None
+        
+        from stripe_manager.models import StripeProduct
+        try:
+            return StripeProduct.objects.get(stripe_id=self.stripe_product_id)
+        except StripeProduct.DoesNotExist:
+            return None
+
+    def allocate_monthly_credits(self):
+        """Allocate monthly credits for this subscription period."""
+        if not self.is_active:
+            return None
+        
+        stripe_product = self.get_stripe_product()
+        if not stripe_product:
+            return None
+        
+        # Create credit transaction for monthly allocation
+        credit_account = CreditAccount.get_or_create_for_user(self.user)
+        description = f"Monthly credits allocation - {stripe_product.name}"
+        
+        return credit_account.add_credits(
+            amount=Decimal(str(stripe_product.credit_amount)),
+            description=description,
+            credit_type='SUBSCRIPTION'
+        )
+
+
 class CreditAccount(models.Model):
     """Model representing a user's credit account with balance management."""
     
@@ -87,6 +225,24 @@ class CreditAccount(models.Model):
             balance=models.Sum('amount')
         )['balance']
         return total or Decimal('0.00')
+
+    def get_balance_by_type(self) -> dict:
+        """Get balance breakdown by credit type."""
+        from django.db.models import Sum, Q
+        
+        subscription_balance = self.user.credit_transactions.filter(
+            credit_type='SUBSCRIPTION'
+        ).aggregate(balance=Sum('amount'))['balance'] or Decimal('0.00')
+        
+        pay_as_you_go_balance = self.user.credit_transactions.filter(
+            credit_type__in=['PURCHASE', 'ADMIN']
+        ).aggregate(balance=Sum('amount'))['balance'] or Decimal('0.00')
+        
+        return {
+            'subscription': subscription_balance,
+            'pay_as_you_go': pay_as_you_go_balance,
+            'total': subscription_balance + pay_as_you_go_balance
+        }
 
     def add_credits(self, amount: Decimal, description: str, credit_type: str = 'ADMIN') -> 'CreditTransaction':
         """Add credits to the account and return the transaction."""
@@ -138,6 +294,7 @@ class CreditTransaction(models.Model):
     
     CREDIT_TYPE_CHOICES = [
         ('PURCHASE', _('Purchase')),
+        ('SUBSCRIPTION', _('Subscription')),
         ('CONSUMPTION', _('Consumption')),
         ('ADMIN', _('Admin Adjustment')),
     ]
@@ -166,6 +323,12 @@ class CreditTransaction(models.Model):
         default='ADMIN',
         help_text=_('Type of credit transaction')
     )
+    expires_at = models.DateTimeField(
+        _('expires at'),
+        null=True,
+        blank=True,
+        help_text=_('When these credits expire (for subscription credits)')
+    )
     created_at = models.DateTimeField(
         _('created at'),
         auto_now_add=True
@@ -179,6 +342,7 @@ class CreditTransaction(models.Model):
             models.Index(fields=['user', '-created_at']),
             models.Index(fields=['-created_at']),
             models.Index(fields=['credit_type']),
+            models.Index(fields=['expires_at']),
         ]
 
     def __str__(self):
@@ -199,6 +363,11 @@ class CreditTransaction(models.Model):
         return self.credit_type == 'PURCHASE'
 
     @property
+    def is_subscription(self):
+        """Check if this is a subscription transaction."""
+        return self.credit_type == 'SUBSCRIPTION'
+
+    @property
     def is_consumption(self):
         """Check if this is a consumption transaction."""
         return self.credit_type == 'CONSUMPTION'
@@ -207,6 +376,13 @@ class CreditTransaction(models.Model):
     def is_admin_adjustment(self):
         """Check if this is an admin adjustment transaction."""
         return self.credit_type == 'ADMIN'
+
+    @property
+    def is_expired(self):
+        """Check if these credits have expired."""
+        if not self.expires_at:
+            return False
+        return timezone.now() > self.expires_at
 
 
 class ServiceUsage(models.Model):
@@ -252,5 +428,5 @@ class ServiceUsage(models.Model):
 
 
 class InsufficientCreditsError(Exception):
-    """Custom exception for insufficient credits."""
+    """Exception raised when a user has insufficient credits for an operation."""
     pass 

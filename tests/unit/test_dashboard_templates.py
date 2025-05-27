@@ -143,13 +143,9 @@ class AdminDashboardTemplateTests(unittest.TestCase):
         self.assertRegex(views_content, r'stripe_product\s*=\s*stripe_manager\.retrieve_product\(product_id\)',
                         "product_sync view does not retrieve product from Stripe")
         
-        # Check that the view gets prices from Stripe
-        self.assertRegex(views_content, r'prices\s*=\s*stripe_manager\.get_product_prices\(product_id\)',
-                        "product_sync view does not get prices from Stripe")
-        
-        # Check that the view updates the database
-        self.assertRegex(views_content, r'product,\s*created\s*=\s*StripeProduct\.objects\.update_or_create',
-                        "product_sync view does not update the database")
+        # Check that the view syncs the product using the new method
+        self.assertRegex(views_content, r'synced_product\s*=\s*stripe_manager\.sync_product_from_stripe\(product_id,\s*StripeProduct\)',
+                        "product_sync view does not sync product from Stripe using the correct method")
 
 
 if __name__ == '__main__':

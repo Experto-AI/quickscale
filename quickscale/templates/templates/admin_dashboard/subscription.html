@@ -1,0 +1,328 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block title %}Subscription - {{ project_name }}{% endblock %}
+
+{% block content %}
+{% csrf_token %}
+<section class="hero is-primary is-small">
+    <div class="hero-body">
+        <p class="title">Subscription Management</p>
+        <p class="subtitle">Manage your monthly subscription plan</p>
+    </div>
+</section>
+
+<section class="section">
+    <div class="container">
+        {% if not stripe_enabled or not stripe_available %}
+            <div class="notification is-warning">
+                <p class="has-text-weight-semibold">Subscription Management Unavailable</p>
+                {% if missing_api_keys %}
+                    <p>Stripe integration is not properly configured. Please contact support.</p>
+                {% else %}
+                    <p>Subscription features are currently disabled.</p>
+                {% endif %}
+            </div>
+        {% else %}
+            <div class="columns is-multiline">
+                
+                <!-- Current Subscription Status -->
+                <div class="column is-full">
+                    <div class="card">
+                        <div class="card-content">
+                            <div class="level">
+                                <div class="level-left">
+                                    <div class="level-item">
+                                        <div>
+                                            <p class="title is-4">
+                                                <span class="icon">
+                                                    <i class="fas fa-calendar-alt"></i>
+                                                </span>
+                                                Current Subscription
+                                            </p>
+                                        </div>
+                                    </div>
+                                </div>
+                                <div class="level-right">
+                                    <div class="level-item">
+                                        {% if subscription and subscription.is_active %}
+                                            <span class="tag is-large is-success">Active</span>
+                                        {% else %}
+                                            <span class="tag is-large is-light">No Active Subscription</span>
+                                        {% endif %}
+                                    </div>
+                                </div>
+                            </div>
+                            
+                            {% if subscription and subscription.is_active %}
+                                <div class="content">
+                                    {% with stripe_product=subscription.get_stripe_product %}
+                                        {% if stripe_product %}
+                                            <p><strong>Plan:</strong> {{ stripe_product.name }}</p>
+                                            <p><strong>Monthly Credits:</strong> {{ stripe_product.credit_amount }} credits</p>
+                                            <p><strong>Price:</strong> ${{ stripe_product.price }}/month</p>
+                                        {% else %}
+                                            <p><strong>Plan:</strong> Unknown Plan</p>
+                                        {% endif %}
+                                    {% endwith %}
+                                    
+                                    {% if subscription.current_period_start and subscription.current_period_end %}
+                                        <p><strong>Billing Period:</strong> 
+                                            {{ subscription.current_period_start|date:"M d, Y" }} - 
+                                            {{ subscription.current_period_end|date:"M d, Y" }}
+                                        </p>
+                                    {% endif %}
+                                    
+                                    {% if subscription.days_until_renewal is not None %}
+                                        {% if subscription.days_until_renewal > 0 %}
+                                            <p><strong>Next Billing:</strong> {{ subscription.days_until_renewal }} days</p>
+                                        {% elif subscription.days_until_renewal == 0 %}
+                                            <p><strong>Next Billing:</strong> Today</p>
+                                        {% else %}
+                                            <p><strong>Status:</strong> Billing period expired</p>
+                                        {% endif %}
+                                    {% endif %}
+                                    
+                                    {% if subscription.cancel_at_period_end %}
+                                        <div class="notification is-warning is-light">
+                                            <p><strong>Cancellation Scheduled:</strong> Your subscription will end on {{ subscription.current_period_end|date:"M d, Y" }}</p>
+                                        </div>
+                                    {% endif %}
+                                </div>
+                            {% else %}
+                                <div class="content">
+                                    <p>You don't have an active subscription. Subscribe to a monthly plan to get credits automatically each month.</p>
+                                    <ul>
+                                        <li>Monthly credit allocation</li>
+                                        <li>Better value than pay-as-you-go</li>
+                                        <li>Automatic renewal</li>
+                                        <li>Cancel anytime</li>
+                                    </ul>
+                                </div>
+                            {% endif %}
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- Available Subscription Plans -->
+                {% if subscription_products %}
+                    <div class="column is-full">
+                        <h2 class="title is-4">Available Plans</h2>
+                        <div class="columns is-multiline">
+                            {% for product in subscription_products %}
+                                <div class="column is-one-third">
+                                    <div class="card {% if subscription and subscription.get_stripe_product.id == product.id %}has-background-success-light{% endif %}">
+                                        <div class="card-content">
+                                            <div class="media">
+                                                <div class="media-content">
+                                                    <p class="title is-5">{{ product.name }}</p>
+                                                    <p class="subtitle is-6">${{ product.price }}/month</p>
+                                                </div>
+                                            </div>
+                                            
+                                            <div class="content">
+                                                {% if product.description %}
+                                                    <p>{{ product.description }}</p>
+                                                {% endif %}
+                                                
+                                                <ul>
+                                                    <li><strong>{{ product.credit_amount }} credits</strong> per month</li>
+                                                    <li>Credits expire monthly</li>
+                                                    <li>Cancel anytime</li>
+                                                    {% if product.credit_amount > 0 %}
+                                                        <li>{% widthratio product.price 1 product.credit_amount %} cents per credit</li>
+                                                    {% endif %}
+                                                </ul>
+                                            </div>
+                                        </div>
+                                        <footer class="card-footer">
+                                            {% if subscription and subscription.is_active and subscription.get_stripe_product.id == product.id %}
+                                                <span class="card-footer-item has-text-success has-text-weight-semibold">Current Plan</span>
+                                            {% elif subscription and subscription.is_active %}
+                                                <span class="card-footer-item has-text-grey">Plan Change Coming Soon</span>
+                                            {% else %}
+                                                <a href="#" 
+                                                   class="card-footer-item has-text-primary has-text-weight-semibold subscribe-btn"
+                                                   data-product-id="{{ product.id }}"
+                                                   data-product-name="{{ product.name }}"
+                                                   data-product-price="{{ product.price }}">
+                                                    Subscribe Now
+                                                </a>
+                                            {% endif %}
+                                        </footer>
+                                    </div>
+                                </div>
+                            {% endfor %}
+                        </div>
+                    </div>
+                {% endif %}
+                
+                <!-- Credit Balance Breakdown -->
+                <div class="column is-full">
+                    <div class="card">
+                        <div class="card-content">
+                            <p class="title is-4">
+                                <span class="icon">
+                                    <i class="fas fa-coins"></i>
+                                </span>
+                                Credit Balance
+                            </p>
+                            
+                            {% if user.credit_account %}
+                                {% with balance_breakdown=user.credit_account.get_balance_by_type %}
+                                    <div class="columns">
+                                        <div class="column">
+                                            <div class="has-text-centered">
+                                                <p class="title is-3 has-text-primary">{{ balance_breakdown.subscription }}</p>
+                                                <p class="subtitle is-6">Subscription Credits</p>
+                                                <p class="is-size-7 has-text-grey">
+                                                    {% if subscription and subscription.is_active %}
+                                                        Expires: {{ subscription.current_period_end|date:"M d, Y" }}
+                                                    {% else %}
+                                                        No active subscription
+                                                    {% endif %}
+                                                </p>
+                                            </div>
+                                        </div>
+                                        <div class="column">
+                                            <div class="has-text-centered">
+                                                <p class="title is-3 has-text-info">{{ balance_breakdown.pay_as_you_go }}</p>
+                                                <p class="subtitle is-6">Pay-as-You-Go Credits</p>
+                                                <p class="is-size-7 has-text-grey">Never expire</p>
+                                            </div>
+                                        </div>
+                                        <div class="column">
+                                            <div class="has-text-centered">
+                                                <p class="title is-3 has-text-success">{{ balance_breakdown.total }}</p>
+                                                <p class="subtitle is-6">Total Credits</p>
+                                                <p class="is-size-7 has-text-grey">Available for use</p>
+                                            </div>
+                                        </div>
+                                    </div>
+                                {% endwith %}
+                            {% else %}
+                                <p>No credit account found.</p>
+                            {% endif %}
+                        </div>
+                        <footer class="card-footer">
+                            <a href="{% url 'credits:dashboard' %}" class="card-footer-item">View Credit History</a>
+                            <a href="{% url 'credits:buy_credits' %}" class="card-footer-item">Buy More Credits</a>
+                        </footer>
+                    </div>
+                </div>
+            </div>
+        {% endif %}
+    </div>
+</section>
+
+<!-- Subscription Checkout Modal -->
+<div class="modal" id="subscription-modal">
+    <div class="modal-background"></div>
+    <div class="modal-card">
+        <header class="modal-card-head">
+            <p class="modal-card-title">Confirm Subscription</p>
+            <button class="delete" aria-label="close" onclick="closeSubscriptionModal()"></button>
+        </header>
+        <section class="modal-card-body">
+            <div class="content">
+                <p>You are about to subscribe to:</p>
+                <div class="box">
+                    <p class="title is-5" id="modal-plan-name"></p>
+                    <p class="subtitle is-6" id="modal-plan-price"></p>
+                    <p>This will start your monthly subscription and you'll be charged immediately.</p>
+                </div>
+            </div>
+        </section>
+        <footer class="modal-card-foot">
+            <button class="button is-primary" id="confirm-subscription-btn">Proceed to Checkout</button>
+            <button class="button" onclick="closeSubscriptionModal()">Cancel</button>
+        </footer>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+let selectedProductId = null;
+
+// Handle subscription button clicks
+document.addEventListener('DOMContentLoaded', function() {
+    const subscribeButtons = document.querySelectorAll('.subscribe-btn');
+    
+    subscribeButtons.forEach(button => {
+        button.addEventListener('click', function(e) {
+            e.preventDefault();
+            
+            selectedProductId = this.dataset.productId;
+            const productName = this.dataset.productName;
+            const productPrice = this.dataset.productPrice;
+            
+            // Update modal content
+            document.getElementById('modal-plan-name').textContent = productName;
+            document.getElementById('modal-plan-price').textContent = `$${productPrice}/month`;
+            
+            // Show modal
+            document.getElementById('subscription-modal').classList.add('is-active');
+        });
+    });
+    
+    // Handle confirm subscription
+    document.getElementById('confirm-subscription-btn').addEventListener('click', function() {
+        if (selectedProductId) {
+            createSubscriptionCheckout(selectedProductId);
+        }
+    });
+});
+
+function closeSubscriptionModal() {
+    document.getElementById('subscription-modal').classList.remove('is-active');
+    selectedProductId = null;
+}
+
+function createSubscriptionCheckout(productId) {
+    // Show loading state
+    const confirmBtn = document.getElementById('confirm-subscription-btn');
+    const originalText = confirmBtn.textContent;
+    confirmBtn.textContent = 'Processing...';
+    confirmBtn.disabled = true;
+    
+    // Create form data
+    const formData = new FormData();
+    formData.append('product_id', productId);
+    formData.append('csrfmiddlewaretoken', document.querySelector('[name=csrfmiddlewaretoken]').value);
+    
+    fetch('{% url "admin_dashboard:create_subscription_checkout" %}', {
+        method: 'POST',
+        body: formData,
+        headers: {
+            'X-Requested-With': 'XMLHttpRequest',
+        }
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.checkout_url) {
+            // Redirect to Stripe Checkout
+            window.location.href = data.checkout_url;
+        } else {
+            // Show error
+            alert('Error: ' + (data.error || 'Failed to create checkout session'));
+            
+            // Reset button
+            confirmBtn.textContent = originalText;
+            confirmBtn.disabled = false;
+        }
+    })
+    .catch(error => {
+        console.error('Error:', error);
+        alert('An error occurred. Please try again.');
+        
+        // Reset button
+        confirmBtn.textContent = originalText;
+        confirmBtn.disabled = false;
+    });
+}
+
+// Close modal when clicking background
+document.querySelector('.modal-background').addEventListener('click', closeSubscriptionModal);
+</script>
+{% endblock %} 
