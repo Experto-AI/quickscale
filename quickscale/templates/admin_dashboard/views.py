@@ -4,6 +4,7 @@ from django.http import HttpRequest, HttpResponse, JsonResponse
 from django.shortcuts import render, get_object_or_404, redirect
 from django.core.paginator import Paginator
 from django.contrib import messages
+from django.urls import reverse
 from core.env_utils import get_env, is_feature_enabled
 
 # Import the local StripeProduct model
@@ -43,23 +44,245 @@ if stripe_enabled:
 def user_dashboard(request: HttpRequest) -> HttpResponse:
     """Display the user dashboard with credits info and quick actions."""
     # Import here to avoid circular imports
-    from credits.models import CreditAccount
+    from credits.models import CreditAccount, UserSubscription
     
     # Get or create credit account for the user
     credit_account = CreditAccount.get_or_create_for_user(request.user)
     current_balance = credit_account.get_balance()
+    balance_breakdown = credit_account.get_balance_by_type()
     
     # Get recent transactions (limited to 3 for dashboard overview)
     recent_transactions = request.user.credit_transactions.all()[:3]
     
+    # Get user's subscription status
+    subscription = None
+    try:
+        subscription = request.user.subscription
+    except UserSubscription.DoesNotExist:
+        pass
+    
     context = {
         'credit_account': credit_account,
         'current_balance': current_balance,
+        'balance_breakdown': balance_breakdown,
         'recent_transactions': recent_transactions,
+        'subscription': subscription,
         'stripe_enabled': stripe_enabled,
     }
     
     return render(request, 'admin_dashboard/user_dashboard.html', context)
+
+@login_required
+def subscription_page(request: HttpRequest) -> HttpResponse:
+    """Display the subscription management page."""
+    from credits.models import UserSubscription
+    
+    # Get user's current subscription
+    subscription = None
+    try:
+        subscription = request.user.subscription
+    except UserSubscription.DoesNotExist:
+        pass
+    except AttributeError:
+        # Handle case where user doesn't have subscription attribute
+        try:
+            subscription = UserSubscription.objects.filter(user=request.user).first()
+        except Exception:
+            pass
+    
+    # Get available subscription plans (monthly products)
+    subscription_products = StripeProduct.objects.filter(
+        active=True,
+        interval='month'
+    ).order_by('display_order', 'price')
+    
+    context = {
+        'subscription': subscription,
+        'subscription_products': subscription_products,
+        'stripe_enabled': stripe_enabled,
+        'stripe_available': STRIPE_AVAILABLE,
+        'missing_api_keys': missing_api_keys,
+    }
+    
+    return render(request, 'admin_dashboard/subscription.html', context)
+
+@login_required
+def create_subscription_checkout(request: HttpRequest) -> JsonResponse:
+    """Create a Stripe checkout session for subscription."""
+    if request.method != 'POST':
+        return JsonResponse({'error': 'Method not allowed'}, status=405)
+    
+    product_id = request.POST.get('product_id')
+    if not product_id:
+        return JsonResponse({'error': 'Product ID is required'}, status=400)
+    
+    if not stripe_enabled or not STRIPE_AVAILABLE:
+        return JsonResponse({'error': 'Stripe integration is not enabled'}, status=400)
+    
+    try:
+        product = StripeProduct.objects.get(id=product_id, active=True, interval='month')
+    except StripeProduct.DoesNotExist:
+        return JsonResponse({'error': 'Subscription product not found or inactive'}, status=404)
+    
+    try:
+        # Create or get customer
+        from stripe_manager.models import StripeCustomer
+        stripe_customer, created = StripeCustomer.objects.get_or_create(
+            user=request.user,
+            defaults={
+                'email': request.user.email,
+                'name': f"{getattr(request.user, 'first_name', '')} {getattr(request.user, 'last_name', '')}".strip(),
+            }
+        )
+        
+        # If customer doesn't have a Stripe ID, create one
+        if not stripe_customer.stripe_id:
+            stripe_customer_data = stripe_manager.create_customer(
+                email=request.user.email,
+                name=f"{getattr(request.user, 'first_name', '')} {getattr(request.user, 'last_name', '')}".strip(),
+                metadata={'user_id': str(request.user.id)}
+            )
+            stripe_customer.stripe_id = stripe_customer_data['id']
+            stripe_customer.save()
+        
+        # Create checkout session for subscription
+        success_url = request.build_absolute_uri(reverse('admin_dashboard:subscription_success'))
+        cancel_url = request.build_absolute_uri(reverse('admin_dashboard:subscription_cancel'))
+        
+        if product.stripe_price_id:
+            # Use existing Stripe price
+            session = stripe_manager.create_checkout_session(
+                price_id=product.stripe_price_id,
+                quantity=1,
+                success_url=success_url + '?session_id={CHECKOUT_SESSION_ID}',
+                cancel_url=cancel_url,
+                customer_id=stripe_customer.stripe_id,
+                mode='subscription',
+                metadata={
+                    'user_id': str(request.user.id),
+                    'product_id': str(product.id),
+                    'credit_amount': str(product.credit_amount),
+                    'purchase_type': 'subscription',
+                }
+            )
+        else:
+            # Create price data dynamically for subscription
+            session_data = {
+                'mode': 'subscription',
+                'customer': stripe_customer.stripe_id,
+                'line_items': [{
+                    'price_data': {
+                        'currency': product.currency.lower(),
+                        'unit_amount': int(product.price * 100),  # Convert to cents
+                        'recurring': {'interval': 'month'},
+                        'product_data': {
+                            'name': product.name,
+                            'description': f"{product.credit_amount} credits per month",
+                        },
+                    },
+                    'quantity': 1,
+                }],
+                'success_url': success_url + '?session_id={CHECKOUT_SESSION_ID}',
+                'cancel_url': cancel_url,
+                'metadata': {
+                    'user_id': str(request.user.id),
+                    'product_id': str(product.id),
+                    'credit_amount': str(product.credit_amount),
+                    'purchase_type': 'subscription',
+                },
+            }
+            session = stripe_manager.client.checkout.sessions.create(**session_data)
+        
+        return JsonResponse({'checkout_url': session.url})
+        
+    except Exception as e:
+        return JsonResponse({'error': f'Failed to create subscription checkout: {str(e)}'}, status=500)
+
+@login_required
+def subscription_success(request: HttpRequest) -> HttpResponse:
+    """Handle successful subscription creation."""
+    session_id = request.GET.get('session_id')
+    
+    context = {
+        'session_id': session_id,
+        'stripe_enabled': stripe_enabled,
+    }
+    
+    if session_id and stripe_enabled and STRIPE_AVAILABLE:
+        try:
+            # Retrieve the session details
+            session_data = stripe_manager.retrieve_checkout_session(session_id)
+            context['session_data'] = session_data
+            
+            # Add debugging information
+            context['debug_info'] = {
+                'session_mode': session_data.get('mode'),
+                'payment_status': session_data.get('payment_status'),
+                'subscription_id': session_data.get('subscription'),
+                'metadata': session_data.get('metadata', {}),
+            }
+            
+            # Process subscription creation as fallback if webhook hasn't processed it yet
+            if session_data.get('mode') == 'subscription' and session_data.get('payment_status') == 'paid':
+                metadata = session_data.get('metadata', {})
+                subscription_id = session_data.get('subscription')
+                
+                if metadata.get('purchase_type') == 'subscription' and subscription_id:
+                    try:
+                        from credits.models import UserSubscription, CreditAccount
+                        
+                        # Check if subscription already exists
+                        existing_subscription = UserSubscription.objects.filter(
+                            user=request.user,
+                            stripe_subscription_id=subscription_id
+                        ).first()
+                        
+                        if not existing_subscription:
+                            # Get product information
+                            product_id = metadata.get('product_id')
+                            if product_id:
+                                try:
+                                    product = StripeProduct.objects.get(id=product_id)
+                                    
+                                    # Create subscription record
+                                    subscription = UserSubscription.objects.create(
+                                        user=request.user,
+                                        stripe_subscription_id=subscription_id,
+                                        stripe_product_id=product.stripe_id,
+                                        status='active'
+                                    )
+                                    
+                                    # Allocate initial subscription credits
+                                    credit_account = CreditAccount.get_or_create_for_user(request.user)
+                                    description = f"Initial subscription credits - {product.name} (Subscription: {subscription_id})"
+                                    
+                                    credit_account.add_credits(
+                                        amount=product.credit_amount,
+                                        description=description,
+                                        credit_type='SUBSCRIPTION'
+                                    )
+                                    
+                                    context['subscription_created'] = True
+                                    context['subscription'] = subscription
+                                    
+                                except StripeProduct.DoesNotExist:
+                                    context['error'] = 'Product not found in database'
+                        else:
+                            context['subscription'] = existing_subscription
+                            context['subscription_found'] = True
+                            
+                    except Exception as e:
+                        context['subscription_error'] = str(e)
+                        
+        except Exception as e:
+            context['error'] = str(e)
+    
+    return render(request, 'admin_dashboard/subscription_success.html', context)
+
+@login_required
+def subscription_cancel(request: HttpRequest) -> HttpResponse:
+    """Handle canceled subscription creation."""
+    return render(request, 'admin_dashboard/subscription_cancel.html')
 
 @login_required
 @user_passes_test(lambda u: u.is_staff)
@@ -200,50 +423,17 @@ def product_sync(request: HttpRequest, product_id: str) -> HttpResponse:
             existing_product = StripeProduct.objects.get(stripe_id=product_id)
         except StripeProduct.DoesNotExist:
             pass
-            
-        # Prepare the product data
-        product_data = {
-            'name': stripe_product['name'],
-            'description': stripe_product.get('description', ''),
-            'active': stripe_product['active'],
-            'stripe_id': stripe_product['id'],
-            # Preserve the existing display_order if product exists
-            'display_order': existing_product.display_order if existing_product else 0,
-        }
         
-        # Get prices for the product
-        prices = stripe_manager.get_product_prices(product_id)
+        # Sync the product from Stripe
+        synced_product = stripe_manager.sync_product_from_stripe(product_id, StripeProduct)
         
-        # Handle prices - get the first price
-        if prices and len(prices) > 0:
-            first_price = prices[0]
-            product_data['price'] = first_price.get('unit_amount', 0) / 100
-            product_data['currency'] = first_price.get('currency', 'usd')
-            
-            # Handle recurring interval
-            if first_price.get('recurring') and first_price['recurring'].get('interval'):
-                product_data['interval'] = first_price['recurring']['interval']
-            else:
-                product_data['interval'] = 'one-time'
+        if synced_product:
+            messages.success(request, f'Successfully synced product: {synced_product.name}')
         else:
-            # Default values if no prices are found
-            product_data['price'] = 0
-            product_data['currency'] = 'usd'
-            product_data['interval'] = 'one-time'
-        
-        # Update or create the product in the database
-        product, created = StripeProduct.objects.update_or_create(
-            stripe_id=product_id,
-            defaults=product_data
-        )
-        
-        if created:
-            messages.success(request, f'Successfully created product {product.name} from Stripe')
-        else:
-            messages.success(request, f'Successfully updated product {product.name} from Stripe')
-        
+            messages.warning(request, f'Product {product_id} sync completed but no changes were made')
+            
     except Exception as e:
-        messages.error(request, f'Error syncing product: {str(e)}')
+        messages.error(request, f'Error syncing product {product_id}: {str(e)}')
     
     return redirect('admin_dashboard:product_detail', product_id=product_id)
 
@@ -257,24 +447,28 @@ def sync_products(request: HttpRequest) -> HttpResponse:
         request: The HTTP request
         
     Returns:
-        Rendered product list partial for HTMX response on success or error message
+        Redirects back to the product admin page
     """
     if request.method != 'POST':
-        return HttpResponse("Method not allowed", status=405)
+        return redirect('admin_dashboard:product_admin')
     
-    # Use the module-level stripe_enabled variable
+    # Check if Stripe is enabled
+    stripe_enabled = is_feature_enabled(get_env('STRIPE_ENABLED', 'False'))
+    
     if not stripe_enabled or not STRIPE_AVAILABLE or stripe_manager is None:
-        return HttpResponse("Stripe integration is not enabled or available", status=400)
+        messages.error(request, 'Stripe integration is not enabled or available')
+        return redirect('admin_dashboard:product_admin')
     
     try:
-        # Sync products from Stripe
+        # Sync all products from Stripe
         synced_count = stripe_manager.sync_products_from_stripe(StripeProduct)
-        messages.success(request, f'Successfully synced {synced_count} products from Stripe')
         
-        # Return the updated product list partial
-        products = StripeProduct.objects.all().order_by('display_order')
-        return render(request, 'admin_dashboard/partials/product_list.html', {'products': products})
-        
+        if synced_count > 0:
+            messages.success(request, f'Successfully synced {synced_count} products from Stripe')
+        else:
+            messages.info(request, 'No products were synced. All products may already be up to date.')
+            
     except Exception as e:
-        messages.error(request, f'Error syncing products: {str(e)}')
-        return HttpResponse(f"Error syncing products: {str(e)}", status=500)
+        messages.error(request, f'Error syncing products from Stripe: {str(e)}')
+    
+    return redirect('admin_dashboard:product_admin')

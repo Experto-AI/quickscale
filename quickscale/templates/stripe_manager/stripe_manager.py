@@ -7,6 +7,7 @@ from typing import Dict, Any, Optional, Union, List, Tuple
 from django.conf import settings
 from core.env_utils import get_env, is_feature_enabled
 # from stripe import StripeClient # Move this import
+import stripe
 
 logger = logging.getLogger(__name__)
 
@@ -65,6 +66,9 @@ class StripeManager:
             logger.error("Stripe secret key not configured. Configure STRIPE_SECRET_KEY IN .env.")
             raise StripeConfigurationError("Stripe secret key not configured")
 
+        # Set the global API key for the stripe module
+        stripe.api_key = api_key
+
         # Set API version from environment or default to a modern version
         stripe_api_version = os.environ.get('STRIPE_API_VERSION', None)
 
@@ -81,7 +85,7 @@ class StripeManager:
                 try:
                     logger.info("Attempting a basic Stripe API call (list customers) to confirm connectivity and version compatibility...")
                     # Use the client instance with a minimal request
-                    self._client.customers.list(limit=1)
+                    self._client.customers.list(params={'limit': 1})
                     logger.info("Basic Stripe API call successful - Stripe connectivity confirmed.")
                 except Exception as e:
                     # Log the error but don't fail initialization - allow app to start
@@ -115,7 +119,7 @@ class StripeManager:
         
         try:
             # Minimal API call to test connectivity
-            self._client.customers.list(limit=1)
+            self._client.customers.list(params={'limit': 1})
             return True
         except Exception as e:
             logger.warning(f"Stripe connectivity check failed: {e}")
@@ -537,7 +541,8 @@ class StripeManager:
                                 cancel_url: str,
                                 customer_email: Optional[str] = None,
                                 customer_id: Optional[str] = None,
-                                metadata: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+                                metadata: Optional[Dict[str, Any]] = None,
+                                mode: Optional[str] = None) -> Dict[str, Any]:
         """Create a new Stripe Checkout session using the v12+ API."""
         line_items = [
             {
@@ -546,23 +551,27 @@ class StripeManager:
             },
         ]
 
-        # Determine if the price is recurring by retrieving the price details
-        try:
-            price = self.client.prices.retrieve(price_id)
-            # If the price has a recurring component, set mode to subscription
-            if price.get('recurring'):
-                mode = 'subscription'
-                logger.info(f"Price {price_id} is recurring with interval: {price.get('recurring', {}).get('interval')}. Using subscription mode.")
-            else:
+        # Use explicit mode if provided, otherwise determine automatically
+        if mode:
+            logger.info(f"Using explicit mode: {mode} for price_id: {price_id}")
+        else:
+            # Determine if the price is recurring by retrieving the price details
+            try:
+                price = self.client.prices.retrieve(price_id)
+                # If the price has a recurring component, set mode to subscription
+                if price.get('recurring'):
+                    mode = 'subscription'
+                    logger.info(f"Price {price_id} is recurring with interval: {price.get('recurring', {}).get('interval')}. Using subscription mode.")
+                else:
+                    mode = 'payment'
+                    logger.info(f"Price {price_id} is a one-time payment. Using payment mode.")
+            except Exception as e:
+                logger.warning(f"Error retrieving price details to determine mode: {e}. Using payment mode by default.")
                 mode = 'payment'
-                logger.info(f"Price {price_id} is a one-time payment. Using payment mode.")
-        except Exception as e:
-            logger.warning(f"Error retrieving price details to determine mode: {e}. Using payment mode by default.")
-            mode = 'payment'
 
         checkout_session_data = {
             'line_items': line_items,
-            'mode': mode,  # Set dynamically based on price type
+            'mode': mode,  # Set dynamically based on price type or explicit parameter
             'success_url': success_url,
             'cancel_url': cancel_url,
         }
@@ -578,10 +587,8 @@ class StripeManager:
         logger.info(f"Creating Stripe checkout session with mode: {mode}, price_id: {price_id}")
         
         try:
-            # Use StripeClient instance
-            session = self.client.checkout.sessions.create(
-                params=checkout_session_data
-            )
+            # Use the correct Stripe API method
+            session = stripe.checkout.Session.create(**checkout_session_data)
             logger.info(f"Successfully created checkout session: {session.id} with mode: {mode}")
             return session
         except Exception as e:
@@ -591,8 +598,8 @@ class StripeManager:
     def retrieve_checkout_session(self, session_id: str, include_line_items: bool = True) -> Dict[str, Any]:
         """Retrieve a Stripe Checkout session with detailed transaction information."""
         try:
-            # First retrieve the basic session
-            session = self.client.checkout.sessions.retrieve(session_id)
+            # First retrieve the basic session using the correct API method
+            session = stripe.checkout.Session.retrieve(session_id)
             
             # Convert to dictionary for easier manipulation
             session_data = dict(session)
@@ -617,7 +624,7 @@ class StripeManager:
             # Retrieve line items if requested
             if include_line_items:
                 try:
-                    line_items = self.client.checkout.sessions.list_line_items(session_id)
+                    line_items = stripe.checkout.Session.list_line_items(session_id, limit=100)
                     session_data['line_items_details'] = line_items
                 except Exception as e:
                     logger.warning(f"Could not retrieve line items for session {session_id}: {e}")
