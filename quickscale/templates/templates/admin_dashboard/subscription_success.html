@@ -1,0 +1,135 @@
+{% extends "base.html" %}
+
+{% block title %}Subscription Success - {{ project_name }}{% endblock %}
+
+{% block content %}
+<section class="hero is-success is-medium">
+    <div class="hero-body">
+        <div class="container has-text-centered">
+            <div class="columns is-centered">
+                <div class="column is-half">
+                    <span class="icon is-large has-text-white">
+                        <i class="fas fa-check-circle fa-3x"></i>
+                    </span>
+                    <h1 class="title is-2 has-text-white">
+                        Subscription Activated!
+                    </h1>
+                    <h2 class="subtitle is-4 has-text-white">
+                        Welcome to your new monthly plan
+                    </h2>
+                </div>
+            </div>
+        </div>
+    </div>
+</section>
+
+<section class="section">
+    <div class="container">
+        <div class="columns is-centered">
+            <div class="column is-two-thirds">
+                <div class="card">
+                    <div class="card-content">
+                        <div class="content has-text-centered">
+                            <h3 class="title is-4">Your subscription is now active!</h3>
+                            
+                            {% if session_data %}
+                                <div class="box has-background-success-light">
+                                    <p class="has-text-weight-semibold">Subscription Details:</p>
+                                    {% if session_data.metadata.credit_amount %}
+                                        <p>Monthly Credits: <strong>{{ session_data.metadata.credit_amount }} credits</strong></p>
+                                    {% endif %}
+                                    <p>Session ID: <strong>{{ session_data.id }}</strong></p>
+                                    <p>Monthly Price: <strong>${{ session_data.amount_total|floatformat:2 }}</strong></p>
+                                </div>
+                            {% endif %}
+                            
+                            {% if debug_info %}
+                                <div class="box has-background-info-light">
+                                    <p class="has-text-weight-semibold">Debug Information:</p>
+                                    <p>Session Mode: <strong>{{ debug_info.session_mode }}</strong></p>
+                                    <p>Payment Status: <strong>{{ debug_info.payment_status }}</strong></p>
+                                    <p>Subscription ID: <strong>{{ debug_info.subscription_id }}</strong></p>
+                                    <p>Metadata: <strong>{{ debug_info.metadata }}</strong></p>
+                                    {% if subscription_created %}
+                                        <p class="has-text-success">✓ Subscription created in success view</p>
+                                    {% endif %}
+                                    {% if subscription_found %}
+                                        <p class="has-text-info">✓ Subscription found (already exists)</p>
+                                    {% endif %}
+                                    {% if subscription_error %}
+                                        <p class="has-text-danger">✗ Subscription error: {{ subscription_error }}</p>
+                                    {% endif %}
+                                </div>
+                            {% endif %}
+                            
+                            <div class="content">
+                                <h4 class="title is-5">What happens next?</h4>
+                                <div class="columns">
+                                    <div class="column">
+                                        <div class="box">
+                                            <span class="icon has-text-primary">
+                                                <i class="fas fa-coins fa-2x"></i>
+                                            </span>
+                                            <p class="has-text-weight-semibold">Credits Allocated</p>
+                                            <p class="is-size-7">Your monthly credits have been added to your account and are ready to use.</p>
+                                        </div>
+                                    </div>
+                                    <div class="column">
+                                        <div class="box">
+                                            <span class="icon has-text-info">
+                                                <i class="fas fa-calendar-alt fa-2x"></i>
+                                            </span>
+                                            <p class="has-text-weight-semibold">Monthly Billing</p>
+                                            <p class="is-size-7">You'll be charged monthly and receive fresh credits each billing period.</p>
+                                        </div>
+                                    </div>
+                                    <div class="column">
+                                        <div class="box">
+                                            <span class="icon has-text-success">
+                                                <i class="fas fa-cog fa-2x"></i>
+                                            </span>
+                                            <p class="has-text-weight-semibold">Manage Anytime</p>
+                                            <p class="is-size-7">You can view your subscription details and cancel anytime from your dashboard.</p>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                            
+                            <div class="notification is-info is-light">
+                                <p><strong>Important:</strong> Subscription credits expire at the end of each billing period. Any unused credits will not roll over to the next month.</p>
+                            </div>
+                        </div>
+                    </div>
+                    <footer class="card-footer">
+                        <a href="{% url 'admin_dashboard:user_dashboard' %}" class="card-footer-item">
+                            <span class="icon">
+                                <i class="fas fa-tachometer-alt"></i>
+                            </span>
+                            <span>Go to Dashboard</span>
+                        </a>
+                        <a href="{% url 'admin_dashboard:subscription' %}" class="card-footer-item">
+                            <span class="icon">
+                                <i class="fas fa-calendar-alt"></i>
+                            </span>
+                            <span>Manage Subscription</span>
+                        </a>
+                        <a href="{% url 'credits:dashboard' %}" class="card-footer-item">
+                            <span class="icon">
+                                <i class="fas fa-coins"></i>
+                            </span>
+                            <span>View Credits</span>
+                        </a>
+                    </footer>
+                </div>
+                
+                {% if error %}
+                    <div class="notification is-warning">
+                        <p><strong>Note:</strong> There was an issue retrieving your subscription details, but your subscription should be active. If you have any concerns, please contact support.</p>
+                        <p class="is-size-7">Error: {{ error }}</p>
+                    </div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</section>
+{% endblock %} 

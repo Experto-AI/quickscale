@@ -2,8 +2,9 @@
 
 This document contains detailed technical information about the QuickScale project, including the tech stack, project structure, development workflows, and more.
 
-This is a project generator that generates a project only once.
-AI coding assistants must edit the template files (root cause or source files), not project generated files (destination files).
+QuickScale is a project generator that generates a project only once.
+
+AI coding assistants must edit the template files (root cause or source files), not project generated files (destination files). When creating tests of fixing bugs, AI coding assistants must edit the template files in the QuickScale project generator, not the generated files in the deployed django project.
 
 The main command for end users is `quickscale init`, which creates a new project from templates.
 Project configuration is managed through environment variables with secure defaults.
