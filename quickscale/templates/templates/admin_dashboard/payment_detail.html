@@ -1,0 +1,292 @@
+{% extends "base.html" %}
+{% load i18n %}
+
+{% block title %}{% trans "Payment Details" %}{% endblock %}
+
+{% block content %}
+<div class="container mt-5">
+    <div class="columns">
+        <div class="column is-8 is-offset-2">
+            <!-- Header -->
+            <div class="level">
+                <div class="level-left">
+                    <div class="level-item">
+                        <h1 class="title is-3">
+                            <span class="icon-text">
+                                <span class="icon">
+                                    <i class="fas fa-receipt"></i>
+                                </span>
+                                <span>{% trans "Payment Details" %}</span>
+                            </span>
+                        </h1>
+                    </div>
+                </div>
+                <div class="level-right">
+                    <div class="level-item">
+                        <a href="{% url 'admin_dashboard:payment_history' %}" class="button is-light">
+                            <span class="icon">
+                                <i class="fas fa-arrow-left"></i>
+                            </span>
+                            <span>{% trans "Back to Payment History" %}</span>
+                        </a>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Payment Status Banner -->
+            <div class="notification 
+                {% if payment.status == 'succeeded' %}is-success
+                {% elif payment.status == 'pending' %}is-warning
+                {% elif payment.status == 'failed' %}is-danger
+                {% elif payment.status == 'refunded' %}is-info
+                {% else %}is-light{% endif %}
+            ">
+                <div class="level">
+                    <div class="level-left">
+                        <div class="level-item">
+                            <span class="icon">
+                                {% if payment.status == 'succeeded' %}
+                                    <i class="fas fa-check-circle"></i>
+                                {% elif payment.status == 'pending' %}
+                                    <i class="fas fa-clock"></i>
+                                {% elif payment.status == 'failed' %}
+                                    <i class="fas fa-times-circle"></i>
+                                {% elif payment.status == 'refunded' %}
+                                    <i class="fas fa-undo"></i>
+                                {% else %}
+                                    <i class="fas fa-question-circle"></i>
+                                {% endif %}
+                            </span>
+                            <strong>{% trans "Payment Status:" %} {{ payment.get_status_display }}</strong>
+                        </div>
+                    </div>
+                    {% if payment.is_succeeded %}
+                        <div class="level-right">
+                            <div class="level-item">
+                                <a href="{% url 'admin_dashboard:download_receipt' payment.id %}" 
+                                   class="button is-small {% if payment.status == 'succeeded' %}is-success{% else %}is-info{% endif %}">
+                                    <span class="icon">
+                                        <i class="fas fa-download"></i>
+                                    </span>
+                                    <span>{% trans "Download Receipt" %}</span>
+                                </a>
+                            </div>
+                        </div>
+                    {% endif %}
+                </div>
+            </div>
+
+            <!-- Payment Information -->
+            <div class="box">
+                <h2 class="subtitle is-4">{% trans "Payment Information" %}</h2>
+                <div class="columns">
+                    <div class="column is-6">
+                        <table class="table is-fullwidth">
+                            <tbody>
+                                <tr>
+                                    <td><strong>{% trans "Payment ID:" %}</strong></td>
+                                    <td>{{ payment.id }}</td>
+                                </tr>
+                                <tr>
+                                    <td><strong>{% trans "Amount:" %}</strong></td>
+                                    <td class="has-text-weight-bold">${{ payment.amount }} {{ payment.currency }}</td>
+                                </tr>
+                                <tr>
+                                    <td><strong>{% trans "Payment Type:" %}</strong></td>
+                                    <td>
+                                        <span class="tag is-light">
+                                            {{ payment.get_payment_type_display }}
+                                        </span>
+                                    </td>
+                                </tr>
+                                <tr>
+                                    <td><strong>{% trans "Date:" %}</strong></td>
+                                    <td>{{ payment.created_at|date:"M d, Y H:i" }}</td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                    <div class="column is-6">
+                        <table class="table is-fullwidth">
+                            <tbody>
+                                <tr>
+                                    <td><strong>{% trans "Description:" %}</strong></td>
+                                    <td>{{ payment.description }}</td>
+                                </tr>
+                                {% if payment.stripe_payment_intent_id %}
+                                <tr>
+                                    <td><strong>{% trans "Stripe Payment ID:" %}</strong></td>
+                                    <td><code>{{ payment.stripe_payment_intent_id }}</code></td>
+                                </tr>
+                                {% endif %}
+                                {% if payment.stripe_subscription_id %}
+                                <tr>
+                                    <td><strong>{% trans "Stripe Subscription ID:" %}</strong></td>
+                                    <td><code>{{ payment.stripe_subscription_id }}</code></td>
+                                </tr>
+                                {% endif %}
+                                <tr>
+                                    <td><strong>{% trans "Last Updated:" %}</strong></td>
+                                    <td>{{ payment.updated_at|date:"M d, Y H:i" }}</td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Credit Information -->
+            {% if payment.credit_transaction %}
+            <div class="box">
+                <h2 class="subtitle is-4">
+                    <span class="icon-text">
+                        <span class="icon">
+                            <i class="fas fa-coins"></i>
+                        </span>
+                        <span>{% trans "Credit Information" %}</span>
+                    </span>
+                </h2>
+                <div class="columns">
+                    <div class="column is-6">
+                        <table class="table is-fullwidth">
+                            <tbody>
+                                <tr>
+                                    <td><strong>{% trans "Credits Added:" %}</strong></td>
+                                    <td class="has-text-weight-bold has-text-success">
+                                        +{{ payment.credit_transaction.amount }} {% trans "credits" %}
+                                    </td>
+                                </tr>
+                                <tr>
+                                    <td><strong>{% trans "Credit Type:" %}</strong></td>
+                                    <td>
+                                        <span class="tag 
+                                            {% if payment.credit_transaction.credit_type == 'PURCHASE' %}is-info
+                                            {% elif payment.credit_transaction.credit_type == 'SUBSCRIPTION' %}is-primary
+                                            {% else %}is-light{% endif %}
+                                        ">
+                                            {{ payment.credit_transaction.get_credit_type_display }}
+                                        </span>
+                                    </td>
+                                </tr>
+                                {% if payment.credit_transaction.expires_at %}
+                                <tr>
+                                    <td><strong>{% trans "Expires:" %}</strong></td>
+                                    <td>{{ payment.credit_transaction.expires_at|date:"M d, Y" }}</td>
+                                </tr>
+                                {% endif %}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+            {% endif %}
+
+            <!-- Subscription Information -->
+            {% if payment.subscription %}
+            <div class="box">
+                <h2 class="subtitle is-4">
+                    <span class="icon-text">
+                        <span class="icon">
+                            <i class="fas fa-calendar-alt"></i>
+                        </span>
+                        <span>{% trans "Subscription Information" %}</span>
+                    </span>
+                </h2>
+                <div class="columns">
+                    <div class="column is-6">
+                        <table class="table is-fullwidth">
+                            <tbody>
+                                <tr>
+                                    <td><strong>{% trans "Plan:" %}</strong></td>
+                                    <td>
+                                        {% with stripe_product=payment.subscription.get_stripe_product %}
+                                            {% if stripe_product %}
+                                                {{ stripe_product.name }}
+                                            {% else %}
+                                                {% trans "Unknown Plan" %}
+                                            {% endif %}
+                                        {% endwith %}
+                                    </td>
+                                </tr>
+                                <tr>
+                                    <td><strong>{% trans "Status:" %}</strong></td>
+                                    <td>
+                                        <span class="tag 
+                                            {% if payment.subscription.is_active %}is-success
+                                            {% else %}is-warning{% endif %}
+                                        ">
+                                            {{ payment.subscription.get_status_display }}
+                                        </span>
+                                    </td>
+                                </tr>
+                                <tr>
+                                    <td><strong>{% trans "Billing Period:" %}</strong></td>
+                                    <td>
+                                        {{ payment.subscription.current_period_start|date:"M d" }} - 
+                                        {{ payment.subscription.current_period_end|date:"M d, Y" }}
+                                    </td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+            {% endif %}
+
+            <!-- Receipt Data -->
+            {% if payment.receipt_data %}
+            <div class="box">
+                <h2 class="subtitle is-4">
+                    <span class="icon-text">
+                        <span class="icon">
+                            <i class="fas fa-receipt"></i>
+                        </span>
+                        <span>{% trans "Receipt Details" %}</span>
+                    </span>
+                </h2>
+                <div class="content">
+                    <div class="notification is-light">
+                        <div class="columns">
+                            {% for key, value in payment.receipt_data.items %}
+                                <div class="column is-6">
+                                    <strong>{{ key|title }}:</strong> {{ value }}
+                                </div>
+                                {% if forloop.counter|divisibleby:2 %}
+                                    </div><div class="columns">
+                                {% endif %}
+                            {% endfor %}
+                        </div>
+                    </div>
+                </div>
+            </div>
+            {% endif %}
+
+            <!-- Action Buttons -->
+            <div class="box">
+                <div class="buttons is-centered">
+                    <a href="{% url 'admin_dashboard:payment_history' %}" class="button is-primary">
+                        <span class="icon">
+                            <i class="fas fa-list"></i>
+                        </span>
+                        <span>{% trans "View All Payments" %}</span>
+                    </a>
+                    {% if payment.is_succeeded %}
+                        <a href="{% url 'admin_dashboard:download_receipt' payment.id %}" class="button is-info">
+                            <span class="icon">
+                                <i class="fas fa-download"></i>
+                            </span>
+                            <span>{% trans "Download Receipt" %}</span>
+                        </a>
+                    {% endif %}
+                    <a href="{% url 'admin_dashboard:user_dashboard' %}" class="button is-light">
+                        <span class="icon">
+                            <i class="fas fa-tachometer-alt"></i>
+                        </span>
+                        <span>{% trans "Dashboard" %}</span>
+                    </a>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %} 

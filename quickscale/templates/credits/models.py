@@ -576,6 +576,7 @@ class ServiceUsage(models.Model):
         indexes = [
             models.Index(fields=['user', '-created_at']),
             models.Index(fields=['service', '-created_at']),
+            models.Index(fields=['created_at']),
         ]
 
     def __str__(self):
@@ -585,6 +586,221 @@ class ServiceUsage(models.Model):
         return f"{user_email} used {service_name}"
 
 
+class Payment(models.Model):
+    """Model for tracking all payment transactions."""
+    
+    PAYMENT_TYPE_CHOICES = [
+        ('CREDIT_PURCHASE', _('Credit Purchase')),
+        ('SUBSCRIPTION', _('Subscription')),
+        ('REFUND', _('Refund')),
+    ]
+    
+    STATUS_CHOICES = [
+        ('pending', _('Pending')),
+        ('succeeded', _('Succeeded')),
+        ('failed', _('Failed')),
+        ('refunded', _('Refunded')),
+        ('cancelled', _('Cancelled')),
+    ]
+    
+    user = models.ForeignKey(
+        User,
+        on_delete=models.CASCADE,
+        related_name='payments',
+        verbose_name=_('user')
+    )
+    stripe_payment_intent_id = models.CharField(
+        _('stripe payment intent id'),
+        max_length=255,
+        blank=True,
+        null=True,
+        help_text=_('Stripe Payment Intent ID')
+    )
+    stripe_subscription_id = models.CharField(
+        _('stripe subscription id'),
+        max_length=255,
+        blank=True,
+        null=True,
+        help_text=_('Stripe Subscription ID (for subscription payments)')
+    )
+    amount = models.DecimalField(
+        _('amount'),
+        max_digits=10,
+        decimal_places=2,
+        help_text=_('Payment amount in the specified currency')
+    )
+    currency = models.CharField(
+        _('currency'),
+        max_length=3,
+        default='USD',
+        help_text=_('Currency code (ISO 4217)')
+    )
+    payment_type = models.CharField(
+        _('payment type'),
+        max_length=20,
+        choices=PAYMENT_TYPE_CHOICES,
+        help_text=_('Type of payment')
+    )
+    status = models.CharField(
+        _('status'),
+        max_length=20,
+        choices=STATUS_CHOICES,
+        default='pending',
+        help_text=_('Payment status')
+    )
+    description = models.CharField(
+        _('description'),
+        max_length=255,
+        help_text=_('Payment description')
+    )
+    credit_transaction = models.ForeignKey(
+        CreditTransaction,
+        on_delete=models.SET_NULL,
+        blank=True,
+        null=True,
+        related_name='payment',
+        verbose_name=_('credit transaction'),
+        help_text=_('Associated credit transaction (if applicable)')
+    )
+    subscription = models.ForeignKey(
+        UserSubscription,
+        on_delete=models.SET_NULL,
+        blank=True,
+        null=True,
+        related_name='payments',
+        verbose_name=_('subscription'),
+        help_text=_('Associated subscription (if applicable)')
+    )
+    receipt_data = models.JSONField(
+        _('receipt data'),
+        blank=True,
+        null=True,
+        help_text=_('Receipt information in JSON format')
+    )
+    created_at = models.DateTimeField(
+        _('created at'),
+        auto_now_add=True
+    )
+    updated_at = models.DateTimeField(
+        _('updated at'),
+        auto_now=True
+    )
+
+    class Meta:
+        verbose_name = _('payment')
+        verbose_name_plural = _('payments')
+        ordering = ['-created_at']
+        indexes = [
+            models.Index(fields=['user']),
+            models.Index(fields=['stripe_payment_intent_id']),
+            models.Index(fields=['stripe_subscription_id']),
+            models.Index(fields=['status']),
+            models.Index(fields=['payment_type']),
+            models.Index(fields=['created_at']),
+        ]
+
+    def __str__(self):
+        """Return string representation of the payment."""
+        user_email = self.user.email if self.user else "No User"
+        amount = self.amount or 0
+        currency = self.currency or "USD"
+        return f"{user_email} - {amount} {currency} ({self.get_status_display()})"
+
+    @property
+    def is_succeeded(self):
+        """Check if the payment succeeded."""
+        return self.status == 'succeeded'
+
+    @property
+    def is_refunded(self):
+        """Check if the payment was refunded."""
+        return self.status == 'refunded'
+
+    @property
+    def is_subscription_payment(self):
+        """Check if this is a subscription payment."""
+        return self.payment_type == 'SUBSCRIPTION'
+
+    @property
+    def is_credit_purchase(self):
+        """Check if this is a credit purchase payment."""
+        return self.payment_type == 'CREDIT_PURCHASE'
+
+    def generate_receipt_data(self):
+        """Generate receipt data for this payment."""
+        # Generate a receipt number based on payment ID and date
+        receipt_number = f"RCP-{self.created_at.strftime('%Y%m%d')}-{self.id:06d}"
+        
+        receipt_data = {
+            'payment_id': self.id,
+            'receipt_number': receipt_number,
+            'transaction_id': self.stripe_payment_intent_id or f"PAY-{self.id}",
+            'stripe_payment_intent_id': self.stripe_payment_intent_id,
+            'user_email': self.user.email,
+            'amount': str(self.amount),
+            'currency': self.currency,
+            'payment_type': self.get_payment_type_display(),
+            'payment_method': 'card',  # Default payment method, could be enhanced with actual data
+            'status': self.get_status_display(),
+            'description': self.description,
+            'date': self.created_at.isoformat(),
+            'payment_date': self.created_at.strftime('%Y-%m-%d'),
+        }
+        
+        # Add credit-specific information
+        if self.credit_transaction:
+            receipt_data['credits_added'] = str(abs(self.credit_transaction.amount))
+            receipt_data['credit_type'] = self.credit_transaction.get_credit_type_display()
+        
+        # Add subscription-specific information
+        if self.subscription:
+            stripe_product = self.subscription.get_stripe_product()
+            if stripe_product:
+                receipt_data['plan_name'] = stripe_product.name
+                receipt_data['billing_interval'] = stripe_product.get_interval_display()
+        
+        return receipt_data
+
+    @classmethod
+    def create_from_stripe_event(cls, user, stripe_event_data, payment_type='CREDIT_PURCHASE'):
+        """Create a payment record from Stripe event data."""
+        payment_intent = stripe_event_data.get('data', {}).get('object', {})
+        
+        # Extract basic payment information
+        amount = Decimal(str(payment_intent.get('amount', 0))) / 100  # Convert from cents
+        currency = payment_intent.get('currency', 'usd').upper()
+        status = payment_intent.get('status', 'pending')
+        
+        # Map Stripe status to our status choices
+        status_mapping = {
+            'succeeded': 'succeeded',
+            'requires_payment_method': 'failed',
+            'requires_confirmation': 'pending',
+            'requires_action': 'pending',
+            'processing': 'pending',
+            'requires_capture': 'pending',
+            'canceled': 'cancelled',
+        }
+        mapped_status = status_mapping.get(status, 'pending')
+        
+        # Create payment record
+        payment = cls.objects.create(
+            user=user,
+            stripe_payment_intent_id=payment_intent.get('id'),
+            amount=amount,
+            currency=currency,
+            payment_type=payment_type,
+            status=mapped_status,
+            description=payment_intent.get('description', f'{payment_type.title()} Payment'),
+        )
+        
+        # Generate and store receipt data
+        payment.receipt_data = payment.generate_receipt_data()
+        payment.save()
+        
+        return payment
+
+
 class InsufficientCreditsError(Exception):
-    """Exception raised when a user has insufficient credits for an operation."""
+    """Exception raised when a user has insufficient credits."""
     pass 
