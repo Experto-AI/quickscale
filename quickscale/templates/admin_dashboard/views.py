@@ -256,11 +256,39 @@ def subscription_success(request: HttpRequest) -> HttpResponse:
                                     credit_account = CreditAccount.get_or_create_for_user(request.user)
                                     description = f"Initial subscription credits - {product.name} (Subscription: {subscription_id})"
                                     
-                                    credit_account.add_credits(
+                                    credit_transaction = credit_account.add_credits(
                                         amount=product.credit_amount,
                                         description=description,
                                         credit_type='SUBSCRIPTION'
                                     )
+                                    
+                                    # Create Payment record as fallback if webhook hasn't processed yet
+                                    from credits.models import Payment
+                                    existing_payment = Payment.objects.filter(
+                                        user=request.user,
+                                        stripe_subscription_id=subscription_id
+                                    ).first()
+                                    
+                                    if not existing_payment:
+                                        # Get payment amount from session
+                                        amount_total = session_data.get('amount_total', 0) / 100 if session_data.get('amount_total') else 0
+                                        currency = session_data.get('currency', 'usd').upper()
+                                        
+                                        payment = Payment.objects.create(
+                                            user=request.user,
+                                            stripe_subscription_id=subscription_id,
+                                            amount=amount_total,
+                                            currency=currency,
+                                            payment_type='SUBSCRIPTION',
+                                            status='succeeded',
+                                            description=f"Subscription Payment - {product.name}",
+                                            credit_transaction=credit_transaction,
+                                            subscription=subscription
+                                        )
+                                        
+                                        # Generate and save receipt data
+                                        payment.receipt_data = payment.generate_receipt_data()
+                                        payment.save()
                                     
                                     context['subscription_created'] = True
                                     context['subscription'] = subscription
@@ -440,35 +468,95 @@ def product_sync(request: HttpRequest, product_id: str) -> HttpResponse:
 @login_required
 @user_passes_test(lambda u: u.is_staff)
 def sync_products(request: HttpRequest) -> HttpResponse:
-    """
-    Sync all products from Stripe to the local database.
-    
-    Args:
-        request: The HTTP request
-        
-    Returns:
-        Redirects back to the product admin page
-    """
-    if request.method != 'POST':
-        return redirect('admin_dashboard:product_admin')
-    
-    # Check if Stripe is enabled
-    stripe_enabled = is_feature_enabled(get_env('STRIPE_ENABLED', 'False'))
-    
-    if not stripe_enabled or not STRIPE_AVAILABLE or stripe_manager is None:
-        messages.error(request, 'Stripe integration is not enabled or available')
+    """Sync all products from Stripe."""
+    if not stripe_enabled or not STRIPE_AVAILABLE:
+        messages.error(request, 'Stripe integration is not enabled or configured.')
         return redirect('admin_dashboard:product_admin')
     
     try:
-        # Sync all products from Stripe
-        synced_count = stripe_manager.sync_products_from_stripe(StripeProduct)
-        
-        if synced_count > 0:
-            messages.success(request, f'Successfully synced {synced_count} products from Stripe')
-        else:
-            messages.info(request, 'No products were synced. All products may already be up to date.')
-            
+        synced_count = stripe_manager.sync_all_products()
+        messages.success(request, f'Successfully synced {synced_count} products from Stripe.')
     except Exception as e:
-        messages.error(request, f'Error syncing products from Stripe: {str(e)}')
+        messages.error(request, f'Failed to sync products: {str(e)}')
     
     return redirect('admin_dashboard:product_admin')
+
+@login_required
+def payment_history(request: HttpRequest) -> HttpResponse:
+    """Display user's payment history with filtering options."""
+    from credits.models import Payment
+    
+    # Get user's payments
+    payments = Payment.objects.filter(user=request.user).order_by('-created_at')
+    
+    # Filter by payment type if specified
+    payment_type = request.GET.get('type')
+    if payment_type in ['CREDIT_PURCHASE', 'SUBSCRIPTION', 'REFUND']:
+        payments = payments.filter(payment_type=payment_type)
+    
+    # Filter by status if specified
+    status = request.GET.get('status')
+    if status in ['pending', 'succeeded', 'failed', 'refunded', 'cancelled']:
+        payments = payments.filter(status=status)
+    
+    # Pagination
+    paginator = Paginator(payments, 20)  # Show 20 payments per page
+    page_number = request.GET.get('page')
+    page_obj = paginator.get_page(page_number)
+    
+    # Separate subscription and credit purchase payments for display
+    subscription_payments = payments.filter(payment_type='SUBSCRIPTION')[:5]
+    credit_purchase_payments = payments.filter(payment_type='CREDIT_PURCHASE')[:5]
+    
+    context = {
+        'payments': page_obj,
+        'subscription_payments': subscription_payments,
+        'credit_purchase_payments': credit_purchase_payments,
+        'current_type_filter': payment_type,
+        'current_status_filter': status,
+        'stripe_enabled': stripe_enabled,
+    }
+    
+    return render(request, 'admin_dashboard/payments.html', context)
+
+@login_required
+def payment_detail(request: HttpRequest, payment_id: int) -> HttpResponse:
+    """Display detailed information about a specific payment."""
+    from credits.models import Payment
+    
+    payment = get_object_or_404(Payment, id=payment_id, user=request.user)
+    
+    # Generate receipt data if not already present
+    if not payment.receipt_data:
+        payment.receipt_data = payment.generate_receipt_data()
+        payment.save()
+    
+    context = {
+        'payment': payment,
+        'stripe_enabled': stripe_enabled,
+    }
+    
+    return render(request, 'admin_dashboard/payment_detail.html', context)
+
+@login_required
+def download_receipt(request: HttpRequest, payment_id: int) -> HttpResponse:
+    """Download receipt for a specific payment."""
+    from credits.models import Payment
+    from django.http import JsonResponse
+    import json
+    
+    payment = get_object_or_404(Payment, id=payment_id, user=request.user)
+    
+    # Generate receipt data if not already present
+    if not payment.receipt_data:
+        payment.receipt_data = payment.generate_receipt_data()
+        payment.save()
+    
+    # For now, return JSON receipt data
+    # In a production system, you might generate a PDF
+    receipt_data = payment.receipt_data or {}
+    
+    response = JsonResponse(receipt_data, json_dumps_params={'indent': 2})
+    response['Content-Disposition'] = f'attachment; filename="receipt_{payment.id}.json"'
+    
+    return response

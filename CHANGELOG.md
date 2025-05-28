@@ -2,6 +2,28 @@
 
 All notable changes to this project will be documented in this file.
 
+## v0.20.0 (2025-05-28)
+v0.20.0 feat: Implement Payment History and Receipts System
+
+This PR implements a comprehensive payment history and receipt management system, allowing users to view their payment history, download receipts, and manage payment records effectively.
+
+- Backend Implementation:
+  - Created `Payment` model for all payment tracking.
+  - Linked payments to credit transactions and subscriptions.
+  - Generated receipt data for all payment types.
+  - Added payment status tracking (success, failed, refunded).
+- Frontend Implementation:
+  - Created `/admin_dashboard/payments/` page with payment history.
+  - Show detailed payment information (amount, date, type, status).
+  - Added downloadable receipts for each payment.
+  - Separated views for subscription payments vs credit purchases.
+- Testing:
+  - Tests for payment tracking.
+  - Tests for receipt generation.
+  - Integration tests for payment history display.
+
+This PR completes the implementation of the Payment History and Receipts system, providing users with better visibility and control over their transactions.
+
 ## v0.19.0 (2025-05-27)
 v0.19.0 feat: Implement Credit Type Priority System
 

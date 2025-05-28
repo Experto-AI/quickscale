@@ -38,6 +38,7 @@
    - ✅ Payment confirmation
    - ✅ Stripe webhook handling (basic structure)
    - ✅ Checkout success/error pages
+   - ✅ Payment history and receipts (Sprint 8)
    - ❌ Subscription management system
    - ❌ Advanced webhook event processing
    - ❌ Payment method management
@@ -48,6 +49,9 @@
    - ✅ Manual credit management for admins (Sprint 2)
    - ✅ Basic service credit consumption (Sprint 3)
    - ✅ Pay-as-you-go credit purchase (Sprint 4)
+   - ✅ Basic monthly subscription system (Sprint 6)
+   - ✅ Credit type priority system (Sprint 7)
+   - ✅ Payment history & receipts (Sprint 8)
 
 For more details refer to the [CHANGELOG](CHANGELOG.md).
 
@@ -66,106 +70,24 @@ The QuickScale credit system supports multiple payment models and credit types w
 
 ---
 
-### Sprint 4: Pay-as-You-Go Credit Purchase (v0.16.0) ✅ COMPLETED
-**Goal**: Users can buy credits that never expire
-
-**Backend Implementation:**
-- [X] Add `credit_type` field to `CreditTransaction` (PURCHASE, CONSUMPTION, ADMIN)
-- [X] Create credit purchase packages (100, 500, 1000 credits)
-- [X] Integrate Stripe Checkout for one-time payments
-- [X] Add webhook handling for successful payments
-- [X] Automatic credit allocation on payment success
-
-**Frontend Implementation:**
-- [X] Create `/dashboard/buy-credits/` page with package options
-- [X] Add Stripe Checkout integration with package selection
-- [X] Create payment success/failure pages
-- [X] Show purchase history in credit transactions
-
-**Testing:**
-- [X] Tests for credit purchase flow
-- [X] Tests for Stripe webhook processing
-- [X] Integration tests for complete purchase process
-
-**Validation**: User can purchase credits with real money and immediately see updated balance ✅
-
-**FIXED**:
-- [X] Refactor, use Synced STRIPE INTERGRATION -> STRIPE PRODUCTS instead of CREDITS -> CREDIT PURCHASES PACKAGES
-- [X] Clarify CREDIT SYSTEM docs for that
-
----
-
-### Sprint 5: Refactor and Maintenance (v0.17.0)
-**Goal**: Improve code quality, user flow and maintainability
-
-**Django Admin:**
-- [X] Update Technical DOCs, each diagram should be updated to reflect the new structure
-- [X] Fix credits synced from Stripe for each plan (are all 1000?)
-   - [X] Code created in sync_product_from_stripe, sync metadata credit_amount.
-   - [X] Also sync metadata display_order.
-   - [X] Fail gracefully by default, do not create defaults.
-   - [X] Human test
-- [X] Remove Django Admin ADD STRIPE PRODUCT button in STRIPE INTEGRATION -> STRIPE PRODUCTS
-   - [X] Human test
-- [X] Analyze if Django Admin ACCOUNTS -> Email Address could be grouped with USERS -> Customs Users
-   - [X] Human test
-- [X] Analyze if also Django Admin STRIPE INTEGRATION -> STRIPE USERS could be grouped.
-      Not DONE, is not convenient.
-
-**Backend and Frontend Implementation:**
-- [X] Admin: rename Dashboard to Admin Dashboard to differentiate user dashboard ("My Dashboard")
-      In codebase, backend and frontend.
-- [X] Group all migrations into one file
-
-**Testing:**
-- [X] Update all unit tests to reflect changes
-
-**Validation**: Refactor completed, user flows improved, and codebase more maintainable
-
----
-
-### Sprint 6: Basic Monthly Subscription (v0.18.0) ✅ COMPLETED
-**Goal**: Implement Basic subscription plan with monthly credits
-
-**Backend Implementation:**
-- [X] Create `UserSubscription` model with status and billing date
-- [X] Add `credit_type` field: SUBSCRIPTION vs PAY_AS_YOU_GO
-- [X] Create Stripe subscription product for Basic plan (**Note**: Create this product and its pricing in your Stripe account first, then sync to your local StripeProduct model.)
-- [X] Add subscription webhook handling
-
-**Frontend Implementation:**
-- [X] Create `/admin_dashboard/subscription/` page showing current plan
-- [X] Add "Subscribe to Basic" button with Stripe Checkout
-- [X] Show subscription status and next billing date
-- [X] Display credit breakdown (subscription vs pay-as-you-go)
-
-**Testing:**
-- [X] Tests for subscription creation, check them
-- [X] Tests for subscription credit allocation, check them
-- [X] Integration tests for subscription flow, check them
-
-**Validation**: User can subscribe to Basic plan and receive monthly credits automatically ✅
-
----
-
 ### Sprint 7: Credit Type Priority System (v0.19.0)
 **Goal**: Implement subscription credits consumed first, then pay-as-you-go
 
 **Backend Implementation:**
-- [ ] Add credit expiration logic for subscription credits
-- [ ] Implement priority consumption (subscription credits first)
-- [ ] Update `consume_credits()` method with priority logic
-- [ ] Add credit expiration handling on billing cycle
+- [X] Add credit expiration logic for subscription credits
+- [X] Implement priority consumption (subscription credits first)
+- [X] Update `consume_credits()` method with priority logic
+- [X] Add credit expiration handling on billing cycle
 
 **Frontend Implementation:**
-- [ ] Update credit balance display to show breakdown by type
-- [ ] Add expiration dates for subscription credits
-- [ ] Show which credit type is being consumed during service usage
+- [X] Update credit balance display to show breakdown by type
+- [X] Add expiration dates for subscription credits
+- [X] Show which credit type is being consumed during service usage
 
 **Testing:**
-- [ ] Tests for credit priority consumption, check them
-- [ ] Tests for credit expiration logic, check them
-- [ ] Integration tests for mixed credit scenarios, check them
+- [X] Tests for credit priority consumption, check them
+- [X] Tests for credit expiration logic, check them
+- [X] Integration tests for mixed credit scenarios, check them
 
 **Notes**:
 - We don't need backward compatibility for credit types.
@@ -175,7 +97,35 @@ The QuickScale credit system supports multiple payment models and credit types w
 
 ---
 
-### Sprint 8: Pro Subscription Plan (v0.20.0)
+### Sprint 8: Payment History & Receipts (v0.20.0) ✅ COMPLETED
+**Goal**: Complete payment tracking and receipt system
+
+**Backend Implementation:**
+- [X] Create `Payment` model for all payment tracking
+- [X] Link payments to credit transactions and subscriptions
+- [X] Generate receipt data for all payment types
+- [X] Add payment status tracking (success, failed, refunded)
+
+**Frontend Implementation:**
+- [X] Create `/admin_dashboard/payments/` page with payment history
+- [X] Show detailed payment information (amount, date, type, status)
+- [X] Add downloadable receipts for each payment
+- [X] Separate views for subscription payments vs credit purchases
+
+**Testing:**
+- [X] Tests for payment tracking, check them, remember to check the quickscale codebase not a genrated project
+- [X] Tests for receipt generation, check them, remember to check the quickscale codebase not a genrated project
+- [X] Integration tests for payment history display, check them, remember to check the quickscale codebase not a genrated project
+
+**Notes**:
+- We don't need backward compatibility with previous versions of the codebase.
+- We don't need django migrations, we could replace previous tables.
+
+**Validation**: User can view complete payment history with downloadable receipts ✅
+
+---
+
+### Sprint 9: Pro Subscription Plan (v0.21.0)
 **Goal**: Add Pro plan with more credits at better rate
 
 **Backend Implementation:**
@@ -190,35 +140,15 @@ The QuickScale credit system supports multiple payment models and credit types w
 - [ ] Show savings calculation for Pro plan
 
 **Testing:**
-- [ ] Tests for Pro plan subscription, check them
-- [ ] Tests for plan upgrades/downgrades, check them
-- [ ] Integration tests for multiple plan types, check them
+- [ ] Tests for Pro plan subscription, check them, remember to check the quickscale codebase not a genrated project
+- [ ] Tests for plan upgrades/downgrades, check them, remember to check the quickscale codebase not a genrated project
+- [ ] Integration tests for multiple plan types, check them, remember to check the quickscale codebase not a genrated project
+
+**Notes**:
+- We don't need backward compatibility with previous versions of the codebase.
+- We don't need django migrations, we could replace previous tables.
 
 **Validation**: User can choose between Basic and Pro plans and upgrade/downgrade
-
----
-
-### Sprint 9: Payment History & Receipts (v0.21.0)
-**Goal**: Complete payment tracking and receipt system
-
-**Backend Implementation:**
-- [ ] Create `Payment` model for all payment tracking
-- [ ] Link payments to credit transactions and subscriptions
-- [ ] Generate receipt data for all payment types
-- [ ] Add payment status tracking (success, failed, refunded)
-
-**Frontend Implementation:**
-- [ ] Create `/admin_dashboard/payments/` page with payment history
-- [ ] Show detailed payment information (amount, date, type, status)
-- [ ] Add downloadable receipts for each payment
-- [ ] Separate views for subscription payments vs credit purchases
-
-**Testing:**
-- [ ] Tests for payment tracking, check them
-- [ ] Tests for receipt generation, check them
-- [ ] Integration tests for payment history display, check them
-
-**Validation**: User can view complete payment history with downloadable receipts
 
 ---
 
@@ -238,9 +168,13 @@ The QuickScale credit system supports multiple payment models and credit types w
 - [ ] Display admin action history and audit logs
 
 **Testing:**
-- [ ] Tests for admin user account access, check them
-- [ ] Tests for admin credit operations, check them
-- [ ] Tests for audit logging, check them
+- [ ] Tests for admin user account access, check them, remember to check the quickscale codebase not a genrated project
+- [ ] Tests for admin credit operations, check them, remember to check the quickscale codebase not a genrated project
+- [ ] Tests for audit logging, check them, remember to check the quickscale codebase not a genrated project
+
+**Notes**:
+- We don't need backward compatibility with previous versions of the codebase.
+- We don't need django migrations, we could replace previous tables.
 
 **Validation**: Admin can search any user, view their complete credit status, and make adjustments
 
@@ -262,9 +196,13 @@ The QuickScale credit system supports multiple payment models and credit types w
 - [ ] Add simple charts for monthly revenue trends
 
 **Testing:**
-- [ ] Tests for analytics calculations, check them
-- [ ] Tests for analytics dashboard display, check them
-- [ ] Integration tests for real-time metrics, check them
+- [ ] Tests for analytics calculations, check them, remember to check the quickscale codebase not a genrated project
+- [ ] Tests for analytics dashboard display, check them, remember to check the quickscale codebase not a genrated project
+- [ ] Integration tests for real-time metrics, check them, remember to check the quickscale codebase not a genrated project
+
+**Notes**:
+- We don't need backward compatibility with previous versions of the codebase.
+- We don't need django migrations, we could replace previous tables.
 
 **Validation**: Admin can view business metrics and revenue analyticds
 

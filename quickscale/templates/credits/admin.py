@@ -9,7 +9,7 @@ from django.utils.decorators import method_decorator
 from django.views.decorators.http import require_http_methods
 from django.utils.html import format_html
 from decimal import Decimal
-from .models import CreditAccount, CreditTransaction, Service, ServiceUsage, UserSubscription
+from .models import CreditAccount, CreditTransaction, Service, ServiceUsage, UserSubscription, Payment
 from .forms import AdminCreditAdjustmentForm
 
 
@@ -373,4 +373,47 @@ class ServiceUsageAdmin(admin.ModelAdmin):
 
     def has_delete_permission(self, request, obj=None):
         """Disable deleting service usage through admin."""
+        return False
+
+
+@admin.register(Payment)
+class PaymentAdmin(admin.ModelAdmin):
+    """Admin interface for Payment model."""
+    
+    list_display = ('user', 'amount', 'currency', 'payment_type', 'status', 'created_at')
+    list_filter = ('created_at', 'payment_type', 'status', 'currency')
+    search_fields = ('user__email', 'user__first_name', 'user__last_name', 'stripe_payment_intent_id', 'description')
+    readonly_fields = ('created_at', 'updated_at', 'receipt_data')
+    ordering = ('-created_at',)
+    
+    fieldsets = (
+        (_('Payment Information'), {
+            'fields': ('user', 'amount', 'currency', 'payment_type', 'status', 'description'),
+        }),
+        (_('Stripe Information'), {
+            'fields': ('stripe_payment_intent_id', 'stripe_subscription_id'),
+        }),
+        (_('Links'), {
+            'fields': ('credit_transaction', 'subscription'),
+        }),
+        (_('Receipt'), {
+            'fields': ('receipt_data',),
+            'classes': ('collapse',),
+        }),
+        (_('System Information'), {
+            'fields': ('created_at', 'updated_at'),
+            'classes': ('collapse',),
+        }),
+    )
+
+    def has_add_permission(self, request):
+        """Disable adding payments through admin."""
+        return False
+
+    def has_change_permission(self, request, obj=None):
+        """Disable changing payments through admin."""
+        return False
+
+    def has_delete_permission(self, request, obj=None):
+        """Disable deleting payments through admin."""
         return False 

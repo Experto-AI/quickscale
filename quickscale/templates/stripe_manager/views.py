@@ -156,25 +156,56 @@ def webhook(request: HttpRequest) -> HttpResponse:
                                 credit_account = CreditAccount.get_or_create_for_user(user)
                                 description = f"Initial subscription credits - {product.name} (Subscription: {subscription_id})"
                                 
-                                credit_account.add_credits(
+                                credit_transaction = credit_account.add_credits(
                                     amount=product.credit_amount,
                                     description=description,
                                     credit_type='SUBSCRIPTION'
                                 )
                                 
+                                # Create Payment record for initial subscription payment
+                                from credits.models import Payment
+                                # Get payment amount from session
+                                amount_total = session.get('amount_total', 0) / 100 if session.get('amount_total') else 0
+                                currency = session.get('currency', 'usd').upper()
+                                
+                                # Check if Payment record already exists (prevent duplicates)
+                                existing_payment = Payment.objects.filter(
+                                    user=user,
+                                    stripe_subscription_id=subscription_id
+                                ).first()
+                                
+                                if not existing_payment:
+                                    payment = Payment.objects.create(
+                                        user=user,
+                                        stripe_subscription_id=subscription_id,
+                                        amount=amount_total,
+                                        currency=currency,
+                                        payment_type='SUBSCRIPTION',
+                                        status='succeeded',  # Session completed means payment succeeded
+                                        description=f"Subscription Payment - {product.name}",
+                                        credit_transaction=credit_transaction,
+                                        subscription=subscription
+                                    )
+                                    
+                                    # Generate and save receipt data
+                                    payment.receipt_data = payment.generate_receipt_data()
+                                    payment.save()
+                                    
+                                    logger.info(
+                                        f"Created Payment record ID {payment.id} for subscription by user {user.email}: "
+                                        f"Subscription: {subscription_id}, Amount: {currency} {amount_total:.2f}"
+                                    )
+                                else:
+                                    logger.info(f"Payment record already exists for subscription {subscription_id}")
+                                
                                 logger.info(
                                     f"Allocated initial {product.credit_amount} subscription credits to user {user.email} "
                                     f"for subscription {subscription_id}"
                                 )
-                            
-                            logger.info(
-                                f"{'Created' if created else 'Updated'} subscription for user {user.email}: "
-                                f"Subscription ID: {subscription_id}, Product: {product.name}"
-                            )
+                            else:
+                                logger.error(f"No subscription ID found in checkout session: {session.get('id', '')}")
                         else:
-                            logger.error(f"No subscription ID found in checkout session: {session.get('id', '')}")
-                    else:
-                        logger.error(f"Missing user_id or product_id in subscription webhook metadata: {metadata}")
+                            logger.error(f"Missing user_id or product_id in subscription webhook metadata: {metadata}")
                         
                 except Exception as e:
                     logger.error(f"Error processing subscription checkout webhook: {e}")
@@ -225,11 +256,43 @@ def webhook(request: HttpRequest) -> HttpResponse:
                                 )
                                 
                                 # Add credits to user account
-                                credit_account.add_credits(
+                                credit_transaction = credit_account.add_credits(
                                     amount=int(credit_amount),
                                     description=description,
                                     credit_type='PURCHASE'
                                 )
+                                
+                                # Create Payment record for this transaction
+                                from credits.models import Payment
+                                
+                                # Check if Payment record already exists (prevent duplicates)
+                                existing_payment = Payment.objects.filter(
+                                    user=user,
+                                    stripe_payment_intent_id=payment_intent_id
+                                ).first()
+                                
+                                if not existing_payment:
+                                    payment = Payment.objects.create(
+                                        user=user,
+                                        stripe_payment_intent_id=payment_intent_id,
+                                        amount=amount_total,
+                                        currency=currency,
+                                        payment_type='CREDIT_PURCHASE',
+                                        status='succeeded',  # Session completed means payment succeeded
+                                        description=f"Credit Purchase - {product.name}",
+                                        credit_transaction=credit_transaction
+                                    )
+                                    
+                                    # Generate and save receipt data
+                                    payment.receipt_data = payment.generate_receipt_data()
+                                    payment.save()
+                                    
+                                    logger.info(
+                                        f"Created Payment record ID {payment.id} for credit purchase by user {user.email}: "
+                                        f"Payment Intent: {payment_intent_id}, Amount: {currency} {amount_total:.2f}"
+                                    )
+                                else:
+                                    logger.info(f"Payment record already exists for payment intent {payment_intent_id}")
                                 
                                 logger.info(
                                     f"Successfully processed credit purchase via webhook for user {user.email}: "
@@ -457,6 +520,44 @@ def _handle_invoice_payment_succeeded(invoice_data):
             if expires_at:
                 transaction.expires_at = expires_at
                 transaction.save()
+            
+            # Create Payment record for recurring subscription payment
+            from credits.models import Payment
+            # Get payment amount from invoice
+            amount_paid = invoice_data.get('amount_paid', 0) / 100 if invoice_data.get('amount_paid') else 0
+            currency = invoice_data.get('currency', 'usd').upper()
+            invoice_id = invoice_data.get('id', '')
+            
+            # Check if Payment record already exists for this invoice (prevent duplicates)
+            existing_payment = Payment.objects.filter(
+                user=user,
+                stripe_subscription_id=subscription_id,
+                description__contains=f"Invoice: {invoice_id}"
+            ).first()
+            
+            if not existing_payment:
+                payment = Payment.objects.create(
+                    user=user,
+                    stripe_subscription_id=subscription_id,
+                    amount=amount_paid,
+                    currency=currency,
+                    payment_type='SUBSCRIPTION',
+                    status='succeeded',  # Invoice payment succeeded
+                    description=f"Monthly Subscription Payment - {stripe_product.name}",
+                    credit_transaction=transaction,
+                    subscription=subscription
+                )
+                
+                # Generate and save receipt data
+                payment.receipt_data = payment.generate_receipt_data()
+                payment.save()
+                
+                logger.info(
+                    f"Created Payment record ID {payment.id} for recurring subscription by user {user.email}: "
+                    f"Invoice: {invoice_id}, Amount: {currency} {amount_paid:.2f}"
+                )
+            else:
+                logger.info(f"Payment record already exists for invoice {invoice_id}")
             
             logger.info(
                 f"Allocated {stripe_product.credit_amount} subscription credits to user {user.email} "

@@ -1,7 +1,7 @@
 quickscale
 ├── dist
-│   ├── quickscale-0.16.0-py3-none-any.whl
-│   └── quickscale-0.16.0.tar.gz
+│   ├── quickscale-0.19.0-py3-none-any.whl
+│   └── quickscale-0.19.0.tar.gz
 ├── docs
 │   ├── contrib
 │   │   ├── 01_ai_programming_assistant.md
@@ -280,6 +280,10 @@ quickscale
 │   │   │   ├── urls.py
 │   │   │   └── views.py
 │   │   │       ├── user_dashboard(request)
+│   │   │       ├── subscription_page(request)
+│   │   │       ├── create_subscription_checkout(request)
+│   │   │       ├── subscription_success(request)
+│   │   │       ├── subscription_cancel(request)
 │   │   │       ├── index(request)
 │   │   │       ├── product_admin(request)
 │   │   │       ├── product_detail(request, product_id)
@@ -309,6 +313,12 @@ quickscale
 │   │   │   │   ├── project_settings(request)
 │   │   │   │   └── settings_context(request)
 │   │   │   ├── email_settings.py
+│   │   │   ├── env_utils.py
+│   │   │   │   ├── get_env(key, default, from_env_file)
+│   │   │   │   ├── is_feature_enabled(value)
+│   │   │   │   ├── refresh_env_cache()
+│   │   │   │   ├── validate_required_vars(component)
+│   │   │   │   └── validate_production_settings()
 │   │   │   ├── security_settings.py
 │   │   │   ├── settings.py
 │   │   │   ├── test_runner.py
@@ -318,6 +328,9 @@ quickscale
 │   │   │   │       ├── __init__(self)
 │   │   │   │       └── build_suite(self, test_labels)
 │   │   │   ├── test_settings.py
+│   │   │   │   └── DisableMigrations {}
+│   │   │   │       ├── __contains__(self, item)
+│   │   │   │       └── __getitem__(self, item)
 │   │   │   ├── urls.py
 │   │   │   │   ├── health_check(request)
 │   │   │   │   └── admin_test(request)
@@ -326,16 +339,63 @@ quickscale
 │   │   │   ├── migrations
 │   │   │   │   ├── 0001_initial.py
 │   │   │   │   │   └── Migration {}
+│   │   │   │   ├── 0002_add_subscription_support.py
+│   │   │   │   │   └── Migration {}
 │   │   │   │   └── __init__.py
 │   │   │   ├── templates
 │   │   │   │   └── credits
 │   │   │   │       ├── buy_credits.html
 │   │   │   │       ├── dashboard.html
 │   │   │   │       └── services.html
+│   │   │   ├── tests
+│   │   │   │   ├── test_priority_consumption.py
+│   │   │   │   │   ├── CreditPriorityConsumptionTest {}
+│   │   │   │   │   │   ├── setUp(self)
+│   │   │   │   │   │   ├── test_priority_consumption_subscription_first(self)
+│   │   │   │   │   │   ├── test_priority_consumption_exhaust_subscription_then_payg(self)
+│   │   │   │   │   │   ├── test_priority_consumption_only_payg_credits(self)
+│   │   │   │   │   │   ├── test_priority_consumption_insufficient_credits(self)
+│   │   │   │   │   │   ├── test_expired_subscription_credits_not_counted(self)
+│   │   │   │   │   │   └── test_multiple_consumption_transactions(self)
+│   │   │   │   │   ├── ServiceUsagePriorityTest {}
+│   │   │   │   │   │   ├── setUp(self)
+│   │   │   │   │   │   ├── test_service_usage_priority_consumption(self)
+│   │   │   │   │   │   └── test_service_usage_cross_credit_type_consumption(self)
+│   │   │   │   │   └── BalanceCalculationAccuracyTest {}
+│   │   │   │   │       ├── setUp(self)
+│   │   │   │   │       ├── test_balance_consistency_across_methods(self)
+│   │   │   │   │       ├── test_zero_balance_edge_case(self)
+│   │   │   │   │       └── test_exact_consumption_edge_case(self)
+│   │   │   │   └── test_subscription.py
+│   │   │   │       ├── UserSubscriptionModelTest {}
+│   │   │   │       │   ├── setUp(self)
+│   │   │   │       │   ├── test_create_subscription(self)
+│   │   │   │       │   ├── test_subscription_str_representation(self)
+│   │   │   │       │   ├── test_days_until_renewal(self)
+│   │   │   │       │   ├── test_get_stripe_product(self)
+│   │   │   │       │   └── test_allocate_monthly_credits(self)
+│   │   │   │       ├── SubscriptionViewsTest {}
+│   │   │   │       │   ├── setUp(self)
+│   │   │   │       │   ├── test_subscription_page_requires_login(self)
+│   │   │   │       │   ├── test_subscription_page_authenticated(self, mock_is_feature_enabled)
+│   │   │   │       │   ├── test_subscription_page_with_active_subscription(self, mock_is_feature_enabled)
+│   │   │   │       │   ├── test_create_subscription_checkout_success(self, mock_is_feature_enabled, mock_stripe_manager)
+│   │   │   │       │   ├── test_create_subscription_checkout_invalid_product(self)
+│   │   │   │       │   ├── test_subscription_success_page(self)
+│   │   │   │       │   └── test_subscription_cancel_page(self)
+│   │   │   │       └── CreditBalanceBreakdownTest {}
+│   │   │   │           ├── setUp(self)
+│   │   │   │           ├── test_balance_breakdown_empty(self)
+│   │   │   │           └── test_balance_breakdown_with_transactions(self)
 │   │   │   ├── __init__.py
 │   │   │   ├── admin.py
+│   │   │   │   ├── UserSubscriptionAdmin {}
+│   │   │   │   │   ├── get_stripe_product_name(self, obj)
+│   │   │   │   │   └── days_until_renewal(self, obj)
 │   │   │   │   ├── CreditAccountAdmin {}
 │   │   │   │   │   ├── get_balance(self, obj)
+│   │   │   │   │   ├── get_balance_breakdown(self, obj)
+│   │   │   │   │   ├── get_subscription_status(self, obj)
 │   │   │   │   │   ├── credit_actions(self, obj)
 │   │   │   │   │   ├── get_urls(self)
 │   │   │   │   │   ├── add_credits_view(self, request, account_id)
@@ -343,6 +403,7 @@ quickscale
 │   │   │   │   │   └── bulk_add_credits(self, request, queryset)
 │   │   │   │   ├── CreditTransactionAdmin {}
 │   │   │   │   │   ├── transaction_type(self, obj)
+│   │   │   │   │   ├── is_expired(self, obj)
 │   │   │   │   │   ├── has_add_permission(self, request)
 │   │   │   │   │   ├── has_change_permission(self, request, obj)
 │   │   │   │   │   └── has_delete_permission(self, request, obj)
@@ -363,20 +424,34 @@ quickscale
 │   │   │   │   ├── Service {}
 │   │   │   │   │   ├── Meta {}
 │   │   │   │   │   └── __str__(self)
+│   │   │   │   ├── UserSubscription {}
+│   │   │   │   │   ├── Meta {}
+│   │   │   │   │   ├── __str__(self)
+│   │   │   │   │   ├── is_active(self)
+│   │   │   │   │   ├── days_until_renewal(self)
+│   │   │   │   │   ├── get_stripe_product(self)
+│   │   │   │   │   └── allocate_monthly_credits(self)
 │   │   │   │   ├── CreditAccount {}
 │   │   │   │   │   ├── Meta {}
 │   │   │   │   │   ├── __str__(self)
 │   │   │   │   │   ├── get_balance(self)
+│   │   │   │   │   ├── get_balance_by_type(self)
 │   │   │   │   │   ├── add_credits(self, amount, description, credit_type)
 │   │   │   │   │   ├── consume_credits(self, amount, description)
+│   │   │   │   │   ├── consume_credits_with_priority(self, amount, description)
+│   │   │   │   │   ├── get_available_balance(self)
+│   │   │   │   │   ├── get_balance_by_type_available(self)
+│   │   │   │   │   ├── get_balance_details(self)
 │   │   │   │   │   └── get_or_create_for_user(cls, user)
 │   │   │   │   ├── CreditTransaction {}
 │   │   │   │   │   ├── Meta {}
 │   │   │   │   │   ├── __str__(self)
 │   │   │   │   │   ├── transactions(self)
 │   │   │   │   │   ├── is_purchase(self)
+│   │   │   │   │   ├── is_subscription(self)
 │   │   │   │   │   ├── is_consumption(self)
-│   │   │   │   │   └── is_admin_adjustment(self)
+│   │   │   │   │   ├── is_admin_adjustment(self)
+│   │   │   │   │   └── is_expired(self)
 │   │   │   │   ├── ServiceUsage {}
 │   │   │   │   │   ├── Meta {}
 │   │   │   │   │   └── __str__(self)
@@ -391,6 +466,7 @@ quickscale
 │   │   │       ├── credit_balance_api(request)
 │   │   │       ├── services_list(request)
 │   │   │       ├── use_service(request, service_id)
+│   │   │       ├── use_service_with_priority(request, service_id)
 │   │   │       └── service_usage_api(request, service_id)
 │   │   ├── docs
 │   │   │   ├── auth_templates.md
@@ -608,7 +684,7 @@ quickscale
 │   │   │   │       ├── confirm_payment_intent(self, payment_intent_id, payment_method)
 │   │   │   │       ├── cancel_payment_intent(self, payment_intent_id)
 │   │   │   │       ├── list_payment_intents(self, customer_id, limit)
-│   │   │   │       ├── create_checkout_session(self, price_id, quantity, success_url, cancel_url, customer_email, customer_id, metadata)
+│   │   │   │       ├── create_checkout_session(self, price_id, quantity, success_url, cancel_url, customer_email, customer_id, metadata, mode)
 │   │   │   │       ├── retrieve_checkout_session(self, session_id, include_line_items)
 │   │   │   │       ├── create_refund(self, payment_intent_id, amount, reason, metadata)
 │   │   │   │       ├── sync_product_to_stripe(self, product_obj)
@@ -623,6 +699,9 @@ quickscale
 │   │   │       ├── product_list(request)
 │   │   │       ├── product_detail(request, product_id)
 │   │   │       ├── webhook(request)
+│   │   │       ├── _handle_subscription_event(subscription_data, event_action)
+│   │   │       ├── _handle_invoice_payment_succeeded(invoice_data)
+│   │   │       ├── _handle_invoice_payment_failed(invoice_data)
 │   │   │       ├── PublicPlanListView {}
 │   │   │       │   ├── get_queryset(self)
 │   │   │       │   └── get_context_data(self)
@@ -670,6 +749,9 @@ quickscale
 │   │   │   │   ├── index.html
 │   │   │   │   ├── product_admin.html
 │   │   │   │   ├── product_detail.html
+│   │   │   │   ├── subscription.html
+│   │   │   │   ├── subscription_cancel.html
+│   │   │   │   ├── subscription_success.html
 │   │   │   │   └── user_dashboard.html
 │   │   │   ├── base
 │   │   │   │   └── base.html
@@ -1105,7 +1187,9 @@ quickscale
 │   │   │   │   ├── test_credits_configuration_in_settings(self, credits_project)
 │   │   │   │   ├── test_credits_urls_in_main_config(self, credits_project)
 │   │   │   │   ├── test_dashboard_integration_with_credits(self, credits_project)
-│   │   │   │   └── test_dashboard_template_shows_credits(self, credits_project)
+│   │   │   │   ├── test_dashboard_template_shows_credits(self, credits_project)
+│   │   │   │   ├── test_user_can_access_credits_dashboard(self, credits_project, settings)
+│   │   │   │   └── test_credits_dashboard_page_content(self, credits_project, settings)
 │   │   │   └── TestCreditsSystemFunctionality {}
 │   │   │       ├── test_credit_models_structure(self)
 │   │   │       ├── test_credit_views_structure(self)
@@ -1446,15 +1530,12 @@ quickscale
 │   │   │   ├── CreditTypeMigrationFixTests {}
 │   │   │   │   ├── test_credit_transaction_model_template_has_credit_type_field(self)
 │   │   │   │   ├── test_credit_type_field_in_model_indexes(self)
-│   │   │   │   ├── test_migration_file_exists_for_credit_type(self)
-│   │   │   │   ├── test_migration_dependencies_are_correct(self)
 │   │   │   │   ├── test_credit_transaction_meta_class_has_correct_indexes(self)
 │   │   │   │   ├── test_credit_transaction_admin_template_handles_credit_type(self)
 │   │   │   │   ├── test_no_duplicate_stripe_customer_models(self)
 │   │   │   │   └── test_no_stripe_customer_migration_in_users_app(self)
 │   │   │   └── CreditTransactionTemplateConsistencyTests {}
-│   │   │       ├── test_credit_type_choices_consistency(self)
-│   │   │       └── test_migration_matches_model_definition(self)
+│   │   │       └── test_credit_type_choices_consistency(self)
 │   │   ├── test_credits_sprint3.py
 │   │   │   ├── ServiceModelTests {}
 │   │   │   │   ├── setUp(self)
@@ -1485,15 +1566,11 @@ quickscale
 │   │   │   │   ├── setUp(self)
 │   │   │   │   ├── test_service_admin_exists(self)
 │   │   │   │   └── test_service_usage_admin_exists(self)
-│   │   │   ├── ServiceTemplatesTests {}
-│   │   │   │   ├── setUp(self)
-│   │   │   │   ├── test_services_template_exists(self)
-│   │   │   │   ├── test_services_template_structure(self)
-│   │   │   │   └── test_dashboard_template_updated(self)
-│   │   │   └── ServiceMigrationTests {}
+│   │   │   └── ServiceTemplatesTests {}
 │   │   │       ├── setUp(self)
-│   │   │       ├── test_services_migration_exists(self)
-│   │   │       └── test_services_migration_structure(self)
+│   │   │       ├── test_services_template_exists(self)
+│   │   │       ├── test_services_template_structure(self)
+│   │   │       └── test_dashboard_template_updated(self)
 │   │   ├── test_credits_sprint4.py
 │   │   │   ├── StripeProductCreditEnhancementTests {}
 │   │   │   │   ├── setUp(self)
@@ -1530,8 +1607,39 @@ quickscale
 │   │   │   │   ├── test_credit_purchase_package_admin_removed(self)
 │   │   │   │   └── test_stripe_product_admin_enhanced(self)
 │   │   │   └── MigrationTests {}
+│   │   │       └── setUp(self)
+│   │   ├── test_credits_sprint6.py
+│   │   │   ├── Sprint6SubscriptionImplementationTests {}
+│   │   │   │   ├── setUp(self)
+│   │   │   │   ├── test_user_subscription_model_exists(self)
+│   │   │   │   ├── test_credit_transaction_subscription_support(self)
+│   │   │   │   ├── test_subscription_migration_exists(self)
+│   │   │   │   ├── test_subscription_admin_interface(self)
+│   │   │   │   ├── test_subscription_views_implemented(self)
+│   │   │   │   ├── test_subscription_urls_configured(self)
+│   │   │   │   ├── test_subscription_webhook_handling(self)
+│   │   │   │   ├── test_subscription_templates_exist(self)
+│   │   │   │   ├── test_subscription_tests_exist(self)
+│   │   │   │   └── test_credit_account_balance_by_type(self)
+│   │   │   └── Sprint6ValidationTests {}
 │   │   │       ├── setUp(self)
-│   │   │       └── test_removal_migration_exists(self)
+│   │   │       └── test_sprint6_requirements_implemented(self)
+│   │   ├── test_credits_sprint7.py
+│   │   │   ├── Sprint7CreditPrioritySystemTests {}
+│   │   │   │   ├── setUp(self)
+│   │   │   │   ├── test_credit_expiration_logic_implemented(self)
+│   │   │   │   ├── test_priority_consumption_method_implemented(self)
+│   │   │   │   ├── test_priority_consumption_logic_implemented(self)
+│   │   │   │   ├── test_expiration_handling_on_billing_cycle(self)
+│   │   │   │   ├── test_updated_views_support_priority_consumption(self)
+│   │   │   │   ├── test_frontend_displays_credit_breakdown(self)
+│   │   │   │   ├── test_frontend_shows_expiration_dates(self)
+│   │   │   │   └── test_service_usage_shows_credit_type_consumption(self)
+│   │   │   └── Sprint7ValidationTests {}
+│   │   │       ├── setUp(self)
+│   │   │       ├── test_sprint7_requirements_implemented(self)
+│   │   │       ├── test_sprint7_backend_implementation_complete(self)
+│   │   │       └── test_sprint7_frontend_implementation_complete(self)
 │   │   ├── test_credits_templates.py
 │   │   │   ├── CreditsTemplateTests {}
 │   │   │   │   ├── setUp(self)
