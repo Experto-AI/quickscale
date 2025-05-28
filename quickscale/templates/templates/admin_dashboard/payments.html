@@ -1,0 +1,294 @@
+{% extends "base.html" %}
+{% load i18n %}
+
+{% block title %}{% trans "Payment History" %}{% endblock %}
+
+{% block content %}
+<div class="container mt-5">
+    <div class="columns">
+        <div class="column is-12">
+            <!-- Header -->
+            <div class="level">
+                <div class="level-left">
+                    <div class="level-item">
+                        <h1 class="title is-3">
+                            <span class="icon-text">
+                                <span class="icon">
+                                    <i class="fas fa-credit-card"></i>
+                                </span>
+                                <span>{% trans "Payment History" %}</span>
+                            </span>
+                        </h1>
+                    </div>
+                </div>
+                <div class="level-right">
+                    <div class="level-item">
+                        <a href="{% url 'admin_dashboard:user_dashboard' %}" class="button is-light">
+                            <span class="icon">
+                                <i class="fas fa-arrow-left"></i>
+                            </span>
+                            <span>{% trans "Back to Dashboard" %}</span>
+                        </a>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Filters -->
+            <div class="box">
+                <h2 class="subtitle is-5">{% trans "Filter Payments" %}</h2>
+                <form method="get" action="{% url 'admin_dashboard:payment_history' %}">
+                    <div class="columns">
+                        <div class="column is-4">
+                            <div class="field">
+                                <label class="label">{% trans "Payment Type" %}</label>
+                                <div class="control">
+                                    <div class="select is-fullwidth">
+                                        <select name="type">
+                                            <option value="">{% trans "All Types" %}</option>
+                                            <option value="CREDIT_PURCHASE" {% if current_type_filter == 'CREDIT_PURCHASE' %}selected{% endif %}>
+                                                {% trans "Credit Purchase" %}
+                                            </option>
+                                            <option value="SUBSCRIPTION" {% if current_type_filter == 'SUBSCRIPTION' %}selected{% endif %}>
+                                                {% trans "Subscription" %}
+                                            </option>
+                                            <option value="REFUND" {% if current_type_filter == 'REFUND' %}selected{% endif %}>
+                                                {% trans "Refund" %}
+                                            </option>
+                                        </select>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="column is-4">
+                            <div class="field">
+                                <label class="label">{% trans "Status" %}</label>
+                                <div class="control">
+                                    <div class="select is-fullwidth">
+                                        <select name="status">
+                                            <option value="">{% trans "All Statuses" %}</option>
+                                            <option value="succeeded" {% if current_status_filter == 'succeeded' %}selected{% endif %}>
+                                                {% trans "Succeeded" %}
+                                            </option>
+                                            <option value="pending" {% if current_status_filter == 'pending' %}selected{% endif %}>
+                                                {% trans "Pending" %}
+                                            </option>
+                                            <option value="failed" {% if current_status_filter == 'failed' %}selected{% endif %}>
+                                                {% trans "Failed" %}
+                                            </option>
+                                            <option value="refunded" {% if current_status_filter == 'refunded' %}selected{% endif %}>
+                                                {% trans "Refunded" %}
+                                            </option>
+                                            <option value="cancelled" {% if current_status_filter == 'cancelled' %}selected{% endif %}>
+                                                {% trans "Cancelled" %}
+                                            </option>
+                                        </select>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="column is-4">
+                            <div class="field" style="padding-top: 1.5rem;">
+                                <div class="control">
+                                    <button type="submit" class="button is-primary">
+                                        <span class="icon">
+                                            <i class="fas fa-filter"></i>
+                                        </span>
+                                        <span>{% trans "Filter" %}</span>
+                                    </button>
+                                    <a href="{% url 'admin_dashboard:payment_history' %}" class="button is-light">
+                                        {% trans "Clear" %}
+                                    </a>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </form>
+            </div>
+
+            <!-- Quick Summary Sections -->
+            <div class="columns">
+                <div class="column is-6">
+                    <div class="box">
+                        <h3 class="subtitle is-6">{% trans "Recent Subscription Payments" %}</h3>
+                        {% if subscription_payments %}
+                            {% for payment in subscription_payments %}
+                                <div class="level is-mobile">
+                                    <div class="level-left">
+                                        <div class="level-item">
+                                            <span class="tag 
+                                                {% if payment.status == 'succeeded' %}is-success
+                                                {% elif payment.status == 'pending' %}is-warning
+                                                {% elif payment.status == 'failed' %}is-danger
+                                                {% else %}is-light{% endif %}
+                                            ">
+                                                {{ payment.get_status_display }}
+                                            </span>
+                                        </div>
+                                        <div class="level-item">
+                                            <span>${{ payment.amount }} {{ payment.currency }}</span>
+                                        </div>
+                                    </div>
+                                    <div class="level-right">
+                                        <div class="level-item">
+                                            <span class="has-text-grey">{{ payment.created_at|date:"M d, Y" }}</span>
+                                        </div>
+                                    </div>
+                                </div>
+                            {% endfor %}
+                        {% else %}
+                            <p class="has-text-grey">{% trans "No subscription payments found." %}</p>
+                        {% endif %}
+                    </div>
+                </div>
+                <div class="column is-6">
+                    <div class="box">
+                        <h3 class="subtitle is-6">{% trans "Recent Credit Purchases" %}</h3>
+                        {% if credit_purchase_payments %}
+                            {% for payment in credit_purchase_payments %}
+                                <div class="level is-mobile">
+                                    <div class="level-left">
+                                        <div class="level-item">
+                                            <span class="tag 
+                                                {% if payment.status == 'succeeded' %}is-success
+                                                {% elif payment.status == 'pending' %}is-warning
+                                                {% elif payment.status == 'failed' %}is-danger
+                                                {% else %}is-light{% endif %}
+                                            ">
+                                                {{ payment.get_status_display }}
+                                            </span>
+                                        </div>
+                                        <div class="level-item">
+                                            <span>${{ payment.amount }} {{ payment.currency }}</span>
+                                        </div>
+                                    </div>
+                                    <div class="level-right">
+                                        <div class="level-item">
+                                            <span class="has-text-grey">{{ payment.created_at|date:"M d, Y" }}</span>
+                                        </div>
+                                    </div>
+                                </div>
+                            {% endfor %}
+                        {% else %}
+                            <p class="has-text-grey">{% trans "No credit purchase payments found." %}</p>
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+
+            <!-- All Payments Table -->
+            <div class="box">
+                <h2 class="subtitle is-5">{% trans "All Payments" %}</h2>
+                {% if payments %}
+                    <div class="table-container">
+                        <table class="table is-fullwidth is-striped is-hoverable">
+                            <thead>
+                                <tr>
+                                    <th>{% trans "Date" %}</th>
+                                    <th>{% trans "Type" %}</th>
+                                    <th>{% trans "Description" %}</th>
+                                    <th>{% trans "Amount" %}</th>
+                                    <th>{% trans "Status" %}</th>
+                                    <th>{% trans "Actions" %}</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for payment in payments %}
+                                    <tr>
+                                        <td>{{ payment.created_at|date:"M d, Y H:i" }}</td>
+                                        <td>
+                                            <span class="tag is-light">
+                                                {{ payment.get_payment_type_display }}
+                                            </span>
+                                        </td>
+                                        <td>{{ payment.description|truncatechars:50 }}</td>
+                                        <td>
+                                            <strong>${{ payment.amount }} {{ payment.currency }}</strong>
+                                        </td>
+                                        <td>
+                                            <span class="tag 
+                                                {% if payment.status == 'succeeded' %}is-success
+                                                {% elif payment.status == 'pending' %}is-warning
+                                                {% elif payment.status == 'failed' %}is-danger
+                                                {% elif payment.status == 'refunded' %}is-info
+                                                {% else %}is-light{% endif %}
+                                            ">
+                                                {{ payment.get_status_display }}
+                                            </span>
+                                        </td>
+                                        <td>
+                                            <div class="buttons">
+                                                <a href="{% url 'admin_dashboard:payment_detail' payment.id %}" 
+                                                   class="button is-small is-primary">
+                                                    <span class="icon">
+                                                        <i class="fas fa-eye"></i>
+                                                    </span>
+                                                    <span>{% trans "View" %}</span>
+                                                </a>
+                                                {% if payment.is_succeeded %}
+                                                    <a href="{% url 'admin_dashboard:download_receipt' payment.id %}" 
+                                                       class="button is-small is-info">
+                                                        <span class="icon">
+                                                            <i class="fas fa-download"></i>
+                                                        </span>
+                                                        <span>{% trans "Receipt" %}</span>
+                                                    </a>
+                                                {% endif %}
+                                            </div>
+                                        </td>
+                                    </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+
+                    <!-- Pagination -->
+                    {% if payments.has_other_pages %}
+                        <nav class="pagination is-centered mt-5" role="navigation" aria-label="pagination">
+                            {% if payments.has_previous %}
+                                <a href="?page={{ payments.previous_page_number }}{% if current_type_filter %}&type={{ current_type_filter }}{% endif %}{% if current_status_filter %}&status={{ current_status_filter }}{% endif %}" 
+                                   class="pagination-previous">{% trans "Previous" %}</a>
+                            {% else %}
+                                <span class="pagination-previous" disabled>{% trans "Previous" %}</span>
+                            {% endif %}
+
+                            {% if payments.has_next %}
+                                <a href="?page={{ payments.next_page_number }}{% if current_type_filter %}&type={{ current_type_filter }}{% endif %}{% if current_status_filter %}&status={{ current_status_filter }}{% endif %}" 
+                                   class="pagination-next">{% trans "Next" %}</a>
+                            {% else %}
+                                <span class="pagination-next" disabled>{% trans "Next" %}</span>
+                            {% endif %}
+
+                            <ul class="pagination-list">
+                                {% for num in payments.paginator.page_range %}
+                                    {% if payments.number == num %}
+                                        <li><span class="pagination-link is-current">{{ num }}</span></li>
+                                    {% elif num > payments.number|add:'-3' and num < payments.number|add:'3' %}
+                                        <li>
+                                            <a href="?page={{ num }}{% if current_type_filter %}&type={{ current_type_filter }}{% endif %}{% if current_status_filter %}&status={{ current_status_filter }}{% endif %}" 
+                                               class="pagination-link">{{ num }}</a>
+                                        </li>
+                                    {% endif %}
+                                {% endfor %}
+                            </ul>
+                        </nav>
+                    {% endif %}
+                {% else %}
+                    <div class="notification is-light">
+                        <p class="has-text-centered">
+                            <span class="icon is-large">
+                                <i class="fas fa-credit-card fa-2x"></i>
+                            </span>
+                        </p>
+                        <p class="has-text-centered">
+                            <strong>{% trans "No payments found" %}</strong>
+                        </p>
+                        <p class="has-text-centered has-text-grey">
+                            {% trans "You haven't made any payments yet. When you purchase credits or subscribe to a plan, your payment history will appear here." %}
+                        </p>
+                    </div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %} 

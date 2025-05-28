@@ -17,4 +17,7 @@ urlpatterns = [
     path('products/<str:product_id>/sync/', views.product_sync, name='product_sync'),
     path('products/<int:product_id>/update_order/', views.update_product_order, name='update_product_order'),
     path('products/<str:product_id>/', views.product_detail, name='product_detail'),
+    path('payments/', views.payment_history, name='payment_history'),
+    path('payments/<int:payment_id>/', views.payment_detail, name='payment_detail'),
+    path('payments/<int:payment_id>/receipt/', views.download_receipt, name='download_receipt'),
 ]

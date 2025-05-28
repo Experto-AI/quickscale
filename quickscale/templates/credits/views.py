@@ -10,6 +10,7 @@ from django.shortcuts import redirect
 from django.conf import settings
 import logging
 from .models import CreditAccount, CreditTransaction, Service, ServiceUsage, InsufficientCreditsError
+from credits.models import Payment
 
 # Setup logging
 logger = logging.getLogger(__name__)
@@ -285,6 +286,33 @@ def purchase_success(request):
                         f"Successfully purchased {credit_amount} credits! "
                         f"New balance: {credit_account.get_balance()} credits."
                     )
+                    
+                    # Create Payment record as fallback if webhook hasn't processed yet
+                    existing_payment = Payment.objects.filter(
+                        user=request.user,
+                        stripe_payment_intent_id=payment_intent_id
+                    ).first()
+                    
+                    if not existing_payment:
+                        payment = Payment.objects.create(
+                            user=request.user,
+                            stripe_payment_intent_id=payment_intent_id,
+                            amount=transaction_data['amount_total'],
+                            currency=transaction_data['currency'],
+                            payment_type='CREDIT_PURCHASE',
+                            status='succeeded',
+                            description=f"Credit Purchase - {product.name}",
+                            credit_transaction=new_transaction
+                        )
+                        
+                        # Generate and save receipt data
+                        payment.receipt_data = payment.generate_receipt_data()
+                        payment.save()
+                        
+                        logger.info(
+                            f"Created Payment record ID {payment.id} as fallback for user {request.user.email}: "
+                            f"Payment Intent: {payment_intent_id}"
+                        )
                 else:
                     # Payment already processed
                     transaction_data.update({
