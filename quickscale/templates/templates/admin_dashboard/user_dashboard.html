@@ -234,14 +234,14 @@
                         <p class="subtitle is-6">Payment history</p>
                         <div class="content">
                             <ul>
-                                <li>View invoices</li>
-                                <li>Update payment methods</li>
-                                <li>Subscription status</li>
+                                <li>View payment history</li>
+                                <li>Download receipts</li>
+                                <li>Track transactions</li>
                             </ul>
                         </div>
                     </div>
                     <footer class="card-footer">
-                        <span class="card-footer-item has-text-grey">Coming Soon</span>
+                        <a href="{% url 'admin_dashboard:payment_history' %}" class="card-footer-item">View Payments</a>
                     </footer>
                 </div>
             </div>
