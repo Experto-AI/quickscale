@@ -9,6 +9,7 @@ from django.http import HttpResponse
 class MockSettings:
     """Mock Django settings class."""
     PROJECT_NAME = 'QuickScale'
+    AUTH_USER_MODEL = 'users.CustomUser'  # Add required Django setting
     TEMPLATES = [{
         'BACKEND': 'django.template.backends.django.DjangoTemplates',
         'OPTIONS': {
@@ -18,6 +19,13 @@ class MockSettings:
         }
     }]
     ALLOWED_HOSTS = ['testserver']
+    INSTALLED_APPS = [  # Add essential Django apps
+        'django.contrib.auth',
+        'django.contrib.contenttypes',
+        'users',
+    ]
+    SECRET_KEY = 'test-secret-key'
+    DEBUG = True
 
 # Mock response with a context dictionary.
 class MockResponse(HttpResponse):
@@ -31,10 +39,8 @@ class ProjectSettingsTests(TestCase):
 
     def setUp(self):
         """Set up test environment."""
-        self.settings_patcher = mock.patch('django.conf.settings', MockSettings())
-        self.mock_settings = self.settings_patcher.start()
-        
-        # Create a mock client with get method
+        # Don't patch Django settings globally as it interferes with test database setup
+        # Instead, we'll patch specific access points when needed
         self.client = mock.MagicMock()
         
         # Set up the get method to return a new MockResponse each time it's called
@@ -45,26 +51,25 @@ class ProjectSettingsTests(TestCase):
         
     def tearDown(self):
         """Tear down test environment."""
-        self.settings_patcher.stop()
+        # No cleanup needed since we're not patching globally
+        pass
 
     def test_project_name_default(self):
         """Test PROJECT_NAME has correct default value."""
-        from django.conf import settings
-        self.assertEqual(settings.PROJECT_NAME, 'QuickScale')
+        # Test our mock settings directly instead of Django settings
+        self.assertEqual(MockSettings.PROJECT_NAME, 'QuickScale')
 
     def test_project_name_override(self):
         """Test PROJECT_NAME can be overridden."""
         with mock.patch.object(MockSettings, 'PROJECT_NAME', 'TestProject'):
-            from django.conf import settings
-            self.assertEqual(settings.PROJECT_NAME, 'TestProject')
+            self.assertEqual(MockSettings.PROJECT_NAME, 'TestProject')
 
     def test_project_name_from_env(self):
         """Test PROJECT_NAME reads from environment variable."""
         test_name = 'EnvProject'
         with mock.patch.dict(os.environ, {'PROJECT_NAME': test_name}):
             with mock.patch.object(MockSettings, 'PROJECT_NAME', test_name):
-                from django.conf import settings
-                self.assertEqual(settings.PROJECT_NAME, test_name)
+                self.assertEqual(MockSettings.PROJECT_NAME, test_name)
 
     def test_context_processor_provides_project_name(self):
         """Test project_name is available in template context."""
@@ -115,9 +120,8 @@ class ProjectSettingsTests(TestCase):
         with mock.patch.object(MockSettings, 'TEMPLATES', templates_without_processor):
             # Mock a function that checks for context processors and returns 500 if missing
             def render_with_context_processor():
-                from django.conf import settings
                 if not any('project_settings' in processor for processor in 
-                          settings.TEMPLATES[0]['OPTIONS'].get('context_processors', [])):
+                          MockSettings.TEMPLATES[0]['OPTIONS'].get('context_processors', [])):
                     response = MockResponse("<title>Error</title>")
                     response.status_code = 500
                     return response

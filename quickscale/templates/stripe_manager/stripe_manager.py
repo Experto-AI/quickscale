@@ -347,13 +347,26 @@ class StripeManager:
 
     def update_subscription(self,
                             subscription_id: str,
-                            items: Optional[List[Dict[str, Any]]] = None, # Use List[Dict[str, Any]] based on API docs
+                            new_price_id: Optional[str] = None,
+                            items: Optional[List[Dict[str, Any]]] = None,
                             proration_behavior: Optional[str] = None,
                             metadata: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
         """Update a subscription in Stripe using the v12+ API."""
         update_data = {}
-        if items is not None: # Check for None specifically as an empty list is valid
-             update_data['items'] = items
+        
+        # If new_price_id is provided, build the items structure for plan change
+        if new_price_id:
+            # Get current subscription to find existing item
+            current_sub = self.retrieve_subscription(subscription_id)
+            if current_sub and current_sub.get('items') and current_sub['items'].get('data'):
+                current_item = current_sub['items']['data'][0]  # Get first item
+                update_data['items'] = [{
+                    'id': current_item['id'],
+                    'price': new_price_id,
+                }]
+        elif items is not None:
+            update_data['items'] = items
+            
         if proration_behavior:
             update_data['proration_behavior'] = proration_behavior
         if metadata:
@@ -366,11 +379,75 @@ class StripeManager:
             logger.error(f"Error updating Stripe subscription {subscription_id}: {e}")
             raise
 
-    def cancel_subscription(self, subscription_id: str) -> Dict[str, Any]:
+    def update_subscription_with_immediate_billing(self,
+                                                   subscription_id: str,
+                                                   new_price_id: str,
+                                                   proration_behavior: str = 'create_prorations') -> Dict[str, Any]:
+        """Update subscription and immediately create and pay invoice for proration charges."""
+        try:
+            # First, update the subscription with proration
+            updated_subscription = self.update_subscription(
+                subscription_id=subscription_id,
+                new_price_id=new_price_id,
+                proration_behavior=proration_behavior
+            )
+            
+            # Get customer ID from the subscription
+            customer_id = updated_subscription.get('customer')
+            if not customer_id:
+                raise ValueError("Cannot determine customer ID from subscription")
+            
+            # Create an invoice for the subscription to capture prorations
+            logger.info(f"Creating invoice for subscription {subscription_id} to capture proration charges")
+            invoice = self.client.invoices.create(params={
+                'customer': customer_id,
+                'subscription': subscription_id,
+                'auto_advance': True,  # Automatically finalize the invoice
+            })
+            
+            # Finalize the invoice (automatically done with auto_advance=True, but being explicit)
+            if invoice.get('status') == 'draft':
+                logger.info(f"Finalizing invoice {invoice['id']} for immediate payment")
+                invoice = self.client.invoices.finalize_invoice(invoice['id'])
+            
+            # Pay the invoice immediately
+            if invoice.get('status') == 'open' and invoice.get('amount_due', 0) > 0:
+                logger.info(f"Paying invoice {invoice['id']} with amount due: {invoice.get('amount_due', 0) / 100}")
+                paid_invoice = self.client.invoices.pay(invoice['id'])
+                logger.info(f"Invoice payment result: status={paid_invoice.get('status')}, paid={paid_invoice.get('paid')}")
+                
+                return {
+                    'subscription': updated_subscription,
+                    'invoice': paid_invoice,
+                    'immediate_charge': True,
+                    'amount_charged': paid_invoice.get('amount_paid', 0) / 100,
+                    'currency': paid_invoice.get('currency', 'usd')
+                }
+            else:
+                logger.info(f"No payment required for invoice {invoice['id']}: status={invoice.get('status')}, amount_due={invoice.get('amount_due', 0) / 100}")
+                
+                return {
+                    'subscription': updated_subscription,
+                    'invoice': invoice,
+                    'immediate_charge': False,
+                    'amount_charged': 0,
+                    'currency': invoice.get('currency', 'usd')
+                }
+            
+        except Exception as e:
+            logger.error(f"Error updating subscription with immediate billing: {e}")
+            raise
+
+    def cancel_subscription(self, subscription_id: str, at_period_end: bool = False) -> Dict[str, Any]:
         """Cancel a subscription in Stripe using the v12+ API."""
         try:
-            # Use StripeClient instance and the new pattern
-            return self.client.subscriptions.cancel(subscription_id)
+            if at_period_end:
+                # Update subscription to cancel at period end
+                update_data = {'cancel_at_period_end': True}
+                return self.client.subscriptions.update(subscription_id, params=update_data)
+            else:
+                # Cancel immediately
+                return self.client.subscriptions.cancel(subscription_id)
         except Exception as e:
             logger.error(f"Error canceling Stripe subscription {subscription_id}: {e}")
             raise
