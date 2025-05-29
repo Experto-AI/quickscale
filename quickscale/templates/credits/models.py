@@ -623,6 +623,13 @@ class Payment(models.Model):
         null=True,
         help_text=_('Stripe Subscription ID (for subscription payments)')
     )
+    stripe_invoice_id = models.CharField(
+        _('stripe invoice id'),
+        max_length=255,
+        blank=True,
+        null=True,
+        help_text=_('Stripe Invoice ID (for immediate charges like plan changes)')
+    )
     amount = models.DecimalField(
         _('amount'),
         max_digits=10,
@@ -694,6 +701,7 @@ class Payment(models.Model):
             models.Index(fields=['user']),
             models.Index(fields=['stripe_payment_intent_id']),
             models.Index(fields=['stripe_subscription_id']),
+            models.Index(fields=['stripe_invoice_id']),
             models.Index(fields=['status']),
             models.Index(fields=['payment_type']),
             models.Index(fields=['created_at']),
@@ -803,4 +811,117 @@ class Payment(models.Model):
 
 class InsufficientCreditsError(Exception):
     """Exception raised when a user has insufficient credits."""
-    pass 
+    pass
+
+
+def handle_plan_change_credit_transfer(user, current_product, new_product, new_subscription_id, change_type, session_data):
+    """
+    Handle credit transfer and payment creation for plan changes.
+    
+    This function centralizes the logic for transferring subscription credits to pay-as-you-go
+    and creating payment records, ensuring consistency between view handlers and webhooks.
+    
+    Args:
+        user: The user whose plan is changing
+        current_product: The current StripeProduct (before change)
+        new_product: The new StripeProduct (after change)
+        new_subscription_id: The new Stripe subscription ID
+        change_type: 'upgrade' or 'downgrade'
+        session_data: Stripe checkout session data for payment info
+        
+    Returns:
+        dict: Information about the transfer and payment creation
+    """
+    from decimal import Decimal
+    from stripe_manager.models import StripeProduct
+    from django.db import transaction
+    
+    # Get credit account and current balance breakdown
+    credit_account = CreditAccount.get_or_create_for_user(user)
+    current_balance = credit_account.get_balance_by_type_available()
+    subscription_credits = current_balance['subscription']
+    
+    # Transfer remaining subscription credits to pay-as-you-go credits
+    transferred_credits = Decimal('0.00')
+    if subscription_credits > 0:
+        with transaction.atomic():
+            # First, remove the subscription credits by creating a negative transaction directly
+            deduction_description = f"Plan change: removed subscription credits from {current_product.name}"
+            CreditTransaction.objects.create(
+                user=user,
+                amount=-subscription_credits,  # Negative amount to remove credits
+                description=deduction_description,
+                credit_type='SUBSCRIPTION'  # Remove from subscription credits
+            )
+            
+            # Then add them as pay-as-you-go credits using the positive add_credits method
+            transfer_description = f"Plan change: transferred subscription credits from {current_product.name} to pay-as-you-go"
+            credit_account.add_credits(
+                amount=subscription_credits,  # Positive amount
+                description=transfer_description,
+                credit_type='PURCHASE'  # Make them pay-as-you-go credits (never expire)
+            )
+            transferred_credits = subscription_credits
+    
+    # Update local subscription record with new subscription ID and product
+    try:
+        subscription = user.subscription
+        subscription.stripe_subscription_id = new_subscription_id
+        subscription.stripe_product_id = new_product.stripe_id
+        subscription.save()
+    except UserSubscription.DoesNotExist:
+        # Create new subscription if it doesn't exist
+        subscription = UserSubscription.objects.create(
+            user=user,
+            stripe_subscription_id=new_subscription_id,
+            stripe_product_id=new_product.stripe_id,
+            status='active'
+        )
+    
+    # Allocate new plan credits
+    description = f"Plan change credits - {new_product.name} ({change_type})"
+    credit_transaction = credit_account.add_credits(
+        amount=new_product.credit_amount,
+        description=description,
+        credit_type='SUBSCRIPTION'
+    )
+    
+    # Create Payment record for the plan change
+    amount_total = session_data.get('amount_total', 0) / 100 if session_data.get('amount_total') else 0
+    currency = session_data.get('currency', 'usd').upper()
+    
+    # Check if Payment record already exists (prevent duplicates)
+    existing_payment = Payment.objects.filter(
+        user=user,
+        stripe_subscription_id=new_subscription_id
+    ).first()
+    
+    payment = None
+    if not existing_payment:
+        payment = Payment.objects.create(
+            user=user,
+            stripe_subscription_id=new_subscription_id,
+            amount=amount_total,
+            currency=currency,
+            payment_type='SUBSCRIPTION',
+            status='succeeded',
+            description=f"Plan Change - {current_product.name} to {new_product.name}",
+            credit_transaction=credit_transaction,
+            subscription=subscription
+        )
+        
+        # Generate and save receipt data
+        payment.receipt_data = payment.generate_receipt_data()
+        payment.save()
+    
+    return {
+        'transferred_credits': transferred_credits,
+        'new_plan_credits': new_product.credit_amount,
+        'amount_charged': amount_total,
+        'currency': currency,
+        'payment': payment,
+        'subscription': subscription,
+        'change_type': change_type,
+        'old_plan': current_product.name,
+        'new_plan': new_product.name,
+    } 

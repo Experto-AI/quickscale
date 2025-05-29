@@ -1,0 +1,157 @@
+{% extends 'base/base.html' %}
+{% load static %}
+
+{% block title %}Plan Change Successful{% endblock %}
+
+{% block content %}
+<section class="section">
+    <div class="container">
+        <div class="has-text-centered mb-6">
+            <h1 class="title is-2 has-text-success">
+                <span class="icon is-large">
+                    <i class="fas fa-check-circle"></i>
+                </span>
+                Plan Change Successful!
+            </h1>
+            {% if plan_change_success %}
+                <p class="subtitle is-4">Your subscription plan has been updated</p>
+            {% else %}
+                <p class="subtitle is-4">Your payment has been processed</p>
+            {% endif %}
+        </div>
+
+        {% if error %}
+            <div class="columns is-centered">
+                <div class="column is-half">
+                    <div class="notification is-warning">
+                        <p><strong>Notice:</strong> {{ error }}</p>
+                        <p>Your payment was successful, but there may have been a processing delay. Your plan change should be reflected in your account shortly.</p>
+                    </div>
+                </div>
+            </div>
+        {% endif %}
+
+        {% if plan_change_success %}
+            <div class="columns is-centered">
+                <div class="column is-two-thirds">
+                    <div class="box">
+                        <h2 class="title is-4 has-text-centered mb-5">Plan Change Details</h2>
+                        
+                        <div class="columns">
+                            <div class="column has-text-centered">
+                                <p class="subtitle is-6">Previous Plan</p>
+                                <p class="title is-5">{{ old_plan }}</p>
+                            </div>
+                            <div class="column has-text-centered">
+                                <span class="icon is-large">
+                                    {% if change_type == 'upgrade' %}
+                                        <i class="fas fa-arrow-up fa-2x has-text-success"></i>
+                                    {% else %}
+                                        <i class="fas fa-arrow-down fa-2x has-text-info"></i>
+                                    {% endif %}
+                                </span>
+                            </div>
+                            <div class="column has-text-centered">
+                                <p class="subtitle is-6">New Plan</p>
+                                <p class="title is-5 has-text-primary">{{ new_plan }}</p>
+                            </div>
+                        </div>
+
+                        {% if amount_charged > 0 %}
+                            <div class="notification is-info is-light">
+                                <p><strong>Amount Charged:</strong> {{ currency }} ${{ amount_charged|floatformat:2 }}</p>
+                                <p>This charge covers your new plan and any prorated difference.</p>
+                            </div>
+                        {% endif %}
+
+                        <hr>
+
+                        <h3 class="title is-5">Credit Information</h3>
+                        
+                        {% if transferred_credits > 0 %}
+                            <div class="notification is-success is-light">
+                                <p><strong>Credits Transferred:</strong> {{ transferred_credits|floatformat:0 }} credits</p>
+                                <p>Your remaining subscription credits have been converted to pay-as-you-go credits (never expire).</p>
+                            </div>
+                        {% endif %}
+
+                        <div class="notification is-primary is-light">
+                            <p><strong>New Plan Credits:</strong> {{ new_plan_credits|floatformat:0 }} credits</p>
+                            <p>You now have {{ new_plan_credits|floatformat:0 }} monthly credits for your {{ new_plan }} plan.</p>
+                        </div>
+
+                        <div class="content">
+                            <h4>What happens next?</h4>
+                            <ul>
+                                <li>Your new plan is active immediately</li>
+                                <li>You'll be billed monthly for your {{ new_plan }} plan</li>
+                                {% if transferred_credits > 0 %}
+                                    <li>Your {{ transferred_credits|floatformat:0 }} transferred credits are available as pay-as-you-go credits</li>
+                                {% endif %}
+                                <li>Your {{ new_plan_credits|floatformat:0 }} monthly credits will renew each billing cycle</li>
+                            </ul>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        {% else %}
+            <!-- Fallback for when plan_change_success is not set -->
+            <div class="columns is-centered">
+                <div class="column is-half">
+                    <div class="box has-text-centered">
+                        <h2 class="title is-4">Payment Processed</h2>
+                        <p>Your payment has been successfully processed. Your plan change is being updated and should be reflected in your account shortly.</p>
+                        
+                        {% if session_data %}
+                            <div class="content mt-4">
+                                <p><strong>Session ID:</strong> {{ session_data.id }}</p>
+                                {% if session_data.amount_total %}
+                                    <p><strong>Amount:</strong> {{ session_data.currency|upper }} ${{ session_data.amount_total|floatformat:2 }}</p>
+                                {% endif %}
+                            </div>
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+        {% endif %}
+
+        <!-- Action buttons -->
+        <div class="columns is-centered mt-6">
+            <div class="column is-narrow">
+                <div class="buttons is-centered">
+                    <a href="{% url 'admin_dashboard:subscription' %}" class="button is-primary is-large">
+                        <span class="icon">
+                            <i class="fas fa-credit-card"></i>
+                        </span>
+                        <span>Manage Subscription</span>
+                    </a>
+                    <a href="{% url 'admin_dashboard:user_dashboard' %}" class="button is-light is-large">
+                        <span class="icon">
+                            <i class="fas fa-tachometer-alt"></i>
+                        </span>
+                        <span>Go to Dashboard</span>
+                    </a>
+                </div>
+            </div>
+        </div>
+
+        <!-- Debug information (only shown when appropriate) -->
+        {% if debug_info and user.is_staff %}
+            <div class="columns is-centered mt-6">
+                <div class="column is-half">
+                    <details class="box">
+                        <summary class="has-text-weight-semibold">Debug Information (Staff Only)</summary>
+                        <div class="content mt-3">
+                            <p><strong>Session Mode:</strong> {{ debug_info.session_mode }}</p>
+                            <p><strong>Payment Status:</strong> {{ debug_info.payment_status }}</p>
+                            <p><strong>Subscription ID:</strong> {{ debug_info.subscription_id }}</p>
+                            <p><strong>Metadata:</strong></p>
+                            <pre>{{ debug_info.metadata|dictsort:0.0 }}</pre>
+                        </div>
+                    </details>
+                </div>
+            </div>
+        {% endif %}
+    </div>
+</section>
+{% endblock %} 

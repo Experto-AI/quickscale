@@ -308,6 +308,54 @@ def webhook(request: HttpRequest) -> HttpResponse:
                         
                 except Exception as e:
                     logger.error(f"Error processing credit purchase webhook: {e}")
+            
+            # Handle plan changes
+            elif metadata.get('purchase_type') == 'plan_change' and subscription_id:
+                try:
+                    from credits.models import handle_plan_change_credit_transfer
+                    from django.contrib.auth import get_user_model
+                    User = get_user_model()
+                    
+                    user_id = metadata.get('user_id')
+                    new_product_id = metadata.get('product_id')
+                    change_type = metadata.get('change_type', 'unknown')
+                    current_product_id = metadata.get('current_product_id')
+                    
+                    if user_id and new_product_id and current_product_id:
+                        try:
+                            user = User.objects.get(id=user_id)
+                            new_product = StripeProduct.objects.get(id=new_product_id)
+                            current_product = StripeProduct.objects.get(id=current_product_id)
+                            
+                            # Create session data dict for the common function
+                            session_data = {
+                                'amount_total': session.get('amount_total'),
+                                'currency': session.get('currency', 'usd'),
+                            }
+                            
+                            # Use the common function to handle credit transfer and payment
+                            transfer_result = handle_plan_change_credit_transfer(
+                                user=user,
+                                current_product=current_product,
+                                new_product=new_product,
+                                new_subscription_id=subscription_id,
+                                change_type=change_type,
+                                session_data=session_data
+                            )
+                            
+                            logger.info(f"Plan change processed successfully for user {user_id}: "
+                                       f"{transfer_result['old_plan']} -> {transfer_result['new_plan']}, "
+                                       f"transferred {transfer_result['transferred_credits']} credits")
+                            
+                        except (User.DoesNotExist, StripeProduct.DoesNotExist) as e:
+                            logger.error(f"Error finding user or product for plan change: {e}")
+                    else:
+                        logger.warning(f"Missing required metadata for plan change: user_id={user_id}, "
+                                      f"new_product_id={new_product_id}, current_product_id={current_product_id}")
+                        
+                except Exception as e:
+                    logger.error(f"Error processing plan change: {e}")
+                    # Continue processing other events
             else:
                 # Handle other types of checkout sessions
                 logger.info(f"Received checkout.session.completed for unknown purchase type: {metadata}")

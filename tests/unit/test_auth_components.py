@@ -285,7 +285,12 @@ class TestAccountAdapter:
         """Test is_open_for_signup uses settings correctly."""
         # Test with default settings (open for signup)
         adapter = MockAccountAdapter()
+        
+        # Create a properly configured settings mock with essential Django settings
         settings_mock = Mock()
+        settings_mock.AUTH_USER_MODEL = 'users.CustomUser'  # Essential for Django migrations
+        settings_mock.INSTALLED_APPS = ['django.contrib.auth', 'django.contrib.contenttypes', 'users']
+        settings_mock.SECRET_KEY = 'test-secret-key'
         
         # Test when setting is True
         settings_mock.ACCOUNT_ALLOW_REGISTRATION = True
