@@ -2,6 +2,28 @@
 
 All notable changes to this project will be documented in this file.
 
+## v0.21.0 (2025-05-29)
+v0.21.0 feat: Implement Pro Subscription Plan
+
+This PR implements the Pro subscription plan, offering users a higher credit allocation at a better rate compared to the Basic plan, and adds the logic for upgrading and downgrading between plans with prorated billing.
+
+- Backend Implementation:
+  - Added Pro plan as a Stripe subscription product.
+  - Added plan upgrade/downgrade logic.
+  - Handled prorated billing for plan changes.
+  - Implemented logic to transfer remaining credits to pay-as-you-go and charge immediately upon upgrade/downgrade.
+- Frontend Implementation:
+  - Added Pro plan option to the subscription page.
+  - Created plan comparison table (Basic vs Pro).
+  - Added upgrade/downgrade buttons for existing subscribers.
+  - Added message to the user about credit transfer and immediate charge on upgrade/downgrade.
+- Testing:
+  - Tests for Pro plan subscription.
+  - Tests for plan upgrades/downgrades, including scenarios with no credits left and immediate changes.
+  - Integration tests for multiple plan types.
+
+This PR completes the implementation of the Pro Subscription Plan, allowing users to choose between Basic and Pro plans and manage their subscriptions through upgrades and downgrades, enhancing the flexibility of the credit system.
+
 ## v0.20.0 (2025-05-28)
 v0.20.0 feat: Implement Payment History and Receipts System
 
