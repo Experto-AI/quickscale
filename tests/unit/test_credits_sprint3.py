@@ -447,8 +447,8 @@ class ServiceTemplatesTests(unittest.TestCase):
         with open(self.dashboard_template, 'r') as f:
             template_content = f.read()
         
-        # Check for services link
-        self.assertIn("{% url 'credits:services' %}", template_content,
+        # Check for services link (Sprint 10 moved services to their own app)
+        self.assertIn("{% url 'services:list' %}", template_content,
                      "Services link not found in dashboard")
         self.assertIn("Use Services", template_content,
                      "Use Services button text not found")

@@ -8,30 +8,40 @@ class Sprint9TemplateStructureTests(unittest.TestCase):
     """Test Sprint 9 template structure and implementation."""
     
     def test_subscription_template_has_plan_comparison(self):
-        """Test that subscription template contains plan comparison functionality."""
+        """Test that subscription template includes plan comparison."""
         subscription_path = 'quickscale/templates/templates/admin_dashboard/subscription.html'
         self.assertTrue(os.path.exists(subscription_path), "Subscription template should exist")
         
         with open(subscription_path, 'r') as f:
             template_content = f.read()
             
-        # Test plan comparison table exists
+        # Test plan comparison features
         self.assertIn('Plan Comparison', template_content, "Plan comparison section should exist")
-        self.assertIn('Monthly Price', template_content, "Monthly price column should exist")
-        self.assertIn('Monthly Credits', template_content, "Monthly credits column should exist")
-        self.assertIn('Cost per Credit', template_content, "Cost per credit column should exist")
-        
-        # Test multiple plans can be displayed
+        # Test dynamic plan name display instead of hardcoded plan names
+        self.assertIn('{{ product.name }}', template_content, "Should display dynamic product names")
         self.assertIn('subscription_products', template_content, "Should iterate over subscription products")
-        self.assertIn('{% for product in subscription_products %}', template_content, "Should loop through products")
+        
+        # Test pricing display - check for actual template content
+        self.assertIn('widthratio product.price 1 product.credit_amount', template_content, "Should calculate price per credit using widthratio")
+        self.assertIn('credit_amount', template_content, "Should display credit amounts")
+        
+        # Test that template supports multiple plans through product iteration
+        self.assertIn('{% for product in subscription_products %}', template_content, "Should iterate over multiple products")
+        self.assertIn('{{ product.price }}', template_content, "Should display dynamic product prices")
+        self.assertIn('{{ product.credit_amount }}', template_content, "Should display dynamic credit amounts")
+        
+        # Test cost per credit calculation display
+        self.assertIn('Cost per Credit', template_content, "Should have cost per credit section in comparison table")
+        self.assertIn('cents per credit', template_content, "Should display cost in cents per credit")
     
     def test_upgrade_downgrade_buttons_exist(self):
-        """Test that upgrade/downgrade buttons exist in template."""
+        """Test that subscription template has upgrade/downgrade functionality."""
         subscription_path = 'quickscale/templates/templates/admin_dashboard/subscription.html'
+        self.assertTrue(os.path.exists(subscription_path), "Subscription template should exist")
         
         with open(subscription_path, 'r') as f:
             template_content = f.read()
-            
+        
         # Test upgrade/downgrade functionality
         self.assertIn('upgrade-btn', template_content, "Upgrade button should exist")
         self.assertIn('downgrade-btn', template_content, "Downgrade button should exist")

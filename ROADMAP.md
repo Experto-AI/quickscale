@@ -68,84 +68,260 @@ The QuickScale credit system supports multiple payment models and credit types w
 
 ## Development Sprints
 
+**Philosophy**: Small, focused sprints that can be completed in 1-2 days. Each sprint delivers immediate value and can be verified independently. Customer-facing features first, admin tools second.
+
 ---
 
-### Sprint 10: Admin Support Dashboard (v0.22.0)
-**Goal**: Admin tools to help users with credit/subscription issues
+### Sprint 10: AI Service Framework Foundation (v0.22.0)
+**Goal**: Create basic service framework for AI engineers to add their services
+**Time**: 1-2 days
 
 **Backend Implementation:**
-- [ ] Create admin views to search and view any user's account
-- [ ] Add admin tools for manual credit adjustments
-- [ ] Create audit logging for all admin actions
-- [ ] Add user account override capabilities
-- [ ] Add admin tools to initiate full or partial Stripe refunds for user payments.
-- [ ] Implement backend logic to search and retrieve failed Stripe transactions by user or transaction ID.
-- [ ] Add functionality to reconcile transactions reported by users as charged but not registered in the system.
-- [ ] Add backend logic to cancel a user's future subscription periods via the Stripe API.
+- [X] Create `services/` Django app template
+- [X] Add basic `Service` model in credits app (name, description, credit_cost, is_active)
+- [X] Create `BaseService` class with credit consumption logic
+- [X] Add service registration decorator for easy integration
 
 **Frontend Implementation:**
-- [ ] Create admin dashboard with user search
-- [ ] Show complete user credit status (same view as user dashboard)
-- [ ] Add admin tools for credit adjustments and subscription changes
-- [ ] Display admin action history and audit logs
-- [ ] Add UI elements in the admin dashboard to view user payment history with Stripe transaction details.
-- [ ] Include an option for admins to initiate refunds directly from the payment history view, allowing specification of refund amount for partial refunds.
-- [ ] Add a search feature for administrators to find specific transactions (including failed ones) by user or transaction ID.
-- [ ] Implement a view or tool to manually register or investigate transactions that are reported as charged by the user but are missing in the system.
-- [ ] Add a UI element in the admin dashboard to cancel a user's future subscription periods.
+- [X] Add services section to user dashboard showing available services
+- [X] Create basic service listing page
+- [X] Add service usage form template
 
 **Testing:**
-- [ ] Tests for admin user account access, check them
-- [ ] Tests for admin credit operations, check them
-- [ ] Tests for audit logging, check them
-- [ ] Tests for initiating refunds via the admin tools, including partial refunds.
-- [ ] Tests for searching and retrieving failed transactions.
-- [ ] Tests for the transaction reconciliation process.
-- [ ] Tests for the functionality to cancel future subscription periods.
+- [X] Test Service model creation and credit cost configuration
+- [X] Test BaseService class credit consumption integration
+- [x] Test service registration and listing
 
-**Notes**:
-- We don't need backward compatibility with previous versions of the codebase.
-- We don't need django migrations, we could replace previous tables.
-- When testing remember to check the quickscale codebase not a genrated project
-- In Stripe, the source of truth, we have 3 plans to sync: Basic, Pro, and one-time credit purchases.
-
-**Validation**: Admin can search any user, view their complete credit status, and make adjustments
+**Validation**: AI engineers can define a service with credit cost and see it listed in user dashboard
 
 ---
 
-### Sprint 11: Basic Analytics Dashboard (v0.23.0)
-**Goal**: Simple revenue and user analytics for business insights
+### Sprint 11: API Authentication & Basic Endpoints (v0.23.0)  
+**Goal**: Add API authentication and endpoint structure for AI services
+**Time**: 1-2 days
 
 **Backend Implementation:**
-- [ ] Create basic analytics calculations (total revenue, active subscriptions)
-- [ ] Add user count metrics (total, active subscribers, credit purchasers)
-- [ ] Calculate most popular services by credit consumption
-- [ ] Add monthly revenue tracking
+- [ ] Add API key authentication system for services
+- [ ] Create `/api/v1/` URL namespace
+- [ ] Add API authentication middleware
+- [ ] Create example AI service endpoint (e.g., text processing)
 
 **Frontend Implementation:**
-- [ ] Create `/admin/analytics/` page with key metrics
-- [ ] Show total revenue, subscription revenue, credit purchase revenue
-- [ ] Display user counts and subscription plan distribution
-- [ ] Add simple charts for monthly revenue trends
+- [ ] Add API key management to user dashboard
+- [ ] Show API documentation page with examples
+- [ ] Add API key generation/regeneration functionality
 
 **Testing:**
-- [ ] Tests for analytics calculations, check them
-- [ ] Tests for analytics dashboard display, check them
-- [ ] Integration tests for real-time metrics, check them
+- [ ] Test API key authentication
+- [ ] Test example service endpoint with authentication
+- [ ] Test API key management functionality
 
-**Notes**:
-- We don't need backward compatibility with previous versions of the codebase.
-- We don't need django migrations, we could replace previous tables.
-- When testing remember to check the quickscale codebase not a genrated project
-- In Stripe, the source of truth, we have 3 plans to sync: Basic, Pro, and one-time credit purchases.
-
-**Validation**: Admin can view business metrics and revenue analyticds
+**Validation**: Users can generate API keys and call service endpoints with authentication
 
 ---
 
-### Sprint 12: Refactor and Maintenance (v0.24.0)
-**Goal**: Refactor and maintain codebase
+### Sprint 12: Service Credit Integration (v0.24.0)
+**Goal**: Integrate credit consumption with API service calls
+**Time**: 1-2 days
 
 **Backend Implementation:**
-- [ ] Iterate code-tree and remove all unused functions and classes
-- [ ] Iterate code-tree and check each file for CONTRIBUTING rules
+- [ ] Add credit validation middleware for API calls
+- [ ] Implement automatic credit consumption on service usage
+- [ ] Add insufficient credits error handling
+- [ ] Create service usage logging
+
+**Frontend Implementation:**
+- [ ] Show credit balance in API documentation
+- [ ] Add insufficient credits error messages
+- [ ] Display service usage history in dashboard
+
+**Testing:**
+- [ ] Test credit validation before service calls
+- [ ] Test automatic credit consumption
+- [ ] Test insufficient credits error handling
+
+**Validation**: API calls consume credits automatically and fail gracefully when insufficient credits
+
+---
+
+### Sprint 13: Service Management Admin Interface (v0.25.0)
+**Goal**: Basic admin interface for managing services and viewing usage
+**Time**: 1-2 days
+
+**Backend Implementation:**
+- [ ] Add service management to Django admin
+- [ ] Create admin views for service configuration
+- [ ] Add service usage analytics (basic counts)
+
+**Frontend Implementation:**
+- [ ] Create admin service management page
+- [ ] Add service enable/disable functionality
+- [ ] Show basic service usage statistics
+
+**Testing:**
+- [ ] Test admin service management functionality
+- [ ] Test service enable/disable
+- [ ] Test basic usage analytics
+
+**Validation**: Admins can manage services and view basic usage statistics
+
+---
+
+### Sprint 14: Service Documentation & Examples (v0.26.0)
+**Goal**: Documentation and examples for AI engineers to add services
+**Time**: 1-2 days
+
+**Backend Implementation:**
+- [ ] Create service template generator command
+- [ ] Add example service implementations (text processing, image processing)
+- [ ] Create service development utilities
+
+**Frontend Implementation:**
+- [ ] Create comprehensive API documentation page
+- [ ] Add service examples and code snippets
+- [ ] Create "Getting Started" guide for adding services
+
+**Testing:**
+- [ ] Test service template generator
+- [ ] Test example service implementations
+- [ ] Validate documentation accuracy
+
+**Validation**: AI engineers can follow documentation to add their own services in under 30 minutes
+
+---
+
+### Sprint 15: Basic User Search & Admin Foundation (v0.27.0)
+**Goal**: Essential admin tools - user search and basic management
+**Time**: 1-2 days
+
+**Backend Implementation:**
+- [ ] Create simple user search functionality (email, name)
+- [ ] Add basic admin permission checks
+- [ ] Create admin user detail view
+
+**Frontend Implementation:**
+- [ ] Add user search page to admin dashboard
+- [ ] Create user detail modal with basic info
+- [ ] Add admin navigation structure
+
+**Testing:**
+- [ ] Test user search functionality
+- [ ] Test admin permission enforcement
+- [ ] Test user detail view
+
+**Validation**: Admins can search and view user details
+
+---
+
+### Sprint 16: Simple Audit Logging (v0.28.0)
+**Goal**: Basic audit logging for admin actions
+**Time**: 1-2 days
+
+**Backend Implementation:**
+- [ ] Create simple AuditLog model (action, user, timestamp, description)
+- [ ] Add audit logging for user changes
+- [ ] Create basic audit log viewing
+
+**Frontend Implementation:**
+- [ ] Add audit log page to admin dashboard
+- [ ] Show recent admin actions
+- [ ] Add basic filtering (user, date)
+
+**Testing:**
+- [ ] Test audit log creation
+- [ ] Test audit log viewing and filtering
+- [ ] Test admin action tracking
+
+**Validation**: Admin actions are logged and viewable
+
+---
+
+### Sprint 17: Admin Credit Management (v0.29.0)
+**Goal**: Allow admins to adjust user credits manually
+**Time**: 1-2 days
+
+**Backend Implementation:**
+- [ ] Add admin credit adjustment functionality
+- [ ] Create credit adjustment validation
+- [ ] Add credit adjustment audit logging
+
+**Frontend Implementation:**
+- [ ] Add credit adjustment form to user detail view
+- [ ] Show credit adjustment history
+- [ ] Add adjustment reason field
+
+**Testing:**
+- [ ] Test credit adjustment functionality
+- [ ] Test adjustment validation and logging
+- [ ] Test credit history display
+
+**Validation**: Admins can manually adjust user credits with proper tracking
+
+---
+
+### Sprint 18: Basic Payment Admin Tools (v0.30.0)
+**Goal**: Essential payment support tools for admins
+**Time**: 1-2 days
+
+**Backend Implementation:**
+- [ ] Add payment search functionality
+- [ ] Create basic refund initiation
+- [ ] Add payment investigation tools
+
+**Frontend Implementation:**
+- [ ] Add payment search to admin dashboard
+- [ ] Create simple refund interface
+- [ ] Show payment details and history
+
+**Testing:**
+- [ ] Test payment search and viewing
+- [ ] Test refund initiation
+- [ ] Test payment investigation tools
+
+**Validation**: Admins can search payments and initiate basic refunds
+
+---
+
+### Sprint 19: Simple Analytics Dashboard (v0.31.0)
+**Goal**: Basic business metrics for admins
+**Time**: 1-2 days
+
+**Backend Implementation:**
+- [ ] Calculate basic metrics (total users, revenue, active subscriptions)
+- [ ] Add service usage statistics
+- [ ] Create monthly revenue calculations
+
+**Frontend Implementation:**
+- [ ] Create simple analytics dashboard
+- [ ] Show key business metrics
+- [ ] Add basic charts for trends
+
+**Testing:**
+- [ ] Test analytics calculations
+- [ ] Test dashboard display
+- [ ] Test chart functionality
+
+**Validation**: Admins can view essential business metrics
+
+---
+
+### Sprint 20: Polish & Launch Preparation (v0.32.0)
+**Goal**: Final polish and launch readiness
+**Time**: 1-2 days
+
+**Backend Implementation:**
+- [ ] Code review and cleanup
+- [ ] Performance optimization
+- [ ] Security review
+
+**Frontend Implementation:**
+- [ ] UI polish and consistency
+- [ ] Error message improvements
+- [ ] Loading state improvements
+
+**Testing:**
+- [ ] Comprehensive integration testing
+- [ ] Performance testing
+- [ ] Security testing
+
+**Validation**: QuickScale is ready for AI engineers to launch production SaaS applications

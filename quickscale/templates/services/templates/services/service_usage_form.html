@@ -1,0 +1,197 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}Use Service: {{ service.name }}{% endblock %}
+
+{% block content %}
+<div class="container">
+    <div class="columns">
+        <div class="column is-8 is-offset-2">
+            <h1 class="title">Use Service: {{ service.name }}</h1>
+            
+            <!-- Service Information -->
+            <div class="box">
+                <div class="media">
+                    <div class="media-content">
+                        <h2 class="title is-4">{{ service.name }}</h2>
+                        <p class="subtitle is-6">
+                            <span class="tag is-primary is-medium">{{ service.credit_cost }} credits</span>
+                        </p>
+                    </div>
+                </div>
+                
+                <div class="content">
+                    <p>{{ service.description }}</p>
+                </div>
+            </div>
+
+            <!-- Current Balance and Credit Check -->
+            <div class="box">
+                <h3 class="subtitle">Credit Balance Check</h3>
+                <div class="level">
+                    <div class="level-left">
+                        <div class="level-item">
+                            <div>
+                                <p class="heading">Current Balance</p>
+                                <p class="title is-5" id="credit-balance">{{ current_balance }} credits</p>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="level-right">
+                        <div class="level-item">
+                            <div>
+                                <p class="heading">Required</p>
+                                <p class="title is-5">{{ service.credit_cost }} credits</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- Credit Breakdown and Consumption Preview -->
+                {% with balance_details=credit_account.get_balance_details %}
+                <div class="columns">
+                    <div class="column is-6">
+                        <div class="box has-background-info-light">
+                            <p class="subtitle is-6">
+                                <span class="icon">
+                                    <i class="fas fa-calendar-alt"></i>
+                                </span>
+                                Subscription Credits
+                            </p>
+                            <p class="title is-6">{{ balance_details.subscription.amount }} credits</p>
+                        </div>
+                    </div>
+                    <div class="column is-6">
+                        <div class="box has-background-success-light">
+                            <p class="subtitle is-6">
+                                <span class="icon">
+                                    <i class="fas fa-infinity"></i>
+                                </span>
+                                Pay-as-You-Go Credits
+                            </p>
+                            <p class="title is-6">{{ balance_details.pay_as_you_go.amount }} credits</p>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- Credit Consumption Preview -->
+                {% if service.credit_cost <= balance_details.total %}
+                    <div class="notification is-info is-light">
+                        <p class="is-size-6">
+                            <strong>Credit consumption preview:</strong>
+                            {% if consumption_preview.type == 'subscription_only' %}
+                                Will consume {{ consumption_preview.subscription_used }} subscription credits
+                            {% elif consumption_preview.type == 'mixed' %}
+                                Will consume {{ consumption_preview.subscription_used }} subscription + {{ consumption_preview.payg_used }} pay-as-you-go credits
+                            {% else %}
+                                Will consume {{ consumption_preview.payg_used }} pay-as-you-go credits
+                            {% endif %}
+                        </p>
+                    </div>
+                {% else %}
+                    <div class="notification is-danger is-light">
+                        <p class="is-size-6">
+                            <strong>Insufficient credits!</strong>
+                            You need {{ credits_needed }} more credits to use this service.
+                        </p>
+                    </div>
+                {% endif %}
+                {% endwith %}
+            </div>
+
+            <!-- Service Usage Form -->
+            <div class="box">
+                <h3 class="subtitle">Confirm Service Usage</h3>
+                
+                {% if current_balance >= service.credit_cost %}
+                    <form hx-post="{% url 'services:use_service' service.id %}" 
+                          hx-target="#usage-result" 
+                          hx-swap="innerHTML"
+                          x-data="{ loading: false }"
+                          x-on:htmx:before-request="loading = true"
+                          x-on:htmx:after-request="loading = false">
+                        {% csrf_token %}
+                        
+                        <div class="field">
+                            <div class="control">
+                                <button type="submit" 
+                                        class="button is-success is-large is-fullwidth" 
+                                        x-bind:class="{ 'is-loading': loading }"
+                                        x-bind:disabled="loading">
+                                    <span class="icon">
+                                        <i class="fas fa-play"></i>
+                                    </span>
+                                    <span>Use {{ service.name }} ({{ service.credit_cost }} credits)</span>
+                                </button>
+                            </div>
+                        </div>
+                        
+                        <div class="notification is-info is-light">
+                            <p class="is-size-7">
+                                <strong>Note:</strong> Credits will be deducted immediately when you use the service. 
+                                The system will automatically use subscription credits first, then pay-as-you-go credits if needed.
+                            </p>
+                        </div>
+                    </form>
+                {% else %}
+                    <div class="notification is-danger">
+                        <p><strong>Insufficient Credits</strong></p>
+                        <p>You need {{ service.credit_cost }} credits to use this service, but you only have {{ current_balance }} credits available.</p>
+                        <div class="buttons">
+                            <a href="{% url 'credits:buy_credits' %}" class="button is-info">
+                                <span class="icon">
+                                    <i class="fas fa-shopping-cart"></i>
+                                </span>
+                                <span>Buy More Credits</span>
+                            </a>
+                            <a href="{% url 'credits:dashboard' %}" class="button is-link">
+                                <span class="icon">
+                                    <i class="fas fa-chart-line"></i>
+                                </span>
+                                <span>View Dashboard</span>
+                            </a>
+                        </div>
+                    </div>
+                {% endif %}
+                
+                <!-- HTMX Response Target -->
+                <div id="usage-result"></div>
+            </div>
+
+            <!-- Navigation -->
+            <div class="box">
+                <div class="buttons">
+                    <a href="{% url 'services:list' %}" class="button is-light">
+                        <span class="icon">
+                            <i class="fas fa-arrow-left"></i>
+                        </span>
+                        <span>Back to Services</span>
+                    </a>
+                    <a href="{% url 'credits:dashboard' %}" class="button is-link">
+                        <span class="icon">
+                            <i class="fas fa-chart-line"></i>
+                        </span>
+                        <span>Credits Dashboard</span>
+                    </a>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+{% block extra_js %}
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    // Handle HTMX responses for service usage
+    document.body.addEventListener('htmx:afterRequest', function(event) {
+        if (event.detail.xhr.status === 200) {
+            // Refresh credit balance after successful service usage
+            setTimeout(function() {
+                window.location.href = "{% url 'services:list' %}";
+            }, 2000);
+        }
+    });
+});
+</script>
+{% endblock %}
+{% endblock %}

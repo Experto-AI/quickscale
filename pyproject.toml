@@ -25,8 +25,12 @@ dependencies = [
     "dj-database-url>=2.1.0",
     # Environment and configuration
     "python-dotenv>=1.0.0",
+    # Authentication
+    "django-allauth>=0.61.0",
     # Payment processing
-    "stripe>=8.0.0",
+    "stripe>=12.1.0",
+    # Image processing
+    "Pillow",
 ]
 
 [project.urls]

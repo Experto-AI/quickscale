@@ -21,6 +21,11 @@
                 Plans
             </a>
             {% endif %}
+            {% if user.is_authenticated %}
+            <a class="navbar-item" href="{% url 'services:list' %}" hx-boost="true">
+                Services
+            </a>
+            {% endif %}
             <a class="navbar-item" href="{% url 'public:about' %}" hx-boost="true">
                 About
             </a>
