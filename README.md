@@ -1,8 +1,9 @@
 # **🚀 Quick-Scale**  
 
-**A SaaS starter kit for Python-first developers using Django**  
 
-Quick-Scale is designed to help **AI/ML engineers, Data Scientists, and Backend/Cloud developers** launch SaaS applications **quickly and efficiently**. 
+**A SaaS starter kit for AI Engineers and Python-first developers using Django**  
+
+Quick-Scale is designed to help **AI Engineers, Data Scientists, and Backend/Cloud developers** launch SaaS applications **quickly and efficiently**. 
 
 It is a project generator that provides a **ready-to-use** Django-based framework with best practices for **scalability, authentication, billing, and deployment**—so you can focus on building your product, not setting up infrastructure.  
 

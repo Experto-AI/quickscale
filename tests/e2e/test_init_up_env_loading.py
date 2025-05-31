@@ -123,8 +123,8 @@ class TestInitUpEnvLoading:
             'DB_NAME': 'quickscale',
             'DB_USER': 'admin',
             'DB_PASSWORD': 'adminpasswd',
-            'DB_MEMORY_LIMIT': '384M',
-            'DB_MEMORY_RESERVE': '256M',
+            'DB_MEMORY_LIMIT': '1G',
+            'DB_MEMORY_RESERVE': '512M',
             'DB_SHARED_BUFFERS': '128MB',
             'DB_WORK_MEM': '16MB',
             
