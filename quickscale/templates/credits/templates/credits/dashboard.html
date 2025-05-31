@@ -237,11 +237,76 @@
                 {% endif %}
             </div>
 
+            <!-- Available Services Section -->
+            {% if available_services %}
+            <div class="box">
+                <h2 class="subtitle">Available Services</h2>
+                <div class="columns is-multiline">
+                    {% for service in available_services %}
+                    <div class="column is-6-tablet is-4-desktop">
+                        <div class="card">
+                            <div class="card-content">
+                                <div class="media">
+                                    <div class="media-content">
+                                        <p class="title is-6">{{ service.name }}</p>
+                                        <p class="subtitle is-7">
+                                            <span class="tag is-primary">{{ service.credit_cost }} credits</span>
+                                        </p>
+                                    </div>
+                                </div>
+                                <div class="content">
+                                    <p class="is-size-7">{{ service.description|truncatewords:10 }}</p>
+                                    {% if service.user_usage_count > 0 %}
+                                        <p class="has-text-grey-dark">
+                                            <small>
+                                                <span class="icon is-small">
+                                                    <i class="fas fa-history"></i>
+                                                </span>
+                                                Used {{ service.user_usage_count }} time{{ service.user_usage_count|pluralize }}
+                                            </small>
+                                        </p>
+                                    {% endif %}
+                                </div>
+                            </div>
+                            <footer class="card-footer">
+                                {% if current_balance >= service.credit_cost %}
+                                    <a href="{% url 'services:use_form' service.id %}" class="card-footer-item button is-success is-small">
+                                        <span class="icon">
+                                            <i class="fas fa-play"></i>
+                                        </span>
+                                        <span>Use Service</span>
+                                    </a>
+                                {% else %}
+                                    <div class="card-footer-item">
+                                        <button class="button is-danger is-small" disabled title="Insufficient credits">
+                                            <span class="icon">
+                                                <i class="fas fa-ban"></i>
+                                            </span>
+                                            <span>Insufficient Credits</span>
+                                        </button>
+                                    </div>
+                                {% endif %}
+                            </footer>
+                        </div>
+                    </div>
+                    {% endfor %}
+                </div>
+                <div class="has-text-centered">
+                    <a href="{% url 'services:list' %}" class="button is-link">
+                        <span class="icon">
+                            <i class="fas fa-list"></i>
+                        </span>
+                        <span>View All Services</span>
+                    </a>
+                </div>
+            </div>
+            {% endif %}
+
             <!-- Quick Actions Section -->
             <div class="box">
                 <h2 class="subtitle">Quick Actions</h2>
                 <div class="buttons">
-                    <a href="{% url 'credits:services' %}" class="button is-success">
+                    <a href="{% url 'services:list' %}" class="button is-success">
                         <span class="icon">
                             <i class="fas fa-cogs"></i>
                         </span>

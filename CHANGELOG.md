@@ -2,6 +2,27 @@
 
 All notable changes to this project will be documented in this file.
 
+## v0.22.0 (2025-05-31)
+v0.22.0 feat: Implement AI Service Framework Foundation
+
+This PR lays the foundation for AI engineers to easily integrate their services into QuickScale, introducing a basic service framework.
+
+- Backend Implementation:
+  - Created a `services/` Django app template.
+  - Added a basic `Service` model in the credits app with name, description, credit_cost, and is_active fields.
+  - Implemented a `BaseService` class with core credit consumption logic.
+  - Added a service registration decorator for streamlined service integration.
+- Frontend Implementation:
+  - Integrated a services section into the user dashboard to display available services.
+  - Created a basic service listing page for user access.
+  - Developed a service usage form template.
+- Testing:
+  - Comprehensive tests were added covering the Service model creation and credit cost configuration.
+  - Implemented tests for `BaseService` class credit consumption integration.
+  - Included tests for service registration and listing functionality.
+
+This PR completes the initial framework for AI services, enabling AI engineers to define services with configurable credit costs, which will be visible in the user dashboard.
+
 ## v0.21.0 (2025-05-29)
 v0.21.0 feat: Implement Pro Subscription Plan
 

@@ -28,11 +28,22 @@ def credits_dashboard(request):
     # Check for recent purchase transaction data in session
     purchase_transaction_data = request.session.pop('purchase_transaction_data', None)
     
+    # Get available services for dashboard preview (limited to 6)
+    available_services = Service.objects.filter(is_active=True).order_by('name')[:6]
+    
+    # Add usage count for each service by the current user
+    for service in available_services:
+        service.user_usage_count = ServiceUsage.objects.filter(
+            user=request.user,
+            service=service
+        ).count()
+    
     context = {
         'credit_account': credit_account,
         'current_balance': current_balance,
         'recent_transactions': recent_transactions,
         'purchase_transaction_data': purchase_transaction_data,  # For displaying detailed purchase info
+        'available_services': available_services,  # For services section in dashboard
     }
     
     return render(request, 'credits/dashboard.html', context)

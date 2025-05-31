@@ -1,0 +1,51 @@
+{% if success %}
+<div class="notification is-success">
+    <p><strong>Success!</strong> {{ message }}</p>
+    <div class="level">
+        <div class="level-left">
+            <div class="level-item">
+                <p><strong>Remaining Balance:</strong> {{ remaining_balance }} credits</p>
+            </div>
+        </div>
+        <div class="level-right">
+            <div class="level-item">
+                <p class="is-size-7">
+                    ({{ subscription_balance }} subscription + {{ payg_balance }} pay-as-you-go)
+                </p>
+            </div>
+        </div>
+    </div>
+    <div class="buttons">
+        <a href="{% url 'services:list' %}" class="button is-link">
+            <span class="icon">
+                <i class="fas fa-list"></i>
+            </span>
+            <span>Back to Services</span>
+        </a>
+        <a href="{% url 'credits:dashboard' %}" class="button is-info">
+            <span class="icon">
+                <i class="fas fa-chart-line"></i>
+            </span>
+            <span>View Dashboard</span>
+        </a>
+    </div>
+</div>
+{% else %}
+<div class="notification is-danger">
+    <p><strong>Error!</strong> {{ error }}</p>
+    <div class="buttons">
+        <a href="{% url 'credits:buy_credits' %}" class="button is-info">
+            <span class="icon">
+                <i class="fas fa-shopping-cart"></i>
+            </span>
+            <span>Buy More Credits</span>
+        </a>
+        <a href="{% url 'services:list' %}" class="button is-light">
+            <span class="icon">
+                <i class="fas fa-list"></i>
+            </span>
+            <span>Back to Services</span>
+        </a>
+    </div>
+</div>
+{% endif %}

@@ -80,6 +80,7 @@ INSTALLED_APPS = [
     'users.apps.UsersConfig',
     'common.apps.CommonConfig',
     'credits.apps.CreditsConfig',
+    'services.apps.ServicesConfig',  # AI Service Framework
     'stripe_manager.apps.StripeConfig',  # Always include for migrations
 ]
 
