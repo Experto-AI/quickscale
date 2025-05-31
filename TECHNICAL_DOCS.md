@@ -18,6 +18,7 @@ Project configuration is managed through environment variables with secure defau
     - django-allauth 0.61.0+ (authentication)
     - Uvicorn 0.27.0+ (ASGI server)
     - stripe 12.1.0+ (payment processing and billing)
+    - Pillow (image processing for user avatars and media)
 - HTMX (frontend to backend communication for CRUD operations with the simplicity of HTML)
 - Alpine.js (simple vanilla JS library for DOM manipulation)
 - Bulma CSS (simple CSS styling without JavaScript) - Do not mix Tailwind or another alternatives
@@ -74,19 +75,26 @@ quickscale/
 │   │   ├── tests_product_admin.py   # Product admin tests
 │   │   └── tests_views_no_stripe.py # View tests without Stripe
 │   ├── stripe_manager/       # Stripe integration app
-│   │   ├── management/       # Management commands
-│   │   │   └── commands/     # Custom commands
+│   │   ├── migrations/       # Pre-generated migrations
 │   │   ├── templates/        # App-specific templates
-│   │   ├── tests/            # Stripe tests
-│   │   ├── templatetags/     # Custom template tags
-│   │   ├── apps/             # Additional app modules
+│   │   │   └── stripe_manager/ # Stripe-specific templates
+│   │   │       ├── plan_comparison.html    # Plan comparison view
+│   │   │       ├── checkout_success.html   # Payment success page
+│   │   │       └── checkout_error.html     # Payment error page
+│   │   ├── tests/            # Comprehensive Stripe tests
+│   │   │   ├── test_models.py          # Model tests
+│   │   │   ├── test_admin.py           # Admin interface tests
+│   │   │   ├── test_webhooks.py        # Webhook handling tests
+│   │   │   ├── test_stripe_manager.py  # API integration tests
+│   │   │   ├── test_plan_views.py      # Plan management tests
+│   │   │   └── test_user_flows.py      # End-to-end user flow tests
 │   │   ├── __init__.py       # Package initialization
 │   │   ├── apps.py           # App configuration
+│   │   ├── admin.py          # Admin interface for Stripe products
 │   │   ├── models.py         # Stripe models (StripeProduct, StripeCustomer)
-│   │   ├── urls.py           # URL routing
-│   │   ├── views.py          # View logic & webhooks
-│   │   ├── utils.py          # Stripe utilities
-│   │   └── stripe_manager.py # Stripe API integration
+│   │   ├── urls.py           # URL routing for webhooks and views
+│   │   ├── views.py          # View logic, webhooks & plan management
+│   │   └── stripe_manager.py # Stripe API integration and management
 │   ├── docs/                 # Documentation files
 │   ├── js/                   # JavaScript assets
 │   ├── logs/                 # Log files directory
@@ -601,7 +609,41 @@ erDiagram
         amount decimal
         description string
         credit_type string
+        expiration_date datetime
         created_at datetime
+    }
+    
+    %% Subscription Management
+    USER_SUBSCRIPTIONS {
+        id int PK
+        user_id int FK
+        stripe_subscription_id string
+        stripe_product_id string
+        status string
+        current_period_start datetime
+        current_period_end datetime
+        cancel_at_period_end boolean
+        canceled_at datetime
+        created_at datetime
+        updated_at datetime
+    }
+    
+    %% Payment Processing
+    PAYMENTS {
+        id int PK
+        user_id int FK
+        subscription_id int FK
+        amount decimal
+        currency string
+        payment_type string
+        stripe_payment_intent_id string
+        stripe_subscription_id string
+        stripe_invoice_id string
+        receipt_number string
+        receipt_data text
+        status string
+        created_at datetime
+        updated_at datetime
     }
     
     SERVICES {
@@ -641,6 +683,7 @@ erDiagram
         currency string
         interval string
         credit_amount int
+        display_order int
         active boolean
         stripe_id string
         stripe_price_id string
@@ -648,23 +691,17 @@ erDiagram
         updated_at datetime
     }
     
-    PAYMENT_METHODS {
-        id int PK
-        customer_id int FK
-        stripe_id string
-        type string
-        card_brand string
-        card_last4 string
-    }
-    
     %% Entity relationships - arranged for better vertical flow
     USERS ||--o{ PROFILES : "has one"
     USERS ||--o{ CREDIT_ACCOUNTS : "has one"
     USERS ||--o{ CREDIT_TRANSACTIONS : "has many"
+    USERS ||--o{ USER_SUBSCRIPTIONS : "has many"
+    USERS ||--o{ PAYMENTS : "has many"
     USERS ||--o{ SERVICE_USAGE : "has many"
     USERS ||--o{ STRIPE_CUSTOMERS : "has one"
+    USER_SUBSCRIPTIONS ||--o{ PAYMENTS : "generates"
     SERVICES ||--o{ SERVICE_USAGE : "consumed by"
-    STRIPE_CUSTOMERS ||--o{ PAYMENT_METHODS : "can have many"
+    STRIPE_PRODUCTS ||--o{ USER_SUBSCRIPTIONS : "defines plan"
 ```
 
 ## AUTHENTICATION
@@ -676,7 +713,7 @@ erDiagram
 - **Social authentication disabled**: No social login options (Google, Facebook, etc.)
 - **Custom email templates**: Customized email templates for all authentication emails
 - **Powered by django-allauth**: The authentication system is implemented using `django-allauth` for robust and extensible functionality.
-- **Stripe Integration App**: The `stripe_manager` app handles Stripe integration.
+- **Stripe Integration App**: The `stripe_manager` app handles comprehensive Stripe integration including product synchronization, customer management, webhook processing, and payment flows.
 
 ### Configuration
 
@@ -784,6 +821,126 @@ To modify the authentication flow:
 3. Review django-allauth documentation for the correct method names
 4. Clear your browser cache and Django cache
 
+## STRIPE INTEGRATION
+
+### Overview
+
+The `stripe_manager` app provides comprehensive Stripe integration for payment processing, subscription management, and product synchronization. It serves as the bridge between Django models and Stripe's API, ensuring data consistency and providing a robust payment infrastructure.
+
+### Key Components
+
+#### **StripeManager Class**
+- **Singleton Pattern**: Ensures single instance across the application
+- **API Integration**: Handles all Stripe API communications
+- **Error Handling**: Graceful fallback when Stripe is unavailable
+- **Configuration Management**: Validates API keys and settings
+
+#### **Models**
+
+**StripeProduct Model**
+- **Product Management**: Local caching of Stripe products with enhanced metadata
+- **Credit Configuration**: Maps products to credit amounts for the credit system
+- **Display Control**: `display_order` field for frontend presentation
+- **Billing Intervals**: Supports monthly, yearly, and one-time billing cycles
+- **Synchronization**: `sync_with_stripe()` method for bidirectional data sync
+- **Utility Methods**: `price_per_credit`, `is_subscription`, `is_one_time` properties
+
+**StripeCustomer Model**
+- **User Linking**: One-to-one relationship with Django users
+- **Customer Management**: Automatic creation and synchronization with Stripe
+- **Contact Information**: Email and name synchronization
+- **Audit Trail**: Creation and modification timestamps
+
+#### **Webhook Processing**
+- **Real-time Events**: Processes Stripe webhooks for subscription events
+- **Security**: Validates webhook signatures to ensure authenticity
+- **Event Handling**: Supports payment, subscription, and plan change events
+- **Error Recovery**: Handles failed webhooks with proper logging
+
+#### **Admin Integration**
+- **Product Synchronization**: Admin actions for syncing products from Stripe
+- **Bulk Operations**: Mass synchronization of products and pricing
+- **Display Management**: Organized admin interface with fieldsets
+- **Search and Filtering**: Enhanced admin discovery and management
+
+### Integration with Credit System
+
+#### **Product-Credit Mapping**
+- Stripe products define credit amounts through metadata
+- One-time products provide pay-as-you-go credits (never expire)
+- Subscription products provide monthly credits (expire at period end)
+
+#### **Payment Processing**
+- Stripe Checkout sessions for secure payment processing
+- Automatic credit allocation upon successful payment
+- Receipt generation with unique receipt numbers
+- Complete audit trail of all transactions
+
+#### **Subscription Management**
+- Plan upgrades/downgrades with credit transfer
+- Automatic renewal and credit allocation
+- Cancellation handling with grace periods
+- Prorated billing for plan changes
+
+### Configuration
+
+#### **Required Settings**
+```python
+STRIPE_ENABLED = True
+STRIPE_PUBLIC_KEY = 'pk_test_...'
+STRIPE_SECRET_KEY = 'sk_test_...'
+STRIPE_WEBHOOK_SECRET = 'whsec_...'
+```
+
+#### **Optional Settings**
+```python
+STRIPE_LIVE_MODE = False  # Set to True for production
+STRIPE_SUCCESS_URL = '/credits/success/'
+STRIPE_CANCEL_URL = '/credits/cancel/'
+```
+
+### API Endpoints
+
+#### **Webhook Endpoints**
+- `/stripe/webhook/` - Handles all Stripe webhook events
+- Processes payment confirmations, subscription updates, plan changes
+
+#### **Payment Endpoints**
+- Plan comparison views for subscription selection
+- Checkout session creation for payments
+- Success/cancel handling with detailed transaction data
+
+### Security
+
+#### **API Key Management**
+- Environment variable configuration
+- Validation of required keys before initialization
+- Separate test/live mode configurations
+
+#### **Webhook Security**
+- Signature verification for all incoming webhooks
+- IP filtering capabilities
+- Request validation and logging
+
+#### **Data Protection**
+- Secure handling of payment information
+- PCI compliance through Stripe's hosted checkout
+- Minimal local storage of sensitive data
+
+### Testing
+
+#### **Comprehensive Test Suite**
+- Unit tests for all models and methods
+- Integration tests for webhook processing
+- Admin interface functionality tests
+- End-to-end payment flow tests
+- Mock Stripe API for reliable testing
+
+#### **Test Configuration**
+- Separate test API keys for safe testing
+- Mock webhook events for scenario testing
+- Isolated test database for data safety
+
 ## ENVIRONMENT VARIABLES
 
 The project uses a standardized environment variable system with validation and secure defaults.
@@ -834,17 +991,21 @@ def validate_production_settings():
 |--------------------|------------------------------|---------------------|
 | DB_HOST            | Database hostname            | db                  |
 | DB_PORT            | Database port                | 5432                |
-| DB_NAME            | Database name                | admin               |
+| DB_NAME            | Database name                | quickscale          |
 | DB_USER            | Database username            | admin               |
 | DB_PASSWORD        | Database password            | adminpasswd         |
-| DB_MEMORY_LIMIT    | Database memory limit        | 384M                |
-| DB_MEMORY_RESERVE  | Database memory reserve      | 256M                |
+| DB_PORT_EXTERNAL   | External database port       | 5432                |
+| DB_MEMORY_LIMIT    | Database memory limit        | 1G                  |
+| DB_MEMORY_RESERVE  | Database memory reserve      | 512M                |
+| DB_SHARED_BUFFERS  | PostgreSQL shared buffers    | 128MB               |
+| DB_WORK_MEM        | PostgreSQL work memory       | 16MB                |
 
 ### Security Variables
 
 | Variable            | Description                  | Default              |
 |--------------------|------------------------------|---------------------|
 | DEBUG              | Debug mode                   | True                |
+| IS_PRODUCTION      | Production environment flag  | False               |
 | SECRET_KEY         | Django secret key            | dev-only-dummy-key  |
 | ALLOWED_HOSTS      | Allowed host names           | *                   |
 
@@ -993,41 +1154,60 @@ Alpine.js is used for all client-side interactivity and state management:
 
 - **Authentication**: Powered by `django-allauth`, QuickScale provides secure email-only authentication with mandatory email verification. Social login is explicitly disabled for simplicity and security.
 - **Custom User Model**: The `CustomUser` model supports email-based login and removes the need for usernames.
-- **Credit System**: Comprehensive credit-based monetization system supporting both pay-as-you-go and subscription models with Stripe integration.
-- **Payment Processing**: Full Stripe integration for handling one-time credit purchases and recurring subscription billing.
-- **Service Management**: Configurable services with credit cost validation and usage tracking.
-- **Admin AdminDashboard**: Built-in admin interface for credit management, user account oversight, and service configuration.
+- **Advanced Credit System**: Comprehensive credit-based monetization system supporting both pay-as-you-go and subscription models with sophisticated priority consumption and expiration handling.
+- **Stripe Integration**: Full-featured Stripe integration with product synchronization, webhook processing, and secure payment flows.
+- **Subscription Management**: Complete subscription lifecycle management with plan upgrades, downgrades, and automatic credit transfer.
+- **Payment Processing**: Secure payment processing with receipt generation, audit trails, and multiple payment method support.
+- **Service Management**: Configurable services with credit cost validation, usage tracking, and priority-based consumption.
+- **Admin Dashboard**: Built-in admin interface for credit management, user account oversight, service configuration, and Stripe product synchronization.
 - **Modern Frontend**: Alpine.js and HTMX for interactive UI components without complex JavaScript frameworks.
 - **Docker Ready**: Complete Docker configuration for development and production deployment.
 - **Email Integration**: Transactional email support with customizable templates for authentication and notifications.
 
 ### Credit System Features
 
-The credit system provides a flexible foundation for SaaS monetization:
+The credit system provides a sophisticated foundation for SaaS monetization:
 
-#### Core Credit Features
+#### Enhanced Credit Features
 - **Pay-as-you-go Credits**: Never-expiring credits purchased through one-time Stripe payments
-- **Subscription Credits**: Monthly credits with automatic renewal through Stripe subscriptions  
-- **Real-time Balance**: Live credit balance tracking and validation before service usage
+- **Subscription Credits**: Monthly credits with automatic renewal and expiration at billing period end
+- **Priority Consumption**: Intelligent consumption system (subscription credits first, then pay-as-you-go)
+- **Credit Expiration**: Automatic expiration handling for subscription credits with real-time balance calculation
+- **Advanced Balance Calculation**: Multiple balance calculation methods for different use cases
+- **Real-time Validation**: Live credit balance tracking and validation before service usage
 - **Transaction History**: Complete audit trail of all credit transactions and service consumption
 - **Service Validation**: Automatic credit validation before allowing service access
 
-#### Stripe Integration Features
-- **Product Synchronization**: Automatic sync of Stripe products with local credit products
-- **Webhook Processing**: Real-time processing of Stripe payment and subscription events
-- **Customer Management**: Seamless customer creation and management between Django and Stripe
+#### Advanced Subscription Management
+- **Subscription Lifecycle**: Complete subscription status management with 8 different states
+- **Plan Changes**: Seamless upgrades and downgrades with automatic credit transfer
+- **Credit Transfer**: Remaining subscription credits automatically convert to pay-as-you-go on plan changes
+- **Billing Period Tracking**: Precise billing cycle management with current period start/end dates
+- **Cancellation Management**: Graceful subscription cancellation with `cancel_at_period_end` support
+- **Monthly Credit Allocation**: Automatic credit provisioning for active subscriptions
+
+#### Enhanced Stripe Integration Features
+- **Bidirectional Synchronization**: Two-way sync between local database and Stripe products/customers
+- **Webhook Processing**: Real-time processing of payment, subscription, and plan change events
+- **Customer Management**: Automatic customer creation and synchronization between Django and Stripe
+- **Product Management**: Local caching with display order, credit amounts, and interval support
 - **Payment Security**: Secure payment processing with Stripe's industry-standard security
 - **Multiple Payment Methods**: Support for cards, digital wallets, and other Stripe payment methods
+- **Receipt Generation**: Automatic receipt creation with unique receipt numbers and downloadable data
 
-#### Administrative Features
-- **Credit Management**: Admin tools for credit adjustment, refunds, and account management
-- **Service Configuration**: Easy setup of new services with customizable credit costs
+#### Enhanced Administrative Features
+- **Advanced Credit Management**: Admin tools for credit adjustment, refunds, and account management with reason tracking
+- **Stripe Product Sync**: Admin interface for synchronizing products from Stripe with bulk operations
+- **Service Configuration**: Easy setup of new services with customizable credit costs and usage tracking
 - **Usage Analytics**: Detailed reporting on service usage and credit consumption patterns
-- **User Account Management**: Comprehensive user management with credit balance oversight
+- **User Account Management**: Comprehensive user management with credit balance oversight and subscription status
 - **Bulk Operations**: Admin tools for bulk credit operations and user management
+- **Payment Tracking**: Complete payment history with receipt generation and audit compliance
 
-#### Developer Features
-- **Template Integration**: Pre-built templates for credit dashboard, purchase flows, and account management
-- **API-Ready Structure**: Clean model architecture ready for API expansion
+#### Enhanced Developer Features
+- **Advanced Template Integration**: Pre-built templates for credit dashboard, purchase flows, plan comparison, and account management
+- **API-Ready Structure**: Clean model architecture ready for API expansion with priority consumption logic
 - **Extensible Design**: Modular design allowing easy addition of new service types and billing models
-- **Test Coverage**: Comprehensive test suite for credit operations and Stripe integration
+- **Comprehensive Test Coverage**: Extensive test suite covering credit operations, Stripe integration, subscription management, and plan changes
+- **Database Integrity**: Atomic transactions for all credit operations ensuring data consistency
+- **Error Handling**: Graceful handling of Stripe API errors with fallback mechanisms

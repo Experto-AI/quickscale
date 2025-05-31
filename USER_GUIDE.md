@@ -2,6 +2,8 @@
 
 Welcome to QuickScale! This guide will help you set up, use, and deploy your QuickScale project effectively.
 
+This guide will help you to know the functionality sections and user flow of QuickScale.
+
 ---
 
 ## **1. Installation**
@@ -138,6 +140,56 @@ QuickScale includes pre-configured accounts for testing:
   - Make sure required variables are set (check .env.example for reference)
   - For production, ensure secure values are used (not default ones)
 
+#### **Important Environment Variables**
+
+**Basic Configuration:**
+```bash
+PROJECT_NAME=your-project-name
+WEB_PORT=8000
+DEBUG=True  # Set to False for production
+SECRET_KEY=your-secret-key  # Change for production
+```
+
+**Database Configuration:**
+```bash
+DB_HOST=db
+DB_PORT=5432
+DB_NAME=quickscale
+DB_USER=admin
+DB_PASSWORD=adminpasswd
+```
+
+**Email Configuration:**
+```bash
+EMAIL_HOST=smtp.example.com
+EMAIL_PORT=587
+EMAIL_HOST_USER=your-email@example.com
+EMAIL_HOST_PASSWORD=your-password
+EMAIL_USE_TLS=True
+DEFAULT_FROM_EMAIL=noreply@example.com
+```
+
+**Credit System (Optional):**
+```bash
+CREDIT_SYSTEM_ENABLED=True
+DEFAULT_CREDIT_BALANCE=0
+```
+
+**Stripe Payment Processing (Optional):**
+```bash
+STRIPE_ENABLED=True
+STRIPE_PUBLIC_KEY=pk_test_your_key_here
+STRIPE_SECRET_KEY=sk_test_your_key_here
+STRIPE_WEBHOOK_SECRET=whsec_your_webhook_secret
+STRIPE_LIVE_MODE=False  # Set to True for production
+```
+
+**Port Fallback (Optional):**
+```bash
+WEB_PORT_ALTERNATIVE_FALLBACK=yes
+DB_PORT_EXTERNAL_ALTERNATIVE_FALLBACK=yes
+```
+
 - **Database Connection Errors**:
   - Verify your `DB_USER`, `DB_PASSWORD`, and other database settings in `.env` file
   - Check if database service is running: `quickscale ps`
@@ -200,9 +252,133 @@ quickscale manage showmigrations    # Show migration status
 ```
 ---
 
-### **5.4. Running Codebase Tests**
+## **6. Using the Web Interface**
 
-QuickScale includes a comprehensive test suite to ensure functionality works as expected. 
+Once your QuickScale project is running, you can access it through your web browser at `http://localhost:8000`.
+
+### **6.1. Public Pages**
+
+- **Home Page** (`/`): Landing page with project overview
+- **About Page** (`/about/`): Information about your project
+- **Contact Page** (`/contact/`): Contact form for user inquiries
+- **Login Page** (`/accounts/login/`): User authentication
+- **Sign Up Page** (`/accounts/signup/`): New user registration
+
+### **6.2. User Authentication**
+
+QuickScale uses email-based authentication:
+
+1. **Registration**:
+   - Go to `/accounts/signup/`
+   - Enter your email and password (no username required)
+   - Check your email for verification link
+   - Click the verification link to activate your account
+
+2. **Login**:
+   - Go to `/accounts/login/`
+   - Enter your email and password
+   - Access your user dashboard after successful login
+
+3. **Password Reset**:
+   - Click "Forgot Password?" on the login page
+   - Enter your email address
+   - Check email for reset instructions
+
+### **6.3. User Dashboard**
+
+After logging in, users can access:
+
+- **Profile Management** (`/users/profile/`): Update personal information
+- **Account Settings**: Change password and preferences
+- **Credit Dashboard** (`/admin_dashboard/`): View and manage credits (if credit system is enabled)
+
+### **6.4. Admin Areas**
+
+Staff users have access to additional features:
+
+- **Admin Dashboard** (`/admin_dashboard/`): User and system management
+- **Django Admin** (`/admin/`): Full administrative interface
+- **User Management**: View and manage user accounts
+- **Credit Management**: Handle user credits and billing (if enabled)
+
+---
+
+## **7. Credit System & Billing**
+
+If your project has the credit system enabled, users can purchase and manage credits for service usage.
+
+### **7.1. Understanding Credits**
+
+- **Pay-as-you-go Credits**: Purchase credits once, use anytime (never expire)
+- **Subscription Credits**: Monthly credits that expire at the end of each billing period
+- **Credit Priority**: Subscription credits are used first, then pay-as-you-go credits
+
+### **7.2. Viewing Your Credit Balance**
+
+1. Log in to your account
+2. Go to the Admin Dashboard (`/admin_dashboard/`)
+3. View your current credit balance and breakdown
+4. See transaction history and usage patterns
+
+### **7.3. Purchasing Credits**
+
+**One-time Credit Purchase:**
+1. Navigate to the credit dashboard
+2. Select a credit package
+3. Complete payment through Stripe checkout
+4. Credits are added to your account immediately
+
+**Subscription Plans:**
+1. Compare available plans (Basic vs Pro)
+2. Select your preferred plan
+3. Complete subscription setup through Stripe
+4. Receive monthly credit allocation automatically
+
+### **7.4. Managing Subscriptions**
+
+- **View Current Plan**: See your active subscription details
+- **Upgrade/Downgrade**: Change plans with automatic credit transfer
+- **Cancel Subscription**: End recurring billing while keeping unused credits
+- **Billing History**: Access payment records and receipts
+
+### **7.5. Using Credits**
+
+Credits are automatically consumed when using services:
+- System checks available credits before allowing service access
+- Usage is tracked and displayed in your dashboard
+- Low balance warnings help you avoid service interruptions
+
+---
+
+## **8. Payment & Billing**
+
+### **8.1. Payment Methods**
+
+QuickScale uses Stripe for secure payment processing:
+- Credit/debit cards
+- Digital wallets (Apple Pay, Google Pay)
+- Bank transfers (where available)
+
+### **8.2. Receipts and Invoices**
+
+- Automatic receipt generation for all payments
+- Downloadable receipts with unique reference numbers
+- Complete payment history accessible in your dashboard
+- Monthly invoices for subscription payments
+
+### **8.3. Payment Issues**
+
+If you experience payment problems:
+1. Check your payment method is valid and has sufficient funds
+2. Verify billing address information
+3. Contact support through the contact form
+4. Check your email for payment failure notifications
+
+---
+
+## **9. Running Codebase Tests**
+
+QuickScale includes a comprehensive test suite to ensure functionality works as expected.
 
 First, install the test dependencies:
 
@@ -236,7 +412,59 @@ For Django application tests, you can use the Django test runner through the Qui
 quickscale manage test
 ```
 
-### **5.5. Automatic Port Fallback**
+---
+
+## **10. Advanced CLI Features**
+
+### **10.1. Shell Commands**
+
+**Interactive Shell:**
+```bash
+quickscale shell
+```
+
+**Run Single Command:**
+```bash
+quickscale shell -c "ls -la"
+```
+
+### **10.2. Enhanced Logging**
+
+**View logs with timestamps:**
+```bash
+quickscale logs -t
+```
+
+**Follow logs continuously:**
+```bash
+quickscale logs -f
+```
+
+**View logs from specific time:**
+```bash
+quickscale logs --since 30m
+quickscale logs --since 2h
+```
+
+**Limit log lines:**
+```bash
+quickscale logs --lines 50
+```
+
+**Service-specific logs:**
+```bash
+quickscale logs web -t --lines 100
+quickscale logs db --since 1h
+```
+
+### **10.3. Service Status**
+
+Check running services:
+```bash
+quickscale ps
+```
+
+### **10.4. Automatic Port Fallback**
 
 QuickScale can automatically find and use alternative ports if the default `WEB_PORT` (8000) or `DB_PORT_EXTERNAL` (5432) are already in use on your system. This feature is controlled by environment variables in your project's `.env` file:
 
@@ -247,7 +475,7 @@ If fallback is enabled and a port conflict is detected when you run `quickscale 
 
 If fallback is disabled (default) and a port conflict occurs, `quickscale up` will fail with a clear error message instructing you to free the port, specify a different port manually, or enable the fallback feature.
 
-## **6. Additional Resources**
+## **11. Additional Resources**
 
 - [Technical Documentation](./TECHNICAL_DOCS.md)
 - [Contributing Guide](./CONTRIBUTING.md)

@@ -157,40 +157,128 @@ Admins can:
 - **User Notifications**: Users notified of account changes
 - **Compliance Reporting**: Financial transaction reporting
 
+### Enhanced Payment History
+Users have access to comprehensive payment tracking:
+- **Receipt Generation**: Automatic receipt creation with unique receipt numbers (`RCP-YYYYMMDD-XXXXXX` format)
+- **Payment Lifecycle**: Complete tracking from payment intent to completion with status updates
+- **Multiple Payment Types**: Credit purchases, subscription payments, plan changes, and refunds
+- **Downloadable Receipts**: JSON-based receipt data with all transaction details
+- **Stripe Integration**: Direct links to Stripe payment intents, subscriptions, and invoices
+- **Audit Compliance**: Complete payment history for tax and compliance requirements
+
+### Enhanced Subscription Management
+Users can:
+- **View Plan**: Current subscription status with detailed billing period information
+- **Plan Comparison**: Side-by-side comparison of Basic vs Pro plans with cost per credit calculations
+- **Upgrade/Downgrade**: Seamless plan changes through Stripe Checkout with automatic credit transfer
+- **Credit Transfer Visibility**: Clear display of how remaining subscription credits transfer to pay-as-you-go
+- **Billing History**: Complete payment history with downloadable receipts
+- **Subscription Status**: Real-time subscription status with days until renewal
+- **Cancel**: Cancel subscription with clear terms and credit preservation
+## Plan Change Management
+
+### Overview
+The system provides comprehensive plan upgrade and downgrade functionality with automatic credit transfer and prorated billing through Stripe Checkout sessions.
+
+### Plan Change Flow
+1. **User Initiation**: Users can upgrade or downgrade their subscription plans through the admin dashboard
+2. **Checkout Session**: All plan changes use Stripe Checkout for user consent and secure payment processing
+3. **Credit Transfer**: Remaining subscription credits automatically transfer to pay-as-you-go credits
+4. **New Plan Activation**: New subscription plan becomes active with immediate credit allocation
+5. **Payment Recording**: Complete payment records generated for audit compliance
+
+### Credit Transfer Logic
+- **Subscription Credit Removal**: Existing subscription credits are deducted using negative SUBSCRIPTION transactions
+- **Pay-as-you-go Addition**: Same credits are added as PURCHASE type (pay-as-you-go, never expire)
+- **Atomic Operations**: All transfers use database transactions to ensure data integrity
+- **Audit Trail**: Complete logging of credit transfers with descriptive transaction records
+
+### Implementation Details
+- **Common Function**: `handle_plan_change_credit_transfer()` ensures consistency across view handlers and webhooks
+- **Duplicate Prevention**: Built-in safeguards prevent double credit allocation or payment processing
+- **Webhook Integration**: Real-time processing of Stripe subscription change events
+- **User Experience**: Success pages display detailed summaries of credit transfers and charges
+
+### Plan Change Types
+- **Upgrades**: Higher-tier plans with more monthly credits and better per-credit rates
+- **Downgrades**: Lower-tier plans with fewer monthly credits
+- **Prorated Billing**: Stripe automatically handles prorated charges for plan changes
+- **Immediate Effect**: Plan changes take effect immediately after successful payment
+
 ## Technical Implementation
 
 ### Database Models
-- **CreditAccount**: User's credit balance and account info
-- **CreditTransaction**: Ledger of all credit movements
-- **StripeProduct**: Local cache of Stripe products (subscriptions and pay-as-you-go)
-- **StripeCustomer**: User linkage to Stripe customer records
-- **UserSubscription**: User's subscription status and billing
-- **Service**: Service definitions and credit costs
 
-### Stripe Integration Models
-- **StripeProduct**: Mirrors Stripe Products with local caching
-  - Stores product information (name, description, pricing)
-  - Contains metadata for credit amounts and billing intervals
-  - Syncs bidirectionally with Stripe API
-  - Supports both subscription (`interval='month'`) and one-time (`interval='one-time'`) products
-- **StripeCustomer**: Links Django users to Stripe customer records
-  - Maintains customer ID mapping for payment processing
-  - Stores customer metadata and billing preferences
+#### Core Credit Models
+- **CreditAccount**: User's credit balance and account info with advanced balance calculation methods
+- **CreditTransaction**: Comprehensive ledger of all credit movements with expiration support
+- **Service**: Service definitions and credit costs with usage tracking
+- **ServiceUsage**: Tracks individual service consumption events linked to credit transactions
 
-### Credit Operations
-- **Atomic Transactions**: All credit operations use database transactions
-- **Balance Calculation**: Real-time balance calculation from transaction history
-- **Expiration Handling**: Automated expiration of subscription credits
-- **Priority Logic**: Implemented in credit consumption methods
-- **Stripe Sync**: Automatic synchronization with Stripe products and prices
+#### Subscription Management Models
+- **UserSubscription**: Complete subscription lifecycle management
+  - **Status Management**: 8 subscription states (active, canceled, past_due, unpaid, incomplete, incomplete_expired, trialing, paused)
+  - **Billing Period Tracking**: `current_period_start`, `current_period_end` for precise billing cycles
+  - **Stripe Integration**: Links to Stripe subscription IDs and product IDs
+  - **Cancellation Management**: `cancel_at_period_end`, `canceled_at` for graceful subscription ending
+  - **Credit Allocation**: `allocate_monthly_credits()` method for automatic credit provisioning
+
+#### Payment Processing Models
+- **Payment**: Comprehensive payment transaction tracking
+  - **Multiple Payment Types**: CREDIT_PURCHASE, SUBSCRIPTION, REFUND support
+  - **Stripe Integration**: Links to payment intents, subscriptions, and invoices
+  - **Receipt Generation**: Automatic receipt creation with `generate_receipt_data()` method
+  - **Audit Trail**: Complete payment lifecycle tracking with receipt data in JSON format
+  - **Invoice Support**: `stripe_invoice_id` field for immediate charges (added in Sprint 9)
+
+### Enhanced Stripe Integration Models
+- **StripeProduct**: Advanced Stripe product management with local caching
+  - **Product Information**: Name, description, pricing with currency support
+  - **Credit Configuration**: `credit_amount` field for credit allocation amounts
+  - **Display Control**: `display_order` for frontend presentation ordering
+  - **Billing Intervals**: Supports monthly, yearly, and one-time billing cycles
+  - **Utility Methods**:
+    - `price_per_credit` property for cost calculations
+    - `is_subscription` and `is_one_time` properties for type identification
+    - `sync_with_stripe()` method for bidirectional synchronization
+  - **Stripe Integration**: `stripe_id` and `stripe_price_id` for API mapping
+
+- **StripeCustomer**: Enhanced Django-Stripe customer linking
+  - **Customer Mapping**: One-to-one relationship with Django users
+  - **Stripe Integration**: `stripe_id` for customer identification
+  - **Contact Information**: Email and name synchronization with Stripe
+  - **Audit Trail**: Creation and modification timestamps
+
+### Enhanced Credit Operations
+- **Atomic Transactions**: All credit operations use database transactions for data integrity
+- **Advanced Balance Calculation**: Multiple balance calculation methods for different use cases:
+  - `get_balance()`: Simple total balance calculation
+  - `get_balance_by_type()`: Balance breakdown by credit type
+  - `get_balance_by_type_available()`: Priority-based balance with expiration filtering
+  - `get_available_balance()`: Real-time balance excluding expired subscription credits
+- **Priority Consumption Logic**:
+  - `consume_credits_with_priority()`: Enforces subscription-first, then pay-as-you-go consumption
+  - Automatic expiration validation during consumption
+  - FIFO (First-In-First-Out) consumption within credit types
+- **Expiration Handling**:
+  - Automated expiration of subscription credits based on billing periods
+  - Real-time filtering of expired credits from balance calculations
+  - Graceful handling of expired credits without data loss
+- **Stripe Sync**: Bidirectional synchronization with Stripe products and prices
+- **Audit Trail**: Complete transaction logging with credit source tracking
 
 ### Integration Points
 - **Stripe Products API**: Primary source for all product and pricing data
-- **Stripe Checkout**: Unified checkout experience for all purchase types
-- **Webhook Handling**: Real-time processing of payment and subscription events
-- **Product Synchronization**: Bidirectional sync between local and Stripe data
-- **Email Notifications**: Automated notifications for billing events
-- **API Endpoints**: RESTful API for credit operations
+- **Stripe Checkout**: Unified checkout experience for all purchase types including plan changes
+- **Webhook Handling**: Real-time processing of payment, subscription, and plan change events
+- **Product Synchronization**: Bidirectional sync between local and Stripe data with `sync_with_stripe()` methods
+- **Email Notifications**: Automated notifications for billing events and plan changes
+- **Enhanced API Endpoints**:
+  - Credit management endpoints with priority consumption logic
+  - Plan change management endpoints (`create_plan_change_checkout`, `plan_change_success`)
+  - Subscription management with upgrade/downgrade support
+  - Receipt generation and download endpoints
+  - Real-time balance calculation endpoints with expiration filtering
 
 ## Security & Compliance
 

@@ -1,7 +1,7 @@
 quickscale
 ├── dist
-│   ├── quickscale-0.19.0-py3-none-any.whl
-│   └── quickscale-0.19.0.tar.gz
+│   ├── quickscale-0.21.0-py3-none-any.whl
+│   └── quickscale-0.21.0.tar.gz
 ├── docs
 │   ├── contrib
 │   │   ├── 01_ai_programming_assistant.md
@@ -233,7 +233,13 @@ quickscale
 │   │   │   │   └── __init__.py
 │   │   │   ├── templates
 │   │   │   ├── templatetags
-│   │   │   │   └── __init__.py
+│   │   │   │   ├── __init__.py
+│   │   │   │   └── dashboard_extras.py
+│   │   │   │       ├── sub(value, arg)
+│   │   │   │       ├── multiply(value, arg)
+│   │   │   │       ├── divide(value, arg)
+│   │   │   │       ├── cost_per_credit(price, credits)
+│   │   │   │       └── savings_per_credit(basic_price, basic_credits, pro_price, pro_credits)
 │   │   │   ├── tests
 │   │   │   │   ├── __init__.py
 │   │   │   │   ├── test_product_admin.py
@@ -284,12 +290,19 @@ quickscale
 │   │   │       ├── create_subscription_checkout(request)
 │   │   │       ├── subscription_success(request)
 │   │   │       ├── subscription_cancel(request)
+│   │   │       ├── create_plan_change_checkout(request)
+│   │   │       ├── plan_change_success(request)
+│   │   │       ├── cancel_subscription(request)
 │   │   │       ├── index(request)
 │   │   │       ├── product_admin(request)
 │   │   │       ├── product_detail(request, product_id)
 │   │   │       ├── update_product_order(request, product_id)
 │   │   │       ├── product_sync(request, product_id)
-│   │   │       └── sync_products(request)
+│   │   │       ├── sync_products(request)
+│   │   │       ├── payment_history(request)
+│   │   │       ├── payment_detail(request, payment_id)
+│   │   │       ├── download_receipt(request, payment_id)
+│   │   │       └── change_subscription_plan_deprecated(request)
 │   │   ├── common
 │   │   │   ├── migrations
 │   │   │   │   ├── 0001_initial.py
@@ -340,6 +353,12 @@ quickscale
 │   │   │   │   ├── 0001_initial.py
 │   │   │   │   │   └── Migration {}
 │   │   │   │   ├── 0002_add_subscription_support.py
+│   │   │   │   │   └── Migration {}
+│   │   │   │   ├── 0003_add_payment_model.py
+│   │   │   │   │   └── Migration {}
+│   │   │   │   ├── 0004_add_stripe_invoice_id.py
+│   │   │   │   │   └── Migration {}
+│   │   │   │   ├── 0005_ai_service_framework.py
 │   │   │   │   │   └── Migration {}
 │   │   │   │   └── __init__.py
 │   │   │   ├── templates
@@ -409,8 +428,12 @@ quickscale
 │   │   │   │   │   └── has_delete_permission(self, request, obj)
 │   │   │   │   ├── ServiceAdmin {}
 │   │   │   │   │   └── usage_count(self, obj)
-│   │   │   │   └── ServiceUsageAdmin {}
-│   │   │   │       ├── get_credit_cost(self, obj)
+│   │   │   │   ├── ServiceUsageAdmin {}
+│   │   │   │   │   ├── get_credit_cost(self, obj)
+│   │   │   │   │   ├── has_add_permission(self, request)
+│   │   │   │   │   ├── has_change_permission(self, request, obj)
+│   │   │   │   │   └── has_delete_permission(self, request, obj)
+│   │   │   │   └── PaymentAdmin {}
 │   │   │   │       ├── has_add_permission(self, request)
 │   │   │   │       ├── has_change_permission(self, request, obj)
 │   │   │   │       └── has_delete_permission(self, request, obj)
@@ -455,7 +478,17 @@ quickscale
 │   │   │   │   ├── ServiceUsage {}
 │   │   │   │   │   ├── Meta {}
 │   │   │   │   │   └── __str__(self)
-│   │   │   │   └── InsufficientCreditsError {}
+│   │   │   │   ├── Payment {}
+│   │   │   │   │   ├── Meta {}
+│   │   │   │   │   ├── __str__(self)
+│   │   │   │   │   ├── is_succeeded(self)
+│   │   │   │   │   ├── is_refunded(self)
+│   │   │   │   │   ├── is_subscription_payment(self)
+│   │   │   │   │   ├── is_credit_purchase(self)
+│   │   │   │   │   ├── generate_receipt_data(self)
+│   │   │   │   │   └── create_from_stripe_event(cls, user, stripe_event_data, payment_type)
+│   │   │   │   ├── InsufficientCreditsError {}
+│   │   │   │   └── handle_plan_change_credit_transfer(user, current_product, new_product, new_subscription_id, change_type, session_data)
 │   │   │   ├── urls.py
 │   │   │   └── views.py
 │   │   │       ├── credits_dashboard(request)
@@ -497,6 +530,47 @@ quickscale
 │   │   │       ├── index(request)
 │   │   │       ├── about(request)
 │   │   │       └── contact(request)
+│   │   ├── services
+│   │   │   ├── templates
+│   │   │   │   └── services
+│   │   │   │       ├── service_list.html
+│   │   │   │       ├── service_usage_form.html
+│   │   │   │       └── service_usage_result.html
+│   │   │   ├── __init__.py
+│   │   │   ├── apps.py
+│   │   │   │   └── ServicesConfig {}
+│   │   │   ├── base.py
+│   │   │   │   └── BaseService {}
+│   │   │   │       ├── __init__(self, service_name)
+│   │   │   │       ├── service_model(self)
+│   │   │   │       ├── consume_credits(self, user)
+│   │   │   │       ├── check_user_credits(self, user)
+│   │   │   │       ├── execute_service(self, user)
+│   │   │   │       └── run(self, user)
+│   │   │   ├── decorators.py
+│   │   │   │   ├── ServiceRegistry {}
+│   │   │   │   │   ├── __init__(self)
+│   │   │   │   │   ├── register(self, service_name, service_class)
+│   │   │   │   │   ├── get_service(self, service_name)
+│   │   │   │   │   ├── get_all_services(self)
+│   │   │   │   │   ├── is_registered(self, service_name)
+│   │   │   │   │   └── unregister(self, service_name)
+│   │   │   │   ├── register_service(service_name)
+│   │   │   │   ├── get_registered_service(service_name)
+│   │   │   │   ├── get_all_registered_services()
+│   │   │   │   └── create_service_instance(service_name)
+│   │   │   ├── examples.py
+│   │   │   │   ├── TextAnalysisService {}
+│   │   │   │   │   └── execute_service(self, user, text)
+│   │   │   │   └── ImageProcessingService {}
+│   │   │   │       └── execute_service(self, user, image_data)
+│   │   │   ├── models.py
+│   │   │   ├── urls.py
+│   │   │   └── views.py
+│   │   │       ├── service_list(request)
+│   │   │       ├── service_usage_form(request, service_id)
+│   │   │       ├── use_service(request, service_id)
+│   │   │       └── service_status_api(request, service_id)
 │   │   ├── static
 │   │   │   ├── css
 │   │   │   │   └── styles.css
@@ -672,8 +746,9 @@ quickscale
 │   │   │   │       ├── get_product_prices(self, product_id, active)
 │   │   │   │       ├── create_subscription(self, customer_id, price_id, quantity, metadata)
 │   │   │   │       ├── retrieve_subscription(self, subscription_id)
-│   │   │   │       ├── update_subscription(self, subscription_id, items, proration_behavior, metadata)
-│   │   │   │       ├── cancel_subscription(self, subscription_id)
+│   │   │   │       ├── update_subscription(self, subscription_id, new_price_id, items, proration_behavior, metadata)
+│   │   │   │       ├── update_subscription_with_immediate_billing(self, subscription_id, new_price_id, proration_behavior)
+│   │   │   │       ├── cancel_subscription(self, subscription_id, at_period_end)
 │   │   │   │       ├── list_subscriptions(self, customer_id, price_id, status, limit)
 │   │   │   │       ├── create_invoice(self, customer_id, days_until_due, metadata)
 │   │   │   │       ├── retrieve_invoice(self, invoice_id)
@@ -747,6 +822,9 @@ quickscale
 │   │   │   │           └── change_list.html
 │   │   │   ├── admin_dashboard
 │   │   │   │   ├── index.html
+│   │   │   │   ├── payment_detail.html
+│   │   │   │   ├── payments.html
+│   │   │   │   ├── plan_change_success.html
 │   │   │   │   ├── product_admin.html
 │   │   │   │   ├── product_detail.html
 │   │   │   │   ├── subscription.html
@@ -1640,6 +1718,40 @@ quickscale
 │   │   │       ├── test_sprint7_requirements_implemented(self)
 │   │   │       ├── test_sprint7_backend_implementation_complete(self)
 │   │   │       └── test_sprint7_frontend_implementation_complete(self)
+│   │   ├── test_credits_sprint9.py
+│   │   │   ├── Sprint9TemplateStructureTests {}
+│   │   │   │   ├── test_subscription_template_has_plan_comparison(self)
+│   │   │   │   ├── test_upgrade_downgrade_buttons_exist(self)
+│   │   │   │   └── test_plan_change_modal_exists(self)
+│   │   │   ├── Sprint9ViewsImplementationTests {}
+│   │   │   │   ├── test_upgrade_downgrade_logic_exists(self)
+│   │   │   │   ├── test_immediate_upgrade_logic_when_no_credits(self)
+│   │   │   │   └── test_prorated_billing_handling(self)
+│   │   │   ├── Sprint9URLsConfigurationTests {}
+│   │   │   │   └── test_urls_configuration_for_plan_management(self)
+│   │   │   ├── Sprint9StripeProductModelTests {}
+│   │   │   │   ├── test_stripe_product_model_structure(self)
+│   │   │   │   └── test_stripe_product_model_methods(self)
+│   │   │   ├── Sprint9TemplateTagsTests {}
+│   │   │   │   └── test_dashboard_template_tags_exist(self)
+│   │   │   ├── Sprint9ValidationTests {}
+│   │   │   │   ├── test_sprint9_backend_implementation_complete(self)
+│   │   │   │   ├── test_sprint9_frontend_implementation_complete(self)
+│   │   │   │   ├── test_three_product_types_supported(self)
+│   │   │   │   ├── test_user_can_choose_between_plans(self)
+│   │   │   │   └── test_roadmap_requirements_met(self)
+│   │   │   ├── Sprint9UpgradeDowngradeCheckoutTests {}
+│   │   │   │   ├── test_plan_change_uses_checkout_flow(self)
+│   │   │   │   ├── test_plan_change_checkout_metadata(self)
+│   │   │   │   ├── test_frontend_uses_checkout_flow(self)
+│   │   │   │   ├── test_plan_change_success_template_exists(self)
+│   │   │   │   └── test_webhook_handles_plan_changes(self)
+│   │   │   └── Sprint9CreditTransferTests {}
+│   │   │       ├── test_credit_transfer_removes_subscription_credits(self)
+│   │   │       ├── test_webhook_credit_transfer_removes_subscription_credits(self)
+│   │   │       ├── test_credit_transfer_uses_correct_credit_types(self)
+│   │   │       ├── test_webhook_credit_transfer_uses_correct_credit_types(self)
+│   │   │       └── test_no_double_credit_allocation(self)
 │   │   ├── test_credits_templates.py
 │   │   │   ├── CreditsTemplateTests {}
 │   │   │   │   ├── setUp(self)
@@ -1742,6 +1854,35 @@ quickscale
 │   │   │   └── TestCommandErrorProperties {}
 │   │   │       ├── test_exit_codes(self)
 │   │   │       └── test_error_details(self)
+│   │   ├── test_migration_fix_sprint8.py
+│   │   │   └── Sprint8MigrationFixTests {}
+│   │   │       ├── setUp(self)
+│   │   │       ├── test_payment_migration_exists(self)
+│   │   │       ├── test_migration_creates_payment_table(self)
+│   │   │       ├── test_migration_dependencies_correct(self)
+│   │   │       ├── test_migration_includes_indexes(self)
+│   │   │       ├── test_payment_creation_in_webhook_handlers(self)
+│   │   │       └── test_payment_creation_in_success_views(self)
+│   │   ├── test_payment_sprint8.py
+│   │   │   ├── Sprint8PaymentModelTests {}
+│   │   │   │   ├── setUp(self)
+│   │   │   │   ├── test_payment_model_exists(self)
+│   │   │   │   ├── test_payment_model_properties(self)
+│   │   │   │   ├── test_payment_model_relationships(self)
+│   │   │   │   ├── test_payment_admin_interface(self)
+│   │   │   │   ├── test_payment_views_implemented(self)
+│   │   │   │   ├── test_payment_views_authentication(self)
+│   │   │   │   ├── test_payment_urls_configured(self)
+│   │   │   │   ├── test_payment_templates_exist(self)
+│   │   │   │   ├── test_payment_templates_structure(self)
+│   │   │   │   ├── test_receipt_generation_functionality(self)
+│   │   │   │   ├── test_stripe_integration_methods(self)
+│   │   │   │   ├── test_payment_filtering_functionality(self)
+│   │   │   │   ├── test_pagination_implementation(self)
+│   │   │   │   └── test_generate_receipt_data_method(self)
+│   │   │   └── Sprint8ValidationTests {}
+│   │   │       ├── setUp(self)
+│   │   │       └── test_sprint8_requirements_implemented(self)
 │   │   ├── test_production_security.py
 │   │   │   └── TestProductionSecurity {}
 │   │   │       ├── test_production_requires_strong_secret_key(self)
@@ -2125,13 +2266,27 @@ quickscale
 │   │   │       ├── test_execute_missing_docker(self)
 │   │   │       ├── test_execute_missing_python(self)
 │   │   │       └── test_execute_docker_daemon_not_running(self)
-│   │   └── test_template_generator.py
-│   │       └── TestTemplateGenerator {}
+│   │   ├── test_template_generator.py
+│   │   │   └── TestTemplateGenerator {}
+│   │   │       ├── setUp(self)
+│   │   │       ├── tearDown(self)
+│   │   │       ├── test_is_binary_file(self)
+│   │   │       ├── test_render_template(self)
+│   │   │       └── test_process_file_templates(self)
+│   │   └── test_webhook_fallback_payment.py
+│   │       ├── WebhookFallbackTests {}
+│   │       │   ├── setUp(self)
+│   │       │   ├── test_payment_migration_exists(self)
+│   │       │   ├── test_webhook_handlers_create_payments(self)
+│   │       │   ├── test_duplicate_payment_prevention(self)
+│   │       │   ├── test_success_view_fallback_exists(self)
+│   │       │   ├── test_subscription_success_fallback_exists(self)
+│   │       │   └── test_logging_for_debugging(self)
+│   │       └── WebhookTimingScenarioTests {}
 │   │           ├── setUp(self)
-│   │           ├── tearDown(self)
-│   │           ├── test_is_binary_file(self)
-│   │           ├── test_render_template(self)
-│   │           └── test_process_file_templates(self)
+│   │           ├── test_session_id_handling_in_success_views(self)
+│   │           ├── test_stripe_api_querying_in_success_views(self)
+│   │           └── test_payment_intent_handling(self)
 │   ├── users
 │   │   ├── migrations
 │   │   │   ├── 0001_initial.py
