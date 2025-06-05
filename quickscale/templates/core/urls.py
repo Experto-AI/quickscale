@@ -32,6 +32,7 @@ urlpatterns = [
     path('services/', include('services.urls', namespace='services')),
     path('common/', include('common.urls')),
     path('accounts/', include('allauth.urls')),  # django-allauth URLs
+    path('api/', include('api.urls', namespace='api')),  # API endpoints for AI services
     path('health/', health_check, name='health_check'),  # Health check endpoint
     path('admin-test/', admin_test, name='admin_test'),  # Admin CSRF test page
 ] + static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)

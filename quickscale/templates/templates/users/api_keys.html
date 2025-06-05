@@ -1,0 +1,272 @@
+{% extends "base.html" %}
+
+{% block title %}API Keys - {{ project_name }}{% endblock %}
+
+{% block content %}
+<section class="hero is-primary is-small">
+    <div class="hero-body">
+        <p class="title">API Keys</p>
+        <p class="subtitle">Manage your API authentication keys</p>
+    </div>
+</section>
+
+<section class="section">
+    <div class="container">
+        <div class="columns">
+            <!-- API Key Management -->
+            <div class="column is-8">
+                <div class="box" id="api-keys-container">
+                    <div class="level">
+                        <div class="level-left">
+                            <div class="level-item">
+                                <h2 class="title is-4">Your API Keys</h2>
+                            </div>
+                        </div>
+                        <div class="level-right">
+                            <div class="level-item">
+                                <button class="button is-primary" onclick="showGenerateForm()">
+                                    <span class="icon">
+                                        <i class="fas fa-plus"></i>
+                                    </span>
+                                    <span>Generate New Key</span>
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Generate API Key Form (hidden by default) -->
+                    <div id="generate-form" class="box" style="display: none;">
+                        <h3 class="title is-5">Generate New API Key</h3>
+                        <form hx-post="{% url 'users:generate_api_key' %}" hx-target="#api-keys-container" hx-swap="outerHTML">
+                            {% csrf_token %}
+                            <div class="field">
+                                <label class="label">Key Name (Optional)</label>
+                                <div class="control">
+                                    <input class="input" type="text" name="name" placeholder="e.g., Production Server, Development, Mobile App">
+                                </div>
+                                <p class="help">Give your API key a descriptive name to help you identify it later.</p>
+                            </div>
+                            <div class="field is-grouped">
+                                <div class="control">
+                                    <button type="submit" class="button is-primary">Generate API Key</button>
+                                </div>
+                                <div class="control">
+                                    <button type="button" class="button is-light" onclick="hideGenerateForm()">Cancel</button>
+                                </div>
+                            </div>
+                        </form>
+                    </div>
+
+                    <!-- API Keys List -->
+                    {% if api_keys %}
+                        <div class="table-container">
+                            <table class="table is-fullwidth is-striped">
+                                <thead>
+                                    <tr>
+                                        <th>Name</th>
+                                        <th>Key Prefix</th>
+                                        <th>Status</th>
+                                        <th>Created</th>
+                                        <th>Last Used</th>
+                                        <th>Actions</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {% for api_key in api_keys %}
+                                    <tr>
+                                        <td>
+                                            <strong>{{ api_key.name|default:"Unnamed Key" }}</strong>
+                                        </td>
+                                        <td>
+                                            <code class="has-background-light">{{ api_key.prefix }}...****</code>
+                                        </td>
+                                        <td>
+                                            {% if api_key.is_active %}
+                                                <span class="tag is-success">Active</span>
+                                            {% else %}
+                                                <span class="tag is-danger">Revoked</span>
+                                            {% endif %}
+                                            {% if api_key.is_expired %}
+                                                <span class="tag is-warning">Expired</span>
+                                            {% endif %}
+                                        </td>
+                                        <td>{{ api_key.created_at|date:'M j, Y' }}</td>
+                                        <td>
+                                            {% if api_key.last_used_at %}
+                                                {{ api_key.last_used_at|date:'M j, Y' }}
+                                            {% else %}
+                                                <span class="has-text-grey">Never</span>
+                                            {% endif %}
+                                        </td>
+                                        <td>
+                                            {% if api_key.is_active %}
+                                                <div class="dropdown" x-data="{ open: false }">
+                                                    <div class="dropdown-trigger">
+                                                        <button class="button is-small" @click="open = !open">
+                                                            <span class="icon is-small">
+                                                                <i class="fas fa-ellipsis-v"></i>
+                                                            </span>
+                                                        </button>
+                                                    </div>
+                                                    <div class="dropdown-menu" :class="{ 'is-active': open }" @click.outside="open = false">
+                                                        <div class="dropdown-content">
+                                                            <a class="dropdown-item regenerate-btn"
+                                                               data-key-id="{{ api_key.id }}"
+                                                               data-key-name="{{ api_key.name|default:"Unnamed Key" }}">
+                                                                <span class="icon">
+                                                                    <i class="fas fa-sync-alt"></i>
+                                                                </span>
+                                                                <span>Regenerate</span>
+                                                            </a>
+                                                            <a class="dropdown-item has-text-danger revoke-btn"
+                                                               data-key-id="{{ api_key.id }}"
+                                                               data-key-name="{{ api_key.name|default:"Unnamed Key" }}">
+                                                                <span class="icon">
+                                                                    <i class="fas fa-times"></i>
+                                                                </span>
+                                                                <span>Revoke</span>
+                                                            </a>
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                            {% else %}
+                                                <span class="has-text-grey">—</span>
+                                            {% endif %}
+                                        </td>
+                                    </tr>
+                                    {% endfor %}
+                                </tbody>
+                            </table>
+                        </div>
+                    {% else %}
+                        <div class="notification is-info is-light">
+                            <p class="has-text-centered">
+                                <span class="icon is-large">
+                                    <i class="fas fa-key fa-2x"></i>
+                                </span>
+                            </p>
+                            <p class="has-text-centered">
+                                <strong>No API keys yet</strong><br>
+                                Generate your first API key to start using our services programmatically.
+                            </p>
+                        </div>
+                    {% endif %}
+                </div>
+            </div>
+
+            <!-- Information Sidebar -->
+            <div class="column is-4">
+                <div class="box">
+                    <h3 class="title is-5">
+                        <span class="icon">
+                            <i class="fas fa-info-circle"></i>
+                        </span>
+                        <span>API Key Information</span>
+                    </h3>
+                    <div class="content">
+                        <p><strong>Security Notice:</strong> API keys are only shown once upon generation. Store them securely and never share them publicly.</p>
+                        
+                        <p><strong>Usage:</strong> Include your API key in the Authorization header:</p>
+                        <pre class="has-background-light p-3"><code>Authorization: Bearer YOUR_API_KEY</code></pre>
+                        
+                        <p><strong>Actions:</strong></p>
+                        <ul>
+                            <li><strong>Regenerate:</strong> Creates a new key and deactivates the old one</li>
+                            <li><strong>Revoke:</strong> Permanently deactivates the key</li>
+                        </ul>
+                        
+                        <p>
+                            <a href="{% url 'public:api_docs' %}" class="button is-link is-small">
+                                <span class="icon">
+                                    <i class="fas fa-book"></i>
+                                </span>
+                                <span>View API Documentation</span>
+                            </a>
+                        </p>
+                    </div>
+                </div>
+
+                <div class="box">
+                    <h3 class="title is-5">
+                        <span class="icon">
+                            <i class="fas fa-shield-alt"></i>
+                        </span>
+                        <span>Best Practices</span>
+                    </h3>
+                    <div class="content">
+                        <ul>
+                            <li>Use different API keys for different environments</li>
+                            <li>Rotate your keys regularly</li>
+                            <li>Revoke unused or compromised keys immediately</li>
+                            <li>Monitor your API key usage regularly</li>
+                            <li>Never commit API keys to version control</li>
+                        </ul>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</section>
+
+<!-- Hidden forms for actions -->
+<form id="revoke-form" style="display: none;" hx-post="{% url 'users:revoke_api_key' %}" hx-target="#api-keys-container" hx-swap="outerHTML">
+    {% csrf_token %}
+    <input type="hidden" name="api_key_id" id="revoke-key-id">
+</form>
+
+<form id="regenerate-form" style="display: none;" hx-post="{% url 'users:regenerate_api_key' %}" hx-target="#api-keys-container" hx-swap="outerHTML">
+    {% csrf_token %}
+    <input type="hidden" name="api_key_id" id="regenerate-key-id">
+</form>
+
+{% endblock %}
+
+{% block extra_js %}
+<script>
+    function showGenerateForm() {
+        document.getElementById('generate-form').style.display = 'block';
+    }
+    
+    function hideGenerateForm() {
+        document.getElementById('generate-form').style.display = 'none';
+    }
+    
+    document.addEventListener('DOMContentLoaded', function() {
+        // Handle revoke button clicks
+        document.querySelectorAll('.revoke-btn').forEach(button => {
+            button.addEventListener('click', function(e) {
+                e.preventDefault();
+                const keyId = this.dataset.keyId;
+                const keyName = this.dataset.keyName;
+                
+                if (confirm(`Are you sure you want to revoke the API key "${keyName}"? This action cannot be undone.`)) {
+                    document.getElementById('revoke-key-id').value = keyId;
+                    const form = document.getElementById('revoke-form');
+                    if (!form.querySelector('button')) {
+                        form.insertAdjacentHTML('beforeend', '<button type="submit" style="display: none;"></button>');
+                    }
+                    form.querySelector('button').click();
+                }
+            });
+        });
+        
+        // Handle regenerate button clicks
+        document.querySelectorAll('.regenerate-btn').forEach(button => {
+            button.addEventListener('click', function(e) {
+                e.preventDefault();
+                const keyId = this.dataset.keyId;
+                const keyName = this.dataset.keyName;
+                
+                if (confirm(`Are you sure you want to regenerate the API key "${keyName}"? The old key will be deactivated and you'll need to update your applications with the new key.`)) {
+                    document.getElementById('regenerate-key-id').value = keyId;
+                    const form = document.getElementById('regenerate-form');
+                    if (!form.querySelector('button')) {
+                        form.insertAdjacentHTML('beforeend', '<button type="submit" style="display: none;"></button>');
+                    }
+                    form.querySelector('button').click();
+                }
+            });
+        });
+    });
+</script>
+{% endblock %}

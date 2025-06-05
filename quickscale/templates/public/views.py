@@ -21,3 +21,9 @@ def contact(request: HttpRequest) -> HttpResponse:
         return render(request, 'public/contact.html')
     
     return render(request, 'public/contact.html')
+
+
+@require_http_methods(["GET"])
+def api_docs(request: HttpRequest) -> HttpResponse:
+    """Display the API documentation page."""
+    return render(request, 'public/api_docs.html')
