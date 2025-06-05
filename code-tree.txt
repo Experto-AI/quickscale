@@ -1,7 +1,7 @@
 quickscale
 ├── dist
-│   ├── quickscale-0.21.0-py3-none-any.whl
-│   └── quickscale-0.21.0.tar.gz
+│   ├── quickscale-0.22.0-py3-none-any.whl
+│   └── quickscale-0.22.0.tar.gz
 ├── docs
 │   ├── contrib
 │   │   ├── 01_ai_programming_assistant.md
@@ -1292,23 +1292,43 @@ quickscale
 │   │   │       ├── test_success_output_format(self, capfd)
 │   │   │       ├── test_error_output_format(self, capfd)
 │   │   │       └── test_template_based_messages(self, capfd)
-│   │   └── test_project_settings.py
-│   │       ├── MockSettings {}
-│   │       ├── MockResponse {}
-│   │       │   └── __init__(self)
-│   │       └── ProjectSettingsTests {}
+│   │   ├── test_project_settings.py
+│   │   │   ├── MockSettings {}
+│   │   │   ├── MockResponse {}
+│   │   │   │   └── __init__(self)
+│   │   │   └── ProjectSettingsTests {}
+│   │   │       ├── setUp(self)
+│   │   │       ├── tearDown(self)
+│   │   │       ├── test_project_name_default(self)
+│   │   │       ├── test_project_name_override(self)
+│   │   │       ├── test_project_name_from_env(self)
+│   │   │       ├── test_context_processor_provides_project_name(self)
+│   │   │       ├── test_template_renders_project_name(self)
+│   │   │       ├── test_template_uses_custom_project_name(self)
+│   │   │       ├── test_invalid_project_name(self)
+│   │   │       ├── test_missing_context_processor(self)
+│   │   │       ├── test_long_project_name(self)
+│   │   │       └── test_special_chars_project_name(self)
+│   │   └── test_services_integration.py
+│   │       ├── ServicesIntegrationTests {}
+│   │       │   ├── setUp(self)
+│   │       │   ├── tearDown(self)
+│   │       │   ├── test_services_app_included_in_generated_project(self)
+│   │       │   ├── test_services_urls_integrated_in_core_urls(self)
+│   │       │   ├── test_services_models_work_with_credit_system(self)
+│   │       │   ├── test_base_service_integrates_with_credit_consumption(self)
+│   │       │   ├── test_service_registry_works_with_examples(self)
+│   │       │   ├── test_services_views_integrate_with_templates(self)
+│   │       │   ├── test_services_dashboard_integration(self)
+│   │       │   ├── test_migration_consistency(self)
+│   │       │   ├── test_complete_service_workflow_integration(self)
+│   │       │   └── test_file_structure_completeness(self)
+│   │       └── ServiceFrameworkBehaviorTests {}
 │   │           ├── setUp(self)
-│   │           ├── tearDown(self)
-│   │           ├── test_project_name_default(self)
-│   │           ├── test_project_name_override(self)
-│   │           ├── test_project_name_from_env(self)
-│   │           ├── test_context_processor_provides_project_name(self)
-│   │           ├── test_template_renders_project_name(self)
-│   │           ├── test_template_uses_custom_project_name(self)
-│   │           ├── test_invalid_project_name(self)
-│   │           ├── test_missing_context_processor(self)
-│   │           ├── test_long_project_name(self)
-│   │           └── test_special_chars_project_name(self)
+│   │           ├── test_base_service_contract_enforcement(self)
+│   │           ├── test_service_registry_contract(self)
+│   │           ├── test_credit_integration_contract(self)
+│   │           └── test_example_services_follow_contract(self)
 │   ├── unit
 │   │   ├── commands
 │   │   │   ├── test_command_utils.py
@@ -2134,6 +2154,66 @@ quickscale
 │   │   │       ├── test_handle_docker_process_error_with_non_special_code(self)
 │   │   │       ├── test_execute_with_custom_retry_count(self)
 │   │   │       └── test_execute_with_custom_retry_count_from_env(self)
+│   │   ├── test_services_sprint10.py
+│   │   │   ├── ServicesAppStructureTests {}
+│   │   │   │   ├── setUp(self)
+│   │   │   │   ├── test_services_app_directory_exists(self)
+│   │   │   │   ├── test_services_app_files_exist(self)
+│   │   │   │   ├── test_services_templates_directory_exists(self)
+│   │   │   │   ├── test_services_app_config(self)
+│   │   │   │   └── test_services_app_in_installed_apps(self)
+│   │   │   ├── BaseServiceClassTests {}
+│   │   │   │   ├── setUp(self)
+│   │   │   │   ├── test_base_service_class_exists(self)
+│   │   │   │   ├── test_base_service_initialization(self)
+│   │   │   │   ├── test_base_service_model_property(self)
+│   │   │   │   ├── test_base_service_consume_credits_method(self)
+│   │   │   │   ├── test_base_service_check_user_credits_method(self)
+│   │   │   │   ├── test_base_service_abstract_execute_method(self)
+│   │   │   │   ├── test_base_service_run_method(self)
+│   │   │   │   └── test_base_service_imports(self)
+│   │   │   ├── ServiceRegistryTests {}
+│   │   │   │   ├── setUp(self)
+│   │   │   │   ├── test_service_registry_class_exists(self)
+│   │   │   │   ├── test_service_registry_register_method(self)
+│   │   │   │   ├── test_service_registry_utility_methods(self)
+│   │   │   │   ├── test_register_service_decorator(self)
+│   │   │   │   ├── test_global_service_registry(self)
+│   │   │   │   ├── test_utility_functions(self)
+│   │   │   │   └── test_type_hints(self)
+│   │   │   ├── ServiceExamplesTests {}
+│   │   │   │   ├── setUp(self)
+│   │   │   │   ├── test_example_services_exist(self)
+│   │   │   │   ├── test_example_service_decorators(self)
+│   │   │   │   ├── test_example_service_implementation(self)
+│   │   │   │   └── test_usage_documentation(self)
+│   │   │   ├── ServicesViewsTests {}
+│   │   │   │   ├── setUp(self)
+│   │   │   │   ├── test_service_list_view_exists(self)
+│   │   │   │   ├── test_service_usage_form_view_exists(self)
+│   │   │   │   ├── test_use_service_view_exists(self)
+│   │   │   │   └── test_service_status_api_view_exists(self)
+│   │   │   ├── ServicesUrlsTests {}
+│   │   │   │   ├── setUp(self)
+│   │   │   │   ├── test_services_urls_exist(self)
+│   │   │   │   └── test_services_urls_included_in_core(self)
+│   │   │   ├── ServicesTemplatesTests {}
+│   │   │   │   ├── setUp(self)
+│   │   │   │   ├── test_service_list_template_structure(self)
+│   │   │   │   ├── test_service_usage_form_template_structure(self)
+│   │   │   │   └── test_service_usage_result_template_structure(self)
+│   │   │   ├── ServiceMigrationTests {}
+│   │   │   │   ├── setUp(self)
+│   │   │   │   ├── test_sprint10_migration_exists(self)
+│   │   │   │   └── test_migration_documents_completion(self)
+│   │   │   ├── ServiceIntegrationTests {}
+│   │   │   │   ├── setUp(self)
+│   │   │   │   └── test_services_integration_in_dashboard(self)
+│   │   │   └── ServiceTemplateSyntaxTests {}
+│   │   │       ├── setUp(self)
+│   │   │       ├── test_service_usage_form_template_no_invalid_filters(self)
+│   │   │       ├── test_service_usage_form_uses_view_calculated_values(self)
+│   │   │       └── test_all_service_templates_syntax_valid(self)
 │   │   ├── test_settings_additional.py
 │   │   │   └── TestSettingsAdditional {}
 │   │   │       ├── setUp(self)

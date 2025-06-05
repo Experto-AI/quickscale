@@ -1,0 +1,19 @@
+{% comment %}
+Base template for API documentation pages (if needed in future)
+Currently, the API only provides JSON responses
+{% endcomment %}
+{% extends "base/base.html" %}
+
+{% block title %}API Documentation{% endblock %}
+
+{% block content %}
+<div class="container">
+    <div class="content">
+        <h1 class="title">QuickScale API</h1>
+        <p class="subtitle">AI Services API Documentation</p>
+        
+        {% block api_content %}
+        {% endblock %}
+    </div>
+</div>
+{% endblock %}

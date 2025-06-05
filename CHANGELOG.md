@@ -2,6 +2,25 @@
 
 All notable changes to this project will be documented in this file.
 
+## v0.23.0 (2025-06-05)
+v0.23.0 feat: Implement API Authentication & Basic Endpoints for AI Services
+
+This PR introduces a new API application for QuickScale, enabling AI services integration. This implementation lays the groundwork for a robust API framework, enhancing the capabilities of QuickScale's AI services.
+
+- Backend Implementation:
+  - Created api Django app with essential configurations and URL routing.
+  - Developed utility functions for standardized API responses and validation.
+  - Implemented views for text processing operations, including a text analysis service.
+  - Added middleware for API key authentication to secure API endpoints.
+  - Integrated credit consumption logic for service usage.
+- Frontend Implementation:
+  - Added base template for API documentation and user interface for API key management.
+  - Created templates for displaying API keys and generated keys.
+- Testing:
+  - Comprehensive test suite for API endpoints, middleware, and key management functionality.
+
+This PR completes the API authentication and basic endpoints for AI services, allowing users to generate API keys and call service endpoints with authentication.
+
 ## v0.22.0 (2025-05-31)
 v0.22.0 feat: Implement AI Service Framework Foundation
 
