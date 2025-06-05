@@ -5,6 +5,9 @@ from django.utils.translation import gettext_lazy as _
 from decimal import Decimal
 from datetime import datetime, timedelta
 from django.utils import timezone
+from django.contrib.auth.hashers import make_password, check_password
+import secrets
+import string
 
 User = get_user_model()
 
@@ -807,6 +810,112 @@ class Payment(models.Model):
         payment.save()
         
         return payment
+
+
+class APIKey(models.Model):
+    """Model representing API keys for authentication with secure hashing."""
+    
+    user = models.ForeignKey(
+        User,
+        on_delete=models.CASCADE,
+        related_name='api_keys',
+        verbose_name=_('user')
+    )
+    prefix = models.CharField(
+        _('prefix'),
+        max_length=8,
+        db_index=True,
+        help_text=_('Short prefix for API key identification')
+    )
+    hashed_key = models.CharField(
+        _('hashed key'),
+        max_length=128,
+        help_text=_('Hashed secret part of the API key')
+    )
+    name = models.CharField(
+        _('name'),
+        max_length=100,
+        blank=True,
+        help_text=_('Optional name for this API key')
+    )
+    created_at = models.DateTimeField(
+        _('created at'),
+        auto_now_add=True
+    )
+    last_used_at = models.DateTimeField(
+        _('last used at'),
+        null=True,
+        blank=True,
+        help_text=_('When this API key was last used')
+    )
+    is_active = models.BooleanField(
+        _('is active'),
+        default=True,
+        help_text=_('Whether this API key is currently active')
+    )
+    expiry_date = models.DateTimeField(
+        _('expiry date'),
+        null=True,
+        blank=True,
+        help_text=_('Optional expiration date for this API key')
+    )
+
+    class Meta:
+        verbose_name = _('API key')
+        verbose_name_plural = _('API keys')
+        indexes = [
+            models.Index(fields=['prefix']),
+            models.Index(fields=['user', 'is_active']),
+            models.Index(fields=['is_active', 'expiry_date']),
+        ]
+
+    def __str__(self):
+        """Return string representation of the API key."""
+        user_email = self.user.email if self.user else "No User"
+        name = self.name or "Unnamed API Key"
+        status = "Active" if self.is_active else "Inactive"
+        return f"{user_email} - {name} ({status})"
+
+    @classmethod
+    def generate_key(cls):
+        """Generate a new API key with prefix and secret parts."""
+        # Generate 4-character prefix (letters and numbers)
+        prefix_chars = string.ascii_uppercase + string.digits
+        prefix = ''.join(secrets.choice(prefix_chars) for _ in range(4))
+        
+        # Generate 32-character secret key (letters, numbers, and safe symbols)
+        secret_chars = string.ascii_letters + string.digits + '_-'
+        secret_key = ''.join(secrets.choice(secret_chars) for _ in range(32))
+        
+        # Return full key in format prefix.secret_key
+        full_key = f"{prefix}.{secret_key}"
+        return full_key, prefix, secret_key
+
+    @classmethod
+    def get_hashed_key(cls, secret_key):
+        """Hash a secret key using Django's password hashers."""
+        return make_password(secret_key)
+
+    def update_last_used(self):
+        """Update the last_used_at timestamp."""
+        self.last_used_at = timezone.now()
+        self.save(update_fields=['last_used_at'])
+
+    def verify_secret_key(self, secret_key):
+        """Verify a secret key against the stored hash."""
+        return check_password(secret_key, self.hashed_key)
+
+    @property
+    def is_expired(self):
+        """Check if this API key has expired."""
+        if not self.expiry_date:
+            return False
+        return timezone.now() > self.expiry_date
+
+    @property
+    def is_valid(self):
+        """Check if this API key is currently valid (active and not expired)."""
+        return self.is_active and not self.is_expired
 
 
 class InsufficientCreditsError(Exception):

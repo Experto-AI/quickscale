@@ -9,7 +9,7 @@ from django.utils.decorators import method_decorator
 from django.views.decorators.http import require_http_methods
 from django.utils.html import format_html
 from decimal import Decimal
-from .models import CreditAccount, CreditTransaction, Service, ServiceUsage, UserSubscription, Payment
+from .models import CreditAccount, CreditTransaction, Service, ServiceUsage, UserSubscription, Payment, APIKey
 from .forms import AdminCreditAdjustmentForm
 
 
@@ -416,4 +416,61 @@ class PaymentAdmin(admin.ModelAdmin):
 
     def has_delete_permission(self, request, obj=None):
         """Disable deleting payments through admin."""
-        return False 
+        return False
+
+
+@admin.register(APIKey)
+class APIKeyAdmin(admin.ModelAdmin):
+    """Admin interface for APIKey model."""
+    
+    list_display = ('user', 'name', 'prefix', 'is_active', 'is_expired_status', 'last_used_at', 'created_at')
+    list_filter = ('is_active', 'created_at', 'last_used_at', 'expiry_date')
+    search_fields = ('user__email', 'user__first_name', 'user__last_name', 'name', 'prefix')
+    readonly_fields = ('prefix', 'hashed_key', 'created_at', 'last_used_at', 'is_expired_status')
+    ordering = ('-created_at',)
+    
+    fieldsets = (
+        (_('API Key Information'), {
+            'fields': ('user', 'name', 'prefix', 'is_active'),
+        }),
+        (_('Security'), {
+            'fields': ('hashed_key',),
+            'classes': ('collapse',),
+        }),
+        (_('Expiration'), {
+            'fields': ('expiry_date', 'is_expired_status'),
+        }),
+        (_('Usage Information'), {
+            'fields': ('last_used_at',),
+        }),
+        (_('System Information'), {
+            'fields': ('created_at',),
+            'classes': ('collapse',),
+        }),
+    )
+
+    def is_expired_status(self, obj):
+        """Display if the API key has expired."""
+        if not obj.expiry_date:
+            return "No expiration"
+        elif obj.is_expired:
+            return format_html('<span style="color: red;">Expired</span>')
+        else:
+            return format_html('<span style="color: green;">Valid</span>')
+    is_expired_status.short_description = _('Expiration Status')
+
+    def has_add_permission(self, request):
+        """Disable adding API keys through admin interface."""
+        # API keys should be generated through proper interface to ensure security
+        return False
+
+    def has_change_permission(self, request, obj=None):
+        """Allow limited changes to API keys."""
+        return True
+
+    def get_readonly_fields(self, request, obj=None):
+        """Make critical fields read-only."""
+        readonly = list(self.readonly_fields)
+        if obj:  # Editing existing object
+            readonly.extend(['user'])  # Don't allow changing the user
+        return readonly

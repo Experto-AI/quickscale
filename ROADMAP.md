@@ -72,54 +72,6 @@ The QuickScale credit system supports multiple payment models and credit types w
 
 ---
 
-### Sprint 10: AI Service Framework Foundation (v0.22.0)
-**Goal**: Create basic service framework for AI engineers to add their services
-**Time**: 1-2 days
-
-**Backend Implementation:**
-- [X] Create `services/` Django app template
-- [X] Add basic `Service` model in credits app (name, description, credit_cost, is_active)
-- [X] Create `BaseService` class with credit consumption logic
-- [X] Add service registration decorator for easy integration
-
-**Frontend Implementation:**
-- [X] Add services section to user dashboard showing available services
-- [X] Create basic service listing page
-- [X] Add service usage form template
-
-**Testing:**
-- [X] Test Service model creation and credit cost configuration
-- [X] Test BaseService class credit consumption integration
-- [x] Test service registration and listing
-
-**Validation**: AI engineers can define a service with credit cost and see it listed in user dashboard
-
----
-
-### Sprint 11: API Authentication & Basic Endpoints (v0.23.0)  
-**Goal**: Add API authentication and endpoint structure for AI services
-**Time**: 1-2 days
-
-**Backend Implementation:**
-- [ ] Add API key authentication system for services
-- [ ] Create `/api/v1/` URL namespace
-- [ ] Add API authentication middleware
-- [ ] Create example AI service endpoint (e.g., text processing)
-
-**Frontend Implementation:**
-- [ ] Add API key management to user dashboard
-- [ ] Show API documentation page with examples
-- [ ] Add API key generation/regeneration functionality
-
-**Testing:**
-- [ ] Test API key authentication
-- [ ] Test example service endpoint with authentication
-- [ ] Test API key management functionality
-
-**Validation**: Users can generate API keys and call service endpoints with authentication
-
----
-
 ### Sprint 12: Service Credit Integration (v0.24.0)
 **Goal**: Integrate credit consumption with API service calls
 **Time**: 1-2 days

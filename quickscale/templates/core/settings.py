@@ -82,6 +82,7 @@ INSTALLED_APPS = [
     'credits.apps.CreditsConfig',
     'services.apps.ServicesConfig',  # AI Service Framework
     'stripe_manager.apps.StripeConfig',  # Always include for migrations
+    'api.apps.ApiConfig',  # API endpoints for AI services
 ]
 
 # Stripe configuration
@@ -134,6 +135,7 @@ MIDDLEWARE = [
     'django.middleware.common.CommonMiddleware',
     'django.middleware.csrf.CsrfViewMiddleware',
     'django.contrib.auth.middleware.AuthenticationMiddleware',
+    'core.api_middleware.APIKeyAuthenticationMiddleware',  # API key authentication for /api/ routes
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
     'allauth.account.middleware.AccountMiddleware',

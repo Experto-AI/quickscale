@@ -2,13 +2,16 @@
 from django.contrib import messages
 from django.contrib.auth import authenticate, get_user_model, login, logout
 from django.contrib.auth.decorators import login_required
-from django.http import HttpRequest, HttpResponse
-from django.shortcuts import redirect, render
+from django.http import HttpRequest, HttpResponse, JsonResponse
+from django.shortcuts import redirect, render, get_object_or_404
 from django.views.decorators.http import require_http_methods
+from django.views.decorators.csrf import csrf_protect
 from django import forms
 from django.contrib.auth.forms import UserCreationForm
+from django.core.exceptions import ValidationError
 
 from .forms import ProfileForm
+from credits.models import APIKey
 
 User = get_user_model()
 
@@ -138,3 +141,145 @@ def profile_view(request: HttpRequest) -> HttpResponse:
         'form': form,
         'is_htmx': is_htmx
     })
+
+
+@login_required
+@require_http_methods(["GET"])
+def api_keys_view(request: HttpRequest) -> HttpResponse:
+    """Display user's API keys."""
+    is_htmx = request.headers.get('HX-Request') == 'true'
+    
+    api_keys = APIKey.objects.filter(user=request.user).order_by('-created_at')
+    
+    return render(request, 'users/api_keys.html', {
+        'api_keys': api_keys,
+        'is_htmx': is_htmx
+    })
+
+
+@login_required
+@csrf_protect
+@require_http_methods(["POST"])
+def generate_api_key_view(request: HttpRequest) -> HttpResponse:
+    """Generate a new API key for the user."""
+    is_htmx = request.headers.get('HX-Request') == 'true'
+    
+    try:
+        # Get the optional name for the API key
+        name = request.POST.get('name', '').strip()
+        
+        # Generate the API key
+        full_key, prefix, secret_key = APIKey.generate_key()
+        
+        # Create the API key record
+        api_key = APIKey.objects.create(
+            user=request.user,
+            prefix=prefix,
+            hashed_key=APIKey.get_hashed_key(secret_key),
+            name=name
+        )
+        
+        messages.success(request, 'API key generated successfully!')
+        
+        # Return the generated key template (shows raw key once)
+        return render(request, 'users/api_key_generated.html', {
+            'api_key': api_key,
+            'full_key': full_key,
+            'is_htmx': is_htmx
+        })
+        
+    except Exception as e:
+        messages.error(request, f'Error generating API key: {str(e)}')
+        
+        if is_htmx:
+            return render(request, 'users/api_keys.html', {
+                'api_keys': APIKey.objects.filter(user=request.user).order_by('-created_at'),
+                'is_htmx': is_htmx
+            })
+        
+        return redirect('users:api_keys')
+
+
+@login_required
+@csrf_protect
+@require_http_methods(["POST"])
+def revoke_api_key_view(request: HttpRequest) -> HttpResponse:
+    """Revoke/deactivate an API key."""
+    is_htmx = request.headers.get('HX-Request') == 'true'
+    
+    try:
+        api_key_id = request.POST.get('api_key_id')
+        if not api_key_id:
+            raise ValidationError('API key ID is required')
+        
+        api_key = get_object_or_404(APIKey, id=api_key_id, user=request.user)
+        api_key.is_active = False
+        api_key.save(update_fields=['is_active'])
+        
+        messages.success(request, f'API key "{api_key.name or api_key.prefix}" has been revoked.')
+        
+    except ValidationError as e:
+        messages.error(request, str(e))
+    except Exception as e:
+        messages.error(request, f'Error revoking API key: {str(e)}')
+    
+    if is_htmx:
+        return render(request, 'users/api_keys.html', {
+            'api_keys': APIKey.objects.filter(user=request.user).order_by('-created_at'),
+            'is_htmx': is_htmx
+        })
+    
+    return redirect('users:api_keys')
+
+
+@login_required
+@csrf_protect
+@require_http_methods(["POST"])
+def regenerate_api_key_view(request: HttpRequest) -> HttpResponse:
+    """Regenerate an API key (deactivate old, create new)."""
+    is_htmx = request.headers.get('HX-Request') == 'true'
+    
+    try:
+        api_key_id = request.POST.get('api_key_id')
+        if not api_key_id:
+            raise ValidationError('API key ID is required')
+        
+        old_api_key = get_object_or_404(APIKey, id=api_key_id, user=request.user)
+        
+        # Deactivate the old key
+        old_api_key.is_active = False
+        old_api_key.save(update_fields=['is_active'])
+        
+        # Generate new API key
+        full_key, prefix, secret_key = APIKey.generate_key()
+        
+        # Create new API key with same name
+        new_api_key = APIKey.objects.create(
+            user=request.user,
+            prefix=prefix,
+            hashed_key=APIKey.get_hashed_key(secret_key),
+            name=old_api_key.name
+        )
+        
+        messages.success(request, f'API key "{old_api_key.name or old_api_key.prefix}" has been regenerated.')
+        
+        # Return the generated key template (shows raw key once)
+        return render(request, 'users/api_key_generated.html', {
+            'api_key': new_api_key,
+            'full_key': full_key,
+            'is_htmx': is_htmx,
+            'is_regeneration': True
+        })
+        
+    except ValidationError as e:
+        messages.error(request, str(e))
+    except Exception as e:
+        messages.error(request, f'Error regenerating API key: {str(e)}')
+    
+    if is_htmx:
+        return render(request, 'users/api_keys.html', {
+            'api_keys': APIKey.objects.filter(user=request.user).order_by('-created_at'),
+            'is_htmx': is_htmx
+        })
+    
+    return redirect('users:api_keys')
