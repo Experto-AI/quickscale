@@ -13,6 +13,8 @@ INSTALLED_APPS = [
     'allauth.account',
     'allauth.socialaccount',
     'users',
+    'credits',
+    'api',
 ]
 
 from quickscale.utils.env_utils import get_env, is_feature_enabled
@@ -58,6 +60,7 @@ MIDDLEWARE = [
     'django.contrib.auth.middleware.AuthenticationMiddleware',
     'django.contrib.messages.middleware.MessageMiddleware',
     'allauth.account.middleware.AccountMiddleware',
+    'core.api_middleware.APIKeyAuthenticationMiddleware',
 ]
 
 ROOT_URLCONF = 'core.urls'

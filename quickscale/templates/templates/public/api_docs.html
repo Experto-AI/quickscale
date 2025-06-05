@@ -1,0 +1,507 @@
+{% extends "base.html" %}
+
+{% block title %}API Documentation - {{ project_name }}{% endblock %}
+
+{% block content %}
+<section class="hero is-info is-small">
+    <div class="hero-body">
+        <p class="title">API Documentation</p>
+        <p class="subtitle">Integrate with {{ project_name }} using our REST API</p>
+    </div>
+</section>
+
+<section class="section">
+    <div class="container">
+        <div class="columns">
+            <!-- Main Content -->
+            <div class="column is-9">
+                <!-- Getting Started -->
+                <div class="box">
+                    <h2 class="title is-3">Getting Started</h2>
+                    <div class="content">
+                        <p>The {{ project_name }} API provides programmatic access to our services. To get started, you'll need an API key.</p>
+                        
+                        <h3 class="title is-4">Authentication</h3>
+                        <p>All API requests must include your API key in the Authorization header:</p>
+                        <pre class="has-background-light p-3"><code>Authorization: Bearer YOUR_API_KEY</code></pre>
+                        
+                        {% if user.is_authenticated %}
+                        <div class="notification is-success is-light">
+                            <p>
+                                <strong>Ready to get started?</strong> 
+                                <a href="{% url 'users:api_keys' %}" class="button is-primary is-small">
+                                    <span class="icon">
+                                        <i class="fas fa-key"></i>
+                                    </span>
+                                    <span>Manage Your API Keys</span>
+                                </a>
+                            </p>
+                        </div>
+                        {% else %}
+                        <div class="notification is-info is-light">
+                            <p>
+                                <strong>Need an API key?</strong> 
+                                <a href="{% url 'account_signup' %}" class="button is-primary is-small">Sign up</a> 
+                                or 
+                                <a href="{% url 'account_login' %}" class="button is-link is-small">log in</a> 
+                                to generate your API keys.
+                            </p>
+                        </div>
+                        {% endif %}
+                    </div>
+                </div>
+
+                <!-- Base URL -->
+                <div class="box">
+                    <h2 class="title is-3">Base URL</h2>
+                    <div class="content">
+                        <p>All API requests should be made to:</p>
+                        <pre class="has-background-light p-3"><code>https://api.{{ request.get_host }}/v1/</code></pre>
+                    </div>
+                </div>
+
+                <!-- Response Format -->
+                <div class="box">
+                    <h2 class="title is-3">Response Format</h2>
+                    <div class="content">
+                        <p>All responses are returned in JSON format with the following structure:</p>
+                        
+                        <h4 class="title is-5">Success Response</h4>
+                        <pre class="has-background-light p-3"><code>{
+  "success": true,
+  "data": {
+    // Response data here
+  },
+  "message": "Operation completed successfully"
+}</code></pre>
+
+                        <h4 class="title is-5">Error Response</h4>
+                        <pre class="has-background-light p-3"><code>{
+  "success": false,
+  "error": {
+    "code": "ERROR_CODE",
+    "message": "Human-readable error description"
+  }
+}</code></pre>
+                    </div>
+                </div>
+
+                <!-- HTTP Status Codes -->
+                <div class="box">
+                    <h2 class="title is-3">HTTP Status Codes</h2>
+                    <div class="content">
+                        <div class="table-container">
+                            <table class="table is-striped is-fullwidth">
+                                <thead>
+                                    <tr>
+                                        <th>Status Code</th>
+                                        <th>Description</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    <tr>
+                                        <td><code class="has-background-success has-text-white">200</code></td>
+                                        <td>Success - Request completed successfully</td>
+                                    </tr>
+                                    <tr>
+                                        <td><code class="has-background-success has-text-white">201</code></td>
+                                        <td>Created - Resource created successfully</td>
+                                    </tr>
+                                    <tr>
+                                        <td><code class="has-background-warning">400</code></td>
+                                        <td>Bad Request - Invalid request parameters</td>
+                                    </tr>
+                                    <tr>
+                                        <td><code class="has-background-warning">401</code></td>
+                                        <td>Unauthorized - Invalid or missing API key</td>
+                                    </tr>
+                                    <tr>
+                                        <td><code class="has-background-warning">403</code></td>
+                                        <td>Forbidden - Insufficient credits or permissions</td>
+                                    </tr>
+                                    <tr>
+                                        <td><code class="has-background-warning">404</code></td>
+                                        <td>Not Found - Resource not found</td>
+                                    </tr>
+                                    <tr>
+                                        <td><code class="has-background-warning">429</code></td>
+                                        <td>Too Many Requests - Rate limit exceeded</td>
+                                    </tr>
+                                    <tr>
+                                        <td><code class="has-background-danger has-text-white">500</code></td>
+                                        <td>Internal Server Error - Server error occurred</td>
+                                    </tr>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- API Endpoints -->
+                <div class="box">
+                    <h2 class="title is-3">API Endpoints</h2>
+                    <div class="content">
+                        
+                        <!-- Account Information -->
+                        <h3 class="title is-4">Account Information</h3>
+                        
+                        <div class="box is-light">
+                            <h4 class="title is-5">
+                                <span class="tag is-info">GET</span>
+                                <code>/account/profile</code>
+                            </h4>
+                            <p>Retrieve your account profile and credit balance.</p>
+                            
+                            <h5 class="title is-6">Example Response</h5>
+                            <pre class="has-background-light p-3"><code>{
+  "success": true,
+  "data": {
+    "user": {
+      "email": "user@example.com",
+      "full_name": "John Doe",
+      "created_at": "2024-01-15T10:30:00Z"
+    },
+    "credit_balance": {
+      "total": 1500.00,
+      "subscription": 1000.00,
+      "pay_as_you_go": 500.00
+    }
+  }
+}</code></pre>
+                        </div>
+
+                        <!-- Services -->
+                        <h3 class="title is-4">Services</h3>
+                        
+                        <div class="box is-light">
+                            <h4 class="title is-5">
+                                <span class="tag is-info">GET</span>
+                                <code>/services</code>
+                            </h4>
+                            <p>List all available services and their credit costs.</p>
+                            
+                            <h5 class="title is-6">Example Response</h5>
+                            <pre class="has-background-light p-3"><code>{
+  "success": true,
+  "data": {
+    "services": [
+      {
+        "id": 1,
+        "name": "Text Processing",
+        "description": "Advanced text analysis and processing",
+        "credit_cost": 10.00,
+        "is_active": true
+      },
+      {
+        "id": 2,
+        "name": "Image Analysis",
+        "description": "AI-powered image recognition and analysis",
+        "credit_cost": 25.00,
+        "is_active": true
+      }
+    ]
+  }
+}</code></pre>
+                        </div>
+
+                        <div class="box is-light">
+                            <h4 class="title is-5">
+                                <span class="tag is-success">POST</span>
+                                <code>/services/{service_id}/use</code>
+                            </h4>
+                            <p>Use a service (consumes credits based on service cost).</p>
+                            
+                            <h5 class="title is-6">Request Body</h5>
+                            <pre class="has-background-light p-3"><code>{
+  "input_data": {
+    // Service-specific input parameters
+  }
+}</code></pre>
+
+                            <h5 class="title is-6">Example Response</h5>
+                            <pre class="has-background-light p-3"><code>{
+  "success": true,
+  "data": {
+    "result": {
+      // Service-specific output
+    },
+    "credits_consumed": 10.00,
+    "remaining_balance": 1490.00
+  }
+}</code></pre>
+                        </div>
+
+                        <!-- Credit Management -->
+                        <h3 class="title is-4">Credit Management</h3>
+                        
+                        <div class="box is-light">
+                            <h4 class="title is-5">
+                                <span class="tag is-info">GET</span>
+                                <code>/credits/balance</code>
+                            </h4>
+                            <p>Get current credit balance with detailed breakdown.</p>
+                            
+                            <h5 class="title is-6">Example Response</h5>
+                            <pre class="has-background-light p-3"><code>{
+  "success": true,
+  "data": {
+    "total_balance": 1500.00,
+    "subscription_credits": {
+      "amount": 1000.00,
+      "expires_at": "2024-02-15T23:59:59Z"
+    },
+    "pay_as_you_go_credits": {
+      "amount": 500.00,
+      "expires_at": null
+    }
+  }
+}</code></pre>
+                        </div>
+
+                        <div class="box is-light">
+                            <h4 class="title is-5">
+                                <span class="tag is-info">GET</span>
+                                <code>/credits/transactions</code>
+                            </h4>
+                            <p>List recent credit transactions with pagination.</p>
+                            
+                            <h5 class="title is-6">Query Parameters</h5>
+                            <ul>
+                                <li><code>page</code> - Page number (default: 1)</li>
+                                <li><code>limit</code> - Items per page (default: 20, max: 100)</li>
+                                <li><code>type</code> - Filter by transaction type (purchase, subscription, consumption, admin)</li>
+                            </ul>
+                            
+                            <h5 class="title is-6">Example Response</h5>
+                            <pre class="has-background-light p-3"><code>{
+  "success": true,
+  "data": {
+    "transactions": [
+      {
+        "id": 123,
+        "amount": -10.00,
+        "description": "Text Processing service usage",
+        "type": "consumption",
+        "created_at": "2024-01-20T14:30:00Z"
+      }
+    ],
+    "pagination": {
+      "current_page": 1,
+      "total_pages": 5,
+      "total_items": 95
+    }
+  }
+}</code></pre>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Rate Limiting -->
+                <div class="box">
+                    <h2 class="title is-3">Rate Limiting</h2>
+                    <div class="content">
+                        <p>API requests are subject to rate limiting to ensure fair usage:</p>
+                        <ul>
+                            <li><strong>Free Tier:</strong> 100 requests per hour</li>
+                            <li><strong>Paid Plans:</strong> 1,000+ requests per hour (varies by plan)</li>
+                        </ul>
+                        
+                        <p>Rate limit information is included in response headers:</p>
+                        <pre class="has-background-light p-3"><code>X-RateLimit-Limit: 1000
+X-RateLimit-Remaining: 999
+X-RateLimit-Reset: 1640995200</code></pre>
+                    </div>
+                </div>
+
+                <!-- SDKs and Libraries -->
+                <div class="box">
+                    <h2 class="title is-3">SDKs and Code Examples</h2>
+                    <div class="content">
+                        
+                        <div class="tabs" x-data="{ activeTab: 'curl' }">
+                            <ul>
+                                <li :class="{ 'is-active': activeTab === 'curl' }">
+                                    <a @click="activeTab = 'curl'">cURL</a>
+                                </li>
+                                <li :class="{ 'is-active': activeTab === 'python' }">
+                                    <a @click="activeTab = 'python'">Python</a>
+                                </li>
+                                <li :class="{ 'is-active': activeTab === 'javascript' }">
+                                    <a @click="activeTab = 'javascript'">JavaScript</a>
+                                </li>
+                                <li :class="{ 'is-active': activeTab === 'php' }">
+                                    <a @click="activeTab = 'php'">PHP</a>
+                                </li>
+                            </ul>
+                        </div>
+
+                        <div x-show="activeTab === 'curl'">
+                            <pre class="has-background-light p-3"><code># Get account profile
+curl -X GET "https://api.{{ request.get_host }}/v1/account/profile" \
+     -H "Authorization: Bearer YOUR_API_KEY" \
+     -H "Content-Type: application/json"
+
+# Use a service
+curl -X POST "https://api.{{ request.get_host }}/v1/services/1/use" \
+     -H "Authorization: Bearer YOUR_API_KEY" \
+     -H "Content-Type: application/json" \
+     -d '{"input_data": {"text": "Hello, world!"}}'</code></pre>
+                        </div>
+
+                        <div x-show="activeTab === 'python'">
+                            <pre class="has-background-light p-3"><code>import requests
+
+# Configuration
+API_BASE_URL = "https://api.{{ request.get_host }}/v1"
+API_KEY = "YOUR_API_KEY"
+
+headers = {
+    "Authorization": f"Bearer {API_KEY}",
+    "Content-Type": "application/json"
+}
+
+# Get account profile
+response = requests.get(f"{API_BASE_URL}/account/profile", headers=headers)
+profile = response.json()
+
+# Use a service
+service_data = {
+    "input_data": {
+        "text": "Hello, world!"
+    }
+}
+response = requests.post(f"{API_BASE_URL}/services/1/use", 
+                        json=service_data, headers=headers)
+result = response.json()</code></pre>
+                        </div>
+
+                        <div x-show="activeTab === 'javascript'">
+                            <pre class="has-background-light p-3"><code>// Configuration
+const API_BASE_URL = "https://api.{{ request.get_host }}/v1";
+const API_KEY = "YOUR_API_KEY";
+
+const headers = {
+    "Authorization": `Bearer ${API_KEY}`,
+    "Content-Type": "application/json"
+};
+
+// Get account profile
+const getProfile = async () => {
+    const response = await fetch(`${API_BASE_URL}/account/profile`, {
+        method: 'GET',
+        headers: headers
+    });
+    return await response.json();
+};
+
+// Use a service
+const useService = async (serviceId, inputData) => {
+    const response = await fetch(`${API_BASE_URL}/services/${serviceId}/use`, {
+        method: 'POST',
+        headers: headers,
+        body: JSON.stringify({ input_data: inputData })
+    });
+    return await response.json();
+};</code></pre>
+                        </div>
+
+                        <div x-show="activeTab === 'php'">
+                            <pre class="has-background-light p-3"><code><?php
+// Configuration
+$apiBaseUrl = "https://api.{{ request.get_host }}/v1";
+$apiKey = "YOUR_API_KEY";
+
+$headers = [
+    "Authorization: Bearer " . $apiKey,
+    "Content-Type: application/json"
+];
+
+// Get account profile
+$ch = curl_init();
+curl_setopt($ch, CURLOPT_URL, $apiBaseUrl . "/account/profile");
+curl_setopt($ch, CURLOPT_HTTPHEADER, $headers);
+curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+$response = curl_exec($ch);
+$profile = json_decode($response, true);
+curl_close($ch);
+
+// Use a service
+$serviceData = [
+    "input_data" => [
+        "text" => "Hello, world!"
+    ]
+];
+
+$ch = curl_init();
+curl_setopt($ch, CURLOPT_URL, $apiBaseUrl . "/services/1/use");
+curl_setopt($ch, CURLOPT_POST, true);
+curl_setopt($ch, CURLOPT_POSTFIELDS, json_encode($serviceData));
+curl_setopt($ch, CURLOPT_HTTPHEADER, $headers);
+curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+$response = curl_exec($ch);
+$result = json_decode($response, true);
+curl_close($ch);
+?></code></pre>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Sidebar -->
+            <div class="column is-3">
+                <div class="box">
+                    <h3 class="title is-5">Quick Links</h3>
+                    <div class="content">
+                        <ul>
+                            {% if user.is_authenticated %}
+                            <li><a href="{% url 'users:api_keys' %}">Manage API Keys</a></li>
+                            <li><a href="{% url 'users:profile' %}">Account Profile</a></li>
+                            {% else %}
+                            <li><a href="{% url 'account_signup' %}">Sign Up</a></li>
+                            <li><a href="{% url 'account_login' %}">Log In</a></li>
+                            {% endif %}
+                            <li><a href="{% url 'public:contact' %}">Contact Support</a></li>
+                        </ul>
+                    </div>
+                </div>
+
+                <div class="box">
+                    <h3 class="title is-5">Need Help?</h3>
+                    <div class="content">
+                        <p>If you have questions about the API or need assistance integrating with our services, please don't hesitate to contact our support team.</p>
+                        <a href="{% url 'public:contact' %}" class="button is-primary is-fullwidth">
+                            <span class="icon">
+                                <i class="fas fa-envelope"></i>
+                            </span>
+                            <span>Contact Support</span>
+                        </a>
+                    </div>
+                </div>
+
+                <div class="box">
+                    <h3 class="title is-5">API Status</h3>
+                    <div class="content">
+                        <div class="level">
+                            <div class="level-left">
+                                <span>API Status:</span>
+                            </div>
+                            <div class="level-right">
+                                <span class="tag is-success">Operational</span>
+                            </div>
+                        </div>
+                        <div class="level">
+                            <div class="level-left">
+                                <span>Response Time:</span>
+                            </div>
+                            <div class="level-right">
+                                <span class="tag is-info">~150ms</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</section>
+
+{% endblock %}
