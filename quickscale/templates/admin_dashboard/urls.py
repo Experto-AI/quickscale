@@ -24,4 +24,8 @@ urlpatterns = [
     path('payments/', views.payment_history, name='payment_history'),
     path('payments/<int:payment_id>/', views.payment_detail, name='payment_detail'),
     path('payments/<int:payment_id>/receipt/', views.download_receipt, name='download_receipt'),
+    # Service management URLs
+    path('services/', views.service_admin, name='service_admin'),
+    path('services/<int:service_id>/', views.service_detail, name='service_detail'),
+    path('services/<int:service_id>/toggle/', views.service_toggle_status, name='service_toggle_status'),
 ]

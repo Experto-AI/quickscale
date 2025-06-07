@@ -1,0 +1,326 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block title %}{{ service.name }} - Service Details{% endblock %}
+
+{% block content %}
+<section class="hero is-primary is-small">
+    <div class="hero-body">
+        <div class="level">
+            <div class="level-left">
+                <div>
+                    <p class="title">Service Details</p>
+                    <p class="subtitle">{{ service.name }} - Analytics and Usage Information</p>
+                </div>
+            </div>
+            <div class="level-right">
+                <a href="{% url 'admin_dashboard:service_admin' %}" class="button is-light">
+                    <span class="icon"><i class="fas fa-arrow-left"></i></span>
+                    <span>Back to Services</span>
+                </a>
+            </div>
+        </div>
+    </div>
+</section>
+
+<section class="section" x-data="serviceDetailData({{ service.is_active|yesno:'true,false' }})">
+    <div class="container">
+        <!-- Service Information -->
+        <div class="box mb-5">
+            <div class="columns">
+                <div class="column is-8">
+                    <h2 class="title is-4">{{ service.name }}</h2>
+                    <p class="subtitle is-6">{{ service.description }}</p>
+                    
+                    <div class="tags">
+                        <span class="tag is-info is-medium">{{ service.credit_cost }} credits per use</span>
+                        <span x-bind:class="getServiceStatusTagClass()">
+                            <span x-text="getServiceStatusText()"></span>
+                        </span>
+                        <span class="tag is-light is-medium">Created {{ service.created_at|date:"M d, Y" }}</span>
+                    </div>
+                </div>
+                <div class="column is-4 has-text-right">
+                    <div class="buttons is-right">
+                        <button 
+                            x-bind:class="getToggleButtonClass()"
+                            x-bind:disabled="isToggling"
+                            x-on:click="toggleServiceStatus()"
+                            hx-post="{% url 'admin_dashboard:service_toggle_status' service.id %}"
+                            hx-headers='{"X-CSRFToken": "{{ csrf_token }}"}'
+                            hx-swap="none"
+                            x-on:htmx:after-request="handleToggleResponse($event)">
+                            <span class="icon">
+                                <i x-bind:class="getToggleIconClass()"></i>
+                            </span>
+                            <span x-text="getToggleText()"></span>
+                        </button>
+                        <a href="/admin/credits/service/{{ service.id }}/change/" class="button is-info" target="_blank">
+                            <span class="icon"><i class="fas fa-edit"></i></span>
+                            <span>Edit in Admin</span>
+                        </a>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Analytics Grid -->
+        <div class="columns is-multiline mb-5">
+            <div class="column is-3">
+                <div class="card">
+                    <div class="card-content has-text-centered">
+                        <p class="title is-3 has-text-info">{{ analytics.total_usage }}</p>
+                        <p class="subtitle is-6">Total Uses</p>
+                    </div>
+                </div>
+            </div>
+            <div class="column is-3">
+                <div class="card">
+                    <div class="card-content has-text-centered">
+                        <p class="title is-3 has-text-success">{{ analytics.usage_30_days }}</p>
+                        <p class="subtitle is-6">Uses (30 days)</p>
+                        <p class="is-size-7 has-text-grey">{{ analytics.usage_7_days }} in last 7 days</p>
+                    </div>
+                </div>
+            </div>
+            <div class="column is-3">
+                <div class="card">
+                    <div class="card-content has-text-centered">
+                        <p class="title is-3 has-text-warning">{{ analytics.total_credits }}</p>
+                        <p class="subtitle is-6">Credits Consumed</p>
+                        <p class="is-size-7 has-text-grey">{{ analytics.credits_30_days }} in last 30 days</p>
+                    </div>
+                </div>
+            </div>
+            <div class="column is-3">
+                <div class="card">
+                    <div class="card-content has-text-centered">
+                        <p class="title is-3 has-text-primary">{{ analytics.unique_users }}</p>
+                        <p class="subtitle is-6">Unique Users</p>
+                        <p class="is-size-7 has-text-grey">{{ analytics.unique_users_30_days }} in last 30 days</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Detailed Analytics -->
+        <div class="columns">
+            <div class="column is-6">
+                <div class="box">
+                    <h3 class="title is-5">Usage Breakdown</h3>
+                    <div class="content">
+                        <div class="level">
+                            <div class="level-left">
+                                <div class="level-item">
+                                    <div>
+                                        <p class="heading">Recent Activity</p>
+                                        <p class="title is-6">Last 7 days: {{ analytics.usage_7_days }} uses</p>
+                                        <p class="title is-6">Last 30 days: {{ analytics.usage_30_days }} uses</p>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        {% if analytics.avg_credits_per_use > 0 %}
+                        <div class="level">
+                            <div class="level-left">
+                                <div class="level-item">
+                                    <div>
+                                        <p class="heading">Average Usage</p>
+                                        <p class="title is-6">{{ analytics.avg_credits_per_use|floatformat:2 }} credits per use</p>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+            <div class="column is-6">
+                <div class="box">
+                    <h3 class="title is-5">Credit Consumption</h3>
+                    <div class="content">
+                        <div class="level">
+                            <div class="level-left">
+                                <div class="level-item">
+                                    <div>
+                                        <p class="heading">Total Consumed</p>
+                                        <p class="title is-6">{{ analytics.total_credits }} credits</p>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <div class="level">
+                            <div class="level-left">
+                                <div class="level-item">
+                                    <div>
+                                        <p class="heading">Recent Consumption</p>
+                                        <p class="title is-6">{{ analytics.credits_7_days }} credits (7 days)</p>
+                                        <p class="title is-6">{{ analytics.credits_30_days }} credits (30 days)</p>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Recent Usage Table -->
+        {% if recent_usages %}
+        <div class="box">
+            <h3 class="title is-5">Recent Usage (Last 20)</h3>
+            <div class="table-container">
+                <table class="table is-fullwidth is-striped is-hoverable">
+                    <thead>
+                        <tr>
+                            <th>User</th>
+                            <th>Credits Used</th>
+                            <th>Date & Time</th>
+                            <th>Transaction</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for usage in recent_usages %}
+                        <tr>
+                            <td>
+                                <div>
+                                    <p class="has-text-weight-semibold">{{ usage.user.email }}</p>
+                                    {% if usage.user.get_full_name %}
+                                    <p class="is-size-7 has-text-grey">{{ usage.user.get_full_name }}</p>
+                                    {% endif %}
+                                </div>
+                            </td>
+                            <td>
+                                <span class="tag is-info">{{ usage.credit_transaction.amount|floatformat:0 }} credits</span>
+                            </td>
+                            <td>
+                                <div>
+                                    <p>{{ usage.created_at|date:"M d, Y" }}</p>
+                                    <p class="is-size-7 has-text-grey">{{ usage.created_at|time:"H:i" }}</p>
+                                </div>
+                            </td>
+                            <td>
+                                <span class="is-size-7 has-text-grey">ID: {{ usage.credit_transaction.id }}</span>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+        {% else %}
+        <div class="box">
+            <div class="notification is-info is-light">
+                <p><strong>No usage data available</strong></p>
+                <p>This service hasn't been used yet. Usage information will appear here once users start consuming this service.</p>
+            </div>
+        </div>
+        {% endif %}
+
+        <!-- Alpine.js notification component -->
+        <div x-show="notification.show" 
+             x-bind:class="'notification ' + notification.type + ' is-light'"
+             x-transition:enter="transition ease-out duration-300"
+             x-transition:enter-start="opacity-0 transform translate-y-2"
+             x-transition:enter-end="opacity-100 transform translate-y-0"
+             x-transition:leave="transition ease-in duration-200"
+             x-transition:leave-start="opacity-100"
+             x-transition:leave-end="opacity-0">
+            <button class="delete" x-on:click="hideNotification()"></button>
+            <span x-text="notification.message"></span>
+        </div>
+    </div>
+</section>
+
+<script>
+// Service detail data management using Alpine.js
+function serviceDetailData(initialIsActive) {
+    return {
+        isActive: initialIsActive,
+        isToggling: false,
+        notification: {
+            show: false,
+            message: '',
+            type: 'is-success'
+        },
+        
+        getServiceStatusTagClass() {
+            return this.isActive ? 'tag is-success is-medium' : 'tag is-warning is-medium';
+        },
+        
+        getServiceStatusText() {
+            return this.isActive ? 'Active' : 'Inactive';
+        },
+        
+        getToggleButtonClass() {
+            return this.isActive ? 'button is-warning' : 'button is-success';
+        },
+        
+        getToggleIconClass() {
+            return this.isActive ? 'fas fa-pause' : 'fas fa-play';
+        },
+        
+        getToggleText() {
+            return this.isActive ? 'Disable Service' : 'Enable Service';
+        },
+        
+        toggleServiceStatus() {
+            this.isToggling = true;
+        },
+        
+        handleToggleResponse(event) {
+            this.isToggling = false;
+            
+            if (event.detail.successful) {
+                try {
+                    const response = JSON.parse(event.detail.xhr.responseText);
+                    
+                    if (response.success) {
+                        // Update service status using Alpine.js reactive data
+                        this.isActive = response.is_active;
+                        
+                        // Show success notification
+                        this.showNotification(response.message, 'is-success');
+                        
+                        // Reload page after short delay to update analytics
+                        setTimeout(() => {
+                            window.location.reload();
+                        }, 1000);
+                    } else {
+                        this.showNotification(response.error || 'Failed to toggle service status', 'is-danger');
+                    }
+                } catch (e) {
+                    this.showNotification('Invalid response format', 'is-danger');
+                }
+            } else {
+                try {
+                    const response = JSON.parse(event.detail.xhr.responseText);
+                    this.showNotification(response.error || 'Failed to toggle service status', 'is-danger');
+                } catch (e) {
+                    this.showNotification('Request failed', 'is-danger');
+                }
+            }
+        },
+        
+        showNotification(message, type = 'is-success') {
+            this.notification = {
+                show: true,
+                message: message,
+                type: type
+            };
+            
+            // Auto-hide notification after 3 seconds
+            setTimeout(() => {
+                this.hideNotification();
+            }, 3000);
+        },
+        
+        hideNotification() {
+            this.notification.show = false;
+        }
+    }
+}
+</script>
+{% endblock %} 
