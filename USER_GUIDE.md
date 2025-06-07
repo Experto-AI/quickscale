@@ -300,6 +300,12 @@ Staff users have access to additional features:
 - **Django Admin** (`/admin/`): Full administrative interface
 - **User Management**: View and manage user accounts
 - **Credit Management**: Handle user credits and billing (if enabled)
+- **Service Management** (`/admin_dashboard/services/`): Configure and monitor application services
+  - Enable/disable services in real-time
+  - View service usage analytics and statistics
+  - Monitor credit consumption per service
+  - Track unique users and service performance
+  - Bulk operations for service management
 
 ---
 

@@ -1159,6 +1159,7 @@ Alpine.js is used for all client-side interactivity and state management:
 - **Subscription Management**: Complete subscription lifecycle management with plan upgrades, downgrades, and automatic credit transfer.
 - **Payment Processing**: Secure payment processing with receipt generation, audit trails, and multiple payment method support.
 - **Service Management**: Configurable services with credit cost validation, usage tracking, and priority-based consumption.
+- **Service Admin Interface**: Comprehensive service management through both Django admin and custom admin dashboard with real-time enable/disable, usage analytics, and bulk operations.
 - **Admin Dashboard**: Built-in admin interface for credit management, user account oversight, service configuration, and Stripe product synchronization.
 - **Modern Frontend**: Alpine.js and HTMX for interactive UI components without complex JavaScript frameworks.
 - **Docker Ready**: Complete Docker configuration for development and production deployment.
@@ -1199,6 +1200,12 @@ The credit system provides a sophisticated foundation for SaaS monetization:
 - **Advanced Credit Management**: Admin tools for credit adjustment, refunds, and account management with reason tracking
 - **Stripe Product Sync**: Admin interface for synchronizing products from Stripe with bulk operations
 - **Service Configuration**: Easy setup of new services with customizable credit costs and usage tracking
+- **Service Management Interface**: Comprehensive service administration through:
+  - Enhanced Django admin with usage analytics, bulk enable/disable operations, and detailed service statistics
+  - Custom admin dashboard pages with real-time service status toggling via HTMX
+  - Service detail views showing usage statistics, credit consumption, unique user counts, and recent activity
+  - Alpine.js powered interface for dynamic interactions and instant feedback
+  - Custom service analytics views within Django admin for detailed performance insights
 - **Usage Analytics**: Detailed reporting on service usage and credit consumption patterns
 - **User Account Management**: Comprehensive user management with credit balance oversight and subscription status
 - **Bulk Operations**: Admin tools for bulk credit operations and user management
