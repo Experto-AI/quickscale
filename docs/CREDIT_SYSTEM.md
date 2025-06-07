@@ -145,6 +145,16 @@ Admins can:
 - **Plan Changes**: Override subscription plans for support cases
 - **Payment Issues**: Resolve billing and payment problems
 
+### Service Management
+Admins have comprehensive service administration capabilities:
+- **Service Configuration**: Enable/disable services in real-time through admin dashboard
+- **Usage Analytics**: Monitor service consumption patterns, credit usage, and user engagement
+- **Performance Metrics**: Track total usage, unique users, and credits consumed per service
+- **Bulk Operations**: Enable/disable multiple services simultaneously with audit logging
+- **Real-time Monitoring**: Live service status updates via HTMX for immediate feedback
+- **Detailed Analytics**: Service-specific analytics pages showing 30-day trends and usage patterns
+- **Django Admin Integration**: Enhanced service management through Django admin with custom analytics views
+
 ### Analytics Dashboards
 - **Revenue Analytics**: MRR, revenue by plan type, growth trends
 - **User Analytics**: Active users, churn rates, usage patterns

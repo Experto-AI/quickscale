@@ -1105,7 +1105,7 @@ def capture_container_debug_info(container_name, output_dir=None):
     return str(log_file)
 
 def init_test_project(tmp_path, project_name, env=None, check=True):
-    """Initialize a test project using quickscale init command."""
+    """Initialize a test project in a temporary directory using quickscale init command."""
     # Store original directory
     original_dir = os.getcwd()
     
@@ -1123,3 +1123,47 @@ def init_test_project(tmp_path, project_name, env=None, check=True):
     finally:
         # Change back to original directory
         os.chdir(original_dir)
+
+class ProjectTestMixin:
+    """Mixin for integration tests that need to create and test QuickScale projects."""
+    
+    def setUp(self):
+        """Set up test environment for project testing."""
+        import tempfile
+        import shutil
+        from pathlib import Path
+        
+        # Create temporary directory for test project
+        self.temp_dir = Path(tempfile.mkdtemp())
+        self.project_name = "test_project"
+        self.project_path = self.temp_dir / self.project_name
+        
+    def tearDown(self):
+        """Clean up test environment."""
+        import shutil
+        if hasattr(self, 'temp_dir') and self.temp_dir.exists():
+            shutil.rmtree(self.temp_dir)
+    
+    def create_test_project(self):
+        """Create a test project using QuickScale templates."""
+        import shutil
+        from pathlib import Path
+        
+        # Get the base path to the QuickScale templates
+        base_path = Path(__file__).parent.parent / 'quickscale' / 'templates'
+        
+        # Copy template files to project directory
+        if self.project_path.exists():
+            shutil.rmtree(self.project_path)
+        
+        # Create project directory
+        self.project_path.mkdir(parents=True, exist_ok=True)
+        
+        # Copy all template files to the project directory
+        for item in base_path.iterdir():
+            if item.is_file():
+                # Copy template files directly to project root
+                shutil.copy2(item, self.project_path)
+            elif item.is_dir():
+                # Copy template directories to project root
+                shutil.copytree(item, self.project_path / item.name, dirs_exist_ok=True)

@@ -310,20 +310,21 @@ class CreditTransactionAdmin(admin.ModelAdmin):
 
 @admin.register(Service)
 class ServiceAdmin(admin.ModelAdmin):
-    """Admin interface for Service model."""
+    """Admin interface for Service model with enhanced management and analytics."""
     
-    list_display = ('name', 'credit_cost', 'is_active', 'usage_count', 'created_at', 'updated_at')
+    list_display = ('name', 'credit_cost', 'is_active', 'usage_count', 'total_credits_consumed', 'unique_users_count', 'created_at', 'updated_at', 'service_actions')
     list_filter = ('is_active', 'created_at', 'credit_cost')
     search_fields = ('name', 'description')
-    readonly_fields = ('created_at', 'updated_at', 'usage_count')
+    readonly_fields = ('created_at', 'updated_at', 'usage_count', 'total_credits_consumed', 'unique_users_count', 'get_usage_analytics')
     ordering = ('name',)
+    actions = ['bulk_enable_services', 'bulk_disable_services', 'export_service_usage']
     
     fieldsets = (
         (_('Service Information'), {
             'fields': ('name', 'description', 'credit_cost', 'is_active'),
         }),
-        (_('Statistics'), {
-            'fields': ('usage_count',),
+        (_('Usage Analytics'), {
+            'fields': ('usage_count', 'total_credits_consumed', 'unique_users_count', 'get_usage_analytics'),
             'classes': ('collapse',),
         }),
         (_('System Information'), {
@@ -335,22 +336,216 @@ class ServiceAdmin(admin.ModelAdmin):
     def usage_count(self, obj):
         """Display the number of times this service has been used."""
         return obj.usages.count()
-    usage_count.short_description = _('Usage Count')
+    usage_count.short_description = _('Total Uses')
+
+    def total_credits_consumed(self, obj):
+        """Display total credits consumed by this service."""
+        from django.db.models import Sum
+        total = obj.usages.aggregate(
+            total_consumed=Sum('credit_transaction__amount')
+        )['total_consumed']
+        if total:
+            return f"{abs(total)} credits"
+        return "0 credits"
+    total_credits_consumed.short_description = _('Credits Consumed')
+
+    def unique_users_count(self, obj):
+        """Display number of unique users who have used this service."""
+        return obj.usages.values('user').distinct().count()
+    unique_users_count.short_description = _('Unique Users')
+
+    def get_usage_analytics(self, obj):
+        """Display detailed usage analytics."""
+        if obj.pk:
+            from django.db.models import Sum, Count
+            from django.utils import timezone
+            from datetime import timedelta
+            
+            now = timezone.now()
+            last_30_days = now - timedelta(days=30)
+            last_7_days = now - timedelta(days=7)
+            
+            # Get usage stats for different periods
+            total_usage = obj.usages.count()
+            usage_30_days = obj.usages.filter(created_at__gte=last_30_days).count()
+            usage_7_days = obj.usages.filter(created_at__gte=last_7_days).count()
+            
+            # Get credits consumed for different periods
+            total_credits = obj.usages.aggregate(
+                total=Sum('credit_transaction__amount')
+            )['total'] or 0
+            credits_30_days = obj.usages.filter(
+                created_at__gte=last_30_days
+            ).aggregate(
+                total=Sum('credit_transaction__amount')
+            )['total'] or 0
+            credits_7_days = obj.usages.filter(
+                created_at__gte=last_7_days
+            ).aggregate(
+                total=Sum('credit_transaction__amount')
+            )['total'] or 0
+            
+            return format_html(
+                "<strong>Usage Summary:</strong><br>"
+                "• Total uses: {}<br>"
+                "• Last 30 days: {} uses<br>"
+                "• Last 7 days: {} uses<br><br>"
+                "<strong>Credits Summary:</strong><br>"
+                "• Total consumed: {} credits<br>"
+                "• Last 30 days: {} credits<br>"
+                "• Last 7 days: {} credits",
+                total_usage,
+                usage_30_days,
+                usage_7_days,
+                abs(total_credits),
+                abs(credits_30_days),
+                abs(credits_7_days)
+            )
+        return "Save to view analytics"
+    get_usage_analytics.short_description = _('Detailed Analytics')
+
+    def service_actions(self, obj):
+        """Display action buttons for service management."""
+        usage_url = reverse('admin:credits_service_usage_analytics', args=[obj.pk])
+        return format_html(
+            '<a href="{}" class="button" style="padding: 2px 8px; font-size: 11px;">View Analytics</a>',
+            usage_url
+        )
+    service_actions.short_description = _('Actions')
+
+    def get_urls(self):
+        """Add custom URLs for service management."""
+        urls = super().get_urls()
+        custom_urls = [
+            path('<int:service_id>/usage-analytics/', 
+                 self.admin_site.admin_view(self.service_usage_analytics_view), 
+                 name='credits_service_usage_analytics'),
+        ]
+        return custom_urls + urls
+
+    def service_usage_analytics_view(self, request, service_id):
+        """Admin view to show detailed service usage analytics."""
+        service = get_object_or_404(Service, pk=service_id)
+        
+        from django.db.models import Sum, Count
+        from django.utils import timezone
+        from datetime import timedelta
+        
+        now = timezone.now()
+        last_30_days = now - timedelta(days=30)
+        last_7_days = now - timedelta(days=7)
+        
+        # Get recent usage data
+        recent_usages = service.usages.select_related(
+            'user', 'credit_transaction'
+        ).order_by('-created_at')[:50]
+        
+        # Get analytics data
+        analytics = {
+            'total_uses': service.usages.count(),
+            'uses_30_days': service.usages.filter(created_at__gte=last_30_days).count(),
+            'uses_7_days': service.usages.filter(created_at__gte=last_7_days).count(),
+            'unique_users': service.usages.values('user').distinct().count(),
+            'unique_users_30_days': service.usages.filter(
+                created_at__gte=last_30_days
+            ).values('user').distinct().count(),
+            'total_credits': abs(service.usages.aggregate(
+                total=Sum('credit_transaction__amount')
+            )['total'] or 0),
+            'credits_30_days': abs(service.usages.filter(
+                created_at__gte=last_30_days
+            ).aggregate(
+                total=Sum('credit_transaction__amount')
+            )['total'] or 0),
+            'credits_7_days': abs(service.usages.filter(
+                created_at__gte=last_7_days
+            ).aggregate(
+                total=Sum('credit_transaction__amount')
+            )['total'] or 0),
+        }
+        
+        # Calculate average credits per use
+        if analytics['total_uses'] > 0:
+            analytics['avg_credits_per_use'] = analytics['total_credits'] / analytics['total_uses']
+        else:
+            analytics['avg_credits_per_use'] = 0
+        
+        context = {
+            'service': service,
+            'recent_usages': recent_usages,
+            'analytics': analytics,
+            'title': f'Usage Analytics for {service.name}',
+        }
+        return render(request, 'admin/credits/service_usage_analytics.html', context)
+
+    def bulk_enable_services(self, request, queryset):
+        """Bulk enable selected services."""
+        updated = queryset.update(is_active=True)
+        self.message_user(
+            request,
+            f"Successfully enabled {updated} service(s)."
+        )
+    bulk_enable_services.short_description = _('Enable selected services')
+
+    def bulk_disable_services(self, request, queryset):
+        """Bulk disable selected services."""
+        updated = queryset.update(is_active=False)
+        self.message_user(
+            request,
+            f"Successfully disabled {updated} service(s)."
+        )
+    bulk_disable_services.short_description = _('Disable selected services')
+
+    def export_service_usage(self, request, queryset):
+        """Export usage data for selected services."""
+        import csv
+        from django.http import HttpResponse
+        from django.utils import timezone
+        
+        response = HttpResponse(content_type='text/csv')
+        response['Content-Disposition'] = 'attachment; filename="service_usage_export.csv"'
+        
+        writer = csv.writer(response)
+        writer.writerow([
+            'Service Name', 'Credit Cost', 'Is Active', 'Total Uses', 
+            'Unique Users', 'Total Credits Consumed', 'Created Date'
+        ])
+        
+        for service in queryset:
+            from django.db.models import Sum
+            total_credits = abs(service.usages.aggregate(
+                total=Sum('credit_transaction__amount')
+            )['total'] or 0)
+            
+            writer.writerow([
+                service.name,
+                service.credit_cost,
+                'Yes' if service.is_active else 'No',
+                service.usages.count(),
+                service.usages.values('user').distinct().count(),
+                total_credits,
+                service.created_at.strftime('%Y-%m-%d %H:%M:%S')
+            ])
+        
+        return response
+    export_service_usage.short_description = _('Export service usage data')
 
 
 @admin.register(ServiceUsage)
 class ServiceUsageAdmin(admin.ModelAdmin):
-    """Admin interface for ServiceUsage model."""
+    """Admin interface for ServiceUsage model with enhanced analytics."""
     
-    list_display = ('user', 'service', 'get_credit_cost', 'created_at')
-    list_filter = ('service', 'created_at')
+    list_display = ('user', 'service', 'get_credit_cost', 'get_service_status', 'created_at')
+    list_filter = ('service', 'service__is_active', 'created_at')
     search_fields = ('user__email', 'user__first_name', 'user__last_name', 'service__name')
-    readonly_fields = ('created_at', 'get_credit_cost')
+    readonly_fields = ('created_at', 'get_credit_cost', 'get_service_status', 'get_user_info')
     ordering = ('-created_at',)
+    date_hierarchy = 'created_at'
+    actions = ['export_usage_data']
     
     fieldsets = (
         (_('Usage Information'), {
-            'fields': ('user', 'service', 'credit_transaction', 'get_credit_cost'),
+            'fields': ('user', 'get_user_info', 'service', 'get_service_status', 'credit_transaction', 'get_credit_cost'),
         }),
         (_('System Information'), {
             'fields': ('created_at',),
@@ -362,6 +557,73 @@ class ServiceUsageAdmin(admin.ModelAdmin):
         """Display the credit cost for this service usage."""
         return f"{abs(obj.credit_transaction.amount)} credits"
     get_credit_cost.short_description = _('Credits Used')
+
+    def get_service_status(self, obj):
+        """Display the service status at time of usage."""
+        if obj.service.is_active:
+            return format_html('<span style="color: green;">Active</span>')
+        else:
+            return format_html('<span style="color: red;">Inactive</span>')
+    get_service_status.short_description = _('Service Status')
+
+    def get_user_info(self, obj):
+        """Display additional user information."""
+        try:
+            credit_account = obj.user.credit_account
+            current_balance = credit_account.get_balance()
+            subscription_status = "No subscription"
+            
+            try:
+                subscription = obj.user.subscription
+                if subscription.is_active:
+                    subscription_status = f"Active ({subscription.get_status_display()})"
+                else:
+                    subscription_status = subscription.get_status_display()
+            except:
+                pass
+                
+            return format_html(
+                "Current balance: {} credits<br>Subscription: {}",
+                current_balance,
+                subscription_status
+            )
+        except:
+            return "No credit account"
+    get_user_info.short_description = _('User Info')
+
+    def get_queryset(self, request):
+        """Optimize queryset with select_related."""
+        return super().get_queryset(request).select_related(
+            'user', 'service', 'credit_transaction'
+        )
+
+    def export_usage_data(self, request, queryset):
+        """Export selected usage data as CSV."""
+        import csv
+        from django.http import HttpResponse
+        from django.utils import timezone
+        
+        response = HttpResponse(content_type='text/csv')
+        response['Content-Disposition'] = 'attachment; filename="service_usage_export.csv"'
+        
+        writer = csv.writer(response)
+        writer.writerow([
+            'User Email', 'Service Name', 'Credits Used', 'Service Status', 
+            'Usage Date', 'Transaction ID'
+        ])
+        
+        for usage in queryset:
+            writer.writerow([
+                usage.user.email,
+                usage.service.name,
+                abs(usage.credit_transaction.amount),
+                'Active' if usage.service.is_active else 'Inactive',
+                usage.created_at.strftime('%Y-%m-%d %H:%M:%S'),
+                usage.credit_transaction.id
+            ])
+        
+        return response
+    export_usage_data.short_description = _('Export selected usage data')
 
     def has_add_permission(self, request):
         """Disable adding service usage through admin."""
