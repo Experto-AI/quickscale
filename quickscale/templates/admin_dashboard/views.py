@@ -825,3 +825,166 @@ def change_subscription_plan_deprecated(request: HttpRequest) -> JsonResponse:
     """DEPRECATED: Handle subscription plan changes (upgrade/downgrade) with credit transfer."""
     # This function is deprecated - use create_plan_change_checkout instead
     return JsonResponse({'error': 'This endpoint is deprecated. Please use the new checkout flow.'}, status=410)
+
+@login_required
+@user_passes_test(lambda u: u.is_staff)
+def service_admin(request: HttpRequest) -> HttpResponse:
+    """Display service management page with list of all services."""
+    from credits.models import Service, ServiceUsage
+    from django.db.models import Count, Sum
+    from django.utils import timezone
+    from datetime import timedelta
+    
+    # Get all services with usage statistics
+    services = Service.objects.all().order_by('name')
+    
+    # Calculate analytics for each service
+    now = timezone.now()
+    last_30_days = now - timedelta(days=30)
+    last_7_days = now - timedelta(days=7)
+    
+    services_with_stats = []
+    for service in services:
+        # Calculate usage statistics
+        total_usage = service.usages.count()
+        usage_30_days = service.usages.filter(created_at__gte=last_30_days).count()
+        usage_7_days = service.usages.filter(created_at__gte=last_7_days).count()
+        
+        # Calculate credit consumption
+        total_credits = service.usages.aggregate(
+            total=Sum('credit_transaction__amount')
+        )['total'] or 0
+        total_credits = abs(total_credits)  # Make positive for display
+        
+        credits_30_days = abs(service.usages.filter(
+            created_at__gte=last_30_days
+        ).aggregate(
+            total=Sum('credit_transaction__amount')
+        )['total'] or 0)
+        
+        # Calculate unique users
+        unique_users = service.usages.values('user').distinct().count()
+        unique_users_30_days = service.usages.filter(
+            created_at__gte=last_30_days
+        ).values('user').distinct().count()
+        
+        services_with_stats.append({
+            'service': service,
+            'total_usage': total_usage,
+            'usage_30_days': usage_30_days,
+            'usage_7_days': usage_7_days,
+            'total_credits': total_credits,
+            'credits_30_days': credits_30_days,
+            'unique_users': unique_users,
+            'unique_users_30_days': unique_users_30_days,
+        })
+    
+    context = {
+        'services_with_stats': services_with_stats,
+        'total_services': services.count(),
+        'active_services': services.filter(is_active=True).count(),
+        'inactive_services': services.filter(is_active=False).count(),
+    }
+    
+    return render(request, 'admin_dashboard/service_admin.html', context)
+
+@login_required
+@user_passes_test(lambda u: u.is_staff)
+def service_detail(request: HttpRequest, service_id: int) -> HttpResponse:
+    """Display detailed information for a specific service."""
+    from credits.models import Service, ServiceUsage
+    from django.db.models import Count, Sum
+    from django.utils import timezone
+    from datetime import timedelta
+    from django.shortcuts import get_object_or_404
+    
+    service = get_object_or_404(Service, id=service_id)
+    
+    # Calculate detailed analytics
+    now = timezone.now()
+    last_30_days = now - timedelta(days=30)
+    last_7_days = now - timedelta(days=7)
+    
+    # Usage statistics
+    total_usage = service.usages.count()
+    usage_30_days = service.usages.filter(created_at__gte=last_30_days).count()
+    usage_7_days = service.usages.filter(created_at__gte=last_7_days).count()
+    
+    # Credit consumption
+    total_credits = abs(service.usages.aggregate(
+        total=Sum('credit_transaction__amount')
+    )['total'] or 0)
+    
+    credits_30_days = abs(service.usages.filter(
+        created_at__gte=last_30_days
+    ).aggregate(
+        total=Sum('credit_transaction__amount')
+    )['total'] or 0)
+    
+    credits_7_days = abs(service.usages.filter(
+        created_at__gte=last_7_days
+    ).aggregate(
+        total=Sum('credit_transaction__amount')
+    )['total'] or 0)
+    
+    # User engagement
+    unique_users = service.usages.values('user').distinct().count()
+    unique_users_30_days = service.usages.filter(
+        created_at__gte=last_30_days
+    ).values('user').distinct().count()
+    
+    # Recent usage
+    recent_usages = service.usages.select_related(
+        'user', 'credit_transaction'
+    ).order_by('-created_at')[:20]
+    
+    # Calculate average credits per use
+    avg_credits_per_use = total_credits / total_usage if total_usage > 0 else 0
+    
+    context = {
+        'service': service,
+        'analytics': {
+            'total_usage': total_usage,
+            'usage_30_days': usage_30_days,
+            'usage_7_days': usage_7_days,
+            'total_credits': total_credits,
+            'credits_30_days': credits_30_days,
+            'credits_7_days': credits_7_days,
+            'unique_users': unique_users,
+            'unique_users_30_days': unique_users_30_days,
+            'avg_credits_per_use': avg_credits_per_use,
+        },
+        'recent_usages': recent_usages,
+    }
+    
+    return render(request, 'admin_dashboard/service_detail.html', context)
+
+@login_required
+@user_passes_test(lambda u: u.is_staff)
+def service_toggle_status(request: HttpRequest, service_id: int) -> JsonResponse:
+    """Toggle service active status via HTMX."""
+    if request.method != 'POST':
+        return JsonResponse({'error': 'Method not allowed'}, status=405)
+    
+    from credits.models import Service
+    from django.shortcuts import get_object_or_404
+    
+    try:
+        service = get_object_or_404(Service, id=service_id)
+        service.is_active = not service.is_active
+        service.save()
+        
+        action = 'enabled' if service.is_active else 'disabled'
+        
+        return JsonResponse({
+            'success': True,
+            'is_active': service.is_active,
+            'message': f'Service "{service.name}" has been {action}.',
+            'status_text': 'Active' if service.is_active else 'Inactive',
+            'status_class': 'is-success' if service.is_active else 'is-warning'
+        })
+    
+    except Exception as e:
+        return JsonResponse({
+            'error': f'Failed to toggle service status: {str(e)}'
+        }, status=500)

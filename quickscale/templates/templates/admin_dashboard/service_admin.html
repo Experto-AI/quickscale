@@ -1,0 +1,271 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block title %}Service Management - Admin Dashboard{% endblock %}
+
+{% block content %}
+<section class="hero is-primary is-small">
+    <div class="hero-body">
+        <p class="title">Service Management</p>
+        <p class="subtitle">Manage your application services and view usage analytics</p>
+    </div>
+</section>
+
+<section class="section" x-data="serviceAdminData()" id="service-admin-section">
+    <div class="container">
+        <!-- Service Overview Cards -->
+        <div class="columns is-multiline mb-5">
+            <div class="column is-4">
+                <div class="card">
+                    <div class="card-content has-text-centered">
+                        <p class="title is-4 has-text-info">{{ total_services }}</p>
+                        <p class="subtitle is-6">Total Services</p>
+                    </div>
+                </div>
+            </div>
+            <div class="column is-4">
+                <div class="card">
+                    <div class="card-content has-text-centered">
+                        <p class="title is-4 has-text-success">{{ active_services }}</p>
+                        <p class="subtitle is-6">Active Services</p>
+                    </div>
+                </div>
+            </div>
+            <div class="column is-4">
+                <div class="card">
+                    <div class="card-content has-text-centered">
+                        <p class="title is-4 has-text-warning">{{ inactive_services }}</p>
+                        <p class="subtitle is-6">Inactive Services</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Filter and Search - Temporarily disabled for debugging -->
+        <!--
+        <div class="box">
+            <div class="field is-grouped">
+                <div class="control">
+                    <div class="select">
+                        <select x-model="statusFilter">
+                            <option value="all">All Services</option>
+                            <option value="active">Active Only</option>
+                            <option value="inactive">Inactive Only</option>
+                        </select>
+                    </div>
+                </div>
+                <div class="control is-expanded">
+                    <input class="input" type="text" x-model="searchTerm" placeholder="Search services...">
+                </div>
+            </div>
+        </div>
+        -->
+
+        <!-- Services Table -->
+        {% if services_with_stats %}
+        <div class="box">
+            <div class="table-container">
+                <table class="table is-fullwidth is-striped is-hoverable">
+                    <thead>
+                        <tr>
+                            <th>Service</th>
+                            <th>Credit Cost</th>
+                            <th>Status</th>
+                            <th>Total Usage</th>
+                            <th>Last 30 Days</th>
+                            <th>Credits Consumed</th>
+                            <th>Unique Users</th>
+                            <th>Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for item in services_with_stats %}
+                        <tr x-data="serviceRowData({{ item.service.id }}, '{{ item.service.is_active|yesno:'active,inactive' }}', '{{ item.service.name|lower }}')"
+                            data-service-id="{{ item.service.id }}" 
+                            data-service-status="{{ item.service.is_active|yesno:'active,inactive' }}"
+                            data-service-name="{{ item.service.name|lower }}">
+                            <td>
+                                <div>
+                                    <p class="has-text-weight-bold">{{ item.service.name }}</p>
+                                    <p class="is-size-7 has-text-grey">{{ item.service.description|truncatechars:80 }}</p>
+                                </div>
+                            </td>
+                            <td>
+                                <span class="tag is-info">{{ item.service.credit_cost }} credits</span>
+                            </td>
+                            <td>
+                                <span x-bind:class="getStatusClass()" x-text="getStatusText()"></span>
+                            </td>
+                            <td>
+                                <span class="has-text-weight-semibold">{{ item.total_usage }}</span>
+                            </td>
+                            <td>
+                                <div>
+                                    <p>{{ item.usage_30_days }} uses</p>
+                                    <p class="is-size-7 has-text-grey">{{ item.usage_7_days }} last 7 days</p>
+                                </div>
+                            </td>
+                            <td>
+                                <div>
+                                    <p class="has-text-weight-semibold">{{ item.total_credits }}</p>
+                                    <p class="is-size-7 has-text-grey">{{ item.credits_30_days }} last 30 days</p>
+                                </div>
+                            </td>
+                            <td>
+                                <div>
+                                    <p class="has-text-weight-semibold">{{ item.unique_users }}</p>
+                                    <p class="is-size-7 has-text-grey">{{ item.unique_users_30_days }} last 30 days</p>
+                                </div>
+                            </td>
+                            <td>
+                                <div class="buttons are-small">
+                                    <a href="{% url 'admin_dashboard:service_detail' item.service.id %}" class="button is-info">
+                                        <span class="icon"><i class="fas fa-eye"></i></span>
+                                        <span>View</span>
+                                    </a>
+                                    <button 
+                                        x-bind:class="getToggleButtonClass()"
+                                        x-bind:disabled="isToggling"
+                                        x-on:click="toggleServiceStatus()"
+                                        hx-post="{% url 'admin_dashboard:service_toggle_status' item.service.id %}"
+                                        hx-headers='{"X-CSRFToken": "{{ csrf_token }}"}'
+                                        hx-swap="none"
+                                        x-on:htmx:after-request="handleToggleResponse($event)">
+                                        <span class="icon">
+                                            <i x-bind:class="getToggleIconClass()"></i>
+                                        </span>
+                                        <span x-text="getToggleText()"></span>
+                                    </button>
+                                </div>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+        {% else %}
+        <div class="box">
+            <div class="notification is-info is-light">
+                <p><strong>No services found!</strong></p>
+                <p>There are currently no services configured in your application. Services can be created and managed through the Django admin interface.</p>
+                <p class="mt-3">
+                    <a href="/admin/credits/service/" class="button is-info" target="_blank">
+                        <span class="icon"><i class="fas fa-plus"></i></span>
+                        <span>Add Service in Admin</span>
+                    </a>
+                </p>
+            </div>
+        </div>
+        {% endif %}
+
+        <!-- Alpine.js notification component -->
+        <div x-show="notification.show" 
+             x-bind:class="'notification ' + notification.type + ' is-light'"
+             x-transition:enter="transition ease-out duration-300"
+             x-transition:enter-start="opacity-0 transform translate-y-2"
+             x-transition:enter-end="opacity-100 transform translate-y-0"
+             x-transition:leave="transition ease-in duration-200"
+             x-transition:leave-start="opacity-100"
+             x-transition:leave-end="opacity-0">
+            <button class="delete" x-on:click="hideNotification()"></button>
+            <span x-text="notification.message"></span>
+        </div>
+    </div>
+</section>
+
+<script>
+// Service admin data management using Alpine.js
+function serviceAdminData() {
+    return {
+        statusFilter: 'all',
+        searchTerm: '',
+        notification: {
+            show: false,
+            message: '',
+            type: 'is-success'
+        },
+        
+        showNotification(message, type = 'is-success') {
+            this.notification = {
+                show: true,
+                message: message,
+                type: type
+            };
+            
+            // Auto-hide notification after 5 seconds
+            setTimeout(() => {
+                this.hideNotification();
+            }, 5000);
+        },
+        
+        hideNotification() {
+            this.notification.show = false;
+        }
+    }
+}
+
+// Individual service row data management using Alpine.js
+function serviceRowData(serviceId, initialStatus, serviceName) {
+    return {
+        serviceId: serviceId,
+        isActive: initialStatus === 'active',
+        serviceName: serviceName,
+        isToggling: false,
+        
+        getStatusClass() {
+            return this.isActive ? 'tag is-success' : 'tag is-warning';
+        },
+        
+        getStatusText() {
+            return this.isActive ? 'Active' : 'Inactive';
+        },
+        
+        getToggleButtonClass() {
+            return this.isActive ? 'button is-warning' : 'button is-success';
+        },
+        
+        getToggleIconClass() {
+            return this.isActive ? 'fas fa-pause' : 'fas fa-play';
+        },
+        
+        getToggleText() {
+            return this.isActive ? 'Disable' : 'Enable';
+        },
+        
+        toggleServiceStatus() {
+            this.isToggling = true;
+        },
+        
+        handleToggleResponse(event) {
+            this.isToggling = false;
+            
+            if (event.detail.successful) {
+                try {
+                    const response = JSON.parse(event.detail.xhr.responseText);
+                    
+                    if (response.success) {
+                        // Update service status using Alpine.js reactive data
+                        this.isActive = response.is_active;
+                        
+                        // Show success notification
+                        this.$root.showNotification(response.message, 'is-success');
+                    } else {
+                        this.$root.showNotification(response.error || 'Failed to toggle service status', 'is-danger');
+                    }
+                } catch (e) {
+                    this.$root.showNotification('Invalid response format', 'is-danger');
+                }
+            } else {
+                try {
+                    const response = JSON.parse(event.detail.xhr.responseText);
+                    this.$root.showNotification(response.error || 'Failed to toggle service status', 'is-danger');
+                } catch (e) {
+                    this.$root.showNotification('Request failed', 'is-danger');
+                }
+            }
+        }
+    }
+}
+</script>
+{% endblock %} 

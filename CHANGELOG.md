@@ -2,6 +2,31 @@
 
 All notable changes to this project will be documented in this file.
 
+## v0.24.0 (2025-06-07)
+v0.24.0 feat: Implement Service Management Admin Interface
+
+This PR implements comprehensive service management and analytics capabilities for administrators, enhancing the ability to manage and monitor services effectively within QuickScale's admin interface.
+
+- Backend Implementation:
+  - Enhanced Django admin for Service and ServiceUsage models with comprehensive analytics and usage tracking.
+  - Added bulk operations for enabling/disabling services with proper audit trail logging.
+  - Implemented detailed service usage analytics including total usage, credits consumed, and unique user counts.
+  - Created custom admin views for service configuration and performance monitoring.
+  - Added service usage analytics with 30-day trends and detailed performance metrics.
+- Frontend Implementation:
+  - Created admin service management pages with real-time enable/disable functionality via HTMX.
+  - Developed service detail views showing usage statistics, credit consumption, and user engagement metrics.
+  - Integrated Alpine.js for dynamic UI interactions, notifications, and state management.
+  - Added service filtering capabilities and responsive admin dashboard components.
+  - Implemented comprehensive service analytics templates with detailed performance insights.
+- Testing:
+  - Added comprehensive integration tests for end-to-end service management workflows.
+  - Implemented unit tests for service admin enhancements, security, and error handling.
+  - Created tests for Alpine.js and HTMX functionalities within service management templates.
+  - Verified data integrity and consistency across service analytics calculations.
+
+This PR completes the Service Management Admin Interface, providing administrators with powerful tools to manage services, view detailed analytics, and monitor service performance with real-time controls and comprehensive usage insights.
+
 ## v0.23.0 (2025-06-05)
 v0.23.0 feat: Implement API Authentication & Basic Endpoints for AI Services
 

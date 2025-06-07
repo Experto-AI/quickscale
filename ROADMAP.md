@@ -52,6 +52,7 @@
    - ✅ Basic monthly subscription system (Sprint 6)
    - ✅ Credit type priority system (Sprint 7)
    - ✅ Payment history & receipts (Sprint 8)
+   - ✅ Service management admin interface (Sprint 13)
 
 For more details refer to the [CHANGELOG](CHANGELOG.md).
 
@@ -72,54 +73,7 @@ The QuickScale credit system supports multiple payment models and credit types w
 
 ---
 
-### Sprint 12: Service Credit Integration (v0.24.0)
-**Goal**: Integrate credit consumption with API service calls
-**Time**: 1-2 days
-
-**Backend Implementation:**
-- [ ] Add credit validation middleware for API calls
-- [ ] Implement automatic credit consumption on service usage
-- [ ] Add insufficient credits error handling
-- [ ] Create service usage logging
-
-**Frontend Implementation:**
-- [ ] Show credit balance in API documentation
-- [ ] Add insufficient credits error messages
-- [ ] Display service usage history in dashboard
-
-**Testing:**
-- [ ] Test credit validation before service calls
-- [ ] Test automatic credit consumption
-- [ ] Test insufficient credits error handling
-
-**Validation**: API calls consume credits automatically and fail gracefully when insufficient credits
-
----
-
-### Sprint 13: Service Management Admin Interface (v0.25.0)
-**Goal**: Basic admin interface for managing services and viewing usage
-**Time**: 1-2 days
-
-**Backend Implementation:**
-- [ ] Add service management to Django admin
-- [ ] Create admin views for service configuration
-- [ ] Add service usage analytics (basic counts)
-
-**Frontend Implementation:**
-- [ ] Create admin service management page
-- [ ] Add service enable/disable functionality
-- [ ] Show basic service usage statistics
-
-**Testing:**
-- [ ] Test admin service management functionality
-- [ ] Test service enable/disable
-- [ ] Test basic usage analytics
-
-**Validation**: Admins can manage services and view basic usage statistics
-
----
-
-### Sprint 14: Service Documentation & Examples (v0.26.0)
+### Sprint 14: Service Documentation & Examples (v0.25.0)
 **Goal**: Documentation and examples for AI engineers to add services
 **Time**: 1-2 days
 
@@ -142,7 +96,7 @@ The QuickScale credit system supports multiple payment models and credit types w
 
 ---
 
-### Sprint 15: Basic User Search & Admin Foundation (v0.27.0)
+### Sprint 15: Basic User Search & Admin Foundation (v0.26.0)
 **Goal**: Essential admin tools - user search and basic management
 **Time**: 1-2 days
 
@@ -165,7 +119,7 @@ The QuickScale credit system supports multiple payment models and credit types w
 
 ---
 
-### Sprint 16: Simple Audit Logging (v0.28.0)
+### Sprint 16: Simple Audit Logging (v0.27.0)
 **Goal**: Basic audit logging for admin actions
 **Time**: 1-2 days
 
@@ -188,7 +142,7 @@ The QuickScale credit system supports multiple payment models and credit types w
 
 ---
 
-### Sprint 17: Admin Credit Management (v0.29.0)
+### Sprint 17: Admin Credit Management (v0.28.0)
 **Goal**: Allow admins to adjust user credits manually
 **Time**: 1-2 days
 
@@ -211,7 +165,7 @@ The QuickScale credit system supports multiple payment models and credit types w
 
 ---
 
-### Sprint 18: Basic Payment Admin Tools (v0.30.0)
+### Sprint 18: Basic Payment Admin Tools (v0.29.0)
 **Goal**: Essential payment support tools for admins
 **Time**: 1-2 days
 
@@ -234,7 +188,7 @@ The QuickScale credit system supports multiple payment models and credit types w
 
 ---
 
-### Sprint 19: Simple Analytics Dashboard (v0.31.0)
+### Sprint 19: Simple Analytics Dashboard (v0.30.0)
 **Goal**: Basic business metrics for admins
 **Time**: 1-2 days
 
@@ -257,7 +211,7 @@ The QuickScale credit system supports multiple payment models and credit types w
 
 ---
 
-### Sprint 20: Polish & Launch Preparation (v0.32.0)
+### Sprint 20: Polish & Launch Preparation (v0.31.0)
 **Goal**: Final polish and launch readiness
 **Time**: 1-2 days
 
