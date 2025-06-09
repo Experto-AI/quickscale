@@ -75,7 +75,6 @@ The QuickScale credit system supports multiple payment models and credit types w
 
 ### Sprint 14: Service Documentation & Examples (v0.25.0)
 **Goal**: Documentation and examples for AI engineers to add services
-**Time**: 1-2 days
 
 **Backend Implementation:**
 - [ ] Create service template generator command
@@ -98,7 +97,6 @@ The QuickScale credit system supports multiple payment models and credit types w
 
 ### Sprint 15: Basic User Search & Admin Foundation (v0.26.0)
 **Goal**: Essential admin tools - user search and basic management
-**Time**: 1-2 days
 
 **Backend Implementation:**
 - [ ] Create simple user search functionality (email, name)
@@ -121,7 +119,6 @@ The QuickScale credit system supports multiple payment models and credit types w
 
 ### Sprint 16: Simple Audit Logging (v0.27.0)
 **Goal**: Basic audit logging for admin actions
-**Time**: 1-2 days
 
 **Backend Implementation:**
 - [ ] Create simple AuditLog model (action, user, timestamp, description)
@@ -144,7 +141,6 @@ The QuickScale credit system supports multiple payment models and credit types w
 
 ### Sprint 17: Admin Credit Management (v0.28.0)
 **Goal**: Allow admins to adjust user credits manually
-**Time**: 1-2 days
 
 **Backend Implementation:**
 - [ ] Add admin credit adjustment functionality
@@ -167,7 +163,6 @@ The QuickScale credit system supports multiple payment models and credit types w
 
 ### Sprint 18: Basic Payment Admin Tools (v0.29.0)
 **Goal**: Essential payment support tools for admins
-**Time**: 1-2 days
 
 **Backend Implementation:**
 - [ ] Add payment search functionality
@@ -190,7 +185,6 @@ The QuickScale credit system supports multiple payment models and credit types w
 
 ### Sprint 19: Simple Analytics Dashboard (v0.30.0)
 **Goal**: Basic business metrics for admins
-**Time**: 1-2 days
 
 **Backend Implementation:**
 - [ ] Calculate basic metrics (total users, revenue, active subscriptions)
@@ -213,7 +207,6 @@ The QuickScale credit system supports multiple payment models and credit types w
 
 ### Sprint 20: Polish & Launch Preparation (v0.31.0)
 **Goal**: Final polish and launch readiness
-**Time**: 1-2 days
 
 **Backend Implementation:**
 - [ ] Code review and cleanup

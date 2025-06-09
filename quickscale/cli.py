@@ -250,6 +250,119 @@ For a list of available commands, use:
         help="Arguments to pass to manage.py")
 
 
+def setup_service_generator_parsers(subparsers: argparse._SubParsersAction) -> None:
+    """Set up service generator command parsers."""
+    # Generate service command
+    generate_parser = subparsers.add_parser("generate-service",
+        help="Generate a new AI service template",
+        description="""
+Generate a new AI service template for QuickScale projects.
+
+This command creates a service template that integrates with the QuickScale
+credit system and provides a foundation for implementing AI functionality.
+
+Service types:
+  basic           - General purpose service template
+  text_processing - Template optimized for text analysis
+  image_processing - Template optimized for image processing
+
+The generated service will include:
+- Service class that inherits from BaseService
+- Credit consumption integration
+- Usage example with error handling
+- Complete documentation and TODO comments
+        """,
+        epilog="""
+Examples:
+  quickscale generate-service sentiment_analysis
+  quickscale generate-service text_summarizer --type text_processing
+  quickscale generate-service image_classifier --type image_processing --output-dir ./my_services
+        """,
+        formatter_class=argparse.RawDescriptionHelpFormatter)
+    generate_parser.add_argument(
+        "name",
+        help="Name of the service to generate (snake_case, e.g., sentiment_analysis)")
+    generate_parser.add_argument(
+        "--type", "-t",
+        choices=["basic", "text_processing", "image_processing"],
+        default="basic",
+        help="Type of service template to generate (default: basic)")
+    generate_parser.add_argument(
+        "--output-dir", "-o",
+        help="Output directory for generated files (default: ./services)")
+    
+    # List services command
+    list_parser = subparsers.add_parser("list-services",
+        help="List available services and their status",
+        description="""
+List all registered services in the current QuickScale project.
+
+This command shows all services that have been registered using the
+@register_service decorator, along with their configuration details
+from the database.
+        """,
+        epilog="""
+Examples:
+  quickscale list-services           List all services
+  quickscale list-services --details Show detailed information including credit costs
+        """,
+        formatter_class=argparse.RawDescriptionHelpFormatter)
+    list_parser.add_argument(
+        "--details", "-d",
+        action="store_true",
+        help="Show detailed information including credit costs and descriptions")
+    
+    # Validate service command
+    validate_parser = subparsers.add_parser("validate-service",
+        help="Validate a service file and provide development assistance",
+        description="""
+Validate a service file to ensure it follows QuickScale service patterns.
+
+This command checks:
+- Required imports and inheritance
+- Proper use of decorators
+- Implementation of required methods
+- Code quality and best practices
+- Dependencies and potential issues
+
+Use this during development to catch issues early.
+        """,
+        epilog="""
+Examples:
+  quickscale validate-service my_service.py
+  quickscale validate-service my_service.py --tips
+        """,
+        formatter_class=argparse.RawDescriptionHelpFormatter)
+    validate_parser.add_argument(
+        "file",
+        help="Path to the service file to validate")
+    validate_parser.add_argument(
+        "--tips", "-t",
+        action="store_true",
+        help="Show development tips along with validation results")
+    
+    # Service examples command
+    examples_parser = subparsers.add_parser("service-examples",
+        help="Show available service examples",
+        description="""
+Display available service examples with descriptions and use cases.
+
+Examples include common AI service patterns like text processing,
+image analysis, and data validation. Each example shows the
+command to generate that specific service type.
+        """,
+        epilog="""
+Examples:
+  quickscale service-examples                Show all examples
+  quickscale service-examples --type text_processing    Show only text processing examples
+        """,
+        formatter_class=argparse.RawDescriptionHelpFormatter)
+    examples_parser.add_argument(
+        "--type", "-t",
+        choices=["basic", "text_processing", "image_processing"],
+        help="Filter examples by service type")
+
+
 def setup_help_and_version_parsers(subparsers: argparse._SubParsersAction) -> None:
     """Set up help and version command parsers."""
     help_parser = subparsers.add_parser("help", 
@@ -358,6 +471,7 @@ def main() -> int:
     setup_utility_parsers(subparsers)
     setup_logs_parser(subparsers)
     setup_manage_parser(subparsers)
+    setup_service_generator_parsers(subparsers)
     setup_help_and_version_parsers(subparsers)
     
     # Parse arguments

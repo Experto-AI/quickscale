@@ -6,6 +6,7 @@ from .project_commands import DestroyProjectCommand
 from .service_commands import ServiceUpCommand, ServiceDownCommand, ServiceLogsCommand, ServiceStatusCommand
 from .development_commands import ShellCommand, ManageCommand
 from .system_commands import CheckCommand
+from .service_generator_commands import ServiceGeneratorCommand, ListServicesCommand, ValidateServiceCommand, ServiceExamplesCommand
 
 class CommandManager:
     """Manages execution of all available CLI commands."""
@@ -30,6 +31,12 @@ class CommandManager:
             
             # System commands
             'check': CheckCommand(),
+            
+            # Service generator commands
+            'generate-service': ServiceGeneratorCommand(),
+            'list-services': ListServicesCommand(),
+            'validate-service': ValidateServiceCommand(),
+            'service-examples': ServiceExamplesCommand(),
             
             # Info commands - these are handled specially
             'help': None,  # Will be handled by _handle_info_commands
@@ -90,6 +97,22 @@ class CommandManager:
         """Check if required tools are available."""
         self.execute_command('check', print_info=print_info)
     
+    def generate_service(self, service_name: str, service_type: str = "basic", output_dir: Optional[str] = None) -> Dict[str, Any]:
+        """Generate a new service template."""
+        return self.execute_command('generate-service', service_name, service_type=service_type, output_dir=output_dir)
+    
+    def list_services(self, show_details: bool = False) -> Dict[str, Any]:
+        """List available services."""
+        return self.execute_command('list-services', show_details=show_details)
+    
+    def validate_service(self, service_file: str, show_tips: bool = False) -> Dict[str, Any]:
+        """Validate a service file."""
+        return self.execute_command('validate-service', service_file, show_tips=show_tips)
+    
+    def show_service_examples(self, example_type: Optional[str] = None) -> Dict[str, Any]:
+        """Show available service examples."""
+        return self.execute_command('service-examples', example_type=example_type)
+    
     def get_available_commands(self) -> List[str]:
         """Get list of available command names."""
         return list(self._commands.keys())
@@ -133,6 +156,29 @@ class CommandManager:
             return self.run_manage_command(args.args)
         return None
     
+    def _handle_service_generator_commands(self, command_name: str, args: Any) -> Any:
+        """Handle service generator commands."""
+        if command_name == 'generate-service':
+            return self.generate_service(
+                service_name=getattr(args, 'name'),
+                service_type=getattr(args, 'type', 'basic'),
+                output_dir=getattr(args, 'output_dir', None)
+            )
+        if command_name == 'list-services':
+            return self.list_services(
+                show_details=getattr(args, 'details', False)
+            )
+        if command_name == 'validate-service':
+            return self.validate_service(
+                service_file=getattr(args, 'file'),
+                show_tips=getattr(args, 'tips', False)
+            )
+        if command_name == 'service-examples':
+            return self.show_service_examples(
+                example_type=getattr(args, 'type', None)
+            )
+        return None
+    
     def _display_help(self, topic: Optional[str] = None) -> None:
         """Display help information."""
         from quickscale.utils.help_manager import show_manage_help
@@ -152,6 +198,10 @@ class CommandManager:
             MessageManager.info("  shell          - Open a shell in the web container")
             MessageManager.info("  django-shell   - Open Django shell")
             MessageManager.info("  manage         - Run Django management commands")
+            MessageManager.info("  generate-service - Generate a new AI service template")
+            MessageManager.info("  list-services  - List available services")
+            MessageManager.info("  validate-service - Validate a service file")
+            MessageManager.info("  service-examples - Show available service examples")
             MessageManager.info("  help           - Show this help message")
             MessageManager.info("  version        - Show the current version of QuickScale")
             MessageManager.info("\nUse 'quickscale help manage' for Django management help.")
@@ -181,6 +231,7 @@ class CommandManager:
             self._handle_service_commands(command_name, args) or
             self._handle_project_commands(command_name, args) or
             self._handle_shell_commands(command_name, args) or
+            self._handle_service_generator_commands(command_name, args) or
             self._handle_info_commands(command_name, args)
         )
         

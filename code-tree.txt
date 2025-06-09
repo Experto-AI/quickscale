@@ -1,7 +1,7 @@
 quickscale
 ├── dist
-│   ├── quickscale-0.22.0-py3-none-any.whl
-│   └── quickscale-0.22.0.tar.gz
+│   ├── quickscale-0.24.0-py3-none-any.whl
+│   └── quickscale-0.24.0.tar.gz
 ├── docs
 │   ├── contrib
 │   │   ├── 01_ai_programming_assistant.md
@@ -302,7 +302,36 @@ quickscale
 │   │   │       ├── payment_history(request)
 │   │   │       ├── payment_detail(request, payment_id)
 │   │   │       ├── download_receipt(request, payment_id)
-│   │   │       └── change_subscription_plan_deprecated(request)
+│   │   │       ├── change_subscription_plan_deprecated(request)
+│   │   │       ├── service_admin(request)
+│   │   │       ├── service_detail(request, service_id)
+│   │   │       └── service_toggle_status(request, service_id)
+│   │   ├── api
+│   │   │   ├── templates
+│   │   │   │   └── api
+│   │   │   │       └── base.html
+│   │   │   ├── __init__.py
+│   │   │   ├── apps.py
+│   │   │   │   └── ApiConfig {}
+│   │   │   ├── urls.py
+│   │   │   ├── utils.py
+│   │   │   │   ├── APIResponse {}
+│   │   │   │   │   ├── success(data, message, status)
+│   │   │   │   │   ├── error(message, status, error_code, details)
+│   │   │   │   │   ├── validation_error(errors)
+│   │   │   │   │   ├── unauthorized(message)
+│   │   │   │   │   ├── forbidden(message)
+│   │   │   │   │   ├── not_found(message)
+│   │   │   │   │   └── server_error(message)
+│   │   │   │   ├── validate_json_request(request)
+│   │   │   │   ├── validate_required_fields(data, required_fields)
+│   │   │   │   ├── validate_text_length(text, min_length, max_length)
+│   │   │   │   └── consume_service_credits(user, service_name, credit_cost)
+│   │   │   └── views.py
+│   │   │       └── TextProcessingView {}
+│   │   │           ├── post(self, request)
+│   │   │           ├── _process_text(self, text, operation)
+│   │   │           └── get(self, request)
 │   │   ├── common
 │   │   │   ├── migrations
 │   │   │   │   ├── 0001_initial.py
@@ -321,6 +350,11 @@ quickscale
 │   │   │   │   │   ├── create_site_permissions(apps, schema_editor)
 │   │   │   │   │   └── Migration {}
 │   │   │   │   └── __init__.py
+│   │   │   ├── api_middleware.py
+│   │   │   │   └── APIKeyAuthenticationMiddleware {}
+│   │   │   │       ├── process_request(self, request)
+│   │   │   │       ├── _extract_api_key(self, request)
+│   │   │   │       └── _validate_api_key(self, api_key_data)
 │   │   │   ├── asgi.py
 │   │   │   ├── context_processors.py
 │   │   │   │   ├── project_settings(request)
@@ -359,6 +393,12 @@ quickscale
 │   │   │   │   ├── 0004_add_stripe_invoice_id.py
 │   │   │   │   │   └── Migration {}
 │   │   │   │   ├── 0005_ai_service_framework.py
+│   │   │   │   │   └── Migration {}
+│   │   │   │   ├── 0006_add_api_key_model.py
+│   │   │   │   │   └── Migration {}
+│   │   │   │   ├── 0007_add_text_processing_service.py
+│   │   │   │   │   ├── create_text_processing_service(apps, schema_editor)
+│   │   │   │   │   ├── remove_text_processing_service(apps, schema_editor)
 │   │   │   │   │   └── Migration {}
 │   │   │   │   └── __init__.py
 │   │   │   ├── templates
@@ -427,16 +467,35 @@ quickscale
 │   │   │   │   │   ├── has_change_permission(self, request, obj)
 │   │   │   │   │   └── has_delete_permission(self, request, obj)
 │   │   │   │   ├── ServiceAdmin {}
-│   │   │   │   │   └── usage_count(self, obj)
+│   │   │   │   │   ├── usage_count(self, obj)
+│   │   │   │   │   ├── total_credits_consumed(self, obj)
+│   │   │   │   │   ├── unique_users_count(self, obj)
+│   │   │   │   │   ├── get_usage_analytics(self, obj)
+│   │   │   │   │   ├── service_actions(self, obj)
+│   │   │   │   │   ├── get_urls(self)
+│   │   │   │   │   ├── service_usage_analytics_view(self, request, service_id)
+│   │   │   │   │   ├── bulk_enable_services(self, request, queryset)
+│   │   │   │   │   ├── bulk_disable_services(self, request, queryset)
+│   │   │   │   │   └── export_service_usage(self, request, queryset)
 │   │   │   │   ├── ServiceUsageAdmin {}
 │   │   │   │   │   ├── get_credit_cost(self, obj)
+│   │   │   │   │   ├── get_service_status(self, obj)
+│   │   │   │   │   ├── get_user_info(self, obj)
+│   │   │   │   │   ├── get_queryset(self, request)
+│   │   │   │   │   ├── export_usage_data(self, request, queryset)
 │   │   │   │   │   ├── has_add_permission(self, request)
 │   │   │   │   │   ├── has_change_permission(self, request, obj)
 │   │   │   │   │   └── has_delete_permission(self, request, obj)
-│   │   │   │   └── PaymentAdmin {}
+│   │   │   │   ├── PaymentAdmin {}
+│   │   │   │   │   ├── has_add_permission(self, request)
+│   │   │   │   │   ├── has_change_permission(self, request, obj)
+│   │   │   │   │   └── has_delete_permission(self, request, obj)
+│   │   │   │   └── APIKeyAdmin {}
+│   │   │   │       ├── is_expired_status(self, obj)
 │   │   │   │       ├── has_add_permission(self, request)
 │   │   │   │       ├── has_change_permission(self, request, obj)
-│   │   │   │       └── has_delete_permission(self, request, obj)
+│   │   │   │       └── get_readonly_fields(self, request, obj)
+│   │   │   ├── api_urls.py
 │   │   │   ├── apps.py
 │   │   │   │   └── CreditsConfig {}
 │   │   │   ├── forms.py
@@ -487,6 +546,15 @@ quickscale
 │   │   │   │   │   ├── is_credit_purchase(self)
 │   │   │   │   │   ├── generate_receipt_data(self)
 │   │   │   │   │   └── create_from_stripe_event(cls, user, stripe_event_data, payment_type)
+│   │   │   │   ├── APIKey {}
+│   │   │   │   │   ├── Meta {}
+│   │   │   │   │   ├── __str__(self)
+│   │   │   │   │   ├── generate_key(cls)
+│   │   │   │   │   ├── get_hashed_key(cls, secret_key)
+│   │   │   │   │   ├── update_last_used(self)
+│   │   │   │   │   ├── verify_secret_key(self, secret_key)
+│   │   │   │   │   ├── is_expired(self)
+│   │   │   │   │   └── is_valid(self)
 │   │   │   │   ├── InsufficientCreditsError {}
 │   │   │   │   └── handle_plan_change_credit_transfer(user, current_product, new_product, new_subscription_id, change_type, session_data)
 │   │   │   ├── urls.py
@@ -529,7 +597,8 @@ quickscale
 │   │   │   └── views.py
 │   │   │       ├── index(request)
 │   │   │       ├── about(request)
-│   │   │       └── contact(request)
+│   │   │       ├── contact(request)
+│   │   │       └── api_docs(request)
 │   │   ├── services
 │   │   │   ├── templates
 │   │   │   │   └── services
@@ -816,7 +885,8 @@ quickscale
 │   │   │   ├── admin
 │   │   │   │   ├── credits
 │   │   │   │   │   ├── bulk_credit_adjustment.html
-│   │   │   │   │   └── credit_adjustment.html
+│   │   │   │   │   ├── credit_adjustment.html
+│   │   │   │   │   └── service_usage_analytics.html
 │   │   │   │   └── stripe_manager
 │   │   │   │       └── stripeproduct
 │   │   │   │           └── change_list.html
@@ -827,6 +897,8 @@ quickscale
 │   │   │   │   ├── plan_change_success.html
 │   │   │   │   ├── product_admin.html
 │   │   │   │   ├── product_detail.html
+│   │   │   │   ├── service_admin.html
+│   │   │   │   ├── service_detail.html
 │   │   │   │   ├── subscription.html
 │   │   │   │   ├── subscription_cancel.html
 │   │   │   │   ├── subscription_success.html
@@ -839,6 +911,7 @@ quickscale
 │   │   │   │   └── navbar.html
 │   │   │   ├── public
 │   │   │   │   ├── about.html
+│   │   │   │   ├── api_docs.html
 │   │   │   │   ├── contact.html
 │   │   │   │   ├── home.html
 │   │   │   │   └── index.html
@@ -848,6 +921,8 @@ quickscale
 │   │   │   │   ├── product_list.html
 │   │   │   │   └── status.html
 │   │   │   ├── users
+│   │   │   │   ├── api_key_generated.html
+│   │   │   │   ├── api_keys.html
 │   │   │   │   ├── login.html
 │   │   │   │   ├── login_form.html
 │   │   │   │   ├── profile.html
@@ -890,6 +965,7 @@ quickscale
 │   │   │   │           ├── setUpTestData(cls)
 │   │   │   │           ├── test_authenticated_user_can_view_plans(self)
 │   │   │   │           └── test_unauthenticated_user_can_view_plans(self)
+│   │   │   ├── README_API_TESTS.md
 │   │   │   ├── __init__.py
 │   │   │   └── test_sample.py
 │   │   │       └── SampleTestCase {}
@@ -981,7 +1057,11 @@ quickscale
 │   │   │       ├── CustomSignupForm {}
 │   │   │       │   └── Meta {}
 │   │   │       ├── signup_view(request)
-│   │   │       └── profile_view(request)
+│   │   │       ├── profile_view(request)
+│   │   │       ├── api_keys_view(request)
+│   │   │       ├── generate_api_key_view(request)
+│   │   │       ├── revoke_api_key_view(request)
+│   │   │       └── regenerate_api_key_view(request)
 │   │   ├── Dockerfile
 │   │   ├── docker-compose.yml
 │   │   ├── entrypoint.sh
@@ -1113,14 +1193,66 @@ quickscale
 │   ├── requires.txt
 │   └── top_level.txt
 ├── tests
+│   ├── api
+│   │   ├── __init__.py
+│   │   ├── apps.py
+│   │   │   └── ApiConfig {}
+│   │   ├── urls.py
+│   │   └── views.py
+│   │       └── TextProcessingView {}
+│   │           ├── get(self, request)
+│   │           ├── post(self, request)
+│   │           └── _process_text(self, text, operation)
 │   ├── core
 │   │   ├── stripe
 │   │   │   ├── __init__.py
 │   │   │   └── settings.py
 │   │   ├── __init__.py
+│   │   ├── api_middleware.py
+│   │   │   └── APIKeyAuthenticationMiddleware {}
+│   │   │       ├── process_request(self, request)
+│   │   │       ├── _extract_api_key(self, request)
+│   │   │       └── _validate_api_key(self, api_key_data)
 │   │   ├── settings.py
 │   │   ├── urls.py
 │   │   └── wsgi.py
+│   ├── credits
+│   │   ├── __init__.py
+│   │   ├── apps.py
+│   │   │   └── CreditsConfig {}
+│   │   ├── models.py
+│   │   │   ├── Service {}
+│   │   │   │   ├── Meta {}
+│   │   │   │   └── __str__(self)
+│   │   │   ├── CreditAccount {}
+│   │   │   │   ├── Meta {}
+│   │   │   │   ├── __str__(self)
+│   │   │   │   ├── get_balance(self)
+│   │   │   │   ├── add_credits(self, amount, description, credit_type)
+│   │   │   │   ├── consume_credits(self, amount, description)
+│   │   │   │   └── get_or_create_for_user(cls, user)
+│   │   │   ├── CreditTransaction {}
+│   │   │   │   ├── Meta {}
+│   │   │   │   └── __str__(self)
+│   │   │   ├── ServiceUsage {}
+│   │   │   │   ├── Meta {}
+│   │   │   │   └── __str__(self)
+│   │   │   ├── APIKey {}
+│   │   │   │   ├── Meta {}
+│   │   │   │   ├── __str__(self)
+│   │   │   │   ├── generate_key(cls)
+│   │   │   │   ├── get_hashed_key(cls, secret_key)
+│   │   │   │   ├── update_last_used(self)
+│   │   │   │   ├── verify_secret_key(self, secret_key)
+│   │   │   │   ├── is_expired(self)
+│   │   │   │   └── is_valid(self)
+│   │   │   └── InsufficientCreditsError {}
+│   │   ├── urls.py
+│   │   └── views.py
+│   │       ├── APIKeyListView {}
+│   │       │   └── get(self, request)
+│   │       └── APIKeyCreateView {}
+│   │           └── post(self, request)
 │   ├── e2e
 │   │   ├── support
 │   │   │   ├── test_project_template
@@ -1309,26 +1441,72 @@ quickscale
 │   │   │       ├── test_missing_context_processor(self)
 │   │   │       ├── test_long_project_name(self)
 │   │   │       └── test_special_chars_project_name(self)
-│   │   └── test_services_integration.py
-│   │       ├── ServicesIntegrationTests {}
+│   │   ├── test_services_integration.py
+│   │   │   ├── ServicesIntegrationTests {}
+│   │   │   │   ├── setUp(self)
+│   │   │   │   ├── tearDown(self)
+│   │   │   │   ├── test_services_app_included_in_generated_project(self)
+│   │   │   │   ├── test_services_urls_integrated_in_core_urls(self)
+│   │   │   │   ├── test_services_models_work_with_credit_system(self)
+│   │   │   │   ├── test_base_service_integrates_with_credit_consumption(self)
+│   │   │   │   ├── test_service_registry_works_with_examples(self)
+│   │   │   │   ├── test_services_views_integrate_with_templates(self)
+│   │   │   │   ├── test_services_dashboard_integration(self)
+│   │   │   │   ├── test_migration_consistency(self)
+│   │   │   │   ├── test_complete_service_workflow_integration(self)
+│   │   │   │   └── test_file_structure_completeness(self)
+│   │   │   └── ServiceFrameworkBehaviorTests {}
+│   │   │       ├── setUp(self)
+│   │   │       ├── test_base_service_contract_enforcement(self)
+│   │   │       ├── test_service_registry_contract(self)
+│   │   │       ├── test_credit_integration_contract(self)
+│   │   │       └── test_example_services_follow_contract(self)
+│   │   ├── test_sprint13_end_to_end.py
+│   │   │   ├── Sprint13EndToEndWorkflowTests {}
+│   │   │   │   ├── setUp(self)
+│   │   │   │   ├── tearDown(self)
+│   │   │   │   ├── test_complete_service_admin_workflow(self)
+│   │   │   │   ├── test_service_detail_workflow_integration(self)
+│   │   │   │   ├── test_django_admin_analytics_integration(self)
+│   │   │   │   ├── test_service_management_url_workflow(self)
+│   │   │   │   └── test_service_management_view_workflow(self)
+│   │   │   ├── Sprint13DataConsistencyTests {}
+│   │   │   │   ├── setUp(self)
+│   │   │   │   ├── tearDown(self)
+│   │   │   │   ├── test_analytics_calculation_consistency(self)
+│   │   │   │   ├── test_service_status_display_consistency(self)
+│   │   │   │   └── test_credit_cost_display_consistency(self)
+│   │   │   ├── Sprint13SecurityIntegrationTests {}
+│   │   │   │   ├── setUp(self)
+│   │   │   │   ├── tearDown(self)
+│   │   │   │   ├── test_staff_access_enforcement(self)
+│   │   │   │   ├── test_csrf_protection_integration(self)
+│   │   │   │   └── test_method_validation_integration(self)
+│   │   │   └── Sprint13PerformanceIntegrationTests {}
+│   │   │       ├── setUp(self)
+│   │   │       ├── tearDown(self)
+│   │   │       ├── test_efficient_database_queries(self)
+│   │   │       └── test_analytics_caching_considerations(self)
+│   │   └── test_sprint13_integration.py
+│   │       ├── Sprint13ServiceAdminIntegrationTests {}
 │   │       │   ├── setUp(self)
 │   │       │   ├── tearDown(self)
-│   │       │   ├── test_services_app_included_in_generated_project(self)
-│   │       │   ├── test_services_urls_integrated_in_core_urls(self)
-│   │       │   ├── test_services_models_work_with_credit_system(self)
-│   │       │   ├── test_base_service_integrates_with_credit_consumption(self)
-│   │       │   ├── test_service_registry_works_with_examples(self)
-│   │       │   ├── test_services_views_integrate_with_templates(self)
-│   │       │   ├── test_services_dashboard_integration(self)
-│   │       │   ├── test_migration_consistency(self)
-│   │       │   ├── test_complete_service_workflow_integration(self)
-│   │       │   └── test_file_structure_completeness(self)
-│   │       └── ServiceFrameworkBehaviorTests {}
+│   │       │   ├── test_service_admin_enhanced_configuration_in_generated_project(self)
+│   │       │   ├── test_service_usage_admin_enhanced_configuration_in_generated_project(self)
+│   │       │   ├── test_admin_dashboard_service_views_in_generated_project(self)
+│   │       │   ├── test_admin_dashboard_service_urls_in_generated_project(self)
+│   │       │   ├── test_service_admin_template_in_generated_project(self)
+│   │       │   ├── test_service_detail_template_in_generated_project(self)
+│   │       │   ├── test_service_analytics_admin_template_in_generated_project(self)
+│   │       │   ├── test_admin_dashboard_index_service_integration_in_generated_project(self)
+│   │       │   ├── test_service_models_support_sprint13_features_in_generated_project(self)
+│   │       │   └── test_django_admin_service_analytics_url_configuration(self)
+│   │       └── Sprint13ServiceManagementWorkflowTests {}
 │   │           ├── setUp(self)
-│   │           ├── test_base_service_contract_enforcement(self)
-│   │           ├── test_service_registry_contract(self)
-│   │           ├── test_credit_integration_contract(self)
-│   │           └── test_example_services_follow_contract(self)
+│   │           ├── tearDown(self)
+│   │           ├── test_service_management_complete_workflow_integration(self)
+│   │           ├── test_service_admin_dashboard_navigation_integration(self)
+│   │           └── test_service_analytics_data_consistency(self)
 │   ├── unit
 │   │   ├── commands
 │   │   │   ├── test_command_utils.py
@@ -2244,6 +2422,105 @@ quickscale
 │   │   │       ├── test_required_vars_by_component(self)
 │   │   │       ├── test_actual_module_validate_production_settings(self)
 │   │   │       └── test_actual_module_REQUIRED_VARS(self)
+│   │   ├── test_sprint13_fixes.py
+│   │   │   ├── ServiceUsageAnalyticsTemplateFixTests {}
+│   │   │   │   ├── setUp(self)
+│   │   │   │   ├── test_analytics_template_exists(self)
+│   │   │   │   ├── test_analytics_template_uses_correct_admin_url_pattern(self)
+│   │   │   │   ├── test_analytics_template_user_link_structure(self)
+│   │   │   │   ├── test_analytics_template_context_requirements(self)
+│   │   │   │   └── test_analytics_template_no_reverse_match_regression(self)
+│   │   │   ├── ServiceVisibilityFixTests {}
+│   │   │   │   ├── setUp(self)
+│   │   │   │   ├── test_service_admin_template_exists(self)
+│   │   │   │   ├── test_service_rows_not_hidden_by_alpine_js(self)
+│   │   │   │   ├── test_alpine_js_components_simplified(self)
+│   │   │   │   ├── test_filtering_controls_handled_properly(self)
+│   │   │   │   ├── test_service_data_structure_correct(self)
+│   │   │   │   └── test_text_processing_service_display_structure(self)
+│   │   │   ├── ServiceManagementIntegrationTests {}
+│   │   │   │   ├── setUp(self)
+│   │   │   │   ├── test_service_admin_view_provides_correct_context(self)
+│   │   │   │   └── test_service_analytics_view_handles_custom_user_model(self)
+│   │   │   ├── TextProcessingServiceMigrationTests {}
+│   │   │   │   ├── setUp(self)
+│   │   │   │   ├── test_text_processing_service_migration_exists(self)
+│   │   │   │   └── test_text_processing_service_migration_content(self)
+│   │   │   └── RegressionTests {}
+│   │   │       ├── setUp(self)
+│   │   │       ├── test_other_admin_templates_not_affected(self)
+│   │   │       ├── test_custom_user_model_consistency(self)
+│   │   │       └── test_service_admin_dashboard_integration(self)
+│   │   ├── test_sprint13_service_admin.py
+│   │   │   ├── ServiceAdminEnhancementsTests {}
+│   │   │   │   ├── setUp(self)
+│   │   │   │   ├── test_service_admin_enhanced_list_display(self)
+│   │   │   │   ├── test_service_admin_analytics_methods(self)
+│   │   │   │   ├── test_service_admin_bulk_operations(self)
+│   │   │   │   └── test_service_admin_custom_analytics_view(self)
+│   │   │   ├── ServiceUsageAdminEnhancementsTests {}
+│   │   │   │   ├── setUp(self)
+│   │   │   │   ├── test_service_usage_admin_enhanced_display(self)
+│   │   │   │   └── test_service_usage_admin_helper_methods(self)
+│   │   │   ├── AdminDashboardServiceManagementTests {}
+│   │   │   │   ├── setUp(self)
+│   │   │   │   ├── test_service_admin_view_exists(self)
+│   │   │   │   ├── test_service_detail_view_exists(self)
+│   │   │   │   ├── test_service_toggle_status_view_exists(self)
+│   │   │   │   └── test_service_management_urls_exist(self)
+│   │   │   ├── ServiceAdminTemplateTests {}
+│   │   │   │   ├── setUp(self)
+│   │   │   │   ├── test_service_admin_template_structure(self)
+│   │   │   │   ├── test_service_admin_template_alpine_js_integration(self)
+│   │   │   │   ├── test_service_admin_template_htmx_integration(self)
+│   │   │   │   ├── test_service_detail_template_structure(self)
+│   │   │   │   ├── test_service_detail_template_alpine_js_integration(self)
+│   │   │   │   ├── test_service_admin_template_visibility_fix(self)
+│   │   │   │   ├── test_service_admin_template_alpine_js_simplified(self)
+│   │   │   │   └── test_service_admin_template_filtering_controls_safe(self)
+│   │   │   ├── ServiceAnalyticsTemplateTests {}
+│   │   │   │   ├── setUp(self)
+│   │   │   │   ├── test_service_analytics_template_exists(self)
+│   │   │   │   ├── test_service_analytics_template_analytics_display(self)
+│   │   │   │   ├── test_service_analytics_template_correct_admin_url_pattern(self)
+│   │   │   │   └── test_service_analytics_template_no_reverse_match_regression(self)
+│   │   │   └── AdminDashboardIndexIntegrationTests {}
+│   │   │       ├── setUp(self)
+│   │   │       └── test_admin_dashboard_index_service_card(self)
+│   │   ├── test_sprint13_service_admin_enhancements.py
+│   │   │   ├── ServiceAdminSecurityTests {}
+│   │   │   │   ├── setUp(self)
+│   │   │   │   ├── test_service_toggle_csrf_protection(self)
+│   │   │   │   ├── test_service_views_staff_only_access(self)
+│   │   │   │   └── test_service_toggle_method_validation(self)
+│   │   │   ├── ServiceAdminErrorHandlingTests {}
+│   │   │   │   ├── setUp(self)
+│   │   │   │   ├── test_service_toggle_error_handling(self)
+│   │   │   │   ├── test_service_analytics_view_error_handling(self)
+│   │   │   │   └── test_service_admin_empty_state_handling(self)
+│   │   │   ├── ServiceAdminUIConsistencyTests {}
+│   │   │   │   ├── setUp(self)
+│   │   │   │   ├── test_service_admin_bulma_css_consistency(self)
+│   │   │   │   ├── test_service_detail_template_navigation_consistency(self)
+│   │   │   │   └── test_service_templates_responsive_design(self)
+│   │   │   ├── ServiceAdminAlpineJSFunctionalityTests {}
+│   │   │   │   ├── setUp(self)
+│   │   │   │   ├── test_service_admin_alpine_filtering_functionality(self)
+│   │   │   │   ├── test_service_row_alpine_functionality(self)
+│   │   │   │   └── test_service_detail_alpine_functionality(self)
+│   │   │   ├── ServiceAdminHTMXIntegrationTests {}
+│   │   │   │   ├── setUp(self)
+│   │   │   │   ├── test_service_admin_htmx_configuration(self)
+│   │   │   │   └── test_service_detail_htmx_configuration(self)
+│   │   │   ├── ServiceAnalyticsDataIntegrityTests {}
+│   │   │   │   ├── setUp(self)
+│   │   │   │   ├── test_service_analytics_time_range_consistency(self)
+│   │   │   │   ├── test_service_analytics_credit_calculation_consistency(self)
+│   │   │   │   └── test_service_analytics_aggregation_safety(self)
+│   │   │   └── ServiceAdminMigrationAndModelTests {}
+│   │   │       ├── setUp(self)
+│   │   │       ├── test_service_model_admin_field_consistency(self)
+│   │   │       └── test_service_usage_model_admin_relationship_consistency(self)
 │   │   ├── test_stripe_config.py
 │   │   │   └── StripeConfigurationTests {}
 │   │   │       ├── setUp(self)
@@ -2441,6 +2718,79 @@ quickscale
 │   │   ├── test_allowed_hosts()
 │   │   ├── test_db_password()
 │   │   └── test_email_tls()
+│   ├── test_api_endpoints.py
+│   │   └── APIEndpointsTest {}
+│   │       ├── setUp(self)
+│   │       ├── test_text_processing_count_words(self)
+│   │       ├── test_text_processing_analyze(self)
+│   │       ├── test_text_processing_summarize(self)
+│   │       ├── test_insufficient_credits_error(self)
+│   │       ├── test_unauthorized_request(self)
+│   │       ├── test_invalid_operation(self)
+│   │       ├── test_missing_required_fields(self)
+│   │       ├── test_text_length_validation(self)
+│   │       ├── test_invalid_json_format(self)
+│   │       ├── test_wrong_content_type(self)
+│   │       ├── test_api_endpoint_info(self)
+│   │       ├── test_service_usage_tracking(self)
+│   │       ├── test_request_logging(self, mock_logger)
+│   │       ├── test_character_counting_operation(self)
+│   │       └── test_concurrent_credit_consumption(self)
+│   ├── test_api_integration.py
+│   │   └── APIIntegrationTest {}
+│   │       ├── setUp(self)
+│   │       ├── test_complete_api_workflow(self)
+│   │       ├── test_credit_depletion_workflow(self)
+│   │       ├── test_api_key_lifecycle_management(self)
+│   │       ├── test_concurrent_api_usage(self)
+│   │       ├── test_api_authentication_edge_cases(self)
+│   │       ├── test_api_key_expiry_workflow(self)
+│   │       ├── test_api_endpoint_info_workflow(self)
+│   │       ├── test_error_handling_and_logging_workflow(self)
+│   │       └── test_successful_request_logging(self, mock_logger)
+│   ├── test_api_key_management.py
+│   │   └── APIKeyManagementTest {}
+│   │       ├── setUp(self)
+│   │       ├── test_list_api_keys_view(self)
+│   │       ├── test_create_api_key_success(self)
+│   │       ├── test_create_api_key_duplicate_name(self)
+│   │       ├── test_create_api_key_missing_name(self)
+│   │       ├── test_deactivate_api_key(self)
+│   │       ├── test_delete_api_key(self)
+│   │       ├── test_unauthorized_access_protection(self)
+│   │       ├── test_user_isolation(self)
+│   │       ├── test_api_key_usage_statistics(self)
+│   │       ├── test_api_key_security_display(self)
+│   │       ├── test_json_response_format(self)
+│   │       ├── test_rate_limiting_api_key_creation(self)
+│   │       ├── test_key_generation_failure_handling(self, mock_generate)
+│   │       └── test_api_key_expiry_display(self)
+│   ├── test_api_key_model.py
+│   │   └── APIKeyModelTest {}
+│   │       ├── setUp(self)
+│   │       ├── test_generate_api_key_security(self)
+│   │       ├── test_key_hashing_verification(self)
+│   │       ├── test_key_expiration(self)
+│   │       ├── test_prefix_uniqueness(self)
+│   │       ├── test_model_validation(self)
+│   │       ├── test_update_last_used(self)
+│   │       ├── test_is_valid_property(self)
+│   │       └── test_multiple_keys_per_user(self)
+│   ├── test_api_middleware.py
+│   │   └── APIKeyAuthenticationMiddlewareTest {}
+│   │       ├── setUp(self)
+│   │       ├── test_valid_api_key_auth(self)
+│   │       ├── test_invalid_api_key_formats(self)
+│   │       ├── test_expired_api_key(self)
+│   │       ├── test_deactivated_api_key(self)
+│   │       ├── test_middleware_scope(self)
+│   │       ├── test_auth_header_parsing(self)
+│   │       ├── test_nonexistent_api_key(self)
+│   │       ├── test_wrong_secret_for_existing_prefix(self)
+│   │       ├── test_logging_on_invalid_attempts(self, mock_logger)
+│   │       ├── test_api_endpoint_paths_only(self)
+│   │       ├── test_case_sensitive_bearer_token(self)
+│   │       └── test_middleware_exception_handling(self)
 │   └── utils.py
 │       ├── is_port_open(host, port)
 │       ├── find_available_port(start_port, end_port)
@@ -2488,7 +2838,11 @@ quickscale
 │       ├── _get_container_restart_history(container_name)
 │       ├── _get_host_system_info()
 │       ├── capture_container_debug_info(container_name, output_dir)
-│       └── init_test_project(tmp_path, project_name, env, check)
+│       ├── init_test_project(tmp_path, project_name, env, check)
+│       └── ProjectTestMixin {}
+│           ├── setUp(self)
+│           ├── tearDown(self)
+│           └── create_test_project(self)
 ├── CHANGELOG.md
 ├── CONTRIBUTING.md
 ├── LICENSE
