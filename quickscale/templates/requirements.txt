@@ -6,3 +6,4 @@ dj-database-url>=2.1.0
 django-allauth>=0.61.0
 stripe>=12.1.0
 Pillow
+djangorestframework>=3.14.0

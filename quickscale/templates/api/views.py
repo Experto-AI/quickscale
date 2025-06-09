@@ -13,6 +13,7 @@ from .utils import (
     consume_service_credits
 )
 from django.shortcuts import render
+from django.http import HttpResponse
 from django.views.decorators.csrf import ensure_csrf_cookie
 from django.views.decorators.http import require_http_methods
 from rest_framework import status
@@ -23,21 +24,21 @@ from rest_framework.response import Response
 
 from services.decorators import create_service_instance
 from services.examples import (
-    text_sentiment_analysis_service,
-    text_keyword_extraction_service,
-    image_metadata_extraction_service,
-    data_validation_service
+    TextSentimentAnalysisService,
+    TextKeywordExtractorService,
+    ImageMetadataExtractorService,
+    DataValidatorService
 )
-from services.models import Service
+from credits.models import Service
 
 logger = logging.getLogger(__name__)
 
 # List of all available example services, useful for API documentation
 EXAMPLE_SERVICES = [
-    text_sentiment_analysis_service,
-    text_keyword_extraction_service,
-    image_metadata_extraction_service,
-    data_validation_service
+    TextSentimentAnalysisService,
+    TextKeywordExtractorService,
+    ImageMetadataExtractorService,
+    DataValidatorService
 ]
 
 @method_decorator(csrf_exempt, name='dispatch')

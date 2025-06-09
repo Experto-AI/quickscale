@@ -20,6 +20,7 @@ class Command(BaseCommand):
         parser.add_argument(
             'service_name',
             type=str,
+            nargs='?',  # Make service_name optional
             help='Name of the service to configure'
         )
         parser.add_argument(
@@ -59,10 +60,15 @@ class Command(BaseCommand):
     def handle(self, *args, **options):
         """Handle the command execution."""
         if options['list']:
+            if options['service_name']:
+                raise CommandError("Cannot specify service_name with --list option.")
             self.list_services()
             return
 
         service_name = options['service_name']
+        if not service_name:
+            raise CommandError("The following arguments are required: service_name for create/update operations.")
+
         description = options['description'] or f"AI service: {service_name}"
         credit_cost = Decimal(str(options['credit_cost']))
         is_active = not options['inactive']  # Default to active unless --inactive is set
