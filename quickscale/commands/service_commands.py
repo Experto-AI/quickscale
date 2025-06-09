@@ -382,7 +382,7 @@ class ServiceUpCommand(Command):
     def _get_docker_compose_logs(self, env: Dict) -> None:
         """Get logs from docker-compose for debugging."""
         try:
-            logs_result = subprocess.run([DOCKER_COMPOSE_COMMAND, "logs"], capture_output=True, text=True, env=env, check=False)
+            logs_result = subprocess.run(DOCKER_COMPOSE_COMMAND.split() + ["logs"], capture_output=True, text=True, env=env, check=False)
             if logs_result.returncode == 0:
                 self.logger.debug(f"Docker compose logs output: {logs_result.stdout}")
                 if logs_result.stderr:
@@ -394,7 +394,7 @@ class ServiceUpCommand(Command):
         """Check if services are running despite docker-compose error."""
         try:
             # Check if the services are starting despite the error
-            ps_result = subprocess.run([DOCKER_COMPOSE_COMMAND, "ps"], check=False, env=env, capture_output=True, text=True)
+            ps_result = subprocess.run(DOCKER_COMPOSE_COMMAND.split() + ["ps"], check=False, env=env, capture_output=True, text=True)
             if ps_result.returncode == 0 and ("db" in ps_result.stdout or "web" in ps_result.stdout):
                 self.logger.info("Services appear to be starting despite exit code, proceeding.")
                 # Continue with the operation, treating as if it succeeded
@@ -415,7 +415,7 @@ class ServiceUpCommand(Command):
     def _verify_services_running(self, env: Dict) -> None:
         """Verify that services are actually running."""
         try:
-            ps_result = subprocess.run([DOCKER_COMPOSE_COMMAND, "ps"], capture_output=True, text=True, check=True, env=env)
+            ps_result = subprocess.run(DOCKER_COMPOSE_COMMAND.split() + ["ps"], capture_output=True, text=True, check=True, env=env)
             if "db" not in ps_result.stdout:
                 self.logger.warning("Database service not detected in running containers. Services may not be fully started.")
                 self.logger.debug(f"Docker compose ps output: {ps_result.stdout}")
@@ -454,7 +454,7 @@ class ServiceUpCommand(Command):
         time.sleep(5)
         
         # Check again if services are running
-        ps_retry = subprocess.run([DOCKER_COMPOSE_COMMAND, "ps"], capture_output=True, text=True, check=False)
+        ps_retry = subprocess.run(DOCKER_COMPOSE_COMMAND.split() + ["ps"], capture_output=True, text=True, check=False)
         if ps_retry.returncode == 0 and "db" in ps_retry.stdout:
             self.logger.info("Services are now running after direct intervention.")
         else:
@@ -691,7 +691,7 @@ class ServiceStatusCommand(Command):
         
         try:
             MessageManager.info("Checking service status...", self.logger)
-            subprocess.run(["docker", "compose", "ps"], check=True)
+            subprocess.run(DOCKER_COMPOSE_COMMAND.split() + ["ps"], check=True)
         except subprocess.SubprocessError as e:
             self.handle_error(
                 e,
