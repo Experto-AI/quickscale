@@ -251,116 +251,96 @@ For a list of available commands, use:
 
 
 def setup_service_generator_parsers(subparsers: argparse._SubParsersAction) -> None:
-    """Set up service generator command parsers."""
-    # Generate service command
+    """Set up AI service generator command parsers."""
     generate_parser = subparsers.add_parser("generate-service",
-        help="Generate a new AI service template",
+        help="Generate an AI service template",
         description="""
-Generate a new AI service template for QuickScale projects.
+Generate a new AI service template with boilerplate code, integrated with the QuickScale credit system.
+This command helps AI engineers quickly scaffold new services.
 
-This command creates a service template that integrates with the QuickScale
-credit system and provides a foundation for implementing AI functionality.
+Service Name: Should be snake_case (e.g., 'my_service', 'sentiment_analyzer').
+Service Type: Specifies a template type (basic, text_processing, image_processing, data_validation).
+Output Directory: Optional. If not provided, service will be generated in a 'services/' directory in the current working directory.
+Credit Cost: Cost in credits for using this service (default: 1.0).
+Description: Service description for documentation and admin interface.
 
-Service types:
-  basic           - General purpose service template
-  text_processing - Template optimized for text analysis
-  image_processing - Template optimized for image processing
-
-The generated service will include:
-- Service class that inherits from BaseService
-- Credit consumption integration
-- Usage example with error handling
-- Complete documentation and TODO comments
+The service will be automatically configured in the database unless --skip-db-config is used.
         """,
         epilog="""
 Examples:
-  quickscale generate-service sentiment_analysis
-  quickscale generate-service text_summarizer --type text_processing
-  quickscale generate-service image_classifier --type image_processing --output-dir ./my_services
+  quickscale generate-service my_ai_service                  (basic service, 1.0 credits)
+  quickscale generate-service sentiment_analyzer --type text_processing --credit-cost 2.5
+  quickscale generate-service image_classifier --type image_processing --description "Advanced image classification service"
+  quickscale generate-service my_service --credit-cost 0.5 --description "Low-cost utility service"
+  quickscale generate-service test_service --skip-db-config  (generate files only, skip database configuration)
         """,
-        formatter_class=argparse.RawDescriptionHelpFormatter)
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        usage="quickscale generate-service <service_name> [--type <service_type>] [--output <output_dir>]")
     generate_parser.add_argument(
         "name",
-        help="Name of the service to generate (snake_case, e.g., sentiment_analysis)")
+        help="Name of the service to generate (e.g., my_ai_service, sentiment_analyzer)")
     generate_parser.add_argument(
-        "--type", "-t",
-        choices=["basic", "text_processing", "image_processing"],
+        "--type",
+        choices=["basic", "text_processing", "image_processing", "data_validation"],
         default="basic",
-        help="Type of service template to generate (default: basic)")
+        help="Type of service template to generate")
     generate_parser.add_argument(
-        "--output-dir", "-o",
-        help="Output directory for generated files (default: ./services)")
-    
-    # List services command
-    list_parser = subparsers.add_parser("list-services",
-        help="List available services and their status",
-        description="""
-List all registered services in the current QuickScale project.
-
-This command shows all services that have been registered using the
-@register_service decorator, along with their configuration details
-from the database.
-        """,
-        epilog="""
-Examples:
-  quickscale list-services           List all services
-  quickscale list-services --details Show detailed information including credit costs
-        """,
-        formatter_class=argparse.RawDescriptionHelpFormatter)
-    list_parser.add_argument(
-        "--details", "-d",
+        "--output-dir",
+        dest="output_dir", 
+        help="Optional output directory for the generated service files")
+    generate_parser.add_argument(
+        "--credit-cost",
+        type=float,
+        default=1.0,
+        help="Credit cost for using this service (default: 1.0)")
+    generate_parser.add_argument(
+        "--description",
+        help="Description of the service (if not provided, will be auto-generated)")
+    generate_parser.add_argument(
+        "--skip-db-config",
         action="store_true",
-        help="Show detailed information including credit costs and descriptions")
-    
-    # Validate service command
+        help="Skip automatic database configuration of the service")
+
     validate_parser = subparsers.add_parser("validate-service",
-        help="Validate a service file and provide development assistance",
+        help="Validate a service file and provide development tips",
         description="""
-Validate a service file to ensure it follows QuickScale service patterns.
-
-This command checks:
-- Required imports and inheritance
-- Proper use of decorators
-- Implementation of required methods
-- Code quality and best practices
-- Dependencies and potential issues
-
-Use this during development to catch issues early.
+Validate an AI service Python file against QuickScale's service development guidelines.
+This helps ensure the service is correctly structured and integrates with the framework.
+Optionally provides development tips for common issues.
         """,
         epilog="""
 Examples:
-  quickscale validate-service my_service.py
-  quickscale validate-service my_service.py --tips
+  quickscale validate-service my_ai_service              (validate a service by name, assumes default path)
+  quickscale validate-service services/sentiment_analyzer.py --tips  (validate a specific file with tips)
         """,
-        formatter_class=argparse.RawDescriptionHelpFormatter)
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        usage="quickscale validate-service [<service_name_or_file_path>] [--tips]")
     validate_parser.add_argument(
-        "file",
-        help="Path to the service file to validate")
-    validate_parser.add_argument(
-        "--tips", "-t",
+        "name_or_path",
+        nargs="?",
+        metavar="<service_name_or_file_path>",
+        help="Name of the service (e.g., my_ai_service) or full path to the service Python file (e.g., services/my_service.py)")
+    validate_parser.add_argument("--tips",
         action="store_true",
-        help="Show development tips along with validation results")
-    
-    # Service examples command
-    examples_parser = subparsers.add_parser("service-examples",
-        help="Show available service examples",
-        description="""
-Display available service examples with descriptions and use cases.
+        help="Show additional development tips")
 
-Examples include common AI service patterns like text processing,
-image analysis, and data validation. Each example shows the
-command to generate that specific service type.
+    examples_parser = subparsers.add_parser("show-service-examples",
+        help="Show available AI service examples",
+        description="""
+Display a list of available QuickScale AI service examples, which can be generated
+using 'quickscale generate-service'. You can filter by service type.
         """,
         epilog="""
 Examples:
-  quickscale service-examples                Show all examples
-  quickscale service-examples --type text_processing    Show only text processing examples
+  quickscale show-service-examples                                (show all examples)
+  quickscale show-service-examples --type text_processing         (show text processing examples)
         """,
-        formatter_class=argparse.RawDescriptionHelpFormatter)
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        usage="quickscale show-service-examples [--type <example_type>]")
     examples_parser.add_argument(
-        "--type", "-t",
-        choices=["basic", "text_processing", "image_processing"],
-        help="Filter examples by service type")
+        "--type",
+        choices=["basic", "text_processing", "image_processing", "data_validation"],
+        help="Optional type of examples to show (e.g., text_processing, image_processing)")
 
 
 def setup_help_and_version_parsers(subparsers: argparse._SubParsersAction) -> None:

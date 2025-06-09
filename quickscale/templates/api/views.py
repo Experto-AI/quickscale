@@ -22,24 +22,39 @@ from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.request import Request
 from rest_framework.response import Response
 
-from services.decorators import create_service_instance
-from services.examples import (
-    TextSentimentAnalysisService,
-    TextKeywordExtractorService,
-    ImageMetadataExtractorService,
-    DataValidatorService
-)
+# Services imports - wrapped in try-except for template compatibility
+try:
+    from services.decorators import create_service_instance
+    from services.examples import (
+        TextSentimentAnalysisService,
+        TextKeywordExtractorService,
+        ImageMetadataExtractorService,
+        DataValidatorService
+    )
+    SERVICES_AVAILABLE = True
+except ImportError:
+    # This will happen when running tests in the generator codebase
+    # where services is just a template directory, not a Python module
+    SERVICES_AVAILABLE = False
+    create_service_instance = None
+    TextSentimentAnalysisService = None
+    TextKeywordExtractorService = None
+    ImageMetadataExtractorService = None
+    DataValidatorService = None
+
 from credits.models import Service
 
 logger = logging.getLogger(__name__)
 
 # List of all available example services, useful for API documentation
-EXAMPLE_SERVICES = [
-    TextSentimentAnalysisService,
-    TextKeywordExtractorService,
-    ImageMetadataExtractorService,
-    DataValidatorService
-]
+EXAMPLE_SERVICES = []
+if SERVICES_AVAILABLE:
+    EXAMPLE_SERVICES = [
+        TextSentimentAnalysisService,
+        TextKeywordExtractorService,
+        ImageMetadataExtractorService,
+        DataValidatorService
+    ]
 
 @method_decorator(csrf_exempt, name='dispatch')
 class TextProcessingView(View):

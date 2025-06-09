@@ -12,13 +12,18 @@ from quickscale.utils.service_templates import generate_service_file, get_servic
 class ServiceGeneratorCommand(Command):
     """Command to generate service templates for AI engineers."""
     
-    def execute(self, service_name: str, service_type: str = "basic", output_dir: Optional[str] = None) -> Dict[str, Any]:
+    def execute(self, service_name: str, service_type: str = "basic", output_dir: Optional[str] = None, 
+                credit_cost: float = 1.0, description: Optional[str] = None, skip_db_config: bool = False) -> Dict[str, Any]:
         """Generate a new service template."""
         self.logger.info(f"Generating service template: {service_name}")
         
         # Validate service name
         if not self._validate_service_name(service_name):
             raise ValueError(f"Invalid service name: {service_name}")
+        
+        # Generate description if not provided
+        if not description:
+            description = f"AI service: {service_name.replace('_', ' ').title()}"
         
         # Determine output directory
         if output_dir:
@@ -46,7 +51,7 @@ class ServiceGeneratorCommand(Command):
         variables = {
             "SERVICE_NAME": service_name,
             "SERVICE_CLASS": self._to_class_name(service_name),
-            "SERVICE_DESCRIPTION": f"AI service for {service_name.replace('_', ' ')}",
+            "SERVICE_DESCRIPTION": description,
         }
         
         # Render template
@@ -68,11 +73,36 @@ class ServiceGeneratorCommand(Command):
         
         MessageManager.success(f"Usage example generated: {example_file_path}")
         
-        return {
+        result = {
             "success": True,
             "service_file": str(service_file_path),
-            "example_file": str(example_file_path)
+            "example_file": str(example_file_path),
+            "service_name": service_name,
+            "description": description,
+            "credit_cost": credit_cost
         }
+        
+        # Configure service in database unless skip_db_config is True
+        if not skip_db_config:
+            try:
+                db_config_result = self._configure_service_in_database(service_name, description, credit_cost)
+                result["database_configured"] = db_config_result["success"]
+                if db_config_result["success"]:
+                    MessageManager.success(f"Service '{service_name}' configured in database with {credit_cost} credit cost")
+                else:
+                    MessageManager.warning(f"Database configuration skipped: {db_config_result.get('reason', 'Unknown reason')}")
+                    result["database_config_warning"] = db_config_result.get('reason', 'Unknown reason')
+            except Exception as e:
+                MessageManager.warning(f"Could not configure service in database: {str(e)}")
+                MessageManager.info(f"You can configure it manually with: python manage.py configure_service {service_name} --description \"{description}\" --credit-cost {credit_cost}")
+                result["database_configured"] = False
+                result["database_config_error"] = str(e)
+        else:
+            MessageManager.info(f"Database configuration skipped. Configure manually with: python manage.py configure_service {service_name} --description \"{description}\" --credit-cost {credit_cost}")
+            result["database_configured"] = False
+            result["database_config_skipped"] = True
+        
+        return result
     
     def _validate_service_name(self, service_name: str) -> bool:
         """Validate service name follows Python naming conventions."""
@@ -92,6 +122,36 @@ class ServiceGeneratorCommand(Command):
             return False
         
         return True
+    
+    def _configure_service_in_database(self, service_name: str, description: str, credit_cost: float) -> Dict[str, Any]:
+        """Configure the service in the database by running Django management command."""
+        import os
+        import subprocess
+        from decimal import Decimal
+        
+        # Check if we're in a Django project directory
+        if not os.path.exists('manage.py'):
+            return {"success": False, "reason": "Not in a Django project directory (manage.py not found)"}
+        
+        try:
+            # Use the Django management command to configure the service
+            cmd = [
+                'python', 'manage.py', 'configure_service', service_name,
+                '--description', description,
+                '--credit-cost', str(credit_cost)
+            ]
+            
+            result = subprocess.run(cmd, capture_output=True, text=True, timeout=30)
+            
+            if result.returncode == 0:
+                return {"success": True, "output": result.stdout}
+            else:
+                return {"success": False, "reason": f"Management command failed: {result.stderr}"}
+                
+        except subprocess.TimeoutExpired:
+            return {"success": False, "reason": "Database configuration timed out"}
+        except Exception as e:
+            return {"success": False, "reason": f"Error running management command: {str(e)}"}
     
     def _to_class_name(self, service_name: str) -> str:
         """Convert snake_case service name to PascalCase class name."""
@@ -354,15 +414,35 @@ if __name__ == "__main__":
 class ValidateServiceCommand(Command):
     """Command to validate service files and provide development assistance."""
     
-    def execute(self, service_file: str, show_tips: bool = False) -> Dict[str, Any]:
+    def execute(self, name_or_path: Optional[str] = None, show_tips: bool = False) -> Dict[str, Any]:
         """Validate a service file and show development tips."""
         from quickscale.utils.service_dev_utils import validate_service_file, ServiceDevelopmentHelper
+        from quickscale.utils.error_manager import CommandError
         
         if show_tips:
             ServiceDevelopmentHelper.display_development_tips()
             MessageManager.info("")
         
-        validate_service_file(service_file)
+        service_file_path: Optional[Path] = None
+
+        if not name_or_path:
+            raise CommandError("Missing service name or file path. Please provide a service name or full path to the service file.")
+
+        path_obj = Path(name_or_path)
+
+        if path_obj.exists() and path_obj.is_file():
+            service_file_path = path_obj
+        elif '/' in name_or_path or '\\' in name_or_path or name_or_path.endswith('.py'):
+            # If it looks like a path but doesn't exist yet, assume it's an intended path
+            service_file_path = path_obj
+        else:
+            # Assume it's a service name and construct the default path
+            service_file_path = Path.cwd() / "services" / f"{name_or_path}_service.py"
+
+        if not service_file_path or not service_file_path.exists():
+            raise CommandError(f"Service file not found at: {service_file_path}\n\nSuggestion: Ensure the service name is correct or provide the full path to the service file.")
+
+        validate_service_file(str(service_file_path))
         
         return {"validation_completed": True}
 
@@ -396,74 +476,4 @@ class ServiceExamplesCommand(Command):
             return {"examples": filtered_examples, "count": len(filtered_examples)}
         else:
             show_service_examples()
-            return {"examples_displayed": True}
-
-
-class ListServicesCommand(Command):
-    """Command to list available services and their status."""
-    
-    def execute(self, show_details: bool = False) -> Dict[str, Any]:
-        """List all available services."""
-        try:
-            from services.decorators import get_all_registered_services
-            
-            registered_services = get_all_registered_services()
-            
-            if not registered_services:
-                MessageManager.info("No services are currently registered.")
-                return {"services": [], "count": 0}
-            
-            MessageManager.info(f"Found {len(registered_services)} registered services:")
-            
-            services_info = []
-            for service_name, service_class in registered_services.items():
-                info = {
-                    "name": service_name,
-                    "class": service_class.__name__,
-                    "module": service_class.__module__
-                }
-                
-                if show_details:
-                    try:
-                        # Try to get service details from database
-                        from credits.models import Service
-                        service_model = Service.objects.filter(name=service_name, is_active=True).first()
-                        if service_model:
-                            info.update({
-                                "credit_cost": str(service_model.credit_cost),
-                                "description": service_model.description,
-                                "active": service_model.is_active
-                            })
-                        else:
-                            info.update({
-                                "credit_cost": "Not configured",
-                                "description": "Not configured in database",
-                                "active": False
-                            })
-                    except Exception:
-                        info.update({
-                            "credit_cost": "Error retrieving",
-                            "description": "Error retrieving details",
-                            "active": "Unknown"
-                        })
-                
-                services_info.append(info)
-                
-                if show_details:
-                    MessageManager.info(f"  • {service_name} ({service_class.__name__})")
-                    MessageManager.info(f"    Cost: {info.get('credit_cost', 'Unknown')} credits")
-                    MessageManager.info(f"    Active: {info.get('active', 'Unknown')}")
-                else:
-                    MessageManager.info(f"  • {service_name} ({service_class.__name__})")
-            
-            return {
-                "services": services_info,
-                "count": len(services_info)
-            }
-            
-        except ImportError:
-            MessageManager.error("Services framework not available. Make sure you're in a QuickScale project.")
-            return {"services": [], "count": 0}
-        except Exception as e:
-            MessageManager.error(f"Error listing services: {str(e)}")
-            return {"services": [], "count": 0} 
+            return {"examples_displayed": True} 
