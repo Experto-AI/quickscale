@@ -10,6 +10,7 @@ import os
 import unittest
 import re
 from pathlib import Path
+from typing import Dict, Any, Union
 
 
 class ServicesAppStructureTests(unittest.TestCase):
@@ -340,59 +341,74 @@ class ServiceRegistryTests(unittest.TestCase):
 
 
 class ServiceExamplesTests(unittest.TestCase):
-    """Test cases for service examples implementation."""
-    
+    """Test cases for example service implementations."""
+
     def setUp(self):
         """Set up test environment."""
         self.base_path = Path(os.path.dirname(os.path.dirname(os.path.dirname(__file__))))
-        self.services_app_path = self.base_path / 'quickscale' / 'templates' / 'services'
-        self.examples_py = self.services_app_path / 'examples.py'
-    
+        self.examples_py = self.base_path / 'quickscale' / 'templates' / 'services' / 'examples.py'
+        with open(self.examples_py, 'r') as f:
+            self.examples_content = f.read()
+
     def test_example_services_exist(self):
-        """Test that example services are properly implemented."""
-        with open(self.examples_py, 'r') as f:
-            examples_content = f.read()
-        
-        # Check for example service classes
-        self.assertIn("class TextAnalysisService(BaseService):", examples_content,
-                     "TextAnalysisService class not found")
-        self.assertIn("class ImageProcessingService(BaseService):", examples_content,
-                     "ImageProcessingService class not found")
-    
+        """Test that example service classes are properly defined."""
+        # Updated to check for the actual service names introduced in Sprint 14
+        self.assertIn("class TextSentimentAnalysisService(BaseService):", self.examples_content,
+                      "TextSentimentAnalysisService class not found")
+        self.assertIn("class TextKeywordExtractorService(BaseService):", self.examples_content,
+                      "TextKeywordExtractorService class not found")
+        self.assertIn("class ImageMetadataExtractorService(BaseService):", self.examples_content,
+                      "ImageMetadataExtractorService class not found")
+        self.assertIn("class DataValidatorService(BaseService):", self.examples_content,
+                      "DataValidatorService class not found")
+
     def test_example_service_decorators(self):
-        """Test that example services use the registration decorator."""
-        with open(self.examples_py, 'r') as f:
-            examples_content = f.read()
-        
-        # Check for decorator usage
-        self.assertIn("@register_service(\"text_analysis\")", examples_content,
-                     "TextAnalysisService registration not found")
-        self.assertIn("@register_service(\"image_processing\")", examples_content,
-                     "ImageProcessingService registration not found")
-    
+        """Test that example services use the register_service decorator."""
+        # Updated to check for the actual service names introduced in Sprint 14
+        self.assertIn('@register_service("text_sentiment_analysis")', self.examples_content,
+                      "TextSentimentAnalysisService registration not found")
+        self.assertIn('@register_service("text_keyword_extractor")', self.examples_content,
+                      "TextKeywordExtractorService registration not found")
+        self.assertIn('@register_service("image_metadata_extractor")', self.examples_content,
+                      "ImageMetadataExtractorService registration not found")
+        self.assertIn('@register_service("data_validator")', self.examples_content,
+                      "DataValidatorService registration not found")
+
     def test_example_service_implementation(self):
-        """Test that example services implement execute_service method."""
-        with open(self.examples_py, 'r') as f:
-            examples_content = f.read()
-        
-        # Check for execute_service implementations
-        self.assertIn("def execute_service(self, user: User, text: str = \"\", **kwargs):", examples_content,
-                     "TextAnalysisService execute_service method not found")
-        self.assertIn("def execute_service(self, user: User, image_data=None, **kwargs):", examples_content,
-                     "ImageProcessingService execute_service method not found")
-    
+        """Test that example services have the execute_service method implemented."""
+        # Updated to check for specific execute_service methods in new services
+        self.assertIn('def execute_service(self, user: User, text: str = "", **kwargs) -> Dict[str, Any]:', self.examples_content,
+                      "TextSentimentAnalysisService execute_service method not found")
+        self.assertIn('def execute_service(self, user: User, text: str = "", max_keywords: int = 10, **kwargs) -> Dict[str, Any]:', self.examples_content,
+                      "TextKeywordExtractorService execute_service method not found")
+        self.assertIn('def execute_service(self, user: User, image_data: Union[str, bytes] = None, **kwargs) -> Dict[str, Any]:', self.examples_content,
+                      "ImageMetadataExtractorService execute_service method not found")
+        self.assertIn('def execute_service(self, user: User, data: Any = None, data_type: str = "text", **kwargs) -> Dict[str, Any]:', self.examples_content,
+                      "DataValidatorService execute_service method not found")
+
     def test_usage_documentation(self):
-        """Test that comprehensive usage documentation is provided."""
-        with open(self.examples_py, 'r') as f:
-            examples_content = f.read()
-        
-        # Check for usage examples in docstring
-        self.assertIn("# Method 1: Direct instantiation", examples_content,
-                     "Direct instantiation example not found")
-        self.assertIn("# Method 2: Using the service registry", examples_content,
-                     "Service registry example not found")
-        self.assertIn("# Method 3: Just consume credits without using run()", examples_content,
-                     "Credit consumption example not found")
+        """Test that example services include basic usage documentation."""
+        # Updated to reflect the new structure of usage examples in examples.py
+        match = re.search(r'"""\n# Advanced Usage Patterns for QuickScale AI Services(.*)"""', self.examples_content, re.DOTALL)
+        self.assertIsNotNone(match, "Advanced usage patterns documentation block not found.")
+        usage_doc_content = match.group(1)
+
+        self.assertIn("## 1. Service Chaining Example", usage_doc_content,
+                      "Service Chaining Example not found in usage documentation")
+        self.assertIn("def process_text_pipeline(user, text):", usage_doc_content,
+                      "process_text_pipeline example not found")
+        self.assertIn("## 2. Batch Processing Example", usage_doc_content,
+                      "Batch Processing Example not found in usage documentation")
+        self.assertIn("def batch_process_texts(user, texts: List[str], service_name: str):", usage_doc_content,
+                      "batch_process_texts example not found")
+        self.assertIn("## 3. Error Handling with Retry Logic", usage_doc_content,
+                      "Error Handling with Retry Logic example not found")
+        self.assertIn("def robust_service_call(user, service_name: str, max_retries: int = 3, **kwargs):", usage_doc_content,
+                      "robust_service_call example not found")
+        self.assertIn("## 4. Service Performance Monitoring", usage_doc_content,
+                      "Service Performance Monitoring example not found")
+        self.assertIn("def monitored_service_call(user, service_name: str, **kwargs):", usage_doc_content,
+                      "monitored_service_call example not found")
 
 
 class ServicesViewsTests(unittest.TestCase):
