@@ -120,10 +120,15 @@ quickscale
 │   │   │       ├── open_shell(self, django_shell, command)
 │   │   │       ├── run_manage_command(self, args)
 │   │   │       ├── check_requirements(self, print_info)
+│   │   │       ├── generate_service(self, service_name, service_type, output_dir)
+│   │   │       ├── list_services(self, show_details)
+│   │   │       ├── validate_service(self, service_file, show_tips)
+│   │   │       ├── show_service_examples(self, example_type)
 │   │   │       ├── get_available_commands(self)
 │   │   │       ├── _handle_service_commands(self, command_name, args)
 │   │   │       ├── _handle_project_commands(self, command_name, args)
 │   │   │       ├── _handle_shell_commands(self, command_name, args)
+│   │   │       ├── _handle_service_generator_commands(self, command_name, args)
 │   │   │       ├── _display_help(self, topic)
 │   │   │       ├── _handle_info_commands(self, command_name, args)
 │   │   │       └── handle_command(self, command_name, args)
@@ -192,8 +197,6 @@ quickscale
 │   │   │   │   ├── _find_ports_for_retry(self, retry_count, max_retries, no_cache)
 │   │   │   │   ├── _start_docker_services(self, env, no_cache)
 │   │   │   │   ├── _handle_docker_process_error(self, e, env)
-│   │   │   │   ├── _get_docker_compose_logs(self, env)
-│   │   │   │   ├── _check_if_services_running_despite_error(self, e, env)
 │   │   │   │   ├── _verify_services_running(self, env)
 │   │   │   │   ├── _start_stopped_containers(self)
 │   │   │   │   ├── _start_container(self, container_name, status)
@@ -210,6 +213,22 @@ quickscale
 │   │   │   └── ServiceStatusCommand {}
 │   │   │       ├── __init__(self)
 │   │   │       └── execute(self)
+│   │   ├── service_generator_commands.py
+│   │   │   ├── ServiceGeneratorCommand {}
+│   │   │   │   ├── execute(self, service_name, service_type, output_dir)
+│   │   │   │   ├── _validate_service_name(self, service_name)
+│   │   │   │   ├── _to_class_name(self, service_name)
+│   │   │   │   ├── _get_service_template(self, service_type)
+│   │   │   │   ├── _get_basic_template(self)
+│   │   │   │   ├── _get_text_processing_template(self)
+│   │   │   │   ├── _get_image_processing_template(self)
+│   │   │   │   └── _get_usage_example_template(self)
+│   │   │   ├── ValidateServiceCommand {}
+│   │   │   │   └── execute(self, service_file, show_tips)
+│   │   │   ├── ServiceExamplesCommand {}
+│   │   │   │   └── execute(self, example_type)
+│   │   │   └── ListServicesCommand {}
+│   │   │       └── execute(self, show_details)
 │   │   └── system_commands.py
 │   │       └── CheckCommand {}
 │   │           ├── _check_docker_compose(self, print_info)
@@ -571,6 +590,7 @@ quickscale
 │   │   │       └── service_usage_api(request, service_id)
 │   │   ├── docs
 │   │   │   ├── auth_templates.md
+│   │   │   ├── service_development_guide.md
 │   │   │   ├── styling_guidelines.md
 │   │   │   └── template_customization_examples.md
 │   │   ├── js
@@ -600,6 +620,16 @@ quickscale
 │   │   │       ├── contact(request)
 │   │   │       └── api_docs(request)
 │   │   ├── services
+│   │   │   ├── management
+│   │   │   │   └── commands
+│   │   │   │       └── configure_service.py
+│   │   │   │           └── Command {}
+│   │   │   │               ├── add_arguments(self, parser)
+│   │   │   │               ├── handle(self)
+│   │   │   │               ├── create_service(self, name, description, credit_cost, is_active)
+│   │   │   │               ├── update_service(self, name, description, credit_cost, is_active)
+│   │   │   │               ├── list_services(self)
+│   │   │   │               └── display_service_info(self, service)
 │   │   │   ├── templates
 │   │   │   │   └── services
 │   │   │   │       ├── service_list.html
@@ -629,10 +659,18 @@ quickscale
 │   │   │   │   ├── get_all_registered_services()
 │   │   │   │   └── create_service_instance(service_name)
 │   │   │   ├── examples.py
-│   │   │   │   ├── TextAnalysisService {}
+│   │   │   │   ├── TextSentimentAnalysisService {}
 │   │   │   │   │   └── execute_service(self, user, text)
-│   │   │   │   └── ImageProcessingService {}
-│   │   │   │       └── execute_service(self, user, image_data)
+│   │   │   │   ├── TextKeywordExtractorService {}
+│   │   │   │   │   └── execute_service(self, user, text, max_keywords)
+│   │   │   │   ├── ImageMetadataExtractorService {}
+│   │   │   │   │   └── execute_service(self, user, image_data)
+│   │   │   │   └── DataValidatorService {}
+│   │   │   │       ├── execute_service(self, user, data, data_type)
+│   │   │   │       ├── _validate_text_data(self, text)
+│   │   │   │       ├── _validate_email_data(self, email)
+│   │   │   │       ├── _validate_json_data(self, data)
+│   │   │   │       └── _validate_generic_data(self, data)
 │   │   │   ├── models.py
 │   │   │   ├── urls.py
 │   │   │   └── views.py
@@ -1160,6 +1198,22 @@ quickscale
 │   │   │       ├── template(cls, template_key, msg_type, logger)
 │   │   │       ├── print_command_result(cls, service, port)
 │   │   │       └── print_recovery_suggestion(cls, suggestion_key)
+│   │   ├── service_dev_utils.py
+│   │   │   ├── ServiceDevelopmentHelper {}
+│   │   │   │   ├── validate_service_structure(service_file_path)
+│   │   │   │   ├── analyze_service_dependencies(service_file_path)
+│   │   │   │   ├── generate_service_config_template(service_name, credit_cost)
+│   │   │   │   ├── check_project_structure()
+│   │   │   │   ├── get_service_examples()
+│   │   │   │   └── display_development_tips()
+│   │   │   ├── validate_service_file(file_path)
+│   │   │   └── show_service_examples()
+│   │   ├── service_templates.py
+│   │   │   ├── get_basic_service_template()
+│   │   │   ├── get_text_processing_template()
+│   │   │   ├── get_image_processing_template()
+│   │   │   ├── generate_service_file(service_name, service_type, service_description)
+│   │   │   └── get_service_readme_template()
 │   │   └── template_generator.py
 │   │       ├── copy_sync_modules(project_dir, quickscale_dir, logger)
 │   │       ├── is_binary_file(file_path)
@@ -1180,6 +1234,7 @@ quickscale
 │       ├── setup_utility_parsers(subparsers)
 │       ├── setup_logs_parser(subparsers)
 │       ├── setup_manage_parser(subparsers)
+│       ├── setup_service_generator_parsers(subparsers)
 │       ├── setup_help_and_version_parsers(subparsers)
 │       ├── handle_init_command(args)
 │       ├── handle_check_command_output(args)
@@ -1192,6 +1247,13 @@ quickscale
 │   ├── entry_points.txt
 │   ├── requires.txt
 │   └── top_level.txt
+├── services
+│   ├── test_service_example.py
+│   │   ├── use_test_service_service(user)
+│   │   └── example_usage()
+│   └── test_service_service.py
+│       └── TestServiceService {}
+│           └── execute_service(self, user)
 ├── tests
 │   ├── api
 │   │   ├── __init__.py
@@ -1261,6 +1323,53 @@ quickscale
 │   │   │   └── command_runner.py
 │   │   │       └── run_quickscale_command()
 │   │   ├── __init__.py
+│   │   ├── test_api_endpoints.py
+│   │   │   └── APIEndpointsTest {}
+│   │   │       ├── setUp(self)
+│   │   │       ├── test_text_processing_count_words(self)
+│   │   │       ├── test_text_processing_analyze(self)
+│   │   │       ├── test_text_processing_summarize(self)
+│   │   │       ├── test_insufficient_credits_error(self)
+│   │   │       ├── test_unauthorized_request(self)
+│   │   │       ├── test_invalid_operation(self)
+│   │   │       ├── test_missing_required_fields(self)
+│   │   │       ├── test_text_length_validation(self)
+│   │   │       ├── test_invalid_json_format(self)
+│   │   │       ├── test_wrong_content_type(self)
+│   │   │       ├── test_api_endpoint_info(self)
+│   │   │       ├── test_service_usage_tracking(self)
+│   │   │       ├── test_request_logging(self, mock_logger)
+│   │   │       ├── test_character_counting_operation(self)
+│   │   │       └── test_concurrent_credit_consumption(self)
+│   │   ├── test_api_integration.py
+│   │   │   └── APIIntegrationTest {}
+│   │   │       ├── setUp(self)
+│   │   │       ├── test_complete_api_workflow(self)
+│   │   │       ├── test_credit_depletion_workflow(self)
+│   │   │       ├── test_api_key_lifecycle_management(self)
+│   │   │       ├── test_concurrent_api_usage(self)
+│   │   │       ├── test_api_authentication_edge_cases(self)
+│   │   │       ├── test_api_key_expiry_workflow(self)
+│   │   │       ├── test_api_endpoint_info_workflow(self)
+│   │   │       ├── test_error_handling_and_logging_workflow(self)
+│   │   │       └── test_successful_request_logging(self, mock_logger)
+│   │   ├── test_api_key_management.py
+│   │   │   └── APIKeyManagementTest {}
+│   │   │       ├── setUp(self)
+│   │   │       ├── test_list_api_keys_view(self)
+│   │   │       ├── test_create_api_key_success(self)
+│   │   │       ├── test_create_api_key_duplicate_name(self)
+│   │   │       ├── test_create_api_key_missing_name(self)
+│   │   │       ├── test_deactivate_api_key(self)
+│   │   │       ├── test_delete_api_key(self)
+│   │   │       ├── test_unauthorized_access_protection(self)
+│   │   │       ├── test_user_isolation(self)
+│   │   │       ├── test_api_key_usage_statistics(self)
+│   │   │       ├── test_api_key_security_display(self)
+│   │   │       ├── test_json_response_format(self)
+│   │   │       ├── test_rate_limiting_api_key_creation(self)
+│   │   │       ├── test_key_generation_failure_handling(self, mock_generate)
+│   │   │       └── test_api_key_expiry_display(self)
 │   │   ├── test_auth_e2e.py
 │   │   │   └── TestAuthE2E {}
 │   │   │       ├── setUp(self)
@@ -1667,6 +1776,32 @@ quickscale
 │   │   │           └── test_format_message_without_color_without_icon(self, mock_stdout_not_tty)
 │   │   ├── __init__.py
 │   │   ├── pytest_setup.py
+│   │   ├── test_api_key_model.py
+│   │   │   └── APIKeyModelTest {}
+│   │   │       ├── setUp(self)
+│   │   │       ├── test_generate_api_key_security(self)
+│   │   │       ├── test_key_hashing_verification(self)
+│   │   │       ├── test_key_expiration(self)
+│   │   │       ├── test_prefix_uniqueness(self)
+│   │   │       ├── test_model_validation(self)
+│   │   │       ├── test_update_last_used(self)
+│   │   │       ├── test_is_valid_property(self)
+│   │   │       └── test_multiple_keys_per_user(self)
+│   │   ├── test_api_middleware.py
+│   │   │   └── APIKeyAuthenticationMiddlewareTest {}
+│   │   │       ├── setUp(self)
+│   │   │       ├── test_valid_api_key_auth(self)
+│   │   │       ├── test_invalid_api_key_formats(self)
+│   │   │       ├── test_expired_api_key(self)
+│   │   │       ├── test_deactivated_api_key(self)
+│   │   │       ├── test_middleware_scope(self)
+│   │   │       ├── test_auth_header_parsing(self)
+│   │   │       ├── test_nonexistent_api_key(self)
+│   │   │       ├── test_wrong_secret_for_existing_prefix(self)
+│   │   │       ├── test_logging_on_invalid_attempts(self, mock_logger)
+│   │   │       ├── test_api_endpoint_paths_only(self)
+│   │   │       ├── test_case_sensitive_bearer_token(self)
+│   │   │       └── test_middleware_exception_handling(self)
 │   │   ├── test_auth_components.py
 │   │   │   ├── _PasswordStrengthValidator {}
 │   │   │   │   ├── __init__(self, min_length, require_uppercase, require_lowercase, require_digit, require_special)
@@ -2505,7 +2640,6 @@ quickscale
 │   │   │   │   └── test_service_templates_responsive_design(self)
 │   │   │   ├── ServiceAdminAlpineJSFunctionalityTests {}
 │   │   │   │   ├── setUp(self)
-│   │   │   │   ├── test_service_admin_alpine_filtering_functionality(self)
 │   │   │   │   ├── test_service_row_alpine_functionality(self)
 │   │   │   │   └── test_service_detail_alpine_functionality(self)
 │   │   │   ├── ServiceAdminHTMXIntegrationTests {}
@@ -2521,6 +2655,160 @@ quickscale
 │   │   │       ├── setUp(self)
 │   │   │       ├── test_service_model_admin_field_consistency(self)
 │   │   │       └── test_service_usage_model_admin_relationship_consistency(self)
+│   │   ├── test_sprint14_api_documentation.py
+│   │   │   └── TestSprint14APIDocumentation {}
+│   │   │       ├── setUp(self)
+│   │   │       ├── test_text_processing_api_info(self)
+│   │   │       ├── test_api_response_success(self)
+│   │   │       ├── test_api_response_error(self)
+│   │   │       ├── test_api_response_validation_error(self)
+│   │   │       ├── test_validate_json_request_valid(self)
+│   │   │       ├── test_validate_json_request_invalid(self)
+│   │   │       ├── test_validate_required_fields_valid(self)
+│   │   │       ├── test_validate_required_fields_missing(self)
+│   │   │       ├── test_api_endpoint_authentication_required(self)
+│   │   │       ├── test_api_endpoint_authenticated_user(self)
+│   │   │       └── test_api_documentation_completeness(self)
+│   │   ├── test_sprint14_cli_integration.py
+│   │   │   └── TestSprint14CLIIntegration {}
+│   │   │       ├── setUp(self)
+│   │   │       ├── test_generate_service_command_registration(self)
+│   │   │       ├── test_generate_service_command_arguments(self)
+│   │   │       ├── test_generate_service_command_output_directory(self)
+│   │   │       ├── test_command_manager_service_generation(self, mock_execute_command)
+│   │   │       ├── test_service_generator_help_text(self)
+│   │   │       ├── test_invalid_service_name_handling(self)
+│   │   │       ├── test_service_type_validation(self)
+│   │   │       ├── test_service_generator_command_execution(self, mock_input, mock_exists, mock_makedirs)
+│   │   │       ├── test_command_manager_methods(self)
+│   │   │       └── test_list_services_command_registration(self)
+│   │   ├── test_sprint14_example_services.py
+│   │   │   ├── TestTextSentimentAnalysisService {}
+│   │   │   │   ├── setUp(self)
+│   │   │   │   ├── test_positive_sentiment_analysis(self)
+│   │   │   │   ├── test_negative_sentiment_analysis(self)
+│   │   │   │   ├── test_neutral_sentiment_analysis(self)
+│   │   │   │   └── test_empty_text_validation(self)
+│   │   │   ├── TestTextKeywordExtractorService {}
+│   │   │   │   ├── setUp(self)
+│   │   │   │   ├── test_keyword_extraction_basic(self)
+│   │   │   │   ├── test_stop_words_filtering(self)
+│   │   │   │   └── test_max_keywords_parameter(self)
+│   │   │   ├── TestImageMetadataExtractorService {}
+│   │   │   │   ├── setUp(self)
+│   │   │   │   ├── test_jpeg_format_detection(self)
+│   │   │   │   ├── test_png_format_detection(self)
+│   │   │   │   ├── test_base64_image_processing(self)
+│   │   │   │   └── test_empty_image_data_validation(self)
+│   │   │   ├── TestDataValidatorService {}
+│   │   │   │   ├── setUp(self)
+│   │   │   │   ├── test_text_data_validation_valid(self)
+│   │   │   │   ├── test_email_validation_valid(self)
+│   │   │   │   ├── test_email_validation_invalid(self)
+│   │   │   │   ├── test_json_validation_valid(self)
+│   │   │   │   └── test_json_validation_invalid(self)
+│   │   │   └── TestServiceExampleIntegration {}
+│   │   │       ├── setUp(self)
+│   │   │       ├── test_service_template_structure_consistency(self)
+│   │   │       ├── test_error_handling_consistency(self)
+│   │   │       ├── test_service_registration_patterns(self)
+│   │   │       └── test_example_service_documentation(self)
+│   │   ├── test_sprint14_examples.py
+│   │   │   ├── TestServiceExampleStructure {}
+│   │   │   │   ├── setUp(self)
+│   │   │   │   ├── test_sentiment_analysis_structure(self)
+│   │   │   │   ├── test_keyword_extraction_structure(self)
+│   │   │   │   └── test_data_validator_structure(self)
+│   │   │   └── TestServiceValidationPatterns {}
+│   │   │       ├── test_empty_input_validation(self)
+│   │   │       └── test_json_validation_logic(self)
+│   │   ├── test_sprint14_service_dev_utils.py
+│   │   │   ├── TestServiceDevelopmentHelper {}
+│   │   │   │   ├── setUp(self)
+│   │   │   │   ├── tearDown(self)
+│   │   │   │   ├── _create_test_service_file(self, content)
+│   │   │   │   ├── test_validate_service_structure_valid_service(self)
+│   │   │   │   ├── test_validate_service_structure_missing_imports(self)
+│   │   │   │   ├── test_validate_service_structure_missing_inheritance(self)
+│   │   │   │   ├── test_validate_service_structure_missing_decorator(self)
+│   │   │   │   ├── test_validate_service_structure_missing_method(self)
+│   │   │   │   ├── test_validate_service_structure_nonexistent_file(self)
+│   │   │   │   ├── test_analyze_service_dependencies_external_imports(self)
+│   │   │   │   ├── test_analyze_service_dependencies_no_external_imports(self)
+│   │   │   │   ├── test_generate_service_config_template(self)
+│   │   │   │   ├── test_check_project_structure_not_quickscale_project(self)
+│   │   │   │   ├── test_check_project_structure_partial_quickscale_project(self)
+│   │   │   │   ├── test_get_service_examples(self)
+│   │   │   │   └── test_display_development_tips(self, mock_message_manager)
+│   │   │   ├── TestServiceDevUtilityFunctions {}
+│   │   │   │   ├── setUp(self)
+│   │   │   │   ├── tearDown(self)
+│   │   │   │   ├── _create_test_service_file(self, content)
+│   │   │   │   ├── test_validate_service_file(self, mock_message_manager)
+│   │   │   │   └── test_show_service_examples(self, mock_message_manager)
+│   │   │   └── TestServiceDevelopmentIntegration {}
+│   │   │       ├── setUp(self)
+│   │   │       ├── tearDown(self)
+│   │   │       ├── test_complete_service_validation_workflow(self)
+│   │   │       └── test_service_validation_error_accumulation(self)
+│   │   ├── test_sprint14_service_generator.py
+│   │   │   ├── TestServiceGeneratorCommand {}
+│   │   │   │   ├── setUp(self)
+│   │   │   │   ├── tearDown(self)
+│   │   │   │   ├── test_validate_service_name_valid_names(self)
+│   │   │   │   ├── test_validate_service_name_invalid_names(self)
+│   │   │   │   ├── test_to_class_name_conversion(self)
+│   │   │   │   ├── test_execute_service_generation_file_exists_no_overwrite(self, mock_message, mock_exists, mock_input)
+│   │   │   │   ├── test_execute_service_generation_file_exists_overwrite(self, mock_input)
+│   │   │   │   ├── test_execute_service_generation_new_file(self)
+│   │   │   │   ├── test_execute_with_invalid_service_name(self)
+│   │   │   │   ├── test_get_service_template_types(self)
+│   │   │   │   └── test_generate_service_with_existing_file(self, mock_input)
+│   │   │   ├── TestValidateServiceCommand {}
+│   │   │   │   ├── setUp(self)
+│   │   │   │   ├── tearDown(self)
+│   │   │   │   ├── test_execute_validates_service_file(self)
+│   │   │   │   └── test_execute_with_nonexistent_file(self)
+│   │   │   ├── TestServiceExamplesCommand {}
+│   │   │   │   ├── setUp(self)
+│   │   │   │   ├── test_execute_shows_all_examples(self)
+│   │   │   │   ├── test_execute_shows_specific_example_type(self)
+│   │   │   │   └── test_execute_with_unknown_type(self)
+│   │   │   ├── TestListServicesCommand {}
+│   │   │   │   ├── setUp(self)
+│   │   │   │   ├── test_execute_lists_services(self)
+│   │   │   │   └── test_execute_with_details(self)
+│   │   │   ├── TestServiceTemplates {}
+│   │   │   │   ├── test_get_basic_service_template(self)
+│   │   │   │   ├── test_get_text_processing_template(self)
+│   │   │   │   └── test_get_image_processing_template(self)
+│   │   │   ├── TestServiceDevUtils {}
+│   │   │   │   ├── test_service_validation_valid_file(self)
+│   │   │   │   ├── test_service_validation_invalid_file(self)
+│   │   │   │   ├── test_get_service_examples(self)
+│   │   │   │   ├── test_get_service_examples_by_type(self)
+│   │   │   │   ├── test_generate_service_config_template(self)
+│   │   │   │   └── test_show_service_examples_function(self, mock_message_manager)
+│   │   │   └── TestServiceTemplateIntegration {}
+│   │   │       ├── setUp(self)
+│   │   │       ├── tearDown(self)
+│   │   │       └── test_complete_service_generation_workflow(self, mock_render)
+│   │   ├── test_sprint14_service_utilities.py
+│   │   │   └── TestSprint14ServiceUtilities {}
+│   │   │       ├── setUp(self)
+│   │   │       ├── test_validate_service_structure_valid_file(self)
+│   │   │       ├── test_validate_service_structure_missing_imports(self)
+│   │   │       ├── test_validate_service_structure_missing_decorator(self)
+│   │   │       ├── test_validate_service_structure_file_not_found(self)
+│   │   │       ├── test_analyze_service_dependencies_external_packages(self)
+│   │   │       ├── test_analyze_service_dependencies_no_external(self)
+│   │   │       ├── test_generate_service_config_template(self)
+│   │   │       ├── test_check_project_structure_valid_project(self)
+│   │   │       ├── test_check_project_structure_invalid_project(self)
+│   │   │       ├── test_get_service_examples(self)
+│   │   │       ├── test_validate_service_file(self, mock_message_manager)
+│   │   │       ├── test_show_service_examples(self, mock_message_manager)
+│   │   │       └── test_service_development_helper_initialization(self)
 │   │   ├── test_stripe_config.py
 │   │   │   └── StripeConfigurationTests {}
 │   │   │       ├── setUp(self)
@@ -2569,6 +2857,8 @@ quickscale
 │   │   │       ├── test_stripe_manager_direct_api_calls(self, mock_get_env, mock_is_feature_enabled)
 │   │   │       └── test_compatibility_layer(self, mock_get_env, mock_is_feature_enabled)
 │   │   ├── test_stripe_real_api.py
+│   │   │   ├── _setup_module_mocks()
+│   │   │   ├── _cleanup_module_mocks()
 │   │   │   ├── StripeManager {}
 │   │   │   │   ├── __init__(self)
 │   │   │   │   ├── get_instance(cls)
@@ -2587,16 +2877,19 @@ quickscale
 │   │   │   ├── JsonResponse {}
 │   │   │   │   └── __init__(self, data, status)
 │   │   │   ├── stripe_test_mode()
-│   │   │   └── TestStripeRealAPI {}
-│   │   │       ├── setUp(self)
-│   │   │       ├── tearDown(self)
-│   │   │       ├── test_stripe_manager_initialization(self)
-│   │   │       ├── test_create_customer_calls_real_api(self, mock_create)
-│   │   │       ├── test_create_product_calls_real_api(self, mock_create)
-│   │   │       ├── test_create_price_calls_real_api(self, mock_create)
-│   │   │       ├── test_retrieve_product_calls_real_api(self, mock_retrieve)
-│   │   │       ├── test_list_products_calls_real_api(self, mock_list)
-│   │   │       └── test_webhook_handling(self, mock_construct_event)
+│   │   │   ├── TestStripeRealAPI {}
+│   │   │   │   ├── setUp(self)
+│   │   │   │   ├── tearDown(self)
+│   │   │   │   ├── tearDownClass(cls)
+│   │   │   │   ├── test_stripe_manager_initialization(self)
+│   │   │   │   ├── test_create_customer_calls_real_api(self, mock_create)
+│   │   │   │   ├── test_create_product_calls_real_api(self, mock_create)
+│   │   │   │   ├── test_create_price_calls_real_api(self, mock_create)
+│   │   │   │   ├── test_retrieve_product_calls_real_api(self, mock_retrieve)
+│   │   │   │   ├── test_list_products_calls_real_api(self, mock_list)
+│   │   │   │   └── test_webhook_handling(self, mock_construct_event)
+│   │   │   ├── pytest_runtest_teardown()
+│   │   │   └── pytest_sessionfinish()
 │   │   ├── test_stripe_settings_validation.py
 │   │   │   └── StripeSettingsValidationTest {}
 │   │   │       ├── setUp(self)
@@ -2718,79 +3011,6 @@ quickscale
 │   │   ├── test_allowed_hosts()
 │   │   ├── test_db_password()
 │   │   └── test_email_tls()
-│   ├── test_api_endpoints.py
-│   │   └── APIEndpointsTest {}
-│   │       ├── setUp(self)
-│   │       ├── test_text_processing_count_words(self)
-│   │       ├── test_text_processing_analyze(self)
-│   │       ├── test_text_processing_summarize(self)
-│   │       ├── test_insufficient_credits_error(self)
-│   │       ├── test_unauthorized_request(self)
-│   │       ├── test_invalid_operation(self)
-│   │       ├── test_missing_required_fields(self)
-│   │       ├── test_text_length_validation(self)
-│   │       ├── test_invalid_json_format(self)
-│   │       ├── test_wrong_content_type(self)
-│   │       ├── test_api_endpoint_info(self)
-│   │       ├── test_service_usage_tracking(self)
-│   │       ├── test_request_logging(self, mock_logger)
-│   │       ├── test_character_counting_operation(self)
-│   │       └── test_concurrent_credit_consumption(self)
-│   ├── test_api_integration.py
-│   │   └── APIIntegrationTest {}
-│   │       ├── setUp(self)
-│   │       ├── test_complete_api_workflow(self)
-│   │       ├── test_credit_depletion_workflow(self)
-│   │       ├── test_api_key_lifecycle_management(self)
-│   │       ├── test_concurrent_api_usage(self)
-│   │       ├── test_api_authentication_edge_cases(self)
-│   │       ├── test_api_key_expiry_workflow(self)
-│   │       ├── test_api_endpoint_info_workflow(self)
-│   │       ├── test_error_handling_and_logging_workflow(self)
-│   │       └── test_successful_request_logging(self, mock_logger)
-│   ├── test_api_key_management.py
-│   │   └── APIKeyManagementTest {}
-│   │       ├── setUp(self)
-│   │       ├── test_list_api_keys_view(self)
-│   │       ├── test_create_api_key_success(self)
-│   │       ├── test_create_api_key_duplicate_name(self)
-│   │       ├── test_create_api_key_missing_name(self)
-│   │       ├── test_deactivate_api_key(self)
-│   │       ├── test_delete_api_key(self)
-│   │       ├── test_unauthorized_access_protection(self)
-│   │       ├── test_user_isolation(self)
-│   │       ├── test_api_key_usage_statistics(self)
-│   │       ├── test_api_key_security_display(self)
-│   │       ├── test_json_response_format(self)
-│   │       ├── test_rate_limiting_api_key_creation(self)
-│   │       ├── test_key_generation_failure_handling(self, mock_generate)
-│   │       └── test_api_key_expiry_display(self)
-│   ├── test_api_key_model.py
-│   │   └── APIKeyModelTest {}
-│   │       ├── setUp(self)
-│   │       ├── test_generate_api_key_security(self)
-│   │       ├── test_key_hashing_verification(self)
-│   │       ├── test_key_expiration(self)
-│   │       ├── test_prefix_uniqueness(self)
-│   │       ├── test_model_validation(self)
-│   │       ├── test_update_last_used(self)
-│   │       ├── test_is_valid_property(self)
-│   │       └── test_multiple_keys_per_user(self)
-│   ├── test_api_middleware.py
-│   │   └── APIKeyAuthenticationMiddlewareTest {}
-│   │       ├── setUp(self)
-│   │       ├── test_valid_api_key_auth(self)
-│   │       ├── test_invalid_api_key_formats(self)
-│   │       ├── test_expired_api_key(self)
-│   │       ├── test_deactivated_api_key(self)
-│   │       ├── test_middleware_scope(self)
-│   │       ├── test_auth_header_parsing(self)
-│   │       ├── test_nonexistent_api_key(self)
-│   │       ├── test_wrong_secret_for_existing_prefix(self)
-│   │       ├── test_logging_on_invalid_attempts(self, mock_logger)
-│   │       ├── test_api_endpoint_paths_only(self)
-│   │       ├── test_case_sensitive_bearer_token(self)
-│   │       └── test_middleware_exception_handling(self)
 │   └── utils.py
 │       ├── is_port_open(host, port)
 │       ├── find_available_port(start_port, end_port)
