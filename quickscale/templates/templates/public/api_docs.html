@@ -69,7 +69,7 @@
                         <h3 class="title is-4">Step 1: Create Your Service Class</h3>
                         <p>All AI services inherit from <code>BaseService</code> and use the <code>@register_service</code> decorator:</p>
                         
-                        <div class="tabs" x-data="{ activeServiceTab: 'sentiment' }" x-init="activeServiceTab = 'sentiment'">
+                        <div class="tabs" x-data="{ activeServiceTab: 'sentiment' }">
                             <ul>
                                 <li :class="{ 'is-active': activeServiceTab === 'sentiment' }">
                                     <a @click="activeServiceTab = 'sentiment'">Sentiment Analysis</a>
@@ -378,7 +378,11 @@ curl -X POST "https://api.{{ request.get_host }}/v1/services/1/use" \
                     <h2 class="title is-3">Base URL</h2>
                     <div class="content">
                         <p>All API requests should be made to:</p>
-                        <pre class="has-background-light p-3"><code>https://api.{{ request.get_host }}/v1/</code></pre>
+                        <pre class="has-background-light p-3"><code>https://{{ request.get_host }}/api/v1/</code></pre>
+                        
+                        <div class="notification is-warning is-light">
+                            <p><strong>Note:</strong> This is a demonstration API with limited endpoints. The examples below show the intended API structure for a complete implementation.</p>
+                        </div>
                     </div>
                 </div>
 
@@ -463,6 +467,47 @@ curl -X POST "https://api.{{ request.get_host }}/v1/services/1/use" \
                 <div class="box">
                     <h2 class="title is-3">API Endpoints</h2>
                     <div class="content">
+                        
+                        <!-- Currently Implemented -->
+                        <div class="notification is-info is-light">
+                            <h4 class="title is-5">🚀 Currently Implemented Endpoints</h4>
+                            <p>The following endpoints are available in the current implementation:</p>
+                            
+                            <div class="box is-light">
+                                <h5 class="title is-6">
+                                    <span class="tag is-success">POST</span>
+                                    <code>/text/process</code>
+                                </h5>
+                                <p>Process text with various AI operations (analyze, summarize, count_words, count_characters).</p>
+                                
+                                <h6 class="title is-6">Request Body Example</h6>
+                                <pre class="has-background-light p-3"><code>{
+  "text": "Your text content here",
+  "operation": "analyze"
+}</code></pre>
+
+                                <h6 class="title is-6">Example Response</h6>
+                                <pre class="has-background-light p-3"><code>{
+  "success": true,
+  "status": 200,
+  "message": "Text analyze completed successfully",
+  "data": {
+    "operation": "analyze",
+    "credits_consumed": "2.0",
+    "result": {
+      "word_count": 25,
+      "character_count": 150,
+      "sentence_count": 3,
+      "average_words_per_sentence": 8.33
+    }
+  }
+}</code></pre>
+                            </div>
+                        </div>
+                        
+                        <!-- Future API Structure -->
+                        <h3 class="title is-4">🔮 Future API Structure (Demonstration)</h3>
+                        <p>The following shows the planned API structure for service framework integration:</p>
                         
                         <!-- Account Information -->
                         <h3 class="title is-4">Account Information</h3>
@@ -684,7 +729,7 @@ X-RateLimit-Reset: 1640995200</code></pre>
                     <h2 class="title is-3">SDKs and Code Examples</h2>
                     <div class="content">
                         
-                        <div class="tabs" x-data="{ activeTab: 'curl' }" x-init="activeTab = 'curl'">
+                        <div class="tabs" x-data="{ activeTab: 'curl' }">
                             <ul>
                                 <li :class="{ 'is-active': activeTab === 'curl' }">
                                     <a @click="activeTab = 'curl'">cURL</a>
@@ -703,22 +748,22 @@ X-RateLimit-Reset: 1640995200</code></pre>
 
                         <div x-show="activeTab === 'curl'">
                             <h4 class="title is-5">cURL Examples</h4>
-                            <pre class="has-background-light p-3"><code># Get account profile
-curl -X GET "https://api.{{ request.get_host }}/v1/account/profile" \
+                            <pre class="has-background-light p-3"><code># Currently implemented endpoint - Text processing
+curl -X POST "https://{{ request.get_host }}/api/v1/text/process" \
+     -H "Authorization: Bearer YOUR_API_KEY" \
+     -H "Content-Type: application/json" \
+     -d '{"text": "This AI service is fantastic!", "operation": "analyze"}'
+
+# Future endpoints (demonstration) - Account profile  
+curl -X GET "https://{{ request.get_host }}/api/v1/account/profile" \
      -H "Authorization: Bearer YOUR_API_KEY" \
      -H "Content-Type: application/json"
 
-# Use sentiment analysis service
-curl -X POST "https://api.{{ request.get_host }}/v1/services/1/use" \
+# Future endpoints (demonstration) - Service usage
+curl -X POST "https://{{ request.get_host }}/api/v1/services/1/use" \
      -H "Authorization: Bearer YOUR_API_KEY" \
      -H "Content-Type: application/json" \
-     -d '{"input_data": {"text": "This AI service is fantastic!"}}'
-
-# Extract keywords from text
-curl -X POST "https://api.{{ request.get_host }}/v1/services/2/use" \
-     -H "Authorization: Bearer YOUR_API_KEY" \
-     -H "Content-Type: application/json" \
-     -d '{"input_data": {"text": "Machine learning and artificial intelligence", "max_keywords": 3}}'</code></pre>
+     -d '{"input_data": {"text": "Machine learning and artificial intelligence"}}'</code></pre>
                         </div>
 
                         <div x-show="activeTab === 'python'">
@@ -727,7 +772,7 @@ curl -X POST "https://api.{{ request.get_host }}/v1/services/2/use" \
 import json
 
 class QuickScaleAPI:
-    def __init__(self, api_key, base_url="https://api.{{ request.get_host }}/v1"):
+    def __init__(self, api_key, base_url="https://{{ request.get_host }}/api/v1"):
         self.api_key = api_key
         self.base_url = base_url
         self.headers = {
@@ -774,7 +819,7 @@ for keyword in keywords_result['data']['result']['keywords']:
                         <div x-show="activeTab === 'javascript'">
                             <h4 class="title is-5">JavaScript/Node.js Example</h4>
                             <pre class="has-background-light p-3"><code>class QuickScaleAPI {
-    constructor(apiKey, baseUrl = "https://api.{{ request.get_host }}/v1") {
+    constructor(apiKey, baseUrl = "https://{{ request.get_host }}/api/v1") {
         this.apiKey = apiKey;
         this.baseUrl = baseUrl;
         this.headers = {
@@ -841,7 +886,7 @@ class QuickScaleAPI {
     private $baseUrl;
     private $headers;
     
-    public function __construct($apiKey, $baseUrl = "https://api.{{ request.get_host }}/v1") {
+    public function __construct($apiKey, $baseUrl = "https://{{ request.get_host }}/api/v1") {
         $this->apiKey = $apiKey;
         $this->baseUrl = $baseUrl;
         $this->headers = [
