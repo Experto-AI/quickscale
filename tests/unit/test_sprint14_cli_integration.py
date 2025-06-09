@@ -120,8 +120,9 @@ class TestSprint14CLIIntegration(unittest.TestCase):
         # Test that service generation works
         result = self.command_manager.generate_service('test_service')
         
-        # Should return success even if not overwritten, but check that no write occurred.
-        self.assertTrue(result.get('success', False))
+        # Should fail because user chose not to overwrite existing file
+        self.assertFalse(result.get('success', False))
+        self.assertEqual(result.get('reason'), 'File already exists')
     
     def test_command_manager_methods(self):
         """Test that command manager has the expected methods."""
