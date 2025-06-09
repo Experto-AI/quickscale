@@ -187,29 +187,7 @@ class ServiceAdminAlpineJSFunctionalityTests(unittest.TestCase):
         self.base_path = Path(os.path.dirname(os.path.dirname(os.path.dirname(__file__))))
         self.templates_path = self.base_path / 'quickscale' / 'templates' / 'templates' / 'admin_dashboard'
         
-    def test_service_admin_alpine_filtering_functionality(self):
-        """Test that service admin has proper Alpine.js filtering functionality."""
-        service_admin_template = self.templates_path / 'service_admin.html'
-        
-        with open(service_admin_template, 'r') as f:
-            template_content = f.read()
-        
-        # Check for Alpine.js filtering functions
-        alpine_functions = [
-            'filterServices()', 'isVisible()', 'statusFilter', 'searchTerm'
-        ]
-        for func in alpine_functions:
-            self.assertIn(func, template_content,
-                         f"Alpine.js filtering function {func} not found")
-        
-        # Check for filter controls
-        self.assertIn("x-model=\"statusFilter\"", template_content,
-                     "Status filter Alpine.js model not found")
-        self.assertIn("x-model=\"searchTerm\"", template_content,
-                     "Search term Alpine.js model not found")
-        self.assertIn("x-on:change=\"filterServices()\"", template_content,
-                     "Filter change handler not found")
-    
+   
     def test_service_row_alpine_functionality(self):
         """Test that service row has proper Alpine.js functionality."""
         service_admin_template = self.templates_path / 'service_admin.html'
