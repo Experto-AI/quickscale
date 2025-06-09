@@ -21,13 +21,3 @@ def contact(request: HttpRequest) -> HttpResponse:
         return render(request, 'public/contact.html')
     
     return render(request, 'public/contact.html')
-
-
-@require_http_methods(["GET"])
-def api_docs(request: HttpRequest) -> HttpResponse:
-    """Display the API documentation page."""
-    context = {
-        'page_title': 'API Documentation',
-        'page_description': 'Complete API reference for AI engineers',
-    }
-    return render(request, 'public/api_docs.html', context)
