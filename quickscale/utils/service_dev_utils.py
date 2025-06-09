@@ -4,6 +4,7 @@ import importlib.util
 from pathlib import Path
 from typing import Dict, List, Optional, Any, Type
 from quickscale.utils.message_manager import MessageManager
+from django.core.management.base import CommandError
 
 
 class ServiceDevelopmentHelper:
@@ -316,6 +317,10 @@ def validate_service_file(file_path: str) -> None:
         MessageManager.warning("Potential issues:")
         for issue in analysis["potential_issues"]:
             MessageManager.warning(f"  • {issue}")
+    
+    if not validation["valid"]:
+        MessageManager.error("Service validation failed. Please fix the errors listed above.")
+        raise CommandError("Service validation failed due to structural issues.")
 
 
 def show_service_examples() -> None:

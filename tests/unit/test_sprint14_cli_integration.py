@@ -68,7 +68,7 @@ class TestSprint14CLIIntegration(unittest.TestCase):
         # Test service generation through command manager
         result = self.command_manager.generate_service('test_service')
         
-        mock_execute_command.assert_called_once_with('generate-service', 'test_service', service_type='basic', output_dir=None)
+        mock_execute_command.assert_called_once_with('generate-service', 'test_service', service_type='basic', output_dir=None, credit_cost=1.0, description=None, skip_db_config=False)
         self.assertEqual(result, {'success': True})
     
     def test_service_generator_help_text(self):
@@ -133,20 +133,6 @@ class TestSprint14CLIIntegration(unittest.TestCase):
         # Test that execute_command method exists and is callable
         self.assertTrue(hasattr(self.command_manager, 'execute_command'))
         self.assertTrue(callable(getattr(self.command_manager, 'execute_command')))
-    
-    def test_list_services_command_registration(self):
-        """Test that list-services command is properly registered."""
-        parser, subparsers = create_parser()
-        setup_service_generator_parsers(subparsers)
-        
-        # Test list-services command
-        args = parser.parse_args(['list-services'])
-        self.assertEqual(args.command, 'list-services')
-        
-        # Test with details flag
-        args = parser.parse_args(['list-services', '--details'])
-        self.assertEqual(args.command, 'list-services')
-        self.assertTrue(args.details)
 
 
 if __name__ == '__main__':

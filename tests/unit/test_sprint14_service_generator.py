@@ -8,8 +8,7 @@ from unittest.mock import patch, MagicMock, mock_open
 from quickscale.commands.service_generator_commands import (
     ServiceGeneratorCommand,
     ValidateServiceCommand,
-    ServiceExamplesCommand,
-    ListServicesCommand
+    ServiceExamplesCommand
 )
 from quickscale.utils.service_templates import (
     get_basic_service_template,
@@ -217,14 +216,15 @@ class TestService(BaseService):
     
     def test_execute_with_nonexistent_file(self):
         """Test validation with nonexistent file."""
+        from quickscale.utils.error_manager import CommandError
+        
         nonexistent_file = Path(self.test_dir) / "nonexistent.py"
         
-        # This should complete without crashing, even though the file doesn't exist
-        # The validate_service_file function handles the error internally
-        result = self.command.execute(str(nonexistent_file))
+        # This should raise a CommandError when the file doesn't exist
+        with self.assertRaises(CommandError) as context:
+            self.command.execute(str(nonexistent_file))
         
-        self.assertTrue(result["validation_completed"])
-        self.assertIsInstance(result, dict)
+        self.assertIn("Service file not found", str(context.exception))
 
 
 class TestServiceExamplesCommand(unittest.TestCase):
@@ -259,32 +259,6 @@ class TestServiceExamplesCommand(unittest.TestCase):
         self.assertIn("examples", result)
         self.assertIn("count", result)
         self.assertEqual(result["count"], 0)  # No examples for unknown type
-
-
-class TestListServicesCommand(unittest.TestCase):
-    """Test cases for ListServicesCommand."""
-    
-    def setUp(self):
-        """Set up test environment."""
-        self.command = ListServicesCommand()
-    
-    def test_execute_lists_services(self):
-        """Test listing available services."""
-        # This test checks the import error handling when services framework isn't available
-        result = self.command.execute()
-        
-        self.assertIn("services", result)
-        self.assertIn("count", result)
-        self.assertEqual(result["count"], 0)  # No services when framework not available
-    
-    def test_execute_with_details(self):
-        """Test listing services with details."""
-        # This test checks the import error handling when services framework isn't available
-        result = self.command.execute(show_details=True)
-        
-        self.assertIn("services", result)
-        self.assertIn("count", result)
-        self.assertEqual(result["count"], 0)  # No services when framework not available
 
 
 class TestServiceTemplates(unittest.TestCase):
