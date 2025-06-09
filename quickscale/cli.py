@@ -264,7 +264,9 @@ Output Directory: Optional. If not provided, service will be generated in a 'ser
 Credit Cost: Cost in credits for using this service (default: 1.0).
 Description: Service description for documentation and admin interface.
 
-The service will be automatically configured in the database unless --skip-db-config is used.
+Database Configuration: The service will be automatically configured in the database if your 
+project is running (quickscale up). If not running, you'll get instructions to configure it later.
+Use --skip-db-config to skip automatic database configuration entirely.
         """,
         epilog="""
 Examples:
@@ -273,6 +275,9 @@ Examples:
   quickscale generate-service image_classifier --type image_processing --description "Advanced image classification service"
   quickscale generate-service my_service --credit-cost 0.5 --description "Low-cost utility service"
   quickscale generate-service test_service --skip-db-config  (generate files only, skip database configuration)
+
+Note: If your project isn't running (quickscale up), database configuration will be skipped automatically
+with instructions on how to configure it later. This is normal behavior.
         """,
         formatter_class=argparse.RawDescriptionHelpFormatter,
         usage="quickscale generate-service <service_name> [--type <service_type>] [--output <output_dir>]")
