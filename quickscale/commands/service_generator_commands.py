@@ -90,15 +90,32 @@ class ServiceGeneratorCommand(Command):
                 if db_config_result["success"]:
                     MessageManager.success(f"Service '{service_name}' configured in database with {credit_cost} credit cost")
                 else:
-                    MessageManager.warning(f"Database configuration skipped: {db_config_result.get('reason', 'Unknown reason')}")
-                    result["database_config_warning"] = db_config_result.get('reason', 'Unknown reason')
+                    reason = db_config_result.get('reason', 'Unknown reason')
+                    MessageManager.warning(f"Database configuration skipped: {reason}")
+                    
+                    # Provide helpful guidance based on the specific failure reason
+                    if "Docker services are not running" in reason:
+                        MessageManager.info("To configure the service in the database:")
+                        MessageManager.info(f"  1. Start your project: quickscale up")
+                        MessageManager.info(f"  2. Configure service: quickscale manage configure_service {service_name} --description \"{description}\" --credit-cost {credit_cost}")
+                    elif "Cannot check Docker services" in reason:
+                        MessageManager.info("To configure the service in the database:")
+                        MessageManager.info(f"  1. Ensure Docker is running and project is started: quickscale up")
+                        MessageManager.info(f"  2. Configure service: quickscale manage configure_service {service_name} --description \"{description}\" --credit-cost {credit_cost}")
+                    else:
+                        MessageManager.info(f"You can configure it manually with: quickscale manage configure_service {service_name} --description \"{description}\" --credit-cost {credit_cost}")
+                    
+                    result["database_config_warning"] = reason
             except Exception as e:
                 MessageManager.warning(f"Could not configure service in database: {str(e)}")
-                MessageManager.info(f"You can configure it manually with: python manage.py configure_service {service_name} --description \"{description}\" --credit-cost {credit_cost}")
+                MessageManager.info("To configure the service in the database:")
+                MessageManager.info(f"  1. Start your project: quickscale up")
+                MessageManager.info(f"  2. Configure service: quickscale manage configure_service {service_name} --description \"{description}\" --credit-cost {credit_cost}")
                 result["database_configured"] = False
                 result["database_config_error"] = str(e)
         else:
-            MessageManager.info(f"Database configuration skipped. Configure manually with: python manage.py configure_service {service_name} --description \"{description}\" --credit-cost {credit_cost}")
+            MessageManager.info(f"Database configuration skipped. Configure manually with:")
+            MessageManager.info(f"  quickscale manage configure_service {service_name} --description \"{description}\" --credit-cost {credit_cost}")
             result["database_configured"] = False
             result["database_config_skipped"] = True
         
@@ -132,6 +149,24 @@ class ServiceGeneratorCommand(Command):
         # Check if we're in a Django project directory
         if not os.path.exists('manage.py'):
             return {"success": False, "reason": "Not in a Django project directory (manage.py not found)"}
+        
+        # Check if Docker services are running before attempting database operations
+        try:
+            # Use docker compose ps to check if services are up
+            result = subprocess.run(['docker', 'compose', 'ps', '--quiet'], 
+                                   capture_output=True, text=True, timeout=10)
+            
+            if result.returncode != 0 or not result.stdout.strip():
+                return {
+                    "success": False, 
+                    "reason": "Docker services are not running. Start services with 'quickscale up' first."
+                }
+                
+        except (subprocess.TimeoutExpired, FileNotFoundError):
+            return {
+                "success": False, 
+                "reason": "Cannot check Docker services. Ensure Docker is installed and 'quickscale up' has been run."
+            }
         
         try:
             # Use the Django management command to configure the service
