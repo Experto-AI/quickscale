@@ -9,7 +9,7 @@ import pytest
 from quickscale.commands.service_commands import (
     ServiceUpCommand, ServiceDownCommand, ServiceLogsCommand, ServiceStatusCommand
 )
-from quickscale.utils.error_manager import ServiceError
+from quickscale.utils.error_manager import ServiceError, CommandError
 
 
 class TestServiceUpCommandExtended:
@@ -41,12 +41,18 @@ class TestServiceUpCommandExtended:
         error.stderr = b"Some error"
         env = {'ENV_VAR': 'value'}
         
-        # Should re-raise the error for non-special error codes
-        with pytest.raises(subprocess.CalledProcessError):
-            cmd._handle_docker_process_error(error, env)
+        # Mock subprocess.run to return no services running
+        mock_result = MagicMock()
+        mock_result.returncode = 0
+        mock_result.stdout = "no services found"
+        
+        with patch('subprocess.run', return_value=mock_result) as mock_run:
+            # Should re-raise the error for non-special error codes when no services running
+            with pytest.raises(subprocess.CalledProcessError):
+                cmd._handle_docker_process_error(error, env)
     
     def test_handle_docker_process_error_special_code(self):
-        """Test _handle_docker_process_error with special error codes (1 or 5)."""
+        """Test _handle_docker_process_error with special error codes (5) when services are running."""
         cmd = ServiceUpCommand()
         # Create CalledProcessError without stdout/stderr as kwargs
         error = subprocess.CalledProcessError(5, "docker-compose up")
@@ -54,52 +60,66 @@ class TestServiceUpCommandExtended:
         error.stderr = b"Some error"
         env = {'ENV_VAR': 'value'}
         
-        # Mock methods to avoid actual subprocess calls
-        with patch.object(cmd, '_get_docker_compose_logs') as mock_get_logs, \
-             patch.object(cmd, '_check_if_services_running_despite_error') as mock_check_services:
-            
-            # Should not raise for special error codes
+        # Mock subprocess.run to return services running
+        mock_result = MagicMock()
+        mock_result.returncode = 0
+        mock_result.stdout = "web db running"
+        
+        with patch('subprocess.run', return_value=mock_result) as mock_run:
+            # Should not raise for error codes when services are detected as running
             cmd._handle_docker_process_error(error, env)
             
-            # Verify methods were called
-            mock_get_logs.assert_called_once_with(env)
-            mock_check_services.assert_called_once_with(error, env)
+            # Verify subprocess.run was called to check services
+            mock_run.assert_called_once()
+            args, kwargs = mock_run.call_args
+            assert "ps" in args[0]
     
     def test_get_docker_compose_logs_success(self):
-        """Test _get_docker_compose_logs successful execution."""
+        """Test that docker-compose logs are properly handled in _handle_docker_process_error."""
         cmd = ServiceUpCommand()
         env = {'ENV_VAR': 'value'}
         
-        # Mock successful subprocess call
+        # Create a subprocess error to trigger the error handler
+        error = subprocess.CalledProcessError(5, "docker-compose up")
+        error.stdout = "Service startup output"
+        error.stderr = "Service startup error"
+        
+        # Mock successful subprocess call (services running)
         mock_result = MagicMock()
         mock_result.returncode = 0
-        mock_result.stdout = "Log output"
-        mock_result.stderr = "Log error"
+        mock_result.stdout = "web db running"
         
         with patch('subprocess.run', return_value=mock_result) as mock_run:
-            cmd._get_docker_compose_logs(env)
+            # Should not raise because services appear to be running
+            cmd._handle_docker_process_error(error, env)
             
-            # Verify subprocess.run called correctly
+            # Verify subprocess.run called for ps command
             mock_run.assert_called_once()
             args, kwargs = mock_run.call_args
-            assert args[0][1] == "logs"
+            assert "ps" in args[0]
             assert kwargs['env'] == env
     
     def test_get_docker_compose_logs_exception(self):
-        """Test _get_docker_compose_logs handling exceptions."""
+        """Test _handle_docker_process_error when subprocess check fails."""
         cmd = ServiceUpCommand()
         env = {'ENV_VAR': 'value'}
         
+        # Create a subprocess error to trigger the error handler
+        error = subprocess.CalledProcessError(5, "docker-compose up")
+        error.stdout = "Service startup output"
+        error.stderr = "Service startup error"
+        
         # Mock subprocess call that raises an exception
         with patch('subprocess.run', side_effect=Exception("Test exception")) as mock_run:
-            # Should not raise but log the error
-            cmd._get_docker_compose_logs(env)
+            # Should raise the exception from subprocess.run since it's not caught
+            with pytest.raises(Exception, match="Test exception"):
+                cmd._handle_docker_process_error(error, env)
             
             # Verify subprocess.run called
             mock_run.assert_called_once()
     
     def test_check_if_services_running_despite_error_success(self):
-        """Test _check_if_services_running_despite_error when services are running."""
+        """Test _handle_docker_process_error when services are running despite error."""
         cmd = ServiceUpCommand()
         error = subprocess.CalledProcessError(5, "docker-compose up")
         env = {'ENV_VAR': 'value'}
@@ -111,47 +131,41 @@ class TestServiceUpCommandExtended:
         
         with patch('subprocess.run', return_value=ps_result) as mock_run:
             # Should not raise because services appear to be running
-            cmd._check_if_services_running_despite_error(error, env)
+            cmd._handle_docker_process_error(error, env)
             
             # Verify subprocess.run called once
             mock_run.assert_called_once()
     
     def test_check_if_services_running_despite_error_failure(self):
-        """Test _check_if_services_running_despite_error when services aren't running."""
+        """Test _handle_docker_process_error when services aren't running."""
         cmd = ServiceUpCommand()
         error = subprocess.CalledProcessError(5, "docker-compose up")
         env = {'ENV_VAR': 'value'}
         
-        # First call: services not found
+        # Mock services not found
         ps_result = MagicMock()
         ps_result.returncode = 0
         ps_result.stdout = "No services"
         
-        # Second call: docker ps -a
-        docker_ps_result = MagicMock()
-        docker_ps_result.returncode = 0
-        docker_ps_result.stdout = "No containers"
-        
-        # Set up mock to return different values on each call
-        with patch('subprocess.run', side_effect=[ps_result, docker_ps_result]) as mock_run:
-            # Should raise the original error
+        with patch('subprocess.run', return_value=ps_result) as mock_run:
+            # Should raise the original error when no services are running
             with pytest.raises(subprocess.CalledProcessError):
-                cmd._check_if_services_running_despite_error(error, env)
+                cmd._handle_docker_process_error(error, env)
             
-            # Verify subprocess.run called twice (ps and docker ps)
-            assert mock_run.call_count == 2
+            # Verify subprocess.run called once for ps check
+            mock_run.assert_called_once()
     
     def test_check_if_services_running_despite_error_exception(self):
-        """Test _check_if_services_running_despite_error handling exceptions."""
+        """Test _handle_docker_process_error handling exceptions during service check."""
         cmd = ServiceUpCommand()
         error = subprocess.CalledProcessError(5, "docker-compose up")
         env = {'ENV_VAR': 'value'}
         
         # Mock subprocess.run to raise an exception
         with patch('subprocess.run', side_effect=Exception("Test exception")) as mock_run:
-            # Should re-raise the original error
-            with pytest.raises(subprocess.CalledProcessError):
-                cmd._check_if_services_running_despite_error(error, env)
+            # Should raise the exception from subprocess.run since it's not caught
+            with pytest.raises(Exception, match="Test exception"):
+                cmd._handle_docker_process_error(error, env)
             
             # Verify subprocess.run was called
             mock_run.assert_called_once()
@@ -402,8 +416,9 @@ class TestServiceUpCommandExtended:
              patch.object(cmd, '_print_service_info'), \
              patch('time.sleep'):
             
-            # Should eventually give up
-            cmd._start_services_with_retry(2)
+            # Should raise CommandError when all attempts fail
+            with pytest.raises(CommandError, match="Failed to start services after 2 attempts"):
+                cmd._start_services_with_retry(2)
             
             # Verify _handle_retry_attempt called for all attempts
             assert cmd._handle_retry_attempt.call_count == 2

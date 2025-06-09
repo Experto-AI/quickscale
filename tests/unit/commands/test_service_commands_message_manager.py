@@ -153,6 +153,8 @@ class TestServiceCommandsMessageManager:
     
     def test_start_services_with_retry_failure(self, mock_message_manager, mock_project_found):
         """Test error handling in _start_services_with_retry when all attempts fail."""
+        from quickscale.utils.error_manager import CommandError
+        
         command = ServiceUpCommand()
         
         # Create a mock Exception for the last error
@@ -165,8 +167,13 @@ class TestServiceCommandsMessageManager:
              patch('quickscale.utils.message_manager.MessageManager.error') as mock_error, \
              patch('quickscale.utils.message_manager.MessageManager.print_recovery_suggestion') as mock_recovery:
             
-            # Call the method with 1 retry
-            command._start_services_with_retry(max_retries=1)
+            # Expect CommandError to be raised
+            with pytest.raises(CommandError) as exc_info:
+                command._start_services_with_retry(max_retries=1)
+            
+            # Verify the exception contains the expected message
+            assert "Failed to start services after 1 attempts" in str(exc_info.value)
+            assert "Service start failed" in str(exc_info.value)
             
             # Verify MessageManager methods were called
             assert mock_error.called

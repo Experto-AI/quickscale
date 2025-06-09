@@ -5,7 +5,7 @@ from unittest.mock import patch, MagicMock, call, ANY
 import pytest
 
 from quickscale.commands.service_commands import ServiceUpCommand
-from quickscale.utils.error_manager import ServiceError
+from quickscale.utils.error_manager import ServiceError, CommandError
 from quickscale.utils.env_utils import get_env
 
 
@@ -221,19 +221,16 @@ class TestServiceCommandRetryHandling:
              patch.object(cmd, '_start_docker_services', 
                          side_effect=error) as mock_start, \
              patch.object(cmd, '_handle_retry_attempt', 
-                         return_value={'PORT': 8001}) as mock_handle_retry, \
-             patch.object(cmd, 'handle_error') as mock_handle_error:
+                         return_value={'PORT': 8001}) as mock_handle_retry:
             
-            # Run the method - it should handle errors internally and not raise
-            cmd._start_services_with_retry(max_retries=2)
+            # The actual implementation raises CommandError after all attempts fail
+            with pytest.raises(CommandError):
+                cmd._start_services_with_retry(max_retries=2)
             
             # Verify methods called expected number of times
             assert mock_prepare.call_count == 1
             assert mock_start.call_count == 2  # Initial + 1 retry (since max_retries=2 actually means 2 total attempts)
             assert mock_handle_retry.call_count == 2  # Called once for each attempt
-            
-            # Verify errors aren't handled by the mock anymore, but instead are processed internally
-            assert mock_handle_error.call_count <= 1
     
     def test_start_services_with_retry_prepare_exception(self):
         """Test _start_services_with_retry when _prepare_environment_and_ports fails."""

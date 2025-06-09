@@ -126,12 +126,11 @@ class TestServiceOperations:
             cmd.execute()
             
             # Verify subprocess.run was called with docker compose ps
-            # Note: We're using the new Docker Compose command format 
-            # which is ["docker", "compose", "ps"]
+            # The actual implementation uses DOCKER_COMPOSE_COMMAND.split() + ["ps"]
+            # which results in either ["docker-compose", "ps"] or ["docker", "compose", "ps"]
             mock_run.assert_called_once()
             args = mock_run.call_args[0][0]
-            assert "docker" in args
-            assert "compose" in args
+            assert "docker-compose" in args or "docker" in args
             assert "ps" in args
     
     def test_service_status_execute_no_project(self):
