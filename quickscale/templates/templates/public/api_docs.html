@@ -318,7 +318,7 @@ X-RateLimit-Reset: 1640995200</code></pre>
                     <h2 class="title is-3">SDKs and Code Examples</h2>
                     <div class="content">
                         
-                        <div class="tabs" x-data="{ activeTab: 'curl' }">
+                        <div class="tabs" x-data="{ activeTab: 'curl' }" x-init="activeTab = 'curl'">
                             <ul>
                                 <li :class="{ 'is-active': activeTab === 'curl' }">
                                     <a @click="activeTab = 'curl'">cURL</a>
