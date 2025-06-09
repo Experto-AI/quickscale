@@ -12,9 +12,33 @@ from .utils import (
     validate_text_length,
     consume_service_credits
 )
+from django.shortcuts import render
+from django.views.decorators.csrf import ensure_csrf_cookie
+from django.views.decorators.http import require_http_methods
+from rest_framework import status
+from rest_framework.decorators import api_view, permission_classes
+from rest_framework.permissions import AllowAny, IsAuthenticated
+from rest_framework.request import Request
+from rest_framework.response import Response
+
+from services.decorators import create_service_instance
+from services.examples import (
+    text_sentiment_analysis_service,
+    text_keyword_extraction_service,
+    image_metadata_extraction_service,
+    data_validation_service
+)
+from services.models import Service
 
 logger = logging.getLogger(__name__)
 
+# List of all available example services, useful for API documentation
+EXAMPLE_SERVICES = [
+    text_sentiment_analysis_service,
+    text_keyword_extraction_service,
+    image_metadata_extraction_service,
+    data_validation_service
+]
 
 @method_decorator(csrf_exempt, name='dispatch')
 class TextProcessingView(View):
@@ -192,3 +216,80 @@ class TextProcessingView(View):
             },
             message="Text Processing API endpoint information"
         )
+
+# Service execution endpoint
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def execute_service(request: Request) -> Response:
+    """Execute an AI service and deduct credits."""
+    service_name = request.data.get('service_name')
+    if not service_name:
+        return APIResponse(
+            success=False,
+            message="Service name is required.",
+            status_code=status.HTTP_400_BAD_REQUEST
+        )
+
+    try:
+        service_instance = create_service_instance(service_name)
+    except ValueError:
+        return APIResponse(
+            success=False,
+            message=f"Service '{service_name}' not found or not registered.",
+            status_code=status.HTTP_404_NOT_FOUND
+        )
+
+    user = request.user
+    if not user.is_authenticated:
+        return APIResponse(
+            success=False,
+            message="Authentication required.",
+            status_code=status.HTTP_401_UNAUTHORIZED
+        )
+
+    try:
+        # Pass remaining kwargs to the service
+        service_input = {k: v for k, v in request.data.items() if k != 'service_name'}
+        result = service_instance.run(user, **service_input)
+        return APIResponse(
+            success=True,
+            message=f"Service '{service_name}' executed successfully.",
+            data=result,
+            status_code=status.HTTP_200_OK
+        )
+    except ValueError as e:
+        return APIResponse(
+            success=False,
+            message=str(e),
+            status_code=status.HTTP_400_BAD_REQUEST
+        )
+    except Exception as e:
+        return APIResponse(
+            success=False,
+            message=f"An unexpected error occurred: {str(e)}",
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR
+        )
+
+# List available services endpoint
+@api_view(['GET'])
+@permission_classes([AllowAny])
+def list_services(request: Request) -> Response:
+    """List all available AI services with their details."""
+    services = Service.objects.filter(is_active=True).values('name', 'description', 'credit_cost')
+    return APIResponse(
+        success=True,
+        message="Available services listed.",
+        data=list(services),
+        status_code=status.HTTP_200_OK
+    )
+
+@require_http_methods(["GET"])
+@permission_classes([AllowAny])
+def api_docs(request: Request) -> HttpResponse:
+    """Display the API documentation page."""
+    context = {
+        'page_title': 'API Documentation',
+        'page_description': 'Complete API reference for AI engineers',
+        'example_services': EXAMPLE_SERVICES,
+    }
+    return render(request, 'api/api_docs.html', context)
