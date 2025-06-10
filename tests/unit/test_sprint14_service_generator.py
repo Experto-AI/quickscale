@@ -180,6 +180,115 @@ class TestServiceGeneratorCommand(unittest.TestCase):
         # Should fail because user chose not to overwrite
         self.assertFalse(result["success"])
         self.assertEqual(result["reason"], "File already exists")
+    
+    @patch('subprocess.run')
+    @patch('os.path.exists')
+    def test_configure_service_uses_quickscale_manage(self, mock_exists, mock_subprocess):
+        """Test that database configuration uses quickscale manage command instead of direct python manage.py."""
+        # Mock that we're in a Django project directory
+        mock_exists.return_value = True
+        
+        # Mock Docker services are running (docker compose ps returns output)
+        docker_ps_result = MagicMock()
+        docker_ps_result.returncode = 0
+        docker_ps_result.stdout = "web_container_id\ndb_container_id"
+        
+        # Mock successful quickscale manage command
+        manage_result = MagicMock()
+        manage_result.returncode = 0
+        manage_result.stdout = "✅ Created service 'test_service' with 1.0 credit cost"
+        
+        # Configure subprocess.run to return different results based on command
+        def subprocess_side_effect(cmd, **kwargs):
+            if cmd == ['docker', 'compose', 'ps', '--quiet']:
+                return docker_ps_result
+            elif cmd[0] == 'quickscale' and cmd[1] == 'manage':
+                return manage_result
+            else:
+                raise ValueError(f"Unexpected command: {cmd}")
+        
+        mock_subprocess.side_effect = subprocess_side_effect
+        
+        # Test the database configuration method
+        result = self.command._configure_service_in_database('test_service', 'Test service', 1.0)
+        
+        # Verify the quickscale manage command was called correctly
+        expected_manage_call = unittest.mock.call([
+            'quickscale', 'manage', 'configure_service', 'test_service',
+            '--description', 'Test service',
+            '--credit-cost', '1.0'
+        ], capture_output=True, text=True, timeout=30)
+        
+        # Check that subprocess.run was called with the correct commands
+        calls = mock_subprocess.call_args_list
+        self.assertEqual(len(calls), 2)  # Docker ps check + quickscale manage
+        
+        # Verify docker compose ps was called first
+        self.assertEqual(calls[0], unittest.mock.call(['docker', 'compose', 'ps', '--quiet'], 
+                                                     capture_output=True, text=True, timeout=10))
+        
+        # Verify quickscale manage was called second  
+        self.assertEqual(calls[1], expected_manage_call)
+        
+        # Verify result indicates success
+        self.assertTrue(result["success"])
+        self.assertIn("✅ Created service", result["output"])
+
+    @patch('subprocess.run')
+    @patch('os.path.exists')
+    def test_generate_service_database_configuration_failure_provides_helpful_message(self, mock_exists, mock_subprocess):
+        """Test that when database configuration fails, helpful error messages are provided."""
+        # Mock that we're in a Django project directory
+        mock_exists.return_value = True
+        
+        # Mock Docker services are running (docker compose ps returns output)
+        docker_ps_result = MagicMock()
+        docker_ps_result.returncode = 0
+        docker_ps_result.stdout = "web_container_id\ndb_container_id"
+        
+        # Mock failed quickscale manage command (simulate the original error)
+        manage_result = MagicMock()
+        manage_result.returncode = 1
+        manage_result.stderr = 'CommandError: Error configuring service: could not translate host name "db" to address: Temporary failure in name resolution'
+        
+        # Configure subprocess.run to return different results based on command
+        def subprocess_side_effect(cmd, **kwargs):
+            if cmd == ['docker', 'compose', 'ps', '--quiet']:
+                return docker_ps_result
+            elif cmd[0] == 'quickscale' and cmd[1] == 'manage':
+                return manage_result
+            else:
+                raise ValueError(f"Unexpected command: {cmd}")
+        
+        mock_subprocess.side_effect = subprocess_side_effect
+        
+        # Test the full service generation including database configuration
+        result = self.command.execute('test_service', 'basic', output_dir=self.test_dir, skip_db_config=False)
+        
+        # Verify that service files were created successfully even though database config failed
+        self.assertTrue(result["success"])
+        self.assertIn("service_file", result)
+        self.assertIn("example_file", result)
+        
+        # Verify database configuration failed but was handled gracefully
+        self.assertFalse(result["database_configured"])
+        self.assertIn("database_config_warning", result)
+        
+        # Verify the helpful error message is provided
+        error_reason = result["database_config_warning"]
+        self.assertIn("Management command failed", error_reason)
+        
+        # Verify files were actually created
+        service_file = Path(self.test_dir) / "test_service_service.py"
+        example_file = Path(self.test_dir) / "test_service_example.py"
+        self.assertTrue(service_file.exists())
+        self.assertTrue(example_file.exists())
+        
+        # Verify that quickscale manage was called (not direct python manage.py)
+        manage_calls = [call for call in mock_subprocess.call_args_list if len(call[0]) > 0 and call[0][0][0] == 'quickscale']
+        self.assertEqual(len(manage_calls), 1)
+        expected_cmd = ['quickscale', 'manage', 'configure_service', 'test_service', '--description', 'AI service: Test Service', '--credit-cost', '1.0']
+        self.assertEqual(manage_calls[0][0][0], expected_cmd)
 
 
 class TestValidateServiceCommand(unittest.TestCase):
