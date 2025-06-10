@@ -678,7 +678,7 @@ class PublicPlanListView(ListView):
             return StripeProduct.objects.filter(active=True).order_by('display_order')
         except Exception as e:
             # Log the error and return an empty list
-            print(f"Error fetching plans from database: {e}") # TODO: Use proper logging
+            logger.error(f"Error fetching plans from database: {str(e)}")
             return []
 
     def get_context_data(self, **kwargs):

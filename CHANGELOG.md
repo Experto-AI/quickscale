@@ -2,6 +2,30 @@
 
 All notable changes to this project will be documented in this file.
 
+## v0.26.0 (2025-06-10)
+v0.26.0 feat: Implement Basic User Search & Admin Foundation
+
+This PR introduces essential admin tools for user management, allowing administrators to search for users and view comprehensive user details. This implementation provides the foundational admin interface for user management, significantly enhancing administrative capabilities within QuickScale.
+
+- Backend Implementation:
+  - Created user_search view with support for email, first name, and last name searches with pagination.
+  - Implemented comprehensive user_detail view displaying user information, credit accounts, subscription details, and service usage history.
+  - Added proper admin permission checks using @staff_member_required decorators for security.
+  - Enhanced service usage queries to include credits_consumed attribute for better credit consumption tracking.
+  - Implemented robust error handling and logging for user detail retrieval operations.
+- Frontend Implementation:
+  - Created user search template with pagination and result display based on total count.
+  - Developed comprehensive user detail page showing credits, subscription status, recent transactions, and service usage.
+  - Updated admin dashboard navigation structure with proper links to user management features.
+  - Enhanced templates to display service usage with credit consumption details for better admin insights.
+- Testing:
+  - Added extensive unit tests for user search functionality covering various search scenarios.
+  - Implemented tests for admin permission enforcement ensuring proper access control.
+  - Created comprehensive tests for user detail view functionality and data retrieval.
+  - Ensured robust testing coverage for pagination and search result handling.
+  
+This PR completes: Basic User Search & Admin Foundation, providing administrators with powerful tools to search users by email or name, view detailed user information including credits and subscription status, and access comprehensive service usage history. The implementation includes proper security controls, pagination support, and detailed user insights for effective user management.
+
 ## v0.25.0 (2025-06-09)
 v0.25.0 feat: Enhance AI Service Framework and Documentation
 

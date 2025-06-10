@@ -1,0 +1,316 @@
+{% extends "base.html" %}
+
+{% block title %}User Details - {{ selected_user.email }} - Admin Dashboard - {{ project_name }}{% endblock %}
+
+{% block content %}
+<section class="hero is-primary is-small">
+    <div class="hero-body">
+        <div class="container">
+            <h1 class="title">User Details</h1>
+            <p class="subtitle">{{ selected_user.email }}</p>
+        </div>
+    </div>
+</section>
+
+<section class="section">
+    <div class="container">
+        <!-- User Information -->
+        <div class="columns">
+            <div class="column is-one-third">
+                <div class="card">
+                    <header class="card-header">
+                        <p class="card-header-title">User Information</p>
+                    </header>
+                    <div class="card-content">
+                        <div class="content">
+                            <p><strong>Email:</strong> {{ selected_user.email }}</p>
+                            <p><strong>Name:</strong> 
+                                {% if selected_user.first_name or selected_user.last_name %}
+                                    {{ selected_user.first_name }} {{ selected_user.last_name }}
+                                {% else %}
+                                    <span class="has-text-grey-light">Not set</span>
+                                {% endif %}
+                            </p>
+                            <p><strong>User ID:</strong> {{ selected_user.id }}</p>
+                            <p><strong>Date Joined:</strong> {{ selected_user.date_joined|date:"M d, Y H:i" }}</p>
+                            <p><strong>Last Login:</strong> 
+                                {% if selected_user.last_login %}
+                                    {{ selected_user.last_login|date:"M d, Y H:i" }}
+                                {% else %}
+                                    <span class="has-text-grey-light">Never</span>
+                                {% endif %}
+                            </p>
+                            <p><strong>Status:</strong>
+                                {% if selected_user.is_active %}
+                                    <span class="tag is-success">Active</span>
+                                {% else %}
+                                    <span class="tag is-danger">Inactive</span>
+                                {% endif %}
+                                {% if selected_user.is_staff %}
+                                    <span class="tag is-warning">Staff</span>
+                                {% endif %}
+                                {% if selected_user.is_superuser %}
+                                    <span class="tag is-danger">Superuser</span>
+                                {% endif %}
+                            </p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Credit Information -->
+            <div class="column is-one-third">
+                <div class="card">
+                    <header class="card-header">
+                        <p class="card-header-title">Credit Information</p>
+                    </header>
+                    <div class="card-content">
+                        <div class="content">
+                            {% if credit_account %}
+                                <p><strong>Current Balance:</strong> 
+                                    <span class="tag is-primary is-large">{{ current_balance|floatformat:1 }} credits</span>
+                                </p>
+                                
+                                {% if balance_breakdown %}
+                                    <div class="field">
+                                        <label class="label">Balance Breakdown:</label>
+                                        {% if balance_breakdown.subscription %}
+                                            <p><span class="icon"><i class="fas fa-calendar"></i></span> 
+                                               Subscription: {{ balance_breakdown.subscription|floatformat:1 }} credits</p>
+                                        {% endif %}
+                                        {% if balance_breakdown.purchase %}
+                                            <p><span class="icon"><i class="fas fa-shopping-cart"></i></span> 
+                                               Pay-as-you-go: {{ balance_breakdown.purchase|floatformat:1 }} credits</p>
+                                        {% endif %}
+                                    </div>
+                                {% endif %}
+                                
+                                <p><strong>Account Created:</strong> {{ credit_account.created_at|date:"M d, Y" }}</p>
+                                <p><strong>Last Updated:</strong> {{ credit_account.updated_at|date:"M d, Y H:i" }}</p>
+                            {% else %}
+                                <p class="has-text-grey-light">No credit account information available</p>
+                            {% endif %}
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Subscription Information -->
+            <div class="column is-one-third">
+                <div class="card">
+                    <header class="card-header">
+                        <p class="card-header-title">Subscription Information</p>
+                    </header>
+                    <div class="card-content">
+                        <div class="content">
+                            {% if subscription %}
+                                <p><strong>Status:</strong> 
+                                    <span class="tag {% if subscription.status == 'active' %}is-success{% elif subscription.status == 'canceled' %}is-danger{% else %}is-warning{% endif %}">
+                                        {{ subscription.status|title }}
+                                    </span>
+                                </p>
+                                <p><strong>Plan:</strong> {{ subscription.stripe_product_id }}</p>
+                                <p><strong>Current Period:</strong> 
+                                    {{ subscription.current_period_start|date:"M d, Y" }} - 
+                                    {{ subscription.current_period_end|date:"M d, Y" }}
+                                </p>
+                                {% if subscription.cancel_at_period_end %}
+                                    <p><strong>Cancellation:</strong> 
+                                        <span class="tag is-warning">Canceling at period end</span>
+                                    </p>
+                                {% endif %}
+                                {% if subscription.canceled_at %}
+                                    <p><strong>Canceled Date:</strong> {{ subscription.canceled_at|date:"M d, Y H:i" }}</p>
+                                {% endif %}
+                            {% else %}
+                                <p class="has-text-grey-light">No active subscription</p>
+                            {% endif %}
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Statistics Row -->
+        <div class="columns">
+            <div class="column">
+                <div class="card">
+                    <header class="card-header">
+                        <p class="card-header-title">User Statistics</p>
+                    </header>
+                    <div class="card-content">
+                        <div class="columns is-mobile has-text-centered">
+                            <div class="column">
+                                <p class="heading">Total Payments</p>
+                                <p class="title">{{ total_payments }}</p>
+                            </div>
+                            <div class="column">
+                                <p class="heading">Service Usage</p>
+                                <p class="title">{{ total_service_usage }}</p>
+                            </div>
+                            <div class="column">
+                                <p class="heading">Credits Purchased</p>
+                                <p class="title">{{ total_credits_purchased|floatformat:1 }}</p>
+                            </div>
+                            <div class="column">
+                                <p class="heading">Credits Consumed</p>
+                                <p class="title">{{ total_credits_consumed|floatformat:1 }}</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Recent Activity Tabs -->
+        <div class="card">
+            <header class="card-header">
+                <p class="card-header-title">Recent Activity</p>
+            </header>
+            <div class="card-content">
+                <div class="tabs" x-data="{ activeTab: 'transactions' }">
+                    <ul>
+                        <li :class="{ 'is-active': activeTab === 'transactions' }">
+                            <a @click="activeTab = 'transactions'">Credit Additions</a>
+                        </li>
+                        <li :class="{ 'is-active': activeTab === 'payments' }">
+                            <a @click="activeTab = 'payments'">Payments</a>
+                        </li>
+                        <li :class="{ 'is-active': activeTab === 'services' }">
+                            <a @click="activeTab = 'services'">Service Usage</a>
+                        </li>
+                    </ul>
+                </div>
+
+                <!-- Credit Additions Tab -->
+                <div x-show="activeTab === 'transactions'">
+                    {% if recent_transactions %}
+                        <div class="table-container">
+                            <table class="table is-fullwidth is-striped">
+                                <thead>
+                                    <tr>
+                                        <th>Date</th>
+                                        <th>Credits Added</th>
+                                        <th>Source</th>
+                                        <th>Description</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {% for transaction in recent_transactions %}
+                                    <tr>
+                                        <td>{{ transaction.created_at|date:"M d, Y H:i" }}</td>
+                                        <td>
+                                            <span class="has-text-success">
+                                                +{{ transaction.amount|floatformat:1 }}
+                                            </span>
+                                        </td>
+                                        <td>{{ transaction.credit_type }}</td>
+                                        <td>{{ transaction.description|default:"-" }}</td>
+                                    </tr>
+                                    {% endfor %}
+                                </tbody>
+                            </table>
+                        </div>
+                    {% else %}
+                        <p class="has-text-grey-light">No recent credit additions</p>
+                    {% endif %}
+                </div>
+
+                <!-- Payments Tab -->
+                <div x-show="activeTab === 'payments'">
+                    {% if recent_payments %}
+                        <div class="table-container">
+                            <table class="table is-fullwidth is-striped">
+                                <thead>
+                                    <tr>
+                                        <th>Date</th>
+                                        <th>Amount Paid</th>
+                                        <th>Payment Type</th>
+                                        <th>Status</th>
+                                        <th>Receipt</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {% for payment in recent_payments %}
+                                    <tr>
+                                        <td>{{ payment.created_at|date:"M d, Y H:i" }}</td>
+                                        <td>${{ payment.amount|floatformat:2 }}</td>
+                                        <td>{{ payment.payment_type }}</td>
+                                        <td>
+                                            <span class="tag {% if payment.status == 'succeeded' %}is-success{% elif payment.status == 'failed' %}is-danger{% else %}is-warning{% endif %}">
+                                                {{ payment.status|title }}
+                                            </span>
+                                        </td>
+                                        <td>
+                                            {% if payment.receipt_number %}
+                                                {{ payment.receipt_number }}
+                                            {% else %}
+                                                -
+                                            {% endif %}
+                                        </td>
+                                    </tr>
+                                    {% endfor %}
+                                </tbody>
+                            </table>
+                        </div>
+                    {% else %}
+                        <p class="has-text-grey-light">No recent payments</p>
+                    {% endif %}
+                </div>
+
+                <!-- Service Usage Tab -->
+                <div x-show="activeTab === 'services'">
+                    {% if recent_service_usage %}
+                        <div class="table-container">
+                            <table class="table is-fullwidth is-striped">
+                                <thead>
+                                    <tr>
+                                        <th>Date</th>
+                                        <th>Service</th>
+                                        <th>Credits Used</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {% for usage in recent_service_usage %}
+                                    <tr>
+                                        <td>{{ usage.created_at|date:"M d, Y H:i" }}</td>
+                                        <td>{{ usage.service.name|default:"-" }}</td>
+                                        <td>{{ usage.credits_consumed|floatformat:1 }}</td>
+                                    </tr>
+                                    {% endfor %}
+                                </tbody>
+                            </table>
+                        </div>
+                    {% else %}
+                        <p class="has-text-grey-light">No recent service usage</p>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+
+        <!-- Navigation -->
+        <div class="level">
+            <div class="level-left">
+                <div class="level-item">
+                    <a href="{% url 'admin_dashboard:user_search' %}" class="button is-light">
+                        <span class="icon">
+                            <i class="fas fa-arrow-left"></i>
+                        </span>
+                        <span>Back to User Search</span>
+                    </a>
+                </div>
+            </div>
+            <div class="level-right">
+                <div class="level-item">
+                    <a href="{% url 'admin_dashboard:index' %}" class="button is-primary">
+                        <span class="icon">
+                            <i class="fas fa-home"></i>
+                        </span>
+                        <span>Admin Dashboard</span>
+                    </a>
+                </div>
+            </div>
+        </div>
+    </div>
+</section>
+{% endblock %} 
