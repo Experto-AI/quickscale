@@ -1,7 +1,7 @@
 """Admin dashboard views."""
 import logging
-from decimal import Decimal
 from datetime import datetime, timedelta
+from decimal import Decimal
 
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required, user_passes_test
@@ -12,6 +12,8 @@ from django.shortcuts import render, get_object_or_404, redirect
 from django.urls import reverse
 
 from core.env_utils import get_env, is_feature_enabled
+from .models import AuditLog
+from .utils import log_admin_action
 
 # Create logger instance
 logger = logging.getLogger(__name__)
@@ -737,6 +739,15 @@ def sync_products(request: HttpRequest) -> HttpResponse:
     
     try:
         synced_count = stripe_manager.sync_all_products()
+        
+        # Log the product sync action
+        log_admin_action(
+            user=request.user,
+            action='PRODUCT_SYNC',
+            description=f'Synchronized {synced_count} products from Stripe',
+            request=request
+        )
+        
         messages.success(request, f'Successfully synced {synced_count} products from Stripe.')
     except Exception as e:
         messages.error(request, f'Failed to sync products: {str(e)}')
@@ -969,10 +980,19 @@ def service_toggle_status(request: HttpRequest, service_id: int) -> JsonResponse
     
     try:
         service = get_object_or_404(Service, id=service_id)
+        old_status = service.is_active
         service.is_active = not service.is_active
         service.save()
         
         action = 'enabled' if service.is_active else 'disabled'
+        
+        # Log the service toggle action
+        log_admin_action(
+            user=request.user,
+            action='SERVICE_TOGGLE',
+            description=f'Changed service "{service.name}" from {old_status} to {service.is_active}',
+            request=request
+        )
         
         return JsonResponse({
             'success': True,
@@ -1004,6 +1024,14 @@ def user_search(request: HttpRequest) -> HttpResponse:
     users = CustomUser.objects.none()
     
     if query:
+        # Log the search action
+        log_admin_action(
+            user=request.user,
+            action='USER_SEARCH',
+            description=f'Searched for users with query: "{query}"',
+            request=request
+        )
+        
         # Create search filter for email, first name, last name, or full name
         search_filter = Q()
         
@@ -1045,6 +1073,14 @@ def user_detail(request: HttpRequest, user_id: int) -> HttpResponse:
     from credits.models import CreditAccount, UserSubscription, Payment, ServiceUsage
     
     user = get_object_or_404(CustomUser, id=user_id)
+    
+    # Log the user view action
+    log_admin_action(
+        user=request.user,
+        action='USER_VIEW',
+        description=f'Viewed details for user: {user.email}',
+        request=request
+    )
     
     # Get credit account information with error handling
     credit_account = None
@@ -1124,3 +1160,67 @@ def user_detail(request: HttpRequest, user_id: int) -> HttpResponse:
     }
     
     return render(request, 'admin_dashboard/user_detail.html', context)
+
+
+@login_required
+@user_passes_test(lambda u: u.is_staff)
+def audit_log(request: HttpRequest) -> HttpResponse:
+    """Display audit log with filtering options."""
+    from users.models import CustomUser
+    
+    # Get filter parameters
+    user_filter = request.GET.get('user')
+    action_filter = request.GET.get('action')
+    date_from = request.GET.get('date_from')
+    date_to = request.GET.get('date_to')
+    
+    # Start with all audit logs
+    logs = AuditLog.objects.select_related('user').all()
+    
+    # Apply filters
+    if user_filter:
+        try:
+            user_id = int(user_filter)
+            logs = logs.filter(user_id=user_id)
+        except (ValueError, TypeError):
+            pass
+    
+    if action_filter and action_filter != 'all':
+        logs = logs.filter(action=action_filter)
+    
+    if date_from:
+        try:
+            date_from_obj = datetime.strptime(date_from, '%Y-%m-%d').date()
+            logs = logs.filter(timestamp__date__gte=date_from_obj)
+        except ValueError:
+            pass
+    
+    if date_to:
+        try:
+            date_to_obj = datetime.strptime(date_to, '%Y-%m-%d').date()
+            logs = logs.filter(timestamp__date__lte=date_to_obj)
+        except ValueError:
+            pass
+    
+    # Pagination
+    paginator = Paginator(logs, 50)  # Show 50 logs per page
+    page_number = request.GET.get('page')
+    page_obj = paginator.get_page(page_number)
+    
+    # Get unique users for filter dropdown
+    audit_users = CustomUser.objects.filter(
+        id__in=AuditLog.objects.values_list('user_id', flat=True).distinct()
+    ).order_by('email')
+    
+    context = {
+        'logs': page_obj,
+        'audit_users': audit_users,
+        'action_choices': AuditLog.ACTION_CHOICES,
+        'current_user_filter': user_filter,
+        'current_action_filter': action_filter,
+        'current_date_from': date_from,
+        'current_date_to': date_to,
+        'total_count': logs.count(),
+    }
+    
+    return render(request, 'admin_dashboard/audit_log.html', context)
