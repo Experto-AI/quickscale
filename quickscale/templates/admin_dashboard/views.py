@@ -1,13 +1,17 @@
 """Admin dashboard views."""
+import logging
+from decimal import Decimal
+from datetime import datetime, timedelta
+
+from django.contrib import messages
 from django.contrib.auth.decorators import login_required, user_passes_test
+from django.core.paginator import Paginator
+from django.db.models import Q, Sum
 from django.http import HttpRequest, HttpResponse, JsonResponse
 from django.shortcuts import render, get_object_or_404, redirect
-from django.core.paginator import Paginator
-from django.contrib import messages
 from django.urls import reverse
+
 from core.env_utils import get_env, is_feature_enabled
-from decimal import Decimal
-import logging
 
 # Create logger instance
 logger = logging.getLogger(__name__)
@@ -831,9 +835,7 @@ def change_subscription_plan_deprecated(request: HttpRequest) -> JsonResponse:
 def service_admin(request: HttpRequest) -> HttpResponse:
     """Display service management page with list of all services."""
     from credits.models import Service, ServiceUsage
-    from django.db.models import Count, Sum
     from django.utils import timezone
-    from datetime import timedelta
     
     # Get all services with usage statistics
     services = Service.objects.all().order_by('name')
@@ -893,10 +895,7 @@ def service_admin(request: HttpRequest) -> HttpResponse:
 def service_detail(request: HttpRequest, service_id: int) -> HttpResponse:
     """Display detailed information for a specific service."""
     from credits.models import Service, ServiceUsage
-    from django.db.models import Count, Sum
     from django.utils import timezone
-    from datetime import timedelta
-    from django.shortcuts import get_object_or_404
     
     service = get_object_or_404(Service, id=service_id)
     
@@ -967,7 +966,6 @@ def service_toggle_status(request: HttpRequest, service_id: int) -> JsonResponse
         return JsonResponse({'error': 'Method not allowed'}, status=405)
     
     from credits.models import Service
-    from django.shortcuts import get_object_or_404
     
     try:
         service = get_object_or_404(Service, id=service_id)
@@ -984,7 +982,145 @@ def service_toggle_status(request: HttpRequest, service_id: int) -> JsonResponse
             'status_class': 'is-success' if service.is_active else 'is-warning'
         })
     
-    except Exception as e:
+    except Service.DoesNotExist:
         return JsonResponse({
-            'error': f'Failed to toggle service status: {str(e)}'
+            'error': 'Service not found'
+        }, status=404)
+    except Exception as e:
+        logger.exception(f"Unexpected error toggling service {service_id}")
+        return JsonResponse({
+            'error': 'Internal server error'
         }, status=500)
+
+@login_required
+@user_passes_test(lambda u: u.is_staff)
+def user_search(request: HttpRequest) -> HttpResponse:
+    """Search for users by email or name."""
+    from users.models import CustomUser
+    
+    query = request.GET.get('q', '').strip()
+    page = request.GET.get('page', 1)
+    
+    users = CustomUser.objects.none()
+    
+    if query:
+        # Create search filter for email, first name, last name, or full name
+        search_filter = Q()
+        
+        # Basic searches
+        search_filter |= Q(email__icontains=query)
+        search_filter |= Q(first_name__icontains=query)
+        search_filter |= Q(last_name__icontains=query)
+        
+        # Split query for full name search
+        if ' ' in query:
+            query_parts = query.split()
+            if len(query_parts) >= 2:
+                first_part = query_parts[0]
+                last_part = query_parts[-1]
+                search_filter |= Q(first_name__icontains=first_part, last_name__icontains=last_part)
+                search_filter |= Q(first_name__icontains=last_part, last_name__icontains=first_part)
+        
+        users = CustomUser.objects.filter(search_filter).distinct().order_by('email')
+    
+    # Pagination
+    paginator = Paginator(users, 20)  # Show 20 users per page
+    page_obj = paginator.get_page(page)
+    
+    context = {
+        'query': query,
+        'users': page_obj,
+        'total_count': users.count() if query else 0,
+    }
+    
+    return render(request, 'admin_dashboard/user_search.html', context)
+
+@login_required
+@user_passes_test(lambda u: u.is_staff)
+def user_detail(request: HttpRequest, user_id: int) -> HttpResponse:
+    """Display detailed information for a specific user."""
+    from django.db import models
+    
+    from users.models import CustomUser
+    from credits.models import CreditAccount, UserSubscription, Payment, ServiceUsage
+    
+    user = get_object_or_404(CustomUser, id=user_id)
+    
+    # Get credit account information with error handling
+    credit_account = None
+    current_balance = 0
+    balance_breakdown = {}
+    try:
+        credit_account = CreditAccount.get_or_create_for_user(user)
+        current_balance = credit_account.get_balance()
+        balance_breakdown = credit_account.get_balance_by_type_available()
+    except Exception as e:
+        logger.error(f"Error getting credit account for user {user_id}: {str(e)}")
+        messages.error(request, "Unable to load credit account information")
+    
+    # Get subscription information with improved error handling
+    subscription = None
+    try:
+        subscription = user.subscription
+    except (UserSubscription.DoesNotExist, AttributeError):
+        try:
+            subscription = UserSubscription.objects.filter(user=user).first()
+        except Exception as e:
+            logger.error(f"Error getting subscription for user {user_id}: {str(e)}")
+    
+    # Get recent data with error handling
+    try:
+        # Credit transactions: only show credit additions (exclude consumption)
+        recent_transactions = user.credit_transactions.select_related().exclude(credit_type='CONSUMPTION').order_by('-created_at')[:10]
+        
+        # Payments: only actual payment records
+        recent_payments = Payment.objects.filter(user=user).order_by('-created_at')[:5]
+        
+        # Service usage: only service usage records
+        recent_service_usage = ServiceUsage.objects.filter(user=user).select_related('service', 'credit_transaction').order_by('-created_at')[:10]
+        
+        # Add credits_consumed attribute to each usage for template display
+        for usage in recent_service_usage:
+            if usage.credit_transaction and usage.credit_transaction.amount:
+                usage.credits_consumed = abs(usage.credit_transaction.amount)
+            else:
+                usage.credits_consumed = 0
+    except Exception as e:
+        logger.error(f"Error getting recent data for user {user_id}: {str(e)}")
+        recent_transactions = []
+        recent_payments = []
+        recent_service_usage = []
+    
+    # Calculate user statistics with error handling
+    try:
+        total_payments = Payment.objects.filter(user=user).count()
+        total_service_usage = ServiceUsage.objects.filter(user=user).count()
+        total_credits_purchased = user.credit_transactions.filter(
+            credit_type='PURCHASE'
+        ).aggregate(total=models.Sum('amount'))['total'] or 0
+        total_credits_consumed = user.credit_transactions.filter(
+            amount__lt=0
+        ).aggregate(total=models.Sum('amount'))['total'] or 0
+    except Exception as e:
+        logger.error(f"Error calculating statistics for user {user_id}: {str(e)}")
+        total_payments = 0
+        total_service_usage = 0
+        total_credits_purchased = 0
+        total_credits_consumed = 0
+    
+    context = {
+        'selected_user': user,
+        'credit_account': credit_account,
+        'current_balance': current_balance,
+        'balance_breakdown': balance_breakdown,
+        'subscription': subscription,
+        'recent_transactions': recent_transactions,
+        'recent_payments': recent_payments,
+        'recent_service_usage': recent_service_usage,
+        'total_payments': total_payments,
+        'total_service_usage': total_service_usage,
+        'total_credits_purchased': total_credits_purchased,
+        'total_credits_consumed': abs(total_credits_consumed),
+    }
+    
+    return render(request, 'admin_dashboard/user_detail.html', context)
