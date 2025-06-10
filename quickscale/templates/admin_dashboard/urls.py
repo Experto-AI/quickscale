@@ -28,4 +28,7 @@ urlpatterns = [
     path('services/', views.service_admin, name='service_admin'),
     path('services/<int:service_id>/', views.service_detail, name='service_detail'),
     path('services/<int:service_id>/toggle/', views.service_toggle_status, name='service_toggle_status'),
+    # User management URLs
+    path('users/search/', views.user_search, name='user_search'),
+    path('users/<int:user_id>/', views.user_detail, name='user_detail'),
 ]

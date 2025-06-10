@@ -1,0 +1,159 @@
+{% extends "base.html" %}
+
+{% block title %}User Search - Admin Dashboard - {{ project_name }}{% endblock %}
+
+{% block content %}
+<section class="hero is-primary is-small">
+    <div class="hero-body">
+        <div class="container">
+            <h1 class="title">User Search</h1>
+            <p class="subtitle">Search and manage system users</p>
+        </div>
+    </div>
+</section>
+
+<section class="section">
+    <div class="container">
+        <!-- Search Form -->
+        <div class="box">
+            <form method="get" action="{% url 'admin_dashboard:user_search' %}">
+                <div class="field has-addons">
+                    <div class="control is-expanded">
+                        <input class="input" type="text" name="q" value="{{ query }}" 
+                               placeholder="Search by email, first name, or last name..." 
+                               autofocus>
+                    </div>
+                    <div class="control">
+                        <button class="button is-primary" type="submit">
+                            <span class="icon">
+                                <i class="fas fa-search"></i>
+                            </span>
+                            <span>Search</span>
+                        </button>
+                    </div>
+                </div>
+            </form>
+        </div>
+
+        <!-- Search Results -->
+        {% if query %}
+            <div class="box">
+                <h2 class="title is-4">Search Results</h2>
+                <p class="subtitle is-6">
+                    Found {{ total_count }} user{{ total_count|pluralize }} matching "{{ query }}"
+                </p>
+
+                {% if total_count > 0 %}
+                    <div class="table-container">
+                        <table class="table is-fullwidth is-striped is-hoverable">
+                            <thead>
+                                <tr>
+                                    <th>Email</th>
+                                    <th>Name</th>
+                                    <th>Staff</th>
+                                    <th>Active</th>
+                                    <th>Date Joined</th>
+                                    <th>Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for user in users %}
+                                <tr>
+                                    <td>{{ user.email }}</td>
+                                    <td>
+                                        {% if user.first_name or user.last_name %}
+                                            {{ user.first_name }} {{ user.last_name }}
+                                        {% else %}
+                                            <span class="has-text-grey-light">No name set</span>
+                                        {% endif %}
+                                    </td>
+                                    <td>
+                                        {% if user.is_staff %}
+                                            <span class="tag is-success">Staff</span>
+                                        {% else %}
+                                            <span class="tag is-light">User</span>
+                                        {% endif %}
+                                    </td>
+                                    <td>
+                                        {% if user.is_active %}
+                                            <span class="tag is-success">Active</span>
+                                        {% else %}
+                                            <span class="tag is-danger">Inactive</span>
+                                        {% endif %}
+                                    </td>
+                                    <td>{{ user.date_joined|date:"M d, Y" }}</td>
+                                    <td>
+                                        <a href="{% url 'admin_dashboard:user_detail' user.id %}" 
+                                           class="button is-small is-primary">
+                                            <span class="icon">
+                                                <i class="fas fa-eye"></i>
+                                            </span>
+                                            <span>View</span>
+                                        </a>
+                                    </td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+
+                    <!-- Pagination -->
+                    {% if users.has_other_pages %}
+                        <nav class="pagination is-centered" role="navigation" aria-label="pagination">
+                            {% if users.has_previous %}
+                                <a class="pagination-previous" 
+                                   href="?q={{ query }}&page={{ users.previous_page_number }}">Previous</a>
+                            {% else %}
+                                <a class="pagination-previous" disabled>Previous</a>
+                            {% endif %}
+
+                            {% if users.has_next %}
+                                <a class="pagination-next" 
+                                   href="?q={{ query }}&page={{ users.next_page_number }}">Next</a>
+                            {% else %}
+                                <a class="pagination-next" disabled>Next</a>
+                            {% endif %}
+
+                            <ul class="pagination-list">
+                                {% for num in users.paginator.page_range %}
+                                    {% if users.number == num %}
+                                        <li><a class="pagination-link is-current">{{ num }}</a></li>
+                                    {% elif num > users.number|add:'-3' and num < users.number|add:'3' %}
+                                        <li>
+                                            <a class="pagination-link" 
+                                               href="?q={{ query }}&page={{ num }}">{{ num }}</a>
+                                        </li>
+                                    {% endif %}
+                                {% endfor %}
+                            </ul>
+                        </nav>
+                    {% endif %}
+                {% else %}
+                    <div class="notification is-warning">
+                        <p>No users found matching your search criteria.</p>
+                    </div>
+                {% endif %}
+            </div>
+        {% else %}
+            <div class="box has-text-centered">
+                <p class="title is-5">Search for Users</p>
+                <p class="subtitle is-6">Enter an email address, first name, or last name to search for users.</p>
+            </div>
+        {% endif %}
+
+        <!-- Navigation Back -->
+        <div class="level">
+            <div class="level-left">
+                <div class="level-item">
+                    <a href="{% url 'admin_dashboard:index' %}" class="button is-light">
+                        <span class="icon">
+                            <i class="fas fa-arrow-left"></i>
+                        </span>
+                        <span>Back to Admin Dashboard</span>
+                    </a>
+                </div>
+            </div>
+        </div>
+    </div>
+</section>
+{% endblock %} 
