@@ -99,7 +99,19 @@ QuickScale provides a CLI for managing your project. Below are the most common c
   quickscale django-shell
   ```
 
-### **3.6. Destroying a Project**
+### **3.6. AI Service Development**
+- **Generate AI Service Template**:
+  ```bash
+  quickscale generate-service my_ai_service
+  quickscale generate-service sentiment_analyzer --type text_processing
+  quickscale generate-service image_classifier --type image_processing
+  ```
+- **Configure Service in Database**:
+  ```bash
+  quickscale manage configure_service my_service --credit-cost 2.0 --description "My AI service"
+  ```
+
+### **3.7. Destroying a Project**
 - **Permanently Delete a Project**:
   ```bash
   quickscale destroy
@@ -382,7 +394,95 @@ If you experience payment problems:
 
 ---
 
-## **9. Running Codebase Tests**
+## **9. AI Service Development Guide**
+
+QuickScale includes a comprehensive AI service framework that allows AI engineers to quickly create and deploy AI services with automatic credit consumption and billing.
+
+### **9.1. Getting Started with AI Services**
+
+**Generate Your First Service:**
+```bash
+# Basic AI service
+quickscale generate-service my_first_service
+
+# Text processing service (sentiment analysis, summarization, etc.)
+quickscale generate-service text_analyzer --type text_processing
+
+# Image processing service (classification, analysis, etc.)
+quickscale generate-service image_processor --type image_processing
+```
+
+**Configure Service in Database:**
+```bash
+# Configure service with credit cost
+quickscale manage configure_service my_first_service --credit-cost 1.0 --description "My first AI service"
+
+# List all configured services
+quickscale manage configure_service --list
+
+# Update existing service
+quickscale manage configure_service my_first_service --update --credit-cost 2.0
+```
+
+### **9.2. Service Development Workflow**
+
+1. **Generate Template**: Use `quickscale generate-service` to create service boilerplate
+2. **Implement Logic**: Add your AI processing logic to the `execute_service` method
+3. **Configure Database**: Set credit costs and activate the service
+4. **Test Service**: Use the generated example files to test your implementation
+5. **Deploy**: Service automatically integrates with credit system and admin interface
+
+### **9.3. Example Service Structure**
+
+```python
+@register_service("my_service_name")
+class MyAIService(BaseService):
+    """Your AI service description."""
+    
+    def execute_service(self, user: User, **kwargs) -> Dict[str, Any]:
+        """Implement your AI logic here."""
+        # 1. Validate inputs
+        input_data = kwargs.get('input_data')
+        if not input_data:
+            raise ValueError("input_data is required")
+        
+        # 2. Process with your AI model/API
+        result = your_ai_processing_function(input_data)
+        
+        # 3. Return structured results
+        return {
+            'status': 'completed',
+            'result': result,
+            'metadata': {
+                'service_name': 'my_service_name',
+                'processing_time': '50ms'
+            }
+        }
+```
+
+### **9.4. Service Integration Features**
+
+- **Automatic Credit Consumption**: Credits automatically deducted when service is used
+- **Usage Tracking**: Complete audit trail of service usage
+- **Admin Interface**: Real-time service management through admin dashboard
+- **API Integration**: Services automatically available via API endpoints
+- **Error Handling**: Consistent error patterns and validation
+- **Documentation**: Auto-generated usage examples and documentation
+
+### **9.5. Available Example Services**
+
+QuickScale includes several example services that demonstrate best practices:
+
+- **Text Sentiment Analysis**: Analyze sentiment with confidence scoring
+- **Keyword Extraction**: Extract important keywords from text
+- **Image Metadata Extraction**: Extract metadata from image files
+- **Data Validation**: Validate different data formats (text, email, JSON)
+
+For complete documentation, see the generated `docs/service_development_guide.md` in your project.
+
+---
+
+## **10. Running Codebase Tests**
 
 QuickScale includes a comprehensive test suite to ensure functionality works as expected.
 
@@ -420,9 +520,9 @@ quickscale manage test
 
 ---
 
-## **10. Advanced CLI Features**
+## **11. Advanced CLI Features**
 
-### **10.1. Shell Commands**
+### **11.1. Shell Commands**
 
 **Interactive Shell:**
 ```bash
@@ -434,7 +534,7 @@ quickscale shell
 quickscale shell -c "ls -la"
 ```
 
-### **10.2. Enhanced Logging**
+### **11.2. Enhanced Logging**
 
 **View logs with timestamps:**
 ```bash
@@ -463,14 +563,14 @@ quickscale logs web -t --lines 100
 quickscale logs db --since 1h
 ```
 
-### **10.3. Service Status**
+### **11.3. Service Status**
 
 Check running services:
 ```bash
 quickscale ps
 ```
 
-### **10.4. Automatic Port Fallback**
+### **11.4. Automatic Port Fallback**
 
 QuickScale can automatically find and use alternative ports if the default `WEB_PORT` (8000) or `DB_PORT_EXTERNAL` (5432) are already in use on your system. This feature is controlled by environment variables in your project's `.env` file:
 
@@ -481,7 +581,7 @@ If fallback is enabled and a port conflict is detected when you run `quickscale 
 
 If fallback is disabled (default) and a port conflict occurs, `quickscale up` will fail with a clear error message instructing you to free the port, specify a different port manually, or enable the fallback feature.
 
-## **11. Additional Resources**
+## **12. Additional Resources**
 
 - [Technical Documentation](./TECHNICAL_DOCS.md)
 - [Contributing Guide](./CONTRIBUTING.md)

@@ -5,7 +5,7 @@ from unittest.mock import patch, MagicMock, call
 import pytest
 
 from quickscale.commands.development_commands import (
-    ShellCommand, ManageCommand
+    ShellCommand, ManageCommand, DjangoShellCommand
 )
 from quickscale.commands.project_manager import ProjectManager
 
@@ -40,20 +40,6 @@ class TestShellCommandExtended:
             # Verify help was printed
             assert mock_print.call_count >= 3
             mock_print.assert_any_call("usage: quickscale shell [options]")
-    
-    def test_django_shell_command_help_mode(self):
-        """Test ShellCommand.execute with django_shell=True in help mode."""
-        cmd = ShellCommand()
-        
-        with patch('quickscale.commands.project_manager.ProjectManager.get_project_state',
-                  return_value={'has_project': False}), \
-             patch('builtins.print') as mock_print:
-            
-            cmd.execute(django_shell=True)
-            
-            # Verify django shell help was printed
-            assert mock_print.call_count >= 2
-            mock_print.assert_any_call("usage: quickscale django-shell")
     
     def test_shell_command_success(self):
         """Test ShellCommand.execute successfully running bash."""
@@ -93,26 +79,6 @@ class TestShellCommandExtended:
             assert test_command in args[0]
             assert kwargs["check"] is True
     
-    def test_django_shell_command_success(self):
-        """Test ShellCommand.execute successfully running Django shell."""
-        cmd = ShellCommand()
-        
-        with patch('quickscale.commands.project_manager.ProjectManager.get_project_state',
-                  return_value={'has_project': True}), \
-             patch('subprocess.run', return_value=MagicMock(returncode=0)) as mock_run, \
-             patch('builtins.print') as mock_print:
-            
-            cmd.execute(django_shell=True)
-            
-            # Verify subprocess.run was called correctly
-            mock_print.assert_called_with("Starting Django shell...")
-            mock_run.assert_called_once()
-            args, kwargs = mock_run.call_args
-            assert "python" in args[0]
-            assert "manage.py" in args[0]
-            assert "shell" in args[0]
-            assert kwargs["check"] is True
-    
     def test_shell_command_keyboard_interrupt(self):
         """Test ShellCommand handling keyboard interrupt gracefully."""
         cmd = ShellCommand()
@@ -126,6 +92,58 @@ class TestShellCommandExtended:
             
             # Verify proper exit message
             mock_print.assert_any_call("\nExited shell.")
+
+
+class TestDjangoShellCommandExtended:
+    """Extended tests for DjangoShellCommand."""
+    
+    def test_django_shell_command_help_mode(self):
+        """Test DjangoShellCommand.execute in help mode."""
+        cmd = DjangoShellCommand()
+        
+        with patch('quickscale.commands.project_manager.ProjectManager.get_project_state',
+                  return_value={'has_project': False}), \
+             patch('builtins.print') as mock_print:
+            
+            cmd.execute()
+            
+            # Verify django shell help was printed
+            assert mock_print.call_count >= 2
+            mock_print.assert_any_call("usage: quickscale django-shell")
+    
+    def test_django_shell_command_success(self):
+        """Test DjangoShellCommand.execute successfully running Django shell."""
+        cmd = DjangoShellCommand()
+        
+        with patch('quickscale.commands.project_manager.ProjectManager.get_project_state',
+                  return_value={'has_project': True}), \
+             patch('subprocess.run', return_value=MagicMock(returncode=0)) as mock_run, \
+             patch('builtins.print') as mock_print:
+            
+            cmd.execute()
+            
+            # Verify subprocess.run was called correctly
+            mock_print.assert_called_with("Starting Django shell...")
+            mock_run.assert_called_once()
+            args, kwargs = mock_run.call_args
+            assert "python" in args[0]
+            assert "manage.py" in args[0]
+            assert "shell" in args[0]
+            assert kwargs["check"] is True
+
+    def test_django_shell_command_keyboard_interrupt(self):
+        """Test DjangoShellCommand handling keyboard interrupt gracefully."""
+        cmd = DjangoShellCommand()
+        
+        with patch('quickscale.commands.project_manager.ProjectManager.get_project_state',
+                  return_value={'has_project': True}), \
+             patch('subprocess.run', side_effect=KeyboardInterrupt()), \
+             patch('builtins.print') as mock_print:
+            
+            cmd.execute()
+            
+            # Verify proper exit message
+            mock_print.assert_any_call("\nExited Django shell.")
 
 
 class TestManageCommandExtended:

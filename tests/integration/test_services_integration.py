@@ -207,7 +207,7 @@ class ServicesIntegrationTests(unittest.TestCase):
         examples_path = self.base_path / 'quickscale' / 'templates' / 'services' / 'examples.py'
         with open(examples_path, 'r') as f:
             examples_content = f.read()
-        self.assertIn("class TextAnalysisService(BaseService)", examples_content)
+        self.assertIn("class TextSentimentAnalysisService(BaseService)", examples_content)
         self.assertIn("@register_service(", examples_content)
         
         # 5. Views connect services to credit consumption
@@ -353,10 +353,10 @@ class ServiceFrameworkBehaviorTests(unittest.TestCase):
             examples_content = f.read()
         
         # Should inherit from BaseService
-        self.assertIn("class TextAnalysisService(BaseService):", examples_content,
-                     "TextAnalysisService not inheriting from BaseService")
-        self.assertIn("class ImageProcessingService(BaseService):", examples_content,
-                     "ImageProcessingService not inheriting from BaseService")
+        self.assertIn("class TextSentimentAnalysisService(BaseService):", examples_content,
+                     "TextSentimentAnalysisService not inheriting from BaseService")
+        self.assertIn("class ImageMetadataExtractorService(BaseService):", examples_content,
+                     "ImageMetadataExtractorService not inheriting from BaseService")
         
         # Should implement execute_service method
         self.assertIn("def execute_service(self, user: User", examples_content,

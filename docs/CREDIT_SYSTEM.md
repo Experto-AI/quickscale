@@ -90,6 +90,12 @@ The system follows a strict consumption priority to maximize value for users:
 
 ## Services & Products
 
+### AI Service Framework Integration
+- **Service Template Generator**: `quickscale generate-service` creates AI services with automatic credit integration
+- **BaseService Class**: All AI services inherit credit consumption logic automatically
+- **Service Registration**: `@register_service` decorator automatically integrates services with credit system
+- **Example Services**: Pre-built text processing, image processing, and data validation services
+
 ### Credit Consumption
 - Each service and product has a **configurable credit cost**
 - Credit costs can vary based on:
@@ -97,11 +103,13 @@ The system follows a strict consumption priority to maximize value for users:
   - Resource requirements
   - Processing time
   - External API costs
+- **Automatic Integration**: AI services generated with QuickScale framework automatically consume credits
 
 ### Pre-Flight Validation
 - Before any service usage, the system checks available credits
 - If insufficient credits: Service usage is **blocked** with clear error message
 - User is prompted to purchase more credits or upgrade subscription
+- **BaseService Integration**: Credit validation is automatic for all generated AI services
 
 ### Usage Tracking
 - All service usage is tracked in real-time
@@ -111,6 +119,7 @@ The system follows a strict consumption priority to maximize value for users:
   - Credit source (subscription vs. pay-as-you-go)
   - Timestamp
   - User ID
+- **ServiceUsage Model**: Complete audit trail for all AI service consumption
 
 ## User Experience Features
 

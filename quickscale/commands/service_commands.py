@@ -361,61 +361,32 @@ class ServiceUpCommand(Command):
             
     def _handle_docker_process_error(self, e: subprocess.CalledProcessError, env: Dict) -> None:
         """Handle errors from docker-compose command."""
-        # Special handling for exit code 5 or 1, which can happen but services might still start
-        if e.returncode not in [1, 5]:
-            # For other error codes, re-raise the error
-            raise e
-            
-        self.logger.warning(f"Docker Compose returned exit code {e.returncode}, but services might still be starting.")
-        # Enhanced logging of error output
+        # Log the actual error details to help users diagnose issues
+        self.logger.warning(f"Docker Compose returned exit code {e.returncode}")
+        
+        # Show actual error output to help users understand what went wrong
         if hasattr(e, 'stdout') and e.stdout:
-            self.logger.debug(f"Command stdout: {e.stdout}")
+            self.logger.info(f"Docker Compose stdout:\n{e.stdout}")
         if hasattr(e, 'stderr') and e.stderr:
-            self.logger.debug(f"Command stderr: {e.stderr}")
+            self.logger.info(f"Docker Compose stderr:\n{e.stderr}")
         
-        # Try to get detailed service logs
-        self._get_docker_compose_logs(env)
+        # Check if services are actually running despite the error
+        ps_result = subprocess.run(DOCKER_COMPOSE_COMMAND.split() + ["ps"], check=False, env=env, capture_output=True, text=True)
+        if ps_result.returncode == 0 and ("db" in ps_result.stdout or "web" in ps_result.stdout):
+            self.logger.info("Services appear to be starting despite exit code, proceeding.")
+            # Continue with the operation, treating as if it succeeded
+            return
         
-        # Try to inspect what's happening
-        self._check_if_services_running_despite_error(e, env)
+        # If no services are running, this is a real failure - re-raise the error
+        self.logger.error("No services found running after docker-compose error.")
+        raise e
     
-    def _get_docker_compose_logs(self, env: Dict) -> None:
-        """Get logs from docker-compose for debugging."""
-        try:
-            logs_result = subprocess.run([DOCKER_COMPOSE_COMMAND, "logs"], capture_output=True, text=True, env=env, check=False)
-            if logs_result.returncode == 0:
-                self.logger.debug(f"Docker compose logs output: {logs_result.stdout}")
-                if logs_result.stderr:
-                    self.logger.debug(f"Docker compose logs stderr: {logs_result.stderr}")
-        except Exception as logs_err:
-            self.logger.debug(f"Failed to get docker-compose logs: {logs_err}")
-    
-    def _check_if_services_running_despite_error(self, e: subprocess.CalledProcessError, env: Dict) -> None:
-        """Check if services are running despite docker-compose error."""
-        try:
-            # Check if the services are starting despite the error
-            ps_result = subprocess.run([DOCKER_COMPOSE_COMMAND, "ps"], check=False, env=env, capture_output=True, text=True)
-            if ps_result.returncode == 0 and ("db" in ps_result.stdout or "web" in ps_result.stdout):
-                self.logger.info("Services appear to be starting despite exit code, proceeding.")
-                # Continue with the operation, treating as if it succeeded
-            else:
-                # Try to see what's happening with docker
-                self.logger.info("Checking container status with docker ps...")
-                docker_ps = subprocess.run(["docker", "ps", "-a"], check=False, capture_output=True, text=True)
-                self.logger.debug(f"Docker ps output: {docker_ps.stdout}")
-                
-                # If no services are showing up, re-raise the error
-                self.logger.error("No services found running after exit code error.")
-                raise e
-        except Exception as inspect_error:
-            self.logger.error(f"Error inspecting service status: {inspect_error}")
-            # Re-raise the original error
-            raise e
+
             
     def _verify_services_running(self, env: Dict) -> None:
         """Verify that services are actually running."""
         try:
-            ps_result = subprocess.run([DOCKER_COMPOSE_COMMAND, "ps"], capture_output=True, text=True, check=True, env=env)
+            ps_result = subprocess.run(DOCKER_COMPOSE_COMMAND.split() + ["ps"], capture_output=True, text=True, check=True, env=env)
             if "db" not in ps_result.stdout:
                 self.logger.warning("Database service not detected in running containers. Services may not be fully started.")
                 self.logger.debug(f"Docker compose ps output: {ps_result.stdout}")
@@ -454,7 +425,7 @@ class ServiceUpCommand(Command):
         time.sleep(5)
         
         # Check again if services are running
-        ps_retry = subprocess.run([DOCKER_COMPOSE_COMMAND, "ps"], capture_output=True, text=True, check=False)
+        ps_retry = subprocess.run(DOCKER_COMPOSE_COMMAND.split() + ["ps"], capture_output=True, text=True, check=False)
         if ps_retry.returncode == 0 and "db" in ps_retry.stdout:
             self.logger.info("Services are now running after direct intervention.")
         else:
@@ -580,6 +551,10 @@ class ServiceUpCommand(Command):
         from quickscale.utils.message_manager import MessageManager
         MessageManager.error(error_message)
         MessageManager.print_recovery_suggestion("custom", suggestion="Try again with ports that are not in use, or check Docker logs for more details.")
+        
+        # Raise an exception to signal failure
+        from quickscale.utils.error_manager import CommandError
+        raise CommandError(error_message, recovery="Check Docker logs and ensure Docker daemon is running with network connectivity")
     
     def execute(self, no_cache: bool = False) -> None:
         """Executes the command to start services."""
@@ -691,7 +666,9 @@ class ServiceStatusCommand(Command):
         
         try:
             MessageManager.info("Checking service status...", self.logger)
-            subprocess.run(["docker", "compose", "ps"], check=True)
+            result = subprocess.run(DOCKER_COMPOSE_COMMAND.split() + ["ps"], check=True, capture_output=True, text=True)
+            # Print the output directly to the user (not through logger)
+            print(result.stdout)
         except subprocess.SubprocessError as e:
             self.handle_error(
                 e,

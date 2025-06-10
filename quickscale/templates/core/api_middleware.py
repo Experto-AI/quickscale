@@ -3,6 +3,7 @@ from django.http import JsonResponse
 from django.utils.deprecation import MiddlewareMixin
 from django.utils import timezone
 import logging
+from django.contrib.auth.models import AnonymousUser
 
 logger = logging.getLogger(__name__)
 
@@ -14,6 +15,15 @@ class APIKeyAuthenticationMiddleware(MiddlewareMixin):
         """Process API requests and validate API keys."""
         # Only apply to /api/ routes
         if not request.path.startswith('/api/'):
+            return None
+
+        logger.debug(f"APIKeyAuthenticationMiddleware processing path: {request.path}")
+
+        # Allow /api/docs/ to be accessed without API key
+        if request.path == '/api/docs/':
+            # Attach a dummy user to allow AllowAny to work for documentation
+            request.user = AnonymousUser()
+            request.api_authenticated = False # Explicitly set to False as no API key was used
             return None
 
         # Extract API key from Authorization header

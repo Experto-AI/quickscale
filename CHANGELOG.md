@@ -2,6 +2,33 @@
 
 All notable changes to this project will be documented in this file.
 
+## v0.25.0 (2025-06-09)
+v0.25.0 feat: Enhance AI Service Framework and Documentation
+
+This PR introduces a comprehensive service generation framework, allowing AI engineers to create, validate, and manage AI services seamlessly within QuickScale. It significantly enhances the capabilities for AI service integration, providing a robust foundation for future development and user engagement.
+
+- Backend Implementation:
+  - Introduced a powerful service template generator (`quickscale generate-service`) supporting basic, text processing, image processing, and data validation service types, with options for credit cost, description, and database configuration.
+  - Added comprehensive example service implementations (e.g., text sentiment analysis, keyword extraction, image metadata).
+  - Implemented new API endpoints: `execute-service` for AI service execution with credit deduction.
+  - Implemented `quickscale generate-service` and `quickscale manage configure_service` commands for streamlined service creation and database configuration, with improved guidance for users when Docker services are not running.
+  - Integrated utility functions for service development, including validation and dependency analysis.
+  - Added `djangorestframework` dependency and refactored API views for improved clarity and functionality.
+- Frontend Implementation:
+  - Developed a comprehensive API documentation framework with a dedicated page and an AI Service Development Guide for clear guidance.
+  - Updated documentation with a detailed service development guide, code snippets, and a "Getting Started" guide for AI engineers.
+  - Corrected navigation links to API documentation for improved consistency.
+- Testing:
+  - Introduced a new test service example (`test_service`) and comprehensive end-to-end tests for API endpoints, API key management, and service integration, ensuring robust functionality.
+  - Enhanced error handling and logging in service commands for better diagnostics and stability.
+  - Updated service generation tests to accurately reflect failure scenarios when attempting to overwrite existing files.
+- Refactorings & Fixes:
+  - Enhanced APIKeyAuthenticationMiddleware to allow access to API documentation without requiring an API key.
+  - Streamlined CLI by removing the deprecated `list-services` command and renaming `service-examples` to `show-service-examples` for clarity.
+  - Refactored API views to align with updated service class names.
+
+This PR completes the Service Documentation & Examples sprint, ensuring AI engineers can follow documentation to add their own services in under 30 minutes, validating the sprint's core goal.
+
 ## v0.24.0 (2025-06-07)
 v0.24.0 feat: Implement Service Management Admin Interface
 

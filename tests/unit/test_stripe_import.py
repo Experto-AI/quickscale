@@ -33,7 +33,6 @@ def test_custom_stripe_app_import(mock_is_feature_enabled, mock_get_env):
 @patch('quickscale.templates.stripe_manager.stripe_manager.get_env')
 @patch('quickscale.templates.stripe_manager.stripe_manager.is_feature_enabled', return_value=True)
 @patch.dict('os.environ', {'STRIPE_API_VERSION': '2025-04-30.basil'})
-@patch('quickscale.templates.stripe_manager.stripe_manager.settings', MagicMock(STRIPE_SECRET_KEY='sk_test_12345'))
 def test_stripe_manager_init(mock_is_feature_enabled, mock_get_env):
     """Verify that StripeManager can be initialized."""
 
@@ -52,11 +51,15 @@ def test_stripe_manager_init(mock_is_feature_enabled, mock_get_env):
             'STRIPE_PUBLIC_KEY': 'pk_test_12345',
             'STRIPE_WEBHOOK_SECRET': 'whsec_12345'
         }.get(key, 'default_value')
+        
+        # Mock the settings module used by stripe_manager
+        with patch('quickscale.templates.stripe_manager.stripe_manager.settings') as mock_settings:
+            mock_settings.STRIPE_SECRET_KEY = 'sk_test_12345'
 
-        try:
-            # Import from the specific template path rather than relying on Python package importing
-            from quickscale.templates.stripe_manager.stripe_manager import StripeManager
-            manager = StripeManager.get_instance()
-            assert manager is not None
-        except Exception as e:
-            pytest.fail(f"Failed to initialize StripeManager: {str(e)}") 
+            try:
+                # Import from the specific template path rather than relying on Python package importing
+                from quickscale.templates.stripe_manager.stripe_manager import StripeManager
+                manager = StripeManager.get_instance()
+                assert manager is not None
+            except Exception as e:
+                pytest.fail(f"Failed to initialize StripeManager: {str(e)}") 
