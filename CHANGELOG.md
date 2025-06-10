@@ -2,6 +2,31 @@
 
 All notable changes to this project will be documented in this file.
 
+## v0.27.0 (2025-06-10)
+v0.27.0 feat: Implement Simple Audit Logging for Admin Actions
+
+This PR introduces comprehensive audit logging for administrative actions within QuickScale's admin dashboard, enhancing accountability and monitoring capabilities by providing a complete record of admin activities and system changes.
+
+- Backend Implementation:
+  - Created AuditLog model with fields for action type, user, timestamp, description, IP address, and user agent to track administrative activities.
+  - Implemented utility functions log_admin_action() to capture admin actions with relevant context from HTTP requests.
+  - Added signals.py to handle user login and logout events, automatically logging these actions for staff users.
+  - Enhanced CreditAccountAdmin class with audit logging for credit adjustments, capturing adjustment details and reasons.
+  - Integrated audit logging into product synchronization operations with detailed action tracking.
+  - Created audit_log view with comprehensive filtering capabilities by user, action type, and date range with pagination support.
+- Frontend Implementation:
+  - Developed audit log page (audit_log.html) with filtering options and pagination for easy navigation through logged actions.
+  - Updated admin dashboard index to include audit log card with quick access link and recent activity summary.
+  - Added AuditLogAdmin class for Django admin interface with list display, filtering, and search capabilities.
+  - Implemented read-only audit log management to prevent manual creation and editing while maintaining data integrity.
+- Testing:
+  - Created comprehensive unit tests for audit log model creation and field validation.
+  - Implemented tests for audit log utility functions and signal handling for user actions.
+  - Added integration tests for audit log viewing, filtering, and pagination functionality.
+  - Ensured proper testing coverage for admin action tracking and Django admin interface integration.
+  
+This PR completes the Simple Audit Logging sprint, providing administrators with powerful tools to monitor and track all administrative actions within QuickScale. The implementation includes automatic logging of user sessions, credit adjustments, product synchronization, and other admin activities with comprehensive filtering and viewing capabilities for enhanced system oversight and accountability.
+
 ## v0.26.0 (2025-06-10)
 v0.26.0 feat: Implement Basic User Search & Admin Foundation
 

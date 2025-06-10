@@ -83,51 +83,23 @@ The QuickScale credit system supports multiple payment models and credit types w
 
 ---
 
-### ✅ Sprint 15: Basic User Search & Admin Foundation (v0.26.0) - COMPLETED
-**Goal**: Essential admin tools - user search and basic management
-
-**Backend Implementation:**
-- ✅ Create simple user search functionality (email, name)
-- ✅ Add basic admin permission checks
-- ✅ Create admin user detail view
-
-**Frontend Implementation:**
-- ✅ Add user search page to admin dashboard
-- ✅ Create user detail page with comprehensive info
-- ✅ Add admin navigation structure
-
-**Testing:**
-- ✅ Test user search functionality
-- ✅ Test admin permission enforcement
-- ✅ Test user detail view 
-
-**Validation**: ✅ Admins can search and view user details
-
-**Key Features Delivered:**
-- **User Search**: Search users by email, first name, last name with pagination
-- **User Detail View**: Comprehensive user information including credits, subscription, and activity
-- **Admin Navigation**: Updated admin dashboard with proper links to user management
-- **Permission Control**: Staff-only access with proper decorators
-
----
-
 ### Sprint 16: Simple Audit Logging (v0.27.0)
 **Goal**: Basic audit logging for admin actions
 
 **Backend Implementation:**
-- [ ] Create simple AuditLog model (action, user, timestamp, description)
-- [ ] Add audit logging for user changes
-- [ ] Create basic audit log viewing
+- ✅ Create simple AuditLog model (action, user, timestamp, description)
+- ✅ Add audit logging for user changes
+- ✅ Create basic audit log viewing
 
 **Frontend Implementation:**
-- [ ] Add audit log page to admin dashboard
-- [ ] Show recent admin actions
-- [ ] Add basic filtering (user, date)
+- ✅ Add audit log page to admin dashboard
+- ✅ Show recent admin actions
+- ✅ Add basic filtering (user, date)
 
 **Testing:**
-- [ ] Test audit log creation
-- [ ] Test audit log viewing and filtering
-- [ ] Test admin action tracking
+- ✅ Test audit log creation
+- ✅ Test audit log viewing and filtering
+- ✅ Test admin action tracking
 
 **Validation**: Admin actions are logged and viewable
 
