@@ -1,0 +1,240 @@
+{% extends "base.html" %}
+{% load i18n %}
+
+{% block title %}{% trans "Audit Log" %}{% endblock %}
+
+{% block content %}
+<div class="container mt-5">
+    <div class="columns">
+        <div class="column is-12">
+            <!-- Header -->
+            <div class="level">
+                <div class="level-left">
+                    <div class="level-item">
+                        <h1 class="title is-3">
+                            <span class="icon-text">
+                                <span class="icon">
+                                    <i class="fas fa-clipboard-list"></i>
+                                </span>
+                                <span>{% trans "Audit Log" %}</span>
+                            </span>
+                        </h1>
+                    </div>
+                </div>
+                <div class="level-right">
+                    <div class="level-item">
+                        <a href="{% url 'admin_dashboard:index' %}" class="button is-light">
+                            <span class="icon">
+                                <i class="fas fa-arrow-left"></i>
+                            </span>
+                            <span>{% trans "Back to Admin Dashboard" %}</span>
+                        </a>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Summary -->
+            <div class="notification is-info is-light">
+                <p><strong>{% trans "Total Audit Entries:" %}</strong> {{ total_count }}</p>
+                <p>{% trans "This log tracks all administrative actions performed in the system." %}</p>
+            </div>
+
+            <!-- Filters -->
+            <div class="box">
+                <h2 class="subtitle is-5">{% trans "Filter Audit Logs" %}</h2>
+                <form method="get" action="{% url 'admin_dashboard:audit_log' %}">
+                    <div class="columns">
+                        <div class="column is-3">
+                            <div class="field">
+                                <label class="label">{% trans "User" %}</label>
+                                <div class="control">
+                                    <div class="select is-fullwidth">
+                                        <select name="user">
+                                            <option value="">{% trans "All Users" %}</option>
+                                            {% for audit_user in audit_users %}
+                                                <option value="{{ audit_user.id }}" 
+                                                        {% if current_user_filter == audit_user.id|stringformat:"s" %}selected{% endif %}>
+                                                    {{ audit_user.email }}
+                                                </option>
+                                            {% endfor %}
+                                        </select>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="column is-3">
+                            <div class="field">
+                                <label class="label">{% trans "Action Type" %}</label>
+                                <div class="control">
+                                    <div class="select is-fullwidth">
+                                        <select name="action">
+                                            <option value="all">{% trans "All Actions" %}</option>
+                                            {% for action_key, action_label in action_choices %}
+                                                <option value="{{ action_key }}" 
+                                                        {% if current_action_filter == action_key %}selected{% endif %}>
+                                                    {{ action_label }}
+                                                </option>
+                                            {% endfor %}
+                                        </select>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="column is-2">
+                            <div class="field">
+                                <label class="label">{% trans "From Date" %}</label>
+                                <div class="control">
+                                    <input class="input" type="date" name="date_from" value="{{ current_date_from }}">
+                                </div>
+                            </div>
+                        </div>
+                        <div class="column is-2">
+                            <div class="field">
+                                <label class="label">{% trans "To Date" %}</label>
+                                <div class="control">
+                                    <input class="input" type="date" name="date_to" value="{{ current_date_to }}">
+                                </div>
+                            </div>
+                        </div>
+                        <div class="column is-2">
+                            <div class="field" style="padding-top: 1.5rem;">
+                                <div class="control">
+                                    <button type="submit" class="button is-primary">
+                                        <span class="icon">
+                                            <i class="fas fa-filter"></i>
+                                        </span>
+                                        <span>{% trans "Filter" %}</span>
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="columns">
+                        <div class="column">
+                            <a href="{% url 'admin_dashboard:audit_log' %}" class="button is-light is-small">
+                                <span class="icon">
+                                    <i class="fas fa-times"></i>
+                                </span>
+                                <span>{% trans "Clear Filters" %}</span>
+                            </a>
+                        </div>
+                    </div>
+                </form>
+            </div>
+
+            <!-- Audit Log Table -->
+            <div class="box">
+                <h2 class="subtitle is-5">{% trans "Recent Admin Actions" %}</h2>
+                
+                {% if logs.object_list %}
+                    <div class="table-container">
+                        <table class="table is-fullwidth is-striped is-hoverable">
+                            <thead>
+                                <tr>
+                                    <th>{% trans "Timestamp" %}</th>
+                                    <th>{% trans "User" %}</th>
+                                    <th>{% trans "Action" %}</th>
+                                    <th>{% trans "Description" %}</th>
+                                    <th>{% trans "IP Address" %}</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for log in logs.object_list %}
+                                    <tr>
+                                        <td>
+                                            <span class="is-size-7 has-text-grey">
+                                                {{ log.timestamp|date:"Y-m-d H:i:s" }}
+                                            </span>
+                                        </td>
+                                        <td>
+                                            <strong>{{ log.user.email|default:"Unknown User" }}</strong>
+                                            {% if log.user.first_name or log.user.last_name %}
+                                                <br>
+                                                <span class="is-size-7 has-text-grey">
+                                                    {{ log.user.first_name }} {{ log.user.last_name }}
+                                                </span>
+                                            {% endif %}
+                                        </td>
+                                        <td>
+                                            <span class="tag {% if log.action == 'USER_SEARCH' %}is-info{% elif log.action == 'USER_VIEW' %}is-link{% elif log.action == 'SERVICE_TOGGLE' %}is-warning{% elif log.action == 'CREDIT_ADJUSTMENT' %}is-success{% else %}is-light{% endif %}">
+                                                {{ log.get_action_display }}
+                                            </span>
+                                        </td>
+                                        <td>
+                                            <span class="content is-small">
+                                                {{ log.description }}
+                                            </span>
+                                        </td>
+                                        <td>
+                                            <span class="is-size-7 has-text-grey">
+                                                {{ log.ip_address|default:"N/A" }}
+                                            </span>
+                                        </td>
+                                    </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+
+                    <!-- Pagination -->
+                    {% if logs.has_other_pages %}
+                        <nav class="pagination is-centered" role="navigation" aria-label="pagination">
+                            {% if logs.has_previous %}
+                                <a class="pagination-previous" href="?page={{ logs.previous_page_number }}{% if current_user_filter %}&user={{ current_user_filter }}{% endif %}{% if current_action_filter %}&action={{ current_action_filter }}{% endif %}{% if current_date_from %}&date_from={{ current_date_from }}{% endif %}{% if current_date_to %}&date_to={{ current_date_to }}{% endif %}">
+                                    {% trans "Previous" %}
+                                </a>
+                            {% endif %}
+                            
+                            {% if logs.has_next %}
+                                <a class="pagination-next" href="?page={{ logs.next_page_number }}{% if current_user_filter %}&user={{ current_user_filter }}{% endif %}{% if current_action_filter %}&action={{ current_action_filter }}{% endif %}{% if current_date_from %}&date_from={{ current_date_from }}{% endif %}{% if current_date_to %}&date_to={{ current_date_to }}{% endif %}">
+                                    {% trans "Next" %}
+                                </a>
+                            {% endif %}
+
+                            <ul class="pagination-list">
+                                {% if logs.number > 3 %}
+                                    <li><a class="pagination-link" href="?page=1{% if current_user_filter %}&user={{ current_user_filter }}{% endif %}{% if current_action_filter %}&action={{ current_action_filter }}{% endif %}{% if current_date_from %}&date_from={{ current_date_from }}{% endif %}{% if current_date_to %}&date_to={{ current_date_to }}{% endif %}">1</a></li>
+                                    {% if logs.number > 4 %}
+                                        <li><span class="pagination-ellipsis">&hellip;</span></li>
+                                    {% endif %}
+                                {% endif %}
+
+                                {% for page_num in logs.paginator.page_range %}
+                                    {% if page_num >= logs.number|add:"-2" and page_num <= logs.number|add:"2" %}
+                                        {% if page_num == logs.number %}
+                                            <li><a class="pagination-link is-current" aria-label="Page {{ page_num }}" aria-current="page">{{ page_num }}</a></li>
+                                        {% else %}
+                                            <li><a class="pagination-link" href="?page={{ page_num }}{% if current_user_filter %}&user={{ current_user_filter }}{% endif %}{% if current_action_filter %}&action={{ current_action_filter }}{% endif %}{% if current_date_from %}&date_from={{ current_date_from }}{% endif %}{% if current_date_to %}&date_to={{ current_date_to }}{% endif %}">{{ page_num }}</a></li>
+                                        {% endif %}
+                                    {% endif %}
+                                {% endfor %}
+
+                                {% if logs.number < logs.paginator.num_pages|add:"-2" %}
+                                    {% if logs.number < logs.paginator.num_pages|add:"-3" %}
+                                        <li><span class="pagination-ellipsis">&hellip;</span></li>
+                                    {% endif %}
+                                    <li><a class="pagination-link" href="?page={{ logs.paginator.num_pages }}{% if current_user_filter %}&user={{ current_user_filter }}{% endif %}{% if current_action_filter %}&action={{ current_action_filter }}{% endif %}{% if current_date_from %}&date_from={{ current_date_from }}{% endif %}{% if current_date_to %}&date_to={{ current_date_to }}{% endif %}">{{ logs.paginator.num_pages }}</a></li>
+                                {% endif %}
+                            </ul>
+                        </nav>
+                        
+                        <div class="has-text-centered mt-4">
+                            <p class="is-size-7 has-text-grey">
+                                {% trans "Page" %} {{ logs.number }} {% trans "of" %} {{ logs.paginator.num_pages }} 
+                                ({{ logs.paginator.count }} {% trans "total entries" %})
+                            </p>
+                        </div>
+                    {% endif %}
+                {% else %}
+                    <div class="notification is-info">
+                        <p>{% trans "No audit log entries found matching your criteria." %}</p>
+                        {% if current_user_filter or current_action_filter or current_date_from or current_date_to %}
+                            <p>{% trans "Try adjusting your filters or" %} <a href="{% url 'admin_dashboard:audit_log' %}">{% trans "clear all filters" %}</a>.</p>
+                        {% endif %}
+                    </div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %} 

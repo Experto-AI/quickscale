@@ -11,6 +11,7 @@ from django.utils.html import format_html
 from decimal import Decimal
 from .models import CreditAccount, CreditTransaction, Service, ServiceUsage, UserSubscription, Payment, APIKey
 from .forms import AdminCreditAdjustmentForm
+from admin_dashboard.utils import log_admin_action
 
 
 @admin.register(UserSubscription)
@@ -143,6 +144,15 @@ class CreditAccountAdmin(admin.ModelAdmin):
                         description=f"Admin Credit Addition: {reason} (by {request.user.email})",
                         credit_type='ADMIN'
                     )
+                    
+                    # Log the credit adjustment action
+                    log_admin_action(
+                        user=request.user,
+                        action='CREDIT_ADJUSTMENT',
+                        description=f'Added {amount} credits to {account.user.email}. Reason: {reason}',
+                        request=request
+                    )
+                    
                     messages.success(
                         request, 
                         f"Successfully added {amount} credits to {account.user.email}. "
@@ -187,6 +197,15 @@ class CreditAccountAdmin(admin.ModelAdmin):
                             description=f"Admin Credit Removal: {reason} (by {request.user.email})",
                             credit_type='ADMIN'
                         )
+                        
+                        # Log the credit adjustment action
+                        log_admin_action(
+                            user=request.user,
+                            action='CREDIT_ADJUSTMENT',
+                            description=f'Removed {amount} credits from {account.user.email}. Reason: {reason}',
+                            request=request
+                        )
+                        
                         messages.success(
                             request, 
                             f"Successfully removed {amount} credits from {account.user.email}. "
@@ -226,6 +245,14 @@ class CreditAccountAdmin(admin.ModelAdmin):
                         updated_count += 1
                     except ValueError:
                         continue
+                
+                # Log the bulk credit adjustment action
+                log_admin_action(
+                    user=request.user,
+                    action='CREDIT_ADJUSTMENT',
+                    description=f'Bulk added {amount} credits to {updated_count} accounts. Reason: {reason}',
+                    request=request
+                )
                 
                 self.message_user(
                     request, 
