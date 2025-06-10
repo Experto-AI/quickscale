@@ -23,12 +23,36 @@ mock_env_utils_module.get_env = MagicMock(side_effect=lambda key, default=None: 
 mock_env_utils_module.is_feature_enabled = MagicMock(return_value=True)
 mock_core_module.env_utils = mock_env_utils_module
 
-# Add modules to sys.modules to avoid import errors
-sys.modules['stripe'] = mock_stripe_module
-sys.modules['core'] = mock_core_module
-sys.modules['core.env_utils'] = mock_env_utils_module
-sys.modules['django.conf'] = MagicMock()
-sys.modules['django.conf.settings'] = MagicMock(STRIPE_SECRET_KEY='sk_test_51ExampleTestKeyDummyValue')
+# Add modules to sys.modules to avoid import errors for this test module only
+# Note: These mocks are scoped to this test module and cleaned up after tests
+_original_modules = {}
+
+def _setup_module_mocks():
+    """Set up module mocks for this test file."""
+    global _original_modules
+    _original_modules = {
+        'stripe': sys.modules.get('stripe'),
+        'core': sys.modules.get('core'),
+        'core.env_utils': sys.modules.get('core.env_utils'),
+        'django.conf': sys.modules.get('django.conf'),
+        'django.conf.settings': sys.modules.get('django.conf.settings')
+    }
+    
+    sys.modules['stripe'] = mock_stripe_module
+    sys.modules['core'] = mock_core_module
+    sys.modules['core.env_utils'] = mock_env_utils_module
+
+def _cleanup_module_mocks():
+    """Clean up module mocks for this test file."""
+    global _original_modules
+    for module, original in _original_modules.items():
+        if original is None:
+            sys.modules.pop(module, None)
+        else:
+            sys.modules[module] = original
+
+# Set up mocks when module is imported
+_setup_module_mocks()
 
 # Disable noisy logging during tests
 logging.getLogger('stripe').setLevel(logging.ERROR)
@@ -181,16 +205,30 @@ class TestStripeRealAPI(unittest.TestCase):
     def setUp(self):
         """Set up test environment."""
         self.original_env = os.environ.copy()
+        # Use a context manager for settings mock to avoid bleeding
+        self.settings_patcher = patch('quickscale.templates.stripe_manager.stripe_manager.settings')
+        self.mock_settings = self.settings_patcher.start()
+        self.mock_settings.STRIPE_SECRET_KEY = 'sk_test_51ExampleTestKeyDummyValue'
         self.manager = get_stripe_manager()
 
     def tearDown(self):
         """Clean up test environment."""
+        # Stop the settings patcher to prevent mock bleeding
+        if hasattr(self, 'settings_patcher'):
+            self.settings_patcher.stop()
+            
         # Restore original environment
         os.environ.clear()
         os.environ.update(self.original_env)
         
         # Reset StripeManager singleton
         StripeManager._instance = None
+
+    @classmethod
+    def tearDownClass(cls):
+        """Clean up class-level resources."""
+        # Clean up module mocks after all tests in this class
+        _cleanup_module_mocks()
 
     def test_stripe_manager_initialization(self):
         """Test StripeManager initializes correctly with test API key."""
@@ -379,5 +417,19 @@ class TestStripeRealAPI(unittest.TestCase):
             self.assertEqual(response.status_code, 200)
 
 
+# Add pytest fixture for cleanup
+def pytest_runtest_teardown():
+    """Clean up after each test function."""
+    _cleanup_module_mocks()
+    _setup_module_mocks()  # Re-setup for next test
+
+def pytest_sessionfinish():
+    """Clean up after all tests in this module."""
+    _cleanup_module_mocks()
+
 if __name__ == '__main__':
-    unittest.main() 
+    try:
+        unittest.main()
+    finally:
+        # Clean up module mocks when script exits
+        _cleanup_module_mocks() 

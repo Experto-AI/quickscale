@@ -250,6 +250,104 @@ For a list of available commands, use:
         help="Arguments to pass to manage.py")
 
 
+def setup_service_generator_parsers(subparsers: argparse._SubParsersAction) -> None:
+    """Set up AI service generator command parsers."""
+    generate_parser = subparsers.add_parser("generate-service",
+        help="Generate an AI service template",
+        description="""
+Generate a new AI service template with boilerplate code, integrated with the QuickScale credit system.
+This command helps AI engineers quickly scaffold new services.
+
+Service Name: Should be snake_case (e.g., 'my_service', 'sentiment_analyzer').
+Service Type: Specifies a template type (basic, text_processing, image_processing, data_validation).
+Output Directory: Optional. If not provided, service will be generated in a 'services/' directory in the current working directory.
+Credit Cost: Cost in credits for using this service (default: 1.0).
+Description: Service description for documentation and admin interface.
+
+Database Configuration: The service will be automatically configured in the database if your 
+project is running (quickscale up). If not running, you'll get instructions to configure it later.
+Use --skip-db-config to skip automatic database configuration entirely.
+        """,
+        epilog="""
+Examples:
+  quickscale generate-service my_ai_service                  (basic service, 1.0 credits)
+  quickscale generate-service sentiment_analyzer --type text_processing --credit-cost 2.5
+  quickscale generate-service image_classifier --type image_processing --description "Advanced image classification service"
+  quickscale generate-service my_service --credit-cost 0.5 --description "Low-cost utility service"
+  quickscale generate-service test_service --skip-db-config  (generate files only, skip database configuration)
+
+Note: If your project isn't running (quickscale up), database configuration will be skipped automatically
+with instructions on how to configure it later. This is normal behavior.
+        """,
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        usage="quickscale generate-service <service_name> [--type <service_type>] [--output <output_dir>]")
+    generate_parser.add_argument(
+        "name",
+        help="Name of the service to generate (e.g., my_ai_service, sentiment_analyzer)")
+    generate_parser.add_argument(
+        "--type",
+        choices=["basic", "text_processing", "image_processing", "data_validation"],
+        default="basic",
+        help="Type of service template to generate")
+    generate_parser.add_argument(
+        "--output-dir",
+        dest="output_dir", 
+        help="Optional output directory for the generated service files")
+    generate_parser.add_argument(
+        "--credit-cost",
+        type=float,
+        default=1.0,
+        help="Credit cost for using this service (default: 1.0)")
+    generate_parser.add_argument(
+        "--description",
+        help="Description of the service (if not provided, will be auto-generated)")
+    generate_parser.add_argument(
+        "--skip-db-config",
+        action="store_true",
+        help="Skip automatic database configuration of the service")
+
+    validate_parser = subparsers.add_parser("validate-service",
+        help="Validate a service file and provide development tips",
+        description="""
+Validate an AI service Python file against QuickScale's service development guidelines.
+This helps ensure the service is correctly structured and integrates with the framework.
+Optionally provides development tips for common issues.
+        """,
+        epilog="""
+Examples:
+  quickscale validate-service my_ai_service              (validate a service by name, assumes default path)
+  quickscale validate-service services/sentiment_analyzer.py --tips  (validate a specific file with tips)
+        """,
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        usage="quickscale validate-service [<service_name_or_file_path>] [--tips]")
+    validate_parser.add_argument(
+        "name_or_path",
+        nargs="?",
+        metavar="<service_name_or_file_path>",
+        help="Name of the service (e.g., my_ai_service) or full path to the service Python file (e.g., services/my_service.py)")
+    validate_parser.add_argument("--tips",
+        action="store_true",
+        help="Show additional development tips")
+
+    examples_parser = subparsers.add_parser("show-service-examples",
+        help="Show available AI service examples",
+        description="""
+Display a list of available QuickScale AI service examples, which can be generated
+using 'quickscale generate-service'. You can filter by service type.
+        """,
+        epilog="""
+Examples:
+  quickscale show-service-examples                                (show all examples)
+  quickscale show-service-examples --type text_processing         (show text processing examples)
+        """,
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        usage="quickscale show-service-examples [--type <example_type>]")
+    examples_parser.add_argument(
+        "--type",
+        choices=["basic", "text_processing", "image_processing", "data_validation"],
+        help="Optional type of examples to show (e.g., text_processing, image_processing)")
+
+
 def setup_help_and_version_parsers(subparsers: argparse._SubParsersAction) -> None:
     """Set up help and version command parsers."""
     help_parser = subparsers.add_parser("help", 
@@ -358,6 +456,7 @@ def main() -> int:
     setup_utility_parsers(subparsers)
     setup_logs_parser(subparsers)
     setup_manage_parser(subparsers)
+    setup_service_generator_parsers(subparsers)
     setup_help_and_version_parsers(subparsers)
     
     # Parse arguments

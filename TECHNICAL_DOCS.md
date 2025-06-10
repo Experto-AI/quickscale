@@ -167,7 +167,27 @@ PROJECT_NAME/
 ├── credits/                # Credit system app (account management, transactions)
 ├── admin_dashboard/        # Admin dashboard app
 ├── stripe_manager/         # Stripe integration app
+├── services/               # AI Services framework app
+│   ├── management/         # Service management commands
+│   │   └── commands/       # Django management commands
+│   │       └── configure_service.py # Service configuration command
+│   ├── templates/          # Service templates
+│   ├── base.py             # BaseService class for AI services
+│   ├── decorators.py       # Service registration decorators
+│   ├── examples.py         # Example service implementations
+│   ├── models.py           # Service models
+│   ├── urls.py             # Service URL routing
+│   └── views.py            # Service views
+├── api/                    # API framework app
+│   ├── templates/          # API documentation templates
+│   ├── utils.py            # API utilities and response handling
+│   ├── urls.py             # API URL routing
+│   └── views.py            # API endpoints and authentication
 ├── docs/                   # Project-specific documentation
+│   ├── service_development_guide.md # Complete AI service development guide
+│   ├── template_customization_examples.md # Template customization examples
+│   ├── styling_guidelines.md # UI/UX styling guidelines
+│   └── auth_templates.md   # Authentication template documentation
 ├── js/                     # JavaScript source files (e.g., Alpine.js components)
 ├── logs/                   # Log files directory
 ├── public/                 # Public-facing pages app (landing, about, contact)
@@ -178,6 +198,8 @@ PROJECT_NAME/
 │   ├── components/         # Reusable UI components (navbar, footer)
 │   ├── credits/            # Credit system templates
 │   ├── admin_dashboard/    # Admin AdminDashboard specific templates
+│   ├── api/                # API documentation templates
+│   ├── services/           # AI service templates
 │   ├── public/             # Public page templates
 │   └── users/              # User profile and settings templates
 ├── tests/                  # Project tests
@@ -227,6 +249,8 @@ flowchart TD
         common_app["Common App"]
         credits_app["Credits App<br>(Accounts, Transactions, Services)"]
         stripe_app["Stripe Manager App<br>(Customer, Products, Webhooks)"]
+        services_app["Services App<br>(AI Framework, BaseService, Examples)"]
+        api_app["API App<br>(Authentication, Endpoints, Documentation)"]
   end
  subgraph Generated["Generated Project"]
     direction TB
@@ -307,6 +331,19 @@ flowchart TD
         payment_utils["utils.py<br>Stripe Utilities"]
         stripe_integration["stripe_manager.py<br>Stripe API Integration"]
   end
+ subgraph Services["services/"]
+    direction TB
+        services_base["base.py<br>BaseService Class"]
+        services_decorators["decorators.py<br>Service Registration"]
+        services_examples["examples.py<br>AI Service Examples"]
+        services_management["management/commands/<br>Service Configuration"]
+  end
+ subgraph API["api/"]
+    direction TB
+        api_views["views.py<br>API Endpoints"]
+        api_utils["utils.py<br>Response Handling & Auth"]
+        api_urls["urls.py<br>API Routing"]
+  end
  subgraph Apps["Django Apps"]
     direction TB
         Users
@@ -315,6 +352,8 @@ flowchart TD
         AdminDashboard
         Credits
         Payments
+        Services
+        API
   end
  subgraph Templates["templates/"]
     direction TB
@@ -821,6 +860,146 @@ To modify the authentication flow:
 3. Review django-allauth documentation for the correct method names
 4. Clear your browser cache and Django cache
 
+## AI SERVICE FRAMEWORK
+
+### Overview
+
+The AI Service Framework enables AI engineers to rapidly create and integrate AI services into the QuickScale platform. The framework provides automatic credit consumption, usage tracking, template generation, and comprehensive development tools.
+
+### Key Components
+
+#### **Service Template Generator**
+- **CLI Command**: `quickscale generate-service service_name --type text_processing`
+- **Service Types**: Basic, text processing, image processing, data validation
+- **Template Features**: Pre-configured BaseService inheritance, credit integration, error handling
+- **Output**: Complete service files with usage examples and documentation
+
+#### **BaseService Class**
+- **Credit Integration**: Automatic credit consumption and validation
+- **Usage Tracking**: Complete audit trail through ServiceUsage model
+- **Error Handling**: Consistent error patterns and validation
+- **Service Registry**: Automatic service registration and discovery
+
+#### **Service Registration System**
+- **Decorator Pattern**: `@register_service("service_name")` for automatic registration
+- **Service Discovery**: Dynamic service instantiation via `create_service_instance()`
+- **Configuration Integration**: Links to Service model for credit costs and status
+- **Runtime Validation**: Pre-flight credit checks and input validation
+
+#### **Example Service Implementations**
+
+**Text Processing Services:**
+- **Sentiment Analysis**: Keyword-based sentiment scoring with confidence metrics
+- **Keyword Extraction**: Frequency-based keyword extraction with relevance scoring
+- **Text Analysis**: Comprehensive text metrics and readability analysis
+
+**Image Processing Services:**
+- **Metadata Extraction**: Image format detection and size estimation
+- **Classification Ready**: Framework for implementing image classification services
+
+**Data Validation Services:**
+- **Multi-format Support**: Text, email, JSON, and generic data validation
+- **Comprehensive Validation**: Format checking, structure validation, and quality scoring
+
+### Service Development Workflow
+
+#### **1. Generate Service Template**
+```bash
+# Generate basic service
+quickscale generate-service my_ai_service
+
+# Generate text processing service
+quickscale generate-service sentiment_analyzer --type text_processing
+
+# Generate image processing service  
+quickscale generate-service image_classifier --type image_processing
+```
+
+#### **2. Implement Service Logic**
+```python
+@register_service("my_service_name")
+class MyAIService(BaseService):
+    """Custom AI service implementation."""
+    
+    def execute_service(self, user: User, **kwargs) -> Dict[str, Any]:
+        """Implement AI logic with automatic credit consumption."""
+        # Validate inputs
+        # Process with AI model/API
+        # Return structured results
+        return {"result": "processed_output"}
+```
+
+#### **3. Configure Service**
+```python
+# Via Django management command
+python manage.py configure_service my_service_name --credit-cost 2.0 --description "AI service description"
+
+# Via Django admin interface
+Service.objects.create(
+    name="my_service_name",
+    description="AI service for processing",
+    credit_cost=2.0,
+    is_active=True
+)
+```
+
+#### **4. Use Service**
+```python
+from services.decorators import create_service_instance
+
+service = create_service_instance("my_service_name")
+result = service.run(user, input_data="your input")
+```
+
+### API Integration
+
+#### **Authentication Framework**
+- **API Key System**: Secure API key generation and validation
+- **Middleware Integration**: Automatic authentication for API endpoints
+- **User Context**: API requests linked to authenticated users for credit tracking
+
+#### **Standardized API Responses**
+- **APIResponse Class**: Consistent response formatting across all endpoints
+- **Error Handling**: Standardized error codes and messages
+- **Validation Framework**: Input validation with detailed error feedback
+
+#### **Example API Endpoints**
+- **Text Processing**: `/api/text/` with operations (analyze, summarize, count)
+- **Credit Validation**: Automatic credit checking before service execution
+- **Usage Tracking**: Complete audit trail for all API usage
+
+### Development Tools
+
+#### **Service Configuration Command**
+```bash
+# Configure new service
+python manage.py configure_service my_service --credit-cost 1.5 --active
+
+# Update existing service
+python manage.py configure_service my_service --update --credit-cost 2.0
+
+# List all services
+python manage.py configure_service --list
+```
+
+#### **Validation and Testing Tools**
+- **Service Validation**: Built-in validation for service implementations
+- **Example Generation**: Automatic usage example generation
+- **Development Guidelines**: Comprehensive best practices documentation
+
+### Integration with Credit System
+
+#### **Automatic Credit Consumption**
+- **Pre-flight Validation**: Credit balance checked before service execution
+- **Priority Consumption**: Subscription credits used before pay-as-you-go credits
+- **Service Costing**: Configurable credit costs per service type
+- **Usage Tracking**: Complete audit trail via ServiceUsage model
+
+#### **Service Management**
+- **Admin Interface**: Real-time service enable/disable via admin dashboard
+- **Usage Analytics**: Service consumption metrics and user engagement tracking
+- **Bulk Operations**: Mass service configuration and management tools
+
 ## STRIPE INTEGRATION
 
 ### Overview
@@ -1160,6 +1339,7 @@ Alpine.js is used for all client-side interactivity and state management:
 - **Payment Processing**: Secure payment processing with receipt generation, audit trails, and multiple payment method support.
 - **Service Management**: Configurable services with credit cost validation, usage tracking, and priority-based consumption.
 - **Service Admin Interface**: Comprehensive service management through both Django admin and custom admin dashboard with real-time enable/disable, usage analytics, and bulk operations.
+- **AI Service Framework**: Complete framework for AI engineers to create and integrate AI services with automated credit consumption, template generation, and comprehensive development tools.
 - **Admin Dashboard**: Built-in admin interface for credit management, user account oversight, service configuration, and Stripe product synchronization.
 - **Modern Frontend**: Alpine.js and HTMX for interactive UI components without complex JavaScript frameworks.
 - **Docker Ready**: Complete Docker configuration for development and production deployment.

@@ -2,10 +2,15 @@
 from typing import Dict, Any, List, Optional, Type
 from .command_base import Command
 from .init_command import InitCommand
-from .project_commands import DestroyProjectCommand
+from .project_commands import DestroyProjectCommand, ProjectManager
 from .service_commands import ServiceUpCommand, ServiceDownCommand, ServiceLogsCommand, ServiceStatusCommand
-from .development_commands import ShellCommand, ManageCommand
+from .development_commands import ShellCommand, ManageCommand, DjangoShellCommand
 from .system_commands import CheckCommand
+from .service_generator_commands import ServiceGeneratorCommand, ValidateServiceCommand, ServiceExamplesCommand
+
+# Existing imports for utility functions and managers
+from quickscale.utils.error_manager import CommandError, handle_command_error
+from quickscale.utils.message_manager import MessageManager
 
 class CommandManager:
     """Manages execution of all available CLI commands."""
@@ -25,11 +30,16 @@ class CommandManager:
             
             # Development commands
             'shell': ShellCommand(),
-            'django-shell': ShellCommand(),  # Uses same command class with different params
+            'django-shell': DjangoShellCommand(),
             'manage': ManageCommand(),
             
             # System commands
             'check': CheckCommand(),
+            
+            # Service generator commands
+            'generate-service': ServiceGeneratorCommand(),
+            'validate-service': ValidateServiceCommand(),
+            'show-service-examples': ServiceExamplesCommand(),
             
             # Info commands - these are handled specially
             'help': None,  # Will be handled by _handle_info_commands
@@ -42,10 +52,6 @@ class CommandManager:
             raise KeyError(f"Command '{command_name}' not found")
             
         command = self._commands[command_name]
-        
-        if command_name == 'django-shell':
-            return command.execute(django_shell=True)
-            
         return command.execute(*args, **kwargs)
     
     def init_project(self, project_name: str) -> None:
@@ -90,6 +96,18 @@ class CommandManager:
         """Check if required tools are available."""
         self.execute_command('check', print_info=print_info)
     
+    def generate_service(self, service_name: str, service_type: str = "basic", output_dir: Optional[str] = None, credit_cost: float = 1.0, description: Optional[str] = None, skip_db_config: bool = False) -> Dict[str, Any]:
+        """Generate a new service template."""
+        return self.execute_command('generate-service', service_name, service_type=service_type, output_dir=output_dir, credit_cost=credit_cost, description=description, skip_db_config=skip_db_config)
+    
+    def validate_service(self, service_file: str, show_tips: bool = False) -> Dict[str, Any]:
+        """Validate a service file."""
+        return self.execute_command('validate-service', service_file, show_tips=show_tips)
+    
+    def show_service_examples(self, example_type: Optional[str] = None) -> Dict[str, Any]:
+        """Show available service examples."""
+        return self.execute_command('show-service-examples', example_type=example_type)
+    
     def get_available_commands(self) -> List[str]:
         """Get list of available command names."""
         return list(self._commands.keys())
@@ -128,9 +146,30 @@ class CommandManager:
             cmd = getattr(args, 'cmd', None)
             return self.open_shell(command=cmd)
         if command_name == 'django-shell':
-            return self.open_shell(django_shell=True)
+            return self.execute_command('django-shell')
         if command_name == 'manage':
             return self.run_manage_command(args.args)
+        return None
+    
+    def _handle_service_generator_commands(self, command_name: str, args: Any) -> Any:
+        """Handle service generator commands."""
+        if command_name == 'generate-service':
+            return self.generate_service(
+                service_name=getattr(args, 'name'),
+                service_type=getattr(args, 'type', 'basic'),
+                output_dir=getattr(args, 'output_dir', None),
+                credit_cost=getattr(args, 'credit_cost', 1.0),
+                description=getattr(args, 'description', None),
+                skip_db_config=getattr(args, 'skip_db_config', False)
+            )
+        if command_name == 'validate-service':
+            return self.execute_command('validate-service', 
+                                        name_or_path=getattr(args, 'name_or_path', None), 
+                                        show_tips=getattr(args, 'tips', False))
+        if command_name == 'show-service-examples':
+            return self.show_service_examples(
+                example_type=getattr(args, 'type', None)
+            )
         return None
     
     def _display_help(self, topic: Optional[str] = None) -> None:
@@ -152,6 +191,9 @@ class CommandManager:
             MessageManager.info("  shell          - Open a shell in the web container")
             MessageManager.info("  django-shell   - Open Django shell")
             MessageManager.info("  manage         - Run Django management commands")
+            MessageManager.info("  generate-service - Generate an AI service template")
+            MessageManager.info("  validate-service - Validate a service file")
+            MessageManager.info("  show-service-examples - Show available AI service examples")
             MessageManager.info("  help           - Show this help message")
             MessageManager.info("  version        - Show the current version of QuickScale")
             MessageManager.info("\nUse 'quickscale help manage' for Django management help.")
@@ -181,6 +223,7 @@ class CommandManager:
             self._handle_service_commands(command_name, args) or
             self._handle_project_commands(command_name, args) or
             self._handle_shell_commands(command_name, args) or
+            self._handle_service_generator_commands(command_name, args) or
             self._handle_info_commands(command_name, args)
         )
         

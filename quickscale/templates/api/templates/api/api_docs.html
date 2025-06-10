@@ -1,0 +1,1041 @@
+{% extends "base.html" %}
+
+{% block title %}API Documentation - {{ project_name }}{% endblock %}
+
+{% block content %}
+<section class="hero is-info is-small">
+    <div class="hero-body">
+        <p class="title">API Documentation</p>
+        <p class="subtitle">Integrate with {{ project_name }} and build AI services for your SaaS</p>
+    </div>
+</section>
+
+<section class="section">
+    <div class="container">
+        <div class="columns">
+            <!-- Main Content -->
+            <div class="column is-9">
+                <!-- Getting Started -->
+                <div class="box">
+                    <h2 class="title is-3">Getting Started</h2>
+                    <div class="content">
+                        <p>The {{ project_name }} API provides programmatic access to our services and enables AI engineers to quickly add new AI services. To get started, you'll need an API key.</p>
+                        
+                        <h3 class="title is-4">Authentication</h3>
+                        <p>All API requests must include your API key in the Authorization header:</p>
+                        <pre class="has-background-light p-3"><code>Authorization: Bearer YOUR_API_KEY</code></pre>
+                        
+                        {% if user.is_authenticated %}
+                        <div class="notification is-success is-light">
+                            <p>
+                                <strong>Ready to get started?</strong> 
+                                <a href="{% url 'users:api_keys' %}" class="button is-primary is-small">
+                                    <span class="icon">
+                                        <i class="fas fa-key"></i>
+                                    </span>
+                                    <span>Manage Your API Keys</span>
+                                </a>
+                            </p>
+                        </div>
+                        {% else %}
+                        <div class="notification is-info is-light">
+                            <p>
+                                <strong>Need an API key?</strong> 
+                                <a href="{% url 'account_signup' %}" class="button is-primary is-small">Sign up</a> 
+                                or 
+                                <a href="{% url 'account_login' %}" class="button is-link is-small">log in</a> 
+                                to generate your API keys.
+                            </p>
+                        </div>
+                        {% endif %}
+                    </div>
+                </div>
+
+                <!-- AI Service Development Guide -->
+                <div class="box">
+                    <h2 class="title is-3">
+                        <span class="icon has-text-primary">
+                            <i class="fas fa-robot"></i>
+                        </span>
+                        AI Service Development Guide
+                    </h2>
+                    <div class="content">
+                        <p><strong>For AI Engineers:</strong> Learn how to create custom AI services that integrate seamlessly with the credit system and provide excellent user experiences.</p>
+                        
+                        <div class="notification is-info is-light">
+                            <p><strong>🚀 Quick Start:</strong> Build and deploy an AI service in under 30 minutes!</p>
+                        </div>
+
+                        <h3 class="title is-4">Step 1: Create Your Service Class</h3>
+                        <p>All AI services inherit from <code>BaseService</code> and use the <code>@register_service</code> decorator:</p>
+                        
+                        <div class="tabs" x-data="{ activeServiceTab: 'sentiment' }">
+                            <ul>
+                                <li :class="{ 'is-active': activeServiceTab === 'sentiment' }">
+                                    <a @click="activeServiceTab = 'sentiment'">Sentiment Analysis</a>
+                                </li>
+                                <li :class="{ 'is-active': activeServiceTab === 'keyword' }">
+                                    <a @click="activeServiceTab = 'keyword'">Keyword Extraction</a>
+                                </li>
+                                <li :class="{ 'is-active': activeServiceTab === 'image' }">
+                                    <a @click="activeServiceTab = 'image'">Image Analysis</a>
+                                </li>
+                                <li :class="{ 'is-active': activeServiceTab === 'external' }">
+                                    <a @click="activeServiceTab = 'external'">External API</a>
+                                </li>
+                            </ul>
+                        </div>
+
+                        <div x-show="activeServiceTab === 'sentiment'">
+                            <h4 class="title is-5">Text Sentiment Analysis Service</h4>
+                            <pre class="has-background-light p-3"><code>from services.base import BaseService
+from services.decorators import register_service
+from django.contrib.auth import get_user_model
+
+User = get_user_model()
+
+@register_service("text_sentiment_analysis")
+class TextSentimentAnalysisService(BaseService):
+    """Advanced text sentiment analysis service."""
+    
+    def execute_service(self, user: User, text: str = "", **kwargs):
+        """Analyze sentiment of text using AI algorithms."""
+        if not text or not text.strip():
+            raise ValueError("Text input is required and cannot be empty")
+        
+        # AI sentiment analysis logic here
+        positive_words = {'excellent', 'amazing', 'wonderful', 'great', 'love'}
+        negative_words = {'terrible', 'awful', 'horrible', 'bad', 'hate'}
+        
+        words = text.lower().split()
+        total_words = len(words)
+        
+        positive_count = sum(1 for word in words if word in positive_words)
+        negative_count = sum(1 for word in words if word in negative_words)
+        
+        sentiment_score = (positive_count - negative_count) / max(total_words, 1)
+        
+        if sentiment_score > 0.1:
+            sentiment_label = "positive"
+        elif sentiment_score < -0.1:
+            sentiment_label = "negative"
+        else:
+            sentiment_label = "neutral"
+        
+        confidence = min(0.9, max(0.3, (positive_count + negative_count) / max(total_words, 1) * 2))
+        
+        return {
+            'sentiment': {
+                'label': sentiment_label,
+                'score': round(sentiment_score, 3),
+                'confidence': round(confidence, 3)
+            },
+            'analysis': {
+                'total_words': total_words,
+                'positive_words_found': positive_count,
+                'negative_words_found': negative_count
+            },
+            'metadata': {
+                'service_name': 'text_sentiment_analysis',
+                'version': '1.0'
+            }
+        }</code></pre>
+                        </div>
+
+                        <div x-show="activeServiceTab === 'keyword'">
+                            <h4 class="title is-5">Keyword Extraction Service</h4>
+                            <pre class="has-background-light p-3"><code>@register_service("text_keyword_extractor")
+class TextKeywordExtractorService(BaseService):
+    """Extract important keywords from text."""
+    
+    def execute_service(self, user: User, text: str = "", max_keywords: int = 10, **kwargs):
+        """Extract keywords using frequency analysis."""
+        if not text or not text.strip():
+            raise ValueError("Text input is required and cannot be empty")
+        
+        # Stop words to filter out
+        stop_words = {
+            'the', 'a', 'an', 'and', 'or', 'but', 'in', 'on', 'at', 'to', 'for', 'of', 
+            'with', 'by', 'is', 'are', 'was', 'were', 'this', 'that', 'it', 'they'
+        }
+        
+        # Process and filter text
+        words = text.lower().replace('.', '').replace(',', '').split()
+        filtered_words = [word for word in words if word not in stop_words and len(word) > 2]
+        
+        # Count frequencies
+        word_freq = {}
+        for word in filtered_words:
+            word_freq[word] = word_freq.get(word, 0) + 1
+        
+        # Get top keywords
+        top_keywords = sorted(word_freq.items(), key=lambda x: x[1], reverse=True)[:max_keywords]
+        
+        return {
+            'keywords': [
+                {
+                    'word': word,
+                    'frequency': freq,
+                    'relevance_score': round(freq / len(filtered_words), 3)
+                }
+                for word, freq in top_keywords
+            ],
+            'analysis': {
+                'total_words': len(words),
+                'unique_words': len(set(words)),
+                'filtered_words': len(filtered_words)
+            },
+            'metadata': {
+                'service_name': 'text_keyword_extractor',
+                'max_keywords_requested': max_keywords,
+                'keywords_found': len(top_keywords)
+            }
+        }</code></pre>
+                        </div>
+
+                        <div x-show="activeServiceTab === 'image'">
+                            <h4 class="title is-5">Image Analysis Service</h4>
+                            <pre class="has-background-light p-3"><code>@register_service("image_metadata_extractor")
+class ImageMetadataExtractorService(BaseService):
+    """Extract metadata from image data."""
+    
+    def execute_service(self, user: User, image_data=None, **kwargs):
+        """Extract metadata from image."""
+        if not image_data:
+            raise ValueError("Image data is required for processing")
+        
+        # Analyze image data
+        data_size = len(image_data)
+        
+        # Detect format from headers
+        if isinstance(image_data, bytes):
+            if image_data.startswith(b'\xFF\xD8\xFF'):
+                format_hint = 'jpeg'
+            elif image_data.startswith(b'\x89PNG\r\n\x1a\n'):
+                format_hint = 'png'
+            elif image_data.startswith(b'GIF8'):
+                format_hint = 'gif'
+            else:
+                format_hint = 'unknown'
+        else:
+            format_hint = 'base64_encoded'
+        
+        # Estimate size category
+        if data_size < 50000:
+            size_category = 'small'
+            estimated_dimensions = '400x300'
+        elif data_size < 500000:
+            size_category = 'medium'
+            estimated_dimensions = '800x600'
+        else:
+            size_category = 'large'
+            estimated_dimensions = '1920x1080'
+        
+        return {
+            'metadata': {
+                'format': format_hint,
+                'file_size_bytes': data_size,
+                'size_category': size_category,
+                'estimated_dimensions': estimated_dimensions
+            },
+            'analysis': {
+                'compression_ratio': round(data_size / 1024, 2),
+                'quality_estimate': 'high' if data_size > 100000 else 'medium'
+            }
+        }</code></pre>
+                        </div>
+
+                        <div x-show="activeServiceTab === 'external'">
+                            <h4 class="title is-5">External API Integration Service</h4>
+                            <pre class="has-background-light p-3"><code>import requests
+from requests.adapters import HTTPAdapter
+from urllib3.util.retry import Retry
+
+@register_service("external_ai_processor")
+class ExternalAIProcessorService(BaseService):
+    """Service that integrates with external AI APIs."""
+    
+    def __init__(self, service_name: str):
+        super().__init__(service_name)
+        # Configure session with retries
+        self.session = requests.Session()
+        retry_strategy = Retry(
+            total=3,
+            backoff_factor=1,
+            status_forcelist=[429, 500, 502, 503, 504]
+        )
+        adapter = HTTPAdapter(max_retries=retry_strategy)
+        self.session.mount("http://", adapter)
+        self.session.mount("https://", adapter)
+    
+    def execute_service(self, user: User, prompt: str = "", **kwargs):
+        """Process data using external AI service."""
+        if not prompt:
+            raise ValueError("Prompt is required for AI processing")
+        
+        try:
+            response = self.session.post(
+                "https://api.openai.com/v1/completions",  # Example API
+                headers={
+                    "Authorization": f"Bearer {settings.OPENAI_API_KEY}",
+                    "Content-Type": "application/json"
+                },
+                json={
+                    "model": "text-davinci-003",
+                    "prompt": prompt,
+                    "max_tokens": 150,
+                    "temperature": 0.7
+                },
+                timeout=30
+            )
+            response.raise_for_status()
+            
+            result = response.json()
+            
+            return {
+                'response': result.get('choices', [{}])[0].get('text', '').strip(),
+                'usage': result.get('usage', {}),
+                'model': result.get('model', 'text-davinci-003'),
+                'metadata': {
+                    'external_api': 'openai',
+                    'prompt_length': len(prompt),
+                    'response_time_ms': response.elapsed.total_seconds() * 1000
+                }
+            }
+            
+        except requests.exceptions.RequestException as e:
+            raise RuntimeError(f"External AI service error: {str(e)}")
+        except Exception as e:
+            raise RuntimeError(f"Processing failed: {str(e)}")</code></pre>
+                        </div>
+
+                        <h3 class="title is-4">Step 2: Register Your Service in Database</h3>
+                        <p>Create a Service record in the Django admin or using a management command:</p>
+                        <pre class="has-background-light p-3"><code># In Django shell or management command
+from credits.models import Service
+
+Service.objects.create(
+    name="text_sentiment_analysis",  # Must match @register_service name
+    description="Advanced AI-powered sentiment analysis for text content",
+    credit_cost=1.0,  # How many credits this service costs
+    is_active=True
+)</code></pre>
+
+                        <h3 class="title is-4">Step 3: Use Your Service</h3>
+                        <p>Once registered, your service is automatically available through the API and web interface:</p>
+                        <pre class="has-background-light p-3"><code># Using the service programmatically
+from services.decorators import create_service_instance
+
+service = create_service_instance("text_sentiment_analysis")
+result = service.run(user, text="This product is amazing!")
+
+# API usage (cURL)
+curl -X POST "https://api.{{ request.get_host }}/v1/services/1/use" \
+     -H "Authorization: Bearer YOUR_API_KEY" \
+     -H "Content-Type: application/json" \
+     -d '{"input_data": {"text": "This product is amazing!"}}'</code></pre>
+
+                        <div class="notification is-success is-light">
+                            <p><strong>🎉 That's it!</strong> Your AI service is now live and integrated with the credit system, user management, and API.</p>
+                        </div>
+
+                        <h3 class="title is-4">Best Practices for AI Services</h3>
+                        <div class="content">
+                            <h4 class="title is-5">Input Validation</h4>
+                            <ul>
+                                <li>Always validate inputs early with clear error messages</li>
+                                <li>Set reasonable limits (text length, file size, etc.)</li>
+                                <li>Use type hints for better code clarity</li>
+                            </ul>
+
+                            <h4 class="title is-5">Error Handling</h4>
+                            <ul>
+                                <li>Handle external API failures gracefully</li>
+                                <li>Don't expose internal implementation details</li>
+                                <li>Log errors for debugging while returning user-friendly messages</li>
+                            </ul>
+
+                            <h4 class="title is-5">Performance Optimization</h4>
+                            <ul>
+                                <li>Cache expensive operations using Django's cache framework</li>
+                                <li>Use connection pooling for external APIs</li>
+                                <li>Consider async processing for long-running tasks</li>
+                            </ul>
+
+                            <h4 class="title is-5">Credit Cost Guidelines</h4>
+                            <ul>
+                                <li><strong>Simple operations (keyword extraction):</strong> 0.5-1.0 credits</li>
+                                <li><strong>Text analysis (sentiment, classification):</strong> 1.0-2.0 credits</li>
+                                <li><strong>Image processing:</strong> 2.0-5.0 credits</li>
+                                <li><strong>External AI API calls:</strong> 5.0-10.0 credits</li>
+                            </ul>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Base URL -->
+                <div class="box">
+                    <h2 class="title is-3">Base URL</h2>
+                    <div class="content">
+                        <p>All API requests should be made to:</p>
+                        <pre class="has-background-light p-3"><code>https://{{ request.get_host }}/api/v1/</code></pre>
+                        
+                        <div class="notification is-warning is-light">
+                            <p><strong>Note:</strong> This is a demonstration API with limited endpoints. The examples below show the intended API structure for a complete implementation.</p>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Response Format -->
+                <div class="box">
+                    <h2 class="title is-3">Response Format</h2>
+                    <div class="content">
+                        <p>All responses are returned in JSON format with the following structure:</p>
+                        
+                        <h4 class="title is-5">Success Response</h4>
+                        <pre class="has-background-light p-3"><code>{
+  "success": true,
+  "data": {
+    // Response data here
+  },
+  "message": "Operation completed successfully"
+}</code></pre>
+
+                        <h4 class="title is-5">Error Response</h4>
+                        <pre class="has-background-light p-3"><code>{
+  "success": false,
+  "error": {
+    "code": "ERROR_CODE",
+    "message": "Human-readable error description"
+  }
+}</code></pre>
+                    </div>
+                </div>
+
+                <!-- HTTP Status Codes -->
+                <div class="box">
+                    <h2 class="title is-3">HTTP Status Codes</h2>
+                    <div class="content">
+                        <div class="table-container">
+                            <table class="table is-striped is-fullwidth">
+                                <thead>
+                                    <tr>
+                                        <th>Status Code</th>
+                                        <th>Description</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    <tr>
+                                        <td><code class="has-background-success has-text-white">200</code></td>
+                                        <td>Success - Request completed successfully</td>
+                                    </tr>
+                                    <tr>
+                                        <td><code class="has-background-success has-text-white">201</code></td>
+                                        <td>Created - Resource created successfully</td>
+                                    </tr>
+                                    <tr>
+                                        <td><code class="has-background-warning">400</code></td>
+                                        <td>Bad Request - Invalid request parameters</td>
+                                    </tr>
+                                    <tr>
+                                        <td><code class="has-background-warning">401</code></td>
+                                        <td>Unauthorized - Invalid or missing API key</td>
+                                    </tr>
+                                    <tr>
+                                        <td><code class="has-background-warning">403</code></td>
+                                        <td>Forbidden - Insufficient credits or permissions</td>
+                                    </tr>
+                                    <tr>
+                                        <td><code class="has-background-warning">404</code></td>
+                                        <td>Not Found - Resource not found</td>
+                                    </tr>
+                                    <tr>
+                                        <td><code class="has-background-warning">429</code></td>
+                                        <td>Too Many Requests - Rate limit exceeded</td>
+                                    </tr>
+                                    <tr>
+                                        <td><code class="has-background-danger has-text-white">500</code></td>
+                                        <td>Internal Server Error - Server error occurred</td>
+                                    </tr>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- API Endpoints -->
+                <div class="box">
+                    <h2 class="title is-3">API Endpoints</h2>
+                    <div class="content">
+                        
+                        <!-- Currently Implemented -->
+                        <div class="notification is-info is-light">
+                            <h4 class="title is-5">🚀 Currently Implemented Endpoints</h4>
+                            <p>The following endpoints are available in the current implementation:</p>
+                            
+                            <div class="box is-light">
+                                <h5 class="title is-6">
+                                    <span class="tag is-success">POST</span>
+                                    <code>/text/process</code>
+                                </h5>
+                                <p>Process text with various AI operations (analyze, summarize, count_words, count_characters).</p>
+                                
+                                <h6 class="title is-6">Request Body Example</h6>
+                                <pre class="has-background-light p-3"><code>{
+  "text": "Your text content here",
+  "operation": "analyze"
+}</code></pre>
+
+                                <h6 class="title is-6">Example Response</h6>
+                                <pre class="has-background-light p-3"><code>{
+  "success": true,
+  "status": 200,
+  "message": "Text analyze completed successfully",
+  "data": {
+    "operation": "analyze",
+    "credits_consumed": "2.0",
+    "result": {
+      "word_count": 25,
+      "character_count": 150,
+      "sentence_count": 3,
+      "average_words_per_sentence": 8.33
+    }
+  }
+}</code></pre>
+                            </div>
+                        </div>
+                        
+                        <!-- Future API Structure -->
+                        <h3 class="title is-4">🔮 Future API Structure (Demonstration)</h3>
+                        <p>The following shows the planned API structure for service framework integration:</p>
+                        
+                        <!-- Account Information -->
+                        <h3 class="title is-4">Account Information</h3>
+                        
+                        <div class="box is-light">
+                            <h4 class="title is-5">
+                                <span class="tag is-info">GET</span>
+                                <code>/account/profile</code>
+                            </h4>
+                            <p>Retrieve your account profile and credit balance.</p>
+                            
+                            <h5 class="title is-6">Example Response</h5>
+                            <pre class="has-background-light p-3"><code>{
+  "success": true,
+  "data": {
+    "user": {
+      "email": "user@example.com",
+      "full_name": "John Doe",
+      "created_at": "2024-01-15T10:30:00Z"
+    },
+    "credit_balance": {
+      "total": 1500.00,
+      "subscription": 1000.00,
+      "pay_as_you_go": 500.00
+    }
+  }
+}</code></pre>
+                        </div>
+
+                        <!-- Services -->
+                        <h3 class="title is-4">Services</h3>
+                        
+                        <div class="box is-light">
+                            <h4 class="title is-5">
+                                <span class="tag is-info">GET</span>
+                                <code>/services</code>
+                            </h4>
+                            <p>List all available services and their credit costs.</p>
+                            
+                            <h5 class="title is-6">Example Response</h5>
+                            <pre class="has-background-light p-3"><code>{
+  "success": true,
+  "data": {
+    "services": [
+      {
+        "id": 1,
+        "name": "text_sentiment_analysis",
+        "description": "Advanced AI-powered sentiment analysis",
+        "credit_cost": 1.0,
+        "is_active": true
+      },
+      {
+        "id": 2,
+        "name": "image_metadata_extractor",
+        "description": "AI-powered image analysis and metadata extraction",
+        "credit_cost": 2.5,
+        "is_active": true
+      }
+    ]
+  }
+}</code></pre>
+                        </div>
+
+                        <div class="box is-light">
+                            <h4 class="title is-5">
+                                <span class="tag is-success">POST</span>
+                                <code>/services/{service_id}/use</code>
+                            </h4>
+                            <p>Use a service (consumes credits based on service cost).</p>
+                            
+                            <h5 class="title is-6">Request Body for Text Analysis</h5>
+                            <pre class="has-background-light p-3"><code>{
+  "input_data": {
+    "text": "I absolutely love this new AI service! It's incredibly helpful."
+  }
+}</code></pre>
+
+                            <h5 class="title is-6">Example Response for Sentiment Analysis</h5>
+                            <pre class="has-background-light p-3"><code>{
+  "success": true,
+  "data": {
+    "result": {
+      "sentiment": {
+        "label": "positive",
+        "score": 0.267,
+        "confidence": 0.6
+      },
+      "analysis": {
+        "total_words": 12,
+        "positive_words_found": 2,
+        "negative_words_found": 0
+      },
+      "metadata": {
+        "service_name": "text_sentiment_analysis",
+        "version": "1.0"
+      }
+    },
+    "credits_consumed": 1.0,
+    "remaining_balance": 1499.0
+  }
+}</code></pre>
+
+                            <h5 class="title is-6">Request Body for Keyword Extraction</h5>
+                            <pre class="has-background-light p-3"><code>{
+  "input_data": {
+    "text": "Artificial intelligence and machine learning are transforming modern technology",
+    "max_keywords": 5
+  }
+}</code></pre>
+
+                            <h5 class="title is-6">Example Response for Keyword Extraction</h5>
+                            <pre class="has-background-light p-3"><code>{
+  "success": true,
+  "data": {
+    "result": {
+      "keywords": [
+        {"word": "artificial", "frequency": 1, "relevance_score": 0.111},
+        {"word": "intelligence", "frequency": 1, "relevance_score": 0.111},
+        {"word": "machine", "frequency": 1, "relevance_score": 0.111},
+        {"word": "learning", "frequency": 1, "relevance_score": 0.111},
+        {"word": "technology", "frequency": 1, "relevance_score": 0.111}
+      ],
+      "analysis": {
+        "total_words": 9,
+        "unique_words": 9,
+        "filtered_words": 9
+      }
+    },
+    "credits_consumed": 1.0,
+    "remaining_balance": 1498.0
+  }
+}</code></pre>
+                        </div>
+
+                        <!-- Credit Management -->
+                        <h3 class="title is-4">Credit Management</h3>
+                        
+                        <div class="box is-light">
+                            <h4 class="title is-5">
+                                <span class="tag is-info">GET</span>
+                                <code>/credits/balance</code>
+                            </h4>
+                            <p>Get current credit balance with detailed breakdown.</p>
+                            
+                            <h5 class="title is-6">Example Response</h5>
+                            <pre class="has-background-light p-3"><code>{
+  "success": true,
+  "data": {
+    "total_balance": 1500.00,
+    "subscription_credits": {
+      "amount": 1000.00,
+      "expires_at": "2024-02-15T23:59:59Z"
+    },
+    "pay_as_you_go_credits": {
+      "amount": 500.00,
+      "expires_at": null
+    }
+  }
+}</code></pre>
+                        </div>
+
+                        <div class="box is-light">
+                            <h4 class="title is-5">
+                                <span class="tag is-info">GET</span>
+                                <code>/credits/transactions</code>
+                            </h4>
+                            <p>List recent credit transactions with pagination.</p>
+                            
+                            <h5 class="title is-6">Query Parameters</h5>
+                            <ul>
+                                <li><code>page</code> - Page number (default: 1)</li>
+                                <li><code>limit</code> - Items per page (default: 20, max: 100)</li>
+                                <li><code>type</code> - Filter by transaction type (purchase, subscription, consumption, admin)</li>
+                            </ul>
+                            
+                            <h5 class="title is-6">Example Response</h5>
+                            <pre class="has-background-light p-3"><code>{
+  "success": true,
+  "data": {
+    "transactions": [
+      {
+        "id": 123,
+        "amount": -1.0,
+        "description": "Used service: text_sentiment_analysis",
+        "type": "consumption",
+        "created_at": "2024-01-20T14:30:00Z"
+      }
+    ],
+    "pagination": {
+      "current_page": 1,
+      "total_pages": 5,
+      "total_items": 95
+    }
+  }
+}</code></pre>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Rate Limiting -->
+                <div class="box">
+                    <h2 class="title is-3">Rate Limiting</h2>
+                    <div class="content">
+                        <p>API requests are subject to rate limiting to ensure fair usage:</p>
+                        <ul>
+                            <li><strong>Free Tier:</strong> 100 requests per hour</li>
+                            <li><strong>Paid Plans:</strong> 1,000+ requests per hour (varies by plan)</li>
+                        </ul>
+                        
+                        <p>Rate limit information is included in response headers:</p>
+                        <pre class="has-background-light p-3"><code>X-RateLimit-Limit: 1000
+X-RateLimit-Remaining: 999
+X-RateLimit-Reset: 1640995200</code></pre>
+                    </div>
+                </div>
+
+                <!-- SDKs and Libraries -->
+                <div class="box">
+                    <h2 class="title is-3">SDKs and Code Examples</h2>
+                    <div class="content">
+                        
+                        <div class="tabs" x-data="{ activeTab: 'curl' }">
+                            <ul>
+                                <li :class="{ 'is-active': activeTab === 'curl' }">
+                                    <a @click="activeTab = 'curl'">cURL</a>
+                                </li>
+                                <li :class="{ 'is-active': activeTab === 'python' }">
+                                    <a @click="activeTab = 'python'">Python</a>
+                                </li>
+                                <li :class="{ 'is-active': activeTab === 'javascript' }">
+                                    <a @click="activeTab = 'javascript'">JavaScript</a>
+                                </li>
+                                <li :class="{ 'is-active': activeTab === 'php' }">
+                                    <a @click="activeTab = 'php'">PHP</a>
+                                </li>
+                            </ul>
+                        </div>
+
+                        <div x-show="activeTab === 'curl'">
+                            <h4 class="title is-5">cURL Examples</h4>
+                            <pre class="has-background-light p-3"><code># Currently implemented endpoint - Text processing
+curl -X POST "https://{{ request.get_host }}/api/v1/text/process" \
+     -H "Authorization: Bearer YOUR_API_KEY" \
+     -H "Content-Type: application/json" \
+     -d '{"text": "This AI service is fantastic!", "operation": "analyze"}'
+
+# Future endpoints (demonstration) - Account profile  
+curl -X GET "https://{{ request.get_host }}/api/v1/account/profile" \
+     -H "Authorization: Bearer YOUR_API_KEY" \
+     -H "Content-Type: application/json"
+
+# Future endpoints (demonstration) - Service usage
+curl -X POST "https://{{ request.get_host }}/api/v1/services/1/use" \
+     -H "Authorization: Bearer YOUR_API_KEY" \
+     -H "Content-Type: application/json" \
+     -d '{"input_data": {"text": "Machine learning and artificial intelligence"}}'</code></pre>
+                        </div>
+
+                        <div x-show="activeTab === 'python'">
+                            <h4 class="title is-5">Python SDK Example</h4>
+                            <pre class="has-background-light p-3"><code>import requests
+import json
+
+class QuickScaleAPI:
+    def __init__(self, api_key, base_url="https://{{ request.get_host }}/api/v1"):
+        self.api_key = api_key
+        self.base_url = base_url
+        self.headers = {
+            "Authorization": f"Bearer {api_key}",
+            "Content-Type": "application/json"
+        }
+    
+    def get_profile(self):
+        """Get account profile and credit balance."""
+        response = requests.get(f"{self.base_url}/account/profile", headers=self.headers)
+        return response.json()
+    
+    def analyze_sentiment(self, text):
+        """Analyze sentiment of text."""
+        data = {"input_data": {"text": text}}
+        response = requests.post(f"{self.base_url}/services/1/use", 
+                               json=data, headers=self.headers)
+        return response.json()
+    
+    def extract_keywords(self, text, max_keywords=10):
+        """Extract keywords from text."""
+        data = {"input_data": {"text": text, "max_keywords": max_keywords}}
+        response = requests.post(f"{self.base_url}/services/2/use", 
+                               json=data, headers=self.headers)
+        return response.json()
+
+# Usage example
+api = QuickScaleAPI("YOUR_API_KEY")
+
+# Get account info
+profile = api.get_profile()
+print(f"Credit balance: {profile['data']['credit_balance']['total']}")
+
+# Analyze sentiment
+sentiment_result = api.analyze_sentiment("I love this AI service!")
+print(f"Sentiment: {sentiment_result['data']['result']['sentiment']['label']}")
+
+# Extract keywords
+keywords_result = api.extract_keywords("Artificial intelligence and machine learning")
+for keyword in keywords_result['data']['result']['keywords']:
+    print(f"{keyword['word']}: {keyword['relevance_score']}")</code></pre>
+                        </div>
+
+                        <div x-show="activeTab === 'javascript'">
+                            <h4 class="title is-5">JavaScript/Node.js Example</h4>
+                            <pre class="has-background-light p-3"><code>class QuickScaleAPI {
+    constructor(apiKey, baseUrl = "https://{{ request.get_host }}/api/v1") {
+        this.apiKey = apiKey;
+        this.baseUrl = baseUrl;
+        this.headers = {
+            "Authorization": `Bearer ${apiKey}`,
+            "Content-Type": "application/json"
+        };
+    }
+
+    async getProfile() {
+        const response = await fetch(`${this.baseUrl}/account/profile`, {
+            method: 'GET',
+            headers: this.headers
+        });
+        return await response.json();
+    }
+
+    async analyzeSentiment(text) {
+        const response = await fetch(`${this.baseUrl}/services/1/use`, {
+            method: 'POST',
+            headers: this.headers,
+            body: JSON.stringify({ input_data: { text } })
+        });
+        return await response.json();
+    }
+
+    async extractKeywords(text, maxKeywords = 10) {
+        const response = await fetch(`${this.baseUrl}/services/2/use`, {
+            method: 'POST',
+            headers: this.headers,
+            body: JSON.stringify({ 
+                input_data: { text, max_keywords: maxKeywords } 
+            })
+        });
+        return await response.json();
+    }
+}
+
+// Usage example
+const api = new QuickScaleAPI("YOUR_API_KEY");
+
+// Get account info
+api.getProfile().then(profile => {
+    console.log(`Credit balance: ${profile.data.credit_balance.total}`);
+});
+
+// Analyze sentiment
+api.analyzeSentiment("This AI service is amazing!").then(result => {
+    console.log(`Sentiment: ${result.data.result.sentiment.label}`);
+});
+
+// Extract keywords
+api.extractKeywords("Machine learning and artificial intelligence").then(result => {
+    result.data.result.keywords.forEach(keyword => {
+        console.log(`${keyword.word}: ${keyword.relevance_score}`);
+    });
+});</code></pre>
+                        </div>
+
+                        <div x-show="activeTab === 'php'">
+                            <h4 class="title is-5">PHP Example</h4>
+                            <pre class="has-background-light p-3"><code><?php
+class QuickScaleAPI {
+    private $apiKey;
+    private $baseUrl;
+    private $headers;
+    
+    public function __construct($apiKey, $baseUrl = "https://{{ request.get_host }}/api/v1") {
+        $this->apiKey = $apiKey;
+        $this->baseUrl = $baseUrl;
+        $this->headers = [
+            "Authorization: Bearer " . $apiKey,
+            "Content-Type: application/json"
+        ];
+    }
+    
+    public function getProfile() {
+        $ch = curl_init();
+        curl_setopt($ch, CURLOPT_URL, $this->baseUrl . "/account/profile");
+        curl_setopt($ch, CURLOPT_HTTPHEADER, $this->headers);
+        curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+        $response = curl_exec($ch);
+        curl_close($ch);
+        return json_decode($response, true);
+    }
+    
+    public function analyzeSentiment($text) {
+        $data = json_encode(['input_data' => ['text' => $text]]);
+        
+        $ch = curl_init();
+        curl_setopt($ch, CURLOPT_URL, $this->baseUrl . "/services/1/use");
+        curl_setopt($ch, CURLOPT_POST, true);
+        curl_setopt($ch, CURLOPT_POSTFIELDS, $data);
+        curl_setopt($ch, CURLOPT_HTTPHEADER, $this->headers);
+        curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+        $response = curl_exec($ch);
+        curl_close($ch);
+        return json_decode($response, true);
+    }
+    
+    public function extractKeywords($text, $maxKeywords = 10) {
+        $data = json_encode([
+            'input_data' => [
+                'text' => $text,
+                'max_keywords' => $maxKeywords
+            ]
+        ]);
+        
+        $ch = curl_init();
+        curl_setopt($ch, CURLOPT_URL, $this->baseUrl . "/services/2/use");
+        curl_setopt($ch, CURLOPT_POST, true);
+        curl_setopt($ch, CURLOPT_POSTFIELDS, $data);
+        curl_setopt($ch, CURLOPT_HTTPHEADER, $this->headers);
+        curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+        $response = curl_exec($ch);
+        curl_close($ch);
+        return json_decode($response, true);
+    }
+}
+
+// Usage example
+$api = new QuickScaleAPI("YOUR_API_KEY");
+
+// Get account info
+$profile = $api->getProfile();
+echo "Credit balance: " . $profile['data']['credit_balance']['total'] . "\n";
+
+// Analyze sentiment
+$sentimentResult = $api->analyzeSentiment("This AI service is fantastic!");
+echo "Sentiment: " . $sentimentResult['data']['result']['sentiment']['label'] . "\n";
+
+// Extract keywords
+$keywordsResult = $api->extractKeywords("Machine learning and artificial intelligence");
+foreach ($keywordsResult['data']['result']['keywords'] as $keyword) {
+    echo $keyword['word'] . ": " . $keyword['relevance_score'] . "\n";
+}
+?></code></pre>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Sidebar -->
+            <div class="column is-3">
+                <div class="box">
+                    <h3 class="title is-5">Quick Links</h3>
+                    <div class="content">
+                        <ul>
+                            {% if user.is_authenticated %}
+                            <li><a href="{% url 'users:api_keys' %}">Manage API Keys</a></li>
+                            <li><a href="{% url 'users:profile' %}">Account Profile</a></li>
+                            <li><a href="{% url 'services:list' %}">Available Services</a></li>
+                            {% else %}
+                            <li><a href="{% url 'account_signup' %}">Sign Up</a></li>
+                            <li><a href="{% url 'account_login' %}">Log In</a></li>
+                            {% endif %}
+                            <li><a href="{% url 'public:contact' %}">Contact Support</a></li>
+                        </ul>
+                    </div>
+                </div>
+
+                <div class="box">
+                    <h3 class="title is-5">Service Development</h3>
+                    <div class="content">
+                        <p>Ready to build your own AI services? Our framework makes it easy!</p>
+                        <ul>
+                            <li>📚 <strong>5 min setup:</strong> Create and deploy services quickly</li>
+                            <li>💳 <strong>Auto credit integration:</strong> Built-in billing system</li>
+                            <li>🔒 <strong>Secure by default:</strong> Authentication and validation</li>
+                            <li>📊 <strong>Usage tracking:</strong> Analytics and monitoring</li>
+                        </ul>
+                        <a href="{% url 'public:contact' %}" class="button is-primary is-fullwidth">
+                            <span class="icon">
+                                <i class="fas fa-rocket"></i>
+                            </span>
+                            <span>Start Building</span>
+                        </a>
+                    </div>
+                </div>
+
+                <div class="box">
+                    <h3 class="title is-5">Need Help?</h3>
+                    <div class="content">
+                        <p>If you have questions about the API or need assistance integrating with our services, please don't hesitate to contact our support team.</p>
+                        <a href="{% url 'public:contact' %}" class="button is-info is-fullwidth">
+                            <span class="icon">
+                                <i class="fas fa-envelope"></i>
+                            </span>
+                            <span>Contact Support</span>
+                        </a>
+                    </div>
+                </div>
+
+                <div class="box">
+                    <h3 class="title is-5">API Status</h3>
+                    <div class="content">
+                        <div class="level">
+                            <div class="level-left">
+                                <span>API Status:</span>
+                            </div>
+                            <div class="level-right">
+                                <span class="tag is-success">Operational</span>
+                            </div>
+                        </div>
+                        <div class="level">
+                            <div class="level-left">
+                                <span>Response Time:</span>
+                            </div>
+                            <div class="level-right">
+                                <span class="tag is-info">~150ms</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</section>
+
+{% endblock %}

@@ -14,32 +14,22 @@ from .command_utils import DOCKER_COMPOSE_COMMAND
 class ShellCommand(Command):
     """Opens an interactive shell in the web container."""
     
-    def execute(self, django_shell: bool = False, command: Optional[str] = None) -> None:
+    def execute(self, command: Optional[str] = None) -> None:
         """Enter a shell in the web container with optional command execution."""
         state = ProjectManager.get_project_state()
         # If we're in help mode or not in a project directory, show usage
         if not state['has_project'] or command == '--help':
-            if not django_shell:
-                print("usage: quickscale shell [options]")
-                print("\nOpen an interactive bash shell in the web container.")
-                print("\nOptions:")
-                print("  -c, --cmd <command>   Run this command in the container instead of starting an interactive shell")
-                print("\nExamples:")
-                print("  quickscale shell              # Open an interactive bash shell")
-                print("  quickscale shell -c 'ls -la'  # Run 'ls -la' command in the web container")
-            else:
-                print("usage: quickscale django-shell")
-                print("\nOpen an interactive Django shell in the web container.")
+            print("usage: quickscale shell [options]")
+            print("\nOpen an interactive bash shell in the web container.")
+            print("\nOptions:")
+            print("  -c, --cmd <command>   Run this command in the container instead of starting an interactive shell")
+            print("\nExamples:")
+            print("  quickscale shell              # Open an interactive bash shell")
+            print("  quickscale shell -c 'ls -la'  # Run 'ls -la' command in the web container")
             return
         
         try:
-            if django_shell:
-                print("Starting Django shell...")
-                subprocess.run(
-                    [DOCKER_COMPOSE_COMMAND, "exec", "web", "python", "manage.py", "shell"],
-                    check=True
-                )
-            elif command:
+            if command:
                 print(f"Running command: {command}")
                 cmd_parts = [DOCKER_COMPOSE_COMMAND, "exec", "web", "bash", "-c", command]
                 subprocess.run(cmd_parts, check=True)
@@ -47,7 +37,7 @@ class ShellCommand(Command):
                 print("Starting bash shell...")
                 subprocess.run([DOCKER_COMPOSE_COMMAND, "exec", "web", "bash"], check=True)
         except subprocess.SubprocessError as e:
-            context = {"django_shell": django_shell}
+            context = {}
             if command:
                 context["command"] = command
             
@@ -58,6 +48,33 @@ class ShellCommand(Command):
             )
         except KeyboardInterrupt:
             print("\nExited shell.")
+
+
+class DjangoShellCommand(Command):
+    """Opens the Django interactive shell in the web container."""
+    
+    def execute(self) -> None:
+        """Enter Django shell in the web container."""
+        state = ProjectManager.get_project_state()
+        if not state['has_project']:
+            print("usage: quickscale django-shell")
+            print("\nOpen an interactive Django shell in the web container.")
+            return
+        
+        try:
+            print("Starting Django shell...")
+            subprocess.run(
+                [DOCKER_COMPOSE_COMMAND, "exec", "web", "python", "manage.py", "shell"],
+                check=True
+            )
+        except subprocess.SubprocessError as e:
+            self.handle_error(
+                e, 
+                context={"django_shell": True},
+                recovery="Make sure Docker services are running with 'quickscale up'"
+            )
+        except KeyboardInterrupt:
+            print("\nExited Django shell.")
 
 
 class ManageCommand(Command):

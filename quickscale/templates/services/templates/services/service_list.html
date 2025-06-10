@@ -108,7 +108,7 @@
                                                     {% if service.credit_cost <= balance_details.subscription.amount %}
                                                         Will use {{ service.credit_cost }} subscription credits
                                                     {% elif balance_details.subscription.amount > 0 %}
-                                                        Will use {{ balance_details.subscription.amount }} subscription + {{ service.credit_cost|add:balance_details.subscription.amount|add:"-"|add:balance_details.subscription.amount }} pay-as-you-go credits
+                                                        Will use {{ balance_details.subscription.amount }} subscription + remaining pay-as-you-go credits
                                                     {% else %}
                                                         Will use {{ service.credit_cost }} pay-as-you-go credits
                                                     {% endif %}
