@@ -19,8 +19,11 @@ RUN apt-get update && apt-get install -y \
     iputils-ping --no-install-recommends \
     && rm -rf /var/lib/apt/lists/*
 
-# Create quickscale user and group with a home directory
-RUN groupadd -r quickscale && useradd -r -g quickscale -d /home/quickscale -m quickscale
+# Create quickscale user and group with configurable UID/GID
+ARG DOCKER_UID=1000
+ARG DOCKER_GID=1000
+RUN groupadd -g ${DOCKER_GID} quickscale && \
+    useradd -u ${DOCKER_UID} -g quickscale -d /home/quickscale -m -s /bin/bash quickscale
 
 # Set hostname
 ENV HOSTNAME=quickscale

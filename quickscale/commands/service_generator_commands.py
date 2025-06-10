@@ -169,9 +169,9 @@ class ServiceGeneratorCommand(Command):
             }
         
         try:
-            # Use the Django management command to configure the service
+            # Use quickscale manage to run the Django management command inside Docker container
             cmd = [
-                'python', 'manage.py', 'configure_service', service_name,
+                'quickscale', 'manage', 'configure_service', service_name,
                 '--description', description,
                 '--credit-cost', str(credit_cost)
             ]

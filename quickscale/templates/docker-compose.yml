@@ -2,10 +2,13 @@
 services:
   # Django web application service
   web:
-    build: .
+    build: 
+      context: .
+      args:
+        DOCKER_UID: ${DOCKER_UID:-1000}
+        DOCKER_GID: ${DOCKER_GID:-1000}
     command: python manage.py runserver 0.0.0.0:8000
-    # User mapping to maintain file ownership
-    user: "${DOCKER_UID:-1000}:${DOCKER_GID:-1000}"
+    hostname: quickscale
     volumes:
       - ./:/app
     ports:
@@ -43,6 +46,7 @@ services:
   # PostgreSQL database service
   db:
     image: postgres:15
+    hostname: quickscale-db
     volumes:
       - postgres_data:/var/lib/postgresql/data
     environment:
