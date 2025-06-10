@@ -20,15 +20,14 @@
                         <p class="subtitle is-6">Manage system users</p>
                         <div class="content">
                             <ul>
-                                <li>View all users</li>
-                                <li>Manage permissions</li>
-                                <li>User statistics</li>
+                                <li>Search and view users</li>
+                                <li>View user details</li>
+                                <li>Credit account information</li>
                             </ul>
                         </div>
                     </div>
                     <footer class="card-footer">
-                        <a href="#" class="card-footer-item">View</a>
-                        <a href="#" class="card-footer-item">Manage</a>
+                        <a href="{% url 'admin_dashboard:user_search' %}" class="card-footer-item">Search Users</a>
                     </footer>
                 </div>
             </div>
