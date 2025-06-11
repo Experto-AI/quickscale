@@ -31,6 +31,8 @@ urlpatterns = [
     # User management URLs
     path('users/search/', views.user_search, name='user_search'),
     path('users/<int:user_id>/', views.user_detail, name='user_detail'),
+    path('users/<int:user_id>/credit-adjustment/', views.user_credit_adjustment, name='user_credit_adjustment'),
+    path('users/<int:user_id>/credit-history/', views.user_credit_history, name='user_credit_history'),
     # Audit log URLs
     path('audit/', views.audit_log, name='audit_log'),
 ]

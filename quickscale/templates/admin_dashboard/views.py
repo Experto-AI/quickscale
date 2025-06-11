@@ -1224,3 +1224,132 @@ def audit_log(request: HttpRequest) -> HttpResponse:
     }
     
     return render(request, 'admin_dashboard/audit_log.html', context)
+
+
+@login_required
+@user_passes_test(lambda u: u.is_staff)
+def user_credit_adjustment(request: HttpRequest, user_id: int) -> HttpResponse:
+    """Handle HTMX credit adjustment requests for a specific user."""
+    from django.views.decorators.http import require_http_methods
+    from django.utils.decorators import method_decorator
+    from django.contrib.auth import get_user_model
+    from credits.models import CreditAccount
+    from credits.forms import AdminCreditAdjustmentForm
+    
+    User = get_user_model()
+    user = get_object_or_404(User, id=user_id)
+    credit_account = CreditAccount.get_or_create_for_user(user)
+    
+    if request.method == 'POST':
+        # Handle credit adjustment form submission
+        action = request.POST.get('action')  # 'add' or 'remove'
+        form = AdminCreditAdjustmentForm(request.POST)
+        
+        if form.is_valid():
+            amount = form.cleaned_data['amount']
+            reason = form.cleaned_data['reason']
+            current_balance = credit_account.get_balance()
+            
+            # Validate for credit removal
+            if action == 'remove' and amount > current_balance:
+                return JsonResponse({
+                    'success': False,
+                    'error': f'Cannot remove {amount} credits. Current balance is only {current_balance} credits.'
+                }, status=400)
+            
+            try:
+                # Adjust the amount for removal
+                adjustment_amount = amount if action == 'add' else -amount
+                action_text = 'Addition' if action == 'add' else 'Removal'
+                
+                transaction = credit_account.add_credits(
+                    amount=adjustment_amount,
+                    description=f"Admin Credit {action_text}: {reason} (by {request.user.email})",
+                    credit_type='ADMIN'
+                )
+                
+                # Log the credit adjustment action
+                log_admin_action(
+                    user=request.user,
+                    action='CREDIT_ADJUSTMENT',
+                    description=f'{action_text.replace("A", "a").replace("R", "r")} {amount} credits {"to" if action == "add" else "from"} {user.email}. Reason: {reason}',
+                    request=request
+                )
+                
+                # Return updated balance information
+                new_balance = credit_account.get_balance()
+                balance_breakdown = credit_account.get_balance_by_type_available()
+                
+                return JsonResponse({
+                    'success': True,
+                    'message': f'Successfully {action}ed {amount} credits. New balance: {new_balance} credits.',
+                    'new_balance': float(new_balance),
+                    'balance_breakdown': {
+                        'subscription': float(balance_breakdown.get('subscription', 0)),
+                        'pay_as_you_go': float(balance_breakdown.get('pay_as_you_go', 0)),
+                        'total': float(balance_breakdown.get('total', 0))
+                    }
+                })
+                
+            except ValueError as e:
+                return JsonResponse({
+                    'success': False,
+                    'error': f'Error {action}ing credits: {str(e)}'
+                }, status=400)
+        else:
+            # Form validation errors
+            errors = []
+            for field, field_errors in form.errors.items():
+                for error in field_errors:
+                    errors.append(f'{field}: {error}')
+            return JsonResponse({
+                'success': False,
+                'error': 'Form validation failed: ' + '; '.join(errors)
+            }, status=400)
+    
+    # GET request - return the form HTML directly for HTMX
+    form = AdminCreditAdjustmentForm()
+    current_balance = credit_account.get_balance()
+    balance_breakdown = credit_account.get_balance_by_type_available()
+    
+    context = {
+        'form': form,
+        'selected_user': user,
+        'credit_account': credit_account,
+        'current_balance': current_balance,
+        'balance_breakdown': balance_breakdown,
+    }
+    
+    return render(request, 'admin_dashboard/partials/credit_adjustment_form.html', context)
+
+
+@login_required
+@user_passes_test(lambda u: u.is_staff)
+def user_credit_history(request: HttpRequest, user_id: int) -> HttpResponse:
+    """Return credit adjustment history for a specific user via HTMX."""
+    from django.contrib.auth import get_user_model
+    from credits.models import CreditTransaction
+    
+    User = get_user_model()
+    user = get_object_or_404(User, id=user_id)
+    
+    # Log the history view action
+    log_admin_action(
+        user=request.user,
+        action='USER_VIEW',
+        description=f'Viewed credit history for user: {user.email}',
+        request=request
+    )
+    
+    # Get credit adjustment transactions (admin adjustments only)
+    credit_adjustments = CreditTransaction.objects.filter(
+        user=user,
+        credit_type='ADMIN'
+    ).order_by('-created_at')[:20]  # Last 20 adjustments
+    
+    context = {
+        'selected_user': user,
+        'credit_adjustments': credit_adjustments,
+    }
+    
+    return render(request, 'admin_dashboard/partials/credit_history.html', context)
