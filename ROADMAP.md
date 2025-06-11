@@ -38,22 +38,26 @@
    - ✅ Payment confirmation
    - ✅ Stripe webhook handling (basic structure)
    - ✅ Checkout success/error pages
-   - ✅ Payment history and receipts (Sprint 8)
+   - ✅ Payment history and receipts
+   - ✅ Payment search and investigation tools
+   - ✅ Basic refund processing
    - ❌ Subscription management system
    - ❌ Advanced webhook event processing
    - ❌ Payment method management
    - ❌ Customer billing history
 
 5. **Credit System Foundation**:
-   - ✅ Basic credit account system (Sprint 1)
-   - ✅ Manual credit management for admins (Sprint 2)
-   - ✅ Basic service credit consumption (Sprint 3)
-   - ✅ Pay-as-you-go credit purchase (Sprint 4)
-   - ✅ Basic monthly subscription system (Sprint 6)
-   - ✅ Credit type priority system (Sprint 7)
-   - ✅ Payment history & receipts (Sprint 8)
-   - ✅ Service management admin interface (Sprint 13)
-   - ✅ AI service framework foundation (Sprint 14)
+   - ✅ Basic credit account system
+   - ✅ Manual credit management for admins
+   - ✅ Basic service credit consumption
+   - ✅ Pay-as-you-go credit purchase
+   - ✅ Basic monthly subscription system
+   - ✅ Credit type priority system
+   - ✅ Payment history & receipts
+   - ✅ Service management admin interface
+   - ✅ AI service framework foundation
+   - ✅ Admin credit management
+   - ✅ Payment admin tools
 
 6. **AI Service Framework**:
    - ✅ Service template generator (`quickscale generate-service`)
@@ -83,45 +87,23 @@ The QuickScale credit system supports multiple payment models and credit types w
 
 ---
 
-### Sprint 17: Admin Credit Management (v0.28.0)
-**Goal**: Allow admins to adjust user credits manually
-
-**Backend Implementation:**
-- ✅ Add admin credit adjustment functionality
-- ✅ Create credit adjustment validation
-- ✅ Add credit adjustment audit logging
-
-**Frontend Implementation:**
-- ✅ Add credit adjustment form to user detail view
-- ✅ Show credit adjustment history
-- ✅ Add adjustment reason field
-
-**Testing:**
-- ✅ Test credit adjustment functionality
-- ✅ Test adjustment validation and logging
-- ✅ Test credit history display
-
-**Validation**: Admins can manually adjust user credits with proper tracking
-
----
-
 ### Sprint 18: Basic Payment Admin Tools (v0.29.0)
 **Goal**: Essential payment support tools for admins
 
 **Backend Implementation:**
-- [ ] Add payment search functionality
-- [ ] Create basic refund initiation
-- [ ] Add payment investigation tools
+- ✅ Add payment search functionality
+- ✅ Create basic refund initiation
+- ✅ Add payment investigation tools
 
 **Frontend Implementation:**
-- [ ] Add payment search to admin dashboard
-- [ ] Create simple refund interface
-- [ ] Show payment details and history
+- ✅ Add payment search to admin dashboard
+- ✅ Create simple refund interface
+- ✅ Show payment details and history
 
 **Testing:**
-- [ ] Test payment search and viewing
-- [ ] Test refund initiation
-- [ ] Test payment investigation tools
+- ✅ Test payment search and viewing
+- ✅ Test refund initiation
+- ✅ Test payment investigation tools
 
 **Validation**: Admins can search payments and initiate basic refunds
 

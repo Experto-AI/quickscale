@@ -312,6 +312,11 @@ Staff users have access to additional features:
 - **Django Admin** (`/admin/`): Full administrative interface
 - **User Management**: View and manage user accounts
 - **Credit Management**: Handle user credits and billing (if enabled)
+- **Payment Tools** (`/admin_dashboard/payments/search/`): Payment support and investigation
+  - Search and filter payments by multiple criteria
+  - Investigate payment details and user history
+  - Process basic refunds through Stripe integration
+  - View payment warnings and Stripe data
 - **Service Management** (`/admin_dashboard/services/`): Configure and monitor application services
   - Enable/disable services in real-time
   - View service usage analytics and statistics
@@ -394,11 +399,73 @@ If you experience payment problems:
 
 ---
 
-## **9. AI Service Development Guide**
+## **9. Admin Payment Tools**
+
+### **9.1. Payment Search & Investigation**
+
+QuickScale provides comprehensive payment support tools for administrators to investigate and resolve payment issues.
+
+**Access Payment Tools:**
+```bash
+# Access via admin dashboard
+/admin_dashboard/payments/search/
+```
+
+**Search Capabilities:**
+- **General Search**: Search across user emails, Stripe IDs, and payment descriptions
+- **Filtered Search**: Filter by payment type, status, amount ranges, and date ranges
+- **User-Specific Search**: Find all payments for a specific user
+- **Stripe ID Lookup**: Locate payments by exact Stripe Payment Intent ID
+
+**Payment Investigation:**
+- **Detailed Payment View**: Complete payment information with status and metadata
+- **User Payment History**: Last 10 payments from the same user for context
+- **Stripe Data Integration**: Real-time retrieval of Stripe payment intent details
+- **Warning System**: Automated detection of potential issues (missing IDs, failed payments)
+- **Refund History**: Display of related refund transactions
+
+### **9.2. Refund Processing**
+
+**Refund Capabilities:**
+- **Partial Refunds**: Process partial refunds for any amount up to the original payment
+- **Full Refunds**: Complete refund processing with automatic status updates
+- **Credit Adjustment**: Automatic credit removal for refunded credit purchases
+- **Audit Compliance**: Required admin notes and reason tracking for all refunds
+
+**Refund Process:**
+1. **Search Payment**: Use payment search to locate the payment to refund
+2. **Investigate**: Click "Investigate" to view detailed payment information
+3. **Initiate Refund**: Click "Initiate Refund" button for succeeded payments
+4. **Complete Form**: Enter refund amount, reason, and admin notes
+5. **Process**: Refund is processed through Stripe with automatic record creation
+
+**Refund Requirements:**
+- **Payment Status**: Only succeeded payments can be refunded
+- **Stripe Integration**: Valid Stripe Payment Intent ID required
+- **Admin Notes**: Detailed notes required for audit compliance
+- **Reason Selection**: Must select appropriate refund reason
+
+### **9.3. Audit & Compliance**
+
+**Audit Features:**
+- **Admin Action Logging**: All payment searches and refunds are logged
+- **Investigation Tracking**: Payment investigation activities recorded
+- **Refund Documentation**: Complete refund audit trail with admin attribution
+- **Warning Detection**: Automated flagging of unusual payment patterns
+
+**Compliance Tools:**
+- **Receipt Generation**: Access to complete payment receipt data
+- **Transaction History**: Full payment lifecycle tracking
+- **User Context**: User account information and payment patterns
+- **Stripe Integration**: Direct links to Stripe dashboard for detailed investigation
+
+---
+
+## **10. AI Service Development Guide**
 
 QuickScale includes a comprehensive AI service framework that allows AI engineers to quickly create and deploy AI services with automatic credit consumption and billing.
 
-### **9.1. Getting Started with AI Services**
+### **10.1. Getting Started with AI Services**
 
 **Generate Your First Service:**
 ```bash
@@ -424,7 +491,7 @@ quickscale manage configure_service --list
 quickscale manage configure_service my_first_service --update --credit-cost 2.0
 ```
 
-### **9.2. Service Development Workflow**
+### **10.2. Service Development Workflow**
 
 1. **Generate Template**: Use `quickscale generate-service` to create service boilerplate
 2. **Implement Logic**: Add your AI processing logic to the `execute_service` method
@@ -432,7 +499,7 @@ quickscale manage configure_service my_first_service --update --credit-cost 2.0
 4. **Test Service**: Use the generated example files to test your implementation
 5. **Deploy**: Service automatically integrates with credit system and admin interface
 
-### **9.3. Example Service Structure**
+### **10.3. Example Service Structure**
 
 ```python
 @register_service("my_service_name")
@@ -460,7 +527,7 @@ class MyAIService(BaseService):
         }
 ```
 
-### **9.4. Service Integration Features**
+### **10.4. Service Integration Features**
 
 - **Automatic Credit Consumption**: Credits automatically deducted when service is used
 - **Usage Tracking**: Complete audit trail of service usage
@@ -469,7 +536,7 @@ class MyAIService(BaseService):
 - **Error Handling**: Consistent error patterns and validation
 - **Documentation**: Auto-generated usage examples and documentation
 
-### **9.5. Available Example Services**
+### **10.5. Available Example Services**
 
 QuickScale includes several example services that demonstrate best practices:
 
@@ -482,7 +549,7 @@ For complete documentation, see the generated `docs/service_development_guide.md
 
 ---
 
-## **10. Running Codebase Tests**
+## **11. Running Codebase Tests**
 
 QuickScale includes a comprehensive test suite to ensure functionality works as expected.
 
@@ -520,9 +587,9 @@ quickscale manage test
 
 ---
 
-## **11. Advanced CLI Features**
+## **12. Advanced CLI Features**
 
-### **11.1. Shell Commands**
+### **12.1. Shell Commands**
 
 **Interactive Shell:**
 ```bash
@@ -534,7 +601,7 @@ quickscale shell
 quickscale shell -c "ls -la"
 ```
 
-### **11.2. Enhanced Logging**
+### **12.2. Enhanced Logging**
 
 **View logs with timestamps:**
 ```bash
@@ -563,14 +630,14 @@ quickscale logs web -t --lines 100
 quickscale logs db --since 1h
 ```
 
-### **11.3. Service Status**
+### **12.3. Service Status**
 
 Check running services:
 ```bash
 quickscale ps
 ```
 
-### **11.4. Automatic Port Fallback**
+### **12.4. Automatic Port Fallback**
 
 QuickScale can automatically find and use alternative ports if the default `WEB_PORT` (8000) or `DB_PORT_EXTERNAL` (5432) are already in use on your system. This feature is controlled by environment variables in your project's `.env` file:
 
@@ -581,7 +648,7 @@ If fallback is enabled and a port conflict is detected when you run `quickscale 
 
 If fallback is disabled (default) and a port conflict occurs, `quickscale up` will fail with a clear error message instructing you to free the port, specify a different port manually, or enable the fallback feature.
 
-## **12. Additional Resources**
+## **13. Additional Resources**
 
 - [Technical Documentation](./TECHNICAL_DOCS.md)
 - [Contributing Guide](./CONTRIBUTING.md)
