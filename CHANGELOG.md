@@ -2,6 +2,42 @@
 
 All notable changes to this project will be documented in this file.
 
+## v0.28.0 (2025-06-11)
+v0.28.0 feat: Implement Admin Credit Management for Enhanced User Account Control
+
+This PR implements comprehensive admin credit management functionality, enabling administrators to manually adjust user credit balances with complete audit trails and validation. This enhancement provides essential administrative tools for customer support and account management within QuickScale's admin dashboard, addressing issues with template rendering and button functionality found during testing.
+
+- Backend Implementation:
+  - Enhanced CreditAccountAdmin with individual credit adjustment views (`add_credits_view`, `remove_credits_view`) supporting positive and negative credit adjustments.
+  - Created `AdminCreditAdjustmentForm` with comprehensive validation including amount positivity checks and mandatory reason field requirements.
+  - Implemented bulk credit operations through `bulk_add_credits` admin action for efficient management of multiple user accounts.
+  - Integrated audit logging to track all credit adjustment operations with user attribution and reasons.
+  - Added `user_credit_adjustment` HTMX view in admin dashboard for dynamic credit management with real-time balance updates.
+  - Implemented `user_credit_history` view providing comprehensive credit adjustment history with transaction filtering and pagination.
+  - Updated `user_credit_adjustment` and `user_credit_history` views to return `HttpResponse` directly for enhanced HTMX compatibility.
+- Frontend Implementation:
+  - Created credit adjustment form integrated into user detail view with Alpine.js-powered interactive components for add/remove operations.
+  - Developed `credit_adjustment_form.html` partial template with real-time balance display and validation feedback using HTMX.
+  - Implemented `credit_history.html` partial showing detailed adjustment history with transaction types and status indicators.
+  - Enhanced `user_detail.html` with credit adjustment and history modals featuring smooth Alpine.js animations and transitions.
+  - Added Django admin templates (`credit_adjustment.html`, `bulk_credit_adjustment.html`) for traditional admin interface credit operations.
+  - Cleaned up user detail template by condensing conditional statements to a single line, improving readability and reducing whitespace issues.
+  - Updated HTMX trigger mechanism to ensure compatibility with Alpine.js, replacing the 'revealed' trigger with 'htmx:trigger' and implementing manual triggering with `setTimeout` for better integration.
+  - Improved credit adjustment form submission handling and state management by adding `hx-on::before-request` to set `isSubmitting` to true, removing manual click handlers, and resetting `isSubmitting` on `after-request`.
+- Integration Features:
+  - Complete audit trail integration ensuring all credit adjustments are logged with admin user attribution and detailed descriptions.
+  - Real-time balance updates across all admin interfaces with proper error handling and validation feedback.
+  - Seamless integration with existing credit system priority consumption logic maintaining data integrity.
+  - Support for both individual and bulk credit operations with consistent validation and audit logging patterns.
+- Testing:
+  - Added comprehensive unit tests to validate the template rendering fixes and HTMX functionality problems.
+  - Created tests to ensure proper HTML structure, prevent literal newline artifacts, and verify condensed conditional tags.
+  - Implemented tests for HTMX trigger mechanisms, Alpine.js/HTMX integration, and button click handlers.
+  - Added tests for form submission state management and validation to prevent infinite processing.
+  - Ensured all new and existing tests pass after the changes.
+
+This PR completes the Admin Credit Management sprint, providing administrators with powerful tools to manually adjust user credits with proper tracking, validation, and comprehensive audit trails. The implementation ensures data integrity while offering both traditional Django admin and modern HTMX-powered interfaces for flexible administrative workflows.
+
 ## v0.27.0 (2025-06-10)
 v0.27.0 feat: Implement Simple Audit Logging for Admin Actions
 

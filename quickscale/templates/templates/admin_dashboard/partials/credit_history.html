@@ -1,0 +1,129 @@
+{% load static %}
+
+<div class="box" id="credit-history">
+    <h4 class="title is-5">
+        <span class="icon-text">
+            <span class="icon">
+                <i class="fas fa-history"></i>
+            </span>
+            <span>Credit Adjustment History</span>
+        </span>
+    </h4>
+    
+    {% if credit_adjustments %}
+        <div class="table-container">
+            <table class="table is-fullwidth is-striped is-hoverable">
+                <thead>
+                    <tr>
+                        <th>Date & Time</th>
+                        <th>Amount</th>
+                        <th>Type</th>
+                        <th>Description</th>
+                        <th>Status</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for adjustment in credit_adjustments %}
+                    <tr>
+                        <td>
+                            <div>
+                                <p class="has-text-weight-semibold">{{ adjustment.created_at|date:"M d, Y" }}</p>
+                                <p class="is-size-7 has-text-grey">{{ adjustment.created_at|time:"H:i" }}</p>
+                            </div>
+                        </td>
+                        <td>
+                            {% if adjustment.amount > 0 %}
+                                <span class="tag is-success">
+                                    <span class="icon">
+                                        <i class="fas fa-plus"></i>
+                                    </span>
+                                    <span>+{{ adjustment.amount|floatformat:1 }}</span>
+                                </span>
+                            {% else %}
+                                <span class="tag is-warning">
+                                    <span class="icon">
+                                        <i class="fas fa-minus"></i>
+                                    </span>
+                                    <span>{{ adjustment.amount|floatformat:1 }}</span>
+                                </span>
+                            {% endif %}
+                        </td>
+                        <td>
+                            <span class="tag is-info">
+                                {% if adjustment.amount > 0 %}
+                                    Addition
+                                {% else %}
+                                    Removal
+                                {% endif %}
+                            </span>
+                        </td>
+                        <td>
+                            <div class="content">
+                                <p class="is-size-7">{{ adjustment.description|truncatechars:60 }}</p>
+                                {% if adjustment.description|length > 60 %}
+                                    <details class="dropdown">
+                                        <summary class="is-size-7 has-text-link">Show full description</summary>
+                                        <p class="is-size-7 mt-2">{{ adjustment.description }}</p>
+                                    </details>
+                                {% endif %}
+                            </div>
+                        </td>
+                        <td>
+                            {% if adjustment.expires_at %}
+                                {% if adjustment.is_expired %}
+                                    <span class="tag is-danger">Expired</span>
+                                {% else %}
+                                    <span class="tag is-success">Valid</span>
+                                {% endif %}
+                            {% else %}
+                                <span class="tag is-light">No expiration</span>
+                            {% endif %}
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        
+        {% if credit_adjustments|length == 20 %}
+            <div class="has-text-centered mt-4">
+                <p class="is-size-7 has-text-grey">
+                    Showing last 20 credit adjustments.
+                    <a href="{% url 'admin:credits_credittransaction_changelist' %}?user__email={{ selected_user.email }}&credit_type=ADMIN" 
+                       target="_blank" class="has-text-link">
+                        View all in Django Admin
+                    </a>
+                </p>
+            </div>
+        {% endif %}
+    {% else %}
+        <div class="has-text-centered">
+            <div class="content">
+                <p class="has-text-grey">
+                    <span class="icon is-large">
+                        <i class="fas fa-inbox fa-2x"></i>
+                    </span>
+                </p>
+                <p class="has-text-grey">No credit adjustments found for this user.</p>
+                <p class="is-size-7 has-text-grey">
+                    Admin credit adjustments will appear here when performed.
+                </p>
+            </div>
+        </div>
+    {% endif %}
+    
+    <!-- Refresh button -->
+    <div class="has-text-centered mt-4">
+        <button 
+            class="button is-small is-light"
+            hx-get="{% url 'admin_dashboard:user_credit_history' selected_user.id %}"
+            hx-target="#credit-history-container"
+            hx-swap="innerHTML"
+        >
+            <span class="icon">
+                <i class="fas fa-sync-alt"></i>
+            </span>
+            <span>Refresh History</span>
+        </button>
+    </div>
+</div> 
