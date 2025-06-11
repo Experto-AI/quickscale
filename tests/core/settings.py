@@ -14,6 +14,8 @@ INSTALLED_APPS = [
     'allauth.socialaccount',
     'users',
     'credits',
+    'stripe_manager',
+    'admin_dashboard',
     'api',
 ]
 

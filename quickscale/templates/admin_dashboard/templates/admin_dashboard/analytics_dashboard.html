@@ -1,0 +1,228 @@
+{% extends "base.html" %}
+{% load i18n %}
+{% load static %}
+
+{% block title %}{% trans "Analytics Dashboard" %}{% endblock %}
+
+{% block content %}
+<section class="hero is-primary is-small">
+    <div class="hero-body">
+        <p class="title">{% trans "Analytics Dashboard" %}</p>
+        <p class="subtitle">{% trans "Key business metrics and service usage statistics" %}</p>
+    </div>
+</section>
+
+<section class="section">
+    <div class="container">
+        <!-- Key Metrics Cards -->
+        <div class="columns is-multiline">
+            <div class="column is-one-third">
+                <div class="box has-background-info-light">
+                    <p class="title is-4 has-text-info">{{ total_users }}</p>
+                    <p class="subtitle is-6 has-text-info-dark">{% trans "Total Users" %}</p>
+                </div>
+            </div>
+            <div class="column is-one-third">
+                <div class="box has-background-success-light">
+                    <p class="title is-4 has-text-success">${{ total_revenue|floatformat:2 }}</p>
+                    <p class="subtitle is-6 has-text-success-dark">{% trans "Total Revenue" %}</p>
+                </div>
+            </div>
+            <div class="column is-one-third">
+                <div class="box has-background-primary-light">
+                    <p class="title is-4 has-text-primary">{{ active_subscriptions }}</p>
+                    <p class="subtitle is-6 has-text-primary-dark">{% trans "Active Subscriptions" %}</p>
+                </div>
+            </div>
+        </div>
+
+        <!-- Monthly Revenue Trends -->
+        <div class="box">
+            <h2 class="title is-5">{% trans "Monthly Revenue Trends" %}</h2>
+            {% if monthly_revenue %}
+                <div class="table-container">
+                    <table class="table is-fullwidth is-striped is-hoverable">
+                        <thead>
+                            <tr>
+                                <th>{% trans "Month" %}</th>
+                                <th>{% trans "Revenue" %}</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for month_data in monthly_revenue %}
+                            <tr>
+                                <td>{{ month_data.month }}</td>
+                                <td>${{ month_data.revenue|floatformat:2 }}</td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            {% else %}
+                <div class="notification is-info is-light">
+                    <p class="has-text-weight-semibold">{% trans "No revenue data available" %}</p>
+                    <p>{% trans "Revenue information will appear here once payments are processed." %}</p>
+                </div>
+            {% endif %}
+        </div>
+
+        <!-- Monthly Revenue Chart -->
+        {% if monthly_revenue %}
+        <div class="box">
+            <h2 class="title is-5">{% trans "Monthly Revenue Chart" %}</h2>
+            <div x-data="revenueChartData({{ monthly_revenue_json|safe }})">
+                <template x-if="hasData">
+                    <div>
+                        <div class="columns is-mobile is-multiline is-gapless is-centered chart-container">
+                            <template x-for="monthData in monthlyRevenue" :key="monthData.month">
+                                <div class="column is-narrow has-text-centered chart-bar">
+                                    <div 
+                                        class="has-background-info chart-bar-fill"
+                                        :style="getBarStyle(monthData.revenue)"
+                                        :title="`${monthData.month}: $${monthData.revenue.toFixed(2)}`">
+                                    </div>
+                                    <small class="chart-label" x-text="getMonthLabel(monthData.month)"></small>
+                                </div>
+                            </template>
+                        </div>
+                        <div class="has-text-centered mt-2 is-size-7 has-text-grey">
+                            {% trans "Monthly Revenue (last 12 months)" %}
+                        </div>
+                    </div>
+                </template>
+                <template x-if="!hasData">
+                    <div class="notification is-info is-light">
+                        <p>{% trans "No chart data available" %}</p>
+                    </div>
+                </template>
+            </div>
+        </div>
+        {% endif %}
+
+        <!-- Service Usage Statistics -->
+        <div class="box">
+            <h2 class="title is-5">{% trans "Service Usage Statistics" %}</h2>
+            {% if service_stats %}
+                <div class="table-container">
+                    <table class="table is-fullwidth is-striped is-hoverable">
+                        <thead>
+                            <tr>
+                                <th>{% trans "Service Name" %}</th>
+                                <th>{% trans "Description" %}</th>
+                                <th>{% trans "Credit Cost" %}</th>
+                                <th>{% trans "Total Credits Consumed" %}</th>
+                                <th>{% trans "Unique Users" %}</th>
+                                <th>{% trans "Status" %}</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for service in service_stats %}
+                            <tr>
+                                <td>
+                                    <strong>{{ service.name }}</strong>
+                                </td>
+                                <td>{{ service.description|truncatechars:80 }}</td>
+                                <td>
+                                    <span class="tag is-info">{{ service.credit_cost }} credits</span>
+                                </td>
+                                <td>{{ service.total_credits_consumed|floatformat:2 }}</td>
+                                <td>{{ service.unique_users_count }}</td>
+                                <td>
+                                    {% if service.is_active %}
+                                        <span class="tag is-success is-light">{% trans "Active" %}</span>
+                                    {% else %}
+                                        <span class="tag is-danger is-light">{% trans "Inactive" %}</span>
+                                    {% endif %}
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            {% else %}
+                <div class="notification is-info is-light">
+                    <p class="has-text-weight-semibold">{% trans "No services found" %}</p>
+                    <p>{% trans "Service usage statistics will appear here once services are configured and used." %}</p>
+                    <p class="mt-3">
+                        <a href="/admin/credits/service/" class="button is-info" target="_blank">
+                            <span class="icon"><i class="fas fa-plus"></i></span>
+                            <span>{% trans "Add Service in Admin" %}</span>
+                        </a>
+                    </p>
+                </div>
+            {% endif %}
+        </div>
+    </div>
+</section>
+
+<style>
+/* Chart styling */
+.chart-container {
+    height: 200px;
+    align-items: flex-end;
+    border-bottom: 1px solid #dbdbdb;
+    padding: 1rem 0;
+}
+
+.chart-bar {
+    display: flex;
+    flex-direction: column;
+    justify-content: flex-end;
+    align-items: center;
+    padding: 0 0.25rem;
+    min-height: 200px;
+}
+
+.chart-bar-fill {
+    width: 30px;
+    margin-bottom: 5px;
+    border-radius: 4px 4px 0 0;
+    min-height: 2px;
+}
+
+.chart-label {
+    font-size: 0.75rem;
+    margin-top: 5px;
+}
+</style>
+
+<script>
+// Revenue chart data management using Alpine.js
+function revenueChartData(monthlyRevenueJson) {
+    return {
+        monthlyRevenue: typeof monthlyRevenueJson === 'string' ? JSON.parse(monthlyRevenueJson) : (monthlyRevenueJson || []),
+        maxRevenue: 0,
+        hasData: false,
+        
+        init() {
+            // Check if we have valid data
+            this.hasData = this.monthlyRevenue.length > 0;
+            
+            if (this.hasData) {
+                // Calculate max revenue for scaling, handle case where all values are 0
+                const revenues = this.monthlyRevenue.map(m => parseFloat(m.revenue) || 0);
+                this.maxRevenue = Math.max(...revenues);
+                
+                // If all revenues are 0, set a minimum scale for display
+                if (this.maxRevenue === 0) {
+                    this.maxRevenue = 1;
+                }
+            }
+        },
+        
+        getBarStyle(revenue) {
+            const revenueValue = parseFloat(revenue) || 0;
+            const percentage = this.maxRevenue > 0 ? (revenueValue / this.maxRevenue) * 100 : 0;
+            const minHeight = revenueValue > 0 ? Math.max(percentage, 2) : 0; // Minimum 2% height for non-zero values
+            
+            return `height: ${minHeight}% !important;`;
+        },
+        
+        getMonthLabel(monthString) {
+            // Extract first 3 characters (e.g., "Jan" from "Jan 2024")
+            return monthString ? monthString.substring(0, 3) : '';
+        }
+    }
+}
+</script>
+{% endblock %} 

@@ -1,0 +1,73 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Analytics Dashboard</title>
+</head>
+<body>
+    <h1>Analytics Dashboard</h1>
+    
+    <div class="metrics-cards">
+        <div class="card">
+            <h3>Total Users</h3>
+            <p>{{ total_users }}</p>
+        </div>
+        <div class="card">
+            <h3>Total Revenue</h3>
+            <p>${{ total_revenue }}</p>
+        </div>
+        <div class="card">
+            <h3>Active Subscriptions</h3>
+            <p>{{ active_subscriptions }}</p>
+        </div>
+    </div>
+    
+    <div class="monthly-revenue">
+        <h2>Monthly Revenue</h2>
+        <table>
+            <thead>
+                <tr>
+                    <th>Month</th>
+                    <th>Revenue</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for month_data in monthly_revenue %}
+                <tr>
+                    <td>{{ month_data.month }}</td>
+                    <td>${{ month_data.revenue }}</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    
+    <div class="service-stats">
+        <h2>Service Statistics</h2>
+        <table>
+            <thead>
+                <tr>
+                    <th>Service</th>
+                    <th>Credits Consumed</th>
+                    <th>Unique Users</th>
+                    <th>Status</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for service in service_stats %}
+                <tr>
+                    <td>{{ service.name }}</td>
+                    <td>{{ service.total_credits_consumed }}</td>
+                    <td>{{ service.unique_users_count }}</td>
+                    <td>{{ service.is_active|yesno:"Active,Inactive" }}</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    
+    <!-- Hidden JSON data for Alpine.js chart -->
+    <script>
+        window.monthlyRevenueData = {{ monthly_revenue_json|safe }};
+    </script>
+</body>
+</html> 

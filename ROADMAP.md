@@ -87,45 +87,23 @@ The QuickScale credit system supports multiple payment models and credit types w
 
 ---
 
-### Sprint 18: Basic Payment Admin Tools (v0.29.0)
-**Goal**: Essential payment support tools for admins
-
-**Backend Implementation:**
-- ✅ Add payment search functionality
-- ✅ Create basic refund initiation
-- ✅ Add payment investigation tools
-
-**Frontend Implementation:**
-- ✅ Add payment search to admin dashboard
-- ✅ Create simple refund interface
-- ✅ Show payment details and history
-
-**Testing:**
-- ✅ Test payment search and viewing
-- ✅ Test refund initiation
-- ✅ Test payment investigation tools
-
-**Validation**: Admins can search payments and initiate basic refunds
-
----
-
 ### Sprint 19: Simple Analytics Dashboard (v0.30.0)
 **Goal**: Basic business metrics for admins
 
 **Backend Implementation:**
-- [ ] Calculate basic metrics (total users, revenue, active subscriptions)
-- [ ] Add service usage statistics
-- [ ] Create monthly revenue calculations
+- ✅ Calculate basic metrics (total users, revenue, active subscriptions)
+- ✅ Add service usage statistics
+- ✅ Create monthly revenue calculations
 
 **Frontend Implementation:**
-- [ ] Create simple analytics dashboard
-- [ ] Show key business metrics
-- [ ] Add basic charts for trends
+- ✅ Create simple analytics dashboard
+- ✅ Show key business metrics
+- ✅ Add basic charts for trends
 
 **Testing:**
-- [ ] Test analytics calculations
-- [ ] Test dashboard display
-- [ ] Test chart functionality
+- ✅ Test analytics calculations
+- ✅ Test dashboard display
+- ✅ Test chart functionality
 
 **Validation**: Admins can view essential business metrics
 
