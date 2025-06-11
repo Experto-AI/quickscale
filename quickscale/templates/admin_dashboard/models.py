@@ -18,6 +18,8 @@ class AuditLog(models.Model):
         ('PRODUCT_SYNC', 'Product Sync'),
         ('ADMIN_LOGIN', 'Admin Login'),
         ('ADMIN_LOGOUT', 'Admin Logout'),
+        ('PAYMENT_INVESTIGATION', 'Payment Investigation'),
+        ('PAYMENT_REFUND', 'Payment Refund'),
         ('OTHER', 'Other Action'),
     ]
     

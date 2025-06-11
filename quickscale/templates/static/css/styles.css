@@ -94,6 +94,24 @@ table td {
     border: 1px solid #f5c6cb;
 }
 
+/* HTMX indicator styles */
+.htmx-indicator {
+    display: none;
+}
+
+.htmx-request .htmx-indicator {
+    display: block;
+}
+
+.htmx-request.htmx-indicator {
+    display: block;
+}
+
+/* Loading state styles */
+.htmx-request {
+    opacity: 0.8;
+}
+
 /* Responsive styles */
 @media (max-width: 768px) {
     .container {
