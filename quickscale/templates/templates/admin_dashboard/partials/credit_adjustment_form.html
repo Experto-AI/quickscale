@@ -1,0 +1,194 @@
+{% load static %}
+
+<div class="box" id="credit-adjustment-form">
+    <h4 class="title is-5">
+        <span class="icon-text">
+            <span class="icon">
+                <i class="fas fa-coins"></i>
+            </span>
+            <span>Adjust Credits</span>
+        </span>
+    </h4>
+    
+    <div class="content">
+        <p><strong>Current Balance:</strong> 
+            <span class="tag is-primary is-large" id="current-balance-display">{{ current_balance|floatformat:1 }} credits</span>
+        </p>
+        
+        {% if balance_breakdown %}
+            <div class="field">
+                <label class="label is-small">Balance Breakdown:</label>
+                <div class="tags">
+                    {% if balance_breakdown.subscription %}
+                        <span class="tag is-info">
+                            <span class="icon"><i class="fas fa-calendar"></i></span>
+                            Subscription: {{ balance_breakdown.subscription|floatformat:1 }}
+                        </span>
+                    {% endif %}
+                    {% if balance_breakdown.pay_as_you_go %}
+                        <span class="tag is-success">
+                            <span class="icon"><i class="fas fa-shopping-cart"></i></span>
+                            Pay-as-you-go: {{ balance_breakdown.pay_as_you_go|floatformat:1 }}
+                        </span>
+                    {% endif %}
+                </div>
+            </div>
+        {% endif %}
+    </div>
+    
+    <form 
+        hx-post="{% url 'admin_dashboard:user_credit_adjustment' selected_user.id %}" 
+        hx-swap="none"
+        hx-on::before-request="isSubmitting = true"
+        hx-on::after-request="handleCreditAdjustmentResponse(event)"
+        x-data="{ 
+            action: 'add',
+            amount: '',
+            reason: '',
+            isSubmitting: false
+        }"
+    >
+        {% csrf_token %}
+        
+        <!-- Action Selection -->
+        <div class="field">
+            <label class="label">Action</label>
+            <div class="control">
+                <div class="select is-fullwidth">
+                    <select name="action" x-model="action" required>
+                        <option value="add">Add Credits</option>
+                        <option value="remove">Remove Credits</option>
+                    </select>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Amount Input -->
+        <div class="field">
+            <label class="label">Amount</label>
+            <div class="control has-icons-left">
+                <input 
+                    type="number" 
+                    class="input" 
+                    name="amount" 
+                    x-model="amount"
+                    placeholder="Enter amount (e.g., 100.00)" 
+                    step="0.01" 
+                    min="0.01" 
+                    required
+                >
+                <span class="icon is-small is-left">
+                    <i class="fas fa-coins"></i>
+                </span>
+            </div>
+            <p class="help">Enter the amount of credits to <span x-text="action"></span></p>
+        </div>
+        
+        <!-- Reason Input -->
+        <div class="field">
+            <label class="label">Reason</label>
+            <div class="control">
+                <textarea 
+                    class="textarea" 
+                    name="reason" 
+                    x-model="reason"
+                    placeholder="Provide a reason for this credit adjustment..." 
+                    rows="3" 
+                    maxlength="255" 
+                    required
+                ></textarea>
+            </div>
+            <p class="help">Explain why this credit adjustment is being made</p>
+        </div>
+        
+        <!-- Action Buttons -->
+        <div class="field is-grouped">
+            <div class="control">
+                <button 
+                    type="submit" 
+                    class="button"
+                    :class="action === 'add' ? 'is-success' : 'is-warning'"
+                    :disabled="isSubmitting || !amount || !reason"
+                >
+                    <span class="icon">
+                        <i x-show="!isSubmitting" :class="action === 'add' ? 'fas fa-plus' : 'fas fa-minus'"></i>
+                        <i x-show="isSubmitting" class="fas fa-spinner fa-spin"></i>
+                    </span>
+                    <span x-text="isSubmitting ? 'Processing...' : (action === 'add' ? 'Add Credits' : 'Remove Credits')"></span>
+                </button>
+            </div>
+            <div class="control">
+                <button 
+                    type="button" 
+                    class="button is-light"
+                    @click="$dispatch('close-credit-form')"
+                >
+                    Cancel
+                </button>
+            </div>
+        </div>
+    </form>
+    
+    <!-- Messages container -->
+    <div id="credit-adjustment-messages" class="mt-4"></div>
+</div>
+
+<script>
+function handleCreditAdjustmentResponse(event) {
+    const response = event.detail.xhr.response;
+    const data = JSON.parse(response);
+    const messagesContainer = document.getElementById('credit-adjustment-messages');
+    const balanceDisplay = document.getElementById('current-balance-display');
+    
+    // Get the form element to access Alpine.js data
+    const form = event.target.closest('form');
+    const alpineData = Alpine.$data(form);
+    
+    // Reset submitting state immediately
+    alpineData.isSubmitting = false;
+    
+    // Clear previous messages
+    messagesContainer.innerHTML = '';
+    
+    if (data.success) {
+        // Show success message
+        messagesContainer.innerHTML = `
+            <div class="notification is-success is-light">
+                <button class="delete" onclick="this.parentElement.remove()"></button>
+                ${data.message}
+            </div>
+        `;
+        
+        // Update balance display
+        if (data.new_balance !== undefined) {
+            balanceDisplay.textContent = `${data.new_balance.toFixed(1)} credits`;
+        }
+        
+        // Reset form data in Alpine.js
+        alpineData.amount = '';
+        alpineData.reason = '';
+        alpineData.action = 'add';
+        
+        // Refresh the admin adjustments tab if it's visible
+        const adjustmentsTab = document.querySelector('#user-adjustments');
+        if (adjustmentsTab) {
+            // Trigger refresh of adjustments tab
+            htmx.trigger(adjustmentsTab, 'htmx:trigger');
+        }
+        
+        // Close form after successful adjustment
+        setTimeout(() => {
+            document.dispatchEvent(new CustomEvent('close-credit-form'));
+        }, 2000);
+        
+    } else {
+        // Show error message
+        messagesContainer.innerHTML = `
+            <div class="notification is-danger is-light">
+                <button class="delete" onclick="this.parentElement.remove()"></button>
+                ${data.error}
+            </div>
+        `;
+    }
+}
+</script> 

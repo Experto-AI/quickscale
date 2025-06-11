@@ -24,35 +24,11 @@
                     <div class="card-content">
                         <div class="content">
                             <p><strong>Email:</strong> {{ selected_user.email }}</p>
-                            <p><strong>Name:</strong> 
-                                {% if selected_user.first_name or selected_user.last_name %}
-                                    {{ selected_user.first_name }} {{ selected_user.last_name }}
-                                {% else %}
-                                    <span class="has-text-grey-light">Not set</span>
-                                {% endif %}
-                            </p>
+                            <p><strong>Name:</strong> {% if selected_user.first_name or selected_user.last_name %}{{ selected_user.first_name }} {{ selected_user.last_name }}{% else %}<span class="has-text-grey-light">Not set</span>{% endif %}</p>
                             <p><strong>User ID:</strong> {{ selected_user.id }}</p>
                             <p><strong>Date Joined:</strong> {{ selected_user.date_joined|date:"M d, Y H:i" }}</p>
-                            <p><strong>Last Login:</strong> 
-                                {% if selected_user.last_login %}
-                                    {{ selected_user.last_login|date:"M d, Y H:i" }}
-                                {% else %}
-                                    <span class="has-text-grey-light">Never</span>
-                                {% endif %}
-                            </p>
-                            <p><strong>Status:</strong>
-                                {% if selected_user.is_active %}
-                                    <span class="tag is-success">Active</span>
-                                {% else %}
-                                    <span class="tag is-danger">Inactive</span>
-                                {% endif %}
-                                {% if selected_user.is_staff %}
-                                    <span class="tag is-warning">Staff</span>
-                                {% endif %}
-                                {% if selected_user.is_superuser %}
-                                    <span class="tag is-danger">Superuser</span>
-                                {% endif %}
-                            </p>
+                            <p><strong>Last Login:</strong> {% if selected_user.last_login %}{{ selected_user.last_login|date:"M d, Y H:i" }}{% else %}<span class="has-text-grey-light">Never</span>{% endif %}</p>
+                            <p><strong>Status:</strong> {% if selected_user.is_active %}<span class="tag is-success">Active</span>{% else %}<span class="tag is-danger">Inactive</span>{% endif %}{% if selected_user.is_staff %} <span class="tag is-warning">Staff</span>{% endif %}{% if selected_user.is_superuser %} <span class="tag is-danger">Superuser</span>{% endif %}</p>
                         </div>
                     </div>
                 </div>
@@ -63,24 +39,54 @@
                 <div class="card">
                     <header class="card-header">
                         <p class="card-header-title">Credit Information</p>
+                        {% if credit_account %}
+                            <div class="card-header-icon" 
+                                 x-data="{ 
+                                     showCreditForm: false, 
+                                     showCreditHistory: false 
+                                 }"
+                                 @close-credit-form.window="showCreditForm = false"
+                            >
+                                <div class="field is-grouped">
+                                    <div class="control">
+                                        <button 
+                                            class="button is-small is-success"
+                                            @click="showCreditForm = !showCreditForm; showCreditHistory = false; if(showCreditForm) { setTimeout(() => htmx.trigger('#credit-adjustment-container div', 'htmx:trigger'), 100); }"
+                                        >
+                                            <span class="icon">
+                                                <i class="fas fa-coins"></i>
+                                            </span>
+                                            <span>Adjust Credits</span>
+                                        </button>
+                                    </div>
+                                    <div class="control">
+                                        <button 
+                                            class="button is-small is-info"
+                                            @click="showCreditHistory = !showCreditHistory; showCreditForm = false; if(showCreditHistory) { setTimeout(() => htmx.trigger('#credit-history-container div', 'htmx:trigger'), 100); }"
+                                        >
+                                            <span class="icon">
+                                                <i class="fas fa-history"></i>
+                                            </span>
+                                            <span>History</span>
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
+                        {% endif %}
                     </header>
                     <div class="card-content">
                         <div class="content">
                             {% if credit_account %}
-                                <p><strong>Current Balance:</strong> 
-                                    <span class="tag is-primary is-large">{{ current_balance|floatformat:1 }} credits</span>
-                                </p>
+                                <p><strong>Current Balance:</strong> <span class="tag is-primary is-large" id="main-balance-display">{{ current_balance|floatformat:1 }} credits</span></p>
                                 
                                 {% if balance_breakdown %}
                                     <div class="field">
                                         <label class="label">Balance Breakdown:</label>
                                         {% if balance_breakdown.subscription %}
-                                            <p><span class="icon"><i class="fas fa-calendar"></i></span> 
-                                               Subscription: {{ balance_breakdown.subscription|floatformat:1 }} credits</p>
+                                            <p><span class="icon"><i class="fas fa-calendar"></i></span> Subscription: {{ balance_breakdown.subscription|floatformat:1 }} credits</p>
                                         {% endif %}
-                                        {% if balance_breakdown.purchase %}
-                                            <p><span class="icon"><i class="fas fa-shopping-cart"></i></span> 
-                                               Pay-as-you-go: {{ balance_breakdown.purchase|floatformat:1 }} credits</p>
+                                        {% if balance_breakdown.pay_as_you_go %}
+                                            <p><span class="icon"><i class="fas fa-shopping-cart"></i></span> Pay-as-you-go: {{ balance_breakdown.pay_as_you_go|floatformat:1 }} credits</p>
                                         {% endif %}
                                     </div>
                                 {% endif %}
@@ -92,6 +98,58 @@
                             {% endif %}
                         </div>
                     </div>
+                    
+                    <!-- Credit Adjustment Form Modal -->
+                    {% if credit_account %}
+                        <div x-show="showCreditForm" 
+                             x-transition:enter="transition ease-out duration-300"
+                             x-transition:enter-start="opacity-0 transform scale-95"
+                             x-transition:enter-end="opacity-100 transform scale-100"
+                             x-transition:leave="transition ease-in duration-200"
+                             x-transition:leave-start="opacity-100 transform scale-100"
+                             x-transition:leave-end="opacity-0 transform scale-95"
+                             class="card-content"
+                             id="credit-adjustment-container"
+                        >
+                            <div 
+                                hx-get="{% url 'admin_dashboard:user_credit_adjustment' selected_user.id %}"
+                                hx-trigger="htmx:trigger"
+                                hx-swap="innerHTML"
+                            >
+                                <div class="has-text-centered">
+                                    <span class="icon">
+                                        <i class="fas fa-spinner fa-spin"></i>
+                                    </span>
+                                    <p>Loading credit adjustment form...</p>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <!-- Credit History Modal -->
+                        <div x-show="showCreditHistory" 
+                             x-transition:enter="transition ease-out duration-300"
+                             x-transition:enter-start="opacity-0 transform scale-95"
+                             x-transition:enter-end="opacity-100 transform scale-100"
+                             x-transition:leave="transition ease-in duration-200"
+                             x-transition:leave-start="opacity-100 transform scale-100"
+                             x-transition:leave-end="opacity-0 transform scale-95"
+                             class="card-content"
+                             id="credit-history-container"
+                        >
+                            <div 
+                                hx-get="{% url 'admin_dashboard:user_credit_history' selected_user.id %}"
+                                hx-trigger="htmx:trigger"
+                                hx-swap="innerHTML"
+                            >
+                                <div class="has-text-centered">
+                                    <span class="icon">
+                                        <i class="fas fa-spinner fa-spin"></i>
+                                    </span>
+                                    <p>Loading credit history...</p>
+                                </div>
+                            </div>
+                        </div>
+                    {% endif %}
                 </div>
             </div>
 
@@ -104,20 +162,11 @@
                     <div class="card-content">
                         <div class="content">
                             {% if subscription %}
-                                <p><strong>Status:</strong> 
-                                    <span class="tag {% if subscription.status == 'active' %}is-success{% elif subscription.status == 'canceled' %}is-danger{% else %}is-warning{% endif %}">
-                                        {{ subscription.status|title }}
-                                    </span>
-                                </p>
+                                <p><strong>Status:</strong> <span class="tag {% if subscription.status == 'active' %}is-success{% elif subscription.status == 'canceled' %}is-danger{% else %}is-warning{% endif %}">{{ subscription.status|title }}</span></p>
                                 <p><strong>Plan:</strong> {{ subscription.stripe_product_id }}</p>
-                                <p><strong>Current Period:</strong> 
-                                    {{ subscription.current_period_start|date:"M d, Y" }} - 
-                                    {{ subscription.current_period_end|date:"M d, Y" }}
-                                </p>
+                                <p><strong>Current Period:</strong> {{ subscription.current_period_start|date:"M d, Y" }} - {{ subscription.current_period_end|date:"M d, Y" }}</p>
                                 {% if subscription.cancel_at_period_end %}
-                                    <p><strong>Cancellation:</strong> 
-                                        <span class="tag is-warning">Canceling at period end</span>
-                                    </p>
+                                    <p><strong>Cancellation:</strong> <span class="tag is-warning">Canceling at period end</span></p>
                                 {% endif %}
                                 {% if subscription.canceled_at %}
                                     <p><strong>Canceled Date:</strong> {{ subscription.canceled_at|date:"M d, Y H:i" }}</p>
@@ -173,6 +222,9 @@
                         <li :class="{ 'is-active': activeTab === 'transactions' }">
                             <a @click="activeTab = 'transactions'">Credit Additions</a>
                         </li>
+                        <li :class="{ 'is-active': activeTab === 'adjustments' }">
+                            <a @click="activeTab = 'adjustments'">Admin Adjustments</a>
+                        </li>
                         <li :class="{ 'is-active': activeTab === 'payments' }">
                             <a @click="activeTab = 'payments'">Payments</a>
                         </li>
@@ -183,7 +235,7 @@
                 </div>
 
                 <!-- Credit Additions Tab -->
-                <div x-show="activeTab === 'transactions'">
+                <div x-show="activeTab === 'transactions'" id="user-transactions">
                     {% if recent_transactions %}
                         <div class="table-container">
                             <table class="table is-fullwidth is-striped">
@@ -216,6 +268,22 @@
                     {% endif %}
                 </div>
 
+                <!-- Admin Adjustments Tab -->
+                <div x-show="activeTab === 'adjustments'" id="user-adjustments">
+                    <div 
+                        hx-get="{% url 'admin_dashboard:user_credit_history' selected_user.id %}"
+                        hx-trigger="intersect once"
+                        hx-swap="innerHTML"
+                    >
+                        <div class="has-text-centered">
+                            <span class="icon">
+                                <i class="fas fa-spinner fa-spin"></i>
+                            </span>
+                            <p>Loading admin adjustments...</p>
+                        </div>
+                    </div>
+                </div>
+
                 <!-- Payments Tab -->
                 <div x-show="activeTab === 'payments'">
                     {% if recent_payments %}
@@ -237,16 +305,10 @@
                                         <td>${{ payment.amount|floatformat:2 }}</td>
                                         <td>{{ payment.payment_type }}</td>
                                         <td>
-                                            <span class="tag {% if payment.status == 'succeeded' %}is-success{% elif payment.status == 'failed' %}is-danger{% else %}is-warning{% endif %}">
-                                                {{ payment.status|title }}
-                                            </span>
+                                            <span class="tag {% if payment.status == 'succeeded' %}is-success{% elif payment.status == 'failed' %}is-danger{% else %}is-warning{% endif %}">{{ payment.status|title }}</span>
                                         </td>
                                         <td>
-                                            {% if payment.receipt_number %}
-                                                {{ payment.receipt_number }}
-                                            {% else %}
-                                                -
-                                            {% endif %}
+                                            {% if payment.receipt_number %}{{ payment.receipt_number }}{% else %}-{% endif %}
                                         </td>
                                     </tr>
                                     {% endfor %}
@@ -313,4 +375,32 @@
         </div>
     </div>
 </section>
+
+<script>
+// Listen for credit adjustment success events to update the main balance display
+document.addEventListener('DOMContentLoaded', function() {
+    // Override the handleCreditAdjustmentResponse function to also update main balance
+    const originalHandleCreditAdjustmentResponse = window.handleCreditAdjustmentResponse;
+    
+    window.handleCreditAdjustmentResponse = function(event) {
+        // Call the original function first
+        if (originalHandleCreditAdjustmentResponse) {
+            originalHandleCreditAdjustmentResponse(event);
+        }
+        
+        // Additional handling for main balance update
+        const response = event.detail.xhr.response;
+        const data = JSON.parse(response);
+        
+        if (data.success && data.new_balance !== undefined) {
+            // Update the main balance display in the credit information card
+            const mainBalanceDisplay = document.getElementById('main-balance-display');
+            if (mainBalanceDisplay) {
+                mainBalanceDisplay.textContent = `${data.new_balance.toFixed(1)} credits`;
+            }
+        }
+    };
+});
+</script>
+
 {% endblock %} 
