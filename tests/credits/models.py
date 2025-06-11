@@ -351,6 +351,214 @@ class APIKey(models.Model):
         return self.is_active and not self.is_expired
 
 
+class UserSubscription(models.Model):
+    """Model representing a user's subscription status and billing information."""
+    
+    STATUS_CHOICES = [
+        ('active', _('Active')),
+        ('canceled', _('Canceled')),
+        ('past_due', _('Past Due')),
+        ('unpaid', _('Unpaid')),
+        ('incomplete', _('Incomplete')),
+        ('incomplete_expired', _('Incomplete Expired')),
+        ('trialing', _('Trialing')),
+        ('paused', _('Paused')),
+    ]
+    
+    user = models.OneToOneField(
+        User,
+        on_delete=models.CASCADE,
+        related_name='subscription',
+        verbose_name=_('user')
+    )
+    stripe_subscription_id = models.CharField(
+        _('stripe subscription id'),
+        max_length=255,
+        unique=True,
+        blank=True,
+        null=True,
+        help_text=_('Stripe subscription ID')
+    )
+    stripe_product_id = models.CharField(
+        _('stripe product id'),
+        max_length=255,
+        blank=True,
+        help_text=_('Stripe product ID for this subscription')
+    )
+    status = models.CharField(
+        _('status'),
+        max_length=20,
+        choices=STATUS_CHOICES,
+        default='incomplete',
+        help_text=_('Current subscription status')
+    )
+    current_period_start = models.DateTimeField(
+        _('current period start'),
+        null=True,
+        blank=True,
+        help_text=_('Start of the current billing period')
+    )
+    current_period_end = models.DateTimeField(
+        _('current period end'),
+        null=True,
+        blank=True,
+        help_text=_('End of the current billing period')
+    )
+    cancel_at_period_end = models.BooleanField(
+        _('cancel at period end'),
+        default=False,
+        help_text=_('Whether the subscription will cancel at the end of the current period')
+    )
+    canceled_at = models.DateTimeField(
+        _('canceled at'),
+        null=True,
+        blank=True,
+        help_text=_('When the subscription was canceled')
+    )
+    created_at = models.DateTimeField(
+        _('created at'),
+        auto_now_add=True
+    )
+    updated_at = models.DateTimeField(
+        _('updated at'),
+        auto_now=True
+    )
+
+    class Meta:
+        verbose_name = _('user subscription')
+        verbose_name_plural = _('user subscriptions')
+        indexes = [
+            models.Index(fields=['stripe_subscription_id']),
+            models.Index(fields=['status']),
+            models.Index(fields=['current_period_end']),
+        ]
+
+    def __str__(self):
+        """Return string representation of the subscription."""
+        user_email = self.user.email if self.user else "No User"
+        status = self.get_status_display()
+        return f"{user_email} - {status}"
+
+    @property
+    def is_active(self):
+        """Check if the subscription is currently active."""
+        return self.status in ['active', 'trialing']
+
+
+class Payment(models.Model):
+    """Model for tracking all payment transactions."""
+    
+    PAYMENT_TYPE_CHOICES = [
+        ('CREDIT_PURCHASE', _('Credit Purchase')),
+        ('SUBSCRIPTION', _('Subscription')),
+        ('REFUND', _('Refund')),
+    ]
+    
+    STATUS_CHOICES = [
+        ('pending', _('Pending')),
+        ('succeeded', _('Succeeded')),
+        ('failed', _('Failed')),
+        ('refunded', _('Refunded')),
+        ('cancelled', _('Cancelled')),
+    ]
+    
+    user = models.ForeignKey(
+        User,
+        on_delete=models.CASCADE,
+        related_name='payments',
+        verbose_name=_('user')
+    )
+    stripe_payment_intent_id = models.CharField(
+        _('stripe payment intent id'),
+        max_length=255,
+        blank=True,
+        null=True,
+        help_text=_('Stripe Payment Intent ID')
+    )
+    stripe_subscription_id = models.CharField(
+        _('stripe subscription id'),
+        max_length=255,
+        blank=True,
+        null=True,
+        help_text=_('Stripe Subscription ID (for subscription payments)')
+    )
+    stripe_invoice_id = models.CharField(
+        _('stripe invoice id'),
+        max_length=255,
+        blank=True,
+        null=True,
+        help_text=_('Stripe Invoice ID (for immediate charges like plan changes)')
+    )
+    amount = models.DecimalField(
+        _('amount'),
+        max_digits=10,
+        decimal_places=2,
+        help_text=_('Payment amount in the specified currency')
+    )
+    currency = models.CharField(
+        _('currency'),
+        max_length=3,
+        default='USD',
+        help_text=_('Currency code (ISO 4217)')
+    )
+    payment_type = models.CharField(
+        _('payment type'),
+        max_length=20,
+        choices=PAYMENT_TYPE_CHOICES,
+        help_text=_('Type of payment')
+    )
+    status = models.CharField(
+        _('status'),
+        max_length=20,
+        choices=STATUS_CHOICES,
+        default='pending',
+        help_text=_('Payment status')
+    )
+    description = models.CharField(
+        _('description'),
+        max_length=255,
+        help_text=_('Payment description')
+    )
+    receipt_data = models.JSONField(
+        _('receipt data'),
+        blank=True,
+        null=True,
+        help_text=_('Receipt information in JSON format')
+    )
+    created_at = models.DateTimeField(
+        _('created at'),
+        auto_now_add=True
+    )
+    updated_at = models.DateTimeField(
+        _('updated at'),
+        auto_now=True
+    )
+
+    class Meta:
+        verbose_name = _('payment')
+        verbose_name_plural = _('payments')
+        ordering = ['-created_at']
+        indexes = [
+            models.Index(fields=['user', '-created_at']),
+            models.Index(fields=['status']),
+            models.Index(fields=['payment_type']),
+            models.Index(fields=['stripe_payment_intent_id']),
+            models.Index(fields=['-created_at']),
+        ]
+
+    def __str__(self):
+        """Return string representation of the payment."""
+        user_email = self.user.email if self.user else "No User"
+        amount = self.amount or Decimal('0.00')
+        status = self.get_status_display()
+        return f"{user_email}: ${amount} ({status})"
+
+    @property
+    def is_succeeded(self):
+        """Check if the payment was successful."""
+        return self.status == 'succeeded'
+
+
 class InsufficientCreditsError(Exception):
     """Exception raised when a user has insufficient credits."""
     pass

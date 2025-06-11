@@ -35,8 +35,10 @@ urlpatterns = [
     path('users/<int:user_id>/credit-history/', views.user_credit_history, name='user_credit_history'),
     # Audit log URLs
     path('audit/', views.audit_log, name='audit_log'),
-    # Sprint 18: Payment admin tools
+    # Payment admin tools
     path('payments/search/', views.payment_search, name='payment_search'),
     path('payments/<int:payment_id>/investigate/', views.payment_investigation, name='payment_investigation'),
     path('payments/<int:payment_id>/refund/', views.initiate_refund, name='initiate_refund'),
+    # Analytics dashboard
+    path('analytics/', views.analytics_dashboard, name='analytics_dashboard'),
 ]
