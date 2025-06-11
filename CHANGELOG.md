@@ -2,6 +2,23 @@
 
 All notable changes to this project will be documented in this file.
 
+## v0.29.0 (2025-06-11)
+v0.29.0 feat: Implement Basic Payment Admin Tools
+
+This PR implements essential payment support tools for administrators, enabling efficient payment search, investigation, and refund initiation within QuickScale's admin dashboard, as outlined in Sprint 18 of the roadmap.
+
+- Backend Implementation:
+  - Added comprehensive payment search functionality with advanced filtering options and pagination. 
+  - Implemented comprehensive payment investigation tools, integrating user context and Stripe data retrieval.
+  - Created basic refund initiation processes, supporting both partial and full refunds with robust validation and error handling.
+- Frontend Implementation:
+  - Developed new templates for payment search and investigation, improving usability and accessibility for administrators.
+  - Enhanced existing views to accommodate new features, ensuring a seamless user experience, including a simple refund interface and display of payment details and history.
+- Testing:
+  - Added extensive unit tests to validate the new functionalities, including payment search and viewing, refund initiation, and payment investigation tools, ensuring compliance with the updated requirements.
+
+This PR significantly enhances the administrative experience for managing payments, ensuring better oversight and control over financial transactions.
+
 ## v0.28.0 (2025-06-11)
 v0.28.0 feat: Implement Admin Credit Management for Enhanced User Account Control
 

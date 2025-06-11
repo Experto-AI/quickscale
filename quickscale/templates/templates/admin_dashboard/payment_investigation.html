@@ -1,0 +1,498 @@
+{% extends "base.html" %}
+
+{% block title %}Payment Investigation #{{ payment.id }} - Admin Dashboard - {{ project_name }}{% endblock %}
+
+{% block content %}
+<section class="hero is-primary is-small">
+    <div class="hero-body">
+        <div class="container">
+            <h1 class="title">Payment Investigation</h1>
+            <p class="subtitle">Detailed payment analysis and support tools</p>
+        </div>
+    </div>
+</section>
+
+<section class="section">
+    <div class="container">
+        <!-- Warnings Section -->
+        {% if warnings %}
+            <div class="box">
+                <h2 class="title is-5 has-text-danger">Investigation Warnings</h2>
+                {% for warning in warnings %}
+                    <div class="notification is-warning">
+                        <span class="icon">
+                            <i class="fas fa-exclamation-triangle"></i>
+                        </span>
+                        {{ warning }}
+                    </div>
+                {% endfor %}
+            </div>
+        {% endif %}
+
+        <!-- Payment Details -->
+        <div class="box">
+            <div class="level">
+                <div class="level-left">
+                    <div class="level-item">
+                        <h2 class="title is-4">Payment #{{ payment.id }}</h2>
+                    </div>
+                </div>
+                <div class="level-right">
+                    <div class="level-item">
+                        <span class="tag is-large
+                            {% if payment.status == 'succeeded' %}is-success
+                            {% elif payment.status == 'pending' %}is-warning
+                            {% elif payment.status == 'failed' %}is-danger
+                            {% elif payment.status == 'refunded' %}is-info
+                            {% else %}is-light{% endif %}">
+                            {{ payment.get_status_display }}
+                        </span>
+                    </div>
+                </div>
+            </div>
+
+            <div class="columns">
+                <div class="column is-6">
+                    <table class="table is-fullwidth">
+                        <tr>
+                            <th width="40%">User</th>
+                            <td>
+                                <a href="{% url 'admin_dashboard:user_detail' payment.user.id %}" class="has-text-link">
+                                    {{ payment.user.email }}
+                                </a>
+                            </td>
+                        </tr>
+                        <tr>
+                            <th>Payment Type</th>
+                            <td>
+                                <span class="tag is-light">{{ payment.get_payment_type_display }}</span>
+                            </td>
+                        </tr>
+                        <tr>
+                            <th>Amount</th>
+                            <td>
+                                <span class="has-text-weight-bold 
+                                    {% if payment.amount < 0 %}has-text-danger{% else %}has-text-success{% endif %}">
+                                    ${{ payment.amount }} {{ payment.currency|upper }}
+                                </span>
+                            </td>
+                        </tr>
+                        <tr>
+                            <th>Created</th>
+                            <td>{{ payment.created_at|date:"M d, Y H:i:s" }}</td>
+                        </tr>
+                        <tr>
+                            <th>Updated</th>
+                            <td>{{ payment.updated_at|date:"M d, Y H:i:s" }}</td>
+                        </tr>
+                    </table>
+                </div>
+                <div class="column is-6">
+                    <table class="table is-fullwidth">
+                        <tr>
+                            <th width="40%">Description</th>
+                            <td>{{ payment.description|default:"—" }}</td>
+                        </tr>
+                        <tr>
+                            <th>Stripe Payment Intent</th>
+                            <td>
+                                {% if payment.stripe_payment_intent_id %}
+                                    <code>{{ payment.stripe_payment_intent_id }}</code>
+                                {% else %}
+                                    <span class="has-text-grey">None</span>
+                                {% endif %}
+                            </td>
+                        </tr>
+                        <tr>
+                            <th>Stripe Subscription</th>
+                            <td>
+                                {% if payment.stripe_subscription_id %}
+                                    <code>{{ payment.stripe_subscription_id }}</code>
+                                {% else %}
+                                    <span class="has-text-grey">None</span>
+                                {% endif %}
+                            </td>
+                        </tr>
+                        <tr>
+                            <th>Stripe Invoice</th>
+                            <td>
+                                {% if payment.stripe_invoice_id %}
+                                    <code>{{ payment.stripe_invoice_id }}</code>
+                                {% else %}
+                                    <span class="has-text-grey">None</span>
+                                {% endif %}
+                            </td>
+                        </tr>
+                        <tr>
+                            <th>Receipt Number</th>
+                            <td>
+                                {% if payment.receipt_number %}
+                                    <code>{{ payment.receipt_number }}</code>
+                                {% else %}
+                                    <span class="has-text-grey">None</span>
+                                {% endif %}
+                            </td>
+                        </tr>
+                    </table>
+                </div>
+            </div>
+
+            <!-- Action Buttons -->
+            <div class="level">
+                <div class="level-left">
+                    <div class="level-item">
+                        {% if payment.status == 'succeeded' and payment.payment_type != 'REFUND' %}
+                            <button class="button is-danger" 
+                                    x-data="{}" 
+                                    @click="$dispatch('show-refund-modal', {paymentId: {{ payment.id }}, amount: {{ payment.amount }}, currency: '{{ payment.currency }}'})">
+                                <span class="icon">
+                                    <i class="fas fa-undo"></i>
+                                </span>
+                                <span>Initiate Refund</span>
+                            </button>
+                        {% endif %}
+                    </div>
+                </div>
+                <div class="level-right">
+                    <div class="level-item">
+                        {% if payment.receipt_number %}
+                            <a href="{% url 'admin_dashboard:download_receipt' payment.id %}" 
+                               class="button is-light">
+                                <span class="icon">
+                                    <i class="fas fa-download"></i>
+                                </span>
+                                <span>Download Receipt</span>
+                            </a>
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Stripe Data -->
+        {% if stripe_data %}
+            <div class="box">
+                <h2 class="title is-5">Stripe Payment Intent Data</h2>
+                <div class="columns">
+                    <div class="column is-6">
+                        <table class="table is-fullwidth">
+                            <tr>
+                                <th width="40%">Stripe ID</th>
+                                <td><code>{{ stripe_data.id }}</code></td>
+                            </tr>
+                            <tr>
+                                <th>Amount</th>
+                                <td>${{ stripe_data.amount|floatformat:2 }} {{ stripe_data.currency|upper }}</td>
+                            </tr>
+                            <tr>
+                                <th>Status</th>
+                                <td>
+                                    <span class="tag 
+                                        {% if stripe_data.status == 'succeeded' %}is-success
+                                        {% elif stripe_data.status == 'pending' %}is-warning
+                                        {% elif stripe_data.status == 'failed' %}is-danger
+                                        {% else %}is-light{% endif %}">
+                                        {{ stripe_data.status|title }}
+                                    </span>
+                                </td>
+                            </tr>
+                            <tr>
+                                <th>Payment Method</th>
+                                <td>{{ stripe_data.payment_method_types.0|default:"Unknown"|title }}</td>
+                            </tr>
+                        </table>
+                    </div>
+                    <div class="column is-6">
+                        <table class="table is-fullwidth">
+                            <tr>
+                                <th width="40%">Customer</th>
+                                <td>
+                                    {% if stripe_data.customer %}
+                                        <code>{{ stripe_data.customer }}</code>
+                                    {% else %}
+                                        <span class="has-text-grey">None</span>
+                                    {% endif %}
+                                </td>
+                            </tr>
+                            <tr>
+                                <th>Created</th>
+                                <td>{{ stripe_data.created|date:"M d, Y H:i:s" }}</td>
+                            </tr>
+                            <tr>
+                                <th>Confirmation Method</th>
+                                <td>{{ stripe_data.confirmation_method|default:"automatic"|title }}</td>
+                            </tr>
+                            <tr>
+                                <th>Client Secret</th>
+                                <td>
+                                    {% if stripe_data.client_secret %}
+                                        <code>{{ stripe_data.client_secret|slice:":20" }}...</code>
+                                    {% else %}
+                                        <span class="has-text-grey">None</span>
+                                    {% endif %}
+                                </td>
+                            </tr>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        {% elif stripe_enabled and payment.stripe_payment_intent_id %}
+            <div class="box">
+                <div class="notification is-warning">
+                    <span class="icon">
+                        <i class="fas fa-exclamation-triangle"></i>
+                    </span>
+                    Could not retrieve Stripe payment intent data. Check Stripe configuration or payment intent status.
+                </div>
+            </div>
+        {% endif %}
+
+        <!-- Related Transactions -->
+        {% if related_transactions %}
+            <div class="box">
+                <h2 class="title is-5">Related Credit Transactions</h2>
+                <div class="table-container">
+                    <table class="table is-fullwidth is-striped">
+                        <thead>
+                            <tr>
+                                <th>Date</th>
+                                <th>Amount</th>
+                                <th>Type</th>
+                                <th>Description</th>
+                                <th>Expiration</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for transaction in related_transactions %}
+                            <tr>
+                                <td>{{ transaction.created_at|date:"M d, Y H:i" }}</td>
+                                <td>
+                                    <span class="has-text-weight-medium 
+                                        {% if transaction.amount < 0 %}has-text-danger{% else %}has-text-success{% endif %}">
+                                        {{ transaction.amount }} credits
+                                    </span>
+                                </td>
+                                <td>
+                                    <span class="tag is-light">{{ transaction.get_credit_type_display }}</span>
+                                </td>
+                                <td>{{ transaction.description }}</td>
+                                <td>
+                                    {% if transaction.expiration_date %}
+                                        {{ transaction.expiration_date|date:"M d, Y" }}
+                                    {% else %}
+                                        <span class="has-text-grey">Never</span>
+                                    {% endif %}
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        {% endif %}
+
+        <!-- Refund History -->
+        {% if refund_history %}
+            <div class="box">
+                <h2 class="title is-5">Refund History</h2>
+                <div class="table-container">
+                    <table class="table is-fullwidth is-striped">
+                        <thead>
+                            <tr>
+                                <th>Date</th>
+                                <th>Amount</th>
+                                <th>Status</th>
+                                <th>Description</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for refund in refund_history %}
+                            <tr>
+                                <td>{{ refund.created_at|date:"M d, Y H:i" }}</td>
+                                <td>
+                                    <span class="has-text-weight-medium has-text-danger">
+                                        ${{ refund.amount|floatformat:2 }} {{ refund.currency|upper }}
+                                    </span>
+                                </td>
+                                <td>
+                                    <span class="tag is-info">{{ refund.get_status_display }}</span>
+                                </td>
+                                <td>{{ refund.description }}</td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        {% endif %}
+
+        <!-- User Payment History -->
+        {% if user_payment_history %}
+            <div class="box">
+                <h2 class="title is-5">Recent User Payment History</h2>
+                <p class="subtitle is-6">Last 10 payments for {{ payment.user.email }}</p>
+                <div class="table-container">
+                    <table class="table is-fullwidth is-striped">
+                        <thead>
+                            <tr>
+                                <th>Date</th>
+                                <th>Type</th>
+                                <th>Amount</th>
+                                <th>Status</th>
+                                <th>Description</th>
+                                <th>Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for user_payment in user_payment_history %}
+                            <tr {% if user_payment.id == payment.id %}class="has-background-primary-light"{% endif %}>
+                                <td>{{ user_payment.created_at|date:"M d, Y H:i" }}</td>
+                                <td>
+                                    <span class="tag is-light">{{ user_payment.get_payment_type_display }}</span>
+                                </td>
+                                <td>
+                                    <span class="has-text-weight-medium 
+                                        {% if user_payment.amount < 0 %}has-text-danger{% else %}has-text-success{% endif %}">
+                                        ${{ user_payment.amount }} {{ user_payment.currency|upper }}
+                                    </span>
+                                </td>
+                                <td>
+                                    <span class="tag
+                                        {% if user_payment.status == 'succeeded' %}is-success
+                                        {% elif user_payment.status == 'pending' %}is-warning
+                                        {% elif user_payment.status == 'failed' %}is-danger
+                                        {% elif user_payment.status == 'refunded' %}is-info
+                                        {% else %}is-light{% endif %}">
+                                        {{ user_payment.get_status_display }}
+                                    </span>
+                                </td>
+                                <td>
+                                    {% if user_payment.description|length > 30 %}
+                                        {{ user_payment.description|slice:":30" }}...
+                                    {% else %}
+                                        {{ user_payment.description|default:"—" }}
+                                    {% endif %}
+                                </td>
+                                <td>
+                                    {% if user_payment.id != payment.id %}
+                                        <a href="{% url 'admin_dashboard:payment_investigation' user_payment.id %}" 
+                                           class="button is-small is-light">
+                                            <span class="icon">
+                                                <i class="fas fa-search"></i>
+                                            </span>
+                                        </a>
+                                    {% else %}
+                                        <span class="tag is-info is-small">Current</span>
+                                    {% endif %}
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        {% endif %}
+
+        <!-- Navigation -->
+        <div class="level">
+            <div class="level-left">
+                <div class="level-item">
+                    <a href="{% url 'admin_dashboard:payment_search' %}" class="button is-light">
+                        <span class="icon">
+                            <i class="fas fa-arrow-left"></i>
+                        </span>
+                        <span>Back to Payment Search</span>
+                    </a>
+                </div>
+            </div>
+            <div class="level-right">
+                <div class="level-item">
+                    <a href="{% url 'admin_dashboard:user_detail' payment.user.id %}" class="button is-info">
+                        <span class="icon">
+                            <i class="fas fa-user"></i>
+                        </span>
+                        <span>View User Details</span>
+                    </a>
+                </div>
+            </div>
+        </div>
+    </div>
+</section>
+
+<!-- Refund Modal -->
+<div class="modal" x-data="{ showModal: false, paymentId: null, amount: 0, currency: 'USD' }" 
+     x-show="showModal" 
+     @show-refund-modal.window="showModal = true; paymentId = $event.detail.paymentId; amount = $event.detail.amount; currency = $event.detail.currency;"
+     @keydown.escape.window="showModal = false"
+     style="display: none;">
+    <div class="modal-background" @click="showModal = false"></div>
+    <div class="modal-card">
+        <header class="modal-card-head">
+            <p class="modal-card-title">Initiate Refund</p>
+            <button class="delete" @click="showModal = false"></button>
+        </header>
+        <section class="modal-card-body">
+            <div class="notification is-warning">
+                <p><strong>Warning:</strong> This action will process a real refund through Stripe and cannot be easily undone.</p>
+                <p>Make sure you have verified this refund request with the customer or have proper authorization.</p>
+            </div>
+            
+            <div id="refund-response-container">
+                <form x-ref="refundForm" method="post" :action="`{% url 'admin_dashboard:initiate_refund' 0 %}`.replace('0', paymentId)"
+                      hx-post=":action" 
+                      hx-target="#refund-response-container" 
+                      hx-swap="innerHTML"
+                      hx-indicator="#refund-loading">
+                    {% csrf_token %}
+                    <div class="field">
+                        <label class="label">Refund Amount</label>
+                        <div class="control">
+                            <input class="input" type="number" name="amount" :value="amount" step="0.01" min="0.01" :max="amount">
+                        </div>
+                        <p class="help">Leave as-is for full refund of <span x-text="`$${amount} ${currency}`"></span>, or enter partial amount</p>
+                    </div>
+                    <div class="field">
+                        <label class="label">Refund Reason</label>
+                        <div class="control">
+                            <div class="select is-fullwidth">
+                                <select name="reason" required>
+                                    <option value="">Select a reason...</option>
+                                    <option value="requested_by_customer">Requested by customer</option>
+                                    <option value="duplicate">Duplicate payment</option>
+                                    <option value="fraudulent">Fraudulent payment</option>
+                                    <option value="other">Other</option>
+                                </select>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="field">
+                        <label class="label">Admin Notes <span class="has-text-danger">*</span></label>
+                        <div class="control">
+                            <textarea class="textarea" name="admin_notes" required 
+                                      placeholder="Document the reason for this refund, any customer communication, and authorization details..."></textarea>
+                        </div>
+                        <p class="help">Required for audit compliance. Include authorization details and customer communication.</p>
+                    </div>
+                    <div class="field">
+                        <div class="control">
+                            <button type="submit" class="button is-danger">
+                                <span class="icon">
+                                    <i class="fas fa-exclamation-triangle"></i>
+                                </span>
+                                <span>Process Refund</span>
+                            </button>
+                            <button type="button" class="button" @click="showModal = false">Cancel</button>
+                        </div>
+                    </div>
+                </form>
+            </div>
+            <div id="refund-loading" class="htmx-indicator" style="text-align: center; padding: 20px;">
+                <span class="icon">
+                    <i class="fas fa-spinner fa-spin"></i>
+                </span>
+                Processing refund...
+            </div>
+        </section>
+    </div>
+</div>
+{% endblock %} 

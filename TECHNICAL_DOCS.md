@@ -1398,3 +1398,32 @@ The credit system provides a sophisticated foundation for SaaS monetization:
 - **Comprehensive Test Coverage**: Extensive test suite covering credit operations, Stripe integration, subscription management, and plan changes
 - **Database Integrity**: Atomic transactions for all credit operations ensuring data consistency
 - **Error Handling**: Graceful handling of Stripe API errors with fallback mechanisms
+
+#### Enhanced Payment Search Functionality
+- **Advanced Filtering**: Support for filtering by payment type, status, user email, Stripe IDs, amount ranges, and date ranges
+- **Optimized Queries**: Uses `select_related` for efficient database queries with related models
+- **Pagination**: Displays 25 results per page with efficient count limiting
+- **Audit Logging**: All search activities are logged for compliance
+
+#### Payment Investigation Tools
+- **Comprehensive Data Gathering**: Retrieves payment details, user history, related transactions, and Stripe data
+- **Warning System**: Automated detection of potential issues (missing Stripe IDs, failed payments, zero amounts)
+- **Stripe Integration**: Real-time retrieval of payment intent details from Stripe API
+- **Refund History**: Display of related refund transactions for complete payment lifecycle view
+- **Audit Trail**: Investigation activities are logged with admin user attribution
+
+#### Basic Refund Initiation
+- **Comprehensive Validation**: Pre-flight checks for payment status, refund eligibility, and amount limits
+- **Partial and Full Refunds**: Support for both partial and complete payment refunds
+- **Atomic Transactions**: Database integrity ensured through atomic transaction blocks
+- **Credit System Integration**: Automatic credit adjustment for refunded credit purchases
+- **Stripe API Integration**: Real-time refund processing through Stripe with proper metadata
+- **Audit Compliance**: Complete logging of refund actions with admin attribution and reasoning
+
+#### Database Integrity Features
+- **Transaction Safety**: All refund operations use atomic database transactions
+- **Consistent State Management**: Payment status updates coordinated with credit adjustments
+- **Error Handling**: Graceful fallback for Stripe API failures with proper error logging
+- **Duplicate Prevention**: Built-in safeguards against duplicate refund processing
+
+These tools provide essential payment support capabilities for QuickScale administrators while maintaining data integrity and audit compliance.
