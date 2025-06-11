@@ -13,6 +13,7 @@ from django.db.models import Q, Sum
 from django.http import HttpRequest, HttpResponse, JsonResponse
 from django.shortcuts import render, get_object_or_404, redirect
 from django.urls import reverse
+import json
 
 from core.env_utils import get_env, is_feature_enabled
 from .models import AuditLog
@@ -54,6 +55,10 @@ if stripe_enabled:
             stripe_manager = None
             STRIPE_AVAILABLE = False
 
+# Import models for analytics calculations
+from users.models import CustomUser
+from credits.models import Payment, UserSubscription, Service, ServiceUsage
+
 @login_required
 def user_dashboard(request: HttpRequest) -> HttpResponse:
     """Display the user dashboard with credits info and quick actions."""
@@ -85,6 +90,81 @@ def user_dashboard(request: HttpRequest) -> HttpResponse:
     }
     
     return render(request, 'admin_dashboard/user_dashboard.html', context)
+
+@login_required
+@user_passes_test(lambda u: u.is_staff)
+def analytics_dashboard(request: HttpRequest) -> HttpResponse:
+    """Display the analytics dashboard with key business metrics."""
+    # Calculate basic metrics (total users, revenue, active subscriptions)
+    total_users = CustomUser.objects.count()
+    
+    # Total revenue from successful payments
+    total_revenue = Payment.objects.filter(status='succeeded').aggregate(Sum('amount'))['amount__sum'] or Decimal(0)
+    
+    # Active subscriptions count
+    active_subscriptions = UserSubscription.objects.filter(status='active').count()
+
+    # Calculate monthly revenue for the last 12 months
+    monthly_revenue = []
+    current_date = timezone.now().replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+    
+    for i in range(12):
+        # Calculate proper calendar months
+        if i == 0:
+            start_of_month = current_date
+        else:
+            # Go back proper calendar months
+            year = current_date.year
+            month = current_date.month - i
+            while month <= 0:
+                month += 12
+                year -= 1
+            start_of_month = current_date.replace(year=year, month=month)
+        
+        # Calculate end of month
+        if start_of_month.month == 12:
+            end_of_month = start_of_month.replace(year=start_of_month.year + 1, month=1) - timedelta(microseconds=1)
+        else:
+            end_of_month = start_of_month.replace(month=start_of_month.month + 1) - timedelta(microseconds=1)
+
+        month_total = Payment.objects.filter(
+            status='succeeded',
+            created_at__gte=start_of_month,
+            created_at__lte=end_of_month
+        ).aggregate(Sum('amount'))['amount__sum'] or Decimal(0)
+
+        monthly_revenue.append({
+            'month': start_of_month.strftime('%b %Y'),
+            'revenue': float(month_total)  # Convert Decimal to float for JSON serialization
+        })
+    
+    monthly_revenue.reverse()  # Show oldest first
+
+    # Service usage statistics
+    all_services = Service.objects.all().order_by('name')
+    service_stats = []
+    for service in all_services:
+        total_credits_consumed = ServiceUsage.objects.filter(service=service).aggregate(Sum('credit_transaction__amount'))['credit_transaction__amount__sum'] or Decimal(0)
+        unique_users_count = ServiceUsage.objects.filter(service=service).values('user').distinct().count()
+        service_stats.append({
+            'name': service.name,
+            'description': service.description,
+            'credit_cost': float(service.credit_cost),  # Convert Decimal to float
+            'total_credits_consumed': float(abs(total_credits_consumed)),  # Convert Decimal to float and use absolute value
+            'unique_users_count': unique_users_count,
+            'is_active': service.is_active,
+        })
+    
+    context = {
+        'total_users': total_users,
+        'total_revenue': float(total_revenue),  # Convert Decimal to float for template compatibility
+        'active_subscriptions': active_subscriptions,
+        'service_stats': service_stats,
+        'monthly_revenue': monthly_revenue,
+        'monthly_revenue_json': json.dumps(monthly_revenue),  # JSON string for Alpine.js
+    }
+
+    return render(request, 'admin_dashboard/analytics_dashboard.html', context)
 
 @login_required
 def subscription_page(request: HttpRequest) -> HttpResponse:
@@ -582,37 +662,101 @@ def cancel_subscription(request: HttpRequest) -> JsonResponse:
 @login_required
 @user_passes_test(lambda u: u.is_staff)
 def index(request: HttpRequest) -> HttpResponse:
-    """Display the admin dashboard."""
-    return render(request, 'admin_dashboard/index.html')
+    """Display the admin dashboard with overview information and analytics."""
+    # Analytics calculations
+    total_users = CustomUser.objects.count()
+    
+    # Define time ranges
+    today = timezone.now()
+    last_24_hours = today - timedelta(hours=24)
+    last_7_days = today - timedelta(days=7)
+    last_30_days = today - timedelta(days=30)
+    last_90_days = today - timedelta(days=90)
+    
+    # Function to calculate revenue for a given period
+    def calculate_revenue(start_date):
+        succeeded_payments = Payment.objects.filter(
+            status='succeeded',
+            created_at__gte=start_date,
+            created_at__lte=today
+        ).filter(
+            Q(payment_type='CREDIT_PURCHASE') | Q(payment_type='SUBSCRIPTION')
+        )
+        return succeeded_payments.aggregate(total=Sum('amount'))['total'] or Decimal('0.00')
 
-@login_required
-@user_passes_test(lambda u: u.is_staff)
-def product_admin(request: HttpRequest) -> HttpResponse:
-    """
-    Display product management page with list of all products.
+    # Calculate total revenue for different periods
+    total_revenue_24_hours = calculate_revenue(last_24_hours)
+    total_revenue_7_days = calculate_revenue(last_7_days)
+    total_revenue_30_days = calculate_revenue(last_30_days)
+    total_revenue_90_days = calculate_revenue(last_90_days)
     
-    Args:
-        request: The HTTP request
-        
-    Returns:
-        Rendered product management template
-    """
-    # Check if Stripe is enabled
-    stripe_enabled = is_feature_enabled(get_env('STRIPE_ENABLED', 'False'))
+    # Calculate active subscriptions
+    active_subscriptions = UserSubscription.objects.filter(status='active').count()
     
+    # Function to calculate service usage for a given period
+    def get_service_usage_stats(start_date):
+        stats = []
+        for service in all_services:
+            usage = ServiceUsage.objects.filter(
+                service=service,
+                created_at__gte=start_date,
+                created_at__lte=today
+            ).aggregate(total_credits_consumed=Sum('credit_transaction__amount'))['total_credits_consumed'] or Decimal('0.00')
+            
+            # Ensure total_credits_consumed is positive for display
+            usage = abs(usage)
+            stats.append({
+                'name': service.name,
+                'description': service.description,
+                'credit_cost': service.credit_cost,
+                'is_active': service.is_active,
+                'total_credits_consumed': usage
+            })
+        return stats
+
+    # Calculate service usage statistics for different periods
+    all_services = Service.objects.all()
+    service_usage_24_hours = get_service_usage_stats(last_24_hours)
+    service_usage_7_days = get_service_usage_stats(last_7_days)
+    service_usage_30_days = get_service_usage_stats(last_30_days)
+    service_usage_90_days = get_service_usage_stats(last_90_days)
+
     context = {
         'stripe_enabled': stripe_enabled,
         'stripe_available': STRIPE_AVAILABLE,
         'missing_api_keys': missing_api_keys,
-        # Fetch products from the local database, ordered by display_order
-        'products': StripeProduct.objects.all().order_by('display_order'),
+        'total_users': total_users,
+        'active_subscriptions': active_subscriptions,
+        'total_revenue_24_hours': total_revenue_24_hours,
+        'total_revenue_7_days': total_revenue_7_days,
+        'total_revenue_30_days': total_revenue_30_days,
+        'total_revenue_90_days': total_revenue_90_days,
+        'service_usage_24_hours': service_usage_24_hours,
+        'service_usage_7_days': service_usage_7_days,
+        'service_usage_30_days': service_usage_30_days,
+        'service_usage_90_days': service_usage_90_days,
     }
+
+    log_admin_action(
+        user=request.user,
+        action='OTHER',
+        description='Admin dashboard viewed',
+        request=request
+    )
+    return render(request, 'admin_dashboard/index.html', context)
+
+@login_required
+@user_passes_test(lambda u: u.is_staff)
+def product_admin(request: HttpRequest) -> HttpResponse:
+    """Display the Stripe product administration page."""
+    products = StripeProduct.objects.all().order_by('display_order', 'name')
     
-    # Only proceed with product listing if Stripe is enabled and available
-    if stripe_enabled and STRIPE_AVAILABLE and stripe_manager is not None:
-        # No need to fetch from Stripe directly in this view anymore
-        pass # Keep the if block structure in case we add other checks later
-    
+    context = {
+        'products': products,
+        'stripe_enabled': stripe_enabled,
+        'stripe_available': STRIPE_AVAILABLE,
+        'missing_api_keys': missing_api_keys,
+    }
     return render(request, 'admin_dashboard/product_admin.html', context)
 
 @login_required

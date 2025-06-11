@@ -2,6 +2,26 @@
 
 All notable changes to this project will be documented in this file.
 
+## v0.30.0 (2025-06-11)
+v0.30.0 feat: Analytics Dashboard and Enhanced Admin Metrics
+
+This PR introduces a new admin dashboard that displays key business metrics, including total users, revenue, and active subscriptions, alongside detailed service usage statistics and monthly revenue trends, as outlined in Sprint 19 of the roadmap.
+
+- Backend Implementation:
+  - Implemented calculations for basic business metrics such as total users, revenue, and active subscriptions.
+  - Added functionality to calculate and display service usage statistics, ensuring accurate total credits consumed using the `credit_transaction__amount` field and absolute values.
+  - Developed backend logic for monthly revenue calculations and trend analysis.
+- Frontend Implementation:
+  - Created a new analytics dashboard view to display key business metrics and service usage statistics.
+  - Enhanced the admin dashboard template to include basic charts for visualizing monthly revenue trends.
+  - Refactored `log_admin_action` function calls for improved clarity and maintainability in the admin dashboard view.
+- Testing:
+  - Added comprehensive tests for analytics calculations and dashboard display, including the new credit consumption logic.
+  - Ensured that service usage statistics are correctly calculated and presented as positive values.
+  - Tested chart functionality and overall data accuracy on the dashboard.
+
+This PR significantly enhances the administrative oversight of user engagement and financial performance within QuickScale by providing essential analytics and revenue tracking capabilities.
+
 ## v0.29.0 (2025-06-11)
 v0.29.0 feat: Implement Basic Payment Admin Tools
 
