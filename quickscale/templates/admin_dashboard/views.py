@@ -3,6 +3,9 @@ import logging
 from datetime import datetime, timedelta
 from decimal import Decimal
 
+from django.utils import timezone
+from django.db import transaction
+
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required, user_passes_test
 from django.core.paginator import Paginator
@@ -1353,3 +1356,316 @@ def user_credit_history(request: HttpRequest, user_id: int) -> HttpResponse:
     }
     
     return render(request, 'admin_dashboard/partials/credit_history.html', context)
+
+
+# Sprint 18: Payment Admin Tools
+
+@login_required
+@user_passes_test(lambda u: u.is_staff)
+def payment_search(request: HttpRequest) -> HttpResponse:
+    """Search and filter payments for admin investigation."""
+    from credits.models import Payment
+    from django.db.models import Q
+    import datetime
+    
+    payments = Payment.objects.select_related('user', 'subscription', 'credit_transaction').order_by('-created_at')
+    
+    # Search filters
+    search_query = request.GET.get('q', '').strip()
+    payment_type = request.GET.get('type', '')
+    status = request.GET.get('status', '')
+    user_email = request.GET.get('user_email', '').strip()
+    stripe_payment_intent_id = request.GET.get('stripe_payment_intent_id', '').strip()
+    amount_min = request.GET.get('amount_min', '').strip()
+    amount_max = request.GET.get('amount_max', '').strip()
+    date_from = request.GET.get('date_from', '').strip()
+    date_to = request.GET.get('date_to', '').strip()
+    
+    # Apply search filters
+    if search_query:
+        payments = payments.filter(
+            Q(user__email__icontains=search_query) |
+            Q(stripe_payment_intent_id__icontains=search_query) |
+            Q(stripe_subscription_id__icontains=search_query) |
+            Q(stripe_invoice_id__icontains=search_query) |
+            Q(description__icontains=search_query)
+        )
+    
+    if payment_type:
+        payments = payments.filter(payment_type=payment_type)
+    
+    if status:
+        payments = payments.filter(status=status)
+    
+    if user_email:
+        payments = payments.filter(user__email__icontains=user_email)
+    
+    if stripe_payment_intent_id:
+        payments = payments.filter(stripe_payment_intent_id__icontains=stripe_payment_intent_id)
+    
+    if amount_min:
+        try:
+            payments = payments.filter(amount__gte=float(amount_min))
+        except ValueError:
+            pass
+    
+    if amount_max:
+        try:
+            payments = payments.filter(amount__lte=float(amount_max))
+        except ValueError:
+            pass
+    
+    if date_from:
+        try:
+            date_from_parsed = datetime.datetime.strptime(date_from, '%Y-%m-%d').date()
+            payments = payments.filter(created_at__date__gte=date_from_parsed)
+        except ValueError:
+            pass
+    
+    if date_to:
+        try:
+            date_to_parsed = datetime.datetime.strptime(date_to, '%Y-%m-%d').date()
+            payments = payments.filter(created_at__date__lte=date_to_parsed)
+        except ValueError:
+            pass
+    
+    # Pagination
+    paginator = Paginator(payments, 25)
+    page_number = request.GET.get('page')
+    page_obj = paginator.get_page(page_number)
+    
+    context = {
+        'payments': page_obj,
+        'search_query': search_query,
+        'payment_type': payment_type,
+        'status': status,
+        'user_email': user_email,
+        'stripe_payment_intent_id': stripe_payment_intent_id,
+        'amount_min': amount_min,
+        'amount_max': amount_max,
+        'date_from': date_from,
+        'date_to': date_to,
+        'payment_type_choices': Payment.PAYMENT_TYPE_CHOICES,
+        'status_choices': Payment.STATUS_CHOICES,
+        'total_results': min(payments.count(), 10000),
+        'stripe_enabled': stripe_enabled,
+    }
+    
+    return render(request, 'admin_dashboard/payment_search.html', context)
+
+@login_required
+@user_passes_test(lambda u: u.is_staff)
+def payment_investigation(request: HttpRequest, payment_id: int) -> HttpResponse:
+    """Display detailed payment investigation view for admins."""
+    from credits.models import Payment
+    from stripe_manager.stripe_manager import StripeManager
+    
+    payment = get_object_or_404(Payment, id=payment_id)
+    
+    # Log the investigation action
+    log_admin_action(
+        user=request.user,
+        action='PAYMENT_INVESTIGATION',
+        description=f'Investigated payment #{payment.id} for user {payment.user.email}',
+        request=request
+    )
+    
+    # Gather investigation data
+    investigation_data = {
+        'payment': payment,
+        'user_payment_history': Payment.objects.filter(user=payment.user).order_by('-created_at')[:10],
+        'related_transactions': [],
+        'stripe_data': None,
+        'refund_history': [],
+        'warnings': [],
+    }
+    
+    # Get related credit transactions
+    if payment.credit_transaction:
+        investigation_data['related_transactions'] = [payment.credit_transaction]
+    
+    # Get Stripe data if available
+    if payment.stripe_payment_intent_id and stripe_enabled:
+        try:
+            stripe_manager = StripeManager.get_instance()
+            investigation_data['stripe_data'] = stripe_manager.retrieve_payment_intent(
+                payment.stripe_payment_intent_id
+            )
+        except Exception as e:
+            investigation_data['warnings'].append(f"Could not retrieve Stripe data: {str(e)}")
+    
+    # Check for refunds
+    if payment.status == 'refunded':
+        refund_payments = Payment.objects.filter(
+            payment_type='REFUND',
+            stripe_payment_intent_id=payment.stripe_payment_intent_id
+        ).order_by('-created_at')
+        investigation_data['refund_history'] = refund_payments
+    
+    # Add investigation warnings
+    if payment.amount <= 0 and payment.payment_type != 'REFUND':
+        investigation_data['warnings'].append("Payment has zero or negative amount")
+    
+    if payment.status == 'failed' and payment.created_at > timezone.now() - timedelta(hours=24):
+        investigation_data['warnings'].append("Recent failed payment - may need customer support follow-up")
+    
+    if not payment.stripe_payment_intent_id and payment.payment_type != 'REFUND':
+        investigation_data['warnings'].append("Missing Stripe Payment Intent ID")
+    
+    context = {
+        **investigation_data,
+        'stripe_enabled': stripe_enabled,
+    }
+    
+    return render(request, 'admin_dashboard/payment_investigation.html', context)
+
+@login_required
+@user_passes_test(lambda u: u.is_staff)
+def initiate_refund(request: HttpRequest, payment_id: int) -> HttpResponse:
+    """Initiate a refund for a payment through Stripe."""
+    from credits.models import Payment, CreditAccount
+    from stripe_manager.stripe_manager import StripeManager, StripeConfigurationError
+    from decimal import Decimal
+    
+    if request.method != 'POST':
+        error_context = {'success': False, 'error': 'Only POST method allowed'}
+        if request.headers.get('HX-Request'):
+            return render(request, 'admin_dashboard/partials/refund_response.html', error_context)
+        return JsonResponse({'error': 'Only POST method allowed'}, status=405)
+    
+    payment = get_object_or_404(Payment, id=payment_id)
+    
+    # Validation checks
+    if payment.status == 'refunded':
+        error_context = {'success': False, 'error': 'Payment has already been refunded'}
+        if request.headers.get('HX-Request'):
+            return render(request, 'admin_dashboard/partials/refund_response.html', error_context)
+        return JsonResponse({'error': 'Payment has already been refunded'}, status=400)
+    
+    if payment.status != 'succeeded':
+        error_context = {'success': False, 'error': 'Can only refund succeeded payments'}
+        if request.headers.get('HX-Request'):
+            return render(request, 'admin_dashboard/partials/refund_response.html', error_context)
+        return JsonResponse({'error': 'Can only refund succeeded payments'}, status=400)
+    
+    if not payment.stripe_payment_intent_id:
+        error_context = {'success': False, 'error': 'No Stripe Payment Intent ID found'}
+        if request.headers.get('HX-Request'):
+            return render(request, 'admin_dashboard/partials/refund_response.html', error_context)
+        return JsonResponse({'error': 'No Stripe Payment Intent ID found'}, status=400)
+    
+    if not stripe_enabled:
+        error_context = {'success': False, 'error': 'Stripe integration is not enabled'}
+        if request.headers.get('HX-Request'):
+            return render(request, 'admin_dashboard/partials/refund_response.html', error_context)
+        return JsonResponse({'error': 'Stripe integration is not enabled'}, status=400)
+    
+    # Get refund details from request
+    refund_amount = request.POST.get('amount', '').strip()
+    refund_reason = request.POST.get('reason', '').strip()
+    admin_notes = request.POST.get('admin_notes', '').strip()
+    
+    # Validate refund amount
+    if refund_amount:
+        try:
+            refund_amount_decimal = Decimal(refund_amount)
+            if refund_amount_decimal <= 0:
+                error_context = {'success': False, 'error': 'Refund amount must be greater than zero'}
+                if request.headers.get('HX-Request'):
+                    return render(request, 'admin_dashboard/partials/refund_response.html', error_context)
+                return JsonResponse({'error': 'Refund amount must be greater than zero'}, status=400)
+            if refund_amount_decimal > payment.amount:
+                error_context = {'success': False, 'error': 'Refund amount cannot exceed original payment amount'}
+                if request.headers.get('HX-Request'):
+                    return render(request, 'admin_dashboard/partials/refund_response.html', error_context)
+                return JsonResponse({'error': 'Refund amount cannot exceed original payment amount'}, status=400)
+            # Convert to cents for Stripe
+            refund_amount_cents = int(refund_amount_decimal * 100)
+        except (ValueError, TypeError):
+            error_context = {'success': False, 'error': 'Invalid refund amount'}
+            if request.headers.get('HX-Request'):
+                return render(request, 'admin_dashboard/partials/refund_response.html', error_context)
+            return JsonResponse({'error': 'Invalid refund amount'}, status=400)
+    else:
+        # Full refund
+        refund_amount_decimal = payment.amount
+        refund_amount_cents = int(payment.amount * 100)
+    
+    try:
+        # Use atomic transaction to ensure data integrity during refund processing
+        with transaction.atomic():
+            # Process refund through Stripe
+            stripe_manager = StripeManager.get_instance()
+            
+            refund_metadata = {
+                'original_payment_id': str(payment.id),
+                'refund_initiated_by': request.user.email,
+                'admin_notes': admin_notes or 'Admin-initiated refund',
+            }
+            
+            stripe_refund = stripe_manager.create_refund(
+                payment_intent_id=payment.stripe_payment_intent_id,
+                amount=refund_amount_cents,
+                reason=refund_reason or 'requested_by_customer',
+                metadata=refund_metadata
+            )
+            
+            # Create refund payment record
+            refund_payment = Payment.objects.create(
+                user=payment.user,
+                stripe_payment_intent_id=payment.stripe_payment_intent_id,
+                amount=-refund_amount_decimal,  # Negative amount for refund
+                currency=payment.currency,
+                payment_type='REFUND',
+                status='succeeded',
+                description=f"Refund for payment #{payment.id}" + (f" - {admin_notes}" if admin_notes else ""),
+            )
+            
+            # Update original payment status if full refund
+            if refund_amount_decimal >= payment.amount:
+                payment.status = 'refunded'
+                payment.save()
+            
+            # Adjust credits if this was a credit purchase
+            if payment.payment_type == 'CREDIT_PURCHASE' and payment.credit_transaction:
+                from credits.models import CreditTransaction
+                
+                # Create a negative admin transaction to remove the refunded credits
+                CreditTransaction.objects.create(
+                    user=payment.user,
+                    amount=-refund_amount_decimal,  # Negative amount to remove credits
+                    description=f"Credit adjustment for refund #{refund_payment.id}",
+                    credit_type='ADMIN'
+                )
+            
+            # Log the refund action
+            log_admin_action(
+                user=request.user,
+                action='PAYMENT_REFUND',
+                description=f'Processed refund of {refund_amount_decimal} {payment.currency} for payment #{payment.id} (user: {payment.user.email})',
+                request=request
+            )
+            
+            success_context = {
+                'success': True,
+                'message': f'Refund of ${refund_amount_decimal} {payment.currency} processed successfully',
+                'refund_id': refund_payment.id,
+                'stripe_refund_id': stripe_refund.get('id'),
+            }
+            
+            if request.headers.get('HX-Request'):
+                return render(request, 'admin_dashboard/partials/refund_response.html', success_context)
+            
+            return JsonResponse(success_context)
+        
+    except StripeConfigurationError as e:
+        error_context = {'success': False, 'error': f'Stripe configuration error: {str(e)}'}
+        if request.headers.get('HX-Request'):
+            return render(request, 'admin_dashboard/partials/refund_response.html', error_context)
+        return JsonResponse({'error': f'Stripe configuration error: {str(e)}'}, status=500)
+    except Exception as e:
+        logger.error(f"Error processing refund for payment {payment_id}: {str(e)}", exc_info=True)
+        error_context = {'success': False, 'error': f'Failed to process refund: {str(e)}'}
+        if request.headers.get('HX-Request'):
+            return render(request, 'admin_dashboard/partials/refund_response.html', error_context)
+        return JsonResponse({'error': f'Failed to process refund: {str(e)}'}, status=500)

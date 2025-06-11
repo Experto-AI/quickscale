@@ -170,6 +170,13 @@ Admins have comprehensive service administration capabilities:
 - **Cashflow**: Real-time revenue, renewals, failed payments
 - **Service Performance**: Popular services, profitability analysis
 
+### Payment Support Tools
+Admins have access to comprehensive payment support tools:
+- **Payment Search**: Advanced search and filtering capabilities across all payment data
+- **Payment Investigation**: Detailed payment analysis with user context and Stripe integration
+- **Refund Processing**: Secure refund initiation with partial and full refund support
+- **Audit Compliance**: Complete logging of all payment support activities
+
 ### Audit & Compliance
 - **Complete Audit Log**: All admin actions tracked
 - **Security Controls**: Role-based access for sensitive operations

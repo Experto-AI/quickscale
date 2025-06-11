@@ -1,0 +1,41 @@
+{% if success %}
+<div class="notification is-success">
+    <span class="icon">
+        <i class="fas fa-check-circle"></i>
+    </span>
+    <strong>Refund Successful!</strong><br>
+    {{ message }}
+    {% if refund_id %}
+        <br><small>Refund ID: #{{ refund_id }}</small>
+    {% endif %}
+    {% if stripe_refund_id %}
+        <br><small>Stripe Refund ID: {{ stripe_refund_id }}</small>
+    {% endif %}
+</div>
+<div class="buttons">
+    <button type="button" class="button is-primary" @click="showModal = false; window.location.reload()">
+        <span class="icon">
+            <i class="fas fa-refresh"></i>
+        </span>
+        <span>Refresh Page</span>
+    </button>
+    <button type="button" class="button" @click="showModal = false">Close</button>
+</div>
+{% else %}
+<div class="notification is-danger">
+    <span class="icon">
+        <i class="fas fa-exclamation-triangle"></i>
+    </span>
+    <strong>Refund Failed!</strong><br>
+    {{ error }}
+</div>
+<div class="buttons">
+    <button type="button" class="button is-danger" @click="window.location.reload()">
+        <span class="icon">
+            <i class="fas fa-refresh"></i>
+        </span>
+        <span>Reload & Try Again</span>
+    </button>
+    <button type="button" class="button" @click="showModal = false">Cancel</button>
+</div>
+{% endif %} 
