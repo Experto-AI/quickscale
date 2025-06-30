@@ -25,12 +25,12 @@ def admin_test(request):
 urlpatterns = [
     path('admin/', admin.site.urls),
     # Include public app URLs, but at the root level
-    path('', include('public.urls')),
-    path('users/', include('users.urls')),
-    path('dashboard/', include('admin_dashboard.urls')),
+    path('', include('public.urls', namespace='public')),
+    path('users/', include('users.urls', namespace='users')),
+    path('dashboard/', include('admin_dashboard.urls', namespace='admin_dashboard')),
     path('dashboard/credits/', include('credits.urls', namespace='credits')),
     path('services/', include('services.urls', namespace='services')),
-    path('common/', include('common.urls')),
+    path('common/', include('common.urls', namespace='common')),
     path('accounts/', include('allauth.urls')),  # django-allauth URLs
     path('api/', include('api.urls', namespace='api')),  # API endpoints for AI services
     path('health/', health_check, name='health_check'),  # Health check endpoint

@@ -1,7 +1,7 @@
 quickscale
 ├── dist
-│   ├── quickscale-0.24.0-py3-none-any.whl
-│   └── quickscale-0.24.0.tar.gz
+│   ├── quickscale-0.30.0-py3-none-any.whl
+│   └── quickscale-0.30.0.tar.gz
 ├── docs
 │   ├── contrib
 │   │   ├── 01_ai_programming_assistant.md
@@ -120,8 +120,7 @@ quickscale
 │   │   │       ├── open_shell(self, django_shell, command)
 │   │   │       ├── run_manage_command(self, args)
 │   │   │       ├── check_requirements(self, print_info)
-│   │   │       ├── generate_service(self, service_name, service_type, output_dir)
-│   │   │       ├── list_services(self, show_details)
+│   │   │       ├── generate_service(self, service_name, service_type, output_dir, credit_cost, description, skip_db_config)
 │   │   │       ├── validate_service(self, service_file, show_tips)
 │   │   │       ├── show_service_examples(self, example_type)
 │   │   │       ├── get_available_commands(self)
@@ -152,7 +151,9 @@ quickscale
 │   │   │   └── find_available_ports(count, start_port, max_attempts)
 │   │   ├── development_commands.py
 │   │   │   ├── ShellCommand {}
-│   │   │   │   └── execute(self, django_shell, command)
+│   │   │   │   └── execute(self, command)
+│   │   │   ├── DjangoShellCommand {}
+│   │   │   │   └── execute(self)
 │   │   │   └── ManageCommand {}
 │   │   │       └── execute(self, args)
 │   │   ├── init_command.py
@@ -215,8 +216,9 @@ quickscale
 │   │   │       └── execute(self)
 │   │   ├── service_generator_commands.py
 │   │   │   ├── ServiceGeneratorCommand {}
-│   │   │   │   ├── execute(self, service_name, service_type, output_dir)
+│   │   │   │   ├── execute(self, service_name, service_type, output_dir, credit_cost, description, skip_db_config)
 │   │   │   │   ├── _validate_service_name(self, service_name)
+│   │   │   │   ├── _configure_service_in_database(self, service_name, description, credit_cost)
 │   │   │   │   ├── _to_class_name(self, service_name)
 │   │   │   │   ├── _get_service_template(self, service_type)
 │   │   │   │   ├── _get_basic_template(self)
@@ -224,11 +226,9 @@ quickscale
 │   │   │   │   ├── _get_image_processing_template(self)
 │   │   │   │   └── _get_usage_example_template(self)
 │   │   │   ├── ValidateServiceCommand {}
-│   │   │   │   └── execute(self, service_file, show_tips)
-│   │   │   ├── ServiceExamplesCommand {}
-│   │   │   │   └── execute(self, example_type)
-│   │   │   └── ListServicesCommand {}
-│   │   │       └── execute(self, show_details)
+│   │   │   │   └── execute(self, name_or_path, show_tips)
+│   │   │   └── ServiceExamplesCommand {}
+│   │   │       └── execute(self, example_type)
 │   │   └── system_commands.py
 │   │       └── CheckCommand {}
 │   │           ├── _check_docker_compose(self, print_info)
@@ -250,7 +250,10 @@ quickscale
 │   │   │   │   ├── 0001_initial.py
 │   │   │   │   │   └── Migration {}
 │   │   │   │   └── __init__.py
+│   │   │   ├── partials
 │   │   │   ├── templates
+│   │   │   │   └── admin_dashboard
+│   │   │   │       └── analytics_dashboard.html
 │   │   │   ├── templatetags
 │   │   │   │   ├── __init__.py
 │   │   │   │   └── dashboard_extras.py
@@ -261,6 +264,54 @@ quickscale
 │   │   │   │       └── savings_per_credit(basic_price, basic_credits, pro_price, pro_credits)
 │   │   │   ├── tests
 │   │   │   │   ├── __init__.py
+│   │   │   │   ├── test_payment_admin_tools.py
+│   │   │   │   │   ├── PaymentSearchTestCase {}
+│   │   │   │   │   │   ├── setUpTestData(cls)
+│   │   │   │   │   │   ├── setUp(self)
+│   │   │   │   │   │   ├── test_payment_search_page_loads(self)
+│   │   │   │   │   │   ├── test_payment_search_requires_staff_permission(self)
+│   │   │   │   │   │   ├── test_payment_search_all_payments_displayed(self)
+│   │   │   │   │   │   ├── test_payment_search_by_general_query(self)
+│   │   │   │   │   │   ├── test_payment_search_by_payment_type(self)
+│   │   │   │   │   │   ├── test_payment_search_by_status(self)
+│   │   │   │   │   │   ├── test_payment_search_by_user_email(self)
+│   │   │   │   │   │   ├── test_payment_search_by_stripe_payment_intent_id(self)
+│   │   │   │   │   │   ├── test_payment_search_by_amount_range(self)
+│   │   │   │   │   │   ├── test_payment_search_by_date_range(self)
+│   │   │   │   │   │   ├── test_payment_search_combined_filters(self)
+│   │   │   │   │   │   ├── test_payment_search_invalid_filters(self)
+│   │   │   │   │   │   ├── test_payment_search_pagination(self)
+│   │   │   │   │   │   └── test_payment_search_context_data(self)
+│   │   │   │   │   ├── PaymentInvestigationTestCase {}
+│   │   │   │   │   │   ├── setUpTestData(cls)
+│   │   │   │   │   │   ├── setUp(self)
+│   │   │   │   │   │   ├── test_payment_investigation_page_loads(self)
+│   │   │   │   │   │   ├── test_payment_investigation_requires_staff_permission(self)
+│   │   │   │   │   │   ├── test_payment_investigation_invalid_payment_id(self)
+│   │   │   │   │   │   ├── test_payment_investigation_logs_admin_action(self)
+│   │   │   │   │   │   ├── test_payment_investigation_user_payment_history(self)
+│   │   │   │   │   │   ├── test_payment_investigation_related_transactions(self)
+│   │   │   │   │   │   ├── test_payment_investigation_warnings_generation(self)
+│   │   │   │   │   │   ├── test_payment_investigation_refund_history(self)
+│   │   │   │   │   │   ├── test_payment_investigation_stripe_data_success(self, mock_stripe_manager_class)
+│   │   │   │   │   │   ├── test_payment_investigation_stripe_data_error(self, mock_stripe_manager_class)
+│   │   │   │   │   │   └── test_payment_investigation_context_structure(self)
+│   │   │   │   │   └── RefundInitiationTestCase {}
+│   │   │   │   │       ├── setUpTestData(cls)
+│   │   │   │   │       ├── setUp(self)
+│   │   │   │   │       ├── test_refund_initiation_get_method_not_allowed(self)
+│   │   │   │   │       ├── test_refund_initiation_requires_staff_permission(self)
+│   │   │   │   │       ├── test_refund_initiation_invalid_payment_id(self)
+│   │   │   │   │       ├── test_refund_initiation_already_refunded_payment(self)
+│   │   │   │   │       ├── test_refund_initiation_failed_payment(self)
+│   │   │   │   │       ├── test_refund_initiation_no_stripe_payment_intent_id(self)
+│   │   │   │   │       ├── test_refund_initiation_stripe_disabled(self)
+│   │   │   │   │       ├── test_refund_initiation_invalid_amount(self)
+│   │   │   │   │       ├── test_refund_initiation_success_full_refund(self, mock_stripe_manager_class)
+│   │   │   │   │       ├── test_refund_initiation_success_partial_refund(self, mock_stripe_manager_class)
+│   │   │   │   │       ├── test_refund_initiation_credit_adjustment(self, mock_stripe_manager_class)
+│   │   │   │   │       ├── test_refund_initiation_stripe_error(self, mock_stripe_manager_class)
+│   │   │   │   │       └── test_refund_initiation_htmx_response(self)
 │   │   │   │   ├── test_product_admin.py
 │   │   │   │   │   ├── ProductAdminTestCase {}
 │   │   │   │   │   │   ├── setUpClass(cls)
@@ -293,8 +344,20 @@ quickscale
 │   │   │   │           ├── test_product_sync_error_without_stripe(self, mock_is_feature_enabled)
 │   │   │   │           ├── test_product_admin_shows_missing_api_keys(self, mock_get_stripe_manager, mock_is_feature_enabled)
 │   │   │   │           └── test_product_admin_handles_missing_stripe_package(self, mock_get_stripe_manager, mock_is_feature_enabled)
+│   │   │   ├── admin.py
+│   │   │   │   └── AuditLogAdmin {}
+│   │   │   │       ├── has_add_permission(self, request)
+│   │   │   │       └── has_change_permission(self, request, obj)
 │   │   │   ├── apps.py
 │   │   │   │   └── AdminDashboardConfig {}
+│   │   │   │       └── ready(self)
+│   │   │   ├── models.py
+│   │   │   │   └── AuditLog {}
+│   │   │   │       ├── Meta {}
+│   │   │   │       └── __str__(self)
+│   │   │   ├── signals.py
+│   │   │   │   ├── log_admin_login(sender, request, user)
+│   │   │   │   └── log_admin_logout(sender, request, user)
 │   │   │   ├── tests_product_admin.py
 │   │   │   ├── tests_views_no_stripe.py
 │   │   │   │   └── DashboardWithoutStripeTestCase {}
@@ -303,8 +366,12 @@ quickscale
 │   │   │   │       ├── test_dashboard_loads_without_stripe(self)
 │   │   │   │       └── test_subscription_page_without_stripe(self)
 │   │   │   ├── urls.py
+│   │   │   ├── utils.py
+│   │   │   │   ├── log_admin_action(user, action, description, request)
+│   │   │   │   └── get_client_ip(request)
 │   │   │   └── views.py
 │   │   │       ├── user_dashboard(request)
+│   │   │       ├── analytics_dashboard(request)
 │   │   │       ├── subscription_page(request)
 │   │   │       ├── create_subscription_checkout(request)
 │   │   │       ├── subscription_success(request)
@@ -324,10 +391,19 @@ quickscale
 │   │   │       ├── change_subscription_plan_deprecated(request)
 │   │   │       ├── service_admin(request)
 │   │   │       ├── service_detail(request, service_id)
-│   │   │       └── service_toggle_status(request, service_id)
+│   │   │       ├── service_toggle_status(request, service_id)
+│   │   │       ├── user_search(request)
+│   │   │       ├── user_detail(request, user_id)
+│   │   │       ├── audit_log(request)
+│   │   │       ├── user_credit_adjustment(request, user_id)
+│   │   │       ├── user_credit_history(request, user_id)
+│   │   │       ├── payment_search(request)
+│   │   │       ├── payment_investigation(request, payment_id)
+│   │   │       └── initiate_refund(request, payment_id)
 │   │   ├── api
 │   │   │   ├── templates
 │   │   │   │   └── api
+│   │   │   │       ├── api_docs.html
 │   │   │   │       └── base.html
 │   │   │   ├── __init__.py
 │   │   │   ├── apps.py
@@ -347,10 +423,13 @@ quickscale
 │   │   │   │   ├── validate_text_length(text, min_length, max_length)
 │   │   │   │   └── consume_service_credits(user, service_name, credit_cost)
 │   │   │   └── views.py
-│   │   │       └── TextProcessingView {}
-│   │   │           ├── post(self, request)
-│   │   │           ├── _process_text(self, text, operation)
-│   │   │           └── get(self, request)
+│   │   │       ├── TextProcessingView {}
+│   │   │       │   ├── post(self, request)
+│   │   │       │   ├── _process_text(self, text, operation)
+│   │   │       │   └── get(self, request)
+│   │   │       ├── execute_service(request)
+│   │   │       ├── list_services(request)
+│   │   │       └── api_docs(request)
 │   │   ├── common
 │   │   │   ├── migrations
 │   │   │   │   ├── 0001_initial.py
@@ -385,6 +464,7 @@ quickscale
 │   │   │   │   ├── refresh_env_cache()
 │   │   │   │   ├── validate_required_vars(component)
 │   │   │   │   └── validate_production_settings()
+│   │   │   ├── logging_settings.py
 │   │   │   ├── security_settings.py
 │   │   │   ├── settings.py
 │   │   │   ├── test_runner.py
@@ -589,6 +669,7 @@ quickscale
 │   │   │       ├── use_service_with_priority(request, service_id)
 │   │   │       └── service_usage_api(request, service_id)
 │   │   ├── docs
+│   │   │   ├── architectural_decisions.md
 │   │   │   ├── auth_templates.md
 │   │   │   ├── service_development_guide.md
 │   │   │   ├── styling_guidelines.md
@@ -617,8 +698,7 @@ quickscale
 │   │   │   └── views.py
 │   │   │       ├── index(request)
 │   │   │       ├── about(request)
-│   │   │       ├── contact(request)
-│   │   │       └── api_docs(request)
+│   │   │       └── contact(request)
 │   │   ├── services
 │   │   │   ├── management
 │   │   │   │   └── commands
@@ -929,8 +1009,15 @@ quickscale
 │   │   │   │       └── stripeproduct
 │   │   │   │           └── change_list.html
 │   │   │   ├── admin_dashboard
+│   │   │   │   ├── partials
+│   │   │   │   │   ├── credit_adjustment_form.html
+│   │   │   │   │   ├── credit_history.html
+│   │   │   │   │   └── refund_response.html
+│   │   │   │   ├── audit_log.html
 │   │   │   │   ├── index.html
 │   │   │   │   ├── payment_detail.html
+│   │   │   │   ├── payment_investigation.html
+│   │   │   │   ├── payment_search.html
 │   │   │   │   ├── payments.html
 │   │   │   │   ├── plan_change_success.html
 │   │   │   │   ├── product_admin.html
@@ -940,7 +1027,9 @@ quickscale
 │   │   │   │   ├── subscription.html
 │   │   │   │   ├── subscription_cancel.html
 │   │   │   │   ├── subscription_success.html
-│   │   │   │   └── user_dashboard.html
+│   │   │   │   ├── user_dashboard.html
+│   │   │   │   ├── user_detail.html
+│   │   │   │   └── user_search.html
 │   │   │   ├── base
 │   │   │   │   └── base.html
 │   │   │   ├── components
@@ -949,7 +1038,6 @@ quickscale
 │   │   │   │   └── navbar.html
 │   │   │   ├── public
 │   │   │   │   ├── about.html
-│   │   │   │   ├── api_docs.html
 │   │   │   │   ├── contact.html
 │   │   │   │   ├── home.html
 │   │   │   │   └── index.html
@@ -1255,6 +1343,16 @@ quickscale
 │       └── TestServiceService {}
 │           └── execute_service(self, user)
 ├── tests
+│   ├── admin_dashboard
+│   │   ├── templates
+│   │   │   └── admin_dashboard
+│   │   │       └── analytics_dashboard.html
+│   │   ├── __init__.py
+│   │   ├── apps.py
+│   │   │   └── AdminDashboardConfig {}
+│   │   ├── urls.py
+│   │   └── views.py
+│   │       └── analytics_dashboard(request)
 │   ├── api
 │   │   ├── __init__.py
 │   │   ├── apps.py
@@ -1276,6 +1374,40 @@ quickscale
 │   │   │       ├── _extract_api_key(self, request)
 │   │   │       └── _validate_api_key(self, api_key_data)
 │   │   ├── settings.py
+│   │   ├── test_sprint19_analytics.py
+│   │   │   ├── AnalyticsCalculationTests {}
+│   │   │   │   ├── setUp(self)
+│   │   │   │   ├── test_basic_metrics_calculation(self)
+│   │   │   │   ├── test_monthly_revenue_calculation(self)
+│   │   │   │   └── test_service_usage_statistics(self)
+│   │   │   ├── AnalyticsDashboardViewTests {}
+│   │   │   │   ├── setUp(self)
+│   │   │   │   ├── test_analytics_dashboard_access_admin_only(self)
+│   │   │   │   ├── test_analytics_dashboard_context_data(self)
+│   │   │   │   ├── test_monthly_revenue_json_format(self)
+│   │   │   │   ├── test_service_stats_format(self)
+│   │   │   │   ├── test_analytics_dashboard_template(self)
+│   │   │   │   └── test_empty_data_handling(self)
+│   │   │   ├── AnalyticsDashboardTemplateTests {}
+│   │   │   │   ├── setUp(self)
+│   │   │   │   ├── test_metrics_cards_display(self)
+│   │   │   │   ├── test_monthly_revenue_table_display(self)
+│   │   │   │   ├── test_service_statistics_table_display(self)
+│   │   │   │   ├── test_alpinejs_chart_integration(self)
+│   │   │   │   ├── test_empty_state_handling(self)
+│   │   │   │   ├── test_chart_javascript_functions(self)
+│   │   │   │   └── test_responsive_design_classes(self)
+│   │   │   ├── AnalyticsIntegrationTests {}
+│   │   │   │   ├── setUp(self)
+│   │   │   │   ├── test_comprehensive_analytics_calculation(self)
+│   │   │   │   ├── test_monthly_revenue_breakdown(self)
+│   │   │   │   ├── test_service_usage_accuracy(self)
+│   │   │   │   └── test_performance_with_large_dataset(self)
+│   │   │   └── AnalyticsErrorHandlingTests {}
+│   │   │       ├── setUp(self)
+│   │   │       ├── test_database_error_handling(self)
+│   │   │       ├── test_invalid_data_handling(self)
+│   │   │       └── test_empty_json_handling(self)
 │   │   ├── urls.py
 │   │   └── wsgi.py
 │   ├── credits
@@ -1308,6 +1440,14 @@ quickscale
 │   │   │   │   ├── verify_secret_key(self, secret_key)
 │   │   │   │   ├── is_expired(self)
 │   │   │   │   └── is_valid(self)
+│   │   │   ├── UserSubscription {}
+│   │   │   │   ├── Meta {}
+│   │   │   │   ├── __str__(self)
+│   │   │   │   └── is_active(self)
+│   │   │   ├── Payment {}
+│   │   │   │   ├── Meta {}
+│   │   │   │   ├── __str__(self)
+│   │   │   │   └── is_succeeded(self)
 │   │   │   └── InsufficientCreditsError {}
 │   │   ├── urls.py
 │   │   └── views.py
@@ -1323,53 +1463,6 @@ quickscale
 │   │   │   └── command_runner.py
 │   │   │       └── run_quickscale_command()
 │   │   ├── __init__.py
-│   │   ├── test_api_endpoints.py
-│   │   │   └── APIEndpointsTest {}
-│   │   │       ├── setUp(self)
-│   │   │       ├── test_text_processing_count_words(self)
-│   │   │       ├── test_text_processing_analyze(self)
-│   │   │       ├── test_text_processing_summarize(self)
-│   │   │       ├── test_insufficient_credits_error(self)
-│   │   │       ├── test_unauthorized_request(self)
-│   │   │       ├── test_invalid_operation(self)
-│   │   │       ├── test_missing_required_fields(self)
-│   │   │       ├── test_text_length_validation(self)
-│   │   │       ├── test_invalid_json_format(self)
-│   │   │       ├── test_wrong_content_type(self)
-│   │   │       ├── test_api_endpoint_info(self)
-│   │   │       ├── test_service_usage_tracking(self)
-│   │   │       ├── test_request_logging(self, mock_logger)
-│   │   │       ├── test_character_counting_operation(self)
-│   │   │       └── test_concurrent_credit_consumption(self)
-│   │   ├── test_api_integration.py
-│   │   │   └── APIIntegrationTest {}
-│   │   │       ├── setUp(self)
-│   │   │       ├── test_complete_api_workflow(self)
-│   │   │       ├── test_credit_depletion_workflow(self)
-│   │   │       ├── test_api_key_lifecycle_management(self)
-│   │   │       ├── test_concurrent_api_usage(self)
-│   │   │       ├── test_api_authentication_edge_cases(self)
-│   │   │       ├── test_api_key_expiry_workflow(self)
-│   │   │       ├── test_api_endpoint_info_workflow(self)
-│   │   │       ├── test_error_handling_and_logging_workflow(self)
-│   │   │       └── test_successful_request_logging(self, mock_logger)
-│   │   ├── test_api_key_management.py
-│   │   │   └── APIKeyManagementTest {}
-│   │   │       ├── setUp(self)
-│   │   │       ├── test_list_api_keys_view(self)
-│   │   │       ├── test_create_api_key_success(self)
-│   │   │       ├── test_create_api_key_duplicate_name(self)
-│   │   │       ├── test_create_api_key_missing_name(self)
-│   │   │       ├── test_deactivate_api_key(self)
-│   │   │       ├── test_delete_api_key(self)
-│   │   │       ├── test_unauthorized_access_protection(self)
-│   │   │       ├── test_user_isolation(self)
-│   │   │       ├── test_api_key_usage_statistics(self)
-│   │   │       ├── test_api_key_security_display(self)
-│   │   │       ├── test_json_response_format(self)
-│   │   │       ├── test_rate_limiting_api_key_creation(self)
-│   │   │       ├── test_key_generation_failure_handling(self, mock_generate)
-│   │   │       └── test_api_key_expiry_display(self)
 │   │   ├── test_auth_e2e.py
 │   │   │   └── TestAuthE2E {}
 │   │   │       ├── setUp(self)
@@ -1616,6 +1709,20 @@ quickscale
 │   │           ├── test_service_management_complete_workflow_integration(self)
 │   │           ├── test_service_admin_dashboard_navigation_integration(self)
 │   │           └── test_service_analytics_data_consistency(self)
+│   ├── stripe_manager
+│   │   ├── __init__.py
+│   │   ├── apps.py
+│   │   │   └── StripeManagerConfig {}
+│   │   └── models.py
+│   │       ├── StripeProduct {}
+│   │       │   ├── Meta {}
+│   │       │   ├── __str__(self)
+│   │       │   ├── price_per_credit(self)
+│   │       │   ├── is_subscription(self)
+│   │       │   └── is_one_time(self)
+│   │       └── StripeCustomer {}
+│   │           ├── Meta {}
+│   │           └── __str__(self)
 │   ├── unit
 │   │   ├── commands
 │   │   │   ├── test_command_utils.py
@@ -2143,11 +2250,13 @@ quickscale
 │   │   │   ├── TestShellCommandExtended {}
 │   │   │   │   ├── test_shell_command_without_project(self)
 │   │   │   │   ├── test_shell_command_help_mode(self)
-│   │   │   │   ├── test_django_shell_command_help_mode(self)
 │   │   │   │   ├── test_shell_command_success(self)
 │   │   │   │   ├── test_shell_command_with_command_success(self)
-│   │   │   │   ├── test_django_shell_command_success(self)
 │   │   │   │   └── test_shell_command_keyboard_interrupt(self)
+│   │   │   ├── TestDjangoShellCommandExtended {}
+│   │   │   │   ├── test_django_shell_command_help_mode(self)
+│   │   │   │   ├── test_django_shell_command_success(self)
+│   │   │   │   └── test_django_shell_command_keyboard_interrupt(self)
 │   │   │   └── TestManageCommandExtended {}
 │   │   │       ├── test_manage_command_without_project(self)
 │   │   │       ├── test_manage_command_no_args(self)
@@ -2537,6 +2646,26 @@ quickscale
 │   │   │       ├── test_validate_production_settings_with_mixed_case_is_production(self)
 │   │   │       ├── test_validate_production_settings_with_whitespace_in_is_production(self)
 │   │   │       └── test_multiple_hosts_in_allowed_hosts(self)
+│   │   ├── test_settings_review_sprint20.py
+│   │   │   ├── URLNamespaceConfigurationTest {}
+│   │   │   │   ├── test_public_namespace_exists(self)
+│   │   │   │   ├── test_users_namespace_exists(self)
+│   │   │   │   ├── test_admin_dashboard_namespace_exists(self)
+│   │   │   │   ├── test_credits_namespace_exists(self)
+│   │   │   │   ├── test_api_namespace_exists(self)
+│   │   │   │   └── test_health_check_endpoint(self)
+│   │   │   ├── MiddlewareConfigurationTest {}
+│   │   │   │   ├── test_middleware_order(self)
+│   │   │   │   ├── test_security_middleware_present(self)
+│   │   │   │   └── test_custom_api_middleware_present(self)
+│   │   │   ├── SettingsOrganizationTest {}
+│   │   │   │   ├── test_modular_settings_import(self)
+│   │   │   │   ├── test_logging_configuration_present(self)
+│   │   │   │   ├── test_feature_flags_in_settings(self)
+│   │   │   │   └── test_environment_first_configuration(self)
+│   │   │   └── ProductionValidationTest {}
+│   │   │       ├── test_production_validation_with_insecure_secret(self, mock_is_feature_enabled, mock_get_env)
+│   │   │       └── test_production_validation_with_wildcard_hosts(self, mock_is_feature_enabled, mock_get_env)
 │   │   ├── test_settings_validation.py
 │   │   │   ├── validate_required_vars(component)
 │   │   │   ├── validate_production_settings()
@@ -2680,8 +2809,7 @@ quickscale
 │   │   │       ├── test_invalid_service_name_handling(self)
 │   │   │       ├── test_service_type_validation(self)
 │   │   │       ├── test_service_generator_command_execution(self, mock_input, mock_exists, mock_makedirs)
-│   │   │       ├── test_command_manager_methods(self)
-│   │   │       └── test_list_services_command_registration(self)
+│   │   │       └── test_command_manager_methods(self)
 │   │   ├── test_sprint14_example_services.py
 │   │   │   ├── TestTextSentimentAnalysisService {}
 │   │   │   │   ├── setUp(self)
@@ -2763,7 +2891,9 @@ quickscale
 │   │   │   │   ├── test_execute_service_generation_new_file(self)
 │   │   │   │   ├── test_execute_with_invalid_service_name(self)
 │   │   │   │   ├── test_get_service_template_types(self)
-│   │   │   │   └── test_generate_service_with_existing_file(self, mock_input)
+│   │   │   │   ├── test_generate_service_with_existing_file(self, mock_input)
+│   │   │   │   ├── test_configure_service_uses_quickscale_manage(self, mock_exists, mock_subprocess)
+│   │   │   │   └── test_generate_service_database_configuration_failure_provides_helpful_message(self, mock_exists, mock_subprocess)
 │   │   │   ├── TestValidateServiceCommand {}
 │   │   │   │   ├── setUp(self)
 │   │   │   │   ├── tearDown(self)
@@ -2774,10 +2904,6 @@ quickscale
 │   │   │   │   ├── test_execute_shows_all_examples(self)
 │   │   │   │   ├── test_execute_shows_specific_example_type(self)
 │   │   │   │   └── test_execute_with_unknown_type(self)
-│   │   │   ├── TestListServicesCommand {}
-│   │   │   │   ├── setUp(self)
-│   │   │   │   ├── test_execute_lists_services(self)
-│   │   │   │   └── test_execute_with_details(self)
 │   │   │   ├── TestServiceTemplates {}
 │   │   │   │   ├── test_get_basic_service_template(self)
 │   │   │   │   ├── test_get_text_processing_template(self)
@@ -2809,6 +2935,195 @@ quickscale
 │   │   │       ├── test_validate_service_file(self, mock_message_manager)
 │   │   │       ├── test_show_service_examples(self, mock_message_manager)
 │   │   │       └── test_service_development_helper_initialization(self)
+│   │   ├── test_sprint15_user_search_admin.py
+│   │   │   ├── TestSprint15UserSearchTemplates {}
+│   │   │   │   ├── setUp(self)
+│   │   │   │   ├── tearDown(self)
+│   │   │   │   ├── test_admin_dashboard_views_template_contains_user_search(self)
+│   │   │   │   ├── test_admin_dashboard_views_template_contains_user_detail(self)
+│   │   │   │   ├── test_admin_dashboard_urls_template_contains_user_management_routes(self)
+│   │   │   │   ├── test_user_search_template_structure(self)
+│   │   │   │   └── test_user_detail_template_structure(self)
+│   │   │   ├── TestSprint15PermissionControls {}
+│   │   │   │   ├── setUp(self)
+│   │   │   │   ├── tearDown(self)
+│   │   │   │   ├── test_admin_views_have_staff_permission_decorators(self)
+│   │   │   │   └── test_login_required_decorators_present(self)
+│   │   │   ├── TestSprint15SearchFunctionality {}
+│   │   │   │   ├── setUp(self)
+│   │   │   │   ├── tearDown(self)
+│   │   │   │   ├── test_search_query_implementation(self)
+│   │   │   │   └── test_pagination_implementation(self)
+│   │   │   ├── TestSprint15UserDetailImplementation {}
+│   │   │   │   ├── setUp(self)
+│   │   │   │   ├── tearDown(self)
+│   │   │   │   ├── test_user_detail_error_handling(self)
+│   │   │   │   └── test_user_detail_context_variables(self)
+│   │   │   ├── TestSprint15TemplateGeneration {}
+│   │   │   │   ├── test_project_structure_includes_user_management(self)
+│   │   │   │   └── test_admin_dashboard_app_configuration(self)
+│   │   │   ├── TestSprint15IntegrationPoints {}
+│   │   │   │   ├── setUp(self)
+│   │   │   │   ├── tearDown(self)
+│   │   │   │   ├── test_user_model_integration(self)
+│   │   │   │   ├── test_credit_system_integration(self)
+│   │   │   │   └── test_subscription_system_integration(self)
+│   │   │   ├── TestSprint15CodeQuality {}
+│   │   │   │   ├── setUp(self)
+│   │   │   │   ├── tearDown(self)
+│   │   │   │   ├── test_proper_imports_organization(self)
+│   │   │   │   ├── test_proper_docstrings(self)
+│   │   │   │   └── test_proper_logging_usage(self)
+│   │   │   └── TestSprint15SearchLogic {}
+│   │   │       ├── setUp(self)
+│   │   │       ├── tearDown(self)
+│   │   │       ├── test_search_filter_logic_correctness(self)
+│   │   │       └── test_empty_string_search_bug_fixed(self)
+│   │   ├── test_sprint16_audit_logging.py
+│   │   │   ├── TestSprint16AuditLogModelTemplate {}
+│   │   │   │   ├── setUp(self)
+│   │   │   │   ├── tearDown(self)
+│   │   │   │   ├── test_admin_dashboard_models_template_contains_audit_log(self)
+│   │   │   │   ├── test_audit_log_action_choices_completeness(self)
+│   │   │   │   └── test_audit_log_model_str_method(self)
+│   │   │   ├── TestSprint16AuditLogUtilsTemplate {}
+│   │   │   │   ├── setUp(self)
+│   │   │   │   ├── tearDown(self)
+│   │   │   │   ├── test_admin_dashboard_utils_template_contains_log_function(self)
+│   │   │   │   └── test_admin_dashboard_utils_template_contains_ip_helper(self)
+│   │   │   ├── TestSprint16AuditLogViewsTemplate {}
+│   │   │   │   ├── setUp(self)
+│   │   │   │   ├── tearDown(self)
+│   │   │   │   ├── test_admin_dashboard_views_template_contains_audit_log_view(self)
+│   │   │   │   ├── test_audit_log_view_filtering_implementation(self)
+│   │   │   │   └── test_admin_dashboard_views_integration_with_audit_logging(self)
+│   │   │   ├── TestSprint16AuditLogUrlsTemplate {}
+│   │   │   │   ├── setUp(self)
+│   │   │   │   ├── tearDown(self)
+│   │   │   │   └── test_admin_dashboard_urls_template_contains_audit_routes(self)
+│   │   │   ├── TestSprint16AuditLogAdminTemplate {}
+│   │   │   │   ├── setUp(self)
+│   │   │   │   ├── tearDown(self)
+│   │   │   │   └── test_admin_dashboard_admin_template_contains_audit_log_admin(self)
+│   │   │   ├── TestSprint16AuditLogTemplateFiles {}
+│   │   │   │   ├── setUp(self)
+│   │   │   │   ├── tearDown(self)
+│   │   │   │   ├── test_audit_log_template_exists_and_structure(self)
+│   │   │   │   └── test_audit_log_template_filtering_elements(self)
+│   │   │   ├── TestSprint16MigrationTemplate {}
+│   │   │   │   ├── setUp(self)
+│   │   │   │   ├── tearDown(self)
+│   │   │   │   └── test_admin_dashboard_migration_contains_audit_log(self)
+│   │   │   ├── TestSprint16PermissionControlsTemplate {}
+│   │   │   │   ├── setUp(self)
+│   │   │   │   ├── tearDown(self)
+│   │   │   │   └── test_audit_log_view_has_staff_permission_decorator(self)
+│   │   │   ├── TestSprint16CodeQualityTemplate {}
+│   │   │   │   ├── setUp(self)
+│   │   │   │   ├── tearDown(self)
+│   │   │   │   ├── test_proper_imports_in_models_template(self)
+│   │   │   │   ├── test_proper_imports_in_utils_template(self)
+│   │   │   │   ├── test_proper_docstrings_in_functions(self)
+│   │   │   │   └── test_type_hints_usage(self)
+│   │   │   └── TestSprint16IntegrationPointsTemplate {}
+│   │   │       ├── setUp(self)
+│   │   │       ├── tearDown(self)
+│   │   │       ├── test_audit_logging_integration_with_existing_views(self)
+│   │   │       └── test_user_model_relationship_in_audit_log(self)
+│   │   ├── test_sprint17_admin_credit_management.py
+│   │   │   ├── TestSprint17CreditAdjustmentForms {}
+│   │   │   │   ├── setUp(self)
+│   │   │   │   └── test_admin_credit_adjustment_form_exists(self)
+│   │   │   ├── TestSprint17CreditAdjustmentViews {}
+│   │   │   │   ├── setUp(self)
+│   │   │   │   ├── test_user_credit_adjustment_view_exists(self)
+│   │   │   │   └── test_credit_adjustment_response_format(self)
+│   │   │   ├── TestSprint17AuditLoggingIntegration {}
+│   │   │   │   ├── setUp(self)
+│   │   │   │   ├── test_log_admin_action_utility_exists(self)
+│   │   │   │   ├── test_audit_log_model_exists(self)
+│   │   │   │   └── test_credit_admin_audit_integration(self)
+│   │   │   ├── TestSprint17CreditHistoryTemplate {}
+│   │   │   │   ├── setUp(self)
+│   │   │   │   ├── test_credit_history_template_exists(self)
+│   │   │   │   └── test_credit_history_template_structure(self)
+│   │   │   ├── TestSprint17CreditAdjustmentFormTemplate {}
+│   │   │   │   ├── setUp(self)
+│   │   │   │   ├── test_credit_adjustment_form_template_exists(self)
+│   │   │   │   ├── test_credit_adjustment_form_structure(self)
+│   │   │   │   └── test_credit_adjustment_form_validation(self)
+│   │   │   ├── TestSprint17UserDetailIntegration {}
+│   │   │   │   ├── setUp(self)
+│   │   │   │   └── test_user_detail_credit_integration(self)
+│   │   │   ├── TestSprint17ValidationCriteria {}
+│   │   │   │   ├── setUp(self)
+│   │   │   │   ├── test_admin_can_adjust_credits_functionality(self)
+│   │   │   │   ├── test_credit_adjustment_validation_complete(self)
+│   │   │   │   ├── test_audit_logging_complete(self)
+│   │   │   │   └── test_credit_history_display_complete(self)
+│   │   │   ├── TestSprint17IntegrationPoints {}
+│   │   │   │   ├── setUp(self)
+│   │   │   │   ├── test_integration_with_existing_credit_system(self)
+│   │   │   │   └── test_integration_with_admin_dashboard(self)
+│   │   │   ├── TestUserDetailTemplateRendering {}
+│   │   │   │   ├── setUp(self)
+│   │   │   │   ├── test_template_does_not_contain_literal_newlines(self)
+│   │   │   │   ├── test_conditional_tags_are_condensed(self)
+│   │   │   │   └── test_template_has_proper_html_structure(self)
+│   │   │   ├── TestHTMXIntegrationFixes {}
+│   │   │   │   ├── setUp(self)
+│   │   │   │   ├── test_htmx_trigger_mechanism_fixed(self)
+│   │   │   │   ├── test_alpine_js_htmx_integration(self)
+│   │   │   │   ├── test_button_click_handlers_updated(self)
+│   │   │   │   ├── test_htmx_endpoints_accessibility(self)
+│   │   │   │   └── test_htmx_response_format(self)
+│   │   │   ├── TestTemplateUIConsistency {}
+│   │   │   │   ├── setUp(self)
+│   │   │   │   ├── test_modal_functionality_elements(self)
+│   │   │   │   ├── test_button_accessibility_and_styling(self)
+│   │   │   │   ├── test_credit_form_integration(self)
+│   │   │   │   └── test_credit_history_integration(self)
+│   │   │   ├── TestRegressionPrevention {}
+│   │   │   │   ├── setUp(self)
+│   │   │   │   ├── test_no_literal_newline_artifacts(self)
+│   │   │   │   ├── test_htmx_triggers_are_functional(self)
+│   │   │   │   ├── test_button_functionality_preserved(self)
+│   │   │   │   └── test_event_handling_preserved(self)
+│   │   │   └── TestCreditAdjustmentFormFix {}
+│   │   │       ├── setUp(self)
+│   │   │       ├── test_form_submission_state_management(self)
+│   │   │       ├── test_response_handler_resets_state(self)
+│   │   │       ├── test_form_validation_prevents_infinite_submissions(self)
+│   │   │       ├── test_alpine_js_data_structure(self)
+│   │   │       └── test_success_response_handling(self)
+│   │   ├── test_sprint18_payment_admin_tools.py
+│   │   │   ├── Sprint18TemplateValidationTests {}
+│   │   │   │   ├── setUp(self)
+│   │   │   │   ├── test_payment_search_view_exists_in_template(self)
+│   │   │   │   ├── test_payment_investigation_view_exists_in_template(self)
+│   │   │   │   ├── test_refund_initiation_view_exists_in_template(self)
+│   │   │   │   └── test_payment_admin_urls_exist_in_template(self)
+│   │   │   ├── Sprint18PaymentSearchTests {}
+│   │   │   │   ├── setUp(self)
+│   │   │   │   ├── test_payment_search_filtering_logic(self)
+│   │   │   │   └── test_payment_search_context_data(self)
+│   │   │   ├── Sprint18PaymentInvestigationTests {}
+│   │   │   │   ├── setUp(self)
+│   │   │   │   ├── test_payment_investigation_data_gathering(self)
+│   │   │   │   └── test_payment_investigation_warning_generation(self)
+│   │   │   ├── Sprint18RefundInitiationTests {}
+│   │   │   │   ├── setUp(self)
+│   │   │   │   ├── test_refund_validation_logic(self)
+│   │   │   │   └── test_refund_credit_adjustment(self)
+│   │   │   ├── Sprint18RequirementsValidationTests {}
+│   │   │   │   ├── setUp(self)
+│   │   │   │   ├── test_payment_search_requirements(self)
+│   │   │   │   ├── test_refund_initiation_requirements(self)
+│   │   │   │   └── test_payment_investigation_requirements(self)
+│   │   │   └── Sprint18SecurityValidationTests {}
+│   │   │       ├── setUp(self)
+│   │   │       ├── test_staff_permission_requirements(self)
+│   │   │       └── test_csrf_protection(self)
 │   │   ├── test_stripe_config.py
 │   │   │   └── StripeConfigurationTests {}
 │   │   │       ├── setUp(self)
@@ -2923,6 +3238,31 @@ quickscale
 │   │   │       ├── test_is_binary_file(self)
 │   │   │       ├── test_render_template(self)
 │   │   │       └── test_process_file_templates(self)
+│   │   ├── test_url_configuration_sprint20.py
+│   │   │   ├── URLNamespaceConfigurationTest {}
+│   │   │   │   ├── test_public_namespace_exists(self)
+│   │   │   │   ├── test_users_namespace_exists(self)
+│   │   │   │   ├── test_admin_dashboard_namespace_exists(self)
+│   │   │   │   ├── test_credits_namespace_exists(self)
+│   │   │   │   ├── test_services_namespace_exists(self)
+│   │   │   │   ├── test_common_namespace_exists(self)
+│   │   │   │   ├── test_api_namespace_exists(self)
+│   │   │   │   ├── test_api_v1_namespace_exists(self)
+│   │   │   │   ├── test_stripe_conditional_inclusion(self, mock_get_env, mock_is_feature_enabled)
+│   │   │   │   ├── test_health_check_endpoint(self)
+│   │   │   │   └── test_admin_test_endpoint(self)
+│   │   │   ├── URLHierarchyTest {}
+│   │   │   │   ├── test_url_hierarchy_structure(self)
+│   │   │   │   └── test_django_admin_not_namespaced(self)
+│   │   │   ├── MiddlewareConfigurationTest {}
+│   │   │   │   ├── test_middleware_order(self)
+│   │   │   │   ├── test_security_middleware_present(self)
+│   │   │   │   └── test_custom_api_middleware_present(self)
+│   │   │   └── SettingsOrganizationTest {}
+│   │   │       ├── test_modular_settings_import(self)
+│   │   │       ├── test_logging_configuration_present(self)
+│   │   │       ├── test_feature_flags_in_settings(self)
+│   │   │       └── test_environment_first_configuration(self)
 │   │   └── test_webhook_fallback_payment.py
 │   │       ├── WebhookFallbackTests {}
 │   │       │   ├── setUp(self)
