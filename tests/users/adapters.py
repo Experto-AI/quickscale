@@ -1,6 +1,6 @@
 """Custom adapter for django-allauth."""
 from django.conf import settings
-from django.urls import reverse
+from django.urls import reverse, NoReverseMatch
 from allauth.account.adapter import DefaultAccountAdapter
 from allauth.socialaccount.adapter import DefaultSocialAccountAdapter
 
@@ -25,7 +25,7 @@ class AccountAdapter(DefaultAccountAdapter):
         if request.user.is_staff:
             try:
                 return reverse('admin_dashboard:index')
-            except:
+            except NoReverseMatch:
                 # Fall back to default in test environment
                 return settings.LOGIN_REDIRECT_URL
         return settings.LOGIN_REDIRECT_URL
