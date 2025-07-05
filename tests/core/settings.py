@@ -67,10 +67,16 @@ MIDDLEWARE = [
 
 ROOT_URLCONF = 'core.urls'
 
+import os
+from pathlib import Path
+
+# Define BASE_DIR for test settings
+BASE_DIR = Path(__file__).resolve().parent.parent.parent
+
 TEMPLATES = [
     {
         'BACKEND': 'django.template.backends.django.DjangoTemplates',
-        'DIRS': [],
+        'DIRS': [os.path.join(BASE_DIR, 'quickscale', 'templates', 'templates')],
         'APP_DIRS': True,
         'OPTIONS': {
             'context_processors': [
@@ -95,3 +101,44 @@ DATABASES = {
 SITE_ID = 1
 
 AUTH_USER_MODEL = 'users.CustomUser'
+
+# Django-allauth settings
+ACCOUNT_ADAPTER = 'users.adapters.AccountAdapter'
+LOGIN_REDIRECT_URL = '/'
+LOGOUT_REDIRECT_URL = '/'
+ACCOUNT_LOGIN_METHODS = {'email'}
+ACCOUNT_EMAIL_REQUIRED = True
+ACCOUNT_USERNAME_REQUIRED = False
+ACCOUNT_EMAIL_VERIFICATION = 'mandatory'
+ACCOUNT_UNIQUE_EMAIL = True
+# Disable rate limiting for tests (using new django-allauth format)
+ACCOUNT_RATE_LIMITS = {}   # No timeout for tests
+
+# Password validation
+AUTH_PASSWORD_VALIDATORS = [
+    {
+        'NAME': 'django.contrib.auth.password_validation.UserAttributeSimilarityValidator',
+    },
+    {
+        'NAME': 'django.contrib.auth.password_validation.MinimumLengthValidator',
+        'OPTIONS': {
+            'min_length': 8,
+        }
+    },
+    {
+        'NAME': 'django.contrib.auth.password_validation.CommonPasswordValidator',
+    },
+    {
+        'NAME': 'django.contrib.auth.password_validation.NumericPasswordValidator',
+    },
+]
+
+# Static files settings
+STATIC_URL = '/static/'
+STATICFILES_DIRS = [
+    os.path.join(BASE_DIR, 'quickscale', 'templates', 'static'),
+]
+
+# Media files settings
+MEDIA_URL = '/media/'
+MEDIA_ROOT = os.path.join(BASE_DIR, 'media')
