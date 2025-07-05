@@ -416,7 +416,8 @@ class TestServiceCommandErrorHandling:
             mock_prepare_environment_and_ports.assert_called_once()
             mock_start_docker_services.assert_called_once_with(
                 {'WEB_PORT': '8000', 'DB_PORT_EXTERNAL': '5432', 'DB_PORT': '5432', 'PORT': '8001', 'PG_PORT': '8002'},
-                no_cache=True
+                no_cache=True,
+                timeout=240
             )
             mock_verify_services_running.assert_called_once()
             mock_print_service_info.assert_called_once()

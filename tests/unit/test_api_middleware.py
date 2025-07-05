@@ -289,7 +289,7 @@ class APIKeyAuthenticationMiddlewareTest(TestCase):
                     self.assertEqual(response.status_code, 401)
 
     def test_middleware_exception_handling(self):
-        """Test middleware handles database exceptions gracefully."""
+        """Test middleware handles database exceptions gracefully in debug mode."""
         # Arrange: Create request that will cause database error
         request = self.factory.post(
             '/api/v1/test/',
@@ -299,6 +299,7 @@ class APIKeyAuthenticationMiddlewareTest(TestCase):
         # Act: Mock database error during API key lookup
         import logging
         import sys # For StreamHandler output
+        from django.test import override_settings
 
         middleware_logger = logging.getLogger('core.api_middleware')
         original_level = middleware_logger.level
@@ -311,10 +312,6 @@ class APIKeyAuthenticationMiddlewareTest(TestCase):
         stream_handler.setFormatter(formatter)
         middleware_logger.addHandler(stream_handler)
         
-        # Define a specific exception to ensure we're catching the right one
-        class MockDBError(Exception):
-            pass
-
         response = None # Initialize response
         
         # Define a specific exception to ensure we're catching the right one
@@ -322,17 +319,15 @@ class APIKeyAuthenticationMiddlewareTest(TestCase):
             pass
 
         try:
-            # Patch the _validate_api_key method of the middleware instance itself
-            # to simulate an internal error during validation.
-            with patch.object(self.middleware, '_validate_api_key', side_effect=MockInternalError("Simulated internal validation error")) as mock_validate:
-                middleware_logger.debug("Test: Mocking self.middleware._validate_api_key. About to call process_request.")
-                response = self.middleware.process_request(request)
-                middleware_logger.debug(f"Test: process_request returned: {response}")
-                self.assertTrue(mock_validate.called, "Mocked _validate_api_key should have been called.")
+            # Test in DEBUG mode (default for tests)
+            with override_settings(DEBUG=True):
+                with patch.object(self.middleware, '_validate_api_key', side_effect=MockInternalError("Simulated internal validation error")) as mock_validate:
+                    middleware_logger.debug("Test: Mocking self.middleware._validate_api_key. About to call process_request.")
+                    response = self.middleware.process_request(request)
+                    middleware_logger.debug(f"Test: process_request returned: {response}")
+                    self.assertTrue(mock_validate.called, "Mocked _validate_api_key should have been called.")
         except MockInternalError:
-            # This should not be caught here if the middleware handles it.
-            middleware_logger.error("Test: MockInternalError was re-raised to the test, middleware didn't catch it.", exc_info=True)
-            self.fail("Middleware did not catch the simulated internal error from _validate_api_key.")
+            self.fail("Middleware should catch the simulated internal error in DEBUG mode.")
         except Exception as e:
             middleware_logger.error(f"Test: Caught unexpected Exception in test: {e}", exc_info=True)
             self.fail(f"Test caught an unexpected exception: {e}")
@@ -340,11 +335,31 @@ class APIKeyAuthenticationMiddlewareTest(TestCase):
             middleware_logger.setLevel(original_level)
             middleware_logger.removeHandler(stream_handler)
             
-        # Assert: Graceful error handling
-        # The response should be a JsonResponse with status 401
+        # Assert: Graceful error handling in DEBUG mode
+        # The response should be a JsonResponse with status 500 (not 401) in DEBUG mode
         self.assertIsNotNone(response, "Response should not be None if an exception was handled.")
-        self.assertEqual(response.status_code, 401)
+        self.assertEqual(response.status_code, 500)
         
         response_data = json.loads(response.content)
-        self.assertEqual(response_data['error'], 'Invalid API key')
-        self.assertEqual(response_data['message'], 'The provided API key is invalid or inactive')
+        self.assertEqual(response_data['error'], 'Internal server error')
+        self.assertEqual(response_data['message'], 'An unexpected error occurred during authentication')
+
+    def test_middleware_exception_handling_production(self):
+        """Test middleware re-raises exceptions in production mode."""
+        # Arrange: Create request that will cause database error
+        request = self.factory.post(
+            '/api/v1/test/',
+            HTTP_AUTHORIZATION=f'Bearer {self.full_key}'
+        )
+        
+        # Define a specific exception to ensure we're catching the right one
+        class MockInternalError(Exception):
+            pass
+
+        # Test in production mode (DEBUG=False)
+        from django.test import override_settings
+        with override_settings(DEBUG=False):
+            with patch.object(self.middleware, '_validate_api_key', side_effect=MockInternalError("Simulated internal validation error")):
+                # Assert: Exception should be re-raised in production
+                with self.assertRaises(MockInternalError):
+                    self.middleware.process_request(request)

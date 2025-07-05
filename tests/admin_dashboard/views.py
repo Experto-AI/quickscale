@@ -5,6 +5,7 @@ from django.contrib.auth.decorators import login_required, user_passes_test
 from django.db.models import Sum
 from django.utils import timezone
 from datetime import timedelta
+from django.http import HttpResponse
 
 from credits.models import CreditAccount, CreditTransaction, Service, ServiceUsage
 from credits.models import Payment, UserSubscription
@@ -84,4 +85,15 @@ def analytics_dashboard(request):
         'monthly_revenue_json': json.dumps(monthly_revenue),  # JSON string for Alpine.js
     }
 
-    return render(request, 'admin_dashboard/analytics_dashboard.html', context) 
+    return render(request, 'admin_dashboard/analytics_dashboard.html', context)
+
+
+def index(request):
+    """Dummy admin dashboard index view for tests."""
+    return HttpResponse("Test Admin Dashboard Index")
+
+
+@login_required
+def user_dashboard(request):
+    """Dummy user dashboard view for tests."""
+    return HttpResponse("Test User Dashboard") 

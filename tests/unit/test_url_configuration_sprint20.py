@@ -64,7 +64,9 @@ class URLRoutingHierarchyTests(unittest.TestCase):
                 
                 # Should define app_name for namespacing
                 if "app_name = " in content:
-                    self.assertIn(f"app_name = '{app_name}'", content,
+                    # Special case: stripe_manager app uses 'stripe' as app_name
+                    expected_app_name = 'stripe' if app_name == 'stripe_manager' else app_name
+                    self.assertIn(f"app_name = '{expected_app_name}'", content,
                                  f"{app_name} should define proper app_name")
     
     def test_credits_url_patterns(self):
