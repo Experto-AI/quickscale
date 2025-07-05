@@ -385,7 +385,7 @@ class TestServiceCommandRetryHandlingFixed:
             track_call('prepare')
             return ({}, {})
             
-        def start_side_effect(*args, no_cache=False):
+        def start_side_effect(*args, no_cache=False, timeout=240):
             track_call('start')
             raise error
             

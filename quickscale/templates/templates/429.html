@@ -1,0 +1,74 @@
+{% extends "base.html" %}
+{% load i18n %}
+
+{% block title %}{% trans "Too Many Requests" %} - {{ project_name }}{% endblock %}
+
+{% block content %}
+<section class="hero is-danger">
+    <div class="hero-body">
+        <div class="container has-text-centered">
+            <h1 class="title">
+                <i class="fas fa-exclamation-triangle"></i>
+                {% trans "Too Many Requests" %}
+            </h1>
+            <h2 class="subtitle">
+                {% trans "Rate limit exceeded" %}
+            </h2>
+        </div>
+    </div>
+</section>
+
+<section class="section">
+    <div class="container">
+        <div class="columns is-centered">
+            <div class="column is-half">
+                <div class="box">
+                    <div class="notification is-warning">
+                        <h4 class="title is-5">{% trans "Rate Limit Exceeded" %}</h4>
+                        <p>{% trans "You have made too many requests in a short period of time. Please wait a few minutes before trying again." %}</p>
+                    </div>
+                    
+                    <div class="content">
+                        <p>{% trans "This security measure protects our service and all users from abuse. Common reasons for rate limiting include:" %}</p>
+                        <ul>
+                            <li>{% trans "Too many failed login attempts" %}</li>
+                            <li>{% trans "Rapid form submissions" %}</li>
+                            <li>{% trans "Automated or bot-like behavior" %}</li>
+                        </ul>
+                        
+                        <p>{% trans "What you can do:" %}</p>
+                        <ul>
+                            <li>{% trans "Wait 5-10 minutes before trying again" %}</li>
+                            <li>{% trans "Make sure you're using the correct login credentials" %}</li>
+                            <li>{% trans "Clear your browser cache and cookies" %}</li>
+                            <li>{% trans "Contact support if this problem persists" %}</li>
+                        </ul>
+                    </div>
+                    
+                    <div class="buttons is-centered mt-5">
+                        <a href="{% url 'public:index' %}" class="button is-primary">
+                            <span class="icon">
+                                <i class="fas fa-home"></i>
+                            </span>
+                            <span>{% trans "Go Home" %}</span>
+                        </a>
+                        <a href="{% url 'account_login' %}" class="button is-light">
+                            <span class="icon">
+                                <i class="fas fa-sign-in-alt"></i>
+                            </span>
+                            <span>{% trans "Try Login Again" %}</span>
+                        </a>
+                    </div>
+                    
+                    <div class="has-text-centered mt-4">
+                        <p class="is-size-7 has-text-grey">
+                            {% trans "If you believe this is an error, please" %} 
+                            <a href="{% url 'public:contact' %}">{% trans "contact support" %}</a>
+                        </p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</section>
+{% endblock %} 
