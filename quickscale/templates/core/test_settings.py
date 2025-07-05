@@ -36,6 +36,10 @@ PASSWORD_HASHERS = [
     'django.contrib.auth.hashers.MD5PasswordHasher',
 ]
 
+# Disable rate limiting for tests to avoid 429 errors (using new django-allauth format)
+ACCOUNT_RATE_LIMITS = {}  # Disable all rate limiting for tests
+ACCOUNT_EMAIL_CONFIRMATION_HMAC = False  # Simplify for testing
+
 # Disable migrations for faster tests
 class DisableMigrations:
     def __contains__(self, item):

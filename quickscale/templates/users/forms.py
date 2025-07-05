@@ -1,181 +1,211 @@
-"""Custom forms for django-allauth with email-only authentication."""
+"""Enhanced authentication forms for QuickScale with improved security and UX."""
 from django import forms
-from django.utils.translation import gettext_lazy as _
 from django.contrib.auth import get_user_model
-from allauth.account.forms import LoginForm, SignupForm, ResetPasswordForm, ResetPasswordKeyForm, ChangePasswordForm
+from django.contrib.auth.forms import UserCreationForm, AuthenticationForm
+from django.core.exceptions import ValidationError
+from django.utils.translation import gettext_lazy as _
+from allauth.account.models import EmailAddress
+
+from .models import CustomUser
 
 User = get_user_model()
 
 
-class CustomLoginForm(LoginForm):
-    """Custom login form that uses email instead of username."""
+class EnhancedSignupForm(UserCreationForm):
+    """Enhanced signup form with email-only authentication and comprehensive validation."""
     
-    def __init__(self, *args, **kwargs):
-        """Initialize the form with custom fields."""
-        super().__init__(*args, **kwargs)
-        # Remove username field if it exists (should be using email)
-        if 'login' in self.fields:
-            self.fields['login'].label = _('Email')
-            self.fields['login'].widget.attrs.update({
-                'placeholder': _('Email address'),
-                'class': 'input',
-            })
-        
-        # Style the password field
-        if 'password' in self.fields:
-            self.fields['password'].widget.attrs.update({
-                'placeholder': _('Password'),
-                'class': 'input',
-            })
-        
-        # Style the remember field
-        if 'remember' in self.fields:
-            self.fields['remember'].widget.attrs.update({
-                'class': 'checkbox',
-            })
-
-
-class CustomSignupForm(SignupForm):
-    """Custom signup form for email-only authentication."""
+    email = forms.EmailField(
+        max_length=254,
+        required=True,
+        help_text="Required. Enter a valid email address.",
+        widget=forms.EmailInput(attrs={
+            'class': 'input',
+            'placeholder': 'your.email@example.com',
+            'autocomplete': 'email'
+        }),
+        error_messages={
+            'required': 'Email address is required.',
+            'invalid': 'Please enter a valid email address.',
+        }
+    )
     
-    # Remove username field
+    # Remove username field completely
     username = None
     
-    # Add additional fields
-    first_name = forms.CharField(
-        max_length=30,
-        label=_('First Name'),
-        widget=forms.TextInput(attrs={
-            'placeholder': _('First Name'),
+    # Enhanced password fields with better attributes
+    password1 = forms.CharField(
+        label=_("Password"),
+        widget=forms.PasswordInput(attrs={
             'class': 'input',
+            'placeholder': 'Password (8+ characters)',
+            'autocomplete': 'new-password',
+            'minlength': '8'
         }),
+        help_text=_("Your password must be at least 8 characters long and contain uppercase letters, lowercase letters, numbers, and special characters."),
+        error_messages={
+            'required': 'Password is required.',
+        }
     )
     
-    last_name = forms.CharField(
-        max_length=30,
-        label=_('Last Name'),
-        widget=forms.TextInput(attrs={
-            'placeholder': _('Last Name'),
+    password2 = forms.CharField(
+        label=_("Password confirmation"),
+        widget=forms.PasswordInput(attrs={
             'class': 'input',
+            'placeholder': 'Confirm password',
+            'autocomplete': 'new-password',
+            'minlength': '8'
         }),
+        help_text=_("Enter the same password as before, for verification."),
+        error_messages={
+            'required': 'Password confirmation is required.',
+        }
     )
     
-    def __init__(self, *args, **kwargs):
-        """Initialize the form with custom styling."""
-        super().__init__(*args, **kwargs)
-        
-        # Style the email field
-        self.fields['email'].widget.attrs.update({
-            'placeholder': _('Email address'),
-            'class': 'input',
-        })
-        
-        # Style the password fields
-        self.fields['password1'].widget.attrs.update({
-            'placeholder': _('Password'),
-            'class': 'input',
-        })
-        self.fields['password2'].widget.attrs.update({
-            'placeholder': _('Confirm Password'),
-            'class': 'input',
-        })
+    class Meta:
+        model = CustomUser
+        fields = ('email',)
     
-    def save(self, request):
-        """Save the user with their first and last name."""
-        user = super().save(request)
-        user.first_name = self.cleaned_data['first_name']
-        user.last_name = self.cleaned_data['last_name']
-        user.save()
+    def clean_email(self):
+        """Validate email uniqueness and format."""
+        email = self.cleaned_data.get('email')
+        if email:
+            # Check if user already exists
+            if User.objects.filter(email=email).exists():
+                raise ValidationError(
+                    _("A user with this email address already exists. Please use a different email or try logging in."),
+                    code='email_exists'
+                )
+        return email
+    
+    def save(self, commit=True):
+        """Save user with email as primary identifier."""
+        user = super().save(commit=False)
+        user.email = self.cleaned_data['email']
+        user.username = None  # Ensure username is not set
+        if commit:
+            user.save()
         return user
 
 
-class CustomResetPasswordForm(ResetPasswordForm):
-    """Custom password reset form."""
+class EnhancedLoginForm(AuthenticationForm):
+    """Enhanced login form with email-only authentication and improved UX."""
     
-    def __init__(self, *args, **kwargs):
-        """Initialize the form with custom styling."""
-        super().__init__(*args, **kwargs)
-        
-        # Style the email field
-        self.fields['email'].widget.attrs.update({
-            'placeholder': _('Email address'),
+    username = forms.EmailField(
+        label=_("Email"),
+        max_length=254,
+        widget=forms.EmailInput(attrs={
             'class': 'input',
-        })
-
-
-class CustomResetPasswordKeyForm(ResetPasswordKeyForm):
-    """Custom password reset key form."""
+            'placeholder': 'your.email@example.com',
+            'autocomplete': 'email',
+            'autofocus': True
+        }),
+        error_messages={
+            'required': 'Email address is required.',
+            'invalid': 'Please enter a valid email address.',
+        }
+    )
     
-    def __init__(self, *args, **kwargs):
-        """Initialize the form with custom styling."""
-        super().__init__(*args, **kwargs)
-        
-        # Style the password fields
-        self.fields['password1'].widget.attrs.update({
-            'placeholder': _('New Password'),
+    password = forms.CharField(
+        label=_("Password"),
+        strip=False,
+        widget=forms.PasswordInput(attrs={
             'class': 'input',
-        })
-        self.fields['password2'].widget.attrs.update({
-            'placeholder': _('Confirm New Password'),
-            'class': 'input',
-        })
-
-
-class CustomChangePasswordForm(ChangePasswordForm):
-    """Custom password change form."""
+            'placeholder': 'Password',
+            'autocomplete': 'current-password'
+        }),
+        error_messages={
+            'required': 'Password is required.',
+        }
+    )
     
-    def __init__(self, *args, **kwargs):
-        """Initialize the form with custom styling."""
-        super().__init__(*args, **kwargs)
-        
-        # Style the password fields
-        self.fields['oldpassword'].widget.attrs.update({
-            'placeholder': _('Current Password'),
-            'class': 'input',
-        })
-        self.fields['password1'].widget.attrs.update({
-            'placeholder': _('New Password'),
-            'class': 'input',
-        })
-        self.fields['password2'].widget.attrs.update({
-            'placeholder': _('Confirm New Password'),
-            'class': 'input',
-        })
+    error_messages = {
+        'invalid_login': _(
+            "Please enter a correct email and password. Note that both "
+            "fields may be case-sensitive."
+        ),
+        'inactive': _("This account is inactive."),
+    }
 
 
 class ProfileForm(forms.ModelForm):
-    """Form for editing user profile information."""
+    """Enhanced profile form with comprehensive validation and field organization."""
     
     class Meta:
-        """Metadata for the ProfileForm."""
-        model = User
+        model = CustomUser
         fields = [
-            'first_name', 'last_name', 'bio', 
-            'phone_number', 'profile_picture', 
-            'job_title', 'company', 'website', 'location',
-            'twitter', 'linkedin', 'github',
-            'email_notifications'
+            'first_name', 'last_name', 'bio', 'phone_number', 'profile_picture',
+            'job_title', 'company', 'website', 'location', 'twitter', 'linkedin',
+            'github', 'email_notifications'
         ]
-        widgets = {
-            'first_name': forms.TextInput(attrs={'class': 'input'}),
-            'last_name': forms.TextInput(attrs={'class': 'input'}),
-            'bio': forms.Textarea(attrs={'class': 'textarea', 'rows': 4}),
-            'phone_number': forms.TextInput(attrs={'class': 'input'}),
-            'job_title': forms.TextInput(attrs={'class': 'input'}),
-            'company': forms.TextInput(attrs={'class': 'input'}),
-            'website': forms.URLInput(attrs={'class': 'input'}),
-            'location': forms.TextInput(attrs={'class': 'input'}),
-            'twitter': forms.TextInput(attrs={'class': 'input', 'placeholder': '@username'}),
-            'linkedin': forms.TextInput(attrs={'class': 'input', 'placeholder': 'username'}),
-            'github': forms.TextInput(attrs={'class': 'input', 'placeholder': 'username'}),
-            'email_notifications': forms.CheckboxInput(attrs={'class': 'checkbox'}),
-        }
         
-    def __init__(self, *args, **kwargs):
-        """Initialize the form with custom field labels."""
-        super().__init__(*args, **kwargs)
-        self.fields['bio'].label = _('About Me')
-        self.fields['email_notifications'].label = _('Receive email notifications')
-        self.fields['twitter'].help_text = _('Your Twitter/X username (without @)')
-        self.fields['linkedin'].help_text = _('Your LinkedIn profile name (from URL)')
-        self.fields['github'].help_text = _('Your GitHub username') 
+        widgets = {
+            'first_name': forms.TextInput(attrs={
+                'class': 'input',
+                'placeholder': 'First name'
+            }),
+            'last_name': forms.TextInput(attrs={
+                'class': 'input',
+                'placeholder': 'Last name'
+            }),
+            'bio': forms.Textarea(attrs={
+                'class': 'textarea',
+                'rows': 4,
+                'placeholder': 'Tell us about yourself...'
+            }),
+            'phone_number': forms.TextInput(attrs={
+                'class': 'input',
+                'placeholder': '+1 (555) 123-4567'
+            }),
+            'job_title': forms.TextInput(attrs={
+                'class': 'input',
+                'placeholder': 'Software Engineer'
+            }),
+            'company': forms.TextInput(attrs={
+                'class': 'input',
+                'placeholder': 'Company name'
+            }),
+            'website': forms.URLInput(attrs={
+                'class': 'input',
+                'placeholder': 'https://yourwebsite.com'
+            }),
+            'location': forms.TextInput(attrs={
+                'class': 'input',
+                'placeholder': 'City, Country'
+            }),
+            'twitter': forms.TextInput(attrs={
+                'class': 'input',
+                'placeholder': 'twitter_handle'
+            }),
+            'linkedin': forms.TextInput(attrs={
+                'class': 'input',
+                'placeholder': 'linkedin_username'
+            }),
+            'github': forms.TextInput(attrs={
+                'class': 'input',
+                'placeholder': 'github_username'
+            }),
+            'email_notifications': forms.CheckboxInput(attrs={
+                'class': 'checkbox'
+            }),
+        }
+    
+    def clean_website(self):
+        """Validate and format website URL with protocol."""
+        website = self.cleaned_data.get('website')
+        if website and not website.startswith(('http://', 'https://')):
+            website = f'https://{website}'
+        return website
+    
+    def clean_phone_number(self):
+        """Basic phone number validation."""
+        phone = self.cleaned_data.get('phone_number')
+        if phone:
+            # Remove common separators and spaces
+            phone_cleaned = phone.replace(' ', '').replace('-', '').replace('(', '').replace(')', '').replace('+', '')
+            # Basic validation - should be digits only after cleanup
+            if not phone_cleaned.isdigit():
+                raise ValidationError("Please enter a valid phone number.")
+            # Check reasonable length (7-15 digits for international numbers)
+            if len(phone_cleaned) < 7 or len(phone_cleaned) > 15:
+                raise ValidationError("Phone number must be between 7 and 15 digits.")
+        return phone  # Return original format for display 
