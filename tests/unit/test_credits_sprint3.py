@@ -164,24 +164,24 @@ class CreditConsumptionTests(unittest.TestCase):
         self.models_py = self.credits_app_path / 'models.py'
         
     def test_consume_credits_method_exists(self):
-        """Test that consume_credits method is implemented in CreditAccount."""
+        """Test that consume_credits_with_priority method is implemented in CreditAccount."""
         with open(self.models_py, 'r') as f:
             models_content = f.read()
         
-        # Check for consume_credits method
-        self.assertIn("def consume_credits(self, amount: Decimal, description: str)", models_content,
-                     "consume_credits method not found")
+        # Check for consume_credits_with_priority method (actual implementation)
+        self.assertIn("def consume_credits_with_priority(self, amount: Decimal, description: str)", models_content,
+                     "consume_credits_with_priority method not found")
         
         # Check for proper validation
         self.assertIn("if amount <= 0:", models_content,
-                     "Amount validation not found in consume_credits")
+                     "Amount validation not found in consume_credits_with_priority")
         self.assertIn("raise ValueError(\"Amount must be positive\")", models_content,
                      "Amount validation error not found")
         
-        # Check for balance validation
-        self.assertIn("current_balance = self.get_balance()", models_content,
-                     "Balance check not found in consume_credits")
-        self.assertIn("if current_balance < amount:", models_content,
+        # Check for balance validation using available balance method
+        self.assertIn("available_balance = account.get_available_balance()", models_content,
+                     "Balance check not found in consume_credits_with_priority")
+        self.assertIn("if available_balance < amount:", models_content,
                      "Insufficient credits check not found")
         
         # Check for transaction creation with negative amount
@@ -258,8 +258,8 @@ class ServiceViewsTests(unittest.TestCase):
         self.assertIn("get_object_or_404(Service, id=service_id, is_active=True)", views_content,
                      "Service retrieval not found")
         
-        # Check for credit consumption
-        self.assertIn("credit_account.consume_credits", views_content,
+        # Check for credit consumption (actual method name)
+        self.assertIn("credit_account.consume_credits_with_priority", views_content,
                      "Credit consumption not found")
         
         # Check for service usage creation

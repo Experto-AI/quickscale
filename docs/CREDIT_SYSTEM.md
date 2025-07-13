@@ -1,4 +1,4 @@
-# QuickScale Credit System
+git statu# QuickScale Credit System
 
 ## Overview
 
@@ -22,6 +22,17 @@ The QuickScale credit system is a flexible billing and usage tracking system tha
 - **Renewal**: Automatically allocated each billing cycle
 - **Rollover**: Unused credits do NOT roll over to the next period
 - **Implementation**: Stripe Products with `interval='month'` and monthly credit allocations
+
+#### **Intelligent Expiration Handling**
+When subscription credits are allocated, the system uses a sophisticated expiration logic:
+
+1. **Primary Source**: Uses Stripe's `current_period_end` for precise billing cycle alignment
+2. **Intelligent Fallback**: When Stripe billing data is unavailable, uses product interval information:
+   - **Monthly subscriptions**: 31 days from allocation (ensures users get full month regardless of calendar)
+   - **Annual subscriptions**: 365 days from allocation
+   - **Unknown intervals**: Defaults to 31 days (user-favorable approach)
+
+This approach ensures users always receive fair credit expiration periods, even when external billing data is temporarily unavailable.
 
 ## Subscription Plans
 
@@ -66,6 +77,23 @@ The system follows a strict consumption priority to maximize value for users:
 1. **First**: Current period subscription credits (if any active subscription)
 2. **Second**: Pay-as-you-go credits (oldest first, FIFO)
 
+### Advanced Balance Calculation
+The system provides multiple balance calculation methods for different use cases:
+
+- **Available Balance**: Real-time balance excluding expired subscription credits
+- **Balance by Type**: Breakdown showing subscription vs. pay-as-you-go credits separately
+- **Priority-Aware Balance**: Applies consumption priority logic to show accurate remaining credits
+- **Expiration-Filtered Balance**: Automatically excludes expired credits from all calculations
+
+### Consumption Process
+When a service consumes credits, the system:
+
+1. **Pre-flight Validation**: Checks available balance before allowing service usage
+2. **Priority Application**: Consumes subscription credits first, then pay-as-you-go
+3. **Expiration Awareness**: Automatically excludes expired subscription credits
+4. **Transaction Safety**: Uses atomic operations to prevent race conditions
+5. **Audit Trail**: Records complete consumption details for tracking and compliance
+
 ### Example Scenarios
 
 **Scenario 1: Subscription User with Backup Credits**
@@ -87,6 +115,32 @@ The system follows a strict consumption priority to maximize value for users:
 - Service usage: 200 credits needed
 - **Consumption**: 200 from pay-as-you-go credits
 - **Remaining**: 200 pay-as-you-go credits
+
+## Credit Expiration Management
+
+### Automated Expiration Handling
+The system provides comprehensive expiration management for subscription credits:
+
+#### **Expiration Detection**
+- **Real-time Filtering**: All balance calculations automatically exclude expired subscription credits
+- **Cleanup Operations**: Periodic identification and processing of expired credits
+- **Audit Preservation**: Expired credits remain in transaction history for compliance
+
+#### **Expiration Warnings**
+- **Early Warning System**: Identifies credits expiring within configurable timeframes (default: 7 days)
+- **Detailed Breakdown**: Groups expiring credits by expiration date for precise tracking
+- **User Notifications**: Enables proactive user communication about upcoming expirations
+
+#### **Grace Period Logic**
+- **User-Favorable Defaults**: Fallback expiration periods designed to benefit users
+- **Calendar Independence**: Monthly subscriptions use 31-day fallback regardless of actual month length
+- **Billing Alignment**: When available, uses exact Stripe billing period for precision
+
+### Expiration Impact on Operations
+- **Balance Calculations**: Expired credits automatically excluded from available balance
+- **Priority Consumption**: Expiration status checked during credit consumption
+- **Administrative Views**: Admins can track and manage expired credits across all users
+- **Reporting**: Complete expiration analytics for business intelligence
 
 ## Services & Products
 
@@ -201,6 +255,7 @@ Users can:
 - **Billing History**: Complete payment history with downloadable receipts
 - **Subscription Status**: Real-time subscription status with days until renewal
 - **Cancel**: Cancel subscription with clear terms and credit preservation
+
 ## Plan Change Management
 
 ### Overview
@@ -277,19 +332,29 @@ The system provides comprehensive plan upgrade and downgrade functionality with 
 
 ### Enhanced Credit Operations
 - **Atomic Transactions**: All credit operations use database transactions for data integrity
+- **Performance Optimized**: Balance calculations use single database queries with conditional aggregation
+- **Race Condition Prevention**: Concurrent access protection prevents double-spending scenarios
+- **Input Validation**: Enhanced validation for amounts, descriptions, and business rules
 - **Advanced Balance Calculation**: Multiple balance calculation methods for different use cases:
-  - `get_balance()`: Simple total balance calculation
-  - `get_balance_by_type()`: Balance breakdown by credit type
-  - `get_balance_by_type_available()`: Priority-based balance with expiration filtering
-  - `get_available_balance()`: Real-time balance excluding expired subscription credits
+  - Simple total balance calculation
+  - Balance breakdown by credit type (subscription vs. pay-as-you-go)
+  - Priority-based balance with expiration filtering
+  - Real-time balance excluding expired subscription credits
 - **Priority Consumption Logic**:
-  - `consume_credits_with_priority()`: Enforces subscription-first, then pay-as-you-go consumption
+  - Enforces subscription-first, then pay-as-you-go consumption
   - Automatic expiration validation during consumption
   - FIFO (First-In-First-Out) consumption within credit types
-- **Expiration Handling**:
+  - Pre-flight balance validation to prevent insufficient credit scenarios
+- **Enhanced Expiration Handling**:
   - Automated expiration of subscription credits based on billing periods
   - Real-time filtering of expired credits from balance calculations
   - Graceful handling of expired credits without data loss
+  - Early warning system for credits nearing expiration
+  - Calendar-independent fallback logic for fair user treatment
+- **Data Integrity Enforcement**:
+  - Business rule validation at multiple levels (application and database)
+  - Constraint enforcement for transaction types and amounts
+  - Automatic data consistency checks
 - **Stripe Sync**: Bidirectional synchronization with Stripe products and prices
 - **Audit Trail**: Complete transaction logging with credit source tracking
 
@@ -297,14 +362,16 @@ The system provides comprehensive plan upgrade and downgrade functionality with 
 - **Stripe Products API**: Primary source for all product and pricing data
 - **Stripe Checkout**: Unified checkout experience for all purchase types including plan changes
 - **Webhook Handling**: Real-time processing of payment, subscription, and plan change events
-- **Product Synchronization**: Bidirectional sync between local and Stripe data with `sync_with_stripe()` methods
+- **Product Synchronization**: Bidirectional sync between local and Stripe data
 - **Email Notifications**: Automated notifications for billing events and plan changes
-- **Enhanced API Endpoints**:
-  - Credit management endpoints with priority consumption logic
-  - Plan change management endpoints (`create_plan_change_checkout`, `plan_change_success`)
+- **API Architecture**:
+  - Credit management with priority consumption logic
+  - Plan change management with automatic credit transfer
   - Subscription management with upgrade/downgrade support
-  - Receipt generation and download endpoints
-  - Real-time balance calculation endpoints with expiration filtering
+  - Receipt generation and download capabilities
+  - Real-time balance calculation with expiration filtering
+  - Pre-flight credit validation for service usage
+  - Comprehensive audit trail for all credit operations
 
 ## Security & Compliance
 
@@ -321,4 +388,90 @@ The system provides comprehensive plan upgrade and downgrade functionality with 
 ### Data Protection
 - **GDPR Compliance**: User data handling follows GDPR requirements
 - **Data Retention**: Clear policies for financial data retention
-- **Right to Deletion**: Procedures for user data deletion requests 
+- **Right to Deletion**: Procedures for user data deletion requests
+
+## Business Logic Patterns
+
+### Priority Consumption Pattern
+**Pattern**: Subscription credits consumed first, then pay-as-you-go credits
+**Implementation**: 
+- Balance calculations filter expired subscription credits automatically
+- Consumption logic applies priority order during credit deduction
+- FIFO (First-In-First-Out) within each credit type
+- Pre-flight validation prevents insufficient credit scenarios
+
+### Expiration Handling Pattern
+**Pattern**: Automatic filtering of expired subscription credits from all calculations
+**Implementation**:
+- Real-time filtering in balance calculation methods
+- Expiration date validation during consumption
+- Grace period logic with user-favorable fallbacks
+- Calendar-independent expiration periods (31 days for monthly)
+
+### Atomic Transaction Safety Pattern
+**Pattern**: All credit operations use database transactions with `select_for_update()`
+**Implementation**:
+- Race condition prevention through row-level locking
+- Atomic credit addition and consumption operations
+- Transaction rollback on validation failures
+- Concurrent access protection prevents double-spending
+
+### Balance Calculation Pattern
+**Pattern**: Multiple calculation methods for different use cases
+**Implementation**:
+- `get_balance()`: Simple total balance
+- `get_balance_by_type()`: Breakdown by credit type
+- `get_available_balance()`: Excludes expired subscription credits
+- `get_balance_by_type_available()`: Priority-aware with expiration filtering
+
+### Service Integration Pattern
+**Pattern**: Automatic credit consumption through BaseService class
+**Implementation**:
+- BaseService handles credit validation and consumption
+- Service registration through decorators
+- Pre-flight credit checking before service execution
+- Automatic usage tracking and audit trail
+
+### Plan Change Credit Transfer Pattern
+**Pattern**: Automatic credit transfer during subscription plan changes
+**Implementation**:
+- Subscription credits converted to pay-as-you-go credits
+- Atomic operations ensure data integrity
+- Negative SUBSCRIPTION transactions for removal
+- Positive PURCHASE transactions for addition
+- Common function ensures consistency across handlers
+
+### Validation and Error Handling Pattern
+**Pattern**: Multi-level validation with explicit error handling
+**Implementation**:
+- Model-level validation with business rule enforcement
+- Database constraints for data integrity
+- Application-level validation for business logic
+- Explicit error types (InsufficientCreditsError)
+- Comprehensive error messages for debugging
+
+### Performance Optimization Pattern
+**Pattern**: Single-query balance calculations with conditional aggregation
+**Implementation**:
+- Database-level aggregation reduces query count
+- Conditional logic in SQL for expiration filtering
+- Strategic indexing for balance calculation queries
+- Efficient field configurations for common operations
+
+### Audit Trail Pattern
+**Pattern**: Complete transaction logging with descriptive records
+**Implementation**:
+- All credit movements recorded in CreditTransaction model
+- Descriptive transaction descriptions for clarity
+- Credit source tracking (subscription vs. pay-as-you-go)
+- Service usage linked to credit transactions
+- Complete payment history with receipt generation
+
+### Webhook Integration Pattern
+**Pattern**: Real-time processing of Stripe events for credit management
+**Implementation**:
+- Webhook handlers for payment and subscription events
+- Automatic credit allocation on subscription renewal
+- Plan change processing with credit transfer
+- Error handling with graceful fallbacks
+- Audit logging for all webhook activities 

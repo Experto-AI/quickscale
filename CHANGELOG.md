@@ -2,6 +2,42 @@
 
 All notable changes to this project will be documented in this file.
 
+## v0.33.0 (2025-07-13)
+v0.33.0 feat: Credit System Architecture Review and Enhanced Business Logic
+
+This PR implements comprehensive credit system architecture review and business logic enhancement, introducing improved credit consumption priority logic, expiration handling mechanisms, and enhanced validation patterns. The implementation establishes robust credit system foundations with comprehensive test coverage and documentation updates.
+
+- Backend Implementation:
+  - Enhanced credit system with intelligent expiration handling for subscription credits, ensuring users receive fair expiration periods based on billing intervals.
+  - Implemented comprehensive validation for credit transactions, enforcing rules for amounts, descriptions, and expiration dates with improved error handling.
+  - Optimized balance calculation methods to improve performance and accuracy, including single query optimization for retrieving available balances.
+  - Refactored credit consumption logic to remove deprecated methods and streamline subscription and pay-as-you-go credit handling.
+  - Enhanced credit consumption priority system ensuring subscription credits are consumed before pay-as-you-go credits.
+  - Improved transaction safety patterns with comprehensive validation and error recovery mechanisms.
+- Frontend Implementation:
+  - Enhanced credit management interfaces with improved validation feedback and user experience.
+  - Updated credit display components to reflect new expiration handling and priority consumption logic.
+  - Improved error messaging and user feedback for credit-related operations.
+- Credit System Architecture:
+  - Conducted comprehensive review of CreditAccount and CreditTransaction models for SOLID principles compliance.
+  - Validated credit consumption priority logic and expiration handling mechanisms across all credit types.
+  - Analyzed balance calculation methods and transaction safety patterns for improved reliability.
+  - Enhanced service integration patterns with improved credit cost configuration and usage tracking accuracy.
+  - Reviewed admin credit management tools for consistency and improved functionality.
+- Testing:
+  - Added comprehensive edge case tests for credit consumption, expiration handling, and service integration.
+  - Implemented extensive tests for credit consumption priority logic and transaction validation.
+  - Enhanced test coverage for credit system business logic with improved robustness and reliability.
+  - Added tests for credit expiration scenarios and subscription credit lifecycle management.
+  - Validated service integration patterns and credit validation mechanisms.
+- Documentation:
+  - Updated credit system technical documentation with business logic patterns and architectural decisions.
+  - Enhanced documentation for credit consumption priority logic and expiration handling mechanisms.
+  - Improved service integration documentation with updated patterns and best practices.
+  - Updated ROADMAP.md to reflect completed Sprint tasks and future enhancement plans.
+
+This PR completes the Credit System Architecture Review sprint, establishing a robust and efficient credit system foundation with enhanced business logic, comprehensive validation, and improved user experience. The implementation ensures accurate credit tracking, fair expiration handling, and reliable service integration for production deployment.
+
 ## v0.32.0 (2025-07-05)
 v0.32.0 feat: Authentication System Deep Dive and Security Enhancement
 

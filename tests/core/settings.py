@@ -65,7 +65,7 @@ MIDDLEWARE = [
     'core.api_middleware.APIKeyAuthenticationMiddleware',
 ]
 
-ROOT_URLCONF = 'core.urls'
+ROOT_URLCONF = 'tests.core.urls'
 
 import os
 from pathlib import Path

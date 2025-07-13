@@ -217,7 +217,7 @@ class TestServiceGeneratorCommand(unittest.TestCase):
             'quickscale', 'manage', 'configure_service', 'test_service',
             '--description', 'Test service',
             '--credit-cost', '1.0'
-        ], capture_output=True, text=True, timeout=30)
+        ], capture_output=True, text=True, timeout=20)
         
         # Check that subprocess.run was called with the correct commands
         calls = mock_subprocess.call_args_list
