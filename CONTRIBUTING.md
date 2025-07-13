@@ -3,297 +3,204 @@
 This document outlines the coding standards and guidelines for contributing to this project.
 This document is written for humans but also for AI coding assistants like GitHub Copilot, Cursor, and Windsurf.
 
-## Table of Contents
-- [1. AI Programming Assistant LLM System Prompt Guidelines ](docs/contrib/01_ai_programming_assistant.md)
-    - 1.1. Role Definition
-      - 1.1.1. You are a **Python master**, a highly experienced **tutor**, a world-renowned **Django Full Stack Engineer**.
-      - 1.1.2. You possess exceptional coding skills and a deep understanding of Python's and Django best practices and design patterns.
-      - 1.1.3. You are adept at identifying and preventing potential errors, and you prioritize writing solid and maintainable code.
-      - 1.1.4. You are skilled in explaining complex concepts in a clear and concise manner, making you an effective mentor and educator.
-- [2. Documentation and code documentation guidelines](docs/contrib/02_documentation_guidelines.md)
-    - 2.1. Documentation sources of reference to follow
-      - 2.1.1. [README.md](../../README.md): Overview of the project to understand the project and its purpose.
-      - 2.1.2. [TECHNICAL_DOCS.md](../../TECHNICAL_DOCS.md): Technical information of the project to adhere to.
-      - 2.1.3. [USER_GUIDE.md](../../USER_GUIDE.md): User commands and usage instructions.
-      - 2.1.4. [CONTRIBUTING.md](../../CONTRIBUTING.md): Contribution guidelines index for developers and AI assistants.
-      - 2.1.5. [DATABASE_VARIABLES.md](../../docs/DATABASE_VARIABLES.md): Database configuration guidelines and variable standardization.
-      - 2.1.6. [MESSAGE_MANAGER.md](../../docs/MESSAGE_MANAGER.md): CLI output standardization using MessageManager.
-    - 2.2. Follow these guidelines for code documentation
-      - 2.2.1. Use single-line comments for major code sections
-      - 2.1.2. Use single-line docstrings for functions and classes, do not use multi-line docstrings
-      - 2.2.3. On docstrings for functions (single-line), document only the functionality (not arguments or returns)
-      - 2.2.4. On single-line comments, focus on explaining why rather than what
-- [3. Clean code principles to follow](docs/contrib/03_clean_code_principles.md)
-    - 3.1. Apply SOLID Principles: Design Maintainable and Flexible Code Structures
-      - 3.1.1. Implement Single Responsibility (SRP): Assign One Primary Job to Each Class
-        - 3.1.1.1. DO: Create focused classes with single responsibilities
-        - 3.1.1.2. DON'T: Create large classes with multiple responsibilities
-        - 3.1.1.3. Finding the Right Balance Between SRP and KISS: Avoid Over-fragmentation by Focusing on Business Domain Cohesion
-      - 3.1.2. Design for Open/Closed Principle (OCP): Allow Extension Without Modifying Existing Code
-        - 3.1.2.1. DO: Design for extension through polymorphism to Easily Add New Behaviors
-        - 3.1.2.2. DON'T: Use conditionals that require modification for new variants, Prefer Polymorphism
-        - 3.1.2.3. AI Pitfall: Avoid Premature Abstraction by Applying OCP Only Where Variation is Expected
-      - 3.1.3. Maintain Liskov Substitution Principle (LSP): Ensure Subclasses Can Replace Base Classes Without Errors
-        - 3.1.3.1. DO: Design class hierarchies with consistent behavior Ensuring Substitutability
-        - 3.1.3.2. DON'T: Violate expected behavior in subclasses Altering Contracts or Introducing Side Effects
-        - 3.2.3.3. AI Pitfall: Avoid Ignoring Behavioral Contracts by Maintaining Base Class Expectations in Subclasses
-      - 3.1.4. Create Focused Interfaces (ISP): Keep Interfaces Small and Client-Specific
-        - 3.1.4.1. DO: Create minimal, focused interfaces Tailored to Client Needs
-        - 3.1.4.2. DON'T: Create large, monolithic interfaces Forcing Unnecessary Implementations
-        - 3.1.4.3. Finding the Right Balance for Interface Segregation: Group Related Behaviors Logically Without Excessive Fragmentation
-      - 3.1.5. Use Dependency Inversion (DIP): Depend on Abstractions, Not Concrete Implementations
-        - 3.1.5.1. DO: Inject dependencies through abstractions Decoupling High-Level and Low-Level Modules
-        - 3.1.5.2. DON'T: Directly instantiate dependencies Creating Tight Coupling Between Components
-        - 3.1.5.3. AI Pitfall: Avoid Over-abstracting Everything by Creating Abstractions Only for Volatile Components
-    - 3.2. Eliminate Duplication (DRY, Don't Repeat Yourself): Avoid Redundant Code and Logic
-      - 3.2.1. Leverage Existing Functionality: Utilize Libraries and Existing Code Before Reimplementing
-        - 3.2.1.1. DO: Use existing libraries and utilities to Avoid Reinventing Standard Solutions
-        - 3.2.1.2. DON'T: Reinvent the wheel When Standard or Existing Solutions Are Available
-        - 3.2.1.3. AI Pitfall: Prevent Library Unawareness by Researching Standard Solutions First
-      - 3.2.2. Refactor Common Patterns: Extract Repeated Logic into Reusable Components
-        - 3.2.2.1. DO: Create reusable functions for common patterns Identified Across the Codebase
-        - 3.2.2.2. DON'T: Duplicate similar logic across functions Increasing Maintenance Burden
-        - 3.2.2.3. When to Allow Duplication (KISS > DRY): Prioritize Simplicity if Abstraction Adds Complexity
-    - 3.3. Keep Code Simple (KISS, Keep It Simple, Stupid): Prefer Straightforward Solutions
-      - 3.3.1. Maximize Readability: Write Code That Is Easy to Understand and Follow
-        - 3.3.1.1. DO: Use clear, straightforward implementations Prioritizing Human Understanding
-        - 3.3.1.2. DON'T: Use overly clever or complex approaches That Obscure Intent for Brevity
-        - 3.3.1.3. AI Pitfall: Avoid Showing Off by Using Complex Features Unnecessarily, Prioritize Clarity
-      - 3.3.2. Break Down Function Complexity: Decompose Complex Operations into Smaller, Focused Functions
-        - 3.3.2.1. DO: Break complex operations into simple functions Each Handling a Single Task
-        - 3.3.2.2. DON'T: Create large, multi-purpose functions That Mix Unrelated Responsibilities
-        - 3.3.2.3. AI Pitfall: Avoid Function Bloat by Keeping Functions Small and Focused
-      - 3.3.3. Simplify Control Flow: Use Clear Control Structures and Minimize Nesting
-        - 3.3.3.1. DO: Use early returns to reduce nesting Making Conditional Logic Flatter
-        - 3.3.3.2. DON'T: Create deeply nested conditions That Are Hard to Read and Debug
-        - 3.4.3.3. AI Pitfall: Avoid Control Flow Complexity by Using Guard Clauses and Simple Conditions
-      - 3.3.4. Use Appropriate Data Structures: Choose Simple Structures That Fit the Problem
-        - 3.3.4.1. DO: Use straightforward data structures Like Dictionaries and Lists for Simple Needs
-        - 3.3.4.2. DON'T: Create overly complex structures Adding Unnecessary Indirection or Abstraction
-        - 3.3.4.3. AI Pitfall: Avoid Data Structure Overdesign by Starting Simple and Adding Complexity Only When Needed
-      - 3.3.5. Minimize Dependencies: Design Loosely Coupled Components for Flexibility
-        - 3.3.5.1. DO: Keep components loosely coupled Through Interfaces and Dependency Injection
-        - 3.3.5.2. DON'T: Create tight coupling Making Components Hard to Change or Test Independently
-        - 3.3.5.3. AI Pitfall: Avoid Excessive Coupling by Making Dependencies Explicit and Minimizing Interactions
-      - 3.3.6. Avoid Premature Optimization: Write Clear Code First, Optimize Only When Measured Performance Requires It
-        - 3.3.6.1. DO: Write clear code first, then optimize if needed Based on Profiling Data
-        - 3.3.6.2. DON'T: Add complexity for theoretical performance gains Without Measurement
-    - 3.4. Reject Assumptions and Silent Fallbacks, Always Fail Explicitly
-      - 3.4.1. Demand Explicit Configuration, Raise Errors for Missing Settings Instead of Assuming Defaults
-        - 3.4.1.1. Fail Explicitly with Clear Error Messages When Configuration is Missing or Invalid
-        - 3.4.1.2. Avoid Silent Fallbacks or Assumptions for Missing Configuration, Always Require Explicit Values
-        - 3.4.1.3. AI Pitfall: Avoid Convenient Defaults That Mask Configuration Problems, Prefer Explicit Failures
-      - 3.4.2. Validate Inputs Strictly at Boundaries and Fail Fast on Invalid Data
-        - 3.4.2.1. Implement Strict Validation and Reject Invalid Inputs Early at System Boundaries
-        - 3.4.2.2. Never Attempt to Guess or "Fix" Invalid or Missing Input Data Silently
-        - 3.4.2.3. AI Pitfall: Avoid Being "Too Helpful" by Guessing Intent or Silently Fixing Inputs
-      - 3.4.3. Propagate Specific, Meaningful Errors Instead of Swallowing Exceptions or Returning Defaults
-        - 3.4.3.1. Propagate or Re-raise Exceptions with Clear Context and Specific Types
-        - 3.4.3.2. Never Hide Errors by Returning Generic Values, Defaults, or Swallowing Exceptions
-        - 3.4.3.3. AI Pitfall: Avoid Overly Defensive Programming That Catches Broad Exceptions Without Proper Handling
-    - 3.5. Balance Abstraction and Optimization: Abstract When Needed, Optimize When Measured
-      - 3.5.1. Create Abstractions Only for Volatility or Repeated Patterns, Avoid Premature Abstraction
-        - 3.5.1.1. Introduce Abstractions Purposefully to Address Real Complexity or Likely Variations
-      - 3.5.2. Optimize Code Only After Measuring Performance and Identifying Real Bottlenecks
-      - 3.5.3. Prioritize Code Clarity and Readability, Optimize Only When Performance Measurement Justifies It
-    - 3.6. Address Root Causes of Bugs Systematically, Avoid Superficial Symptom-Based Fixes
-      - 3.6.1. Systematically Investigate to Identify and Fix the Fundamental Root Cause of Issues
-        - 3.6.1.1. Systematically Trace Problems to Their Origin Before Implementing Any Fixes
-        - 3.7.1.2. Avoid Implementing Superficial Workarounds or Fallbacks That Mask the Underlying Problem
-        - 3.7.1.3. Problem-Solving Pitfall: Prevent Masking Symptoms, Ensure Fixes Address the True Cause
-      - 3.6.2. Apply the DMAIC Process (Define, Measure, Analyze, Improve, Control) for Structured Debugging
-        - 3.6.2.1. DMAIC - Define: Clearly Define the Problem with Specific Symptoms and Success Criteria
-        - 3.6.2.2. DMAIC - Measure: Gather Quantitative Data and Create Reproducible Test Cases
-        - 3.6.2.3. DMAIC - Analyze: Systematically Analyze Data to Identify the Precise Root Cause
-        - 3.6.2.4. DMAIC - Improve: Implement a Solution Addressing the Root Cause and Validate It
-        - 3.6.2.5. DMAIC - Control: Prevent Regression with Tests, Monitoring, and Documentation Updates
-        - 3.6.2.6. DMAIC Pitfall: Avoid Incomplete Analysis by Methodically Following All Steps
-      - 3.6.3. Employ Systematic Debugging with Logging, Tests, and Root Cause Documentation
-        - 3.6.3.1. Utilize Structured Logging and Debugging Tools for Systematic Problem Investigation
-        - 3.6.3.2. Avoid Ad-Hoc Debugging like Temporary Prints or Blind Retries, Use Logging
-        - 3.6.3.3. Debugging Pitfall: Remove Temporary Debugging Code, Use Proper Logging and Tests Instead
-    - 3.7. Maintain Consistency in Code Style Throughout the Project
-      - 3.7.1. Apply Clear and Consistent Naming Conventions According to Python Standards
-        - 3.7.1.1. Ensure Variable, Function, and Class Names Are Descriptive and Follow Conventions
-        - 3.7.1.2. Avoid Ambiguous, Short, or Inconsistently Cased Names That Obscure Purpose
-        - 3.7.1.3. Prevent Naming Inconsistencies by Sticking to Established Conventions and Specificity
-      - 3.7.2. Enhance Code Clarity and Maintainability by Applying Specific Type Hints
-        - 3.7.2.1. Use Specific Type Hints for Functions and Variables to Improve Understanding
-        - 3.7.2.2. Avoid Overly Complex Type Signatures and Do Not Omit Necessary Type Hints
-        - 3.7.2.3. Balance Type Hint Specificity with Readability, Avoiding Unnecessary Complexity or Omission
-        - 3.7.2.4. Adhere to Guidelines for Mandatory and Optional Type Hint Application
-      - 3.7.3. Utilize Modern F-Strings for Improved String Formatting Readability and Performance
-        - 3.7.3.1. Implement String Interpolation Using F-Strings for Clarity and Conciseness
-        - 3.7.3.2. Refrain From Using Outdated String Formatting Methods like % or str.format()
-        - 3.7.3.3. Maintain Consistency by Exclusively Using F-Strings for String Formatting Tasks
-      - 3.7.4. Structure Imports Logically to Enhance Readability and Prevent Namespace Conflicts
-        - 3.7.4.1. Group Imports by Standard Library, Third-Party, and Local Application Modules
-        - 3.7.4.2. Prefer Absolute Imports Over Relative Imports for Better Code Clarity
-        - 3.7.4.3. Avoid Wildcard Imports and Ambiguous Imports That Obscure Dependencies
-        - 3.7.4.4. Prevent Import Misuse by Avoiding Wildcards, Circular Dependencies, and Disorganization
-    - 3.8. Structure Code Effectively
-      - 3.8.1. Create Functions That Perform Only One Specific Task
-        - 3.8.1.1. DO: Design focused, cohesive functions
-        - 3.8.1.2. DON'T: Create functions with multiple unrelated responsibilities
-        - 3.8.1.3. Prevent Function Scope Creep by Resisting Adding Unrelated Logic to Existing Functions
-      - 3.8.2. Group Related Functionality Logically Within Distinct Modules and Files
-        - 3.8.2.1. DO: Group related functionality in cohesive modules
-        - 3.8.2.2. DON'T: Mix unrelated code in the same file
-        - 3.8.2.3. Avoid Generating Disorganized Code by Respecting Existing Project Structure and Module Boundaries
-      - 3.8.3. Use Exceptions for Error Handling Instead of Returning Error Codes or Ignoring Errors
-        - 3.8.3.1. DO: Use exceptions for error handling
-        - 3.8.3.2. DON'T: Use error codes or ignore exceptions
-        - 3.8.3.3. Avoid Creating Untestable Code by Minimizing Side Effects and Using Dependency Injection
-      - 3.8.4. Write Comments Explaining the Rationale Behind Code, Not Just the Mechanics
-        - 3.8.4.1. DO: Document the "why" not just the "what"
-        - 3.8.4.2. DON'T: State the obvious or explain simple mechanics
-        - 3.8.4.3. Avoid Comment Bloat by Only Documenting Complex Logic, Rationale, or Non-Obvious Choices
-      - 3.8.5. Use Structured Logging Instead of Print Statements for Debugging and Monitoring
-        - 3.8.5.1. DO: Use structured logging with appropriate levels
-        - 3.8.5.2. DON'T: Use print statements or inconsistent logging
-        - 3.8.5.3. Avoid Leaving Temporary Debugging Logging; Use Appropriate Log Levels for Production
-      - 3.8.6. Apply Idiomatic Python Patterns and Leverage Built-in Functions for Better Readability
-        - 3.8.6.1. DO: Use Python idioms and built-ins
-        - 3.8.6.2. DON'T: Write non-idiomatic Python
-        - 3.8.6.3. Avoid Writing Non-Pythonic Code; Follow Established Python Conventions and Idioms
-      - 3.8.7. Prioritize Code Readability, Optimizing Only When Performance Bottlenecks Are Measured
-        - 3.8.7.1. DO: Use efficient approaches for common operations
-        - 3.8.7.2. DON'T: Use inefficient patterns for critical code
-        - 3.8.7.3. Avoid Premature Optimization and Inefficient Algorithms by Choosing Appropriate Data Structures
-- [4. Testing Guidelines - Write Tests After Implementation, Focus on Behavior](docs/contrib/04_testing_guidelines.md)
-    - 4.1. Follow Implementation-First Testing Approach for All Code
-      - 4.1.1. Implement Functionality First, Then Write Comprehensive Tests
-        - 4.1.1.1. Always Write Implementation Code First, Then Add Tests After
-        - 4.1.1.2. Never Write Tests Before Implementing the Corresponding Functionality
-        - 4.1.1.3. Avoid Generating Test Code Before Implementation is Complete
-      - 4.1.2. Structure Tests Logically and Consistently by Functionality
-        - 4.1.2.1. Group Related Tests Together in Well-Organized Files and Classes
-        - 4.1.2.2. Avoid Creating Disorganized Test Files with Mixed Unrelated Functions
-        - 4.1.2.3. Maintain Consistent Naming Patterns for All Test Files and Classes
-      - 4.1.3. Focus Tests on Behavior and Contracts Instead of Implementation Details
-        - 4.1.3.1. Test Observable Behavior and Public API Contracts Not Internal Implementation
-        - 4.1.3.2. Avoid Testing Internal Implementation Details That Might Change
-        - 4.1.3.3. Create Tests That Remain Valid When Implementation Changes
-      - 4.1.4. Use Mock Objects to Isolate Code from External Dependencies
-        - 4.1.4.1. Replace External Dependencies with Appropriate Mocks for Isolation
-        - 4.1.4.2. Never Use Real External Dependencies in Unit Tests
-        - 4.1.4.3. Create Proper Isolation Between Code and External Dependencies
-      - 4.1.5. Write Clear, Focused Tests with Explicit Arrange-Act-Assert Pattern
-        - 4.1.5.1. Structure All Tests with Clear Arrange, Act, and Assert Sections
-        - 4.1.5.2. Keep Tests Focused on Single Behaviors Rather Than Mixing Concerns
-        - 4.1.5.3. Create Tests That Verify Exactly One Thing with Clear Purpose
-      - 4.1.6. Use Fixtures and Factories for Consistent, Reusable Test Data
-        - 4.1.6.1. Create Reusable Fixtures and Factories for Consistent Test Data
-        - 4.1.6.2. Eliminate Ad-Hoc, Inconsistent Test Data Creation in Individual Tests
-        - 4.1.6.3. Centralize Test Data Creation to Enhance Maintainability and Clarity
-      - 4.1.7. Apply Parameterization to Test Multiple Similar Scenarios Efficiently
-        - 4.1.7.1. Use Parameterization for Testing Same Logic with Different Inputs
-        - 4.1.7.2. Avoid Duplicating Similar Test Code Across Multiple Test Functions
-        - 4.1.7.3. Combine Related Test Cases while Keeping Unique Cases Separate
-      - 4.1.8. Ensure Coverage of All Code Paths, Edge Cases and Error Conditions
-        - 4.1.8.1. Test All Important Code Paths Including Error Conditions Systematically
-        - 4.1.8.2. Test Beyond the Happy Path to Include Edge Cases and Errors
-        - 4.1.8.3. Verify All Boundary Conditions and Branches in Conditional Logic
-- [5. Stack and Architecture](docs/contrib/05_stack_and_architecture.md)
-    - 5.1. Always adhere to the prescribed technical stack without exceptions
-      - 5.1.1. Use only technologies explicitly defined in TECHNICAL_DOCS.md for all implementations
-        - 5.1.1.1. Solve all issues using only technologies from the approved stack
-        - 5.1.1.2. Never introduce alternative technologies not specified in TECHNICAL_DOCS.md
-        - 5.1.1.3. Always consult TECHNICAL_DOCS.md before implementing technology solutions
-      - 5.1.2. Fix bugs by addressing root causes within the approved technology stack
-        - 5.1.2.1. Address all bug fixes by solving root causes within the approved stack
-        - 5.1.2.2. Never implement fallbacks or workarounds that deviate from the technical stack
-        - 5.1.2.3. Avoid creating even temporary solutions that violate stack requirements
-    - 5.2. Maintain architectural patterns and boundaries defined in TECHNICAL_DOCS.md
-      - 5.2.1. Implement all code respecting architectural layers and separation of concerns
-        - 5.2.1.1. Place code in appropriate layers and respect established architectural boundaries
-        - 5.2.1.2. Never mix responsibilities across architectural layers or bypass established patterns
-        - 5.2.1.3. Follow the architectural consistency of TECHNICAL_DOCS.md, do not break patterns
-- [6. Development Workflow](docs/contrib/06_development_workflow.md)
-    - 6.1. Branching Strategy with Git Flow (main, develop, feature branches)
-    - 6.2. Adding New Features
-      - 6.2.1. Plan before coding, break down features into smaller tasks, on doubt ask for clarification
-        - 6.2.1.1. Break down features into clear implementation steps with proper separation of concerns
-        - 6.2.1.2. Avoid mixing concerns and implementing unplanned features in a single function
-        - 6.2.1.3. Focus strictly on requested functionality and clarify ambiguous requirements before implementation
-      - 6.2.2. Follow Project Architecture
-        - 6.2.2.1. Implement features following the established architectural layers and patterns
-        - 6.2.2.2. Never bypass service layers or mix responsibilities across architectural boundaries
-        - 6.2.2.3. Study and follow existing architecture patterns while maintaining proper layer separation
-      - 6.2.3. Write Clean, Testable Code
-        - 6.2.3.1. Use dependency injection and interfaces to create testable components
-        - 6.2.3.2. Avoid creating tightly coupled components with hard dependencies and side effects
-        - 6.2.3.3. Design components with dependency injection and interfaces for proper unit testing
-      - 6.2.4. Include Proper Documentation
-        - 6.2.4.1. Document all public APIs and important functionality with clear explanations
-        - 6.2.4.2. Never use unclear parameter names or omit important documentation
-        - 6.2.4.3. Follow project documentation standards consistently for all public APIs
-    - 6.3. Bug Fixing
-      - 6.3.1. Understand the Root Cause
-        - 6.3.1.1. Implement proper transaction handling and validation to fix concurrency issues
-        - 6.3.1.2. Never implement superficial fixes that mask underlying problems
-        - 6.3.1.3. Always investigate concurrency, edge cases, and error conditions when fixing bugs
-      - 6.3.2. Minimize Code Changes
-        - 6.3.2.1. Make minimal changes that directly address the specific bug
-        - 6.3.2.2. Never mix bug fixes with unrelated refactoring or feature changes
-        - 6.3.2.3. Keep bug fixes focused and separate from feature enhancements
-      - 6.3.3. Add Regression Tests
-        - 6.3.3.1. Create specific tests that verify the bug fix and prevent regression
-        - 6.3.3.2. Never fix bugs without adding tests to verify the fix
-        - 6.3.3.3. Always add tests and documentation when fixing bugs
-      - 6.3.4. Document the Fix
-        - 6.3.4.1. Document bug fixes with clear explanations and bug tracking references
-        - 6.3.4.2. Never make silent changes without documenting the reason and fix
-        - 6.3.4.3. Always document bug fixes with clear explanations and references
-- [7. Follow task boundaries and maintain focused workflow](docs/contrib/07_task_focus_and_ai_workflow.md)
-    - 7.1. Maintain strict focus on the requested task only
-      - 7.1.1. Confine all changes strictly within the requested scope
-        - 7.1.1.1. Make changes only within the explicit boundaries of the request
-        - 7.1.1.2. Never introduce unrelated changes when addressing a specific issue
-        - 7.1.1.3. Resist adding unrequested improvements that extend beyond task scope
-      - 7.1.2. Implement changes incrementally with minimal impact
-        - 7.1.2.1. Make focused changes that address only the specific requirement
-        - 7.1.2.2. Avoid bundling multiple logical changes in a single implementation
-        - 7.1.2.3. Keep solutions simple and avoid overengineering beyond requirements
-      - 7.1.3. Preserve existing interfaces and ensure backward compatibility
-        - 7.1.3.1. Maintain existing parameters and return types unless changes are requested
-        - 7.1.3.2. Never change interfaces or function contracts without explicit instruction
-        - 7.1.3.3. Prevent subtle interface changes that break existing functionality
-      - 7.1.4. Match existing code style and patterns precisely
-        - 7.1.4.1. Follow established coding patterns in the existing codebase
-        - 7.1.4.2. Avoid introducing new coding styles or inconsistent approaches
-        - 7.1.4.3. Study and replicate the codebase's established patterns and conventions
-      - 7.1.5. Fix only the specific reported bug without additional changes
-        - 7.1.5.1. Address only the exact bug described without fixing adjacent issues
-        - 7.1.5.2. Resist adding enhancements or fixing unreported issues when fixing bugs
-        - 7.1.5.3. Verify your fix addresses precisely the reported issue and nothing more
-    - 7.2. Follow specific guidelines when providing AI-assisted code changes
-      - 7.2.1. Create precise and bounded requests with explicit limitations
-        - 7.2.1.1. Define exact boundaries for what should and should not be modified
-          - 7.2.1.1.1. Specify the exact changes needed with clear scope limitations
-          - 7.2.1.1.2. Avoid vague requests that invite scope expansion and overengineering
-      - 7.2.2. Explicitly limit changes to specific files and functions
-        - 7.2.2.1. Define clear boundaries for which code can be modified
-        - 7.2.2.2. Prevent unbounded changes by specifying exact modification targets
-      - 7.2.3. Request only one logical change at a time
-        - 7.2.3.1. Focus each request on implementing a single logical concern
-        - 7.2.3.2. Break complex tasks into sequential steps rather than bundling concerns
-      - 7.2.4. Carefully review all changes before accepting them
-        - 7.2.4.1. Verify changes match exactly what was requested with no extras
-      - 7.2.5. Validate all changes remain within the original scope
-        - 7.2.5.1. Verify and confirm all changes directly relate to the request
-        - 7.2.5.2. Always self-check that changes remain strictly within requested scope
-        - 7.2.5.3. Disclose any potentially out-of-scope changes for explicit approval
-      - 7.2.6. Provide specific feedback when changes exceed scope
-        - 7.2.6.1. Identify specific out-of-scope changes and request precise corrections
-        - 7.2.6.2. Avoid vague feedback that doesn't clearly identify scope violations
-    - 7.3. Prevent common focus problems with explicit constraints
-      - 7.3.1. Explicitly forbid adding unrequested "nice-to-have" features
-        - 7.3.1.1. Set clear boundaries about which features should be implemented
-      - 7.3.2. Maintain existing architecture without introducing new patterns
-        - 7.3.2.1. Implement changes within the constraints of the existing architecture
-      - 7.3.3. Ensure all public interfaces remain stable and compatible
-        - 7.3.3.1. Preserve existing function signatures and ensure backward compatibility
-      - 7.3.4. Match existing code style without reformatting unrelated code
-        - 7.3.4.1. Follow the established style patterns without reformatting existing code
+## Programming Stages
+
+This project uses a 4-stage programming approach, with each stage having specific guidelines and focus areas:
+
+### [1. PLAN.md](docs/contrib/PLAN.md) - Planning and Analysis Stage
+**Purpose:** Interpret user intent, understand the project and codebase, and plan implementation steps (without making code changes yet).
+
+**Key Focus Areas:**
+- Role definition and expertise areas
+- Understanding project documentation and architecture
+- Applying KISS principle during planning
+- Planning with SOLID principles in mind
+- Task analysis and boundary definition
+- Planning for architecture compliance and testability
+
+**When to use:** Before starting any implementation, to ensure proper understanding and planning.
+
+### [2. ACT.md](docs/contrib/ACT.md) - Implementation Stage
+**Purpose:** Execute planned changes with proper coding practices.
+
+**Key Focus Areas:**
+- Applying SOLID principles during implementation
+- Using DRY, KISS, and explicit failure principles
+- Code structure and organization
+- Code style and consistency
+- Documentation during implementation
+- Architecture compliance
+- Focus and scope management
+
+**When to use:** During actual code implementation, following the planned approach.
+
+### [3. QUALITY.md](docs/contrib/QUALITY.md) - Quality Control Stage
+**Purpose:** Ensure changes comply with project standards and quality requirements.
+
+**Key Focus Areas:**
+- Verifying adherence to technical stack and architecture
+- Code quality validation (SOLID, DRY, KISS, explicit failure)
+- Testing quality assurance
+- Documentation quality assurance
+- Code style quality assurance
+- Focus and scope validation
+
+**When to use:** After implementation to verify quality and compliance with standards.
+
+### [4. DEBUG.md](docs/contrib/DEBUG.md) - Debugging and Problem Resolution Stage
+**Purpose:** Help debug code that doesn't work, tested by user or tests.
+
+**Key Focus Areas:**
+- Systematic debugging approach with root cause analysis
+- DMAIC process for structured debugging
+- Systematic debugging with logging and tools
+- Bug fixing methodology
+- Focused debugging approach
+
+**When to use:** When code doesn't work as expected or tests fail.
+
+## Shared Guidelines
+
+The following shared guidelines apply across all programming stages:
+
+### [Code Principles](docs/contrib/shared/code_principles.md)
+Fundamental code principles including SOLID, DRY, KISS, explicit failure, and abstraction/optimization balance. Each principle includes guidance for how it applies to different stages of development.
+
+### [Documentation Standards](docs/contrib/shared/documentation_standards.md)
+Documentation guidelines including reference sources, code documentation standards, and how documentation applies to each stage.
+
+### [Architecture Guidelines](docs/contrib/shared/architecture_guidelines.md)
+Technical stack requirements and architectural patterns that must be followed across all stages.
+
+### [Testing Standards](docs/contrib/shared/testing_standards.md)
+Testing guidelines including implementation-first approach, test structure, behavior-focused testing, and coverage requirements.
+
+### [Task Focus Guidelines](docs/contrib/shared/task_focus_guidelines.md)
+Guidelines for maintaining focus on specific tasks and avoiding scope creep.
+
+### [Development Workflow](docs/contrib/shared/development_workflow.md)
+Guidelines for feature development and bug fixing workflows.
+
+## How to Use This Structure
+
+### For New Features:
+1. **PLAN Stage**: Attach `CONTRIBUTING.md` + `PLAN.md` only
+2. **ACT Stage**: Attach `CONTRIBUTING.md` + `ACT.md` only  
+3. **QUALITY Stage**: Attach `CONTRIBUTING.md` + `QUALITY.md` only
+4. **DEBUG Stage**: Attach `CONTRIBUTING.md` + `DEBUG.md` only (if needed)
+
+### For Bug Fixes:
+1. **DEBUG Stage**: Attach `CONTRIBUTING.md` + `DEBUG.md` only
+2. **QUALITY Stage**: Attach `CONTRIBUTING.md` + `QUALITY.md` only
+3. **ACT Stage**: Attach `CONTRIBUTING.md` + `ACT.md` only (if additional implementation needed)
+
+### For Code Reviews:
+1. **QUALITY Stage**: Attach `CONTRIBUTING.md` + `QUALITY.md` only
+
+**📋 Note:** Each stage file contains embedded references to all necessary shared guidelines. You only need to attach 2 files per stage!
+
+## Quick Reference
+
+### File Attachment Guide
+| Stage | Attach These 2 Files Only |
+|-------|---------------------------|
+| **PLAN** | `CONTRIBUTING.md` + `PLAN.md` |
+| **ACT** | `CONTRIBUTING.md` + `ACT.md` |
+| **QUALITY** | `CONTRIBUTING.md` + `QUALITY.md` |
+| **DEBUG** | `CONTRIBUTING.md` + `DEBUG.md` |
+
+### Planning Checklist (PLAN.md)
+- [ ] Thoroughly understood the project and codebase
+- [ ] Referenced all relevant documentation sources
+- [ ] Clarified any ambiguous requirements
+- [ ] Broken down the task into clear implementation steps
+- [ ] Planned for architecture compliance
+- [ ] Planned for testability
+- [ ] Defined clear task boundaries
+- [ ] Applied KISS principle to avoid over-engineering
+- [ ] Planned for SOLID principles in design
+- [ ] Identified potential reusable components (DRY)
+- [ ] Planned for explicit error handling
+- [ ] Planned for proper documentation
+
+### Implementation Checklist (ACT.md)
+- [ ] Applied SOLID principles appropriately
+- [ ] Used DRY to avoid code duplication
+- [ ] Applied KISS to keep solutions simple
+- [ ] Implemented explicit failure handling
+- [ ] Created focused, single-responsibility functions
+- [ ] Grouped related functionality logically
+- [ ] Used exceptions for error handling
+- [ ] Followed consistent naming conventions
+- [ ] Used appropriate type hints
+- [ ] Used f-strings for string formatting
+- [ ] Organized imports logically
+- [ ] Written clear docstrings
+- [ ] Added explanatory comments for complex logic
+- [ ] Used structured logging instead of print statements
+- [ ] Followed project architecture patterns
+- [ ] Maintained focus on the specific task
+- [ ] Preserved existing interfaces
+- [ ] Matched existing code style
+
+### Quality Control Checklist (QUALITY.md)
+- [ ] Only approved technologies from TECHNICAL_DOCS.md are used
+- [ ] Code is placed in appropriate architectural layers
+- [ ] No architectural boundaries are violated
+- [ ] Established patterns are followed
+- [ ] SOLID principles are properly applied
+- [ ] DRY principle is followed (no unnecessary duplication)
+- [ ] KISS principle is applied (solutions are simple)
+- [ ] Explicit failure handling is implemented
+- [ ] No silent fallbacks exist
+- [ ] Implementation was written before tests
+- [ ] Tests focus on behavior, not implementation details
+- [ ] External dependencies are properly mocked
+- [ ] All important code paths are covered
+- [ ] Edge cases and error conditions are tested
+- [ ] Tests are well-organized and logically structured
+- [ ] All public APIs have proper documentation
+- [ ] Comments explain "why" rather than "what"
+- [ ] Documentation is consistent with project standards
+- [ ] Complex logic is properly documented
+- [ ] Naming conventions are followed consistently
+- [ ] Type hints are used appropriately
+- [ ] F-strings are used for string formatting
+- [ ] Imports are organized logically
+- [ ] Code style matches existing patterns
+- [ ] Changes are confined to the requested scope
+- [ ] No unrelated changes were introduced
+- [ ] Existing interfaces are preserved
+- [ ] Code style matches existing patterns
+
+### Debugging Checklist (DEBUG.md)
+- [ ] Systematically traced problems to their origin
+- [ ] Avoided implementing superficial workarounds
+- [ ] Used DMAIC process for structured debugging
+- [ ] Documented root causes thoroughly
+- [ ] Used structured logging and debugging tools
+- [ ] Avoided ad-hoc debugging like temporary prints
+- [ ] Created reproducible test cases
+- [ ] Gathered quantitative data
+- [ ] Understood the root cause before fixing
+- [ ] Made minimal changes that directly address the bug
+- [ ] Added regression tests to verify the fix
+- [ ] Documented the fix with clear explanations
+- [ ] Addressed only the exact bug described
+- [ ] Resisted adding enhancements while fixing bugs
+- [ ] Verified the fix addresses the specific issue
+- [ ] Maintained existing interfaces unless explicitly requested
+
+## Migration from Old Structure
+
+This new structure replaces the previous 7-file organization:
+- **01_ai_programming_assistant.md** → Integrated into PLAN.md
+- **02_documentation_guidelines.md** → Moved to shared/documentation_standards.md
+- **03_clean_code_principles.md** → Distributed across ACT.md, QUALITY.md, and shared/code_principles.md
+- **04_testing_guidelines.md** → Moved to shared/testing_standards.md
+- **05_stack_and_architecture.md** → Moved to shared/architecture_guidelines.md
+- **06_development_workflow.md** → Moved to shared/development_workflow.md
+- **07_task_focus_and_ai_workflow.md** → Distributed across all stages and shared/task_focus_guidelines.md
+
+All content from the old files has been preserved and reorganized for better usability and stage-specific focus.
 

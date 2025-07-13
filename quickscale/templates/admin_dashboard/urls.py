@@ -11,7 +11,7 @@ urlpatterns = [
     path('subscription/', views.subscription_page, name='subscription'),
     path('subscription/checkout/', views.create_subscription_checkout, name='create_subscription_checkout'),
     path('subscription/change-checkout/', views.create_plan_change_checkout, name='create_plan_change_checkout'),
-    path('subscription/change/', views.change_subscription_plan_deprecated, name='change_subscription_plan'),  # Deprecated endpoint
+
     path('subscription/cancel/', views.cancel_subscription, name='cancel_subscription'),
     path('subscription/success/', views.subscription_success, name='subscription_success'),
     path('subscription/plan-change-success/', views.plan_change_success, name='plan_change_success'),

@@ -1,0 +1,153 @@
+{% extends "base.html" %}
+
+{% block title %}Account Locked - {{ project_name }}{% endblock %}
+
+{% block extra_css %}
+<style>
+.is-sr-only {
+    position: absolute !important;
+    width: 1px !important;
+    height: 1px !important;
+    padding: 0 !important;
+    margin: -1px !important;
+    overflow: hidden !important;
+    clip: rect(0, 0, 0, 0) !important;
+    white-space: nowrap !important;
+    border: 0 !important;
+}
+</style>
+{% endblock %}
+
+{% block content %}
+<section class="hero is-danger" role="banner" aria-labelledby="lockout-heading">
+    <div class="hero-body">
+        <div class="container has-text-centered">
+            <h1 class="title" id="lockout-heading">
+                <span aria-hidden="true">🔒</span> Account Locked
+            </h1>
+            <h2 class="subtitle">
+                Your account has been temporarily locked for security reasons
+            </h2>
+        </div>
+    </div>
+</section>
+
+<section class="section">
+    <div class="container">
+        <div class="columns is-centered">
+            <div class="column is-6">
+                <div class="box" role="main" aria-labelledby="lockout-details">
+                    <div class="content has-text-centered">
+                        <div class="notification is-warning" role="alert" aria-live="polite">
+                            <p class="has-text-weight-semibold" id="lockout-details">Security Lock Active</p>
+                            <p>Too many failed login attempts were detected for <strong>{{ user_email }}</strong></p>
+                        </div>
+
+                        <div class="field">
+                            <label class="label" for="failed-attempts-display">Failed Attempts</label>
+                            <div class="control">
+                                <span class="tag is-danger is-large" id="failed-attempts-display" aria-describedby="failed-attempts-help">{{ failed_attempts }}</span>
+                                <div id="failed-attempts-help" class="is-sr-only">Number of failed login attempts that triggered the account lockout</div>
+                            </div>
+                        </div>
+
+                        {% if minutes_remaining > 0 %}
+                        <div class="field">
+                            <label class="label" for="time-remaining-display">Time Remaining</label>
+                            <div class="control">
+                                <span class="tag is-warning is-large" id="time-remaining-display" aria-describedby="time-remaining-help">
+                                    {{ minutes_remaining }} minute{{ minutes_remaining|pluralize }}
+                                </span>
+                                <div id="time-remaining-help" class="is-sr-only">Estimated time until account is automatically unlocked</div>
+                            </div>
+                        </div>
+
+                        <div class="notification is-info is-light" role="status" aria-labelledby="unlock-info-heading">
+                            <p><strong id="unlock-info-heading">Automatic Unlock:</strong></p>
+                            <p>Your account will be automatically unlocked on:</p>
+                            <p class="has-text-weight-semibold">
+                                <time datetime="{{ locked_until|date:'c' }}">{{ locked_until|date:"F j, Y g:i A" }}</time>
+                            </p>
+                        </div>
+                        {% else %}
+                        <div class="notification is-success is-light" role="status" aria-live="polite">
+                            <p><strong>Lockout Expired:</strong></p>
+                            <p>Your account lockout has expired. You may now try logging in again.</p>
+                        </div>
+                        {% endif %}
+
+                        <hr>
+
+                        <div class="content">
+                            <h3 id="what-happened-heading">What happened?</h3>
+                            <p>Your account was automatically locked after multiple failed login attempts to protect your account from unauthorized access.</p>
+                            
+                            <h3 id="what-to-do-heading">What can you do?</h3>
+                            <ul role="list" aria-labelledby="what-to-do-heading">
+                                <li>Wait for the lockout period to expire</li>
+                                <li>Make sure you're using the correct email and password</li>
+                                <li>Use the "Forgot Password" option if you've forgotten your password</li>
+                                <li>Contact support if you believe this is an error</li>
+                            </ul>
+                        </div>
+
+                        <div class="buttons is-centered" role="group" aria-label="Account recovery actions">
+                            {% if minutes_remaining <= 0 %}
+                            <a href="{% url 'account_login' %}" class="button is-primary" aria-describedby="login-button-help">
+                                <span class="icon" aria-hidden="true">
+                                    <i class="fas fa-sign-in-alt"></i>
+                                </span>
+                                <span>Try Login Again</span>
+                            </a>
+                            <div id="login-button-help" class="is-sr-only">Attempt to log in again now that the lockout has expired</div>
+                            {% endif %}
+                            
+                            <a href="{% url 'account_reset_password' %}" class="button is-link" aria-describedby="reset-button-help">
+                                <span class="icon" aria-hidden="true">
+                                    <i class="fas fa-key"></i>
+                                </span>
+                                <span>Reset Password</span>
+                            </a>
+                            <div id="reset-button-help" class="is-sr-only">Create a new password if you've forgotten your current one</div>
+                            
+                            <a href="{% url 'public:contact' %}" class="button is-light" aria-describedby="contact-button-help">
+                                <span class="icon" aria-hidden="true">
+                                    <i class="fas fa-envelope"></i>
+                                </span>
+                                <span>Contact Support</span>
+                            </a>
+                            <div id="contact-button-help" class="is-sr-only">Get help from our support team if you believe this lockout is in error</div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Security Information -->
+                <div class="box" role="complementary" aria-labelledby="security-info-heading">
+                    <h3 class="title is-5" id="security-info-heading">
+                        <span aria-hidden="true">🛡️</span> Security Information
+                    </h3>
+                    <div class="content">
+                        <h4 id="why-locked-heading">Why do accounts get locked?</h4>
+                        <p>Account lockouts are a security feature that helps protect your account from:</p>
+                        <ul role="list" aria-labelledby="why-locked-heading">
+                            <li>Brute force attacks</li>
+                            <li>Unauthorized access attempts</li>
+                            <li>Password guessing</li>
+                        </ul>
+                        
+                        <h4 id="prevent-lockouts-heading">How to prevent lockouts:</h4>
+                        <ul role="list" aria-labelledby="prevent-lockouts-heading">
+                            <li>Use a strong, unique password</li>
+                            <li>Enable password manager auto-fill</li>
+                            <li>Use the "Remember Me" option on trusted devices</li>
+                            <li>Reset your password if you're unsure</li>
+                        </ul>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</section>
+
+<!-- Auto-refresh functionality can be added with Alpine.js if needed -->
+{% endblock %} 

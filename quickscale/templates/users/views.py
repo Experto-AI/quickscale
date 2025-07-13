@@ -11,6 +11,8 @@ from django.contrib.auth.forms import UserCreationForm
 from django.core.exceptions import ValidationError
 
 from .forms import ProfileForm, EnhancedSignupForm, EnhancedLoginForm
+from .models import AccountLockout
+from .security_logger import log_login_failure
 from credits.models import APIKey
 
 User = get_user_model()
@@ -26,21 +28,55 @@ def login_view(request: HttpRequest) -> HttpResponse:
             email = form.cleaned_data['username']  # username field contains email
             password = form.cleaned_data['password']
             
-            # Authenticate user
-            user = authenticate(request, email=email, password=password)
-            
-            if user is not None:
-                login(request, user)
-                messages.success(request, 'Successfully logged in!')
+            # Check if user exists and get lockout status
+            try:
+                user_obj = User.objects.get(email=email)
+                lockout, created = AccountLockout.objects.get_or_create(user=user_obj)
                 
-                if is_htmx:
-                    response = HttpResponse()
-                    response['HX-Redirect'] = '/'
-                    return response
-                return redirect('public:index')
-            else:
-                # Add non-field error for invalid credentials
+                # Check if account is locked
+                if lockout.is_locked:
+                    if not lockout.check_lockout_expired():
+                        # Account is still locked
+                        time_remaining = lockout.time_until_unlock
+                        minutes_remaining = int(time_remaining.total_seconds() / 60) if time_remaining else 0
+                        
+                        form.add_error(None, f'Account locked due to too many failed attempts. Try again in {minutes_remaining} minutes.')
+                        
+                        # Log the blocked login attempt
+                        log_login_failure(email, request, 'account_locked')
+                        
+                        if is_htmx:
+                            return render(request, 'users/login_form.html', {'form': form, 'is_htmx': is_htmx})
+                        return render(request, 'users/login.html', {'form': form, 'is_htmx': is_htmx})
+                
+                # Attempt authentication
+                user = authenticate(request, email=email, password=password)
+                
+                if user is not None:
+                    # Reset failed attempts on successful login
+                    lockout.reset_failed_attempts()
+                    login(request, user)
+                    messages.success(request, 'Successfully logged in!')
+                    
+                    if is_htmx:
+                        response = HttpResponse()
+                        response['HX-Redirect'] = '/'
+                        return response
+                    return redirect('public:index')
+                else:
+                    # Failed login - increment attempts
+                    is_now_locked = lockout.increment_failed_attempts(request)
+                    
+                    if is_now_locked:
+                        form.add_error(None, 'Too many failed attempts. Your account has been temporarily locked.')
+                    else:
+                        remaining_attempts = 5 - lockout.failed_attempts  # Default max attempts
+                        form.add_error(None, f'Invalid email or password. {remaining_attempts} attempts remaining.')
+                    
+            except User.DoesNotExist:
+                # User doesn't exist - still show generic error and log the attempt
                 form.add_error(None, 'Invalid email or password. Please try again.')
+                log_login_failure(email, request, 'user_not_found')
         
         # If we get here, there were form errors
         if is_htmx:

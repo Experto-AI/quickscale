@@ -4,6 +4,85 @@ from pathlib import Path
 
 from .env_utils import get_env, is_feature_enabled
 
+
+class SecurityConfigurationError(Exception):
+    """Raised when security configuration validation fails."""
+    pass
+
+
+def validate_account_lockout_settings():
+    """Validate account lockout configuration parameters."""
+    threshold = int(get_env('ACCOUNT_LOCKOUT_MAX_ATTEMPTS', '5'))
+    duration = int(get_env('ACCOUNT_LOCKOUT_DURATION', '300'))
+    
+    if threshold < 3:
+        raise SecurityConfigurationError(
+            f"ACCOUNT_LOCKOUT_MAX_ATTEMPTS must be at least 3 for security, got {threshold}"
+        )
+    
+    if threshold > 20:
+        raise SecurityConfigurationError(
+            f"ACCOUNT_LOCKOUT_MAX_ATTEMPTS must not exceed 20 to prevent DoS, got {threshold}"
+        )
+    
+    if duration < 60:
+        raise SecurityConfigurationError(
+            f"ACCOUNT_LOCKOUT_DURATION must be at least 60 seconds, got {duration}"
+        )
+    
+    if duration > 86400:  # 24 hours
+        raise SecurityConfigurationError(
+            f"ACCOUNT_LOCKOUT_DURATION must not exceed 86400 seconds (24h), got {duration}"
+        )
+
+
+def validate_session_security_settings():
+    """Validate session security configuration."""
+    session_age = int(get_env('SESSION_COOKIE_AGE', '3600'))
+    
+    if session_age < 300:  # 5 minutes
+        raise SecurityConfigurationError(
+            f"SESSION_COOKIE_AGE must be at least 300 seconds for usability, got {session_age}"
+        )
+    
+    if session_age > 86400:  # 24 hours
+        raise SecurityConfigurationError(
+            f"SESSION_COOKIE_AGE should not exceed 86400 seconds for security, got {session_age}"
+        )
+
+
+def validate_production_security_settings():
+    """Validate security settings for production environment."""
+    if IS_PRODUCTION:
+        secret_key = get_env('SECRET_KEY', '')
+        if not secret_key or secret_key == 'dev-only-dummy-key-replace-in-production':
+            raise SecurityConfigurationError(
+                "Production requires a secure SECRET_KEY different from default"
+            )
+        
+        if len(secret_key) < 32:
+            raise SecurityConfigurationError(
+                f"SECRET_KEY must be at least 32 characters for security, got {len(secret_key)}"
+            )
+        
+        allowed_hosts = get_env('ALLOWED_HOSTS', '')
+        if '*' in allowed_hosts:
+            raise SecurityConfigurationError(
+                "Production requires specific ALLOWED_HOSTS, wildcard '*' is not secure"
+            )
+        
+        if not allowed_hosts or allowed_hosts.strip() == '':
+            raise SecurityConfigurationError(
+                "Production requires explicit ALLOWED_HOSTS configuration"
+            )
+
+
+def validate_all_security_settings():
+    """Validate all security configuration settings."""
+    validate_account_lockout_settings()
+    validate_session_security_settings()
+    validate_production_security_settings()
+
 # Determine environment
 IS_PRODUCTION = is_feature_enabled(get_env('IS_PRODUCTION', 'False'))
 DEBUG = not IS_PRODUCTION
@@ -72,6 +151,10 @@ for host in DEVELOPMENT_HOSTS:
 # Handle HTTP_X_FORWARDED_PROTO when behind a proxy/load balancer
 SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
 
+# Account Lockout Settings
+ACCOUNT_LOCKOUT_MAX_ATTEMPTS = int(get_env('ACCOUNT_LOCKOUT_MAX_ATTEMPTS', '5'))
+ACCOUNT_LOCKOUT_DURATION = int(get_env('ACCOUNT_LOCKOUT_DURATION', '300'))  # 5 minutes in seconds
+
 # Enhanced password strength validation (consistent 8 character minimum)
 AUTH_PASSWORD_VALIDATORS = [
     {
@@ -127,4 +210,19 @@ if IS_PRODUCTION:
         'magnetometer': [],
         'gyroscope': [],
         'accelerometer': [],
-    } 
+    }
+
+# Validate security settings on module import to catch configuration errors early
+try:
+    validate_all_security_settings()
+except SecurityConfigurationError as e:
+    # Import time validation ensures configuration errors are caught during startup
+    import sys
+    print(f"Security Configuration Error: {e}", file=sys.stderr)
+    if IS_PRODUCTION:
+        # In production, configuration errors should prevent startup
+        raise
+    else:
+        # In development, log warning but allow startup for easier development
+        import warnings
+        warnings.warn(f"Security configuration issue: {e}", UserWarning)

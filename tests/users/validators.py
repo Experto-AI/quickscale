@@ -62,7 +62,7 @@ class PasswordStrengthValidator:
     def get_help_text(self):
         """Return help text for this validator."""
         help_texts = [
-            _("Your password must be at least %(min_length)d characters long.") % {'min_length': self.min_length}
+            _("Your password must be at least {min_length} characters long.").format(min_length=self.min_length)
         ]
         
         if self.require_uppercase:

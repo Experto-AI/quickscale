@@ -149,7 +149,7 @@ class TextProcessingView(View):
                 service = Service.objects.get(name='Text Processing')
                 
                 # Consume credits
-                credit_transaction = credit_account.consume_credits(
+                credit_transaction = credit_account.consume_credits_with_priority(
                     amount=credit_cost,
                     description=f'Text processing: {operation}'
                 )

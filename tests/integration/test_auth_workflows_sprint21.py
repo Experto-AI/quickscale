@@ -531,14 +531,21 @@ class AuthenticationSecurityTest(TestCase):
         # Assert: Request is blocked due to missing CSRF token
         self.assertEqual(response.status_code, 403)
 
+    @override_settings(ACCOUNT_RATE_LIMITS={})
     def test_session_security_after_authentication(self):
         """Test session security features after authentication."""
+        # Clear cache to ensure fresh state
+        from django.core.cache import cache
+        cache.clear()
+        
         # Act: Login user through the form to properly set cookies
+        # Use a fresh client to avoid any potential session pollution
+        fresh_client = Client()
         login_data = {
             'login': 'secureuser@example.com',
             'password': 'SecurePassword123!'
         }
-        response = self.client.post(reverse('account_login'), login_data)
+        response = fresh_client.post(reverse('account_login'), login_data)
         
         # Assert: Login successful and session has security attributes
         self.assertEqual(response.status_code, 302)
