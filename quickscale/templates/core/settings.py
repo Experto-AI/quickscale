@@ -33,6 +33,11 @@ ALLOWED_HOSTS: list[str] = get_env('ALLOWED_HOSTS', '*').split(',')
 # Import security settings
 from .security_settings import *
 
+# Two-Factor Authentication Settings (preparation)
+TWO_FACTOR_AUTH_ENABLED = is_feature_enabled(get_env('TWO_FACTOR_AUTH_ENABLED', 'False'))
+TWO_FACTOR_AUTH_ISSUER = get_env('TWO_FACTOR_AUTH_ISSUER', PROJECT_NAME)
+TWO_FACTOR_AUTH_BACKUP_CODES_COUNT = int(get_env('TWO_FACTOR_AUTH_BACKUP_CODES_COUNT', '10'))
+
 # Validate production settings early
 try:
     from .env_utils import validate_production_settings
@@ -123,6 +128,7 @@ MIDDLEWARE = [
     'django.middleware.common.CommonMiddleware',
     'django.middleware.csrf.CsrfViewMiddleware',
     'django.contrib.auth.middleware.AuthenticationMiddleware',
+    'users.middleware.AccountLockoutMiddleware',  # Account lockout protection
     'core.api_middleware.APIKeyAuthenticationMiddleware',  # API key authentication for /api/ routes
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',

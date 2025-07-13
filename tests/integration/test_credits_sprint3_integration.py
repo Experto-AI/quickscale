@@ -96,9 +96,9 @@ class Sprint3IntegrationTests(unittest.TestCase):
         self.assertIn("class InsufficientCreditsError(Exception)", models_content,
                      "InsufficientCreditsError not found in generated project")
         
-        # Check for consume_credits method
-        self.assertIn("def consume_credits(self, amount: Decimal, description: str)", models_content,
-                     "consume_credits method not found in generated project")
+        # Check for consume_credits_with_priority method
+        self.assertIn("def consume_credits_with_priority(self, amount: Decimal, description: str)", models_content,
+                     "consume_credits_with_priority method not found in generated project")
     
     def test_service_views_in_generated_project(self):
         """Test that service views are properly implemented."""

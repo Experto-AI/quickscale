@@ -149,21 +149,21 @@ class CreditAccountMethodTests(unittest.TestCase):
             models_content = f.read()
         
         # Check for updated add_credits signature
-        self.assertIn("def add_credits(self, amount: Decimal, description: str, credit_type: str = 'ADMIN')", models_content,
+        self.assertIn("def add_credits(self, amount: Decimal, description: str, credit_type: str = 'ADMIN', expires_at=None)", models_content,
                      "add_credits method not updated with credit_type parameter")
     
     def test_consume_credits_method_updated(self):
-        """Test that consume_credits method is updated with credit_type."""
+        """Test that consume_credits_with_priority method is updated with credit_type."""
         with open(self.models_py, 'r') as f:
             models_content = f.read()
         
-        # Check for consume_credits method
-        self.assertIn("def consume_credits(self, amount: Decimal, description: str)", models_content,
-                     "consume_credits method not found")
+        # Check for consume_credits_with_priority method (actual implementation)
+        self.assertIn("def consume_credits_with_priority(self, amount: Decimal, description: str)", models_content,
+                     "consume_credits_with_priority method not found")
         
-        # Check for credit_type='CONSUMPTION' in consume_credits
+        # Check for credit_type='CONSUMPTION' in consume_credits_with_priority
         self.assertIn("credit_type='CONSUMPTION'", models_content,
-                     "CONSUMPTION credit_type not found in consume_credits")
+                     "CONSUMPTION credit_type not found in consume_credits_with_priority")
     
     def test_credit_purchase_package_removed(self):
         """Test that CreditPurchasePackage model has been removed."""

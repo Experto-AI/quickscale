@@ -76,10 +76,7 @@ class StripeProductAdmin(admin.ModelAdmin):
             path(
                 'sync_all/',
                 self.admin_site.admin_view(self.sync_all_products_view),
-                name='%s_%s_sync_all' % (
-                    self.model._meta.app_label,
-                    self.model._meta.model_name
-                ),
+                name=f'{self.model._meta.app_label}_{self.model._meta.model_name}_sync_all',
             ),
             path(
                 '<path:object_id>/sync/',
@@ -102,7 +99,7 @@ class StripeProductAdmin(admin.ModelAdmin):
         except Exception as e:
             self.message_user(
                 request,
-                _('Error syncing product: %s') % str(e),
+                _('Error syncing product: {}').format(str(e)),
                 messages.ERROR
             )
         return HttpResponseRedirect(request.META.get('HTTP_REFERER', '/'))
@@ -131,13 +128,13 @@ class StripeProductAdmin(admin.ModelAdmin):
         if success_count:
             self.message_user(
                 request,
-                _('Successfully synced %d products.') % success_count,
+                _('Successfully synced {} products.').format(success_count),
                 messages.SUCCESS
             )
         if error_count:
             self.message_user(
                 request,
-                _('Failed to sync %d products.') % error_count,
+                _('Failed to sync {} products.').format(error_count),
                 messages.ERROR
             )
 
@@ -148,13 +145,13 @@ class StripeProductAdmin(admin.ModelAdmin):
             sync_count = StripeManager.get_instance().sync_products_from_stripe(StripeProduct)
             self.message_user(
                 request,
-                _('Successfully synced %d products from Stripe.') % sync_count,
+                _('Successfully synced {} products from Stripe.').format(sync_count),
                 messages.SUCCESS
             )
         except Exception as e:
             self.message_user(
                 request,
-                _('Error syncing all products: %s') % str(e),
+                _('Error syncing all products: {}').format(str(e)),
                 messages.ERROR
             )
         # Redirect back to the changelist view
@@ -169,10 +166,7 @@ class StripeProductAdmin(admin.ModelAdmin):
         if extra_context is None:
             extra_context = {}
         # Get the URL for the sync_all_products_view
-        sync_all_url = reverse('admin:%s_%s_sync_all' % (
-            self.model._meta.app_label,
-            self.model._meta.model_name
-        ))
+        sync_all_url = reverse(f'admin:{self.model._meta.app_label}_{self.model._meta.model_name}_sync_all')
         extra_context['sync_all_url'] = sync_all_url
         # Pass the custom template name to the context
         extra_context['change_list_template'] = 'admin/stripe_manager/stripeproduct/change_list.html'

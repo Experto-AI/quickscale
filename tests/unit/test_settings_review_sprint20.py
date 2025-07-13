@@ -584,7 +584,7 @@ class ModelBusinessLogicSeparationTests(unittest.TestCase):
         # Should have credit management methods
         credit_methods = [
             "def add_credits",
-            "def consume_credits"
+            "def consume_credits_with_priority"
         ]
         
         for method in credit_methods:

@@ -7,6 +7,7 @@ from .command_base import Command
 from quickscale.utils.message_manager import MessageManager
 from quickscale.utils.template_generator import render_template
 from quickscale.utils.service_templates import generate_service_file, get_service_readme_template
+from quickscale.utils.timeout_constants import DOCKER_OPERATIONS_TIMEOUT
 
 
 class ServiceGeneratorCommand(Command):
@@ -176,7 +177,7 @@ class ServiceGeneratorCommand(Command):
                 '--credit-cost', str(credit_cost)
             ]
             
-            result = subprocess.run(cmd, capture_output=True, text=True, timeout=30)
+            result = subprocess.run(cmd, capture_output=True, text=True, timeout=DOCKER_OPERATIONS_TIMEOUT)
             
             if result.returncode == 0:
                 return {"success": True, "output": result.stdout}

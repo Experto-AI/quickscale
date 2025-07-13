@@ -1,20 +1,26 @@
 quickscale
 ├── dist
-│   ├── quickscale-0.30.0-py3-none-any.whl
-│   └── quickscale-0.30.0.tar.gz
+│   ├── quickscale-0.32.0-py3-none-any.whl
+│   └── quickscale-0.32.0.tar.gz
 ├── docs
 │   ├── contrib
-│   │   ├── 01_ai_programming_assistant.md
-│   │   ├── 02_documentation_guidelines.md
-│   │   ├── 03_clean_code_principles.md
-│   │   ├── 04_testing_guidelines.md
-│   │   ├── 05_stack_and_architecture.md
-│   │   ├── 06_development_workflow.md
-│   │   └── 07_task_focus_and_ai_workflow.md
+│   │   ├── shared
+│   │   │   ├── architecture_guidelines.md
+│   │   │   ├── code_principles.md
+│   │   │   ├── development_workflow.md
+│   │   │   ├── documentation_standards.md
+│   │   │   ├── task_focus_guidelines.md
+│   │   │   └── testing_standards.md
+│   │   ├── ACT.md
+│   │   ├── DEBUG.md
+│   │   ├── PLAN.md
+│   │   └── QUALITY.md
+│   ├── AI_VISUAL_DEVELOPMENT_SYSTEM.md
 │   ├── CREDIT_SYSTEM.md
 │   ├── DATABASE_VARIABLES.md
 │   ├── MANUAL_CREDIT_MANAGEMENT.md
-│   └── MESSAGE_MANAGER.md
+│   ├── MESSAGE_MANAGER.md
+│   └── REVERSE_DEVELOPMENT_WORKFLOW.md
 ├── htmlcov
 │   ├── class_index.html
 │   ├── coverage_html_cb_6fb7b396.js
@@ -196,7 +202,7 @@ quickscale
 │   │   │   │   ├── _check_port_availability(self, env)
 │   │   │   │   ├── _prepare_environment_and_ports(self, no_cache)
 │   │   │   │   ├── _find_ports_for_retry(self, retry_count, max_retries, no_cache)
-│   │   │   │   ├── _start_docker_services(self, env, no_cache)
+│   │   │   │   ├── _start_docker_services(self, env, no_cache, timeout)
 │   │   │   │   ├── _handle_docker_process_error(self, e, env)
 │   │   │   │   ├── _verify_services_running(self, env)
 │   │   │   │   ├── _start_stopped_containers(self)
@@ -388,7 +394,6 @@ quickscale
 │   │   │       ├── payment_history(request)
 │   │   │       ├── payment_detail(request, payment_id)
 │   │   │       ├── download_receipt(request, payment_id)
-│   │   │       ├── change_subscription_plan_deprecated(request)
 │   │   │       ├── service_admin(request)
 │   │   │       ├── service_detail(request, service_id)
 │   │   │       ├── service_toggle_status(request, service_id)
@@ -458,6 +463,7 @@ quickscale
 │   │   │   │   ├── project_settings(request)
 │   │   │   │   └── settings_context(request)
 │   │   │   ├── email_settings.py
+│   │   │   │   └── validate_email_settings()
 │   │   │   ├── env_utils.py
 │   │   │   │   ├── get_env(key, default, from_env_file)
 │   │   │   │   ├── is_feature_enabled(value)
@@ -465,7 +471,13 @@ quickscale
 │   │   │   │   ├── validate_required_vars(component)
 │   │   │   │   └── validate_production_settings()
 │   │   │   ├── logging_settings.py
+│   │   │   │   └── get_logging_config(debug, log_level)
 │   │   │   ├── security_settings.py
+│   │   │   │   ├── SecurityConfigurationError {}
+│   │   │   │   ├── validate_account_lockout_settings()
+│   │   │   │   ├── validate_session_security_settings()
+│   │   │   │   ├── validate_production_security_settings()
+│   │   │   │   └── validate_all_security_settings()
 │   │   │   ├── settings.py
 │   │   │   ├── test_runner.py
 │   │   │   │   ├── QuickScaleTestLoader {}
@@ -617,16 +629,19 @@ quickscale
 │   │   │   │   │   ├── __str__(self)
 │   │   │   │   │   ├── get_balance(self)
 │   │   │   │   │   ├── get_balance_by_type(self)
-│   │   │   │   │   ├── add_credits(self, amount, description, credit_type)
-│   │   │   │   │   ├── consume_credits(self, amount, description)
+│   │   │   │   │   ├── add_credits(self, amount, description, credit_type, expires_at)
 │   │   │   │   │   ├── consume_credits_with_priority(self, amount, description)
 │   │   │   │   │   ├── get_available_balance(self)
 │   │   │   │   │   ├── get_balance_by_type_available(self)
 │   │   │   │   │   ├── get_balance_details(self)
-│   │   │   │   │   └── get_or_create_for_user(cls, user)
+│   │   │   │   │   ├── get_or_create_for_user(cls, user)
+│   │   │   │   │   ├── cleanup_expired_credits(self)
+│   │   │   │   │   └── get_expiring_credits(self, days_ahead)
 │   │   │   │   ├── CreditTransaction {}
 │   │   │   │   │   ├── Meta {}
 │   │   │   │   │   ├── __str__(self)
+│   │   │   │   │   ├── clean(self)
+│   │   │   │   │   ├── save(self)
 │   │   │   │   │   ├── transactions(self)
 │   │   │   │   │   ├── is_purchase(self)
 │   │   │   │   │   ├── is_subscription(self)
@@ -675,12 +690,6 @@ quickscale
 │   │   │   ├── styling_guidelines.md
 │   │   │   └── template_customization_examples.md
 │   │   ├── js
-│   │   │   ├── password_validation.js
-│   │   │   │   ├── addEventListener('DOMContentLoaded', function()
-│   │   │   │   ├── checkPasswordStrength(password)
-│   │   │   │   ├── updateUI()
-│   │   │   │   ├── validatePassword(password)
-│   │   │   │   └── score(()
 │   │   │   └── plan_selection.js
 │   │   │       ├── addEventListener('DOMContentLoaded', ()
 │   │   │       └── forEach(button => {
@@ -773,13 +782,29 @@ quickscale
 │   │   │   │   │   ├── setCookie(name, value, days)
 │   │   │   │   │   └── getCookie(name)
 │   │   │   │   └── password_validation.js
+│   │   │   │       ├── meetsRequirement(password, requirement)
+│   │   │   │       ├── calculateStrengthScore(password)
+│   │   │   │       ├── getStrengthLevel(score)
+│   │   │   │       ├── calculateEntropy(password)
+│   │   │   │       ├── hasCommonPatterns(password)
 │   │   │   │       ├── addEventListener('alpine:init', ()
-│   │   │   │       ├── progressValue()
-│   │   │   │       ├── color()
+│   │   │   │       ├── requirements()
+│   │   │   │       ├── strength()
+│   │   │   │       ├── passwordMatch()
+│   │   │   │       ├── isValid()
 │   │   │   │       ├── feedback()
-│   │   │   │       ├── matchMessage()
-│   │   │   │       ├── matchMessageClass()
-│   │   │   │       └── isSubmitDisabled()
+│   │   │   │       ├── toggleRequirements()
+│   │   │   │       ├── toggleAnalysis()
+│   │   │   │       ├── addEventListener('alpine:init', ()
+│   │   │   │       ├── analysis()
+│   │   │   │       ├── suggestions()
+│   │   │   │       ├── forEach(req => {
+                switch (req.id)
+│   │   │   │       ├── addEventListener('alpine:init', ()
+│   │   │   │       ├── isValid()
+│   │   │   │       ├── strength()
+│   │   │   │       ├── feedback()
+│   │   │   │       └── validatePasswordForHTMX(password)
 │   │   │   ├── favicon.ico
 │   │   │   ├── favicon.svg
 │   │   │   └── generate_favicon.sh
@@ -1033,6 +1058,7 @@ quickscale
 │   │   │   ├── base
 │   │   │   │   └── base.html
 │   │   │   ├── components
+│   │   │   │   ├── enhanced_password_input.html
 │   │   │   │   ├── footer.html
 │   │   │   │   ├── messages.html
 │   │   │   │   └── navbar.html
@@ -1047,6 +1073,7 @@ quickscale
 │   │   │   │   ├── product_list.html
 │   │   │   │   └── status.html
 │   │   │   ├── users
+│   │   │   │   ├── account_locked.html
 │   │   │   │   ├── api_key_generated.html
 │   │   │   │   ├── api_keys.html
 │   │   │   │   ├── login.html
@@ -1054,7 +1081,9 @@ quickscale
 │   │   │   │   ├── profile.html
 │   │   │   │   ├── profile_form.html
 │   │   │   │   ├── signup.html
-│   │   │   │   └── signup_form.html
+│   │   │   │   ├── signup_form.html
+│   │   │   │   └── two_factor_settings.html
+│   │   │   ├── 429.html
 │   │   │   ├── admin_test.html
 │   │   │   └── base.html
 │   │   ├── tests
@@ -1108,22 +1137,183 @@ quickscale
 │   │   │   ├── migrations
 │   │   │   │   ├── 0001_initial.py
 │   │   │   │   │   └── Migration {}
+│   │   │   │   ├── 0002_add_security_models.py
+│   │   │   │   │   └── Migration {}
 │   │   │   │   └── __init__.py
 │   │   │   ├── tests
 │   │   │   │   ├── __init__.py
+│   │   │   │   ├── test_account_lockout.py
+│   │   │   │   │   ├── AccountLockoutModelTestCase {}
+│   │   │   │   │   │   ├── setUp(self)
+│   │   │   │   │   │   ├── test_lockout_creation(self)
+│   │   │   │   │   │   ├── test_lockout_str_representation(self)
+│   │   │   │   │   │   ├── test_reset_failed_attempts(self, mock_log)
+│   │   │   │   │   │   ├── test_reset_failed_attempts_not_locked(self, mock_log)
+│   │   │   │   │   │   ├── test_increment_failed_attempts_normal(self, mock_log)
+│   │   │   │   │   │   ├── test_increment_failed_attempts_lockout(self, mock_log)
+│   │   │   │   │   │   ├── test_check_lockout_expired_not_locked(self)
+│   │   │   │   │   │   ├── test_check_lockout_expired_still_locked(self, mock_reset)
+│   │   │   │   │   │   ├── test_check_lockout_expired_expired(self, mock_reset)
+│   │   │   │   │   │   ├── test_time_until_unlock_not_locked(self)
+│   │   │   │   │   │   ├── test_time_until_unlock_no_locked_until(self)
+│   │   │   │   │   │   ├── test_time_until_unlock_expired(self)
+│   │   │   │   │   │   ├── test_time_until_unlock_active(self)
+│   │   │   │   │   │   ├── test_lockout_duration_minutes_no_times(self)
+│   │   │   │   │   │   ├── test_lockout_duration_minutes_with_times(self)
+│   │   │   │   │   │   ├── test_one_to_one_relationship(self)
+│   │   │   │   │   │   ├── test_get_or_create_lockout(self)
+│   │   │   │   │   │   ├── test_custom_settings(self, mock_log)
+│   │   │   │   │   │   └── test_lockout_without_request(self)
+│   │   │   │   │   ├── AccountLockoutConcurrencyTestCase {}
+│   │   │   │   │   │   ├── setUp(self)
+│   │   │   │   │   │   ├── test_concurrent_failed_attempts(self)
+│   │   │   │   │   │   └── test_concurrent_expiry_check(self)
+│   │   │   │   │   ├── AccountLockoutErrorHandlingTestCase {}
+│   │   │   │   │   │   ├── setUp(self)
+│   │   │   │   │   │   ├── test_timezone_error_handling(self, mock_now)
+│   │   │   │   │   │   ├── test_logging_error_handling(self, mock_log)
+│   │   │   │   │   │   ├── test_boundary_condition_zero_attempts(self)
+│   │   │   │   │   │   ├── test_boundary_condition_zero_duration(self)
+│   │   │   │   │   │   ├── test_negative_failed_attempts(self)
+│   │   │   │   │   │   ├── test_far_future_lockout_time(self)
+│   │   │   │   │   │   ├── test_missing_request_meta(self)
+│   │   │   │   │   │   ├── test_database_save_error(self, mock_save)
+│   │   │   │   │   │   └── test_invalid_lockout_data_recovery(self)
+│   │   │   │   │   └── AccountLockoutPerformanceTestCase {}
+│   │   │   │   │       ├── setUp(self)
+│   │   │   │   │       ├── test_bulk_lockout_operations(self)
+│   │   │   │   │       └── test_lockout_query_performance(self)
 │   │   │   │   ├── test_create_default_users.py
 │   │   │   │   │   └── CreateDefaultUsersTest {}
 │   │   │   │   │       ├── test_command_creates_users(self)
 │   │   │   │   │       ├── test_command_skips_existing_users(self)
 │   │   │   │   │       └── test_command_force_recreates_users(self)
-│   │   │   │   └── test_user_admin_grouping.py
-│   │   │   │       └── UserAdminGroupingTest {}
-│   │   │   │           ├── test_email_address_not_registered_separately(self)
-│   │   │   │           ├── test_custom_user_admin_has_email_inline(self)
-│   │   │   │           ├── test_email_address_inline_configuration(self)
-│   │   │   │           ├── test_custom_user_admin_includes_email_status(self)
-│   │   │   │           ├── test_email_verified_status_method(self)
-│   │   │   │           └── test_admin_fieldsets_include_all_user_fields(self)
+│   │   │   │   ├── test_middleware.py
+│   │   │   │   │   └── AccountLockoutMiddlewareTestCase {}
+│   │   │   │   │       ├── setUp(self)
+│   │   │   │   │       ├── test_middleware_anonymous_user(self)
+│   │   │   │   │       ├── test_middleware_authenticated_user_no_lockout(self)
+│   │   │   │   │       ├── test_middleware_authenticated_user_not_locked(self)
+│   │   │   │   │       ├── test_middleware_locked_user_expired(self, mock_logout)
+│   │   │   │   │       ├── test_middleware_locked_user_active(self, mock_logout)
+│   │   │   │   │       ├── test_middleware_locked_user_context(self, mock_logout)
+│   │   │   │   │       ├── test_middleware_locked_user_no_time_remaining(self, mock_logout)
+│   │   │   │   │       ├── test_middleware_creates_missing_lockout(self)
+│   │   │   │   │       ├── test_middleware_initialization(self)
+│   │   │   │   │       ├── test_middleware_call_method(self)
+│   │   │   │   │       ├── test_middleware_preserves_request_attributes(self, mock_logout)
+│   │   │   │   │       └── test_middleware_edge_case_database_error(self)
+│   │   │   │   ├── test_middleware_edge_cases.py
+│   │   │   │   │   ├── AccountLockoutMiddlewareEdgeCasesTestCase {}
+│   │   │   │   │   │   ├── setUp(self)
+│   │   │   │   │   │   ├── test_malformed_request_without_user(self)
+│   │   │   │   │   │   ├── test_malformed_request_without_meta(self)
+│   │   │   │   │   │   ├── test_missing_remote_addr(self)
+│   │   │   │   │   │   ├── test_anonymous_user_bypass(self)
+│   │   │   │   │   │   ├── test_lockout_record_creation_database_error(self)
+│   │   │   │   │   │   ├── test_lockout_record_creation_validation_error(self)
+│   │   │   │   │   │   ├── test_lockout_get_database_error(self)
+│   │   │   │   │   │   ├── test_unexpected_error_handling(self)
+│   │   │   │   │   │   ├── test_locked_account_response_structure(self)
+│   │   │   │   │   │   ├── test_lockout_expiry_during_request(self)
+│   │   │   │   │   │   ├── test_time_calculation_edge_cases(self)
+│   │   │   │   │   │   └── test_middleware_with_none_response(self)
+│   │   │   │   │   ├── AccountLockoutMiddlewarePerformanceTestCase {}
+│   │   │   │   │   │   ├── setUp(self)
+│   │   │   │   │   │   ├── test_middleware_performance_with_multiple_users(self)
+│   │   │   │   │   │   └── test_middleware_performance_with_locked_accounts(self)
+│   │   │   │   │   └── AccountLockoutMiddlewareIntegrationTestCase {}
+│   │   │   │   │       ├── setUp(self)
+│   │   │   │   │       ├── test_logout_integration(self, mock_logout)
+│   │   │   │   │       ├── test_template_rendering_integration(self)
+│   │   │   │   │       └── test_middleware_chain_integration(self)
+│   │   │   │   ├── test_security_logging.py
+│   │   │   │   │   ├── SecurityLoggerTestCase {}
+│   │   │   │   │   │   ├── setUp(self)
+│   │   │   │   │   │   ├── test_get_client_ip_with_forwarded_for(self)
+│   │   │   │   │   │   ├── test_get_client_ip_with_real_ip(self)
+│   │   │   │   │   │   ├── test_get_client_ip_with_remote_addr(self)
+│   │   │   │   │   │   ├── test_get_client_ip_unknown(self)
+│   │   │   │   │   │   ├── test_authentication_event_logger_with_request(self, mock_logger)
+│   │   │   │   │   │   ├── test_authentication_event_logger_without_request(self, mock_logger)
+│   │   │   │   │   │   ├── test_log_login_success(self, mock_logger)
+│   │   │   │   │   │   ├── test_log_login_failure(self, mock_logger)
+│   │   │   │   │   │   ├── test_log_logout(self, mock_logger)
+│   │   │   │   │   │   ├── test_log_account_lockout(self, mock_logger)
+│   │   │   │   │   │   ├── test_log_account_unlock(self, mock_logger)
+│   │   │   │   │   │   ├── test_log_password_change(self, mock_logger)
+│   │   │   │   │   │   └── test_log_email_verification(self, mock_logger)
+│   │   │   │   │   └── SecuritySignalsTestCase {}
+│   │   │   │   │       ├── setUp(self)
+│   │   │   │   │       ├── test_user_logged_in_signal(self, mock_log)
+│   │   │   │   │       ├── test_user_logged_out_signal(self, mock_log)
+│   │   │   │   │       ├── test_user_logged_out_signal_no_user(self, mock_log)
+│   │   │   │   │       ├── test_user_login_failed_signal(self, mock_log)
+│   │   │   │   │       ├── test_user_login_failed_signal_email_fallback(self, mock_log)
+│   │   │   │   │       ├── test_user_login_failed_signal_unknown_email(self, mock_log)
+│   │   │   │   │       ├── test_email_confirmed_signal(self, mock_log)
+│   │   │   │   │       ├── test_email_confirmed_signal_no_user(self, mock_log)
+│   │   │   │   │       └── test_user_creation_signal(self, mock_log)
+│   │   │   │   ├── test_two_factor_auth.py
+│   │   │   │   │   ├── TwoFactorAuthModelTestCase {}
+│   │   │   │   │   │   ├── setUp(self)
+│   │   │   │   │   │   ├── test_two_factor_auth_creation(self)
+│   │   │   │   │   │   ├── test_two_factor_auth_str_representation(self)
+│   │   │   │   │   │   ├── test_generate_backup_codes_default_count(self)
+│   │   │   │   │   │   ├── test_generate_backup_codes_custom_count(self)
+│   │   │   │   │   │   ├── test_generate_backup_codes_uniqueness(self)
+│   │   │   │   │   │   ├── test_use_backup_code_valid(self)
+│   │   │   │   │   │   ├── test_use_backup_code_invalid(self)
+│   │   │   │   │   │   ├── test_use_backup_code_already_used(self)
+│   │   │   │   │   │   ├── test_one_to_one_relationship(self)
+│   │   │   │   │   │   └── test_get_or_create_two_factor(self)
+│   │   │   │   │   └── TwoFactorAuthViewsTestCase {}
+│   │   │   │   │       ├── setUp(self)
+│   │   │   │   │       ├── create_request(self, path, method, user)
+│   │   │   │   │       ├── test_two_factor_settings_disabled(self)
+│   │   │   │   │       ├── test_two_factor_settings_enabled(self)
+│   │   │   │   │       ├── test_two_factor_settings_with_backup_codes(self)
+│   │   │   │   │       ├── test_two_factor_setup_prepare_disabled(self)
+│   │   │   │   │       ├── test_two_factor_setup_prepare_enabled(self)
+│   │   │   │   │       ├── test_two_factor_setup_prepare_wrong_method(self)
+│   │   │   │   │       ├── test_generate_backup_codes_disabled(self)
+│   │   │   │   │       ├── test_generate_backup_codes_enabled(self)
+│   │   │   │   │       ├── test_generate_backup_codes_creates_two_factor(self)
+│   │   │   │   │       ├── test_two_factor_disable_system_disabled(self)
+│   │   │   │   │       ├── test_two_factor_disable_enabled(self)
+│   │   │   │   │       ├── test_two_factor_disable_not_enabled(self)
+│   │   │   │   │       ├── test_two_factor_status_system_disabled(self)
+│   │   │   │   │       ├── test_two_factor_status_user_enabled(self)
+│   │   │   │   │       ├── test_two_factor_status_user_disabled(self)
+│   │   │   │   │       └── test_views_require_login(self)
+│   │   │   │   ├── test_user_admin_grouping.py
+│   │   │   │   │   └── UserAdminGroupingTest {}
+│   │   │   │   │       ├── test_email_address_not_registered_separately(self)
+│   │   │   │   │       ├── test_custom_user_admin_has_email_inline(self)
+│   │   │   │   │       ├── test_email_address_inline_configuration(self)
+│   │   │   │   │       ├── test_custom_user_admin_includes_email_status(self)
+│   │   │   │   │       ├── test_email_verified_status_method(self)
+│   │   │   │   │       └── test_admin_fieldsets_include_all_user_fields(self)
+│   │   │   │   └── test_views_security.py
+│   │   │   │       └── SecurityViewsTestCase {}
+│   │   │   │           ├── setUp(self)
+│   │   │   │           ├── create_post_request(self, data, path)
+│   │   │   │           ├── create_get_request(self, path)
+│   │   │   │           ├── test_login_view_get_request(self, mock_render)
+│   │   │   │           ├── test_login_view_successful_login(self, mock_login, mock_redirect, mock_messages)
+│   │   │   │           ├── test_login_view_invalid_credentials(self, mock_render)
+│   │   │   │           ├── test_login_view_nonexistent_user(self, mock_render)
+│   │   │   │           ├── test_login_view_account_lockout_progression(self, mock_render)
+│   │   │   │           ├── test_login_view_locked_account(self, mock_render)
+│   │   │   │           ├── test_login_view_expired_lockout(self, mock_login, mock_redirect, mock_messages)
+│   │   │   │           ├── test_login_view_remaining_attempts_message(self, mock_render)
+│   │   │   │           ├── test_login_view_form_validation_error(self, mock_render)
+│   │   │   │           ├── test_login_view_htmx_request(self, mock_render, mock_response)
+│   │   │   │           ├── test_login_view_htmx_successful_login(self, mock_response)
+│   │   │   │           ├── test_lockout_creation_for_new_user(self)
+│   │   │   │           ├── test_lockout_logging_integration(self)
+│   │   │   │           ├── test_failed_login_logging_integration(self, mock_log)
+│   │   │   │           └── test_security_headers_preserved(self)
 │   │   │   ├── adapters.py
 │   │   │   │   ├── AccountAdapter {}
 │   │   │   │   │   ├── is_open_for_signup(self, request)
@@ -1136,36 +1326,101 @@ quickscale
 │   │   │   │       ├── pre_social_login(self, request, sociallogin)
 │   │   │   │       └── populate_user(self, request, sociallogin, data)
 │   │   │   ├── admin.py
+│   │   │   │   ├── LockoutStatusFilter {}
+│   │   │   │   │   ├── lookups(self, request, model_admin)
+│   │   │   │   │   └── queryset(self, request, queryset)
+│   │   │   │   ├── FailedAttemptsFilter {}
+│   │   │   │   │   ├── lookups(self, request, model_admin)
+│   │   │   │   │   └── queryset(self, request, queryset)
+│   │   │   │   ├── TwoFactorStatusFilter {}
+│   │   │   │   │   ├── lookups(self, request, model_admin)
+│   │   │   │   │   └── queryset(self, request, queryset)
 │   │   │   │   ├── EmailAddressInline {}
 │   │   │   │   │   ├── has_add_permission(self, request, obj)
 │   │   │   │   │   └── has_delete_permission(self, request, obj)
-│   │   │   │   └── CustomUserAdmin {}
-│   │   │   │       └── email_verified_status(self, obj)
+│   │   │   │   ├── CustomUserAdmin {}
+│   │   │   │   │   └── email_verified_status(self, obj)
+│   │   │   │   ├── AccountLockoutAdmin {}
+│   │   │   │   │   ├── user_link(self, obj)
+│   │   │   │   │   ├── lockout_status_display(self, obj)
+│   │   │   │   │   ├── failed_attempts_display(self, obj)
+│   │   │   │   │   ├── time_remaining_display(self, obj)
+│   │   │   │   │   ├── lockout_duration_display(self, obj)
+│   │   │   │   │   ├── reset_lockout(self, request, queryset)
+│   │   │   │   │   ├── unlock_accounts(self, request, queryset)
+│   │   │   │   │   ├── force_lockout(self, request, queryset)
+│   │   │   │   │   ├── reset_failed_attempts_only(self, request, queryset)
+│   │   │   │   │   └── bulk_unlock_expired(self, request, queryset)
+│   │   │   │   └── TwoFactorAuthAdmin {}
+│   │   │   │       ├── user_link(self, obj)
+│   │   │   │       ├── get_2fa_status_display(self, obj)
+│   │   │   │       ├── backup_codes_display(self, obj)
+│   │   │   │       ├── last_used_display(self, obj)
+│   │   │   │       ├── backup_codes_count(self, obj)
+│   │   │   │       ├── has_backup_codes(self, obj)
+│   │   │   │       ├── disable_2fa(self, request, queryset)
+│   │   │   │       ├── enable_2fa(self, request, queryset)
+│   │   │   │       ├── regenerate_backup_codes(self, request, queryset)
+│   │   │   │       └── clear_backup_codes(self, request, queryset)
 │   │   │   ├── apps.py
 │   │   │   │   └── UsersConfig {}
+│   │   │   │       └── ready(self)
 │   │   │   ├── forms.py
-│   │   │   │   ├── CustomLoginForm {}
-│   │   │   │   │   └── __init__(self)
-│   │   │   │   ├── CustomSignupForm {}
-│   │   │   │   │   ├── __init__(self)
-│   │   │   │   │   └── save(self, request)
-│   │   │   │   ├── CustomResetPasswordForm {}
-│   │   │   │   │   └── __init__(self)
-│   │   │   │   ├── CustomResetPasswordKeyForm {}
-│   │   │   │   │   └── __init__(self)
-│   │   │   │   ├── CustomChangePasswordForm {}
-│   │   │   │   │   └── __init__(self)
+│   │   │   │   ├── EnhancedSignupForm {}
+│   │   │   │   │   ├── Meta {}
+│   │   │   │   │   ├── clean_email(self)
+│   │   │   │   │   └── save(self, commit)
+│   │   │   │   ├── EnhancedLoginForm {}
 │   │   │   │   └── ProfileForm {}
 │   │   │   │       ├── Meta {}
-│   │   │   │       └── __init__(self)
+│   │   │   │       ├── clean_website(self)
+│   │   │   │       └── clean_phone_number(self)
+│   │   │   ├── middleware.py
+│   │   │   │   ├── MiddlewareValidationError {}
+│   │   │   │   └── AccountLockoutMiddleware {}
+│   │   │   │       ├── __init__(self, get_response)
+│   │   │   │       ├── validate_request(self, request)
+│   │   │   │       └── __call__(self, request)
 │   │   │   ├── models.py
 │   │   │   │   ├── CustomUserManager {}
 │   │   │   │   │   ├── create_user(self, email, password)
 │   │   │   │   │   └── create_superuser(self, email, password)
-│   │   │   │   └── CustomUser {}
+│   │   │   │   ├── CustomUser {}
+│   │   │   │   │   ├── Meta {}
+│   │   │   │   │   ├── __str__(self)
+│   │   │   │   │   └── get_full_name(self)
+│   │   │   │   ├── AccountLockout {}
+│   │   │   │   │   ├── Meta {}
+│   │   │   │   │   ├── __str__(self)
+│   │   │   │   │   ├── reset_failed_attempts(self)
+│   │   │   │   │   ├── increment_failed_attempts(self, request)
+│   │   │   │   │   ├── check_lockout_expired(self)
+│   │   │   │   │   ├── time_until_unlock(self)
+│   │   │   │   │   └── lockout_duration_minutes(self)
+│   │   │   │   └── TwoFactorAuth {}
 │   │   │   │       ├── Meta {}
 │   │   │   │       ├── __str__(self)
-│   │   │   │       └── get_full_name(self)
+│   │   │   │       ├── generate_backup_codes(self, count)
+│   │   │   │       └── use_backup_code(self, code)
+│   │   │   ├── security_logger.py
+│   │   │   │   ├── SecurityLoggingError {}
+│   │   │   │   ├── SecurityValidationError {}
+│   │   │   │   ├── AuthenticationEventLogger {}
+│   │   │   │   │   └── log_security_event(event_type, user_email, request, details)
+│   │   │   │   ├── get_client_ip(request)
+│   │   │   │   ├── log_login_success(user_email, request, user_id, is_staff)
+│   │   │   │   ├── log_login_failure(user_email, request, reason)
+│   │   │   │   ├── log_logout(user_email, request, user_id)
+│   │   │   │   ├── log_account_lockout(user_email, request, lockout_duration, failed_attempts)
+│   │   │   │   ├── log_account_unlock(user_email, user_id, unlock_method)
+│   │   │   │   ├── log_password_change(user_email, request, user_id, change_method)
+│   │   │   │   └── log_email_verification(user_email, request, user_id, verification_status)
+│   │   │   ├── signals.py
+│   │   │   │   ├── log_successful_login(sender, request, user)
+│   │   │   │   ├── log_user_logout(sender, request, user)
+│   │   │   │   ├── log_failed_login_attempt(sender, credentials, request)
+│   │   │   │   ├── log_email_confirmation(sender, request, email_address)
+│   │   │   │   └── log_user_creation(sender, instance, created)
 │   │   │   ├── signup.html
 │   │   │   ├── urls.py
 │   │   │   ├── validators.py
@@ -1177,17 +1432,25 @@ quickscale
 │   │   │   │       ├── __init__(self, min_pwned_count)
 │   │   │   │       ├── validate(self, password, user)
 │   │   │   │       └── get_help_text(self)
-│   │   │   └── views.py
-│   │   │       ├── login_view(request)
-│   │   │       ├── logout_view(request)
-│   │   │       ├── CustomSignupForm {}
-│   │   │       │   └── Meta {}
-│   │   │       ├── signup_view(request)
-│   │   │       ├── profile_view(request)
-│   │   │       ├── api_keys_view(request)
-│   │   │       ├── generate_api_key_view(request)
-│   │   │       ├── revoke_api_key_view(request)
-│   │   │       └── regenerate_api_key_view(request)
+│   │   │   ├── views.py
+│   │   │   │   ├── login_view(request)
+│   │   │   │   ├── logout_view(request)
+│   │   │   │   ├── signup_view(request)
+│   │   │   │   ├── profile_view(request)
+│   │   │   │   ├── api_keys_view(request)
+│   │   │   │   ├── generate_api_key_view(request)
+│   │   │   │   ├── revoke_api_key_view(request)
+│   │   │   │   └── regenerate_api_key_view(request)
+│   │   │   └── views_2fa.py
+│   │   │       ├── TwoFactorValidationError {}
+│   │   │       ├── validate_2fa_request(request)
+│   │   │       ├── validate_backup_codes_request(request)
+│   │   │       ├── create_error_response(message, status, extra_data)
+│   │   │       ├── two_factor_settings(request)
+│   │   │       ├── two_factor_setup_prepare(request)
+│   │   │       ├── two_factor_generate_backup_codes(request)
+│   │   │       ├── two_factor_disable(request)
+│   │   │       └── two_factor_status(request)
 │   │   ├── Dockerfile
 │   │   ├── docker-compose.yml
 │   │   ├── entrypoint.sh
@@ -1302,16 +1565,17 @@ quickscale
 │   │   │   ├── get_image_processing_template()
 │   │   │   ├── generate_service_file(service_name, service_type, service_description)
 │   │   │   └── get_service_readme_template()
-│   │   └── template_generator.py
-│   │       ├── copy_sync_modules(project_dir, quickscale_dir, logger)
-│   │       ├── is_binary_file(file_path)
-│   │       ├── render_template(content, variables)
-│   │       ├── process_file_templates(project_dir, template_variables, logger)
-│   │       ├── _calculate_relative_import_path(target_module_path, file_directory)
-│   │       ├── _update_import_in_file(file_path, import_pattern, target_module_path, logger)
-│   │       ├── _should_process_file(file_path, target_file_path, processed_files)
-│   │       ├── fix_imports(project_dir, logger)
-│   │       └── remove_duplicated_templates(project_dir, logger)
+│   │   ├── template_generator.py
+│   │   │   ├── copy_sync_modules(project_dir, quickscale_dir, logger)
+│   │   │   ├── is_binary_file(file_path)
+│   │   │   ├── render_template(content, variables)
+│   │   │   ├── process_file_templates(project_dir, template_variables, logger)
+│   │   │   ├── _calculate_relative_import_path(target_module_path, file_directory)
+│   │   │   ├── _update_import_in_file(file_path, import_pattern, target_module_path, logger)
+│   │   │   ├── _should_process_file(file_path, target_file_path, processed_files)
+│   │   │   ├── fix_imports(project_dir, logger)
+│   │   │   └── remove_duplicated_templates(project_dir, logger)
+│   │   └── timeout_constants.py
 │   ├── __init__.py
 │   └── cli.py
 │       ├── QuickScaleArgumentParser {}
@@ -1352,12 +1616,15 @@ quickscale
 │   │   │   └── AdminDashboardConfig {}
 │   │   ├── urls.py
 │   │   └── views.py
-│   │       └── analytics_dashboard(request)
+│   │       ├── analytics_dashboard(request)
+│   │       ├── index(request)
+│   │       └── user_dashboard(request)
 │   ├── api
 │   │   ├── __init__.py
 │   │   ├── apps.py
 │   │   │   └── ApiConfig {}
 │   │   ├── urls.py
+│   │   │   └── api_docs(request)
 │   │   └── views.py
 │   │       └── TextProcessingView {}
 │   │           ├── get(self, request)
@@ -1382,6 +1649,7 @@ quickscale
 │   │   │   │   └── test_service_usage_statistics(self)
 │   │   │   ├── AnalyticsDashboardViewTests {}
 │   │   │   │   ├── setUp(self)
+│   │   │   │   ├── tearDown(self)
 │   │   │   │   ├── test_analytics_dashboard_access_admin_only(self)
 │   │   │   │   ├── test_analytics_dashboard_context_data(self)
 │   │   │   │   ├── test_monthly_revenue_json_format(self)
@@ -1405,10 +1673,22 @@ quickscale
 │   │   │   │   └── test_performance_with_large_dataset(self)
 │   │   │   └── AnalyticsErrorHandlingTests {}
 │   │   │       ├── setUp(self)
+│   │   │       ├── tearDown(self)
 │   │   │       ├── test_database_error_handling(self)
 │   │   │       ├── test_invalid_data_handling(self)
 │   │   │       └── test_empty_json_handling(self)
 │   │   ├── urls.py
+│   │   │   ├── dummy_home(request)
+│   │   │   ├── dummy_contact(request)
+│   │   │   ├── dummy_about(request)
+│   │   │   ├── dummy_profile(request)
+│   │   │   ├── dummy_logout(request)
+│   │   │   ├── dummy_signup(request)
+│   │   │   ├── dummy_login(request)
+│   │   │   ├── dummy_user_dashboard(request)
+│   │   │   ├── dummy_service_list(request)
+│   │   │   ├── dummy_service_use_form(request, service_id)
+│   │   │   └── dummy_service_use(request, service_id)
 │   │   └── wsgi.py
 │   ├── credits
 │   │   ├── __init__.py
@@ -1422,12 +1702,23 @@ quickscale
 │   │   │   │   ├── Meta {}
 │   │   │   │   ├── __str__(self)
 │   │   │   │   ├── get_balance(self)
-│   │   │   │   ├── add_credits(self, amount, description, credit_type)
-│   │   │   │   ├── consume_credits(self, amount, description)
+│   │   │   │   ├── add_credits(self, amount, description, credit_type, expires_at)
+│   │   │   │   ├── consume_credits_with_priority(self, amount, description)
+│   │   │   │   ├── get_available_balance(self)
+│   │   │   │   ├── get_balance_by_type_available(self)
+│   │   │   │   ├── cleanup_expired_credits(self)
+│   │   │   │   ├── get_expiring_credits(self, days_ahead)
 │   │   │   │   └── get_or_create_for_user(cls, user)
 │   │   │   ├── CreditTransaction {}
 │   │   │   │   ├── Meta {}
-│   │   │   │   └── __str__(self)
+│   │   │   │   ├── __str__(self)
+│   │   │   │   ├── clean(self)
+│   │   │   │   ├── save(self)
+│   │   │   │   ├── is_purchase(self)
+│   │   │   │   ├── is_subscription(self)
+│   │   │   │   ├── is_consumption(self)
+│   │   │   │   ├── is_admin_adjustment(self)
+│   │   │   │   └── is_expired(self)
 │   │   │   ├── ServiceUsage {}
 │   │   │   │   ├── Meta {}
 │   │   │   │   └── __str__(self)
@@ -1443,7 +1734,10 @@ quickscale
 │   │   │   ├── UserSubscription {}
 │   │   │   │   ├── Meta {}
 │   │   │   │   ├── __str__(self)
-│   │   │   │   └── is_active(self)
+│   │   │   │   ├── is_active(self)
+│   │   │   │   ├── days_until_renewal(self)
+│   │   │   │   ├── get_stripe_product(self)
+│   │   │   │   └── allocate_monthly_credits(self)
 │   │   │   ├── Payment {}
 │   │   │   │   ├── Meta {}
 │   │   │   │   ├── __str__(self)
@@ -1545,8 +1839,74 @@ quickscale
 │   │   │   └── TestIntegrationWithDjangoAllauth {}
 │   │   │       ├── test_custom_adapter_integration(self, mock_class)
 │   │   │       └── test_custom_social_adapter_integration(self, mock_class, mock_social_account)
+│   │   ├── test_auth_security_edge_cases_sprint21.py
+│   │   │   ├── AdvancedAuthenticationSecurityTest {}
+│   │   │   │   ├── setUp(self)
+│   │   │   │   ├── tearDown(self)
+│   │   │   │   ├── test_concurrent_login_attempts(self)
+│   │   │   │   ├── test_concurrent_login_attempts_sequential_simulation(self)
+│   │   │   │   ├── test_session_fixation_protection(self)
+│   │   │   │   ├── test_session_hijacking_protection(self)
+│   │   │   │   ├── test_password_enumeration_prevention(self)
+│   │   │   │   ├── test_timing_attack_resistance(self)
+│   │   │   │   ├── test_password_brute_force_protection_simulation(self)
+│   │   │   │   ├── test_sql_injection_in_authentication_queries(self)
+│   │   │   │   ├── test_nosql_injection_protection(self)
+│   │   │   │   ├── test_ldap_injection_protection(self)
+│   │   │   │   ├── test_xss_in_authentication_forms(self)
+│   │   │   │   ├── test_csrf_token_validation_edge_cases(self)
+│   │   │   │   ├── test_http_header_security(self)
+│   │   │   │   ├── test_password_reset_token_security(self)
+│   │   │   │   ├── test_account_lockout_simulation(self)
+│   │   │   │   ├── test_session_timeout_security(self)
+│   │   │   │   ├── test_password_strength_bypass_attempts(self)
+│   │   │   │   ├── test_authentication_bypass_attempts(self)
+│   │   │   │   ├── test_cookie_security_attributes(self)
+│   │   │   │   └── test_information_disclosure_prevention(self)
+│   │   │   ├── AuthenticationRateLimitingTest {}
+│   │   │   │   ├── setUp(self)
+│   │   │   │   ├── test_login_rate_limiting_by_ip(self)
+│   │   │   │   ├── test_signup_rate_limiting_simulation(self)
+│   │   │   │   ├── test_password_reset_rate_limiting_simulation(self)
+│   │   │   │   └── test_rate_limit_template_rendering(self)
+│   │   │   └── AuthenticationConcurrencyTest {}
+│   │   │       ├── setUp(self)
+│   │   │       ├── test_concurrent_session_creation(self)
+│   │   │       └── test_concurrent_authentication_attempts(self)
 │   │   ├── test_auth_utils.py
 │   │   │   └── patch_django_for_e2e_testing()
+│   │   ├── test_auth_workflows_sprint21.py
+│   │   │   ├── AuthenticationWorkflowsTest {}
+│   │   │   │   ├── setUp(self)
+│   │   │   │   ├── test_login_workflow_valid_credentials(self)
+│   │   │   │   ├── test_login_workflow_invalid_credentials(self)
+│   │   │   │   ├── test_login_workflow_nonexistent_user(self)
+│   │   │   │   ├── test_signup_workflow_valid_data(self)
+│   │   │   │   ├── test_signup_workflow_duplicate_email(self)
+│   │   │   │   ├── test_signup_workflow_password_mismatch(self)
+│   │   │   │   ├── test_signup_workflow_weak_password(self)
+│   │   │   │   ├── test_logout_workflow(self)
+│   │   │   │   ├── test_htmx_login_workflow(self)
+│   │   │   │   ├── test_htmx_login_workflow_invalid_credentials(self)
+│   │   │   │   ├── test_custom_user_model_email_authentication(self)
+│   │   │   │   ├── test_session_management_after_login(self)
+│   │   │   │   ├── test_login_redirect_for_staff_user(self)
+│   │   │   │   ├── test_login_form_csrf_protection(self)
+│   │   │   │   └── test_signup_form_csrf_protection(self)
+│   │   │   ├── AuthenticationFormTest {}
+│   │   │   │   ├── setUp(self)
+│   │   │   │   ├── test_login_form_email_validation(self)
+│   │   │   │   ├── test_signup_form_email_validation(self)
+│   │   │   │   ├── test_signup_form_required_fields(self)
+│   │   │   │   └── test_login_form_required_fields(self)
+│   │   │   └── AuthenticationSecurityTest {}
+│   │   │       ├── setUp(self)
+│   │   │       ├── test_login_rate_limiting_simulation(self)
+│   │   │       ├── test_password_strength_enforcement(self)
+│   │   │       ├── test_sql_injection_prevention_login(self)
+│   │   │       ├── test_xss_prevention_in_forms(self)
+│   │   │       ├── test_csrf_protection_on_auth_forms(self)
+│   │   │       └── test_session_security_after_authentication(self)
 │   │   ├── test_cli_error_handling.py
 │   │   │   ├── TestCLIErrorHandling {}
 │   │   │   │   ├── test_unknown_command_error(self, capsys)
@@ -1609,6 +1969,38 @@ quickscale
 │   │   │       ├── test_credit_admin_structure(self)
 │   │   │       ├── test_credit_migration_structure(self)
 │   │   │       └── test_credit_template_structure(self)
+│   │   ├── test_email_verification_sprint21.py
+│   │   │   ├── EmailVerificationWorkflowTest {}
+│   │   │   │   ├── setUp(self)
+│   │   │   │   ├── test_email_verification_sent_after_signup(self)
+│   │   │   │   ├── test_email_verification_confirmation_success(self)
+│   │   │   │   ├── test_email_verification_confirmation_post_success(self)
+│   │   │   │   ├── test_email_verification_invalid_key(self)
+│   │   │   │   ├── test_email_verification_expired_key(self)
+│   │   │   │   ├── test_email_verification_already_verified(self)
+│   │   │   │   ├── test_email_verification_resend_functionality(self)
+│   │   │   │   ├── test_email_verification_csrf_protection(self)
+│   │   │   │   ├── test_email_verification_sent_page_display(self)
+│   │   │   │   ├── test_email_verification_required_page_display(self)
+│   │   │   │   ├── test_email_verification_mandatory_blocks_unverified_users(self)
+│   │   │   │   ├── test_email_verification_multiple_attempts_same_key(self)
+│   │   │   │   ├── test_email_verification_key_security(self)
+│   │   │   │   ├── test_email_verification_with_special_characters_in_email(self)
+│   │   │   │   ├── test_email_verification_context_data(self)
+│   │   │   │   ├── test_email_verification_custom_adapter_integration(self)
+│   │   │   │   ├── test_email_verification_rate_limiting_simulation(self, _)
+│   │   │   │   └── test_email_verification_error_handling(self)
+│   │   │   ├── EmailVerificationSecurityTest {}
+│   │   │   │   ├── setUp(self)
+│   │   │   │   ├── test_email_verification_key_uniqueness(self)
+│   │   │   │   ├── test_email_verification_timing_attack_prevention(self)
+│   │   │   │   ├── test_email_verification_sql_injection_prevention(self)
+│   │   │   │   └── test_email_verification_xss_prevention(self)
+│   │   │   └── EmailVerificationIntegrationTest {}
+│   │   │       ├── setUp(self)
+│   │   │       ├── test_email_verification_integration_with_login(self)
+│   │   │       ├── test_email_verification_integration_with_password_reset(self)
+│   │   │       └── test_email_verification_integration_with_email_change(self)
 │   │   ├── test_init_integration.py
 │   │   │   └── TestInitIntegration {}
 │   │   │       ├── test_init_command_basics(self, script_runner, tmp_path)
@@ -1908,7 +2300,8 @@ quickscale
 │   │   │       ├── test_logging_on_invalid_attempts(self, mock_logger)
 │   │   │       ├── test_api_endpoint_paths_only(self)
 │   │   │       ├── test_case_sensitive_bearer_token(self)
-│   │   │       └── test_middleware_exception_handling(self)
+│   │   │       ├── test_middleware_exception_handling(self)
+│   │   │       └── test_middleware_exception_handling_production(self)
 │   │   ├── test_auth_components.py
 │   │   │   ├── _PasswordStrengthValidator {}
 │   │   │   │   ├── __init__(self, min_length, require_uppercase, require_lowercase, require_digit, require_special)
@@ -2054,6 +2447,39 @@ quickscale
 │   │   │   │   └── test_no_stripe_customer_migration_in_users_app(self)
 │   │   │   └── CreditTransactionTemplateConsistencyTests {}
 │   │   │       └── test_credit_type_choices_consistency(self)
+│   │   ├── test_credits_sprint22_review.py
+│   │   │   ├── CreditModelValidationTest {}
+│   │   │   │   ├── setUp(self)
+│   │   │   │   ├── test_credit_transaction_validation_consumption_positive_amount(self)
+│   │   │   │   ├── test_credit_transaction_validation_purchase_negative_amount(self)
+│   │   │   │   ├── test_subscription_credits_require_expiration(self)
+│   │   │   │   ├── test_payg_credits_cannot_have_expiration(self)
+│   │   │   │   └── test_expiration_date_must_be_future(self)
+│   │   │   ├── OptimizedBalanceCalculationTest {}
+│   │   │   │   ├── setUp(self)
+│   │   │   │   ├── test_get_balance_by_type_available_single_query_optimization(self)
+│   │   │   │   └── test_priority_consumption_logic_accuracy(self)
+│   │   │   ├── TransactionSafetyTest {}
+│   │   │   │   ├── setUp(self)
+│   │   │   │   ├── test_concurrent_credit_consumption_prevention(self)
+│   │   │   │   ├── test_insufficient_credits_error_handling(self)
+│   │   │   │   └── test_add_credits_input_validation(self)
+│   │   │   ├── ExpirationHandlingTest {}
+│   │   │   │   ├── setUp(self)
+│   │   │   │   ├── test_cleanup_expired_credits(self)
+│   │   │   │   ├── test_get_expiring_credits(self)
+│   │   │   │   └── test_subscription_credit_allocation_with_expiration(self)
+│   │   │   ├── DatabaseConstraintTest {}
+│   │   │   │   ├── setUp(self)
+│   │   │   │   └── test_amount_range_constraint(self)
+│   │   │   └── IntelligentFallbackTest {}
+│   │   │       ├── setUp(self)
+│   │   │       ├── test_monthly_subscription_fallback(self)
+│   │   │       ├── test_yearly_subscription_fallback(self)
+│   │   │       ├── test_unknown_interval_fallback(self)
+│   │   │       ├── test_add_credits_with_yearly_subscription_context(self)
+│   │   │       ├── test_add_credits_with_monthly_subscription_context(self)
+│   │   │       └── test_stripe_period_end_takes_precedence(self)
 │   │   ├── test_credits_sprint3.py
 │   │   │   ├── ServiceModelTests {}
 │   │   │   │   ├── setUp(self)
@@ -2565,7 +2991,6 @@ quickscale
 │   │   │       ├── test_get_docker_compose_logs_success(self)
 │   │   │       ├── test_check_if_services_running_despite_error_false(self)
 │   │   │       ├── test_check_if_services_running_despite_error_true(self)
-│   │   │       ├── test_check_if_services_running_despite_error_exception(self)
 │   │   │       ├── test_handle_retry_attempt_properly_handled(self)
 │   │   │       ├── test_handle_retry_attempt_with_different_retry_numbers(self)
 │   │   │       ├── test_handle_retry_attempt_with_proactive_port_finding(self)
@@ -2648,6 +3073,7 @@ quickscale
 │   │   │       └── test_multiple_hosts_in_allowed_hosts(self)
 │   │   ├── test_settings_review_sprint20.py
 │   │   │   ├── URLNamespaceConfigurationTest {}
+│   │   │   │   ├── setUp(self)
 │   │   │   │   ├── test_public_namespace_exists(self)
 │   │   │   │   ├── test_users_namespace_exists(self)
 │   │   │   │   ├── test_admin_dashboard_namespace_exists(self)
@@ -2655,17 +3081,44 @@ quickscale
 │   │   │   │   ├── test_api_namespace_exists(self)
 │   │   │   │   └── test_health_check_endpoint(self)
 │   │   │   ├── MiddlewareConfigurationTest {}
+│   │   │   │   ├── setUp(self)
 │   │   │   │   ├── test_middleware_order(self)
 │   │   │   │   ├── test_security_middleware_present(self)
 │   │   │   │   └── test_custom_api_middleware_present(self)
 │   │   │   ├── SettingsOrganizationTest {}
+│   │   │   │   ├── setUp(self)
 │   │   │   │   ├── test_modular_settings_import(self)
 │   │   │   │   ├── test_logging_configuration_present(self)
 │   │   │   │   ├── test_feature_flags_in_settings(self)
 │   │   │   │   └── test_environment_first_configuration(self)
-│   │   │   └── ProductionValidationTest {}
-│   │   │       ├── test_production_validation_with_insecure_secret(self, mock_is_feature_enabled, mock_get_env)
-│   │   │       └── test_production_validation_with_wildcard_hosts(self, mock_is_feature_enabled, mock_get_env)
+│   │   │   ├── ProductionValidationTest {}
+│   │   │   │   ├── test_production_validation_with_insecure_secret(self, mock_is_feature_enabled, mock_get_env)
+│   │   │   │   └── test_production_validation_with_wildcard_hosts(self, mock_is_feature_enabled, mock_get_env)
+│   │   │   ├── DatabaseModelsSOLIDPrinciplesTests {}
+│   │   │   │   ├── setUp(self)
+│   │   │   │   ├── test_single_responsibility_principle_credits_models(self)
+│   │   │   │   ├── test_open_closed_principle_validation(self)
+│   │   │   │   ├── test_liskov_substitution_principle_user_models(self)
+│   │   │   │   ├── test_interface_segregation_principle_stripe_models(self)
+│   │   │   │   └── test_dependency_inversion_principle_relationships(self)
+│   │   │   ├── DatabaseRelationshipsValidationTests {}
+│   │   │   │   ├── setUp(self)
+│   │   │   │   ├── test_foreign_key_relationships_credits(self)
+│   │   │   │   ├── test_cascade_behavior_validation(self)
+│   │   │   │   └── test_related_name_consistency(self)
+│   │   │   ├── DatabasePerformancePatternTests {}
+│   │   │   │   ├── setUp(self)
+│   │   │   │   ├── test_database_indexes_credits(self)
+│   │   │   │   ├── test_ordering_definitions(self)
+│   │   │   │   └── test_field_optimization(self)
+│   │   │   ├── MigrationHistoryConsistencyTests {}
+│   │   │   │   ├── setUp(self)
+│   │   │   │   ├── test_migration_naming_consistency(self)
+│   │   │   │   └── test_foreign_key_migrations_consistency(self)
+│   │   │   └── ModelBusinessLogicSeparationTests {}
+│   │   │       ├── setUp(self)
+│   │   │       ├── test_credit_account_business_logic(self)
+│   │   │       └── test_property_methods_usage(self)
 │   │   ├── test_settings_validation.py
 │   │   │   ├── validate_required_vars(component)
 │   │   │   ├── validate_production_settings()
@@ -2686,6 +3139,19 @@ quickscale
 │   │   │       ├── test_required_vars_by_component(self)
 │   │   │       ├── test_actual_module_validate_production_settings(self)
 │   │   │       └── test_actual_module_REQUIRED_VARS(self)
+│   │   ├── test_simplified_docker_error_handling.py
+│   │   │   └── TestSimplifiedDockerErrorHandling {}
+│   │   │       ├── setup_method(self)
+│   │   │       ├── test_handle_docker_process_error_raises_service_error(self)
+│   │   │       ├── test_handle_docker_process_error_logs_error_details(self)
+│   │   │       ├── test_handle_docker_process_error_with_no_output(self)
+│   │   │       ├── test_handle_docker_process_error_trusts_exit_codes(self)
+│   │   │       ├── test_start_docker_services_uses_timeout_constant(self)
+│   │   │       ├── test_start_docker_services_timeout_expired_raises_service_error(self)
+│   │   │       ├── test_verify_services_running_uses_timeout_constant(self)
+│   │   │       ├── test_start_container_uses_timeout_constant(self)
+│   │   │       ├── test_retry_logic_uses_delay_constants(self)
+│   │   │       └── test_error_messages_are_actionable(self)
 │   │   ├── test_sprint13_fixes.py
 │   │   │   ├── ServiceUsageAnalyticsTemplateFixTests {}
 │   │   │   │   ├── setUp(self)
@@ -3124,6 +3590,70 @@ quickscale
 │   │   │       ├── setUp(self)
 │   │   │       ├── test_staff_permission_requirements(self)
 │   │   │       └── test_csrf_protection(self)
+│   │   ├── test_sprint22_credit_edge_cases.py
+│   │   │   ├── CreditConsumptionEdgeCaseTests {}
+│   │   │   │   ├── setUp(self)
+│   │   │   │   ├── test_decimal_precision_edge_cases(self)
+│   │   │   │   ├── test_extremely_small_consumption_amounts(self)
+│   │   │   │   ├── test_extremely_large_consumption_amounts(self)
+│   │   │   │   ├── test_consumption_with_mixed_credit_types_edge_cases(self)
+│   │   │   │   ├── test_concurrent_consumption_with_limited_credits(self)
+│   │   │   │   ├── test_consumption_with_expired_subscription_credits(self)
+│   │   │   │   └── test_consumption_with_partially_expired_credits(self)
+│   │   │   ├── ExpirationHandlingEdgeCaseTests {}
+│   │   │   │   ├── setUp(self)
+│   │   │   │   ├── test_expiration_at_exact_moment(self)
+│   │   │   │   ├── test_expiration_with_microsecond_precision(self)
+│   │   │   │   ├── test_multiple_expiration_dates(self)
+│   │   │   │   ├── test_expiration_cleanup_edge_cases(self)
+│   │   │   │   ├── test_expiring_credits_warning_system(self)
+│   │   │   │   └── test_intelligent_fallback_expiration_logic(self)
+│   │   │   └── ServiceIntegrationEdgeCaseTests {}
+│   │   │       ├── setUp(self)
+│   │   │       ├── test_zero_cost_service_validation(self)
+│   │   │       ├── test_negative_cost_service_validation(self)
+│   │   │       ├── test_minimum_cost_service_validation(self)
+│   │   │       ├── test_expensive_service_with_insufficient_credits(self)
+│   │   │       ├── test_service_usage_with_exact_credit_balance(self)
+│   │   │       ├── test_concurrent_service_usage_with_limited_credits(self)
+│   │   │       ├── test_service_usage_with_mixed_credit_types_edge_cases(self)
+│   │   │       ├── test_service_usage_with_expired_subscription_credits(self)
+│   │   │       └── test_service_usage_audit_trail_completeness(self)
+│   │   ├── test_sprint22_credit_system_testing.py
+│   │   │   ├── CreditConsumptionLogicTests {}
+│   │   │   │   ├── setUp(self)
+│   │   │   │   ├── test_basic_credit_consumption_logic(self)
+│   │   │   │   ├── test_multiple_credit_types_tracking(self)
+│   │   │   │   ├── test_insufficient_credits_validation(self)
+│   │   │   │   ├── test_subscription_credit_tracking(self)
+│   │   │   │   ├── test_consumption_input_validation(self)
+│   │   │   │   ├── test_balance_calculation_consistency(self)
+│   │   │   │   ├── test_exact_consumption_edge_cases(self)
+│   │   │   │   ├── test_concurrent_credit_consumption(self)
+│   │   │   │   ├── test_large_consumption_amounts(self)
+│   │   │   │   └── test_zero_balance_consumption_attempts(self)
+│   │   │   ├── ExpirationHandlingTests {}
+│   │   │   │   ├── setUp(self)
+│   │   │   │   ├── test_subscription_expiration_tracking(self)
+│   │   │   │   ├── test_subscription_management(self)
+│   │   │   │   ├── test_different_subscription_types(self)
+│   │   │   │   ├── test_subscription_period_management(self)
+│   │   │   │   ├── test_expiration_date_tracking(self)
+│   │   │   │   └── test_subscription_credit_allocation_flow(self)
+│   │   │   └── ServiceIntegrationTests {}
+│   │   │       ├── setUp(self)
+│   │   │       ├── test_service_credit_integration(self)
+│   │   │       ├── test_service_usage_priority_consumption(self)
+│   │   │       ├── test_service_cross_credit_type_consumption(self)
+│   │   │       ├── test_inactive_service_handling(self)
+│   │   │       ├── test_insufficient_credits_service_blocking(self)
+│   │   │       ├── test_service_usage_audit_trail(self)
+│   │   │       ├── test_service_input_validation(self)
+│   │   │       ├── test_service_registration_and_discovery(self)
+│   │   │       ├── test_service_credit_cost_configuration(self)
+│   │   │       ├── test_service_activation_deactivation(self)
+│   │   │       ├── test_concurrent_service_usage(self)
+│   │   │       └── test_service_usage_with_expired_credits(self)
 │   │   ├── test_stripe_config.py
 │   │   │   └── StripeConfigurationTests {}
 │   │   │       ├── setUp(self)
@@ -3238,31 +3768,42 @@ quickscale
 │   │   │       ├── test_is_binary_file(self)
 │   │   │       ├── test_render_template(self)
 │   │   │       └── test_process_file_templates(self)
+│   │   ├── test_timeout_constants.py
+│   │   │   └── TestTimeoutConstants {}
+│   │   │       ├── test_docker_service_startup_timeout_is_reasonable(self)
+│   │   │       ├── test_docker_ps_check_timeout_is_short(self)
+│   │   │       ├── test_docker_container_start_timeout_is_medium(self)
+│   │   │       ├── test_docker_operations_timeout_is_short(self)
+│   │   │       ├── test_service_stabilization_delay_is_reasonable(self)
+│   │   │       ├── test_retry_pause_delay_is_short(self)
+│   │   │       ├── test_postgres_connection_timeout_is_short(self)
+│   │   │       ├── test_docker_info_timeout_is_very_short(self)
+│   │   │       ├── test_docker_pull_timeout_is_medium(self)
+│   │   │       ├── test_docker_run_timeout_is_short(self)
+│   │   │       ├── test_timeout_hierarchy_makes_sense(self)
+│   │   │       └── test_all_timeouts_are_positive(self)
 │   │   ├── test_url_configuration_sprint20.py
-│   │   │   ├── URLNamespaceConfigurationTest {}
-│   │   │   │   ├── test_public_namespace_exists(self)
-│   │   │   │   ├── test_users_namespace_exists(self)
-│   │   │   │   ├── test_admin_dashboard_namespace_exists(self)
-│   │   │   │   ├── test_credits_namespace_exists(self)
-│   │   │   │   ├── test_services_namespace_exists(self)
-│   │   │   │   ├── test_common_namespace_exists(self)
-│   │   │   │   ├── test_api_namespace_exists(self)
-│   │   │   │   ├── test_api_v1_namespace_exists(self)
-│   │   │   │   ├── test_stripe_conditional_inclusion(self, mock_get_env, mock_is_feature_enabled)
-│   │   │   │   ├── test_health_check_endpoint(self)
-│   │   │   │   └── test_admin_test_endpoint(self)
-│   │   │   ├── URLHierarchyTest {}
-│   │   │   │   ├── test_url_hierarchy_structure(self)
-│   │   │   │   └── test_django_admin_not_namespaced(self)
-│   │   │   ├── MiddlewareConfigurationTest {}
-│   │   │   │   ├── test_middleware_order(self)
-│   │   │   │   ├── test_security_middleware_present(self)
-│   │   │   │   └── test_custom_api_middleware_present(self)
-│   │   │   └── SettingsOrganizationTest {}
-│   │   │       ├── test_modular_settings_import(self)
-│   │   │       ├── test_logging_configuration_present(self)
-│   │   │       ├── test_feature_flags_in_settings(self)
-│   │   │       └── test_environment_first_configuration(self)
+│   │   │   ├── URLRoutingHierarchyTests {}
+│   │   │   │   ├── setUp(self)
+│   │   │   │   ├── test_core_urls_hierarchy(self)
+│   │   │   │   ├── test_namespace_organization(self)
+│   │   │   │   ├── test_credits_url_patterns(self)
+│   │   │   │   └── test_api_url_patterns(self)
+│   │   │   ├── URLPatternConsistencyTests {}
+│   │   │   │   ├── setUp(self)
+│   │   │   │   ├── test_url_naming_conventions(self)
+│   │   │   │   ├── test_url_pattern_structure(self)
+│   │   │   │   └── test_view_import_patterns(self)
+│   │   │   ├── RESTfulURLDesignTests {}
+│   │   │   │   ├── setUp(self)
+│   │   │   │   ├── test_resource_based_urls(self)
+│   │   │   │   ├── test_api_endpoint_structure(self)
+│   │   │   │   └── test_action_based_urls(self)
+│   │   │   └── URLSecurityTests {}
+│   │   │       ├── setUp(self)
+│   │   │       ├── test_admin_url_patterns(self)
+│   │   │       ├── test_debug_url_patterns(self)
+│   │   │       └── test_parameter_validation_patterns(self)
 │   │   └── test_webhook_fallback_payment.py
 │   │       ├── WebhookFallbackTests {}
 │   │       │   ├── setUp(self)
@@ -3404,6 +3945,7 @@ quickscale
 │           ├── tearDown(self)
 │           └── create_test_project(self)
 ├── CHANGELOG.md
+├── CLAUDE.md
 ├── CONTRIBUTING.md
 ├── LICENSE
 ├── MANIFEST.in
@@ -3412,6 +3954,7 @@ quickscale
 ├── TECHNICAL_DOCS.md
 ├── USER_GUIDE.md
 ├── compile_docs.sh
+├── last_test_run.log
 ├── pyproject.toml
 ├── pytest.ini
 ├── requirements-dev.txt
