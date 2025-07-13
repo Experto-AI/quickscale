@@ -1,7 +1,7 @@
 from abc import ABC, abstractmethod
 from decimal import Decimal
 from django.contrib.auth import get_user_model
-from credits.models import CreditAccount, Service, ServiceUsage, InsufficientCreditsError
+from credits.models import CreditAccount, Service, ServiceUsage, InsufficientCreditsError, CreditTransaction
 
 User = get_user_model()
 
@@ -36,11 +36,21 @@ class BaseService(ABC):
         service = self.service_model
         
         try:
-            # Consume credits using the priority system
-            credit_transaction = credit_account.consume_credits_with_priority(
-                amount=service.credit_cost,
-                description=f"Service usage: {service.name}"
-            )
+            # Handle zero-cost services
+            if service.credit_cost == 0:
+                # For free services, create a zero-amount transaction
+                credit_transaction = CreditTransaction.objects.create(
+                    user=user,
+                    amount=Decimal('0'),
+                    description=f"Service usage: {service.name} (free)",
+                    credit_type='CONSUMPTION'
+                )
+            else:
+                # Consume credits using the priority system
+                credit_transaction = credit_account.consume_credits_with_priority(
+                    amount=service.credit_cost,
+                    description=f"Service usage: {service.name}"
+                )
             
             # Record service usage
             service_usage = ServiceUsage.objects.create(

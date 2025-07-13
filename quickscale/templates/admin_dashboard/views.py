@@ -981,12 +981,7 @@ def download_receipt(request: HttpRequest, payment_id: int) -> HttpResponse:
     
     return response
 
-# Keep the old function for backward compatibility but rename it
-@login_required
-def change_subscription_plan_deprecated(request: HttpRequest) -> JsonResponse:
-    """DEPRECATED: Handle subscription plan changes (upgrade/downgrade) with credit transfer."""
-    # This function is deprecated - use create_plan_change_checkout instead
-    return JsonResponse({'error': 'This endpoint is deprecated. Please use the new checkout flow.'}, status=410)
+
 
 @login_required
 @user_passes_test(lambda u: u.is_staff)

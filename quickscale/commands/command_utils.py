@@ -10,6 +10,7 @@ import logging
 import socket
 from pathlib import Path
 from typing import List, Optional, Tuple, Dict, Any, NoReturn
+from quickscale.utils.timeout_constants import POSTGRES_CONNECTION_TIMEOUT
 
 # Determine the correct docker compose command
 DOCKER_COMPOSE_COMMAND = "docker compose" if shutil.which("docker-compose") is None else "docker-compose"
@@ -126,7 +127,7 @@ def wait_for_postgres(
                 check=False,
                 capture_output=True,
                 text=True,
-                timeout=5  # Add timeout to prevent hanging
+                timeout=POSTGRES_CONNECTION_TIMEOUT  # Add timeout to prevent hanging
             )
             if result.returncode == 0:
                 logger.info("PostgreSQL ready")

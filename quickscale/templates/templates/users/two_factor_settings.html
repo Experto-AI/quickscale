@@ -1,0 +1,295 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block title %}Two-Factor Authentication Settings - {{ project_name }}{% endblock %}
+
+{% block extra_head %}
+    <script src="{% static 'js/password_validation.js' %}"></script>
+    <style>
+    .is-sr-only {
+        position: absolute !important;
+        width: 1px !important;
+        height: 1px !important;
+        padding: 0 !important;
+        margin: -1px !important;
+        overflow: hidden !important;
+        clip: rect(0, 0, 0, 0) !important;
+        white-space: nowrap !important;
+        border: 0 !important;
+    }
+    </style>
+{% endblock %}
+
+{% block content %}
+<section class="section">
+    <div class="container">
+        <div class="columns is-centered">
+            <div class="column is-8">
+                <nav class="breadcrumb" aria-label="breadcrumbs">
+                    <ul>
+                        <li><a href="{% url 'users:profile' %}">Profile</a></li>
+                        <li class="is-active"><a href="#" aria-current="page">Two-Factor Authentication</a></li>
+                    </ul>
+                </nav>
+                
+                <h1 class="title" id="main-heading">
+                    <span aria-hidden="true">🔐</span> Two-Factor Authentication
+                </h1>
+                <h2 class="subtitle">Enhanced Security for Your Account</h2>
+                
+                <!-- System Status -->
+                <div class="notification is-info is-light" role="status" aria-labelledby="system-status-heading">
+                    <p class="has-text-weight-semibold" id="system-status-heading">
+                        <span aria-hidden="true">🚧</span> Infrastructure Ready - Implementation in Progress
+                    </p>
+                    <p>The two-factor authentication system infrastructure is fully prepared and ready for implementation.</p>
+                </div>
+                
+                <!-- Current Status Box -->
+                <div class="box" role="region" aria-labelledby="current-status-heading">
+                    <h3 class="title is-4" id="current-status-heading">Current Status</h3>
+                    
+                    <div class="columns">
+                        <div class="column">
+                            <div class="field">
+                                <label class="label" for="system-status-display">System Status</label>
+                                <div class="control">
+                                    {% if system_enabled %}
+                                        <span class="tag is-success" id="system-status-display" aria-describedby="system-status-help">System Enabled</span>
+                                        <div id="system-status-help" class="is-sr-only">Two-factor authentication system is available for use</div>
+                                    {% else %}
+                                        <span class="tag is-warning" id="system-status-display" aria-describedby="system-status-help">System Disabled</span>
+                                        <div id="system-status-help" class="is-sr-only">Two-factor authentication system is not yet available</div>
+                                    {% endif %}
+                                </div>
+                            </div>
+                            
+                            <div class="field">
+                                <label class="label" for="user-2fa-status-display">Your 2FA Status</label>
+                                <div class="control">
+                                    {% if is_enabled %}
+                                        <span class="tag is-success" id="user-2fa-status-display" aria-describedby="user-2fa-help">Enabled</span>
+                                        <div id="user-2fa-help" class="is-sr-only">Two-factor authentication is enabled for your account</div>
+                                    {% else %}
+                                        <span class="tag is-warning" id="user-2fa-status-display" aria-describedby="user-2fa-help">Disabled</span>
+                                        <div id="user-2fa-help" class="is-sr-only">Two-factor authentication is not enabled for your account</div>
+                                    {% endif %}
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <div class="column">
+                            <div class="field">
+                                <label class="label">Backup Codes</label>
+                                <div class="control">
+                                    {% if has_backup_codes %}
+                                        <span class="tag is-success">{{ backup_codes_count }} Generated</span>
+                                    {% else %}
+                                        <span class="tag is-warning">Not Generated</span>
+                                    {% endif %}
+                                </div>
+                            </div>
+                            
+                            <div class="field">
+                                <label class="label">Issuer</label>
+                                <div class="control">
+                                    <span class="tag is-info">{{ issuer_name }}</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- Implementation Readiness -->
+                <div class="box">
+                    <h3 class="title is-4">🛠️ Implementation Readiness</h3>
+                    
+                    <div class="columns">
+                        <div class="column">
+                            <h4 class="subtitle is-6">✅ Infrastructure Complete</h4>
+                            <ul>
+                                <li>✅ Database models created</li>
+                                <li>✅ Settings configuration ready</li>
+                                <li>✅ View structure prepared</li>
+                                <li>✅ Template framework established</li>
+                                <li>✅ Backup code system functional</li>
+                                <li>✅ API endpoints structured</li>
+                            </ul>
+                        </div>
+                        
+                        <div class="column">
+                            <h4 class="subtitle is-6">⏳ Implementation Pending</h4>
+                            <ul>
+                                <li>⏳ TOTP library integration</li>
+                                <li>⏳ QR code generation</li>
+                                <li>⏳ Verification workflow</li>
+                                <li>⏳ Setup wizard</li>
+                                <li>⏳ Authentication middleware</li>
+                                <li>⏳ Recovery mechanisms</li>
+                            </ul>
+                        </div>
+                    </div>
+                    
+                    <div class="notification is-warning is-light mt-4">
+                        <p><strong>Required Dependencies:</strong></p>
+                        <code>pip install pyotp>=2.8.0 qrcode>=7.4.0 Pillow>=10.0.0</code>
+                    </div>
+                </div>
+                
+                <!-- Preparation Actions -->
+                <div class="box" x-data="{ 
+                    loading: false, 
+                    backupCodes: [], 
+                    showCodes: false,
+                    
+                    async generateBackupCodes() {
+                        this.loading = true;
+                        try {
+                            const response = await fetch('{% url 'users:two_factor_generate_backup_codes' %}', {
+                                method: 'POST',
+                                headers: {
+                                    'X-CSRFToken': '{{ csrf_token }}',
+                                    'Content-Type': 'application/json'
+                                }
+                            });
+                            const data = await response.json();
+                            
+                            if (data.status === 'success') {
+                                this.backupCodes = data.backup_codes;
+                                this.showCodes = true;
+                            } else {
+                                alert('Error: ' + data.message);
+                            }
+                        } catch (error) {
+                            alert('Error generating backup codes: ' + error.message);
+                        } finally {
+                            this.loading = false;
+                        }
+                    },
+                    
+                    downloadCodes() {
+                        const content = this.backupCodes.join('\\n');
+                        const blob = new Blob([content], { type: 'text/plain' });
+                        const url = window.URL.createObjectURL(blob);
+                        const a = document.createElement('a');
+                        a.href = url;
+                        a.download = '{{ project_name }}-backup-codes.txt';
+                        a.click();
+                        window.URL.revokeObjectURL(url);
+                    }
+                }">
+                    <h3 class="title is-4">🔧 Preparation Actions</h3>
+                    <p class="mb-4">Test the infrastructure components that are ready:</p>
+                    
+                    <div class="buttons" role="group" aria-label="Two-factor authentication actions">
+                        <button 
+                            class="button is-primary" 
+                            :class="{ 'is-loading': loading }"
+                            @click="generateBackupCodes()"
+                            :disabled="loading"
+                            aria-describedby="generate-codes-help">
+                            <span class="icon" aria-hidden="true">
+                                <i class="fas fa-key"></i>
+                            </span>
+                            <span>Generate Backup Codes</span>
+                        </button>
+                        <div id="generate-codes-help" class="is-sr-only">Create emergency backup codes for account recovery</div>
+                        
+                        <button class="button is-light" disabled aria-describedby="setup-totp-help">
+                            <span class="icon" aria-hidden="true">
+                                <i class="fas fa-qrcode"></i>
+                            </span>
+                            <span>Setup TOTP (Coming Soon)</span>
+                        </button>
+                        <div id="setup-totp-help" class="is-sr-only">Configure time-based one-time password authentication (feature coming soon)</div>
+                        
+                        <button class="button is-light" disabled aria-describedby="verify-code-help">
+                            <span class="icon" aria-hidden="true">
+                                <i class="fas fa-mobile-alt"></i>
+                            </span>
+                            <span>Verify Code (Coming Soon)</span>
+                        </button>
+                        <div id="verify-code-help" class="is-sr-only">Test authentication code verification (feature coming soon)</div>
+                    </div>
+                    
+                    <!-- Backup Codes Display -->
+                    <div x-show="showCodes" x-transition class="mt-4">
+                        <div class="notification is-success">
+                            <h4 class="subtitle is-5">🔑 Backup Codes Generated</h4>
+                            <p class="mb-3">Store these codes in a secure location. Each code can only be used once.</p>
+                            
+                            <div class="box has-background-dark has-text-light is-family-monospace">
+                                <template x-for="code in backupCodes" :key="code">
+                                    <div x-text="code" class="mb-1"></div>
+                                </template>
+                            </div>
+                            
+                            <button @click="downloadCodes()" class="button is-small is-info">
+                                <span class="icon">
+                                    <i class="fas fa-download"></i>
+                                </span>
+                                <span>Download Codes</span>
+                            </button>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- Development Information -->
+                <div class="box">
+                    <h3 class="title is-4">📚 Implementation Guide</h3>
+                    
+                    <div class="content">
+                        <p><strong>Next Steps for Full Implementation:</strong></p>
+                        
+                        <ol>
+                            <li><strong>Install Dependencies:</strong>
+                                <pre><code>pip install pyotp qrcode[pil]</code></pre>
+                            </li>
+                            
+                            <li><strong>TOTP Secret Generation:</strong>
+                                <pre><code>import pyotp
+secret = pyotp.random_base32()
+totp = pyotp.TOTP(secret)</code></pre>
+                            </li>
+                            
+                            <li><strong>QR Code Generation:</strong>
+                                <pre><code>import qrcode
+provisioning_uri = totp.provisioning_uri(
+    user.email, 
+    issuer_name="{{ issuer_name }}"
+)
+qr = qrcode.make(provisioning_uri)</code></pre>
+                            </li>
+                            
+                            <li><strong>Verification Logic:</strong>
+                                <pre><code>totp = pyotp.TOTP(user.two_factor_auth.secret_key)
+is_valid = totp.verify(user_provided_code)</code></pre>
+                            </li>
+                            
+                            <li><strong>Middleware Integration:</strong>
+                                <p>Add 2FA verification middleware to check codes after login</p>
+                            </li>
+                        </ol>
+                        
+                        <div class="notification is-info is-light">
+                            <p><strong>💡 Framework Ready:</strong> All the database models, views, and templates are prepared. You just need to integrate the TOTP library and implement the verification workflow.</p>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- Back to Profile -->
+                <div class="field">
+                    <div class="control">
+                        <a href="{% url 'users:profile' %}" class="button is-light">
+                            <span class="icon">
+                                <i class="fas fa-arrow-left"></i>
+                            </span>
+                            <span>Back to Profile</span>
+                        </a>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</section>
+{% endblock %} 

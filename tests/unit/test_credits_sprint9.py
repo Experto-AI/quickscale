@@ -71,8 +71,8 @@ class Sprint9ViewsImplementationTests(unittest.TestCase):
         with open(views_path, 'r') as f:
             views_content = f.read()
             
-        # Test plan change functionality
-        self.assertIn('change_subscription_plan', views_content, "Plan change view should exist")
+        # Test plan change functionality (actual implementation uses checkout flow)
+        self.assertIn('create_plan_change_checkout', views_content, "Plan change checkout view should exist")
         self.assertIn('new_product_id', views_content, "Plan change should handle new product ID")
         
     def test_immediate_upgrade_logic_when_no_credits(self):
@@ -113,7 +113,7 @@ class Sprint9URLsConfigurationTests(unittest.TestCase):
             urls_content = f.read()
             
         self.assertIn('subscription', urls_content, "Subscription URL should be configured")
-        self.assertIn('change_subscription_plan', urls_content, "Plan change URL should be configured")
+        self.assertIn('create_plan_change_checkout', urls_content, "Plan change checkout URL should be configured")
 
 
 class Sprint9StripeProductModelTests(unittest.TestCase):
@@ -269,9 +269,9 @@ class Sprint9UpgradeDowngradeCheckoutTests(unittest.TestCase):
         self.assertIn('create_checkout_session', views_content, "Should create checkout sessions for plan changes")
         self.assertIn('plan_change', views_content, "Should use plan_change purchase type")
         
-        # Test that old function is deprecated
-        self.assertIn('change_subscription_plan_deprecated', views_content, "Old function should be deprecated")
-        self.assertIn('deprecated', views_content.lower(), "Should indicate deprecation")
+        # Test that implementation uses checkout flow approach (no deprecated function needed)
+        self.assertIn('create_plan_change_checkout', views_content, "Should use checkout flow for plan changes")
+        self.assertIn('plan_change_success', views_content, "Should have plan change success handler")
     
     def test_plan_change_checkout_metadata(self):
         """Test that plan change checkout includes proper metadata."""

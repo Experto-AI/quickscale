@@ -11,6 +11,14 @@ import random
 
 from quickscale.utils.env_utils import is_feature_enabled, get_env
 from quickscale.utils.error_manager import ServiceError, handle_command_error
+from quickscale.utils.timeout_constants import (
+    DOCKER_SERVICE_STARTUP_TIMEOUT,
+    DOCKER_PS_CHECK_TIMEOUT,
+    DOCKER_CONTAINER_START_TIMEOUT,
+    DOCKER_OPERATIONS_TIMEOUT,
+    SERVICE_STABILIZATION_DELAY,
+    RETRY_PAUSE_DELAY
+)
 from .command_base import Command
 from .project_manager import ProjectManager
 from .command_utils import DOCKER_COMPOSE_COMMAND, find_available_port
@@ -348,7 +356,7 @@ class ServiceUpCommand(Command):
             
         return updated_ports
         
-    def _start_docker_services(self, env: Dict, no_cache: bool = False, timeout: int = 300) -> None:
+    def _start_docker_services(self, env: Dict, no_cache: bool = False, timeout: int = DOCKER_SERVICE_STARTUP_TIMEOUT) -> None:
         """Start the Docker services using docker-compose."""
         try:
             command = [DOCKER_COMPOSE_COMMAND, "up", "--build", "-d"]
@@ -370,36 +378,30 @@ class ServiceUpCommand(Command):
             self._handle_docker_process_error(e, env)
             
     def _handle_docker_process_error(self, e: subprocess.CalledProcessError, env: Dict) -> None:
-        """Handle errors from docker-compose command."""
+        """Handle errors from docker-compose command with simplified logic."""
         # Log the actual error details to help users diagnose issues
-        self.logger.warning(f"Docker Compose returned exit code {e.returncode}")
+        self.logger.error(f"Docker Compose failed with exit code {e.returncode}")
         
         # Show actual error output to help users understand what went wrong
         if hasattr(e, 'stdout') and e.stdout:
             self.logger.info(f"Docker Compose stdout:\n{e.stdout}")
         if hasattr(e, 'stderr') and e.stderr:
-            self.logger.info(f"Docker Compose stderr:\n{e.stderr}")
+            self.logger.error(f"Docker Compose stderr:\n{e.stderr}")
         
-        try:
-            # Check if services are actually running despite the error
-            ps_result = subprocess.run(DOCKER_COMPOSE_COMMAND.split() + ["ps"], check=False, env=env, capture_output=True, text=True, timeout=30)
-            if ps_result.returncode == 0 and ("db" in ps_result.stdout or "web" in ps_result.stdout):
-                self.logger.info("Services appear to be starting despite exit code, proceeding.")
-                # Continue with the operation, treating as if it succeeded
-                return
-        except subprocess.TimeoutExpired:
-            self.logger.warning("Docker ps command timed out while checking service status")
-        
-        # If no services are running, this is a real failure - re-raise the error
-        self.logger.error("No services found running after docker-compose error.")
-        raise e
+        # Trust Docker's exit codes - if it failed, it failed
+        # No complex fallback logic that masks real issues
+        raise ServiceError(
+            f"Docker services failed to start (exit code: {e.returncode})",
+            details=f"Command: {' '.join(e.cmd)}",
+            recovery="Check Docker logs with 'quickscale logs' for detailed error information."
+        )
     
 
             
     def _verify_services_running(self, env: Dict) -> None:
         """Verify that services are actually running."""
         try:
-            ps_result = subprocess.run(DOCKER_COMPOSE_COMMAND.split() + ["ps"], capture_output=True, text=True, check=True, env=env, timeout=30)
+            ps_result = subprocess.run(DOCKER_COMPOSE_COMMAND.split() + ["ps"], capture_output=True, text=True, check=True, env=env, timeout=DOCKER_PS_CHECK_TIMEOUT)
             if "db" not in ps_result.stdout:
                 self.logger.warning("Database service not detected in running containers. Services may not be fully started.")
                 self.logger.debug(f"Docker compose ps output: {ps_result.stdout}")
@@ -407,7 +409,7 @@ class ServiceUpCommand(Command):
                 # Try more direct Docker commands as a fallback
                 self._start_stopped_containers()
         except subprocess.TimeoutExpired:
-            self.logger.warning("Docker compose ps command timed out after 30 seconds")
+            self.logger.warning(f"Docker compose ps command timed out after {DOCKER_PS_CHECK_TIMEOUT} seconds")
         except subprocess.SubprocessError as ps_err:
             self.logger.warning(f"Could not verify if services are running: {ps_err}")
             
@@ -422,7 +424,7 @@ class ServiceUpCommand(Command):
             # Check if containers exist but are stopped
             docker_ps_a = subprocess.run(
                 ["docker", "ps", "-a", "--format", "{{.Names}},{{.Status}}", "--filter", f"name={project_name}"],
-                capture_output=True, text=True, check=False, timeout=30
+                capture_output=True, text=True, check=False, timeout=DOCKER_OPERATIONS_TIMEOUT
             )
             
             for container_line in docker_ps_a.stdout.splitlines():
@@ -441,7 +443,7 @@ class ServiceUpCommand(Command):
             time.sleep(5)
             
             # Check again if services are running
-            ps_retry = subprocess.run(DOCKER_COMPOSE_COMMAND.split() + ["ps"], capture_output=True, text=True, check=False, timeout=30)
+            ps_retry = subprocess.run(DOCKER_COMPOSE_COMMAND.split() + ["ps"], capture_output=True, text=True, check=False, timeout=DOCKER_PS_CHECK_TIMEOUT)
             if ps_retry.returncode == 0 and "db" in ps_retry.stdout:
                 self.logger.info("Services are now running after direct intervention.")
             else:
@@ -457,7 +459,7 @@ class ServiceUpCommand(Command):
             # Try to start the container
             start_result = subprocess.run(
                 ["docker", "start", container_name],
-                capture_output=True, text=True, check=False, timeout=60
+                capture_output=True, text=True, check=False, timeout=DOCKER_CONTAINER_START_TIMEOUT
             )
             if start_result.returncode == 0:
                 self.logger.info(f"Successfully started container: {container_name}")
@@ -540,11 +542,11 @@ class ServiceUpCommand(Command):
                 self.logger.info(f"Starting services...")
                 
                 # Start docker services, passing the no_cache flag and timeout
-                self._start_docker_services(env, no_cache=no_cache, timeout=240)
+                self._start_docker_services(env, no_cache=no_cache, timeout=DOCKER_SERVICE_STARTUP_TIMEOUT)
                 
                 # Add a delay to allow services to start properly
                 self.logger.info("Waiting for services to stabilize...")
-                time.sleep(15)  # Give containers time to fully start and register
+                time.sleep(SERVICE_STABILIZATION_DELAY)  # Give containers time to fully start and register
 
                 # Verify services are actually running
                 self._verify_services_running(env)
@@ -561,7 +563,7 @@ class ServiceUpCommand(Command):
                 retry_count += 1
                 if retry_count >= max_retries:
                     break
-                time.sleep(2)  # Brief pause before retrying
+                time.sleep(RETRY_PAUSE_DELAY)  # Brief pause before retrying
         
         # If we reached here, all attempts failed
         error_message = f"Failed to start services after {max_retries} attempts."

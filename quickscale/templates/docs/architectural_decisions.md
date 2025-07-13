@@ -443,7 +443,6 @@ class CreditAccount(models.Model):
     
     # Credit management methods  
     def add_credits(self, amount: Decimal, description: str) -> CreditTransaction
-    def consume_credits(self, amount: Decimal, description: str) -> CreditTransaction
     def consume_credits_with_priority(self, amount: Decimal, description: str) -> CreditTransaction
 ```
 
