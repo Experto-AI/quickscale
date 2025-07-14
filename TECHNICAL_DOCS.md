@@ -276,6 +276,7 @@ flowchart TD
     Commands --> Utilities
     Utilities --> Templates
     Templates --> Generated
+    %% NOTE: Service startup is now fail-fast. Ports are checked once, and if in use, the process fails immediately. No retries or fallback.
 ```
 
 ### Generated Project Structure

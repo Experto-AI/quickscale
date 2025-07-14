@@ -141,10 +141,11 @@ QuickScale includes pre-configured accounts for testing:
   Ensure Docker is installed and running on your system.
 
 - **Port Already in Use**:
-  Stop any services using port 8000:
+  QuickScale will fail immediately if the configured port is in use. To resolve:
   ```bash
   sudo lsof -i :8000
   sudo kill <PID>
+  # or edit your .env file to use a different WEB_PORT or DB_PORT_EXTERNAL
   ```
 
 - **Environment Configuration**:
@@ -639,14 +640,7 @@ quickscale ps
 
 ### **12.4. Automatic Port Fallback**
 
-QuickScale can automatically find and use alternative ports if the default `WEB_PORT` (8000) or `DB_PORT_EXTERNAL` (5432) are already in use on your system. This feature is controlled by environment variables in your project's `.env` file:
-
-- `WEB_PORT_ALTERNATIVE_FALLBACK`: Set to `yes` to enable automatic fallback for the web server port.
-- `DB_PORT_EXTERNAL_ALTERNATIVE_FALLBACK`: Set to `yes` to enable automatic fallback for the PostgreSQL database external port.
-
-If fallback is enabled and a port conflict is detected when you run `quickscale up`, QuickScale will attempt to find an available port in a nearby range. The new port will be displayed in the console output.
-
-If fallback is disabled (default) and a port conflict occurs, `quickscale up` will fail with a clear error message instructing you to free the port, specify a different port manually, or enable the fallback feature.
+- **[REMOVED]** QuickScale no longer provides automatic port fallback. You must set ports explicitly in `.env` and resolve conflicts yourself. If a port is in use, QuickScale will fail immediately with a clear error message.
 
 ## **13. Additional Resources**
 
