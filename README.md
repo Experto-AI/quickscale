@@ -27,7 +27,7 @@ Ideal for **solo developers** or small teams looking to turn their ideas into pr
 - **Containerized**: Docker setup for consistent development and deployment
 - **Command-Line Control**: Intuitive CLI for managing your project lifecycle
 - **Starter Accounts**: Pre-configured user and admin accounts for immediate testing
-- **Automatic Port Fallback**: Smart handling of port conflicts with automatic alternative port selection
+- **Fail-Fast Port Validation**: Clear error messages when ports are in use, requiring explicit configuration
 
 
 ## PROJECT USAGE
