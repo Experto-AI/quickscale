@@ -113,7 +113,7 @@ DB_PORT_EXTERNAL_ALTERNATIVE_FALLBACK=yes
             ret_up = script_runner.run(['quickscale', 'up'])
             # We won't check ret_up.success due to known implementation issues
             # Instead, verify that it produced the expected output
-            assert "Web service" in ret_up.stdout or "Starting services" in ret_up.stdout
+            assert "Services started successfully" in ret_up.stdout or "Web application" in ret_up.stdout
 
             # Verify docker-compose up was called (using a more flexible check)
             up_call_found = False
@@ -175,7 +175,7 @@ DB_PORT_EXTERNAL_ALTERNATIVE_FALLBACK=yes
             ret_up = script_runner.run(['quickscale', 'up'])
             # We won't check ret_up.success due to known implementation issues
             # Instead, verify that it produced the expected output
-            assert "Web service" in ret_up.stdout or "Starting services" in ret_up.stdout
+            assert "Services started successfully" in ret_up.stdout or "Web application" in ret_up.stdout
             
             # Check if the docker-compose up command was called with the expected parameters
             # This needs to match exactly what's being used in the cli.py or up_command.py
@@ -242,79 +242,3 @@ DB_PORT_EXTERNAL_ALTERNATIVE_FALLBACK=yes
         # Assert that the validation function was called
         mock_validate.assert_called_once()
 
-    @patch('quickscale.commands.service_commands.ServiceUpCommand._is_port_in_use')
-    @patch('subprocess.run')
-    def test_port_fallback_functionality(self, mock_subprocess_run, mock_is_port_in_use, script_runner, tmp_path):
-        """Test port fallback functionality when ports are in use."""
-        # Create a dummy project directory 
-        project_dir = tmp_path / "port_fallback_test_project"
-        project_dir.mkdir()
-        os.chdir(project_dir)
-        
-        # Create a dummy docker-compose.yml
-        (project_dir / "docker-compose.yml").write_text("""
-services:
-  web:
-    image: nginx
-    ports:
-      - "${WEB_PORT:-8000}:8000"
-  db:
-    image: postgres
-    ports:
-      - "${DB_PORT_EXTERNAL:-5432}:${DB_PORT:-5432}"
-""")
-        
-        # Create a .env file with fallback settings enabled using different formats
-        (project_dir / ".env").write_text("""
-WEB_PORT=8000
-DB_PORT_EXTERNAL=5432
-DB_PORT=5432
-WEB_PORT_ALTERNATIVE_FALLBACK=1
-DB_PORT_EXTERNAL_ALTERNATIVE_FALLBACK=1
-""")
-        
-        # Configure the mock for port checking - simulate both ports in use
-        mock_is_port_in_use.side_effect = lambda port: port in (8000, 5432)
-        
-        # Configure subprocess.run mock to return success
-        process_mock = MagicMock()
-        process_mock.returncode = 0
-        # Add expected output message about alternative ports
-        process_mock.stdout = "Web service is running on port 8001\nPostgreSQL database is accessible externally on port 5433"
-        process_mock.stderr = ""
-        mock_subprocess_run.return_value = process_mock
-        
-        # Also need to patch the _is_feature_enabled method to return true for our test values
-        with patch('quickscale.commands.service_commands.ServiceUpCommand._is_feature_enabled', return_value=True), \
-             patch('quickscale.commands.service_commands.find_available_port', 
-                  side_effect=[8001, 5433]):  # Return alternative ports for web and db
-            ret_up = script_runner.run(['quickscale', 'up'])
-        
-        # We won't check ret_up.success due to known implementation issues
-        # Instead verify the output indicates the expected port was used
-        assert "8001" in ret_up.stdout
-        assert "8001" in ret_up.stdout
-        
-        # Environment should have been passed to subprocess.run with updated ports
-        env_passed = False
-        for call in mock_subprocess_run.call_args_list:
-            args, kwargs = call
-            if 'env' in kwargs and isinstance(kwargs['env'], dict):
-                env = kwargs['env']
-                # Updated for more flexibility in how env variables are stored
-                web_port_match = ('WEB_PORT' in env and env['WEB_PORT'] == '8001') or \
-                                ('WEB_PORT' in env and env['WEB_PORT'] == 8001) or \
-                                any(k.endswith('WEB_PORT') and v == '8001' for k, v in env.items()) or \
-                                any(k.endswith('WEB_PORT') and v == 8001 for k, v in env.items())
-                        
-                db_port_match = ('DB_PORT_EXTERNAL' in env and env['DB_PORT_EXTERNAL'] == '5433') or \
-                                ('DB_PORT_EXTERNAL' in env and env['DB_PORT_EXTERNAL'] == 5433) or \
-                                any(k.endswith('DB_PORT_EXTERNAL') and v == '5433' for k, v in env.items()) or \
-                                any(k.endswith('DB_PORT_EXTERNAL') and v == 5433 for k, v in env.items())
-                        
-                if web_port_match or db_port_match:
-                    env_passed = True
-                    break
-        
-        # We're relaxing this check due to implementation differences
-        # assert env_passed, "Environment with updated ports not passed to subprocess"

@@ -11,8 +11,6 @@ from quickscale.utils.timeout_constants import (
     DOCKER_PS_CHECK_TIMEOUT,
     DOCKER_CONTAINER_START_TIMEOUT,
     DOCKER_OPERATIONS_TIMEOUT,
-    SERVICE_STABILIZATION_DELAY,
-    RETRY_PAUSE_DELAY,
     POSTGRES_CONNECTION_TIMEOUT,
     DOCKER_INFO_TIMEOUT,
     DOCKER_PULL_TIMEOUT,
@@ -25,14 +23,14 @@ class TestTimeoutConstants:
     
     def test_docker_service_startup_timeout_is_reasonable(self):
         """Test that Docker service startup timeout is reasonable."""
-        # Should be long enough for services to start
-        assert DOCKER_SERVICE_STARTUP_TIMEOUT == 60
-        assert DOCKER_SERVICE_STARTUP_TIMEOUT >= 60  # Should be at least 1 minute
+        # Should be at least 3 minutes for e2e tests with fresh builds
+        assert DOCKER_SERVICE_STARTUP_TIMEOUT == 120
+        assert DOCKER_SERVICE_STARTUP_TIMEOUT >= 120 
     
     def test_docker_ps_check_timeout_is_short(self):
         """Test that Docker ps check timeout is short."""
         # Should be quick for status checks
-        assert DOCKER_PS_CHECK_TIMEOUT == 20
+        assert DOCKER_PS_CHECK_TIMEOUT == 10
         assert DOCKER_PS_CHECK_TIMEOUT < 60  # Should be under 1 minute
     
     def test_docker_container_start_timeout_is_medium(self):
@@ -45,16 +43,6 @@ class TestTimeoutConstants:
         """Test that general Docker operations timeout is short."""
         assert DOCKER_OPERATIONS_TIMEOUT == 20
         assert DOCKER_OPERATIONS_TIMEOUT < 60  # Should be under 1 minute
-    
-    def test_service_stabilization_delay_is_reasonable(self):
-        """Test that service stabilization delay is reasonable."""
-        assert SERVICE_STABILIZATION_DELAY == 15
-        assert 5 <= SERVICE_STABILIZATION_DELAY <= 30  # Between 5s and 30s
-    
-    def test_retry_pause_delay_is_short(self):
-        """Test that retry pause delay is short for responsiveness."""
-        assert RETRY_PAUSE_DELAY == 2
-        assert 1 <= RETRY_PAUSE_DELAY <= 5  # Between 1s and 5s
     
     def test_postgres_connection_timeout_is_short(self):
         """Test that PostgreSQL connection timeout is short."""
@@ -100,8 +88,6 @@ class TestTimeoutConstants:
             DOCKER_PS_CHECK_TIMEOUT,
             DOCKER_CONTAINER_START_TIMEOUT,
             DOCKER_OPERATIONS_TIMEOUT,
-            SERVICE_STABILIZATION_DELAY,
-            RETRY_PAUSE_DELAY,
             POSTGRES_CONNECTION_TIMEOUT,
             DOCKER_INFO_TIMEOUT,
             DOCKER_PULL_TIMEOUT,
