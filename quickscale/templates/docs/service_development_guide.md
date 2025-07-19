@@ -15,6 +15,11 @@ quickscale generate-service sentiment_analyzer --type text_processing
 
 # Image processing service
 quickscale generate-service image_classifier --type image_processing
+
+# Free services (0.0 credit cost)
+quickscale generate-service free_utility --free
+quickscale generate-service free_text_analyzer --type text_processing --free
+quickscale generate-service free_image_tool --type image_processing --free --description "Free image processing utility"
 ```
 
 ### 2. Implement Your Service Logic
@@ -34,14 +39,38 @@ class MyAIService(BaseService):
 
 ### 3. Configure Service in Database
 
-```python
-# In Django admin or management command
-from credits.models import Service
+```bash
+# Using management command (recommended)
+quickscale manage configure_service my_service --credit-cost 1.0 --description "My AI service"
 
+# For free services
+quickscale manage configure_service free_utility --free --description "Free utility service"
+
+# Update existing service
+quickscale manage configure_service my_service --update --credit-cost 2.0
+
+# List all services
+quickscale manage configure_service --list
+```
+
+```python
+# Alternative: Direct database creation
+from credits.models import Service
+from decimal import Decimal
+
+# Paid service
 Service.objects.create(
     name="my_service_name",
     description="Description of what your service does",
-    credit_cost=1.0,  # How many credits this service costs
+    credit_cost=Decimal('1.0'),  # How many credits this service costs
+    is_active=True
+)
+
+# Free service
+Service.objects.create(
+    name="free_utility",
+    description="Free utility service",
+    credit_cost=Decimal('0.0'),  # Zero cost for free services
     is_active=True
 )
 ```
@@ -87,6 +116,71 @@ Services automatically integrate with the credit system:
 2. **Credit consumption**: `service.consume_credits(user)`
 3. **Usage recording**: Automatic `ServiceUsage` creation
 4. **Priority system**: Subscription credits used first
+
+### Free Services (Zero-Cost Services)
+
+QuickScale supports free services that don't consume credits while still providing usage tracking:
+
+#### Creating Free Services
+
+```bash
+# Generate free service
+quickscale generate-service free_utility --free --description "Free utility service"
+
+# Configure existing service as free
+quickscale manage configure_service my_service --free --description "Now free!"
+```
+
+#### Free Service Behavior
+
+- **No credit consumption**: Users can use the service without credits
+- **Usage tracking**: Still creates `ServiceUsage` records for analytics
+- **Zero-amount transactions**: Creates transactions with `amount=0.0` for audit trails
+- **Same API**: Uses the same BaseService interface as paid services
+
+#### Example Free Service
+
+```python
+@register_service("free_text_counter")
+class FreeTextCounterService(BaseService):
+    """Free text counting utility service."""
+    
+    def execute_service(self, user: User, text: str = "", **kwargs):
+        """Count words and characters in text."""
+        if not text:
+            raise ValueError("Text input is required")
+        
+        words = len(text.split())
+        characters = len(text)
+        lines = text.count('\n') + 1
+        
+        return {
+            'status': 'completed',
+            'result': {
+                'words': words,
+                'characters': characters,
+                'lines': lines
+            },
+            'service_type': 'free',
+            'metadata': {
+                'processing_time': '< 1ms',
+                'credit_cost': 0.0
+            }
+        }
+```
+
+#### When to Use Free Services
+
+- **Utility functions**: Simple operations that don't consume external resources
+- **Demo services**: Allow users to test functionality before purchasing credits
+- **Basic processing**: Simple text or data manipulation
+- **Community features**: Services that benefit from high usage volume
+
+#### Free Service Limitations
+
+- **No external API costs**: Avoid services that incur external costs
+- **Resource management**: Consider server resources even if no credits are charged
+- **Rate limiting**: May still need rate limiting for abuse prevention
 
 ## Best Practices
 
@@ -184,6 +278,67 @@ class ExternalAIService(BaseService):
             return response.json()
         except requests.exceptions.RequestException as e:
             raise RuntimeError(f"External AI service error: {str(e)}")
+```
+
+## Service Pricing Strategies
+
+### Credit Cost Guidelines
+
+Choose appropriate credit costs based on your service characteristics:
+
+#### Free Services (0.0 credits)
+- **Simple utilities**: Text counters, format converters, basic validators
+- **Demo services**: Limited functionality to showcase premium features
+- **Community tools**: Services that benefit from high usage volume
+
+```bash
+quickscale manage configure_service text_counter --free
+quickscale manage configure_service demo_analyzer --free
+```
+
+#### Low-Cost Services (0.1 - 1.0 credits)
+- **Basic processing**: Simple text analysis, basic calculations
+- **Quick operations**: Fast operations with minimal external resource usage
+- **High-volume services**: Frequent-use services with low individual value
+
+```bash
+quickscale manage configure_service basic_sentiment --credit-cost 0.5
+quickscale manage configure_service text_cleanup --credit-cost 0.25
+```
+
+#### Standard Services (1.0 - 5.0 credits)
+- **AI processing**: External API calls, machine learning inference
+- **Medium complexity**: Services requiring moderate processing power
+- **Standard operations**: Most common AI service operations
+
+```bash
+quickscale manage configure_service sentiment_analysis --credit-cost 1.0
+quickscale manage configure_service text_summarization --credit-cost 2.0
+```
+
+#### Premium Services (5.0+ credits)
+- **Complex AI operations**: Advanced models, multiple processing steps
+- **High-cost external APIs**: Services that incur significant external costs
+- **Resource-intensive**: Services requiring substantial computing resources
+
+```bash
+quickscale manage configure_service advanced_nlp --credit-cost 5.0
+quickscale manage configure_service image_generation --credit-cost 10.0
+```
+
+### Mixed Pricing Strategy
+
+Combine different pricing levels to maximize value:
+
+```bash
+# Free tier for basic functionality
+quickscale generate-service basic_analyzer --free
+
+# Standard tier for full features
+quickscale generate-service advanced_analyzer --credit-cost 2.0
+
+# Premium tier for enterprise features
+quickscale generate-service enterprise_analyzer --credit-cost 5.0
 ```
 
 ## Service Types and Examples

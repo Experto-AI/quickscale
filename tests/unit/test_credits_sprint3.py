@@ -56,7 +56,7 @@ class ServiceModelTests(unittest.TestCase):
         # Check for credit cost validation
         self.assertIn("MinValueValidator", models_content,
                      "MinValueValidator not found for credit_cost")
-        self.assertIn("Decimal('0.01')", models_content,
+        self.assertIn("Decimal('0.0')", models_content,
                      "Minimum credit cost validation not found")
         
         # Check for unique constraint on name
@@ -83,10 +83,19 @@ class ServiceModelTests(unittest.TestCase):
         with open(self.models_py, 'r') as f:
             models_content = f.read()
         
-        # Check for __str__ method with defensive programming
-        service_str_pattern = r'def __str__\(self\):\s*""".*?"""\s*name = self\.name or ".*?"\s*credit_cost = self\.credit_cost or \d+\s*return f"{name} \({credit_cost} credits\)"'
-        self.assertRegex(models_content, service_str_pattern, 
-                        "Service __str__ method not properly implemented")
+        # Check for __str__ method with defensive programming and free service support
+        self.assertIn('def __str__(self):', models_content,
+                     "Service model should have __str__ method")
+        self.assertIn('name = self.name or', models_content,
+                     "Service __str__ method should have defensive name handling")
+        self.assertIn('credit_cost = self.credit_cost or', models_content,
+                     "Service __str__ method should have defensive credit_cost handling")
+        self.assertIn('if credit_cost == 0:', models_content,
+                     "Service __str__ method should handle free services")
+        self.assertIn('return f"{name} (Free)"', models_content,
+                     "Service __str__ method should return 'Free' for zero cost")
+        self.assertIn('return f"{name} ({credit_cost} credits)"', models_content,
+                     "Service __str__ method should return credits for paid services")
 
 
 class ServiceUsageModelTests(unittest.TestCase):

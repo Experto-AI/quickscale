@@ -745,120 +745,11 @@ class StripeManager:
 
     # Sync operations (Product model specific, might need adjustment based on your actual Product model)
 
-    def sync_product_to_stripe(self, product_obj) -> Optional[Tuple[str, str]]:
-        """
-        Syncs a local product object to Stripe.
-        Creates or updates the product and its price in Stripe.
-        Returns a tuple of (stripe_product_id, stripe_price_id) on success, None otherwise.
-        """
-
-        if not is_feature_enabled(get_env('STRIPE_ENABLED', 'False')):
-            logger.warning("Stripe integration is not enabled, skipping product sync.")
-            return None
-
-        try:
-            # Check if the product already exists in Stripe by looking for a stripe_id on the local object
-            stripe_product_id = getattr(product_obj, 'stripe_id', None)
-            stripe_price_id = getattr(product_obj, 'stripe_price_id', None)
-
-            product_data = {
-                'name': product_obj.name,
-                'description': getattr(product_obj, 'description', None),
-                'active': getattr(product_obj, 'active', True),
-                # Add any other relevant fields from your Product model
-            }
-            
-            # Prepare metadata for the product
-            metadata = {}
-            if hasattr(product_obj, 'metadata') and isinstance(product_obj.metadata, dict):
-                metadata.update(product_obj.metadata)
-            
-            # Include credit amount in metadata
-            if hasattr(product_obj, 'credit_amount'):
-                metadata['credit_amount'] = str(product_obj.credit_amount)
-                
-            # Add metadata to product data if we have any
-            if metadata:
-                product_data['metadata'] = metadata
-
-
-            price_data = {
-                 'unit_amount': int(product_obj.price * 100), # Assuming price is a Decimal/float, convert to cents
-                 'currency': getattr(product_obj, 'currency', 'usd').lower(),
-                 'recurring': {'interval': getattr(product_obj, 'recurring_interval', 'month')} # Assuming subscription
-            }
-            # Add metadata for the price, ensuring it's a dictionary
-            if hasattr(product_obj, 'price_metadata') and isinstance(product_obj.price_metadata, dict):
-                price_data['metadata'] = product_obj.price_metadata
-
-            if stripe_product_id:
-                # Product exists, update it
-                logger.info(f"Updating existing Stripe Product: {stripe_product_id}")
-                stripe_product = self.client.products.update(stripe_product_id, params=product_data)
-                logger.info(f"Stripe Product updated: {stripe_product.id}")
-
-                if stripe_price_id:
-                    # Price exists, update it (Note: Prices are often immutable, updating might mean creating a new one and archiving the old.
-                    # This simplified example assumes a direct update is possible or handles immutability by creating a new price.)
-                    # A common pattern for price changes is to create a new price and update subscriptions.
-                    # For simplicity, let's assume we create a new price and update the product's default_price if necessary.
-                    logger.info(f"Creating a new Price for Product: {stripe_product_id}")
-                    new_stripe_price = self.client.prices.create(params={'product': stripe_product_id, **price_data})
-                    logger.info(f"New Stripe Price created: {new_stripe_price.id}")
-
-                    # Optionally, update the product's default_price to the new price ID
-                    if getattr(product_obj, 'set_as_default_price', True): # Assuming a flag to control default price
-                         logger.info(f"Setting new price {new_stripe_price.id} as default for product {stripe_product_id}")
-                         self.client.products.update(stripe_product_id, params={'default_price': new_stripe_price.id})
-
-                    # Return both the product ID and the new price ID
-                    return (stripe_product.id, new_stripe_price.id)
-
-                else:
-                    # Product exists, but no price associated in local DB (or first time syncing price for existing product)
-                    logger.info(f"Creating Price for existing Stripe Product: {stripe_product_id}")
-                    stripe_price = self.client.prices.create(params={'product': stripe_product_id, **price_data})
-                    logger.info(f"Stripe Price created: {stripe_price.id}")
-
-                    # Optionally, set this new price as the default on the product
-                    if getattr(product_obj, 'set_as_default_price', True):
-                         logger.info(f"Setting new price {stripe_price.id} as default for product {stripe_product_id}")
-                         self.client.products.update(stripe_product_id, params={'default_price': stripe_price.id})
-
-                    # Return both the product ID and the price ID
-                    return (stripe_product.id, stripe_price.id)
-
-            else:
-                # Product does not exist, create it and its price
-                logger.info("Creating new Stripe Product with Price")
-
-                # Create product
-                stripe_product = self.client.products.create(params=product_data)
-                logger.info(f"Stripe Product created: {stripe_product.id}")
-
-                # Create price for the new product
-                stripe_price = self.client.prices.create(params={'product': stripe_product.id, **price_data})
-                logger.info(f"Stripe Price created: {stripe_price.id}")
-
-                # Optionally, set this new price as the default on the product
-                if getattr(product_obj, 'set_as_default_price', True):
-                     logger.info(f"Setting new price {stripe_price.id} as default for product {stripe_product.id}")
-                     self.client.products.update(stripe_product.id, params={'default_price': stripe_price.id})
-
-                # Return both the product ID and the price ID
-                return (stripe_product.id, stripe_price.id)
-
-        except Exception as e:
-            logger.error(f"Error syncing product {getattr(product_obj, 'id', 'N/A')} to Stripe: {e}", exc_info=True)
-            # Depending on your error handling strategy, you might want to return None or re-raise
-            return None
-
-
     def sync_product_from_stripe(self, stripe_product_id: str, product_model):
         """
         Syncs a Stripe product to a local product object.
         Creates or updates the local product object.
-        Assumes product_model is your Django Product model or similar.
+        Stripe is the source of truth for all product data.
         
         Args:
             stripe_product_id: The Stripe product ID to sync
@@ -1029,6 +920,7 @@ class StripeManager:
         """
         Syncs all products from Stripe to local product objects.
         Creates or updates local product objects based on Stripe data.
+        Stripe is the source of truth for all product data.
         Returns the number of products successfully synced.
         
         Args:

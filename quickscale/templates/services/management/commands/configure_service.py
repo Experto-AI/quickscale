@@ -36,6 +36,11 @@ class Command(BaseCommand):
             default=1.0
         )
         parser.add_argument(
+            '--free',
+            action='store_true',
+            help='Set service as free (0.0 credit cost)'
+        )
+        parser.add_argument(
             '--active',
             action='store_true',
             help='Set service as active (default: True)',
@@ -70,7 +75,13 @@ class Command(BaseCommand):
             raise CommandError("The following arguments are required: service_name for create/update operations.")
 
         description = options['description'] or f"AI service: {service_name}"
-        credit_cost = Decimal(str(options['credit_cost']))
+        
+        # Handle --free flag (overrides --credit-cost)
+        if options['free']:
+            credit_cost = Decimal('0.0')
+        else:
+            credit_cost = Decimal(str(options['credit_cost']))
+        
         is_active = not options['inactive']  # Default to active unless --inactive is set
 
         try:
@@ -94,11 +105,18 @@ class Command(BaseCommand):
         )
 
         if created:
-            self.stdout.write(
-                self.style.SUCCESS(
-                    f"✅ Created service '{name}' with {credit_cost} credit cost"
+            if credit_cost == 0:
+                self.stdout.write(
+                    self.style.SUCCESS(
+                        f"✅ Created free service '{name}' (0.0 credit cost)"
+                    )
                 )
-            )
+            else:
+                self.stdout.write(
+                    self.style.SUCCESS(
+                        f"✅ Created service '{name}' with {credit_cost} credit cost"
+                    )
+                )
         else:
             self.stdout.write(
                 self.style.WARNING(
@@ -162,7 +180,10 @@ class Command(BaseCommand):
             status_text = "active" if service.is_active else "inactive"
             
             self.stdout.write(f"{status_icon} {service.name}")
-            self.stdout.write(f"   Cost: {service.credit_cost} credits")
+            if service.credit_cost == 0:
+                self.stdout.write(f"   Cost: Free")
+            else:
+                self.stdout.write(f"   Cost: {service.credit_cost} credits")
             self.stdout.write(f"   Status: {status_text}")
             if service.description:
                 self.stdout.write(f"   Description: {service.description}")
@@ -175,7 +196,10 @@ class Command(BaseCommand):
         
         self.stdout.write(f"   {status_icon} Current configuration:")
         self.stdout.write(f"     Name: {service.name}")
-        self.stdout.write(f"     Cost: {service.credit_cost} credits")
+        if service.credit_cost == 0:
+            self.stdout.write(f"     Cost: Free")
+        else:
+            self.stdout.write(f"     Cost: {service.credit_cost} credits")
         self.stdout.write(f"     Status: {status_text}")
         if service.description:
             self.stdout.write(f"     Description: {service.description}") 

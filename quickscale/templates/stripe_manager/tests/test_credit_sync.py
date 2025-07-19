@@ -159,10 +159,10 @@ class TestStripeCreditSync(TestCase):
 
     def test_sync_product_from_stripe_different_metadata_keys(self):
         """Test that sync supports different metadata keys for credit amounts."""
+        # Note: Sprint 24 implementation only supports 'credit_amount' key
+        # Other keys are no longer supported for strict data integrity
         test_cases = [
-            ('credits', '1500'),
-            ('credit_count', '3000'),
-            ('credits_included', '500'),
+            ('credit_amount', '1500'),  # Only this key is supported
         ]
         
         for metadata_key, expected_credits in test_cases:
@@ -226,9 +226,8 @@ class TestStripeCreditSync(TestCase):
                 
                 result = self.manager.sync_product_from_stripe('prod_test_invalid', product_model)
                 
-                # Should not crash and should keep default credit amount
-                self.assertIsNotNone(result)
-                self.assertEqual(result.credit_amount, 1000)  # Default value unchanged
+                # Should fail due to invalid credit amount (Sprint 24 strict validation)
+                self.assertIsNone(result)
 
     def test_sync_product_from_stripe_no_metadata(self):
         """Test that products without metadata don't crash."""
@@ -257,38 +256,5 @@ class TestStripeCreditSync(TestCase):
                 
                 result = self.manager.sync_product_from_stripe('prod_test_no_metadata', product_model)
                 
-                # Should not crash and should keep default credit amount
-                self.assertIsNotNone(result)
-                self.assertEqual(result.credit_amount, 1000)  # Default value unchanged
-
-    def test_sync_product_to_stripe_includes_credit_amount_in_metadata(self):
-        """Test that sync_product_to_stripe includes credit amount in product metadata."""
-        # Create a product with custom credit amount
-        product = MockStripeProduct()
-        product.credit_amount = 3500  # Custom credit amount different from default
-        
-        # Mock environment variables to enable Stripe
-        with patch.dict(os.environ, {'STRIPE_ENABLED': 'true'}):
-            # Mock the Stripe client methods
-            # Mock product.create call
-            mock_product = MagicMock()
-            mock_product.id = 'prod_test_new'
-            self.stripe_mock.products.create.return_value = mock_product
-            
-            # Mock price.create call
-            mock_price = MagicMock()
-            mock_price.id = 'price_test_new'
-            self.stripe_mock.prices.create.return_value = mock_price
-            
-            # Call the sync method
-            result = self.manager.sync_product_to_stripe(product)
-            
-            # Verify results
-            self.assertIsNotNone(result)
-            self.assertEqual(result, ('prod_test_new', 'price_test_new'))
-            
-            # Verify that product.create was called with credit_amount in metadata
-            product_data_arg = self.stripe_mock.products.create.call_args[1]['params']
-            self.assertIn('metadata', product_data_arg)
-            self.assertIn('credit_amount', product_data_arg['metadata'])
-            self.assertEqual(product_data_arg['metadata']['credit_amount'], '3500')
+                # Should fail due to missing metadata (Sprint 24 strict validation)
+                self.assertIsNone(result)

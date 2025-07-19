@@ -30,8 +30,8 @@ class Service(models.Model):
         _('credit cost'),
         max_digits=10,
         decimal_places=2,
-        validators=[MinValueValidator(Decimal('0.01'))],
-        help_text=_('Number of credits required to use this service')
+        validators=[MinValueValidator(Decimal('0.0'))],
+        help_text=_('Number of credits required to use this service (0.0 for free services)')
     )
     is_active = models.BooleanField(
         _('is active'),
@@ -56,6 +56,8 @@ class Service(models.Model):
         """Return string representation of the service."""
         name = self.name or "Unnamed Service"
         credit_cost = self.credit_cost or 0
+        if credit_cost == 0:
+            return f"{name} (Free)"
         return f"{name} ({credit_cost} credits)"
 
 
