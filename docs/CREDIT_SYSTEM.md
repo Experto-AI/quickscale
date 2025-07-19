@@ -321,7 +321,7 @@ The system provides comprehensive plan upgrade and downgrade functionality with 
   - **Utility Methods**:
     - `price_per_credit` property for cost calculations
     - `is_subscription` and `is_one_time` properties for type identification
-    - `sync_with_stripe()` method for bidirectional synchronization
+    - Unidirectional synchronization from Stripe to local database (Stripe as source of truth)
   - **Stripe Integration**: `stripe_id` and `stripe_price_id` for API mapping
 
 - **StripeCustomer**: Enhanced Django-Stripe customer linking
