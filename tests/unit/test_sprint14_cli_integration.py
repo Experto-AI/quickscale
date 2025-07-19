@@ -68,7 +68,7 @@ class TestSprint14CLIIntegration(unittest.TestCase):
         # Test service generation through command manager
         result = self.command_manager.generate_service('test_service')
         
-        mock_execute_command.assert_called_once_with('generate-service', 'test_service', service_type='basic', output_dir=None, credit_cost=1.0, description=None, skip_db_config=False)
+        mock_execute_command.assert_called_once_with('generate-service', 'test_service', service_type='basic', output_dir=None, credit_cost=1.0, description=None, skip_db_config=False, free=False)
         self.assertEqual(result, {'success': True})
     
     def test_service_generator_help_text(self):

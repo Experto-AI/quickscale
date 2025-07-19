@@ -2,6 +2,37 @@
 
 All notable changes to this project will be documented in this file.
 
+## v0.35.0 (2025-07-19)
+v0.35.0 feat: Stripe Integration Review, Security Enhancements, and Zero-Cost Services
+
+This release delivers a comprehensive review and enhancement of Stripe API integration, payment processing, and the introduction of zero-cost services. The update improves security, reliability, and flexibility across the payment and credit systems, with extensive test coverage and documentation updates.
+
+- Backend Implementation:
+  - Refactored Stripe integration to enforce unidirectional synchronization from Stripe to the local database, removing bidirectional sync methods for improved data consistency and security.
+  - Enhanced error handling and validation for Stripe API integration, including improved logging, connectivity checks, and explicit failure patterns.
+  - Improved webhook processing security with robust signature verification and event validation.
+  - Updated product synchronization strategy and customer data consistency patterns, ensuring reliable state between Stripe and the local system.
+  - Implemented support for zero-cost services in the credit system, allowing services to be created with a credit cost of 0.0.
+  - Modified the Service model to allow a minimum credit cost of 0.0 and updated string representation to indicate free services.
+  - Enhanced service generation CLI and management commands to support a new --free flag for creating free services.
+  - Added database migration to update credit_cost field constraints for zero-cost support.
+  - Improved BaseService logic to bypass credit consumption for free services, ensuring correct usage tracking.
+- Frontend Implementation:
+  - Updated admin and user interfaces to reflect new product sync actions and improved feedback for payment and subscription operations.
+  - Enhanced service configuration and creation flows to support zero-cost services and display free service status.
+- Testing:
+  - Added comprehensive unit and integration tests for Stripe API integration, webhook processing, and payment flows.
+  - Introduced new test cases for customer, product, subscription, and payment management operations.
+  - Implemented tests for webhook event handling, error recovery, and security validation.
+  - Added tests for zero-cost service creation, execution, and usage tracking, ensuring robust coverage for free service workflows.
+- Documentation:
+  - Updated Stripe integration documentation to clarify new unidirectional sync approach, security enhancements, and payment processing workflows.
+  - Added comprehensive documentation on creating and managing free services, including CLI usage, management commands, and best practices.
+  - Updated ROADMAP.md to reflect completed Sprint 24 tasks and future objectives for subscription management and payment flow unification.
+  - Added validation summary, confirming successful implementation and test coverage.
+
+This release finalizes the Stripe Integration Review sprint, establishing a secure, reliable, and flexible payment and credit system. Zero-cost services are now fully supported, and all changes are validated by comprehensive tests and updated documentation.
+
 ## v0.34.0 (2025-07-14)
 v0.34.0 refactor: Command Retry Logic Simplification and Performance Optimization
 

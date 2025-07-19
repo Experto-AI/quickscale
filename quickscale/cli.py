@@ -274,6 +274,7 @@ Examples:
   quickscale generate-service sentiment_analyzer --type text_processing --credit-cost 2.5
   quickscale generate-service image_classifier --type image_processing --description "Advanced image classification service"
   quickscale generate-service my_service --credit-cost 0.5 --description "Low-cost utility service"
+  quickscale generate-service free_utility --free --description "Free utility service"
   quickscale generate-service test_service --skip-db-config  (generate files only, skip database configuration)
 
 Note: If your project isn't running (quickscale up), database configuration will be skipped automatically
@@ -298,6 +299,10 @@ with instructions on how to configure it later. This is normal behavior.
         type=float,
         default=1.0,
         help="Credit cost for using this service (default: 1.0)")
+    generate_parser.add_argument(
+        "--free",
+        action="store_true",
+        help="Generate a free service with 0.0 credit cost (overrides --credit-cost)")
     generate_parser.add_argument(
         "--description",
         help="Description of the service (if not provided, will be auto-generated)")
