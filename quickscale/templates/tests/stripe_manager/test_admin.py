@@ -74,7 +74,7 @@ class StripeProductAdminTest(TestCase):
 
     def test_sync_action(self):
         """Test sync action in admin."""
-        url = reverse('admin:stripe_manager_stripeproduct_sync', args=[self.product.id])
+        url = reverse('admin:stripe_manager_stripeproduct_sync_from_stripe', args=[self.product.id])
         response = self.client.get(url)
         self.assertEqual(response.status_code, 302)  # Redirect after sync
 
@@ -82,10 +82,16 @@ class StripeProductAdminTest(TestCase):
         """Test bulk sync action."""
         url = reverse('admin:stripe_manager_stripeproduct_changelist')
         data = {
-            'action': 'sync_selected',
+            'action': 'sync_selected_from_stripe',
             '_selected_action': [self.product.id]
         }
         response = self.client.post(url, data)
+        self.assertEqual(response.status_code, 302)  # Redirect after sync
+
+    def test_sync_all_action(self):
+        """Test sync all action in admin."""
+        url = reverse('admin:stripe_manager_stripeproduct_sync_all')
+        response = self.client.get(url)
         self.assertEqual(response.status_code, 302)  # Redirect after sync
 
     def test_add_permission_disabled(self):

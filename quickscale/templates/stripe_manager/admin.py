@@ -70,36 +70,46 @@ class StripeProductAdmin(admin.ModelAdmin):
     price_per_credit_display.short_description = _('Price per Credit')
 
     def get_urls(self):
-        """Add custom URLs for sync functionality."""
+        """Add custom URLs for admin actions."""
         urls = super().get_urls()
         custom_urls = [
             path(
-                'sync_all/',
-                self.admin_site.admin_view(self.sync_all_products_view),
-                name=f'{self.model._meta.app_label}_{self.model._meta.model_name}_sync_all',
+                '<int:object_id>/sync-from-stripe/',
+                self.sync_product_from_stripe,
+                name='stripe_manager_stripeproduct_sync_from_stripe',
             ),
             path(
-                '<path:object_id>/sync/',
-                self.admin_site.admin_view(self.sync_product),
-                name='stripe_product_sync',
+                'sync-all/',
+                self.sync_all_products_view,
+                name='stripe_manager_stripeproduct_sync_all',
             ),
         ]
         return custom_urls + urls
 
-    def sync_product(self, request, object_id):
-        """Handle product sync with Stripe."""
+    def sync_product_from_stripe(self, request, object_id):
+        """Handle product sync from Stripe."""
         try:
             product = self.get_object(request, object_id)
-            product.sync_with_stripe()
-            self.message_user(
-                request,
-                _('Product successfully synced with Stripe.'),
-                messages.SUCCESS
-            )
+            from stripe_manager.stripe_manager import StripeManager
+            stripe_manager = StripeManager.get_instance()
+            synced_product = stripe_manager.sync_product_from_stripe(product.stripe_id, StripeProduct)
+            
+            if synced_product:
+                self.message_user(
+                    request,
+                    _('Product successfully synced from Stripe.'),
+                    messages.SUCCESS
+                )
+            else:
+                self.message_user(
+                    request,
+                    _('Product sync completed but no changes were made.'),
+                    messages.WARNING
+                )
         except Exception as e:
             self.message_user(
                 request,
-                _('Error syncing product: {}').format(str(e)),
+                _('Error syncing product from Stripe: {}').format(str(e)),
                 messages.ERROR
             )
         return HttpResponseRedirect(request.META.get('HTTP_REFERER', '/'))
@@ -107,34 +117,39 @@ class StripeProductAdmin(admin.ModelAdmin):
     def get_actions(self, request):
         """Add custom admin actions."""
         actions = super().get_actions(request)
-        actions['sync_selected'] = (
-            self.sync_selected,
-            'sync_selected',
-            _('Sync selected products with Stripe')
+        actions['sync_selected_from_stripe'] = (
+            self.sync_selected_from_stripe,
+            'sync_selected_from_stripe',
+            _('Sync selected products from Stripe')
         )
         return actions
 
-    def sync_selected(self, request, queryset):
-        """Sync multiple selected products with Stripe."""
+    def sync_selected_from_stripe(self, request, queryset):
+        """Sync multiple selected products from Stripe."""
         success_count = 0
         error_count = 0
         for product in queryset:
             try:
-                product.sync_with_stripe()
-                success_count += 1
+                from stripe_manager.stripe_manager import StripeManager
+                stripe_manager = StripeManager.get_instance()
+                synced_product = stripe_manager.sync_product_from_stripe(product.stripe_id, StripeProduct)
+                if synced_product:
+                    success_count += 1
+                else:
+                    error_count += 1
             except Exception:
                 error_count += 1
         
         if success_count:
             self.message_user(
                 request,
-                _('Successfully synced {} products.').format(success_count),
+                _('Successfully synced {} products from Stripe.').format(success_count),
                 messages.SUCCESS
             )
         if error_count:
             self.message_user(
                 request,
-                _('Failed to sync {} products.').format(error_count),
+                _('Failed to sync {} products from Stripe.').format(error_count),
                 messages.ERROR
             )
 

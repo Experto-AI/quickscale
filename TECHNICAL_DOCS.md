@@ -1022,7 +1022,7 @@ The `stripe_manager` app provides comprehensive Stripe integration for payment p
 - **Credit Configuration**: Maps products to credit amounts for the credit system
 - **Display Control**: `display_order` field for frontend presentation
 - **Billing Intervals**: Supports monthly, yearly, and one-time billing cycles
-- **Synchronization**: `sync_with_stripe()` method for bidirectional data sync
+- **Synchronization**: Unidirectional sync from Stripe to local database (Stripe as source of truth)
 - **Utility Methods**: `price_per_credit`, `is_subscription`, `is_one_time` properties
 
 **StripeCustomer Model**

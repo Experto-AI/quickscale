@@ -14,7 +14,8 @@ class ServiceGeneratorCommand(Command):
     """Command to generate service templates for AI engineers."""
     
     def execute(self, service_name: str, service_type: str = "basic", output_dir: Optional[str] = None, 
-                credit_cost: float = 1.0, description: Optional[str] = None, skip_db_config: bool = False) -> Dict[str, Any]:
+                credit_cost: float = 1.0, description: Optional[str] = None, skip_db_config: bool = False, 
+                free: bool = False) -> Dict[str, Any]:
         """Generate a new service template."""
         self.logger.info(f"Generating service template: {service_name}")
         
@@ -25,6 +26,10 @@ class ServiceGeneratorCommand(Command):
         # Generate description if not provided
         if not description:
             description = f"AI service: {service_name.replace('_', ' ').title()}"
+        
+        # Handle free flag (overrides credit_cost)
+        if free:
+            credit_cost = 0.0
         
         # Determine output directory
         if output_dir:
@@ -89,34 +94,40 @@ class ServiceGeneratorCommand(Command):
                 db_config_result = self._configure_service_in_database(service_name, description, credit_cost)
                 result["database_configured"] = db_config_result["success"]
                 if db_config_result["success"]:
-                    MessageManager.success(f"Service '{service_name}' configured in database with {credit_cost} credit cost")
+                    if credit_cost == 0.0:
+                        MessageManager.success(f"Free service '{service_name}' configured in database (0.0 credit cost)")
+                    else:
+                        MessageManager.success(f"Service '{service_name}' configured in database with {credit_cost} credit cost")
                 else:
                     reason = db_config_result.get('reason', 'Unknown reason')
                     MessageManager.warning(f"Database configuration skipped: {reason}")
                     
                     # Provide helpful guidance based on the specific failure reason
+                    cost_flag = "--free" if credit_cost == 0.0 else f"--credit-cost {credit_cost}"
                     if "Docker services are not running" in reason:
                         MessageManager.info("To configure the service in the database:")
                         MessageManager.info(f"  1. Start your project: quickscale up")
-                        MessageManager.info(f"  2. Configure service: quickscale manage configure_service {service_name} --description \"{description}\" --credit-cost {credit_cost}")
+                        MessageManager.info(f"  2. Configure service: quickscale manage configure_service {service_name} --description \"{description}\" {cost_flag}")
                     elif "Cannot check Docker services" in reason:
                         MessageManager.info("To configure the service in the database:")
                         MessageManager.info(f"  1. Ensure Docker is running and project is started: quickscale up")
-                        MessageManager.info(f"  2. Configure service: quickscale manage configure_service {service_name} --description \"{description}\" --credit-cost {credit_cost}")
+                        MessageManager.info(f"  2. Configure service: quickscale manage configure_service {service_name} --description \"{description}\" {cost_flag}")
                     else:
-                        MessageManager.info(f"You can configure it manually with: quickscale manage configure_service {service_name} --description \"{description}\" --credit-cost {credit_cost}")
+                        MessageManager.info(f"You can configure it manually with: quickscale manage configure_service {service_name} --description \"{description}\" {cost_flag}")
                     
                     result["database_config_warning"] = reason
             except Exception as e:
                 MessageManager.warning(f"Could not configure service in database: {str(e)}")
+                cost_flag = "--free" if credit_cost == 0.0 else f"--credit-cost {credit_cost}"
                 MessageManager.info("To configure the service in the database:")
                 MessageManager.info(f"  1. Start your project: quickscale up")
-                MessageManager.info(f"  2. Configure service: quickscale manage configure_service {service_name} --description \"{description}\" --credit-cost {credit_cost}")
+                MessageManager.info(f"  2. Configure service: quickscale manage configure_service {service_name} --description \"{description}\" {cost_flag}")
                 result["database_configured"] = False
                 result["database_config_error"] = str(e)
         else:
+            cost_flag = "--free" if credit_cost == 0.0 else f"--credit-cost {credit_cost}"
             MessageManager.info(f"Database configuration skipped. Configure manually with:")
-            MessageManager.info(f"  quickscale manage configure_service {service_name} --description \"{description}\" --credit-cost {credit_cost}")
+            MessageManager.info(f"  quickscale manage configure_service {service_name} --description \"{description}\" {cost_flag}")
             result["database_configured"] = False
             result["database_config_skipped"] = True
         
@@ -174,8 +185,13 @@ class ServiceGeneratorCommand(Command):
             cmd = [
                 'quickscale', 'manage', 'configure_service', service_name,
                 '--description', description,
-                '--credit-cost', str(credit_cost)
             ]
+            
+            # Add appropriate cost argument
+            if credit_cost == 0.0:
+                cmd.append('--free')
+            else:
+                cmd.extend(['--credit-cost', str(credit_cost)])
             
             result = subprocess.run(cmd, capture_output=True, text=True, timeout=DOCKER_OPERATIONS_TIMEOUT)
             

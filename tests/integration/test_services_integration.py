@@ -367,5 +367,214 @@ class ServiceFrameworkBehaviorTests(unittest.TestCase):
                      "Registration decorator not used in examples")
 
 
+class ZeroCostServiceIntegrationTests(unittest.TestCase):
+    """Integration tests for Sprint 24: Zero-Cost Services."""
+    
+    def setUp(self):
+        """Set up test environment."""
+        self.base_path = Path(os.path.dirname(os.path.dirname(os.path.dirname(__file__))))
+    
+    def test_service_model_allows_zero_cost(self):
+        """Test that Service model in credits app allows zero credit cost."""
+        credits_models_path = self.base_path / 'quickscale' / 'templates' / 'credits' / 'models.py'
+        
+        with open(credits_models_path, 'r') as f:
+            models_content = f.read()
+        
+        # Should allow MinValueValidator(Decimal('0.0'))
+        self.assertIn("MinValueValidator(Decimal('0.0'))", models_content,
+                     "Service model does not allow zero credit cost")
+        
+        # Should have updated help text
+        self.assertIn("0.0 for free services", models_content,
+                     "Service model help text does not mention free services")
+        
+        # Should have updated __str__ method for free services
+        self.assertIn("if credit_cost == 0:", models_content,
+                     "Service model __str__ method does not handle zero cost")
+        self.assertIn('return f"{name} (Free)"', models_content,
+                     "Service model __str__ method does not return 'Free' for zero cost")
+    
+    def test_base_service_handles_zero_cost(self):
+        """Test that BaseService handles zero-cost services correctly."""
+        base_service_path = self.base_path / 'quickscale' / 'templates' / 'services' / 'base.py'
+        
+        with open(base_service_path, 'r') as f:
+            base_content = f.read()
+        
+        # Should handle zero-cost services
+        self.assertIn("if service.credit_cost == 0:", base_content,
+                     "BaseService does not handle zero-cost services")
+        
+        # Should create zero-amount transaction for tracking
+        self.assertIn("amount=Decimal('0')", base_content,
+                     "BaseService does not create zero-amount transaction")
+        
+        # Should have appropriate description for free services
+        self.assertIn("(free)", base_content,
+                     "BaseService description does not mention free services")
+    
+    def test_migration_exists_for_zero_cost(self):
+        """Test that migration exists for zero-cost service support."""
+        migrations_path = self.base_path / 'quickscale' / 'templates' / 'credits' / 'migrations'
+        migration_file = migrations_path / '0008_allow_zero_cost_services.py'
+        
+        self.assertTrue(migration_file.exists(),
+                       "Migration for zero-cost services not found")
+        
+        with open(migration_file, 'r') as f:
+            migration_content = f.read()
+        
+        # Should update Service model credit_cost field
+        self.assertIn("model_name='service'", migration_content,
+                     "Migration does not target Service model")
+        self.assertIn("name='credit_cost'", migration_content,
+                     "Migration does not target credit_cost field")
+        self.assertIn("MinValueValidator(Decimal('0.0'))", migration_content,
+                     "Migration does not set correct validator")
+    
+    def test_configure_service_command_supports_free_flag(self):
+        """Test that configure_service management command supports --free flag."""
+        command_path = self.base_path / 'quickscale' / 'templates' / 'services' / 'management' / 'commands' / 'configure_service.py'
+        
+        with open(command_path, 'r') as f:
+            command_content = f.read()
+        
+        # Should have --free flag
+        self.assertIn("'--free'", command_content,
+                     "configure_service command does not support --free flag")
+        
+        # Should handle free flag in logic
+        self.assertIn("options['free']", command_content,
+                     "configure_service command does not process --free flag")
+        
+        # Should set credit_cost to 0.0 when free
+        self.assertIn("credit_cost = Decimal('0.0')", command_content,
+                     "configure_service command does not set zero cost for free services")
+        
+        # Should display "Free" in output
+        self.assertIn("if credit_cost == 0:", command_content,
+                     "configure_service command does not handle free service display")
+    
+    def test_service_generator_supports_free_flag(self):
+        """Test that service generator supports --free flag."""
+        generator_path = self.base_path / 'quickscale' / 'commands' / 'service_generator_commands.py'
+        
+        with open(generator_path, 'r') as f:
+            generator_content = f.read()
+        
+        # Should have free parameter
+        self.assertIn("free: bool = False", generator_content,
+                     "Service generator does not support free parameter")
+        
+        # Should handle free flag logic
+        self.assertIn("if free:", generator_content,
+                     "Service generator does not process free flag")
+        self.assertIn("credit_cost = 0.0", generator_content,
+                     "Service generator does not set zero cost for free services")
+        
+        # Should use --free flag in database configuration
+        self.assertIn("--free", generator_content,
+                     "Service generator does not use --free flag for database config")
+    
+    def test_cli_supports_free_flag(self):
+        """Test that CLI supports --free flag for generate-service command."""
+        cli_path = self.base_path / 'quickscale' / 'cli.py'
+        
+        with open(cli_path, 'r') as f:
+            cli_content = f.read()
+        
+        # Should have --free argument
+        self.assertIn("--free", cli_content,
+                     "CLI does not support --free flag")
+        
+        # Should have help text for free flag
+        self.assertIn("Generate a free service", cli_content,
+                     "CLI does not have help text for --free flag")
+        
+        # Should have example usage
+        self.assertIn("--free", cli_content,
+                     "CLI does not show example usage of --free flag")
+    
+    def test_command_manager_supports_free_flag(self):
+        """Test that command manager supports free flag."""
+        manager_path = self.base_path / 'quickscale' / 'commands' / 'command_manager.py'
+        
+        with open(manager_path, 'r') as f:
+            manager_content = f.read()
+        
+        # Should have free parameter in generate_service method
+        self.assertIn("free: bool = False", manager_content,
+                     "Command manager generate_service does not support free parameter")
+        
+        # Should pass free parameter to command
+        self.assertIn("free=", manager_content,
+                     "Command manager does not pass free parameter")
+        
+        # Should get free flag from args
+        self.assertIn("getattr(args, 'free', False)", manager_content,
+                     "Command manager does not extract free flag from args")
+    
+    def test_zero_cost_service_integration_complete(self):
+        """Test that zero-cost service integration is complete across all components."""
+        # This test verifies that all components work together
+        components_to_check = [
+            # Model changes
+            ('quickscale/templates/credits/models.py', [
+                'MinValueValidator(Decimal(\'0.0\'))',
+                'if credit_cost == 0:',
+                '0.0 for free services'
+            ]),
+            # BaseService changes
+            ('quickscale/templates/services/base.py', [
+                'if service.credit_cost == 0:',
+                'amount=Decimal(\'0\')',
+                '(free)'
+            ]),
+            # Migration
+            ('quickscale/templates/credits/migrations/0008_allow_zero_cost_services.py', [
+                'MinValueValidator(Decimal(\'0.0\'))',
+                '0.0 for free services'
+            ]),
+            # Management command
+            ('quickscale/templates/services/management/commands/configure_service.py', [
+                '--free',
+                'credit_cost = Decimal(\'0.0\')',
+                'if credit_cost == 0:'
+            ]),
+            # Service generator
+            ('quickscale/commands/service_generator_commands.py', [
+                'free: bool = False',
+                'if free:',
+                'credit_cost = 0.0'
+            ]),
+            # CLI
+            ('quickscale/cli.py', [
+                '--free',
+                'Generate a free service'
+            ]),
+            # Command manager
+            ('quickscale/commands/command_manager.py', [
+                'free: bool = False',
+                'free=',
+                'getattr(args, \'free\', False)'
+            ])
+        ]
+        
+        for file_path, required_content in components_to_check:
+            full_path = self.base_path / file_path
+            
+            with self.subTest(file=file_path):
+                self.assertTrue(full_path.exists(),
+                               f"Required file {file_path} not found")
+                
+                with open(full_path, 'r') as f:
+                    content = f.read()
+                
+                for required_text in required_content:
+                    self.assertIn(required_text, content,
+                                 f"Required content '{required_text}' not found in {file_path}")
+
+
 if __name__ == '__main__':
     unittest.main() 

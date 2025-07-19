@@ -167,28 +167,6 @@ class StripeProduct(models.Model):
         """Check if this is a one-time purchase product."""
         return self.interval == 'one-time'
 
-    def sync_with_stripe(self):
-        """Sync product data with Stripe."""
-        from stripe_manager.stripe_manager import StripeManager
-        
-        # Get the stripe manager instance
-        stripe_manager = StripeManager.get_instance()
-        
-        # Sync this product to Stripe
-        result = stripe_manager.sync_product_to_stripe(self)
-        
-        if result:
-            stripe_product_id, stripe_price_id = result
-            
-            # If successful, ensure the local object has the Stripe IDs
-            if stripe_product_id and self.stripe_id != stripe_product_id:
-                self.stripe_id = stripe_product_id
-            
-            if stripe_price_id and self.stripe_price_id != stripe_price_id:
-                self.stripe_price_id = stripe_price_id
-                
-            self.save()
-
     def clean(self):
         """Validate model data."""
         super().clean()

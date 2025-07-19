@@ -96,9 +96,9 @@ class CommandManager:
         """Check if required tools are available."""
         self.execute_command('check', print_info=print_info)
     
-    def generate_service(self, service_name: str, service_type: str = "basic", output_dir: Optional[str] = None, credit_cost: float = 1.0, description: Optional[str] = None, skip_db_config: bool = False) -> Dict[str, Any]:
+    def generate_service(self, service_name: str, service_type: str = "basic", output_dir: Optional[str] = None, credit_cost: float = 1.0, description: Optional[str] = None, skip_db_config: bool = False, free: bool = False) -> Dict[str, Any]:
         """Generate a new service template."""
-        return self.execute_command('generate-service', service_name, service_type=service_type, output_dir=output_dir, credit_cost=credit_cost, description=description, skip_db_config=skip_db_config)
+        return self.execute_command('generate-service', service_name, service_type=service_type, output_dir=output_dir, credit_cost=credit_cost, description=description, skip_db_config=skip_db_config, free=free)
     
     def validate_service(self, service_file: str, show_tips: bool = False) -> Dict[str, Any]:
         """Validate a service file."""
@@ -160,7 +160,8 @@ class CommandManager:
                 output_dir=getattr(args, 'output_dir', None),
                 credit_cost=getattr(args, 'credit_cost', 1.0),
                 description=getattr(args, 'description', None),
-                skip_db_config=getattr(args, 'skip_db_config', False)
+                skip_db_config=getattr(args, 'skip_db_config', False),
+                free=getattr(args, 'free', False)
             )
         if command_name == 'validate-service':
             return self.execute_command('validate-service', 
