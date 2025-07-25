@@ -24,8 +24,8 @@ class TestTimeoutConstants:
     def test_docker_service_startup_timeout_is_reasonable(self):
         """Test that Docker service startup timeout is reasonable."""
         # Should be at least 3 minutes for e2e tests with fresh builds
-        assert DOCKER_SERVICE_STARTUP_TIMEOUT == 120
-        assert DOCKER_SERVICE_STARTUP_TIMEOUT >= 120 
+        assert DOCKER_SERVICE_STARTUP_TIMEOUT == 180
+        assert DOCKER_SERVICE_STARTUP_TIMEOUT >= 180 
     
     def test_docker_ps_check_timeout_is_short(self):
         """Test that Docker ps check timeout is short."""
@@ -36,8 +36,8 @@ class TestTimeoutConstants:
     def test_docker_container_start_timeout_is_medium(self):
         """Test that Docker container start timeout is medium."""
         # Should be reasonable for container startup
-        assert DOCKER_CONTAINER_START_TIMEOUT == 30
-        assert 20 <= DOCKER_CONTAINER_START_TIMEOUT <= 60  # Between 20s and 1min
+        assert DOCKER_CONTAINER_START_TIMEOUT == 40
+        assert 20 <= DOCKER_CONTAINER_START_TIMEOUT <= 60
     
     def test_docker_operations_timeout_is_short(self):
         """Test that general Docker operations timeout is short."""

@@ -3,11 +3,11 @@ import pytest
 import sys
 import os
 from unittest.mock import patch, MagicMock
-import quickscale.templates as templates
-from quickscale.templates.stripe_manager.tests.mock_env_utils import get_env, is_feature_enabled
+import quickscale.project_templates as templates
+from quickscale.project_templates.stripe_manager.tests.mock_env_utils import get_env, is_feature_enabled
 
 if not hasattr(templates, 'stripe_manager'):
-    pytest.skip('Skipping stripe tests as quickscale.templates.stripe_manager not available', allow_module_level=True)
+    pytest.skip('Skipping stripe tests as quickscale.project_templates.stripe_manager not available', allow_module_level=True)
 
 def test_stripe_import():
     """Verify that stripe can be imported."""
@@ -18,20 +18,20 @@ def test_stripe_import():
         pytest.fail(f"Failed to import stripe: {str(e)}")
 
 @patch.dict('sys.modules', {'core.env_utils': MagicMock()})
-@patch('quickscale.templates.stripe_manager.stripe_manager.get_env', return_value='False')
-@patch('quickscale.templates.stripe_manager.stripe_manager.is_feature_enabled', return_value=False)
+@patch('quickscale.project_templates.stripe_manager.stripe_manager.get_env', return_value='False')
+@patch('quickscale.project_templates.stripe_manager.stripe_manager.is_feature_enabled', return_value=False)
 def test_custom_stripe_app_import(mock_is_feature_enabled, mock_get_env):
     """Verify that our custom stripe app can be imported."""
     try:
         # Import from the specific template path rather than relying on Python package importing
-        from quickscale.templates.stripe_manager.stripe_manager import StripeManager
+        from quickscale.project_templates.stripe_manager.stripe_manager import StripeManager
         assert StripeManager is not None
     except ImportError as e:
         pytest.fail(f"Failed to import StripeManager: {str(e)}")
         
 @patch.dict('sys.modules', {'core.env_utils': MagicMock()})
-@patch('quickscale.templates.stripe_manager.stripe_manager.get_env')
-@patch('quickscale.templates.stripe_manager.stripe_manager.is_feature_enabled', return_value=True)
+@patch('quickscale.project_templates.stripe_manager.stripe_manager.get_env')
+@patch('quickscale.project_templates.stripe_manager.stripe_manager.is_feature_enabled', return_value=True)
 @patch.dict('os.environ', {'STRIPE_API_VERSION': '2025-04-30.basil'})
 def test_stripe_manager_init(mock_is_feature_enabled, mock_get_env):
     """Verify that StripeManager can be initialized."""
@@ -53,12 +53,12 @@ def test_stripe_manager_init(mock_is_feature_enabled, mock_get_env):
         }.get(key, 'default_value')
         
         # Mock the settings module used by stripe_manager
-        with patch('quickscale.templates.stripe_manager.stripe_manager.settings') as mock_settings:
+        with patch('quickscale.project_templates.stripe_manager.stripe_manager.settings') as mock_settings:
             mock_settings.STRIPE_SECRET_KEY = 'sk_test_12345'
 
             try:
                 # Import from the specific template path rather than relying on Python package importing
-                from quickscale.templates.stripe_manager.stripe_manager import StripeManager
+                from quickscale.project_templates.stripe_manager.stripe_manager import StripeManager
                 manager = StripeManager.get_instance()
                 assert manager is not None
             except Exception as e:

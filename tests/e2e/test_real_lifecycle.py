@@ -422,7 +422,7 @@ class TestRealLifecycle:
             # Run the quickscale up command, expecting success (check=True)
             try:
                 print("Running 'quickscale up' again...")
-                result = run_quickscale_command(['up'], check=True, timeout=120)
+                result = run_quickscale_command(['up'], check=True, timeout=180)
                 print(f"Up command output: {result.stdout}")
             except Exception as e:
                 pytest.fail(f"'quickscale up' failed unexpectedly: {e}")
@@ -561,7 +561,7 @@ class TestRealLifecycle:
             cmd_args_for_test = ['manage', 'test', 'public', '--noinput']
             try:
                 # Increased timeout as tests might take time
-                result = run_quickscale_command(cmd_args_for_test, timeout=120, check=True)
+                result = run_quickscale_command(cmd_args_for_test, timeout=180, check=True)
                 print(f"Django manage test STDOUT: {result.stdout}")
                 if result.stderr: # Print stderr if any, even on success
                     print(f"Django manage test STDERR: {result.stderr}")

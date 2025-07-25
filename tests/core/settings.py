@@ -76,7 +76,7 @@ BASE_DIR = Path(__file__).resolve().parent.parent.parent
 TEMPLATES = [
     {
         'BACKEND': 'django.template.backends.django.DjangoTemplates',
-        'DIRS': [os.path.join(BASE_DIR, 'quickscale', 'templates', 'templates')],
+        'DIRS': [os.path.join(BASE_DIR, 'quickscale', 'project_templates', 'templates')],
         'APP_DIRS': True,
         'OPTIONS': {
             'context_processors': [
@@ -111,6 +111,14 @@ ACCOUNT_EMAIL_REQUIRED = True
 ACCOUNT_USERNAME_REQUIRED = False
 ACCOUNT_EMAIL_VERIFICATION = 'mandatory'
 ACCOUNT_UNIQUE_EMAIL = True
+
+# Enable Stripe for integration tests (use dummy keys)
+STRIPE_ENABLED = True
+STRIPE_LIVE_MODE = False
+STRIPE_PUBLIC_KEY = 'pk_test_dummy'
+STRIPE_SECRET_KEY = 'sk_test_dummy'
+STRIPE_WEBHOOK_SECRET = 'whsec_dummy'
+
 # Disable rate limiting for tests (using new django-allauth format)
 ACCOUNT_RATE_LIMITS = {}   # No timeout for tests
 
@@ -136,7 +144,7 @@ AUTH_PASSWORD_VALIDATORS = [
 # Static files settings
 STATIC_URL = '/static/'
 STATICFILES_DIRS = [
-    os.path.join(BASE_DIR, 'quickscale', 'templates', 'static'),
+    os.path.join(BASE_DIR, 'quickscale', 'project_templates', 'static'),
 ]
 
 # Media files settings

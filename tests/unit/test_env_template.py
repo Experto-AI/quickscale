@@ -72,7 +72,7 @@ class TestEnvTemplate(unittest.TestCase):
         self.original_env = os.environ.copy()
         
         # Get the templates directory path
-        self.templates_dir = Path(__file__).parent.parent.parent / "quickscale" / "templates"
+        self.templates_dir = Path(__file__).parent.parent.parent / "quickscale" / "project_templates"
         self.env_example_path = self.templates_dir / ".env.example"
         
     def tearDown(self):

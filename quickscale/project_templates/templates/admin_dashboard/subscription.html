@@ -1,0 +1,402 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block title %}Subscription - {{ project_name }}{% endblock %}
+
+{% block content %}
+{% csrf_token %}
+<section class="hero is-primary is-small">
+    <div class="hero-body">
+        <p class="title">Subscription Management</p>
+        <p class="subtitle">Manage your monthly subscription plan</p>
+    </div>
+</section>
+
+<section class="section">
+    <div class="container">
+        {% if not stripe_enabled or not stripe_available %}
+            <div class="notification is-warning">
+                <p class="has-text-weight-semibold">Subscription Management Unavailable</p>
+                {% if missing_api_keys %}
+                    <p>Stripe integration is not properly configured. Please contact support.</p>
+                {% else %}
+                    <p>Subscription features are currently disabled.</p>
+                {% endif %}
+            </div>
+        {% else %}
+            <div class="columns is-multiline">
+                
+                <!-- Current Subscription Status -->
+                <div class="column is-full">
+                    <div class="card">
+                        <div class="card-content">
+                            <div class="level">
+                                <div class="level-left">
+                                    <div class="level-item">
+                                        <div>
+                                            <p class="title is-4">
+                                                <span class="icon">
+                                                    <i class="fas fa-calendar-alt"></i>
+                                                </span>
+                                                Current Subscription
+                                            </p>
+                                        </div>
+                                    </div>
+                                </div>
+                                <div class="level-right">
+                                    <div class="level-item">
+                                        {% if subscription and subscription.is_active %}
+                                            <span class="tag is-large is-success">Active</span>
+                                        {% else %}
+                                            <span class="tag is-large is-light">No Active Subscription</span>
+                                        {% endif %}
+                                    </div>
+                                </div>
+                            </div>
+                            
+                            {% if subscription and subscription.is_active %}
+                                <div class="content">
+                                    {% with stripe_product=subscription.get_stripe_product %}
+                                        {% if stripe_product %}
+                                            <p><strong>Plan:</strong> {{ stripe_product.name }}</p>
+                                            <p><strong>Monthly Credits:</strong> {{ stripe_product.credit_amount }} credits</p>
+                                            <p><strong>Price:</strong> ${{ stripe_product.price }}/month</p>
+                                        {% else %}
+                                            <p><strong>Plan:</strong> Unknown Plan</p>
+                                        {% endif %}
+                                    {% endwith %}
+                                    
+                                    {% if subscription.current_period_start and subscription.current_period_end %}
+                                        <p><strong>Billing Period:</strong> 
+                                            {{ subscription.current_period_start|date:"M d, Y" }} - 
+                                            {{ subscription.current_period_end|date:"M d, Y" }}
+                                        </p>
+                                    {% endif %}
+                                    
+                                    {% if subscription.days_until_renewal is not None %}
+                                        {% if subscription.days_until_renewal > 0 %}
+                                            <p><strong>Next Billing:</strong> {{ subscription.days_until_renewal }} days</p>
+                                        {% elif subscription.days_until_renewal == 0 %}
+                                            <p><strong>Next Billing:</strong> Today</p>
+                                        {% else %}
+                                            <p><strong>Status:</strong> Billing period expired</p>
+                                        {% endif %}
+                                    {% endif %}
+                                    
+                                    {% if subscription.cancel_at_period_end %}
+                                        <div class="notification is-warning is-light">
+                                            <p><strong>Cancellation Scheduled:</strong> Your subscription will end on {{ subscription.current_period_end|date:"M d, Y" }}</p>
+                                        </div>
+                                    {% endif %}
+                                </div>
+                            {% else %}
+                                <div class="content">
+                                    <p>You don't have an active subscription. Subscribe to a monthly plan to get credits automatically each month.</p>
+                                    <ul>
+                                        <li>Monthly credit allocation</li>
+                                        <li>Better value than pay-as-you-go</li>
+                                        <li>Automatic renewal</li>
+                                        <li>Cancel anytime</li>
+                                    </ul>
+                                </div>
+                            {% endif %}
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- Available Subscription Plans -->
+                {% if subscription_products %}
+                    <div class="column is-full">
+                        <h2 class="title is-4">Available Plans</h2>
+                        <div class="columns is-multiline">
+                            {% for product in subscription_products %}
+                                <div class="column is-one-third">
+                                    <div class="card {% if subscription and subscription.get_stripe_product.id == product.id %}has-background-success-light{% endif %}">
+                                        <div class="card-content">
+                                            <div class="media">
+                                                <div class="media-content">
+                                                    <p class="title is-5">{{ product.name }}</p>
+                                                    <p class="subtitle is-6">${{ product.price }}/month</p>
+                                                </div>
+                                            </div>
+                                            
+                                            <div class="content">
+                                                {% if product.description %}
+                                                    <p>{{ product.description }}</p>
+                                                {% endif %}
+                                                
+                                                <ul>
+                                                    <li><strong>{{ product.credit_amount }} credits</strong> per month</li>
+                                                    <li>Credits expire monthly</li>
+                                                    <li>Cancel anytime</li>
+                                                    {% if product.credit_amount > 0 %}
+                                                        <li>{% widthratio product.price 1 product.credit_amount %} cents per credit</li>
+                                                    {% endif %}
+                                                </ul>
+                                            </div>
+                                        </div>
+                                        <footer class="card-footer">
+                                            {% if subscription and subscription.is_active and subscription.get_stripe_product.id == product.id %}
+                                                <span class="card-footer-item has-text-success has-text-weight-semibold">Current Plan</span>
+                                            {% elif subscription and subscription.is_active %}
+                                                <!-- Upgrade/Downgrade buttons for existing subscribers -->
+                                                {% with current_product=subscription.get_stripe_product %}
+                                                    {% if current_product and product.price > current_product.price %}
+                                                        <!-- Upgrade button -->
+                                                        <form action="{% url 'admin_dashboard:create_plan_change_checkout' %}" 
+                                                              method="POST"
+                                                              class="card-footer-item">
+                                                            {% csrf_token %}
+                                                            <input type="hidden" name="product_id" value="{{ product.id }}">
+                                                            <button class="button is-primary is-rounded has-text-weight-semibold is-fullwidth" 
+                                                                    type="submit">
+                                                                <span class="icon">
+                                                                    <i class="fas fa-arrow-up"></i>
+                                                                </span>
+                                                                <span>Upgrade to {{ product.name }}</span>
+                                                            </button>
+                                                        </form>
+                                                    {% elif current_product and product.price < current_product.price %}
+                                                        <!-- Downgrade button -->
+                                                        <form action="{% url 'admin_dashboard:create_plan_change_checkout' %}" 
+                                                              method="POST"
+                                                              class="card-footer-item">
+                                                            {% csrf_token %}
+                                                            <input type="hidden" name="product_id" value="{{ product.id }}">
+                                                            <button class="button is-info is-rounded has-text-weight-semibold is-fullwidth" 
+                                                                    type="submit">
+                                                                <span class="icon">
+                                                                    <i class="fas fa-arrow-down"></i>
+                                                                </span>
+                                                                <span>Downgrade to {{ product.name }}</span>
+                                                            </button>
+                                                        </form>
+                                                    {% endif %}
+                                                {% endwith %}
+                                            {% else %}
+                                                <form action="{% url 'admin_dashboard:create_subscription_checkout' %}" 
+                                                      method="POST"
+                                                      class="card-footer-item">
+                                                    {% csrf_token %}
+                                                    <input type="hidden" name="product_id" value="{{ product.id }}">
+                                                    <button class="button is-primary is-rounded has-text-weight-semibold is-fullwidth" 
+                                                            type="submit">
+                                                        <span class="icon">
+                                                            <i class="fas fa-shopping-cart"></i>
+                                                        </span>
+                                                        <span>Subscribe Now</span>
+                                                    </button>
+                                                </form>
+                                            {% endif %}
+                                        </footer>
+                                    </div>
+                                </div>
+                            {% endfor %}
+                        </div>
+                    </div>
+                {% endif %}
+                
+                <!-- Plan Comparison Table -->
+                {% if subscription_products|length > 1 %}
+                    <div class="column is-full">
+                        <div class="card">
+                            <div class="card-content">
+                                <p class="title is-4">
+                                    <span class="icon">
+                                        <i class="fas fa-balance-scale"></i>
+                                    </span>
+                                    Plan Comparison
+                                </p>
+                                
+                                <div class="table-container">
+                                    <table class="table is-fullwidth is-striped">
+                                        <thead>
+                                            <tr>
+                                                <th>Feature</th>
+                                                {% for product in subscription_products %}
+                                                    <th class="has-text-centered {% if subscription and subscription.is_active and subscription.get_stripe_product.id == product.id %}has-background-success-light{% endif %}">
+                                                        {{ product.name }}
+                                                        {% if subscription and subscription.is_active and subscription.get_stripe_product.id == product.id %}
+                                                            <span class="tag is-success is-small ml-2">Current</span>
+                                                        {% endif %}
+                                                    </th>
+                                                {% endfor %}
+                                            </tr>
+                                        </thead>
+                                        <tbody>
+                                            <tr>
+                                                <td><strong>Monthly Price</strong></td>
+                                                {% for product in subscription_products %}
+                                                    <td class="has-text-centered">
+                                                        <span class="has-text-weight-semibold">${{ product.price }}/month</span>
+                                                    </td>
+                                                {% endfor %}
+                                            </tr>
+                                            <tr>
+                                                <td><strong>Monthly Credits</strong></td>
+                                                {% for product in subscription_products %}
+                                                    <td class="has-text-centered">
+                                                        <span class="has-text-weight-semibold">{{ product.credit_amount }} credits</span>
+                                                    </td>
+                                                {% endfor %}
+                                            </tr>
+                                            <tr>
+                                                <td><strong>Cost per Credit</strong></td>
+                                                {% for product in subscription_products %}
+                                                    <td class="has-text-centered">
+                                                        {% if product.credit_amount > 0 %}
+                                                            {% widthratio product.price 1 product.credit_amount %} cents
+                                                        {% else %}
+                                                            N/A
+                                                        {% endif %}
+                                                    </td>
+                                                {% endfor %}
+                                            </tr>
+                                            <tr>
+                                                <td><strong>Credits Expire</strong></td>
+                                                {% for product in subscription_products %}
+                                                    <td class="has-text-centered">Monthly</td>
+                                                {% endfor %}
+                                            </tr>
+                                            <tr>
+                                                <td><strong>Cancellation</strong></td>
+                                                {% for product in subscription_products %}
+                                                    <td class="has-text-centered">Anytime</td>
+                                                {% endfor %}
+                                            </tr>
+                                            {% comment %}
+                                            <!-- Savings calculation row for Pro plan -->
+                                            {% if subscription_products|length >= 2 %}
+                                                {% with basic_plan=subscription_products.0 pro_plan=subscription_products.1 %}
+                                                    {% if pro_plan.credit_amount > basic_plan.credit_amount %}
+                                                        <tr class="has-background-info-light">
+                                                            <td><strong>Savings vs Basic</strong></td>
+                                                            <td class="has-text-centered">-</td>
+                                                            <td class="has-text-centered">
+                                                                {% widthratio basic_plan.price 1 basic_plan.credit_amount as basic_cost_per_credit %}
+                                                                {% widthratio pro_plan.price 1 pro_plan.credit_amount as pro_cost_per_credit %}
+                                                                {% if basic_cost_per_credit > pro_cost_per_credit %}
+                                                                    <span class="has-text-success has-text-weight-semibold">
+                                                                        Save {{ basic_cost_per_credit|sub:pro_cost_per_credit }} cents per credit
+                                                                    </span>
+                                                                {% endif %}
+                                                            </td>
+                                                        </tr>
+                                                    {% endif %}
+                                                {% endwith %}
+                                            {% endif %}
+                                            {% endcomment %}
+                                        </tbody>
+                                    </table>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                {% endif %}
+                
+                <!-- Credit Balance Breakdown -->
+                <div class="column is-full">
+                    <div class="card">
+                        <div class="card-content">
+                            <p class="title is-4">
+                                <span class="icon">
+                                    <i class="fas fa-coins"></i>
+                                </span>
+                                Credit Balance
+                            </p>
+                            
+                            {% if user.credit_account %}
+                                {% with balance_breakdown=user.credit_account.get_balance_by_type %}
+                                    <div class="columns">
+                                        <div class="column">
+                                            <div class="has-text-centered">
+                                                <p class="title is-3 has-text-primary">{{ balance_breakdown.subscription }}</p>
+                                                <p class="subtitle is-6">Subscription Credits</p>
+                                                <p class="is-size-7 has-text-grey">
+                                                    {% if subscription and subscription.is_active %}
+                                                        Expires: {{ subscription.current_period_end|date:"M d, Y" }}
+                                                    {% else %}
+                                                        No active subscription
+                                                    {% endif %}
+                                                </p>
+                                            </div>
+                                        </div>
+                                        <div class="column">
+                                            <div class="has-text-centered">
+                                                <p class="title is-3 has-text-info">{{ balance_breakdown.pay_as_you_go }}</p>
+                                                <p class="subtitle is-6">Pay-as-You-Go Credits</p>
+                                                <p class="is-size-7 has-text-grey">Never expire</p>
+                                            </div>
+                                        </div>
+                                        <div class="column">
+                                            <div class="has-text-centered">
+                                                <p class="title is-3 has-text-success">{{ balance_breakdown.total }}</p>
+                                                <p class="subtitle is-6">Total Credits</p>
+                                                <p class="is-size-7 has-text-grey">Available for use</p>
+                                            </div>
+                                        </div>
+                                    </div>
+                                {% endwith %}
+                            {% else %}
+                                <p>No credit account found.</p>
+                            {% endif %}
+                        </div>
+                        <footer class="card-footer">
+                            <a href="{% url 'credits:dashboard' %}" class="card-footer-item">View Credit History</a>
+                            <a href="{% url 'credits:buy_credits' %}" class="card-footer-item">Buy More Credits</a>
+                        </footer>
+                    </div>
+                </div>
+                
+                <!-- Subscription Management -->
+                {% if subscription and subscription.is_active %}
+                    <div class="column is-full">
+                        <div class="card">
+                            <div class="card-content">
+                                <p class="title is-4">
+                                    <span class="icon">
+                                        <i class="fas fa-cog"></i>
+                                    </span>
+                                    Subscription Management
+                                </p>
+                                
+                                <div class="content">
+                                    {% if subscription.cancel_at_period_end %}
+                                        <div class="notification is-warning">
+                                            <p><strong>Cancellation Scheduled</strong></p>
+                                            <p>Your subscription will end on {{ subscription.current_period_end|date:"F d, Y" }}. You can reactivate it anytime before then.</p>
+                                        </div>
+                                        <form action="{% url 'admin_dashboard:cancel_subscription' %}" method="POST">
+                                            {% csrf_token %}
+                                            <input type="hidden" name="action" value="reactivate">
+                                            <button class="button is-success" type="submit">
+                                                <span class="icon">
+                                                    <i class="fas fa-undo"></i>
+                                                </span>
+                                                <span>Reactivate Subscription</span>
+                                            </button>
+                                        </form>
+                    {% else %}
+                        <p>You can cancel your subscription at any time. Your subscription will remain active until the end of your current billing period.</p>
+                        <form action="{% url 'admin_dashboard:cancel_subscription' %}" method="POST" 
+                              onsubmit="return confirm('Are you sure you want to cancel your subscription?')">
+                            {% csrf_token %}
+                            <input type="hidden" name="action" value="cancel">
+                            <button class="button is-danger" type="submit">
+                                <span class="icon">
+                                    <i class="fas fa-times"></i>
+                                </span>
+                                <span>Cancel Subscription</span>
+                            </button>
+                        </form>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+{% endif %}
+            </div>
+        {% endif %}
+    </div>
+</section>
+{% endblock %}

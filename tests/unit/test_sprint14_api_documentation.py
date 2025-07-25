@@ -6,8 +6,8 @@ from django.contrib.auth import get_user_model
 from django.http import JsonResponse
 
 # Import the actual API views and utilities
-from quickscale.templates.api.views import TextProcessingView
-from quickscale.templates.api.utils import APIResponse, validate_json_request, validate_required_fields
+from quickscale.project_templates.api.views import TextProcessingView
+from quickscale.project_templates.api.utils import APIResponse, validate_json_request, validate_required_fields
 
 User = get_user_model()
 
@@ -184,8 +184,8 @@ class TestSprint14APIDocumentation(TestCase):
         request.api_authenticated = True
         
         # Mock credit consumption to avoid database dependencies and payment errors
-        with patch('quickscale.templates.api.utils.consume_service_credits') as mock_consume, \
-             patch('quickscale.templates.api.views.consume_service_credits') as mock_consume_views:
+        with patch('quickscale.project_templates.api.utils.consume_service_credits') as mock_consume, \
+             patch('quickscale.project_templates.api.views.consume_service_credits') as mock_consume_views:
             
             # Mock successful credit consumption
             mock_consume.return_value = MagicMock()

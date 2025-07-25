@@ -17,10 +17,10 @@ class Sprint6SubscriptionImplementationTests(unittest.TestCase):
     def setUp(self):
         """Set up test environment."""
         self.base_path = Path(os.path.dirname(os.path.dirname(os.path.dirname(__file__))))
-        self.credits_app_path = self.base_path / 'quickscale' / 'templates' / 'credits'
-        self.admin_dashboard_path = self.base_path / 'quickscale' / 'templates' / 'admin_dashboard'
-        self.stripe_manager_path = self.base_path / 'quickscale' / 'templates' / 'stripe_manager'
-        self.templates_path = self.base_path / 'quickscale' / 'templates' / 'templates'
+        self.credits_app_path = self.base_path / 'quickscale' / 'project_templates' / 'credits'
+        self.admin_dashboard_path = self.base_path / 'quickscale' / 'project_templates' / 'admin_dashboard'
+        self.stripe_manager_path = self.base_path / 'quickscale' / 'project_templates' / 'stripe_manager'
+        self.templates_path = self.base_path / 'quickscale' / 'project_templates' / 'templates'
         
         # Key files to check
         self.models_py = self.credits_app_path / 'models.py'

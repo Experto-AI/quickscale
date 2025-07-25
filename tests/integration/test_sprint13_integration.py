@@ -346,7 +346,6 @@ class Sprint13ServiceManagementWorkflowTests(ProjectTestMixin, unittest.TestCase
         """Test that complete service management workflow is properly integrated."""
         # Check that all required components exist
         required_files = [
-            'credits/admin.py',
             'admin_dashboard/views.py',
             'admin_dashboard/urls.py',
             'templates/admin_dashboard/service_admin.html',

@@ -50,8 +50,11 @@ class CommandManager:
         """Execute a command by name with given arguments."""
         if command_name not in self._commands:
             raise KeyError(f"Command '{command_name}' not found")
-            
         command = self._commands[command_name]
+        # Special handling for destroy: pass delete_images from kwargs if present
+        if command_name == 'destroy':
+            delete_images = kwargs.pop('delete_images', False)
+            return command.execute(delete_images=delete_images)
         return command.execute(*args, **kwargs)
     
     def init_project(self, project_name: str) -> None:

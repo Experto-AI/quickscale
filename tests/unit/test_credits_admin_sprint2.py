@@ -18,8 +18,8 @@ class Sprint2AdminTemplateTests(unittest.TestCase):
         """Set up test environment."""
         # Locate the template files
         self.base_path = Path(os.path.dirname(os.path.dirname(os.path.dirname(__file__))))
-        self.credits_app_path = self.base_path / 'quickscale' / 'templates' / 'credits'
-        self.admin_templates_path = self.base_path / 'quickscale' / 'templates' / 'templates' / 'admin' / 'credits'
+        self.credits_app_path = self.base_path / 'quickscale' / 'project_templates' / 'credits'
+        self.admin_templates_path = self.base_path / 'quickscale' / 'project_templates' / 'templates' / 'admin' / 'credits'
         
         # Admin template files
         self.credit_adjustment_template = self.admin_templates_path / 'credit_adjustment.html'
@@ -326,7 +326,7 @@ class Sprint2IntegrationTests(unittest.TestCase):
     def setUp(self):
         """Set up test environment."""
         self.base_path = Path(os.path.dirname(os.path.dirname(os.path.dirname(__file__))))
-        self.credits_app_path = self.base_path / 'quickscale' / 'templates' / 'credits'
+        self.credits_app_path = self.base_path / 'quickscale' / 'project_templates' / 'credits'
         self.admin_py = self.credits_app_path / 'admin.py'
         self.forms_py = self.credits_app_path / 'forms.py'
         self.models_py = self.credits_app_path / 'models.py'
@@ -374,7 +374,7 @@ class Sprint2IntegrationTests(unittest.TestCase):
         self.assertTrue(self.forms_py.exists(), "forms.py missing")
         
         # Check admin templates exist
-        admin_templates_path = self.base_path / 'quickscale' / 'templates' / 'templates' / 'admin' / 'credits'
+        admin_templates_path = self.base_path / 'quickscale' / 'project_templates' / 'templates' / 'admin' / 'credits'
         self.assertTrue((admin_templates_path / 'credit_adjustment.html').exists(),
                        "Credit adjustment template missing")
         self.assertTrue((admin_templates_path / 'bulk_credit_adjustment.html').exists(),
@@ -397,7 +397,7 @@ class Sprint2IntegrationTests(unittest.TestCase):
                      "Bulk credit operations missing")
         
         # User can see updated balance (dashboard already exists from Sprint 1)
-        dashboard_template = self.base_path / 'quickscale' / 'templates' / 'credits' / 'templates' / 'credits' / 'dashboard.html'
+        dashboard_template = self.base_path / 'quickscale' / 'project_templates' / 'credits' / 'templates' / 'credits' / 'dashboard.html'
         self.assertTrue(dashboard_template.exists(),
                        "User dashboard missing for balance visibility")
 

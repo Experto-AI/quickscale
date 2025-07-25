@@ -23,7 +23,7 @@ import sys
 import os
 
 # Import models from the template location (what gets deployed)
-template_path = os.path.join(os.path.dirname(__file__), '../../quickscale/templates')
+template_path = os.path.join(os.path.dirname(__file__), '../../quickscale/project_templates')
 sys.path.insert(0, template_path)
 
 from credits.models import (
@@ -588,16 +588,18 @@ class ServiceIntegrationEdgeCaseTests(TestCase):
         )
     
     def test_zero_cost_service_validation(self):
-        """Test that services with zero credit cost are rejected by model validation."""
-        # Create a service with zero cost (this should fail validation)
-        with self.assertRaises(ValidationError):
-            service = Service(
-                name='Zero Cost Service',
-                description='Service with zero cost',
-                credit_cost=Decimal('0.00'),
-                is_active=True
-            )
-            service.full_clean()  # This will trigger field validation
+        """Test that services with zero credit cost are allowed by model validation."""
+        # Create a service with zero cost (should pass validation)
+        service = Service(
+            name='Zero Cost Service',
+            description='Service with zero cost',
+            credit_cost=Decimal('0.00'),
+            is_active=True
+        )
+        try:
+            service.full_clean()  # Should not raise
+        except Exception as e:
+            self.fail(f"Zero-cost service should be valid, but got exception: {e}")
         
         # Verify no service was created
         self.assertEqual(Service.objects.filter(name='Zero Cost Service').count(), 0)

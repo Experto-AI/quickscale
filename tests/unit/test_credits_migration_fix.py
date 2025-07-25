@@ -10,7 +10,7 @@ class CreditTypeMigrationFixTests(unittest.TestCase):
         """Test that CreditTransaction model template has credit_type field defined."""
         models_file = os.path.join(
             os.path.dirname(__file__), 
-            '../../quickscale/templates/credits/models.py'
+            '../../quickscale/project_templates/credits/models.py'
         )
         
         self.assertTrue(os.path.exists(models_file), 
@@ -44,7 +44,7 @@ class CreditTypeMigrationFixTests(unittest.TestCase):
         """Test that credit_type field is included in model indexes."""
         models_file = os.path.join(
             os.path.dirname(__file__), 
-            '../../quickscale/templates/credits/models.py'
+            '../../quickscale/project_templates/credits/models.py'
         )
         
         with open(models_file, 'r') as f:
@@ -58,7 +58,7 @@ class CreditTypeMigrationFixTests(unittest.TestCase):
         """Test that CreditTransaction Meta class includes all required indexes."""
         models_file = os.path.join(
             os.path.dirname(__file__), 
-            '../../quickscale/templates/credits/models.py'
+            '../../quickscale/project_templates/credits/models.py'
         )
         
         with open(models_file, 'r') as f:
@@ -79,7 +79,7 @@ class CreditTypeMigrationFixTests(unittest.TestCase):
         """Test that CreditTransaction admin template includes credit_type field."""
         admin_file = os.path.join(
             os.path.dirname(__file__), 
-            '../../quickscale/templates/credits/admin.py'
+            '../../quickscale/project_templates/credits/admin.py'
         )
         
         self.assertTrue(os.path.exists(admin_file), 
@@ -96,12 +96,12 @@ class CreditTypeMigrationFixTests(unittest.TestCase):
         """Test that StripeCustomer model only exists in stripe_manager, not in users."""
         users_models_file = os.path.join(
             os.path.dirname(__file__), 
-            '../../quickscale/templates/users/models.py'
+            '../../quickscale/project_templates/users/models.py'
         )
         
         stripe_manager_models_file = os.path.join(
             os.path.dirname(__file__), 
-            '../../quickscale/templates/stripe_manager/models.py'
+            '../../quickscale/project_templates/stripe_manager/models.py'
         )
         
         # Check users models doesn't have StripeCustomer
@@ -126,7 +126,7 @@ class CreditTypeMigrationFixTests(unittest.TestCase):
         """Test that StripeCustomer migration was removed from users app."""
         users_migration_path = os.path.join(
             os.path.dirname(__file__), 
-            '../../quickscale/templates/users/migrations/0004_stripecustomer.py'
+            '../../quickscale/project_templates/users/migrations/0004_stripecustomer.py'
         )
         
         self.assertFalse(os.path.exists(users_migration_path),
@@ -140,7 +140,7 @@ class CreditTransactionTemplateConsistencyTests(unittest.TestCase):
         """Test that credit_type choices are consistent across templates."""
         models_file = os.path.join(
             os.path.dirname(__file__), 
-            '../../quickscale/templates/credits/models.py'
+            '../../quickscale/project_templates/credits/models.py'
         )
         
         with open(models_file, 'r') as f:

@@ -231,10 +231,7 @@ def fix_imports(
 
 def remove_duplicated_templates(project_dir: Path, logger: logging.Logger) -> None:
     """Remove any template files that have been replaced by synced modules to avoid duplication."""
-    # Identify duplicated templates that should be removed
-    for source_path, target_path in SYNCED_MODULES.items():
-        # Check if there's an original template file that should be removed
-        template_path = project_dir / 'templates' / target_path
-        if template_path.exists() and template_path.is_file():
-            logger.info(f"Removing duplicated template: {template_path}")
-            template_path.unlink()
+    # This function is temporarily disabled to avoid removing synced files
+    # TODO: Review and fix the logic for removing duplicated templates
+    logger.info("Skipping removal of duplicated templates (function disabled)")
+    return

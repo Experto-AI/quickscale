@@ -57,7 +57,7 @@ _setup_module_mocks()
 # Disable noisy logging during tests
 logging.getLogger('stripe').setLevel(logging.ERROR)
 
-# Create a simple mock for the StripeManager class since we can't import from quickscale.templates
+# Create a simple mock for the StripeManager class since we can't import from quickscale.project_templates
 class StripeManager:
     """Mock StripeManager for testing."""
     
@@ -173,8 +173,8 @@ class JsonResponse:
 
 # Add mocked objects to sys.modules
 sys.modules['django.http'] = MagicMock(JsonResponse=JsonResponse)
-sys.modules['quickscale.templates.stripe.views'] = MagicMock(webhook_endpoint=webhook_endpoint)
-sys.modules['quickscale.templates.stripe.stripe_manager'] = MagicMock(
+sys.modules['quickscale.project_templates.stripe.views'] = MagicMock(webhook_endpoint=webhook_endpoint)
+sys.modules['quickscale.project_templates.stripe.stripe_manager'] = MagicMock(
     StripeManager=StripeManager,
     get_stripe_manager=get_stripe_manager
 )
@@ -206,7 +206,7 @@ class TestStripeRealAPI(unittest.TestCase):
         """Set up test environment."""
         self.original_env = os.environ.copy()
         # Use a context manager for settings mock to avoid bleeding
-        self.settings_patcher = patch('quickscale.templates.stripe_manager.stripe_manager.settings')
+        self.settings_patcher = patch('quickscale.project_templates.stripe_manager.stripe_manager.settings')
         self.mock_settings = self.settings_patcher.start()
         self.mock_settings.STRIPE_SECRET_KEY = 'sk_test_51ExampleTestKeyDummyValue'
         self.manager = get_stripe_manager()

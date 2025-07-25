@@ -1,4 +1,19 @@
 {
     "github.copilot.nextEditSuggestions.enabled": true,
-    "github.copilot.chat.codesearch.enabled": true
+    "github.copilot.chat.codesearch.enabled": true,
+    "github.copilot.chat.agent.thinkingTool": true,
+    "chat.renderRelatedFiles": true,
+    "github.copilot.chat.agent.terminal.allowList": {
+        "cd": true,
+        "pwd": true,
+        "ls": true,
+        "tail": true,
+        "head": true,
+        "find": true,
+        "grep": true,
+        "python -m pytest *": true,
+        "./run_tests.sh *": true,
+        "tee": true,
+        "echo": true
+    }
 }
