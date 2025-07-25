@@ -22,7 +22,7 @@ class ServiceUsageAnalyticsTemplateFixTests(unittest.TestCase):
     def setUp(self):
         """Set up test environment."""
         self.base_path = Path(os.path.dirname(os.path.dirname(os.path.dirname(__file__))))
-        self.templates_path = self.base_path / 'quickscale' / 'templates' / 'templates'
+        self.templates_path = self.base_path / 'quickscale' / 'project_templates' / 'templates'
         self.analytics_template = self.templates_path / 'admin' / 'credits' / 'service_usage_analytics.html'
         
     def test_analytics_template_exists(self):
@@ -115,7 +115,7 @@ class ServiceVisibilityFixTests(unittest.TestCase):
     def setUp(self):
         """Set up test environment."""
         self.base_path = Path(os.path.dirname(os.path.dirname(os.path.dirname(__file__))))
-        self.templates_path = self.base_path / 'quickscale' / 'templates' / 'templates'
+        self.templates_path = self.base_path / 'quickscale' / 'project_templates' / 'templates'
         self.service_admin_template = self.templates_path / 'admin_dashboard' / 'service_admin.html'
         
     def test_service_admin_template_exists(self):
@@ -249,7 +249,7 @@ class ServiceManagementIntegrationTests(unittest.TestCase):
     def setUp(self):
         """Set up test environment."""
         self.base_path = Path(os.path.dirname(os.path.dirname(os.path.dirname(__file__))))
-        self.admin_dashboard_views = (self.base_path / 'quickscale' / 'templates' / 
+        self.admin_dashboard_views = (self.base_path / 'quickscale' / 'project_templates' / 
                                     'admin_dashboard' / 'views.py')
     
     def test_service_admin_view_provides_correct_context(self):
@@ -299,7 +299,7 @@ class TextProcessingServiceMigrationTests(unittest.TestCase):
     def setUp(self):
         """Set up test environment."""
         self.base_path = Path(os.path.dirname(os.path.dirname(os.path.dirname(__file__))))
-        self.migration_file = (self.base_path / 'quickscale' / 'templates' / 'credits' / 
+        self.migration_file = (self.base_path / 'quickscale' / 'project_templates' / 'credits' / 
                              'migrations' / '0007_add_text_processing_service.py')
     
     def test_text_processing_service_migration_exists(self):
@@ -334,7 +334,7 @@ class RegressionTests(unittest.TestCase):
         
     def test_other_admin_templates_not_affected(self):
         """Test that other admin templates are not affected by the fixes."""
-        admin_templates_path = (self.base_path / 'quickscale' / 'templates' / 
+        admin_templates_path = (self.base_path / 'quickscale' / 'project_templates' / 
                               'templates' / 'admin' / 'credits')
         
         if admin_templates_path.exists():
@@ -349,7 +349,7 @@ class RegressionTests(unittest.TestCase):
     
     def test_custom_user_model_consistency(self):
         """Test that custom user model is consistently referenced."""
-        settings_file = (self.base_path / 'quickscale' / 'templates' / 
+        settings_file = (self.base_path / 'quickscale' / 'project_templates' / 
                         'core' / 'settings.py')
         
         with open(settings_file, 'r') as f:
@@ -361,7 +361,7 @@ class RegressionTests(unittest.TestCase):
     
     def test_service_admin_dashboard_integration(self):
         """Test that service admin dashboard integration is not broken."""
-        admin_dashboard_views = (self.base_path / 'quickscale' / 'templates' / 
+        admin_dashboard_views = (self.base_path / 'quickscale' / 'project_templates' / 
                                'admin_dashboard' / 'views.py')
         
         with open(admin_dashboard_views, 'r') as f:

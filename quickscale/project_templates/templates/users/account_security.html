@@ -1,0 +1,47 @@
+{% extends "base.html" %}
+{% load static %}
+{% block title %}Account Security - {{ project_name }}{% endblock %}
+{% block extra_head %}
+    <script src="{% static 'js/password_validation.js' %}"></script>
+    <style>
+    .is-sr-only {
+        position: absolute !important;
+        width: 1px !important;
+        height: 1px !important;
+        padding: 0 !important;
+        margin: -1px !important;
+        overflow: hidden !important;
+        clip: rect(0, 0, 0, 0) !important;
+        white-space: nowrap !important;
+        border: 0 !important;
+    }
+    </style>
+{% endblock %}
+{% block content %}
+{% include "components/hero_banner.html" with title="Account Security" subtitle="Manage your API keys and two-factor authentication" color="primary" %}
+
+<section class="section">
+    <div class="container">
+        <div class="columns is-centered">
+            <div class="column is-10">
+                <div class="columns">
+                    <!-- API Keys Section -->
+                    <div class="column is-6">
+                        <h2 class="title is-4">Your API Keys</h2>
+                        {% include "users/api_keys.html" %}
+                    </div>
+                    <!-- 2FA Section (if enabled) -->
+                    {% if two_factor_enabled %}
+                    <div class="column is-6">
+                        <div class="box">
+                            <h2 class="title is-4">Two-Factor Authentication</h2>
+                            {% include "users/two_factor_settings.html" %}
+                        </div>
+                    </div>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+</section>
+{% endblock %}

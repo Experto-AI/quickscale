@@ -59,7 +59,7 @@ QuickScale is a **Django SaaS starter kit generator** that creates ready-to-use 
   - `development_commands.py`: Development tools (shell, manage)
   - `service_generator_commands.py`: AI service scaffolding
 
-#### Project Templates (`quickscale/templates/`)
+#### Project Templates (`quickscale/project_templates/`)
 Contains Django project templates with:
 - **Core Django setup**: Settings, URLs, WSGI/ASGI
 - **Authentication system**: django-allauth integration
@@ -153,6 +153,6 @@ except SomeError as e:
 - `quickscale/cli.py:main()` - CLI entry point and argument parsing
 - `quickscale/commands/command_manager.py` - Command dispatch and orchestration
 - `quickscale/commands/init_command.py` - Project generation logic
-- `quickscale/templates/` - Django project templates
+- `quickscale/project_templates/` - Django project templates
 - `quickscale/utils/message_manager.py` - Standardized CLI messaging
 - `run_tests.sh` - Comprehensive test runner with Docker management

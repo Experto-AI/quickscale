@@ -17,6 +17,11 @@ tests_dir = os.path.dirname(os.path.abspath(__file__))
 if tests_dir not in sys.path:
     sys.path.insert(0, tests_dir)
 
+# Add project templates directory to Python path for Django app imports
+project_templates_dir = os.path.join(os.path.dirname(tests_dir), 'quickscale', 'project_templates')
+if project_templates_dir not in sys.path:
+    sys.path.insert(0, project_templates_dir)
+
 # Maximum wait time for services to be ready (seconds)
 SERVICE_TIMEOUT = 30
 # Polling interval for checking service readiness (seconds)

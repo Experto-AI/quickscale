@@ -22,7 +22,7 @@ def get_expected_structure_from_docs():
         'quickscale',
         'quickscale/commands',
         'quickscale/config',
-        'quickscale/templates',
+        'quickscale/project_templates',
         'quickscale/utils',
         'tests',
         'tests/core',
@@ -126,8 +126,8 @@ def get_template_structure_from_docs():
     
     # Always add these core template directories to the expected set
     core_template_dirs = {
-        'quickscale/templates',
-        'quickscale/templates/static',
+        'quickscale/project_templates',
+        'quickscale/project_templates/static',
         'templates'
     }
     expected_template_dirs.update(core_template_dirs)
@@ -240,8 +240,8 @@ def is_django_app(directory_path):
     """Check if a directory is a Django app by looking for typical Django files."""
     django_files = ['models.py', 'views.py', 'urls.py', 'apps.py', 'admin.py']
     
-    # Exclude directories within quickscale/templates/
-    if "quickscale/templates" in str(directory_path):
+    # Exclude directories within quickscale/project_templates/
+    if "quickscale/project_templates" in str(directory_path):
         return False
 
     try:
@@ -343,7 +343,7 @@ def test_static_files_in_correct_locations():
     # Add full paths for static directories
     expanded_static_dirs = set()
     for static_dir in expected_static_dirs:
-        for prefix in ['quickscale/', 'quickscale/templates/', '']:
+        for prefix in ['quickscale/', 'quickscale/project_templates/', '']:
             expanded_static_dirs.add(f"{prefix}{static_dir}")
     
     # Check for static files in wrong locations
@@ -471,8 +471,8 @@ def test_docker_files_in_correct_locations():
     
     # Define expected locations
     root_location = {'Dockerfile', 'docker-compose.yml', '.dockerignore'}
-    templates_location = {'quickscale/templates/Dockerfile', 'quickscale/templates/docker-compose.yml', 
-                          'quickscale/templates/.dockerignore', 'quickscale/templates/entrypoint.sh'}
+    templates_location = {'quickscale/project_templates/Dockerfile', 'quickscale/project_templates/docker-compose.yml', 
+                          'quickscale/project_templates/.dockerignore', 'quickscale/project_templates/entrypoint.sh'}
     
     # Check each Docker file
     for filename, location in actual_docker_files.items():
@@ -491,7 +491,7 @@ def test_docker_files_in_correct_locations():
     if docker_files_in_wrong_locations:
         error_msg = (
             "Docker files found in unexpected locations.\n"
-            "Docker files should be in the root directory or in quickscale/templates/.\n\n"
+            "Docker files should be in the root directory or in quickscale/project_templates/.\n\n"
             "Options to fix this:\n"
             "1. Move these Docker files to the appropriate locations\n"
             "2. Update the documentation to include these new Docker file locations\n\n"

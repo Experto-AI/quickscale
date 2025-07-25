@@ -114,15 +114,31 @@ class TestSprint14CLIIntegration(unittest.TestCase):
     @patch('builtins.input', return_value='n')  # Mock input to return 'n' (no overwrite)
     def test_service_generator_command_execution(self, mock_input, mock_exists, mock_makedirs):
         """Test service generator command execution through command manager."""
+        mock_exists.return_value = False  # File does not exist
+
+        # Test 1: Service generation when file doesn't exist - should succeed
+        with patch('builtins.open', mock_open()):
+            with patch('quickscale.commands.service_generator_commands.os.path.exists', return_value=False):
+                with patch('quickscale.commands.service_generator_commands.Path.exists', return_value=False):
+                    result = self.command_manager.generate_service('test_service_1')
+                    self.assertTrue(result.get('success', False))
+        
+        # Test 2: Service generation when file exists and user says no to overwrite - should fail
         mock_exists.return_value = True  # File exists
-        mock_makedirs.return_value = None
+        with patch('builtins.open', mock_open()):
+            with patch('quickscale.commands.service_generator_commands.os.path.exists', return_value=True):
+                with patch('quickscale.commands.service_generator_commands.Path.exists', return_value=True):
+                    result = self.command_manager.generate_service('test_service_2')
+                    self.assertFalse(result.get('success', True))
+                    self.assertEqual(result.get('reason'), 'File already exists')
         
-        # Test that service generation works
-        result = self.command_manager.generate_service('test_service')
-        
-        # Should fail because user chose not to overwrite existing file
-        self.assertFalse(result.get('success', False))
-        self.assertEqual(result.get('reason'), 'File already exists')
+        # Test 3: Service generation when file exists but user says yes to overwrite - should succeed
+        mock_input.return_value = 'y'  # Change mock to return 'y' for overwrite
+        with patch('builtins.open', mock_open()):
+            with patch('quickscale.commands.service_generator_commands.os.path.exists', return_value=True):
+                with patch('quickscale.commands.service_generator_commands.Path.exists', return_value=True):
+                    result = self.command_manager.generate_service('test_service_3')
+                    self.assertTrue(result.get('success', False))
     
     def test_command_manager_methods(self):
         """Test that command manager has the expected methods."""

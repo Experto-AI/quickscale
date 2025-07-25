@@ -176,17 +176,22 @@ def test_destroy_project_command(mock_destroy_command, tmp_path, monkeypatch):
         with patch('quickscale.commands.project_commands.ProjectManager') as mock_pm:
             # Setup project state
             mock_pm.get_project_state.return_value = project_state
-            
-            # Execute
-            result = mock_destroy_command.execute()
-            
-            # Verify ProjectManager methods were called
-            mock_pm.get_project_state.assert_called_once()
-            mock_pm.stop_containers.assert_called_once_with('test_project')
-            
-            # Verify result
-            assert result['success'] is True
-            assert result['project'] == 'test_project'
+            with patch('shutil.rmtree') as mock_rmtree:
+                # Default: should NOT delete images
+                result = mock_destroy_command.execute()
+                mock_pm.get_project_state.assert_called()
+                mock_pm.stop_containers.assert_called_with('test_project', delete_images=False)
+                assert result['success'] is True
+                assert result['project'] == 'test_project'
+                assert result['images_deleted'] is False
+
+                # With delete_images True
+                mock_pm.stop_containers.reset_mock()
+                result2 = mock_destroy_command.execute(True)
+                mock_pm.stop_containers.assert_called_with('test_project', delete_images=True)
+                assert result2['success'] is True
+                assert result2['project'] == 'test_project'
+                assert result2['images_deleted'] is True
 
 
 def test_destroy_project_cancelled(mock_destroy_command):

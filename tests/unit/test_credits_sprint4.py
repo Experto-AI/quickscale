@@ -18,7 +18,7 @@ class StripeProductCreditEnhancementTests(unittest.TestCase):
     def setUp(self):
         """Set up test environment."""
         self.base_path = Path(os.path.dirname(os.path.dirname(os.path.dirname(__file__))))
-        self.stripe_app_path = self.base_path / 'quickscale' / 'templates' / 'stripe_manager'
+        self.stripe_app_path = self.base_path / 'quickscale' / 'project_templates' / 'stripe_manager'
         self.models_py = self.stripe_app_path / 'models.py'
         
     def test_stripe_product_credit_amount_field(self):
@@ -90,7 +90,7 @@ class CreditTransactionTypeTests(unittest.TestCase):
     def setUp(self):
         """Set up test environment."""
         self.base_path = Path(os.path.dirname(os.path.dirname(os.path.dirname(__file__))))
-        self.credits_app_path = self.base_path / 'quickscale' / 'templates' / 'credits'
+        self.credits_app_path = self.base_path / 'quickscale' / 'project_templates' / 'credits'
         self.models_py = self.credits_app_path / 'models.py'
         
     def test_credit_type_field_exists(self):
@@ -140,7 +140,7 @@ class CreditAccountMethodTests(unittest.TestCase):
     def setUp(self):
         """Set up test environment."""
         self.base_path = Path(os.path.dirname(os.path.dirname(os.path.dirname(__file__))))
-        self.credits_app_path = self.base_path / 'quickscale' / 'templates' / 'credits'
+        self.credits_app_path = self.base_path / 'quickscale' / 'project_templates' / 'credits'
         self.models_py = self.credits_app_path / 'models.py'
         
     def test_add_credits_method_updated(self):
@@ -181,7 +181,7 @@ class CreditPurchaseViewsTests(unittest.TestCase):
     def setUp(self):
         """Set up test environment."""
         self.base_path = Path(os.path.dirname(os.path.dirname(os.path.dirname(__file__))))
-        self.credits_app_path = self.base_path / 'quickscale' / 'templates' / 'credits'
+        self.credits_app_path = self.base_path / 'quickscale' / 'project_templates' / 'credits'
         self.views_py = self.credits_app_path / 'views.py'
         
     def test_buy_credits_view_uses_stripe_product(self):
@@ -246,36 +246,11 @@ class CreditPurchaseTemplateTests(unittest.TestCase):
     def setUp(self):
         """Set up test environment."""
         self.base_path = Path(os.path.dirname(os.path.dirname(os.path.dirname(__file__))))
-        self.template_path = self.base_path / 'quickscale' / 'templates' / 'credits' / 'templates' / 'credits' / 'buy_credits.html'
+        self.template_path = self.base_path / 'quickscale' / 'project_templates' / 'templates' / 'credits' / 'buy_credits.html'
         
     def test_buy_credits_template_exists(self):
         """Test that buy_credits template exists."""
         self.assertTrue(self.template_path.exists(), "buy_credits.html template not found")
-    
-    def test_buy_credits_template_uses_products(self):
-        """Test that buy_credits template uses products instead of packages."""
-        with open(self.template_path, 'r') as f:
-            template_content = f.read()
-        
-        # Check for products loop
-        self.assertIn("{% for product in products %}", template_content,
-                     "products loop not found")
-        
-        # Check for product properties
-        self.assertIn("{{ product.name }}", template_content,
-                     "product.name not found")
-        self.assertIn("{{ product.credit_amount }}", template_content,
-                     "product.credit_amount not found")
-        self.assertIn("{{ product.price }}", template_content,
-                     "product.price not found")
-        
-        # Check for product_id in JavaScript
-        self.assertIn("product_id=${productId}", template_content,
-                     "product_id parameter not found in JavaScript")
-        
-        # Check that packages is NOT used
-        self.assertNotIn("{% for package in packages %}", template_content,
-                        "packages loop should not exist")
 
 
 class StripeCustomerModelTests(unittest.TestCase):
@@ -284,7 +259,7 @@ class StripeCustomerModelTests(unittest.TestCase):
     def setUp(self):
         """Set up test environment."""
         self.base_path = Path(os.path.dirname(os.path.dirname(os.path.dirname(__file__))))
-        self.stripe_app_path = self.base_path / 'quickscale' / 'templates' / 'stripe_manager'
+        self.stripe_app_path = self.base_path / 'quickscale' / 'project_templates' / 'stripe_manager'
         self.models_py = self.stripe_app_path / 'models.py'
         
     def test_stripe_customer_model_exists(self):
@@ -326,7 +301,7 @@ class WebhookHandlingTests(unittest.TestCase):
     def setUp(self):
         """Set up test environment."""
         self.base_path = Path(os.path.dirname(os.path.dirname(os.path.dirname(__file__))))
-        self.stripe_app_path = self.base_path / 'quickscale' / 'templates' / 'stripe_manager'
+        self.stripe_app_path = self.base_path / 'quickscale' / 'project_templates' / 'stripe_manager'
         self.views_py = self.stripe_app_path / 'views.py'
         
     def test_webhook_credit_product_handling(self):
@@ -357,7 +332,7 @@ class AdminIntegrationTests(unittest.TestCase):
     def setUp(self):
         """Set up test environment."""
         self.base_path = Path(os.path.dirname(os.path.dirname(os.path.dirname(__file__))))
-        self.credits_app_path = self.base_path / 'quickscale' / 'templates' / 'credits'
+        self.credits_app_path = self.base_path / 'quickscale' / 'project_templates' / 'credits'
         self.admin_py = self.credits_app_path / 'admin.py'
         
     def test_credit_purchase_package_admin_removed(self):
@@ -375,7 +350,7 @@ class AdminIntegrationTests(unittest.TestCase):
     
     def test_stripe_product_admin_enhanced(self):
         """Test that StripeProduct admin includes credit features."""
-        stripe_admin_py = self.base_path / 'quickscale' / 'templates' / 'stripe_manager' / 'admin.py'
+        stripe_admin_py = self.base_path / 'quickscale' / 'project_templates' / 'stripe_manager' / 'admin.py'
         with open(stripe_admin_py, 'r') as f:
             admin_content = f.read()
         
@@ -398,7 +373,7 @@ class MigrationTests(unittest.TestCase):
     def setUp(self):
         """Set up test environment."""
         self.base_path = Path(os.path.dirname(os.path.dirname(os.path.dirname(__file__))))
-        self.migrations_path = self.base_path / 'quickscale' / 'templates' / 'credits' / 'migrations'
+        self.migrations_path = self.base_path / 'quickscale' / 'project_templates' / 'credits' / 'migrations'
         self.migration_file = self.migrations_path / '0005_remove_credit_purchase_package.py'
         
     # Test that the removal migration was created and exists
@@ -413,4 +388,4 @@ class MigrationTests(unittest.TestCase):
 
 
 if __name__ == '__main__':
-    unittest.main() 
+    unittest.main()

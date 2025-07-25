@@ -12,7 +12,7 @@ from django.contrib.auth import get_user_model
 # Import models from the template location (what gets deployed)
 import sys
 import os
-template_path = os.path.join(os.path.dirname(__file__), '../../quickscale/templates')
+template_path = os.path.join(os.path.dirname(__file__), '../../quickscale/project_templates')
 sys.path.insert(0, template_path)
 
 from credits.models import (

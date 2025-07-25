@@ -1,5 +1,5 @@
 # Include all template files for project generation
-recursive-include quickscale/templates *
+recursive-include quickscale/project_templates *
 
 # Include all command files for project management
 recursive-include quickscale/commands *

@@ -70,81 +70,116 @@
 
 For more details refer to the [CHANGELOG](CHANGELOG.md).
 
-## System Architecture Overview
-
-The QuickScale credit system supports multiple payment models and credit types with flexible billing options. For complete details about the credit system architecture, consumption logic, and technical implementation, see the [Credit System Documentation](docs/CREDIT_SYSTEM.md).
-
-**Key Features:**
-- **Two Credit Types**: Pay-as-you-go (never expire) and subscription credits (monthly expiration)
-- **Three Purchase Options**: Basic plan, Pro plan, and one-time credit purchases
-- **Smart Consumption**: Subscription credits consumed first, then pay-as-you-go credits
-- **Variable Costs**: Each service/product consumes configurable credit amounts
-- **Real-time Tracking**: Complete usage and payment history for users and admins
-
 ## Development Sprints
 
 **Philosophy**: Small, focused sprints that can be completed in 1-2 days. Each sprint delivers immediate value and can be verified independently. Customer-facing features first, admin tools second.
 
 ---
 
-### Sprint 24: Stripe Integration Review (v0.35.0)
-**Goal**: Review Stripe API integration and payment processing
+### Sprint 25: Review Webpage Navigation and User-Facing HTML Templates for Improved User Experience (v0.36.0)
 
-**Deep Analysis**
-- **Component Architecture Study**: Analyze Stripe API integration architecture, webhook processing patterns, and payment flow design
-- **Code Pattern Identification**: Document product synchronization strategy, customer data consistency patterns, and error handling mechanisms
-- **Documentation Review**: Review Stripe integration documentation, security implementations, and payment processing workflows
+**Changes: Reorganize User-Facing HTML Templates and Navigation**
+- ✅ Review and deduplicate all login/signup/account-related templates, consolidating into a single set for authentication.
+- ✅ Group all user account management pages (Profile, API Keys, Password, 2FA) under a unified "Account" section.
+- ✅ Redesign the user dashboard to provide a true overview (credits, recent activity, quick links to services, profile, billing).
+- ✅ Group all credits and billing-related pages (Dashboard, Buy Credits, Plans, Subscription) under a "Billing" or "Credits" section.
+- ✅ Ensure all services-related pages are accessible from a single "Services" section.
+- ✅ Streamline the public pages (Home, About, Contact) and ensure they are clearly separated from authenticated user flows.
+- ✅ Update the navigation bar to reflect the new groupings and user journey:
+    - Public: Home, About, Contact, Plans (if enabled), Login/Signup
+    - Authenticated: Dashboard, Services, Account, Billing/Credits, Logout
+    - Admin: Admin Dashboard (if staff)
+- ✅ Refactor the content and sections within each page for logical grouping and minimal friction in user workflows.
 
-**Stripe Manager & API Integration**
-- ✅ Review StripeManager singleton pattern
-- ✅ Validate API integration and error handling
-- ✅ Check webhook processing security
-- ✅ Analyze product synchronization strategy
-- ✅ Review customer data consistency
+**Review**
+- ✅ Review the new navigation and page groupings for clarity and ease of use.
+- ✅ Ensure all user flows (signup, login, service usage, billing, profile management) are intuitive and require minimal clicks.
+- ✅ Validate that all essential features are still accessible and nothing important is hidden or removed.
 
-**AI API Consumption - Zero-Cost Services Implementation**
-- ✅ Update service consumption, 0 credits consumption for free services
-- ✅ Implement Model Validator Modification approach
-- ✅ Remove minimum credit cost validation constraint (change MinValueValidator(0.01) to MinValueValidator(0.0))
-- ✅ Create database migration for Service model credit_cost field constraint update
-- ✅ Enhance configure_service management command with --free flag support
-- ✅ Update service generator CLI with --free option for zero-cost service creation
-- ✅ Validate BaseService zero-cost handling integration (already implemented in code)
-- ✅ Add comprehensive test coverage for free services workflow
-- ✅ Update service configuration documentation for zero-cost services
+**Tests / Debug**
+- ✅ Create unit tests
+- ✅ Create integration tests
+- ✅ Manually test all navigation links and user flows for both public and authenticated users.
+- ✅ Validate that all forms (login, signup, profile, API keys, credits purchase) work as expected after reorganization.
+- ✅ Check for broken links, missing templates, or orphaned pages.
+- ✅ Update or add unit/integration tests for any backend logic that depends on template or navigation changes.
 
-**Implementation Tasks (Code-Based)**
-- ✅ Modify Service model validator in quickscale/templates/credits/models.py
-- ✅ Generate Django migration file for Service model constraint change
-- ✅ Update configure_service.py command to handle zero-cost service creation
-- ✅ Add --free flag to service_generator_commands.py CLI
-- ✅ Create unit tests for zero-cost service creation and execution
-- ✅ Update integration tests to cover free service credit consumption bypass
-- ✅ Update service development documentation with free service examples
-
-**Testing:**
-- ✅ Test Stripe API integration
-- ✅ Test webhook processing
-- ✅ Test payment flows
-- ✅ Test zero-cost service database creation and validation
-- ✅ Test BaseService credit consumption bypass for 0.0 cost services
-- ✅ Test ServiceUsage tracking for free services (zero-amount transactions)
-- ✅ Test CLI service generation with --free flag
-- ✅ Test configure_service command with --free option
-- ✅ Validate existing credit consumption logic remains intact
-
-**Success Criteria - Must deliver:**
-- ✅ **Updated Tests**: Comprehensive test coverage for Stripe integration, webhook processing, and payment flows
-- ✅ **Documentation**: Updated Stripe integration documentation with security patterns and API usage guide
-- ✅ **Zero-Cost Services**: Complete implementation of free services with 0.0 credit cost support
-- ✅ **Service Framework**: Enhanced BaseService with zero-cost handling and usage tracking
-- ✅ **CLI Integration**: Updated service generator and management commands with --free flag support
-- ✅ **Database Migration**: Proper constraint updates for zero-cost service support
-
-**Validation**: Stripe integration is secure and reliable, zero-cost services are fully functional
+**Additional Notes:**
+- ✅ All custom UI JavaScript is now Alpine.js (except Stripe checkout POST/redirect logic, which is allowed and documented).
+- ✅ Documentation updated to clarify Alpine.js-only policy and Stripe exception.
 
 ---
-### Sprint 25: Payment Flow and Checkout Process Review - Part 2 (v0.36.0)
+
+### Sprint 26: Reverse Development Workflow Implementation (v0.37.0)
+
+**Goal**: Implement a one-shot sync-back command for real-time syncing between generated projects and QuickScale templates with enhanced safety and cross-platform compatibility
+
+**Deep Analysis**
+- **Component Architecture Study**: Analyze template generation system, variable replacement patterns, and file safety for real-time development
+- **Code Pattern Identification**: Document template processing differences between `$variable` (generation-time) and `{{ variable }}` (runtime) patterns
+- **Simplified Strategy Exploration**: Research optimal one-shot sync-back approach combining preview reports with manual approval
+- **Cross-Platform Compatibility**: Ensure Windows, macOS, and Linux support with no OS-specific dependencies
+- **Documentation Review**: Complete sync-back workflow documentation with safety guidelines and best practices
+
+**One-Shot Sync-Back Command Implementation**
+- [ ] **Preview Report Generation**: Generate a detailed report of changes, including added, modified, deleted, and ignored files
+  - [ ] Categorize files into safe, careful, and never-sync groups
+  - [ ] Detect template variables and ensure preservation
+  - [ ] Provide a summary of changes for review
+- [ ] **Sync-Back Execution**: Apply changes based on the preview report
+  - [ ] Copy safe files directly
+  - [ ] Restore template variables in careful files
+  - [ ] Skip never-sync files
+- [ ] **Enhanced CLI Integration**: Add granular control commands
+  - [ ] `quickscale sync-back --preview` - Show changes without applying
+  - [ ] `quickscale sync-back --apply` - Apply all changes
+  - [ ] `quickscale sync-back --interactive` - Review and approve changes file-by-file
+
+**Cross-Platform Safety Enhancements**
+- [ ] **No OS Dependencies**: Avoid symlinks or file watchers
+  - [ ] Use standard file operations (e.g., rsync, shutil)
+  - [ ] Ensure compatibility with all platforms
+- [ ] **Enhanced Safety Mechanisms**: Multiple layers of protection
+  - [ ] Pre-operation validation and conflict detection
+  - [ ] Backup creation before applying changes
+  - [ ] Emergency recovery procedures
+
+**Validation and Testing Framework**
+- [ ] **Comprehensive Testing Suite**: Multi-platform validation
+  - [ ] Test on Windows, macOS, and Linux environments
+  - [ ] Test with different Python and Django versions
+  - [ ] Test Docker integration and volume mounting
+  - [ ] Test template generation with sync-back changes
+- [ ] **Safety Testing**: Edge case and failure scenario testing
+  - [ ] Test file corruption and restoration
+  - [ ] Test concurrent access and file locking
+
+**Success Criteria - Must deliver:**
+- [ ] **One-Shot Sync-Back Command**: Preview, apply, and interactive modes
+- [ ] **Cross-Platform Compatibility**: Works reliably on Windows, macOS, and Linux
+- [ ] **Enhanced CLI Interface**: Granular control with multiple sync modes
+- [ ] **Comprehensive Safety**: Multiple backup layers and recovery mechanisms
+- [ ] **Updated Tests**: Complete test coverage including cross-platform scenarios
+- [ ] **Documentation**: Updated workflow guide with simplified approach and platform considerations
+
+**Developer Experience Benefits:**
+- **Simplicity**: One command to sync changes back to templates
+- **Cross-Platform**: Works consistently across all development environments
+- **Explicit Control**: Preview and approve changes before applying
+- **Template Safety**: Variable mapping prevents template corruption
+- **Recovery Options**: Multiple backup and restoration points for safety
+
+**Phase Rollout Strategy:**
+1. **Week 1**: Implement preview report generation
+2. **Week 2**: Add sync-back execution with safety mechanisms
+3. **Week 3**: Integrate CLI commands and cross-platform testing
+4. **Week 4**: Comprehensive testing, documentation, and validation
+
+**Validation**: Developers can safely improve QuickScale templates through a one-shot sync-back command with appropriate safety measures for different file types and cross-platform reliability
+
+---
+
+### Sprint 27: Payment Flow and Checkout Process Review - Part 2 (v0.38.0)
 **Goal**: Review Stripe API integration and payment processing
 
 **Deep Analysis**
@@ -170,7 +205,7 @@ The QuickScale credit system supports multiple payment models and credit types w
 
 ---
 
-### Sprint 26: Payment Flow and Checkout Process Review (v0.37.0)
+### Sprint 28: Payment Flow and Checkout Process Review (v0.39.0)
 **Goal**: Review and unify payment flow and checkout process across all payment types
 
 **Deep Analysis**
@@ -215,7 +250,7 @@ The QuickScale credit system supports multiple payment models and credit types w
 
 ---
 
-### Sprint 27: Refund Processing Workflow Analysis (v0.38.0)
+### Sprint 29: Refund Processing Workflow Analysis (v0.40.0)
 **Goal**: Analyze and enhance the admin refund processing system
 
 **Deep Analysis**
@@ -260,7 +295,7 @@ The QuickScale credit system supports multiple payment models and credit types w
 
 ---
 
-### Sprint 28: Webhook Event Processing Review (v0.39.0)
+### Sprint 30: Webhook Event Processing Review (v0.41.0)
 **Goal**: Review and optimize webhook event processing system
 
 **Deep Analysis**
@@ -305,7 +340,7 @@ The QuickScale credit system supports multiple payment models and credit types w
 
 ---
 
-### Sprint 29: AI Service Framework Review (v0.40.0)
+### Sprint 31: AI Service Framework Review (v0.42.0)
 **Goal**: Review AI service framework architecture and tools
 
 **Deep Analysis**
@@ -344,209 +379,6 @@ The QuickScale credit system supports multiple payment models and credit types w
 
 **Validation**: AI service framework is developer-friendly and extensible
 
----
-
-### Sprint 30: Reverse Development Workflow Implementation (v0.41.0)
-**Goal**: Implement symlink-based reverse development workflow for real-time syncing between generated projects and QuickScale templates
-
-**Deep Analysis**
-- **Component Architecture Study**: Analyze template generation system, variable replacement patterns, and symlink safety for real-time development
-- **Code Pattern Identification**: Document template processing differences between `$variable` (generation-time) and `{{ variable }}` (runtime) patterns
-- **Documentation Review**: Complete symlink development workflow documentation with safety guidelines and best practices
-
-**Symlink Development Environment Implementation**
-- [ ] **Dual Command Architecture**: Implement both initialization and conversion approaches
-  - [ ] `quickscale init-dev`: Create project with symlinks from the start (clean setup)
-  - [ ] `quickscale sync-back`: Convert existing project to symlink environment (flexible conversion)
-  - [ ] Shared core logic for symlink creation, safety, and validation
-  - [ ] Unified backup and restoration mechanisms for both approaches
-- [ ] **Core Symlink Management**: Implement robust symlink creation and management
-  - [ ] Safe symlink creation with comprehensive backup mechanisms
-  - [ ] Intelligent file categorization for safe vs. careful vs. never-sync files
-  - [ ] Automatic backup creation before symlink setup (both commands)
-  - [ ] Complete restoration capabilities and error recovery
-- [ ] **Development Helper Integration**: Streamlined development workflow support
-  - [ ] Enhanced `quickscale up` with symlink environment detection
-  - [ ] `quickscale validate-templates` for testing changes in new projects
-  - [ ] `quickscale restore-dev` for reverting to backup state
-  - [ ] Status reporting in `quickscale ps` and `quickscale check`
-
-**Template Processing Intelligence**
-- [ ] **Safe File Detection**: Implement automatic categorization of files by template processing needs
-  - [ ] ✅ Safe files: HTML templates, CSS, JavaScript, Django views/models (use `{{ project_name }}`)
-  - [ ] ⚠️ Careful files: Settings files, service files (contain `$secret_key`, `$service_name`)
-  - [ ] 🚫 Never sync: Database files, migrations, logs, cache files
-- [ ] **Template Variable Restoration**: Implement intelligent restoration of `$variable` placeholders
-  - [ ] Auto-detect generation-time variables in synced files
-  - [ ] Restore template placeholders while preserving improvements
-  - [ ] Handle edge cases and custom variable patterns
-
-**Validation and Testing Framework**
-- [ ] **Comprehensive Testing Suite**: Create `test_template_changes.sh` for validating sync operations
-  - [ ] Test project generation with synced changes
-  - [ ] Validate template rendering and Django functionality
-  - [ ] Test Docker build and startup processes
-  - [ ] Verify static files and component functionality
-- [ ] **Multiple Project Validation**: Test improvements across different project configurations
-  - [ ] Generate multiple test projects with synced changes
-  - [ ] Validate consistency across different project names and settings
-  - [ ] Test edge cases and error scenarios
-
-**CLI Integration**
-- [ ] **Primary Symlink Development Commands**: Add core symlink commands to main CLI
-  - [ ] `quickscale init-dev <project-name>` - Initialize project with symlinks from the start
-  - [ ] `quickscale sync-back` - Convert existing project to symlink development environment
-  - [ ] `quickscale validate-templates` - Test template changes and symlink integrity
-  - [ ] `quickscale restore-dev` - Restore from backup and remove symlinks
-- [ ] **Development Workflow Integration**: Integrate with existing development commands
-  - [ ] Add symlink environment detection to `quickscale check` command
-  - [ ] Include symlink status in project management commands (`quickscale ps`)
-  - [ ] Provide clear guidance for both init-dev and sync-back workflows
-
-**Hands-on Implementation**
-- [ ] Implement symlink development environment with full automation and safety
-- [ ] Create comprehensive backup, testing, and validation infrastructure
-- [ ] Integrate symlink development commands into QuickScale CLI
-- [ ] Add development environment setup, management, and restoration tools
-- [ ] Include comprehensive error handling, recovery, and safety mechanisms
-
-**Testing:**
-- [ ] Test `quickscale init-dev` command with clean symlink project creation
-- [ ] Test `quickscale sync-back` command with existing project conversion
-- [ ] Test real-time changes and immediate template synchronization (both approaches)
-- [ ] Validate template processing and variable preservation in symlink environments
-- [ ] Test CLI integration, status reporting, and symlink management functionality
-- [ ] Verify backup, restoration, and error recovery systems for both commands
-- [ ] Test comprehensive validation and integrity checking framework
-
-**Success Criteria - Must deliver:**
-- [ ] **Symlink Development Environment**: Complete symlink-based development workflow implemented and tested
-- [ ] **Intelligent Template Processing**: Safe file categorization and variable preservation working correctly
-- [ ] **CLI Integration**: Symlink development commands integrated into QuickScale CLI
-- [ ] **Safety and Recovery Systems**: Comprehensive backup, restoration, and error recovery mechanisms
-- [ ] **Updated Tests**: Complete test coverage for symlink development workflow and safety systems
-- [ ] **Documentation**: Implementation guide and usage examples for symlink development workflow
-
-**Developer Experience Benefits:**
-- **Flexible Workflow Options**: Choose `init-dev` for new projects or `sync-back` for existing projects
-- **Real-Time Development**: Edit web pages in generated projects with instant sync to generator templates
-- **Template Safety**: Intelligent symlink handling ensures no breaking changes to template variables
-- **Ultra-Fast Workflow**: Immediate synchronization without manual sync steps or complex git workflows
-- **Safety Assurance**: Comprehensive backup and restoration systems prevent data loss for both approaches
-- **CLI Integration**: Seamless integration with existing QuickScale development workflow and status reporting
-
-**Validation**: Developers can efficiently improve QuickScale templates through real-time symlink development with immediate synchronization and comprehensive safety systems
-
----
-
-### Sprint 31: AI Visual Development System (v0.42.0) 
-**Goal**: Implement AI-assisted visual development with real-time webpage feedback and automatic page detection
-
-**Deep Analysis**
-- **Component Architecture Study**: Analyze HTML-first template analysis approach, AI integration patterns, and real-time feedback loop design
-- **Code Pattern Identification**: Document screenshot capture automation, Django template processing, and change management workflow
-- **Documentation Review**: Complete AI visual development documentation with integration guidelines and safety patterns
-
-**Core AI Development Infrastructure**
-- [ ] **HTML Template Extractor**: Implement intelligent Django template analysis system
-  - [ ] Extract template content with Django variable preservation ({{ project_name }})
-  - [ ] Map CSS classes to stylesheet dependencies and relationships
-  - [ ] Identify component includes and template inheritance patterns
-  - [ ] Parse Alpine.js and HTMX directives for JavaScript integration
-- [ ] **Visual Feedback Engine**: Implement automated screenshot capture and analysis
-  - [ ] Browser automation with Playwright for screenshot capture
-  - [ ] Multi-viewport screenshots (desktop, tablet, mobile) for responsive analysis
-  - [ ] Visual diff engine for before/after comparison capabilities
-  - [ ] Screenshot annotation and metadata collection for AI context
-- [ ] **AI Integration Layer**: Implement AI service integration for webpage analysis
-  - [ ] OpenAI/Anthropic API integration with vision model support
-  - [ ] AI prompt engineering for visual development context
-  - [ ] Template modification request processing and validation
-  - [ ] AI response parsing and change instruction generation
-
-**Smart Page Detection System**
-- [ ] **Django Request Monitoring**: Implement primary page detection through Django middleware
-  - [ ] Real-time request tracking with path and template mapping
-  - [ ] Automatic URL-to-template relationship detection
-  - [ ] Recent page history tracking for context awareness
-  - [ ] High-confidence page detection (90% accuracy) for active development
-- [ ] **File System Monitoring**: Implement secondary detection through template file access
-  - [ ] Template file access pattern monitoring with watchdog
-  - [ ] Inference of current page from template usage patterns
-  - [ ] Medium-confidence detection (70% accuracy) as backup method
-  - [ ] Template activity logging and pattern recognition
-- [ ] **Browser Process Monitoring**: Implement fallback detection through browser process analysis
-  - [ ] Browser process scanning for localhost URL detection
-  - [ ] Command line URL extraction from browser processes
-  - [ ] Low-confidence detection (50% accuracy) as last resort
-  - [ ] Cross-platform browser support for development flexibility
-
-**Change Management and Safety System**
-- [ ] **Atomic Change Application**: Implement safe template modification system
-  - [ ] Backup creation before every AI-suggested change
-  - [ ] Atomic file operations with rollback capabilities
-  - [ ] Change validation and Django template syntax checking
-  - [ ] Error recovery and automatic restoration on failure
-- [ ] **Validation Framework**: Implement comprehensive change validation
-  - [ ] Template syntax validation for Django compatibility
-  - [ ] CSS validation for style integrity
-  - [ ] HTML structure validation for markup quality
-  - [ ] Pre-flight checks for change safety and template variable preservation
-
-**CLI Integration and Development Workflow**
-- [ ] **AI Development Commands**: Add core AI development commands to QuickScale CLI
-  - [ ] `quickscale ai-dev start` - Initialize AI development with automatic page detection
-  - [ ] `quickscale ai-dev analyze "request"` - AI analysis and modification of current page
-  - [ ] `quickscale ai-dev current-page` - Display detected current page with confidence
-  - [ ] `quickscale ai-dev monitor` - Real-time page change monitoring
-  - [ ] `quickscale ai-dev screenshot` - Capture current page screenshots
-  - [ ] `quickscale ai-dev rollback --backup-id` - Rollback changes with backup restoration
-- [ ] **Integration with Symlink Workflow**: Seamless integration with Sprint 26 reverse development
-  - [ ] Automatic symlink environment detection and optimization
-  - [ ] Real-time change synchronization with template generator
-  - [ ] Enhanced development workflow with immediate visual feedback
-  - [ ] Integration with existing project management commands
-
-**Hands-on Implementation**
-- [ ] Implement HTML-first template analysis with Django variable preservation
-- [ ] Create automated screenshot capture system with multi-viewport support
-- [ ] Build smart page detection with multiple fallback methods and confidence scoring
-- [ ] Integrate AI services for visual analysis and template modification
-- [ ] Develop change management system with safety, validation, and rollback capabilities
-- [ ] Add AI development commands to QuickScale CLI with existing workflow integration
-
-**Testing:**
-- [ ] Test HTML template extraction and Django variable preservation
-- [ ] Test screenshot capture automation across multiple viewports
-- [ ] Test smart page detection with all three methods (Django, file system, browser)
-- [ ] Test AI integration with visual context and template modification
-- [ ] Test change application, validation, and rollback systems
-- [ ] Test CLI integration and development workflow commands
-- [ ] Validate integration with symlink development workflow from Sprint 26
-
-**Success Criteria - Must deliver:**
-- [ ] **AI Visual Development System**: Complete HTML-first AI development system with real-time feedback
-- [ ] **Smart Page Detection**: Multi-method automatic page detection with confidence scoring
-- [ ] **Safe Change Management**: Atomic template modifications with backup and rollback capabilities
-- [ ] **CLI Integration**: AI development commands integrated into QuickScale CLI
-- [ ] **Updated Tests**: Comprehensive test coverage for AI development system and page detection
-- [ ] **Documentation**: Implementation guide and usage examples for AI-assisted visual development
-
-**Developer Experience Benefits:**
-- **Context-Aware AI**: AI automatically knows which page you're viewing without manual URL input
-- **Visual Understanding**: AI sees screenshots and understands current design state
-- **Real-Time Feedback**: Changes appear immediately in running project via symlink workflow
-- **Safe Experimentation**: Comprehensive backup and rollback system prevents loss of work
-- **Seamless Integration**: Works with existing QuickScale development workflow and commands
-- **Multi-Viewport Analysis**: AI considers responsive design across desktop, tablet, and mobile views
-
-**Integration Points:**
-- **Symlink Workflow**: Builds on Sprint 26 reverse development workflow for immediate synchronization
-- **Template System**: Leverages existing QuickScale template architecture and Django patterns
-- **CLI Commands**: Extends existing command system with AI development capabilities
-- **Error Handling**: Uses existing error management and logging infrastructure
-
-**Validation**: Developers can request AI improvements to web pages using natural language, with AI automatically detecting the current page, analyzing visual state, and applying changes that appear immediately in the running project
 
 ---
 
@@ -914,7 +746,10 @@ The QuickScale credit system supports multiple payment models and credit types w
 - [ ] **Updated Tests**: Complete test suite validation and final regression tests
 - [ ] **Documentation**: Final documentation review with launch-ready user guides and technical documentation
 
-**Validation**: QuickScale v1.0.0 is ready for public launch
 
----
+### Sprint 41: Manual Polish
+- [ ] Why js and static/js directories in project templates?
+- [ ] Why tests in project templates instead of quickscale/tests?
+- [ ] Why docs in project templates instead of quickscale/docs?
+- [ ] Why services directoty in root with tests inside?
 

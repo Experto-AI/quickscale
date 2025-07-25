@@ -522,10 +522,16 @@ class EmailVerificationSecurityTest(TestCase):
                     self.assertEqual(response.status_code, 200)
                     self.assertContains(response, 'invalid')
                     
-                    # Assert: Response doesn't contain actual XSS patterns
-                    self.assertNotContains(response, '<script>')
+                    # Assert: Response doesn't contain the injected XSS attempt
+                    self.assertNotContains(response, xss)
+                    # Assert: Response doesn't contain common XSS injection patterns
                     self.assertNotContains(response, 'javascript:')
                     self.assertNotContains(response, 'onerror=')
+                    self.assertNotContains(response, 'onload=')
+                    self.assertNotContains(response, 'alert(')
+                    # Ensure XSS attempt wasn't reflected in any script context
+                    self.assertNotContains(response, f'<script>{xss}')
+                    self.assertNotContains(response, f'script{xss}')
                 except Exception as e:
                     # If reverse fails with invalid characters, that's also proper XSS protection
                     self.assertIn('not found', str(e).lower())

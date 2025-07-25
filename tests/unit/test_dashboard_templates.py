@@ -18,15 +18,15 @@ class AdminDashboardTemplateTests(unittest.TestCase):
         # Locate the template files
         self.base_path = Path(os.path.dirname(os.path.dirname(os.path.dirname(__file__))))
         # self.templates_path = self.base_path / 'templates' / 'admin_dashboard' / 'templates' # Old path
-        self.quickscale_templates_path = self.base_path / 'quickscale' / 'templates' / 'templates' / 'admin_dashboard'
+        self.quickscale_templates_path = self.base_path / 'quickscale' / 'project_templates' / 'templates' / 'admin_dashboard'
         
         # Template files
         self.product_admin_template = self.quickscale_templates_path / 'product_admin.html' # Corrected path
         self.product_detail_template = self.quickscale_templates_path / 'product_detail.html' # Corrected path
         
         # URLs and views files
-        self.urls_path = self.base_path / 'quickscale' / 'templates' / 'admin_dashboard' / 'urls.py'
-        self.views_path = self.base_path / 'quickscale' / 'templates' / 'admin_dashboard' / 'views.py'
+        self.urls_path = self.base_path / 'quickscale' / 'project_templates' / 'admin_dashboard' / 'urls.py'
+        self.views_path = self.base_path / 'quickscale' / 'project_templates' / 'admin_dashboard' / 'views.py'
     
     def test_product_admin_template_exists(self):
         """Test that the product admin template exists."""

@@ -22,14 +22,14 @@ class URLRoutingHierarchyTests(unittest.TestCase):
         """Set up test environment."""
         self.base_path = Path(os.path.dirname(os.path.dirname(os.path.dirname(__file__))))
         self.url_files = {
-            'core': self.base_path / 'quickscale' / 'templates' / 'core' / 'urls.py',
-            'credits': self.base_path / 'quickscale' / 'templates' / 'credits' / 'urls.py',
-            'api': self.base_path / 'quickscale' / 'templates' / 'api' / 'urls.py',
-            'public': self.base_path / 'quickscale' / 'templates' / 'public' / 'urls.py',
-            'users': self.base_path / 'quickscale' / 'templates' / 'users' / 'urls.py',
-            'stripe_manager': self.base_path / 'quickscale' / 'templates' / 'stripe_manager' / 'urls.py',
-            'admin_dashboard': self.base_path / 'quickscale' / 'templates' / 'admin_dashboard' / 'urls.py',
-            'services': self.base_path / 'quickscale' / 'templates' / 'services' / 'urls.py'
+            'core': self.base_path / 'quickscale' / 'project_templates' / 'core' / 'urls.py',
+            'credits': self.base_path / 'quickscale' / 'project_templates' / 'credits' / 'urls.py',
+            'api': self.base_path / 'quickscale' / 'project_templates' / 'api' / 'urls.py',
+            'public': self.base_path / 'quickscale' / 'project_templates' / 'public' / 'urls.py',
+            'users': self.base_path / 'quickscale' / 'project_templates' / 'users' / 'urls.py',
+            'stripe_manager': self.base_path / 'quickscale' / 'project_templates' / 'stripe_manager' / 'urls.py',
+            'admin_dashboard': self.base_path / 'quickscale' / 'project_templates' / 'admin_dashboard' / 'urls.py',
+            'services': self.base_path / 'quickscale' / 'project_templates' / 'services' / 'urls.py'
         }
     
     def test_core_urls_hierarchy(self):
@@ -123,10 +123,10 @@ class URLPatternConsistencyTests(unittest.TestCase):
         """Set up test environment."""
         self.base_path = Path(os.path.dirname(os.path.dirname(os.path.dirname(__file__))))
         self.url_files = {
-            'credits': self.base_path / 'quickscale' / 'templates' / 'credits' / 'urls.py',
-            'public': self.base_path / 'quickscale' / 'templates' / 'public' / 'urls.py',
-            'users': self.base_path / 'quickscale' / 'templates' / 'users' / 'urls.py',
-            'admin_dashboard': self.base_path / 'quickscale' / 'templates' / 'admin_dashboard' / 'urls.py'
+            'credits': self.base_path / 'quickscale' / 'project_templates' / 'credits' / 'urls.py',
+            'public': self.base_path / 'quickscale' / 'project_templates' / 'public' / 'urls.py',
+            'users': self.base_path / 'quickscale' / 'project_templates' / 'users' / 'urls.py',
+            'admin_dashboard': self.base_path / 'quickscale' / 'project_templates' / 'admin_dashboard' / 'urls.py'
         }
     
     def test_url_naming_conventions(self):
@@ -185,8 +185,8 @@ class RESTfulURLDesignTests(unittest.TestCase):
     def setUp(self):
         """Set up test environment."""
         self.base_path = Path(os.path.dirname(os.path.dirname(os.path.dirname(__file__))))
-        self.api_urls = self.base_path / 'quickscale' / 'templates' / 'api' / 'urls.py'
-        self.credits_urls = self.base_path / 'quickscale' / 'templates' / 'credits' / 'urls.py'
+        self.api_urls = self.base_path / 'quickscale' / 'project_templates' / 'api' / 'urls.py'
+        self.credits_urls = self.base_path / 'quickscale' / 'project_templates' / 'credits' / 'urls.py'
     
     def test_resource_based_urls(self):
         """Test that URLs follow resource-based patterns."""
@@ -222,7 +222,7 @@ class RESTfulURLDesignTests(unittest.TestCase):
     def test_action_based_urls(self):
         """Test that action-based URLs are properly structured."""
         for app_name in ['credits', 'admin_dashboard']:
-            url_file = self.base_path / 'quickscale' / 'templates' / app_name / 'urls.py'
+            url_file = self.base_path / 'quickscale' / 'project_templates' / app_name / 'urls.py'
             if url_file.exists():
                 with open(url_file, 'r') as f:
                     content = f.read()
@@ -247,9 +247,9 @@ class URLSecurityTests(unittest.TestCase):
         """Set up test environment."""
         self.base_path = Path(os.path.dirname(os.path.dirname(os.path.dirname(__file__))))
         self.url_files = {
-            'core': self.base_path / 'quickscale' / 'templates' / 'core' / 'urls.py',
-            'admin_dashboard': self.base_path / 'quickscale' / 'templates' / 'admin_dashboard' / 'urls.py',
-            'api': self.base_path / 'quickscale' / 'templates' / 'api' / 'urls.py'
+            'core': self.base_path / 'quickscale' / 'project_templates' / 'core' / 'urls.py',
+            'admin_dashboard': self.base_path / 'quickscale' / 'project_templates' / 'admin_dashboard' / 'urls.py',
+            'api': self.base_path / 'quickscale' / 'project_templates' / 'api' / 'urls.py'
         }
     
     def test_admin_url_patterns(self):

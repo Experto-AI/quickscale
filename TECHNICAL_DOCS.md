@@ -3,8 +3,10 @@
 This document contains detailed technical information about the QuickScale project, including the tech stack, project structure, development workflows, and more.
 
 QuickScale is a project generator that generates a project only once.
+It is not a generated django project, but a project generator that creates a django project from templates.
 
 AI coding assistants must edit the template files (root cause or source files), not project generated files (destination files). When creating tests of fixing bugs, AI coding assistants must edit the template files in the QuickScale project generator, not the generated files in the deployed django project.
+
 
 The main command for end users is `quickscale init`, which creates a new project from templates.
 Project configuration is managed through environment variables with secure defaults.
@@ -37,7 +39,7 @@ quickscale/
 ├── commands/                 # Command system implementation
 ├── config/                   # Configuration management
 ├── cli.py                    # CLI Entry Point
-├── templates/                # Project template files
+├── project_templates/        # Django project template files
 │   ├── common/               # Common Django app
 │   │   ├── migrations/       # Pre-generated migrations
 │   │   ├── templates/        # App-specific templates
@@ -110,7 +112,7 @@ quickscale/
 │   │   ├── favicon.svg       # SVG favicon
 │   │   ├── favicon.ico       # ICO favicon
 │   │   └── generate_favicon.sh # Favicon generation script
-│   ├── templates/            # Global templates
+│   ├── templates/            # Django HTML templates (no confusion now!)
 │   │   ├── account/          # Authentication templates
 │   │   │   └── email/        # Email templates
 │   │   ├── base/             # Base templates
@@ -535,65 +537,65 @@ config:
 classDiagram
 direction LR
     class Command {
-	    +logger: Logger
-	    +execute()*
-	    +handle_error()
-	    +safe_execute()
+        +logger: Logger
+        +execute()*
+        +handle_error()
+        +safe_execute()
     }
     class ProjectCommand {
-	    +project_name: str
-	    +validate_project_name()
+        +project_name: str
+        +validate_project_name()
     }
     class ServiceCommand {
-	    +check_project_exists()
+        +check_project_exists()
     }
     class DevelopmentCommand {
-	    +setup_environment()
+        +setup_environment()
     }
     class SystemCommand {
-	    +check_dependencies()
+        +check_dependencies()
     }
     class InitCommand {
-	    +execute(project_name)
-	    +validate_project_name(project_name)
+        +execute(project_name)
+        +validate_project_name(project_name)
     }
     class DestroyProjectCommand {
-	    +execute()
-	    +prompt_confirmation()
-	    +remove_project_files()
+        +execute()
+        +prompt_confirmation()
+        +remove_project_files()
     }
     class ServiceUpCommand {
-	    +execute()
-	    +start_docker_services()
+        +execute()
+        +start_docker_services()
     }
     class ServiceDownCommand {
-	    +execute()
-	    +stop_docker_services()
+        +execute()
+        +stop_docker_services()
     }
     class ServiceLogsCommand {
-	    +execute(service, follow, lines)
-	    +stream_docker_logs()
+        +execute(service, follow, lines)
+        +stream_docker_logs()
     }
     class ServiceStatusCommand {
-	    +execute()
-	    +get_service_status()
+        +execute()
+        +get_service_status()
     }
     class ShellCommand {
-	    +execute(django_shell)
-	    +start_interactive_shell()
+        +execute(django_shell)
+        +start_interactive_shell()
     }
     class ManageCommand {
-	    +execute(args)
-	    +run_django_command()
+        +execute(args)
+        +run_django_command()
     }
     class CheckCommand {
-	    +execute()
-	    +check_requirements()
+        +execute()
+        +check_requirements()
     }
     class UntitledClass {
     }
 
-	<<abstract>> Command
+    <<abstract>> Command
 
     Command <|-- ProjectCommand
     Command <|-- ServiceCommand
@@ -800,6 +802,8 @@ Available templates:
 
 ### HTML Templates
 
+All Django templates in this project must extend `base.html` (the canonical base template) to ensure consistent style and functionality across all pages. Do not use or create base template variants.
+
 Authentication HTML templates are located in:
 
 ```
@@ -860,6 +864,36 @@ To modify the authentication flow:
 2. Check that your custom adapters are correctly registered in settings
 3. Review django-allauth documentation for the correct method names
 4. Clear your browser cache and Django cache
+
+## PAYMENT FLOW ARCHITECTURE
+
+### Overview
+
+QuickScale implements a **standardized payment flow** using **Pure Form + POST** approach across all payment types for maximum simplicity, reliability, and consistency.
+
+### Unified Payment Pattern
+
+All payment flows (subscriptions, credits, plan changes) follow the **exact same pattern**:
+
+1. **User Action**: Click button → HTML form submits via POST
+2. **Django Processing**: View creates Stripe checkout session
+3. **Immediate Redirect**: `return redirect(session.url)` to Stripe checkout
+4. **Payment Completion**: Stripe redirects back to success/cancel URLs
+
+### Benefits of This Approach
+
+- **✨ Simplicity**: No JavaScript complexity, just standard HTML forms
+- **🔒 Reliability**: Direct POST → Redirect flow, no AJAX failure points  
+- **📱 Accessibility**: Works without JavaScript enabled
+- **🛠️ Maintainability**: Easy to debug and modify
+- **⚡ Performance**: No client-side state management overhead
+
+### Error Handling
+
+- **Form Errors**: Django messages + redirect back to form
+- **Stripe Errors**: Logged + user-friendly message + redirect
+- **Missing Data**: Validation + redirect with error message
+- **Success Flow**: Stripe handles payment → webhook processes → success page
 
 ## AI SERVICE FRAMEWORK
 
@@ -1317,18 +1351,21 @@ Alpine.js is used for all client-side interactivity and state management:
 3. **Form validation**: Client-side validation
 4. **Interactive UI components**: Password strength meters, toggles, etc.
 
+
 ### JavaScript Implementation Standards
 
-- **Alpine.js Only**: All client-side interactions MUST be implemented using Alpine.js. Vanilla JavaScript or other frameworks (React, Vue, jQuery, etc.) are NOT permitted.
+- **Alpine.js Only**: All client-side interactions and UI logic (modals, dropdowns, state, etc.) MUST be implemented using Alpine.js. Vanilla JavaScript or other frameworks (React, Vue, jQuery, etc.) are NOT permitted for UI logic.
+- **Stripe Checkout Exception**: Only the Stripe checkout POST/redirect logic (i.e., the code that POSTs to the backend and redirects the user to Stripe's secure checkout page) may use vanilla JavaScript, as required by Stripe's security and integration requirements. All other UI state, modal, and interactive logic must use Alpine.js.
 - **Component Structure**: Complex functionality should be organized as reusable Alpine.js components.
 - **Declaration in Templates**: Alpine directives should be declared directly in HTML templates using the `x-data`, `x-bind`, `x-on`, etc. attributes.
 - **Global Component Functions**: For reusable components, define global functions that return Alpine.js component data objects.
 - **Minimal External Dependencies**: Avoid adding additional JavaScript libraries unless absolutely necessary.
 
-**✅ DO: Use Alpine.js for interactive elements**
-**❌ DON'T: Use vanilla JavaScript DOM manipulation**
-**✅ DO: Use Alpine.js for form validation**
+**✅ DO: Use Alpine.js for all interactive UI elements, modals, and state**
+**❌ DON'T: Use vanilla JavaScript DOM manipulation for UI logic**
+**✅ DO: Use Alpine.js for form validation and modal state**
 **❌ DON'T: Add other frameworks like jQuery or React**
+**✅ DO: Use vanilla JavaScript only for Stripe checkout POST/redirect logic (never for UI state)**
 
 ## FEATURES
 
@@ -1428,3 +1465,64 @@ The credit system provides a sophisticated foundation for SaaS monetization:
 - **Duplicate Prevention**: Built-in safeguards against duplicate refund processing
 
 These tools provide essential payment support capabilities for QuickScale administrators while maintaining data integrity and audit compliance.
+
+## AUTHENTICATION SYSTEM
+
+### Overview
+
+QuickScale uses a **simplified, DRY authentication system** powered by **django-allauth** with minimal customizations. 
+
+**Key Principles:**
+- **DRY Compliance**: Leverages django-allauth's battle-tested functionality instead of custom implementations
+- **Email-only authentication**: No usernames, only email addresses for user identification
+- **Minimal customization**: Only essential customizations that add business value
+- **Template styling**: Authentication forms styled with Bulma CSS for UI consistency
+
+**Primary Configuration Files:**
+1. **core/email_settings.py**: Django-allauth settings and email configuration
+2. **users/adapters.py**: Minimal AccountAdapter for custom business logic
+3. **users/models.py**: CustomUser model with email-only authentication
+4. **templates/account/**: Styled templates for authentication flows
+
+The `CustomUser` model extends Django's AbstractUser.
+The minimal `AccountAdapter` provides only essential customizations.
+
+**Template Structure:**
+```
+templates/account/
+├── login.html              # Consolidated login page with form
+├── signup.html             # Consolidated signup page with form  
+├── password_reset.html     # Password reset request
+├── password_change.html    # Password change (logged in users)
+├── password_reset_from_key.html  # Set new password from email link
+├── logout.html             # Logout confirmation
+├── verification_sent.html  # Email verification sent notice
+└── email/                  # Email templates
+    ├── email_confirmation_message.txt
+    └── password_reset_key_message.txt
+```
+
+**Template Principles:**
+- **Consolidated forms**: Login and signup forms integrated into main templates (no separate `*_form.html` files)
+- **Django-allauth form usage**: Templates use `{{ form.field }}` directly from allauth
+- **Bulma styling**: CSS classes applied via templates and global CSS
+- **Minimal JavaScript**: Removed custom password validation in favor of Django's server-side validation
+
+**Built-in Security (via django-allauth):**
+- **Rate limiting**: `ACCOUNT_RATE_LIMITS` prevents brute force attacks
+- **Email verification**: Optional/mandatory email confirmation
+- **Secure password reset**: HMAC-based password reset tokens
+- **Session management**: Proper session handling and logout
+
+**Custom Security Enhancements:**
+- **Password strength validation**: Custom validators for complexity requirements
+- **Account lockout**: Custom model for extended lockout functionality (complement to allauth rate limiting)
+- **Security logging**: Login attempt logging for audit trails
+
+### Authentication Flow
+
+1. **Registration**: User submits email + passwords → django-allauth creates user → email verification (optional)
+2. **Login**: User submits email + password → django-allauth validates → redirect based on user type
+3. **Password Reset**: User requests reset → django-allauth sends secure email → user sets new password
+4. **Email Verification**: User clicks email link → django-allauth verifies → account fully activated
+

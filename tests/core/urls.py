@@ -14,11 +14,15 @@ def dummy_about(request):
 def dummy_profile(request):
     return HttpResponse("Test Profile Page")
 
+
 def dummy_logout(request):
     return HttpResponse("Test Logout")
 
 def dummy_signup(request):
     return HttpResponse("Test Signup")
+
+def dummy_account_security(request):
+    return HttpResponse("Test Account Security Page")
 
 def dummy_login(request):
     return HttpResponse("Test Login")
@@ -60,6 +64,7 @@ users_urls = [
     path('logout/', dummy_logout, name='logout'),
     path('signup/', dummy_signup, name='signup'),
     path('login/', dummy_login, name='login'),
+    path('account-security/', dummy_account_security, name='account_security'),
 ]
 
 # Create services namespace for template compatibility
@@ -74,3 +79,17 @@ urlpatterns += [
     path('users/', include((users_urls, 'users'), namespace='users')),
     path('services/', include((services_urls, 'services'), namespace='services')),
 ]
+
+# Import settings to check if Stripe is enabled
+from django.conf import settings
+
+# Add Stripe URLs if Stripe is enabled in settings
+if getattr(settings, 'STRIPE_ENABLED', False):
+    try:
+        # Import and add stripe URLs
+        urlpatterns += [
+            path('stripe/', include('stripe_manager.urls', namespace='stripe')),
+        ]
+    except ImportError:
+        # If stripe_manager is not available, ignore
+        pass

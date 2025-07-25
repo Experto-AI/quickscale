@@ -1,0 +1,149 @@
+/* Main stylesheet for QuickScale */
+
+/* Global styles */
+body {
+    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+    line-height: 1.6;
+    color: #333;
+    background-color: #f8f9fa;
+}
+
+/* Layout */
+.container {
+    max-width: 1200px;
+    margin: 0 auto;
+    padding: 0 15px;
+}
+
+/* Header styles */
+header {
+    background-color: #fff;
+    box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1);
+    padding: 1rem 0;
+}
+
+/* Footer styles */
+footer {
+    background-color: #f1f1f1;
+    padding: 2rem 0;
+    margin-top: 3rem;
+}
+
+/* Form styles */
+.form-group {
+    margin-bottom: 1.5rem;
+}
+
+/* Django-allauth form styling to match Bulma */
+form input[type="email"],
+form input[type="password"],
+form input[type="text"] {
+    display: block;
+    width: 100%;
+    padding: 0.75rem;
+    font-size: 1rem;
+    line-height: 1.5;
+    color: #495057;
+    background-color: #fff;
+    background-clip: padding-box;
+    border: 1px solid #dbdbdb;
+    border-radius: 4px;
+    transition: border-color 0.15s ease-in-out, box-shadow 0.15s ease-in-out;
+}
+
+form input[type="email"]:focus,
+form input[type="password"]:focus,
+form input[type="text"]:focus {
+    border-color: #3273dc;
+    outline: 0;
+    box-shadow: 0 0 0 0.125em rgba(50, 115, 220, 0.25);
+}
+
+/* Specific styling for allauth forms */
+.account-form input[type="email"],
+.account-form input[type="password"],
+.account-form input[type="text"] {
+    display: block;
+    width: 100%;
+    padding: 0.75rem;
+    font-size: 1rem;
+    line-height: 1.5;
+    color: #495057;
+    background-color: #fff;
+    background-clip: padding-box;
+    border: 1px solid #dbdbdb;
+    border-radius: 4px;
+    transition: border-color 0.15s ease-in-out, box-shadow 0.15s ease-in-out;
+}
+
+.account-form input[type="email"]:focus,
+.account-form input[type="password"]:focus,
+.account-form input[type="text"]:focus {
+    border-color: #3273dc;
+    outline: 0;
+    box-shadow: 0 0 0 0.125em rgba(50, 115, 220, 0.25);
+}
+
+/* Button styles are now handled by Bulma's .button and modifiers. Use .is-rounded for rounded buttons. */
+
+/* Table styles */
+table {
+    width: 100%;
+    border-collapse: collapse;
+    margin-bottom: 1.5rem;
+}
+
+table th,
+table td {
+    padding: 0.75rem;
+    border-bottom: 1px solid #e0e0e0;
+}
+
+/* Card styles */
+.card {
+    background-color: white;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+    padding: 1.5rem;
+    margin-bottom: 1.5rem;
+}
+
+/* Hero sections with rounded corners */
+.hero {
+    margin-bottom: 1rem;
+}
+
+/* Make sure hero content respects the rounded corners */
+.hero.is-primary {
+    overflow: hidden;
+}
+
+.hero.is-info {
+    overflow: hidden;
+}
+
+/* Alert styles are now handled by Bulma's .notification and color modifiers. Use .is-rounded for rounded notifications. */
+
+/* HTMX indicator styles */
+.htmx-indicator {
+    display: none;
+}
+
+.htmx-request .htmx-indicator {
+    display: block;
+}
+
+.htmx-request.htmx-indicator {
+    display: block;
+}
+
+/* Loading state styles */
+.htmx-request {
+    opacity: 0.8;
+}
+
+/* Responsive styles */
+@media (max-width: 768px) {
+    .container {
+        padding: 0 10px;
+    }
+}

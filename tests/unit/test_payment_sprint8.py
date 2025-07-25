@@ -17,9 +17,9 @@ class Sprint8PaymentModelTests(unittest.TestCase):
     def setUp(self):
         """Set up test environment."""
         self.base_path = Path(os.path.dirname(os.path.dirname(os.path.dirname(__file__))))
-        self.credits_app_path = self.base_path / 'quickscale' / 'templates' / 'credits'
-        self.admin_dashboard_path = self.base_path / 'quickscale' / 'templates' / 'admin_dashboard'
-        self.templates_path = self.base_path / 'quickscale' / 'templates' / 'templates'
+        self.credits_app_path = self.base_path / 'quickscale' / 'project_templates' / 'credits'
+        self.admin_dashboard_path = self.base_path / 'quickscale' / 'project_templates' / 'admin_dashboard'
+        self.templates_path = self.base_path / 'quickscale' / 'project_templates' / 'templates'
         
         # Key files to check
         self.models_py = self.credits_app_path / 'models.py'
@@ -368,7 +368,7 @@ class Sprint8ValidationTests(unittest.TestCase):
         # This is a comprehensive test that ensures all Sprint 8 deliverables exist
         
         # Check Payment model implementation
-        models_file = self.base_path / 'quickscale' / 'templates' / 'credits' / 'models.py'
+        models_file = self.base_path / 'quickscale' / 'project_templates' / 'credits' / 'models.py'
         self.assertTrue(models_file.exists(), "Payment model file not found")
         
         with open(models_file, 'r') as f:
@@ -378,7 +378,7 @@ class Sprint8ValidationTests(unittest.TestCase):
                      "Payment model not implemented")
         
         # Check admin interface implementation
-        admin_file = self.base_path / 'quickscale' / 'templates' / 'credits' / 'admin.py'
+        admin_file = self.base_path / 'quickscale' / 'project_templates' / 'credits' / 'admin.py'
         self.assertTrue(admin_file.exists(), "Payment admin file not found")
         
         with open(admin_file, 'r') as f:
@@ -388,7 +388,7 @@ class Sprint8ValidationTests(unittest.TestCase):
                      "Payment admin interface not implemented")
         
         # Check views implementation
-        views_file = self.base_path / 'quickscale' / 'templates' / 'admin_dashboard' / 'views.py'
+        views_file = self.base_path / 'quickscale' / 'project_templates' / 'admin_dashboard' / 'views.py'
         self.assertTrue(views_file.exists(), "Payment views file not found")
         
         with open(views_file, 'r') as f:
@@ -405,7 +405,7 @@ class Sprint8ValidationTests(unittest.TestCase):
                          f"Sprint 9 view '{view}' not implemented")
         
         # Check templates implementation
-        templates_dir = self.base_path / 'quickscale' / 'templates' / 'templates' / 'admin_dashboard'
+        templates_dir = self.base_path / 'quickscale' / 'project_templates' / 'templates' / 'admin_dashboard'
         self.assertTrue(templates_dir.exists(), "Payment templates directory not found")
         
         required_templates = [

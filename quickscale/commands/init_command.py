@@ -80,7 +80,7 @@ class InitCommand(Command):
         self.validate_project_name(project_name)
         
         # Get template directory path
-        template_dir = Path(__file__).parent.parent / 'templates'
+        template_dir = Path(__file__).parent.parent / 'project_templates'
         if not template_dir.exists():
             raise ProjectError("Template directory not found")
         

@@ -45,7 +45,7 @@ import django
 django.setup()
 
 # Import mock utilities
-from quickscale.templates.stripe_manager.tests.mock_env_utils import get_env, is_feature_enabled
+from quickscale.project_templates.stripe_manager.tests.mock_env_utils import get_env, is_feature_enabled
 
 # Create a mock for 'core.env_utils' module
 mock_env_utils = MagicMock()
@@ -54,7 +54,7 @@ mock_env_utils.is_feature_enabled = is_feature_enabled
 sys.modules['core.env_utils'] = mock_env_utils
 
 from django.test import TestCase, override_settings
-from quickscale.templates.stripe_manager.stripe_manager import StripeManager, StripeConfigurationError
+from quickscale.project_templates.stripe_manager.stripe_manager import StripeManager, StripeConfigurationError
 
 
 class MockStripeProduct:
@@ -617,7 +617,7 @@ class TestPaymentOperations(TestCase):
         self.mock_client.prices.retrieve.return_value = mock_price
         
         # Mock the actual checkout session creation
-        with patch('quickscale.templates.stripe_manager.stripe_manager.stripe.checkout.Session.create') as mock_stripe_create:
+        with patch('quickscale.project_templates.stripe_manager.stripe_manager.stripe.checkout.Session.create') as mock_stripe_create:
             mock_stripe_create.return_value = mock_session
             
             result = self.manager.create_checkout_session(
@@ -645,8 +645,8 @@ class TestPaymentOperations(TestCase):
         mock_line_items = MagicMock()
         
         # Mock the actual checkout session retrieval and line items
-        with patch('quickscale.templates.stripe_manager.stripe_manager.stripe.checkout.Session.retrieve') as mock_stripe_retrieve, \
-             patch('quickscale.templates.stripe_manager.stripe_manager.stripe.checkout.Session.list_line_items') as mock_line_items_retrieve:
+        with patch('quickscale.project_templates.stripe_manager.stripe_manager.stripe.checkout.Session.retrieve') as mock_stripe_retrieve, \
+             patch('quickscale.project_templates.stripe_manager.stripe_manager.stripe.checkout.Session.list_line_items') as mock_line_items_retrieve:
             
             mock_stripe_retrieve.return_value = session_data
             mock_line_items_retrieve.return_value = mock_line_items
@@ -721,8 +721,8 @@ class TestUnidirectionalProductSync(TestCase):
         
         # Mock the retrieve_product method and environment
         with patch.object(self.manager, 'retrieve_product', return_value=stripe_product_data):
-            with patch('quickscale.templates.stripe_manager.stripe_manager.get_env', return_value='true'):
-                with patch('quickscale.templates.stripe_manager.stripe_manager.is_feature_enabled', return_value=True):
+            with patch('quickscale.project_templates.stripe_manager.stripe_manager.get_env', return_value='true'):
+                with patch('quickscale.project_templates.stripe_manager.stripe_manager.is_feature_enabled', return_value=True):
                     self.mock_client.prices.retrieve.return_value = stripe_price_data
                     
                     # Create a mock product model
@@ -749,8 +749,8 @@ class TestUnidirectionalProductSync(TestCase):
         }
         
         with patch.object(self.manager, 'retrieve_product', return_value=stripe_product_data):
-            with patch('quickscale.templates.stripe_manager.stripe_manager.get_env', return_value='true'):
-                with patch('quickscale.templates.stripe_manager.stripe_manager.is_feature_enabled', return_value=True):
+            with patch('quickscale.project_templates.stripe_manager.stripe_manager.get_env', return_value='true'):
+                with patch('quickscale.project_templates.stripe_manager.stripe_manager.is_feature_enabled', return_value=True):
                     product_model = create_mock_model()
                     
                     # Should return None due to missing credit_amount
@@ -771,8 +771,8 @@ class TestUnidirectionalProductSync(TestCase):
         }
         
         with patch.object(self.manager, 'retrieve_product', return_value=stripe_product_data):
-            with patch('quickscale.templates.stripe_manager.stripe_manager.get_env', return_value='true'):
-                with patch('quickscale.templates.stripe_manager.stripe_manager.is_feature_enabled', return_value=True):
+            with patch('quickscale.project_templates.stripe_manager.stripe_manager.get_env', return_value='true'):
+                with patch('quickscale.project_templates.stripe_manager.stripe_manager.is_feature_enabled', return_value=True):
                     product_model = create_mock_model()
                     
                     # Should return None due to invalid credit_amount
@@ -803,8 +803,8 @@ class TestUnidirectionalProductSync(TestCase):
         
         # Mock the list_products method and environment
         with patch.object(self.manager, 'list_products', return_value=stripe_products):
-            with patch('quickscale.templates.stripe_manager.stripe_manager.get_env', return_value='true'):
-                with patch('quickscale.templates.stripe_manager.stripe_manager.is_feature_enabled', return_value=True):
+            with patch('quickscale.project_templates.stripe_manager.stripe_manager.get_env', return_value='true'):
+                with patch('quickscale.project_templates.stripe_manager.stripe_manager.is_feature_enabled', return_value=True):
                     # Mock individual product sync
                     with patch.object(self.manager, 'sync_product_from_stripe') as mock_sync:
                         mock_sync.return_value = MockStripeProduct()
@@ -1072,7 +1072,7 @@ class TestIntegrationScenarios(TestCase):
         self.mock_client.prices.retrieve.return_value = mock_price
         
         # Mock the actual checkout session creation
-        with patch('quickscale.templates.stripe_manager.stripe_manager.stripe.checkout.Session.create') as mock_stripe_create:
+        with patch('quickscale.project_templates.stripe_manager.stripe_manager.stripe.checkout.Session.create') as mock_stripe_create:
             mock_stripe_create.return_value = mock_session
             
             # Mock payment intent creation

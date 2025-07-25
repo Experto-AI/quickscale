@@ -18,8 +18,8 @@ class CreditsTemplateTests(unittest.TestCase):
         """Set up test environment."""
         # Locate the template files
         self.base_path = Path(os.path.dirname(os.path.dirname(os.path.dirname(__file__))))
-        self.credits_app_path = self.base_path / 'quickscale' / 'templates' / 'credits'
-        self.credits_templates_path = self.credits_app_path / 'templates' / 'credits'
+        self.credits_app_path = self.base_path / 'quickscale' / 'project_templates' / 'credits'
+        self.credits_templates_path = self.base_path / 'quickscale' / 'project_templates' / 'templates' / 'credits'
         
         # Template files
         self.dashboard_template = self.credits_templates_path / 'dashboard.html'
@@ -36,8 +36,8 @@ class CreditsTemplateTests(unittest.TestCase):
         self.init_migration = self.migrations_path / '0001_initial.py'
         
         # Main Django settings file
-        self.settings_path = self.base_path / 'quickscale' / 'templates' / 'core' / 'settings.py'
-        self.main_urls_path = self.base_path / 'quickscale' / 'templates' / 'core' / 'urls.py'
+        self.settings_path = self.base_path / 'quickscale' / 'project_templates' / 'core' / 'settings.py'
+        self.main_urls_path = self.base_path / 'quickscale' / 'project_templates' / 'core' / 'urls.py'
     
     def test_credits_app_structure_exists(self):
         """Test that all credits app files exist."""
@@ -223,8 +223,8 @@ class CreditsIntegrationTests(unittest.TestCase):
     def setUp(self):
         """Set up test environment."""
         self.base_path = Path(os.path.dirname(os.path.dirname(os.path.dirname(__file__))))
-        self.credits_app_path = self.base_path / 'quickscale' / 'templates' / 'credits'
-        self.dashboard_app_path = self.base_path / 'quickscale' / 'templates' / 'admin_dashboard'
+        self.credits_app_path = self.base_path / 'quickscale' / 'project_templates' / 'credits'
+        self.dashboard_app_path = self.base_path / 'quickscale' / 'project_templates' / 'admin_dashboard'
     
     def test_dashboard_integration_with_credits(self):
         """Test that dashboard views integrate with credits."""
@@ -257,7 +257,7 @@ class CreditsIntegrationTests(unittest.TestCase):
     
     def test_user_dashboard_template_exists(self):
         """Test that user dashboard template exists."""
-        user_dashboard_template = self.base_path / 'quickscale' / 'templates' / 'templates' / 'admin_dashboard' / 'user_dashboard.html'
+        user_dashboard_template = self.base_path / 'quickscale' / 'project_templates' / 'templates' / 'admin_dashboard' / 'user_dashboard.html'
         
         self.assertTrue(user_dashboard_template.exists(),
                        f"User dashboard template not found at {user_dashboard_template}")
@@ -279,4 +279,4 @@ class CreditsIntegrationTests(unittest.TestCase):
 
 
 if __name__ == '__main__':
-    unittest.main() 
+    unittest.main()
