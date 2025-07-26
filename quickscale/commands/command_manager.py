@@ -7,6 +7,7 @@ from .service_commands import ServiceUpCommand, ServiceDownCommand, ServiceLogsC
 from .development_commands import ShellCommand, ManageCommand, DjangoShellCommand
 from .system_commands import CheckCommand
 from .service_generator_commands import ServiceGeneratorCommand, ValidateServiceCommand, ServiceExamplesCommand
+from .sync_back_command import SyncBackCommand
 
 # Existing imports for utility functions and managers
 from quickscale.utils.error_manager import CommandError, handle_command_error
@@ -40,6 +41,9 @@ class CommandManager:
             'generate-service': ServiceGeneratorCommand(),
             'validate-service': ValidateServiceCommand(),
             'show-service-examples': ServiceExamplesCommand(),
+            
+            # Development commands
+            'sync-back': SyncBackCommand(),
             
             # Info commands - these are handled specially
             'help': None,  # Will be handled by _handle_info_commands
@@ -99,6 +103,10 @@ class CommandManager:
         """Check if required tools are available."""
         self.execute_command('check', print_info=print_info)
     
+    def sync_back_project(self, project_path: str, preview: bool = False, apply: bool = False) -> None:
+        """Sync changes from generated project back to templates."""
+        self.execute_command('sync-back', project_path, preview=preview, apply=apply)
+    
     def generate_service(self, service_name: str, service_type: str = "basic", output_dir: Optional[str] = None, credit_cost: float = 1.0, description: Optional[str] = None, skip_db_config: bool = False, free: bool = False) -> Dict[str, Any]:
         """Generate a new service template."""
         return self.execute_command('generate-service', service_name, service_type=service_type, output_dir=output_dir, credit_cost=credit_cost, description=description, skip_db_config=skip_db_config, free=free)
@@ -154,6 +162,16 @@ class CommandManager:
             return self.run_manage_command(args.args)
         return None
     
+    def _handle_development_commands(self, command_name: str, args: Any) -> Any:
+        """Handle development commands."""
+        if command_name == 'sync-back':
+            return self.sync_back_project(
+                project_path=args.project_path,
+                preview=getattr(args, 'preview', False),
+                apply=getattr(args, 'apply', False)
+            )
+        return None
+    
     def _handle_service_generator_commands(self, command_name: str, args: Any) -> Any:
         """Handle service generator commands."""
         if command_name == 'generate-service':
@@ -195,6 +213,7 @@ class CommandManager:
             MessageManager.info("  shell          - Open a shell in the web container")
             MessageManager.info("  django-shell   - Open Django shell")
             MessageManager.info("  manage         - Run Django management commands")
+            MessageManager.info("  sync-back      - Sync changes from generated project back to templates")
             MessageManager.info("  generate-service - Generate an AI service template")
             MessageManager.info("  validate-service - Validate a service file")
             MessageManager.info("  show-service-examples - Show available AI service examples")
@@ -227,6 +246,7 @@ class CommandManager:
             self._handle_service_commands(command_name, args) or
             self._handle_project_commands(command_name, args) or
             self._handle_shell_commands(command_name, args) or
+            self._handle_development_commands(command_name, args) or
             self._handle_service_generator_commands(command_name, args) or
             self._handle_info_commands(command_name, args)
         )

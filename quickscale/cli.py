@@ -381,6 +381,67 @@ For Django management commands help, use:
         description="Display the installed version of QuickScale CLI.")
 
 
+def setup_sync_back_parser(subparsers: argparse._SubParsersAction) -> None:
+    """Set up sync-back command parser."""
+    sync_back_parser = subparsers.add_parser("sync-back",
+        help="Sync changes from generated project back to QuickScale templates",
+        description="""
+Sync-Back: Reverse Development Workflow
+
+This command allows you to sync changes from a generated QuickScale project back 
+to the QuickScale template files. This enables a reverse development workflow where 
+you can modify templates in a generated project and sync those changes back.
+
+REQUIREMENTS:
+- QuickScale must be installed in development mode (Git clone + pip install -e .)
+- If installed via 'pip install quickscale', this command will show instructions
+
+WORKFLOW:
+1. Generate project: quickscale init my-project
+2. Develop changes: Edit files in generated project  
+3. Navigate to project: cd my-project
+4. Preview changes: quickscale sync-back --preview
+5. Apply changes: quickscale sync-back --apply
+
+Alternative: Use from outside project directory:
+3. Preview changes: quickscale sync-back ./my-project --preview
+4. Apply changes: quickscale sync-back ./my-project --apply
+
+FILE CATEGORIZATION:
+- Safe Files (Direct Copy): Templates, static files, documentation
+- Careful Files (Variable Restoration): Settings files with template variables restored
+- Never Sync (Auto-Skip): Database files, migrations, logs, cache files
+        """,
+        epilog="""
+Examples:
+  quickscale sync-back --preview                 Show what would be synced (from current directory)
+  quickscale sync-back --apply                   Apply sync-back changes (from current directory)
+  quickscale sync-back ./my-project --preview    Show what would be synced (specify project path)
+  quickscale sync-back ./my-project --apply      Apply changes (specify project path)
+
+Note: Always preview changes before applying them.
+        """,
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        usage="quickscale sync-back [project_path] [--preview | --apply]")
+    
+    sync_back_parser.add_argument(
+        "project_path",
+        nargs="?",
+        default=".",
+        help="Path to the generated QuickScale project (defaults to current directory)")
+    
+    # Create mutually exclusive group for preview/apply
+    action_group = sync_back_parser.add_mutually_exclusive_group(required=True)
+    action_group.add_argument(
+        "--preview",
+        action="store_true",
+        help="Show preview of changes without applying them")
+    action_group.add_argument(
+        "--apply",
+        action="store_true",
+        help="Apply changes from project to templates")
+
+
 def handle_init_command(args: argparse.Namespace) -> int:
     """Handle initialization command."""
     from quickscale.utils.message_manager import MessageManager
@@ -468,6 +529,7 @@ def main() -> int:
     setup_logs_parser(subparsers)
     setup_manage_parser(subparsers)
     setup_service_generator_parsers(subparsers)
+    setup_sync_back_parser(subparsers)
     setup_help_and_version_parsers(subparsers)
     
     # Parse arguments

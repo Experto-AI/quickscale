@@ -2,6 +2,31 @@
 
 All notable changes to this project will be documented in this file.
 
+## v0.37.0 (2025-07-26)
+v0.37.0 feat: Simplified Sync-Back Command for Reverse Development Workflow
+
+This release introduces the minimal viable implementation of the sync-back command, enabling developers to efficiently synchronize changes from generated projects back to QuickScale templates. The update follows KISS and DRY principles, providing a clear two-mode installation detection, robust file categorization, and safe file operations for template management.
+
+- Backend Implementation:
+  - Added `sync-back` CLI command to sync changes from generated projects back to QuickScale templates.
+  - Implemented two-mode installation detection: development (Git clone + editable install) and production (pip install), with explicit error handling for unsupported scenarios.
+  - Developed file categorization logic for safe (direct copy), careful (variable restoration), and never-sync files.
+  - Enabled preview and apply functionalities for the sync-back command, allowing users to review changes before execution.
+  - Enhanced file comparison logic and default project path handling for improved usability.
+  - Created integration and unit tests for sync-back command and its functionalities.
+
+- Frontend Implementation:
+  - N/A (CLI and backend only for this sprint)
+
+- Testing:
+  - Added comprehensive tests for installation mode detection, file categorization, safe/careful file processing, new/deleted file detection, and CLI command integration.
+  - Validated backup and preview mechanisms for safe execution.
+
+- Documentation:
+  - Updated documentation to include sync-back command usage, installation mode guidance, and reverse development workflow instructions.
+
+This release completes the Simplified Sync-Back Implementation sprint, delivering a reliable, developer-friendly workflow for template synchronization. The implementation ensures clear error handling, robust safety mechanisms, and comprehensive test coverage, validated on Linux as the primary development platform.
+
 ## v0.36.0 (2025-07-25)
 v0.36.0 feat: Webpage Navigation and User-Facing HTML Template Reorganization for Improved User Experience
 
