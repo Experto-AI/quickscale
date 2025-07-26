@@ -1,0 +1,97 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% block title %}{{ project_name }}{% endblock %}</title>
+    
+    <!-- Favicon -->
+    <link rel="icon" type="image/svg+xml" href="/static/favicon.svg">
+    <link rel="alternate icon" type="image/x-icon" href="/static/favicon.ico">
+    
+    <!-- HTMX -->
+    <script src="https://unpkg.com/htmx.org@1.9.10"></script>
+    <!-- Alpine.js -->
+    <script defer src="https://unpkg.com/alpinejs@3.13.5/dist/cdn.min.js"></script>
+    <!-- Bulma CSS -->
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bulma@0.9.4/css/bulma.min.css">
+    <!-- Font Awesome -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/all.min.css">
+    <!-- Custom Styles -->
+    <link rel="stylesheet" href="/static/css/styles.css">
+    
+    {% block extra_head %}{% endblock %}
+</head>
+<body>
+    {% include "components/navbar.html" %}
+    
+    <main class="container">
+        {% if messages %}
+            {% include "components/messages.html" %}
+        {% endif %}
+        
+        {% block content %}{% endblock %}
+    </main>
+    
+    {% include "components/footer.html" %}
+
+    <!-- Login/Signup Required Modal (Hidden by default) -->
+    <div x-data="{ showModal: false, message: '', loginUrl: '', signupUrl: '' }" 
+         x-show="showModal" 
+         class="modal" 
+         x-bind:class="{ 'is-active': showModal }"
+         @show-auth-modal.stop="message = $event.detail.message; loginUrl = $event.detail.loginUrl; signupUrl = $event.detail.signupUrl; showModal = true"
+         x-cloak>
+        <div class="modal-background"></div>
+        <div class="modal-content">
+            <div class="box">
+                <p x-text="message"></p>
+                <br>
+                <div class="buttons is-centered">
+                    <a :href="loginUrl" class="button is-primary">Login</a>
+                    <a :href="signupUrl" class="button is-link">Sign Up</a>
+                </div>
+            </div>
+        </div>
+        <button class="modal-close is-large" aria-label="close" @click="showModal = false"></button>
+    </div>
+
+    <!-- Custom Scripts -->
+    <script src="/static/js/password_validation.js"></script>
+
+    <script>
+        // Global HTMX event listener for 401 Unauthorized responses
+        document.body.addEventListener('htmx:responseError', function(event) {
+            // Check if the response status is 401
+            if (event.detail.xhr.status === 401) {
+                // Find the modal element
+                const modal = document.querySelector('.modal');
+                if (modal && modal._x_dataStack) {
+                    try {
+                        const responseData = JSON.parse(event.detail.xhr.responseText);
+                        // Access Alpine.js component data using _x_dataStack[0]
+                        const modalData = modal._x_dataStack[0];
+                        // Update the modal's Alpine.js state
+                        modalData.message = responseData.message || 'Authentication required.';
+                        modalData.loginUrl = responseData.login_url || '{% url "account_login" %}'; // Fallback URL
+                        modalData.signupUrl = responseData.signup_url || '{% url "account_signup" %}'; // Fallback URL
+                        modalData.showModal = true; // Show the modal
+                    } catch (e) {
+                        console.error('Error handling 401 response:', e);
+                        // Alternative approach using dispatch event
+                        modal.dispatchEvent(new CustomEvent('show-auth-modal', { 
+                            detail: {
+                                message: 'Authentication required to perform this action.',
+                                loginUrl: '{% url "account_login" %}',
+                                signupUrl: '{% url "account_signup" %}'
+                            } 
+                        }));
+                    }
+                }
+            }
+        });
+    </script>
+
+    {% block extra_js %}{% endblock %}
+</body>
+</html>

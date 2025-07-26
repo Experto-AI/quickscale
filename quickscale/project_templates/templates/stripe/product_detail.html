@@ -1,0 +1,89 @@
+{% extends "base.html" %}
+{% if stripe_enabled %}
+{% load stripe_tags %}
+{% endif %}
+
+{% block title %}{{ product|get_stripe_product_name }}{% endblock %}
+
+{% block content %}
+<section class="section">
+  <div class="container">
+    <h1 class="title">{{ product|get_stripe_product_name }}</h1>
+    
+    <div class="box">
+      <div class="columns">
+        <div class="column is-8">
+          {% if product.description %}
+            <p class="subtitle">{{ product.description }}</p>
+          {% endif %}
+          
+          <table class="table is-fullwidth">
+            <tbody>
+              <tr>
+                <th>ID</th>
+                <td>{{ product.stripe_id }}</td>
+              </tr>
+              <tr>
+                <th>Status</th>
+                <td>
+                  <span class="tag {% if product.active %}is-success{% else %}is-danger{% endif %}">
+                    {{ product|get_stripe_product_status|title }}
+                  </span>
+                </td>
+              </tr>
+              <tr>
+                <th>Billing Interval</th>
+                <td>{{ product.get_interval_display }}</td>
+              </tr>
+              <tr>
+                <th>Display Order</th>
+                <td>{{ product.display_order }}</td>
+              </tr>
+              <tr>
+                <th>Created</th>
+                <td>{{ product.created_at|date:"F j, Y" }}</td>
+              </tr>
+              <tr>
+                <th>Last Updated</th>
+                <td>{{ product.updated_at|date:"F j, Y" }}</td>
+              </tr>
+              {% if product.metadata %}
+                <tr>
+                  <th>Metadata</th>
+                  <td>
+                    <ul>
+                      {% for key, value in product.metadata.items %}
+                        <li><strong>{{ key }}:</strong> {{ value }}</li>
+                      {% endfor %}
+                    </ul>
+                  </td>
+                </tr>
+              {% endif %}
+            </tbody>
+          </table>
+        </div>
+        
+        <div class="column is-4">
+          <div class="box">
+            <h3 class="title is-4">Pricing</h3>
+            <div class="notification is-primary">
+              <p class="title is-3">{{ product.price|floatformat:2 }} {{ product.currency }}</p>
+              {% if product.interval != 'one-time' %}
+                <p>{{ product.get_interval_display }} billing</p>
+              {% else %}
+                <p>One-time payment</p>
+              {% endif %}
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+    
+    <div class="buttons">
+      <a href="{% url 'stripe:product_list' %}" class="button is-primary">
+        Back to Products
+      </a>
+    </div>
+  </div>
+</section>
+{% endblock %} 

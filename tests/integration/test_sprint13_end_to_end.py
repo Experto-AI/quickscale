@@ -56,7 +56,7 @@ class Sprint13EndToEndWorkflowTests(ProjectTestMixin, unittest.TestCase):
                          f"Service admin workflow component missing: {component}")
     
     def test_service_detail_workflow_integration(self):
-        """Test service detail page workflow integration."""
+        service_admin_template = self.project_path / 'templates' / 'admin_dashboard' / 'service_admin.html'
         service_detail_template = self.project_path / 'templates' / 'admin_dashboard' / 'service_detail.html'
         
         with open(service_detail_template, 'r') as f:
@@ -77,7 +77,7 @@ class Sprint13EndToEndWorkflowTests(ProjectTestMixin, unittest.TestCase):
         for component in detail_components:
             self.assertIn(component, detail_content,
                          f"Service detail workflow component missing: {component}")
-    
+        service_detail_template = self.project_path / 'templates' / 'admin_dashboard' / 'service_detail.html'
     def test_django_admin_analytics_integration(self):
         """Test Django admin analytics integration workflow."""
         admin_file = self.project_path / 'credits' / 'admin.py'
@@ -118,8 +118,11 @@ class Sprint13EndToEndWorkflowTests(ProjectTestMixin, unittest.TestCase):
         ]
         
         for pattern in url_patterns:
-            self.assertIn(pattern, urls_content,
-                         f"URL pattern missing from workflow: {pattern}")
+            self.assertIn(pattern, urls_content, f"URL pattern '{pattern}' not found in admin_dashboard urls.py")
+        
+        # Check analytics template exists
+        analytics_template = self.project_path / 'templates' / 'admin' / 'credits' / 'service_usage_analytics.html'
+        self.assertTrue(analytics_template.exists(), f"Analytics template not found at {analytics_template}")
     
     def test_service_management_view_workflow(self):
         """Test complete view workflow for service management."""
@@ -209,7 +212,7 @@ class Sprint13DataConsistencyTests(ProjectTestMixin, unittest.TestCase):
             
             for pattern in status_patterns:
                 self.assertIn(pattern, template_content,
-                             f"Status pattern {pattern} not found in {template_path}")
+                             f"Status pattern '{pattern}' not found in {template_path}")
     
     def test_credit_cost_display_consistency(self):
         """Test that credit cost display is consistent across components."""
@@ -289,7 +292,7 @@ class Sprint13SecurityIntegrationTests(ProjectTestMixin, unittest.TestCase):
             if has_htmx:  # Only check CSRF if HTMX is used
                 for pattern in csrf_patterns:
                     self.assertIn(pattern, template_content,
-                                 f"CSRF pattern {pattern} not found in {template_path}")
+                                 f"CSRF pattern '{pattern}' not found in {template_path}")
     
     def test_method_validation_integration(self):
         """Test that HTTP method validation is properly integrated."""

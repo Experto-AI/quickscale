@@ -17,7 +17,7 @@ class ServiceAdminSecurityTests(unittest.TestCase):
     def setUp(self):
         """Set up test environment."""
         self.base_path = Path(os.path.dirname(os.path.dirname(os.path.dirname(__file__))))
-        self.admin_dashboard_path = self.base_path / 'quickscale' / 'templates' / 'admin_dashboard'
+        self.admin_dashboard_path = self.base_path / 'quickscale' / 'project_templates' / 'admin_dashboard'
         self.admin_dashboard_views = self.admin_dashboard_path / 'views.py'
         
     def test_service_toggle_csrf_protection(self):
@@ -26,7 +26,7 @@ class ServiceAdminSecurityTests(unittest.TestCase):
             views_content = f.read()
         
         # Check for CSRF token validation in HTMX integration
-        templates_path = self.base_path / 'quickscale' / 'templates' / 'templates' / 'admin_dashboard'
+        templates_path = self.base_path / 'quickscale' / 'project_templates' / 'templates' / 'admin_dashboard'
         service_admin_template = templates_path / 'service_admin.html'
         
         with open(service_admin_template, 'r') as f:
@@ -72,9 +72,9 @@ class ServiceAdminErrorHandlingTests(unittest.TestCase):
     def setUp(self):
         """Set up test environment."""
         self.base_path = Path(os.path.dirname(os.path.dirname(os.path.dirname(__file__))))
-        self.admin_dashboard_path = self.base_path / 'quickscale' / 'templates' / 'admin_dashboard'
+        self.admin_dashboard_path = self.base_path / 'quickscale' / 'project_templates' / 'admin_dashboard'
         self.admin_dashboard_views = self.admin_dashboard_path / 'views.py'
-        self.credits_app_path = self.base_path / 'quickscale' / 'templates' / 'credits'
+        self.credits_app_path = self.base_path / 'quickscale' / 'project_templates' / 'credits'
         self.admin_py = self.credits_app_path / 'admin.py'
         
     def test_service_toggle_error_handling(self):
@@ -101,7 +101,7 @@ class ServiceAdminErrorHandlingTests(unittest.TestCase):
     
     def test_service_admin_empty_state_handling(self):
         """Test that service admin handles empty state properly."""
-        templates_path = self.base_path / 'quickscale' / 'templates' / 'templates' / 'admin_dashboard'
+        templates_path = self.base_path / 'quickscale' / 'project_templates' / 'templates' / 'admin_dashboard'
         service_admin_template = templates_path / 'service_admin.html'
         
         with open(service_admin_template, 'r') as f:
@@ -122,7 +122,7 @@ class ServiceAdminUIConsistencyTests(unittest.TestCase):
     def setUp(self):
         """Set up test environment."""
         self.base_path = Path(os.path.dirname(os.path.dirname(os.path.dirname(__file__))))
-        self.templates_path = self.base_path / 'quickscale' / 'templates' / 'templates' / 'admin_dashboard'
+        self.templates_path = self.base_path / 'quickscale' / 'project_templates' / 'templates' / 'admin_dashboard'
         
     def test_service_admin_bulma_css_consistency(self):
         """Test that service admin templates use consistent Bulma CSS classes."""
@@ -185,7 +185,7 @@ class ServiceAdminAlpineJSFunctionalityTests(unittest.TestCase):
     def setUp(self):
         """Set up test environment."""
         self.base_path = Path(os.path.dirname(os.path.dirname(os.path.dirname(__file__))))
-        self.templates_path = self.base_path / 'quickscale' / 'templates' / 'templates' / 'admin_dashboard'
+        self.templates_path = self.base_path / 'quickscale' / 'project_templates' / 'templates' / 'admin_dashboard'
         
    
     def test_service_row_alpine_functionality(self):
@@ -228,7 +228,7 @@ class ServiceAdminHTMXIntegrationTests(unittest.TestCase):
     def setUp(self):
         """Set up test environment."""
         self.base_path = Path(os.path.dirname(os.path.dirname(os.path.dirname(__file__))))
-        self.templates_path = self.base_path / 'quickscale' / 'templates' / 'templates' / 'admin_dashboard'
+        self.templates_path = self.base_path / 'quickscale' / 'project_templates' / 'templates' / 'admin_dashboard'
         
     def test_service_admin_htmx_configuration(self):
         """Test that service admin has proper HTMX configuration."""
@@ -269,9 +269,9 @@ class ServiceAnalyticsDataIntegrityTests(unittest.TestCase):
     def setUp(self):
         """Set up test environment."""
         self.base_path = Path(os.path.dirname(os.path.dirname(os.path.dirname(__file__))))
-        self.credits_app_path = self.base_path / 'quickscale' / 'templates' / 'credits'
+        self.credits_app_path = self.base_path / 'quickscale' / 'project_templates' / 'credits'
         self.admin_py = self.credits_app_path / 'admin.py'
-        self.admin_dashboard_path = self.base_path / 'quickscale' / 'templates' / 'admin_dashboard'
+        self.admin_dashboard_path = self.base_path / 'quickscale' / 'project_templates' / 'admin_dashboard'
         self.admin_dashboard_views = self.admin_dashboard_path / 'views.py'
         
     def test_service_analytics_time_range_consistency(self):
@@ -327,7 +327,7 @@ class ServiceAdminMigrationAndModelTests(unittest.TestCase):
     def setUp(self):
         """Set up test environment."""
         self.base_path = Path(os.path.dirname(os.path.dirname(os.path.dirname(__file__))))
-        self.credits_app_path = self.base_path / 'quickscale' / 'templates' / 'credits'
+        self.credits_app_path = self.base_path / 'quickscale' / 'project_templates' / 'credits'
         
     def test_service_model_admin_field_consistency(self):
         """Test that admin configuration matches model fields."""

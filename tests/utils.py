@@ -1148,9 +1148,11 @@ class ProjectTestMixin:
         """Create a test project using QuickScale templates."""
         import shutil
         from pathlib import Path
+        from quickscale.utils import copy_sync_modules, fix_imports, process_file_templates, remove_duplicated_templates
         
         # Get the base path to the QuickScale templates
-        base_path = Path(__file__).parent.parent / 'quickscale' / 'templates'
+        base_path = Path(__file__).parent.parent / 'quickscale' / 'project_templates'
+        quickscale_dir = Path(__file__).parent.parent / 'quickscale'
         
         # Copy template files to project directory
         if self.project_path.exists():
@@ -1167,3 +1169,26 @@ class ProjectTestMixin:
             elif item.is_dir():
                 # Copy template directories to project root
                 shutil.copytree(item, self.project_path / item.name, dirs_exist_ok=True)
+        
+        # Apply the same synchronization process as the real init command
+        # Create a mock logger for the synchronization functions
+        import logging
+        logger = logging.getLogger('test')
+        
+        # Copy synced modules from source to project
+        copy_sync_modules(self.project_path, quickscale_dir, logger)
+        
+        # Fix imports in the project files to use proper relative imports
+        fix_imports(self.project_path, logger)
+        
+        # Process template files with project-specific variables
+        template_variables = {
+            "project_name": self.project_name,
+            "project_name_upper": self.project_name.upper(),
+            "project_name_title": self.project_name.title().replace("_", " "),
+            "secret_key": "test-secret-key-for-testing-only",
+        }
+        process_file_templates(self.project_path, template_variables, logger)
+        
+        # Remove any duplicated templates that have been replaced by synced modules
+        # remove_duplicated_templates(self.project_path, logger)  # Disabled for now

@@ -15,13 +15,13 @@ class WebhookFallbackTests(unittest.TestCase):
     def setUp(self):
         """Set up test environment."""
         self.base_path = Path(__file__).parent.parent.parent
-        self.stripe_views = self.base_path / "quickscale" / "templates" / "stripe_manager" / "views.py"
-        self.credits_views = self.base_path / "quickscale" / "templates" / "credits" / "views.py"
-        self.admin_views = self.base_path / "quickscale" / "templates" / "admin_dashboard" / "views.py"
+        self.stripe_views = self.base_path / "quickscale" / "project_templates" / "stripe_manager" / "views.py"
+        self.credits_views = self.base_path / "quickscale" / "project_templates" / "credits" / "views.py"
+        self.admin_views = self.base_path / "quickscale" / "project_templates" / "admin_dashboard" / "views.py"
     
     def test_payment_migration_exists(self):
         """Test that the Payment model migration file exists."""
-        migration_file = self.base_path / "quickscale" / "templates" / "credits" / "migrations" / "0003_add_payment_model.py"
+        migration_file = self.base_path / "quickscale" / "project_templates" / "credits" / "migrations" / "0003_add_payment_model.py"
         self.assertTrue(migration_file.exists(), 
                        "Payment model migration file should exist")
     
@@ -85,9 +85,9 @@ class WebhookTimingScenarioTests(unittest.TestCase):
     def setUp(self):
         """Set up test environment."""
         self.base_path = Path(__file__).parent.parent.parent
-        self.stripe_views = self.base_path / "quickscale" / "templates" / "stripe_manager" / "views.py"
-        self.credits_views = self.base_path / "quickscale" / "templates" / "credits" / "views.py"
-        self.admin_views = self.base_path / "quickscale" / "templates" / "admin_dashboard" / "views.py"
+        self.stripe_views = self.base_path / "quickscale" / "project_templates" / "stripe_manager" / "views.py"
+        self.credits_views = self.base_path / "quickscale" / "project_templates" / "credits" / "views.py"
+        self.admin_views = self.base_path / "quickscale" / "project_templates" / "admin_dashboard" / "views.py"
     
     def test_session_id_handling_in_success_views(self):
         """Test that success views can handle session IDs from Stripe redirects."""

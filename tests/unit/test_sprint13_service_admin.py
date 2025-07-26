@@ -19,7 +19,7 @@ class ServiceAdminEnhancementsTests(unittest.TestCase):
     def setUp(self):
         """Set up test environment."""
         self.base_path = Path(os.path.dirname(os.path.dirname(os.path.dirname(__file__))))
-        self.credits_app_path = self.base_path / 'quickscale' / 'templates' / 'credits'
+        self.credits_app_path = self.base_path / 'quickscale' / 'project_templates' / 'credits'
         self.admin_py = self.credits_app_path / 'admin.py'
         
     def test_service_admin_enhanced_list_display(self):
@@ -113,7 +113,7 @@ class ServiceUsageAdminEnhancementsTests(unittest.TestCase):
     def setUp(self):
         """Set up test environment."""
         self.base_path = Path(os.path.dirname(os.path.dirname(os.path.dirname(__file__))))
-        self.credits_app_path = self.base_path / 'quickscale' / 'templates' / 'credits'
+        self.credits_app_path = self.base_path / 'quickscale' / 'project_templates' / 'credits'
         self.admin_py = self.credits_app_path / 'admin.py'
         
     def test_service_usage_admin_enhanced_display(self):
@@ -155,7 +155,7 @@ class AdminDashboardServiceManagementTests(unittest.TestCase):
     def setUp(self):
         """Set up test environment."""
         self.base_path = Path(os.path.dirname(os.path.dirname(os.path.dirname(__file__))))
-        self.templates_path = self.base_path / 'quickscale' / 'templates'
+        self.templates_path = self.base_path / 'quickscale' / 'project_templates'
         self.admin_dashboard_path = self.templates_path / 'admin_dashboard'
         self.admin_dashboard_views = self.admin_dashboard_path / 'views.py'
         self.admin_dashboard_urls = self.admin_dashboard_path / 'urls.py'
@@ -244,7 +244,7 @@ class ServiceAdminTemplateTests(unittest.TestCase):
     def setUp(self):
         """Set up test environment."""
         self.base_path = Path(os.path.dirname(os.path.dirname(os.path.dirname(__file__))))
-        self.templates_path = self.base_path / 'quickscale' / 'templates' / 'templates' / 'admin_dashboard'
+        self.templates_path = self.base_path / 'quickscale' / 'project_templates' / 'templates' / 'admin_dashboard'
         self.service_admin_template = self.templates_path / 'service_admin.html'
         self.service_detail_template = self.templates_path / 'service_detail.html'
         
@@ -428,7 +428,7 @@ class ServiceAnalyticsTemplateTests(unittest.TestCase):
     def setUp(self):
         """Set up test environment."""
         self.base_path = Path(os.path.dirname(os.path.dirname(os.path.dirname(__file__))))
-        self.templates_path = self.base_path / 'quickscale' / 'templates' / 'templates' / 'admin' / 'credits'
+        self.templates_path = self.base_path / 'quickscale' / 'project_templates' / 'templates' / 'admin' / 'credits'
         self.analytics_template = self.templates_path / 'service_usage_analytics.html'
         
     def test_service_analytics_template_exists(self):
@@ -542,7 +542,7 @@ class AdminDashboardIndexIntegrationTests(unittest.TestCase):
     def setUp(self):
         """Set up test environment."""
         self.base_path = Path(os.path.dirname(os.path.dirname(os.path.dirname(__file__))))
-        self.templates_path = self.base_path / 'quickscale' / 'templates' / 'templates' / 'admin_dashboard'
+        self.templates_path = self.base_path / 'quickscale' / 'project_templates' / 'templates' / 'admin_dashboard'
         self.index_template = self.templates_path / 'index.html'
         
     def test_admin_dashboard_index_service_card(self):

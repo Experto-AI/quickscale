@@ -19,8 +19,8 @@ class ServicesAppStructureTests(unittest.TestCase):
     def setUp(self):
         """Set up test environment."""
         self.base_path = Path(os.path.dirname(os.path.dirname(os.path.dirname(__file__))))
-        self.services_app_path = self.base_path / 'quickscale' / 'templates' / 'services'
-        self.core_settings_path = self.base_path / 'quickscale' / 'templates' / 'core' / 'settings.py'
+        self.services_app_path = self.base_path / 'quickscale' / 'project_templates' / 'services'
+        self.core_settings_path = self.base_path / 'quickscale' / 'project_templates' / 'core' / 'settings.py'
         
     def test_services_app_directory_exists(self):
         """Test that services app directory exists."""
@@ -101,7 +101,7 @@ class BaseServiceClassTests(unittest.TestCase):
     def setUp(self):
         """Set up test environment."""
         self.base_path = Path(os.path.dirname(os.path.dirname(os.path.dirname(__file__))))
-        self.services_app_path = self.base_path / 'quickscale' / 'templates' / 'services'
+        self.services_app_path = self.base_path / 'quickscale' / 'project_templates' / 'services'
         self.base_py = self.services_app_path / 'base.py'
     
     def test_base_service_class_exists(self):
@@ -239,7 +239,7 @@ class ServiceRegistryTests(unittest.TestCase):
     def setUp(self):
         """Set up test environment."""
         self.base_path = Path(os.path.dirname(os.path.dirname(os.path.dirname(__file__))))
-        self.services_app_path = self.base_path / 'quickscale' / 'templates' / 'services'
+        self.services_app_path = self.base_path / 'quickscale' / 'project_templates' / 'services'
         self.decorators_py = self.services_app_path / 'decorators.py'
     
     def test_service_registry_class_exists(self):
@@ -346,7 +346,7 @@ class ServiceExamplesTests(unittest.TestCase):
     def setUp(self):
         """Set up test environment."""
         self.base_path = Path(os.path.dirname(os.path.dirname(os.path.dirname(__file__))))
-        self.examples_py = self.base_path / 'quickscale' / 'templates' / 'services' / 'examples.py'
+        self.examples_py = self.base_path / 'quickscale' / 'project_templates' / 'services' / 'examples.py'
         with open(self.examples_py, 'r') as f:
             self.examples_content = f.read()
 
@@ -417,7 +417,7 @@ class ServicesViewsTests(unittest.TestCase):
     def setUp(self):
         """Set up test environment."""
         self.base_path = Path(os.path.dirname(os.path.dirname(os.path.dirname(__file__))))
-        self.services_app_path = self.base_path / 'quickscale' / 'templates' / 'services'
+        self.services_app_path = self.base_path / 'quickscale' / 'project_templates' / 'services'
         self.views_py = self.services_app_path / 'views.py'
     
     def test_service_list_view_exists(self):
@@ -489,9 +489,9 @@ class ServicesUrlsTests(unittest.TestCase):
     def setUp(self):
         """Set up test environment."""
         self.base_path = Path(os.path.dirname(os.path.dirname(os.path.dirname(__file__))))
-        self.services_app_path = self.base_path / 'quickscale' / 'templates' / 'services'
+        self.services_app_path = self.base_path / 'quickscale' / 'project_templates' / 'services'
         self.urls_py = self.services_app_path / 'urls.py'
-        self.core_urls_py = self.base_path / 'quickscale' / 'templates' / 'core' / 'urls.py'
+        self.core_urls_py = self.base_path / 'quickscale' / 'project_templates' / 'core' / 'urls.py'
     
     def test_services_urls_exist(self):
         """Test that services URLs are properly configured."""
@@ -528,7 +528,7 @@ class ServicesTemplatesTests(unittest.TestCase):
     def setUp(self):
         """Set up test environment."""
         self.base_path = Path(os.path.dirname(os.path.dirname(os.path.dirname(__file__))))
-        self.services_app_path = self.base_path / 'quickscale' / 'templates' / 'services'
+        self.services_app_path = self.base_path / 'quickscale' / 'project_templates' / 'services'
         self.templates_path = self.services_app_path / 'templates' / 'services'
         self.service_list_template = self.templates_path / 'service_list.html'
         self.service_usage_form_template = self.templates_path / 'service_usage_form.html'
@@ -602,7 +602,7 @@ class ServiceMigrationTests(unittest.TestCase):
     def setUp(self):
         """Set up test environment."""
         self.base_path = Path(os.path.dirname(os.path.dirname(os.path.dirname(__file__))))
-        self.credits_app_path = self.base_path / 'quickscale' / 'templates' / 'credits'
+        self.credits_app_path = self.base_path / 'quickscale' / 'project_templates' / 'credits'
         self.migration_file = self.credits_app_path / 'migrations' / '0005_ai_service_framework.py'
     
     def test_sprint10_migration_exists(self):
@@ -636,7 +636,7 @@ class ServiceIntegrationTests(unittest.TestCase):
     def setUp(self):
         """Set up test environment."""
         self.base_path = Path(os.path.dirname(os.path.dirname(os.path.dirname(__file__))))
-        self.templates_path = self.base_path / 'quickscale' / 'templates'
+        self.templates_path = self.base_path / 'quickscale' / 'project_templates'
     
     def test_services_integration_in_dashboard(self):
         """Test that services are integrated in admin dashboard."""
@@ -663,7 +663,7 @@ class ServiceTemplateSyntaxTests(unittest.TestCase):
     def setUp(self):
         """Set up test environment."""
         self.base_path = Path(os.path.dirname(os.path.dirname(os.path.dirname(__file__))))
-        self.services_templates_path = self.base_path / 'quickscale' / 'templates' / 'services' / 'templates' / 'services'
+        self.services_templates_path = self.base_path / 'quickscale' / 'project_templates' / 'services' / 'templates' / 'services'
     
     def test_service_usage_form_template_no_invalid_filters(self):
         """Test that service_usage_form.html doesn't use invalid Django template filters."""

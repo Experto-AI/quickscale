@@ -31,7 +31,7 @@ class ServicesIntegrationTests(unittest.TestCase):
     def test_services_app_included_in_generated_project(self):
         """Test that services app is included when generating a project."""
         # Check the template settings.py includes services
-        settings_path = self.base_path / 'quickscale' / 'templates' / 'core' / 'settings.py'
+        settings_path = self.base_path / 'quickscale' / 'project_templates' / 'core' / 'settings.py'
         
         with open(settings_path, 'r') as f:
             settings_content = f.read()
@@ -46,7 +46,7 @@ class ServicesIntegrationTests(unittest.TestCase):
     
     def test_services_urls_integrated_in_core_urls(self):
         """Test that services URLs are properly integrated."""
-        core_urls_path = self.base_path / 'quickscale' / 'templates' / 'core' / 'urls.py'
+        core_urls_path = self.base_path / 'quickscale' / 'project_templates' / 'core' / 'urls.py'
         
         with open(core_urls_path, 'r') as f:
             urls_content = f.read()
@@ -58,7 +58,7 @@ class ServicesIntegrationTests(unittest.TestCase):
     def test_services_models_work_with_credit_system(self):
         """Test that services models integrate properly with credit system."""
         # Check that Service model exists in credits app
-        credits_models_path = self.base_path / 'quickscale' / 'templates' / 'credits' / 'models.py'
+        credits_models_path = self.base_path / 'quickscale' / 'project_templates' / 'credits' / 'models.py'
         
         with open(credits_models_path, 'r') as f:
             models_content = f.read()
@@ -79,7 +79,7 @@ class ServicesIntegrationTests(unittest.TestCase):
     
     def test_base_service_integrates_with_credit_consumption(self):
         """Test that BaseService class integrates with credit consumption."""
-        base_service_path = self.base_path / 'quickscale' / 'templates' / 'services' / 'base.py'
+        base_service_path = self.base_path / 'quickscale' / 'project_templates' / 'services' / 'base.py'
         
         with open(base_service_path, 'r') as f:
             base_content = f.read()
@@ -98,8 +98,8 @@ class ServicesIntegrationTests(unittest.TestCase):
     
     def test_service_registry_works_with_examples(self):
         """Test that service registry works with example services."""
-        decorators_path = self.base_path / 'quickscale' / 'templates' / 'services' / 'decorators.py'
-        examples_path = self.base_path / 'quickscale' / 'templates' / 'services' / 'examples.py'
+        decorators_path = self.base_path / 'quickscale' / 'project_templates' / 'services' / 'decorators.py'
+        examples_path = self.base_path / 'quickscale' / 'project_templates' / 'services' / 'examples.py'
         
         # Check registry exists
         with open(decorators_path, 'r') as f:
@@ -121,8 +121,8 @@ class ServicesIntegrationTests(unittest.TestCase):
     
     def test_services_views_integrate_with_templates(self):
         """Test that services views integrate properly with templates."""
-        views_path = self.base_path / 'quickscale' / 'templates' / 'services' / 'views.py'
-        templates_dir = self.base_path / 'quickscale' / 'templates' / 'services' / 'templates' / 'services'
+        views_path = self.base_path / 'quickscale' / 'project_templates' / 'services' / 'views.py'
+        templates_dir = self.base_path / 'quickscale' / 'project_templates' / 'services' / 'templates' / 'services'
         
         # Check views exist
         with open(views_path, 'r') as f:
@@ -147,7 +147,7 @@ class ServicesIntegrationTests(unittest.TestCase):
     
     def test_services_dashboard_integration(self):
         """Test that services are integrated into the dashboard."""
-        dashboard_path = self.base_path / 'quickscale' / 'templates' / 'credits' / 'templates' / 'credits' / 'dashboard.html'
+        dashboard_path = self.base_path / 'quickscale' / 'project_templates' / 'credits' / 'templates' / 'credits' / 'dashboard.html'
         
         with open(dashboard_path, 'r') as f:
             dashboard_content = f.read()
@@ -166,7 +166,7 @@ class ServicesIntegrationTests(unittest.TestCase):
     
     def test_migration_consistency(self):
         """Test that Sprint 10 migration is consistent."""
-        migration_path = self.base_path / 'quickscale' / 'templates' / 'credits' / 'migrations' / '0005_ai_service_framework.py'
+        migration_path = self.base_path / 'quickscale' / 'project_templates' / 'credits' / 'migrations' / '0005_ai_service_framework.py'
         
         # Migration should exist
         self.assertTrue(migration_path.exists(),
@@ -186,44 +186,44 @@ class ServicesIntegrationTests(unittest.TestCase):
         # This test verifies the end-to-end integration by checking that all pieces exist
         
         # 1. Service model exists in credits app
-        credits_models_path = self.base_path / 'quickscale' / 'templates' / 'credits' / 'models.py'
+        credits_models_path = self.base_path / 'quickscale' / 'project_templates' / 'credits' / 'models.py'
         with open(credits_models_path, 'r') as f:
             credits_content = f.read()
         self.assertIn("class Service(models.Model)", credits_content)
         
         # 2. BaseService class exists in services app
-        base_service_path = self.base_path / 'quickscale' / 'templates' / 'services' / 'base.py'
+        base_service_path = self.base_path / 'quickscale' / 'project_templates' / 'services' / 'base.py'
         with open(base_service_path, 'r') as f:
             base_content = f.read()
         self.assertIn("class BaseService(ABC)", base_content)
         
         # 3. Service registry exists and is functional
-        decorators_path = self.base_path / 'quickscale' / 'templates' / 'services' / 'decorators.py'
+        decorators_path = self.base_path / 'quickscale' / 'project_templates' / 'services' / 'decorators.py'
         with open(decorators_path, 'r') as f:
             decorators_content = f.read()
         self.assertIn("service_registry = ServiceRegistry()", decorators_content)
         
         # 4. Example services use the framework
-        examples_path = self.base_path / 'quickscale' / 'templates' / 'services' / 'examples.py'
+        examples_path = self.base_path / 'quickscale' / 'project_templates' / 'services' / 'examples.py'
         with open(examples_path, 'r') as f:
             examples_content = f.read()
         self.assertIn("class TextSentimentAnalysisService(BaseService)", examples_content)
         self.assertIn("@register_service(", examples_content)
         
         # 5. Views connect services to credit consumption
-        views_path = self.base_path / 'quickscale' / 'templates' / 'services' / 'views.py'
+        views_path = self.base_path / 'quickscale' / 'project_templates' / 'services' / 'views.py'
         with open(views_path, 'r') as f:
             views_content = f.read()
         self.assertIn("consume_credits_with_priority", views_content)
         
         # 6. URLs are properly configured
-        urls_path = self.base_path / 'quickscale' / 'templates' / 'services' / 'urls.py'
+        urls_path = self.base_path / 'quickscale' / 'project_templates' / 'services' / 'urls.py'
         with open(urls_path, 'r') as f:
             urls_content = f.read()
         self.assertIn("app_name = 'services'", urls_content)
         
         # 7. Templates exist and are properly structured
-        templates_dir = self.base_path / 'quickscale' / 'templates' / 'services' / 'templates' / 'services'
+        templates_dir = self.base_path / 'quickscale' / 'project_templates' / 'services' / 'templates' / 'services'
         required_templates = ['service_list.html', 'service_usage_form.html', 'service_usage_result.html']
         
         for template in required_templates:
@@ -233,7 +233,7 @@ class ServicesIntegrationTests(unittest.TestCase):
     
     def test_file_structure_completeness(self):
         """Test that all required files for Sprint 10 exist."""
-        services_app_path = self.base_path / 'quickscale' / 'templates' / 'services'
+        services_app_path = self.base_path / 'quickscale' / 'project_templates' / 'services'
         
         # Required files in services app
         required_files = [
@@ -287,7 +287,7 @@ class ServiceFrameworkBehaviorTests(unittest.TestCase):
     
     def test_base_service_contract_enforcement(self):
         """Test that BaseService enforces the proper contract."""
-        base_service_path = self.base_path / 'quickscale' / 'templates' / 'services' / 'base.py'
+        base_service_path = self.base_path / 'quickscale' / 'project_templates' / 'services' / 'base.py'
         
         with open(base_service_path, 'r') as f:
             base_content = f.read()
@@ -306,7 +306,7 @@ class ServiceFrameworkBehaviorTests(unittest.TestCase):
     
     def test_service_registry_contract(self):
         """Test that service registry maintains proper contracts."""
-        decorators_path = self.base_path / 'quickscale' / 'templates' / 'services' / 'decorators.py'
+        decorators_path = self.base_path / 'quickscale' / 'project_templates' / 'services' / 'decorators.py'
         
         with open(decorators_path, 'r') as f:
             decorators_content = f.read()
@@ -325,7 +325,7 @@ class ServiceFrameworkBehaviorTests(unittest.TestCase):
     
     def test_credit_integration_contract(self):
         """Test that credit integration follows proper contracts."""
-        base_service_path = self.base_path / 'quickscale' / 'templates' / 'services' / 'base.py'
+        base_service_path = self.base_path / 'quickscale' / 'project_templates' / 'services' / 'base.py'
         
         with open(base_service_path, 'r') as f:
             base_content = f.read()
@@ -335,7 +335,7 @@ class ServiceFrameworkBehaviorTests(unittest.TestCase):
                      "User validation not found")
         
         # Should use atomic transactions (check in the CreditAccount methods it uses)
-        credits_models_path = self.base_path / 'quickscale' / 'templates' / 'credits' / 'models.py'
+        credits_models_path = self.base_path / 'quickscale' / 'project_templates' / 'credits' / 'models.py'
         with open(credits_models_path, 'r') as f:
             credits_content = f.read()
         self.assertIn("with transaction.atomic():", credits_content,
@@ -347,7 +347,7 @@ class ServiceFrameworkBehaviorTests(unittest.TestCase):
     
     def test_example_services_follow_contract(self):
         """Test that example services follow the BaseService contract."""
-        examples_path = self.base_path / 'quickscale' / 'templates' / 'services' / 'examples.py'
+        examples_path = self.base_path / 'quickscale' / 'project_templates' / 'services' / 'examples.py'
         
         with open(examples_path, 'r') as f:
             examples_content = f.read()
@@ -376,7 +376,7 @@ class ZeroCostServiceIntegrationTests(unittest.TestCase):
     
     def test_service_model_allows_zero_cost(self):
         """Test that Service model in credits app allows zero credit cost."""
-        credits_models_path = self.base_path / 'quickscale' / 'templates' / 'credits' / 'models.py'
+        credits_models_path = self.base_path / 'quickscale' / 'project_templates' / 'credits' / 'models.py'
         
         with open(credits_models_path, 'r') as f:
             models_content = f.read()
@@ -397,7 +397,7 @@ class ZeroCostServiceIntegrationTests(unittest.TestCase):
     
     def test_base_service_handles_zero_cost(self):
         """Test that BaseService handles zero-cost services correctly."""
-        base_service_path = self.base_path / 'quickscale' / 'templates' / 'services' / 'base.py'
+        base_service_path = self.base_path / 'quickscale' / 'project_templates' / 'services' / 'base.py'
         
         with open(base_service_path, 'r') as f:
             base_content = f.read()
@@ -416,7 +416,7 @@ class ZeroCostServiceIntegrationTests(unittest.TestCase):
     
     def test_migration_exists_for_zero_cost(self):
         """Test that migration exists for zero-cost service support."""
-        migrations_path = self.base_path / 'quickscale' / 'templates' / 'credits' / 'migrations'
+        migrations_path = self.base_path / 'quickscale' / 'project_templates' / 'credits' / 'migrations'
         migration_file = migrations_path / '0008_allow_zero_cost_services.py'
         
         self.assertTrue(migration_file.exists(),
@@ -435,7 +435,7 @@ class ZeroCostServiceIntegrationTests(unittest.TestCase):
     
     def test_configure_service_command_supports_free_flag(self):
         """Test that configure_service management command supports --free flag."""
-        command_path = self.base_path / 'quickscale' / 'templates' / 'services' / 'management' / 'commands' / 'configure_service.py'
+        command_path = self.base_path / 'quickscale' / 'project_templates' / 'services' / 'management' / 'commands' / 'configure_service.py'
         
         with open(command_path, 'r') as f:
             command_content = f.read()
@@ -520,24 +520,24 @@ class ZeroCostServiceIntegrationTests(unittest.TestCase):
         # This test verifies that all components work together
         components_to_check = [
             # Model changes
-            ('quickscale/templates/credits/models.py', [
+            ('quickscale/project_templates/credits/models.py', [
                 'MinValueValidator(Decimal(\'0.0\'))',
                 'if credit_cost == 0:',
                 '0.0 for free services'
             ]),
             # BaseService changes
-            ('quickscale/templates/services/base.py', [
+            ('quickscale/project_templates/services/base.py', [
                 'if service.credit_cost == 0:',
                 'amount=Decimal(\'0\')',
                 '(free)'
             ]),
             # Migration
-            ('quickscale/templates/credits/migrations/0008_allow_zero_cost_services.py', [
+            ('quickscale/project_templates/credits/migrations/0008_allow_zero_cost_services.py', [
                 'MinValueValidator(Decimal(\'0.0\'))',
                 '0.0 for free services'
             ]),
             # Management command
-            ('quickscale/templates/services/management/commands/configure_service.py', [
+            ('quickscale/project_templates/services/management/commands/configure_service.py', [
                 '--free',
                 'credit_cost = Decimal(\'0.0\')',
                 'if credit_cost == 0:'

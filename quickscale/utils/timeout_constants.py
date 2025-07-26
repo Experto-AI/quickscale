@@ -6,10 +6,10 @@ project to improve maintainability and consistency.
 """
 
 # Docker service timeouts
-DOCKER_CONTAINER_START_TIMEOUT = 30  # Timeout for individual container startup
-DOCKER_SERVICE_STARTUP_TIMEOUT = 120  # Timeout for full service startup
+DOCKER_CONTAINER_START_TIMEOUT = 40   # Timeout for individual container startup
+DOCKER_SERVICE_STARTUP_TIMEOUT = 180  # Timeout for full service startup
 DOCKER_PS_CHECK_TIMEOUT = 10  # Timeout for docker-compose ps command
-DOCKER_PULL_TIMEOUT = 30  # < DOCKER_SERVICE_STARTUP_TIMEOUT
+DOCKER_PULL_TIMEOUT = 30      # < DOCKER_SERVICE_STARTUP_TIMEOUT
 
 # General Docker operations timeout
 DOCKER_OPERATIONS_TIMEOUT = 20  # < DOCKER_CONTAINER_START_TIMEOUT

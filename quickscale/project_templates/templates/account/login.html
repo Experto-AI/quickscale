@@ -1,0 +1,63 @@
+{% extends "base.html" %}
+
+{% block title %}Login - {{ project_name }}{% endblock %}
+
+{% block content %}
+{% include "components/hero_banner.html" with title="Log In" subtitle="Access your account" color="primary" %}
+
+<section class="section">
+  <div class="container">
+    <div class="columns is-centered">
+      <div class="column is-6">
+        <div class="box" id="form-container">
+          <form method="post" action="{% url 'account_login' %}">
+            {% csrf_token %}
+            {% if form.non_field_errors %}
+              <div class="notification is-danger">
+                {% for error in form.non_field_errors %}
+                  <p>{{ error }}</p>
+                {% endfor %}
+              </div>
+            {% endif %}
+            <div class="field">
+              <label class="label">Email</label>
+              <div class="control">
+                <input class="input {% if form.login.errors %}is-danger{% endif %}" type="email" name="login" placeholder="your.email@example.com" required autocomplete="email" value="{{ form.login.value|default_if_none:''|escape }}">
+              </div>
+              {% if form.login.errors %}
+                {% for error in form.login.errors %}
+                  <p class="help is-danger">{{ error }}</p>
+                {% endfor %}
+              {% endif %}
+            </div>
+            <div class="field">
+              <label class="label">Password</label>
+              <div class="control">
+                <input class="input {% if form.password.errors %}is-danger{% endif %}" type="password" name="password" placeholder="Password" required autocomplete="current-password">
+              </div>
+              {% if form.password.errors %}
+                <p class="help is-danger">{{ form.password.errors.0 }}</p>
+              {% endif %}
+            </div>
+            <div class="field">
+              <div class="control">
+                <button type="submit" class="button is-primary is-fullwidth">
+                  <span class="icon is-small">
+                    <i class="fas fa-sign-in-alt"></i>
+                  </span>
+                  <span>Log In</span>
+                </button>
+              </div>
+            </div>
+    <hr>
+    <div class="has-text-centered mt-4">
+      <p>Don't have an account? <a href="{% url 'account_signup' %}" class="has-text-primary">Sign up</a></p>
+      <p class="mt-2"><a href="{% url 'account_reset_password' %}" class="has-text-grey">Forgot your password?</a></p>
+    </div>
+          </form>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+{% endblock %}

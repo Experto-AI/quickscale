@@ -1,0 +1,62 @@
+{% extends "base.html" %}
+{% if stripe_enabled %}
+{% load stripe_tags %}
+{% endif %}
+
+{% block title %}Stripe Products{% endblock %}
+
+{% block content %}
+<section class="section">
+  <div class="container">
+    <h1 class="title">Stripe Products</h1>
+    
+    {% if products %}
+      <div class="columns is-multiline">
+        {% for product in products %}
+          <div class="column is-4">
+            <div class="card">
+              <div class="card-content">
+                <p class="title is-4">{{ product|get_stripe_product_name }}</p>
+                <p class="subtitle is-6">
+                  <span class="tag {% if product.active %}is-success{% else %}is-danger{% endif %}">
+                    {{ product|get_stripe_product_status|title }}
+                  </span>
+                  <span class="tag is-info ml-2">{{ product.get_interval_display }}</span>
+                </p>
+                
+                {% if product.description %}
+                  <p class="content">{{ product.description|truncatechars:100 }}</p>
+                {% endif %}
+                
+                <div class="content">
+                  <p class="title is-5">
+                    {{ product.price|floatformat:2 }} {{ product.currency }}
+                    {% if product.interval != 'one-time' %}
+                      / {{ product.get_interval_display }}
+                    {% endif %}
+                  </p>
+                </div>
+              </div>
+              <footer class="card-footer">
+                <a href="{% url 'stripe:product_detail' product.id %}" class="card-footer-item">
+                  View Details
+                </a>
+              </footer>
+            </div>
+          </div>
+        {% endfor %}
+      </div>
+    {% else %}
+      <div class="notification is-warning">
+        No products found in Stripe.
+      </div>
+    {% endif %}
+    
+    <div class="buttons mt-5">
+      <a href="{% url 'stripe:status' %}" class="button is-primary">
+        Back to Stripe Status
+      </a>
+    </div>
+  </div>
+</section>
+{% endblock %} 

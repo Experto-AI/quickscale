@@ -112,11 +112,20 @@ QuickScale provides a CLI for managing your project. Below are the most common c
   ```
 
 ### **3.7. Destroying a Project**
-- **Permanently Delete a Project**:
-  ```bash
-  quickscale destroy
-  ```
-  > ⚠️ **Warning**: This will delete all project files and data.
+
+**Permanently Delete a Project**:
+
+```bash
+quickscale destroy
+```
+> ⚠️ **Warning**: This will delete all project files, containers, and volumes, but will keep Docker images for faster rebuilds.
+
+To also delete Docker images (for a full clean, slower rebuild):
+
+```bash
+quickscale destroy --delete-images
+```
+> ⚠️ **Warning**: This will delete all project files, containers, volumes, and Docker images. Use only if you want a completely clean slate.
 
 ---
 

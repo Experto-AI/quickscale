@@ -1,7 +1,7 @@
 quickscale
 ├── dist
-│   ├── quickscale-0.32.0-py3-none-any.whl
-│   └── quickscale-0.32.0.tar.gz
+│   ├── quickscale-0.34.0-py3-none-any.whl
+│   └── quickscale-0.34.0.tar.gz
 ├── docs
 │   ├── contrib
 │   │   ├── shared
@@ -20,7 +20,9 @@ quickscale
 │   ├── DATABASE_VARIABLES.md
 │   ├── MANUAL_CREDIT_MANAGEMENT.md
 │   ├── MESSAGE_MANAGER.md
-│   └── REVERSE_DEVELOPMENT_WORKFLOW.md
+│   ├── REVERSE_DEVELOPMENT_WORKFLOW.md
+│   ├── SPRINT_24_STRIPE_INTEGRATION_REVIEW.md
+│   └── SPRINT_24_SUBSCRIPTION_VALIDATION_SUMMARY.md
 ├── htmlcov
 │   ├── class_index.html
 │   ├── coverage_html_cb_6fb7b396.js
@@ -126,7 +128,7 @@ quickscale
 │   │   │       ├── open_shell(self, django_shell, command)
 │   │   │       ├── run_manage_command(self, args)
 │   │   │       ├── check_requirements(self, print_info)
-│   │   │       ├── generate_service(self, service_name, service_type, output_dir, credit_cost, description, skip_db_config)
+│   │   │       ├── generate_service(self, service_name, service_type, output_dir, credit_cost, description, skip_db_config, free)
 │   │   │       ├── validate_service(self, service_file, show_tips)
 │   │   │       ├── show_service_examples(self, example_type)
 │   │   │       ├── get_available_commands(self)
@@ -173,7 +175,8 @@ quickscale
 │   │   │   └── DestroyProjectCommand {}
 │   │   │       ├── __init__(self)
 │   │   │       ├── _confirm_destruction(self, project_name)
-│   │   │       └── execute(self)
+│   │   │       ├── _ask_delete_images(self)
+│   │   │       └── execute(self, delete_images)
 │   │   ├── project_manager.py
 │   │   │   └── ProjectManager {}
 │   │   │       ├── get_project_root()
@@ -181,7 +184,7 @@ quickscale
 │   │   │       ├── get_project_state()
 │   │   │       ├── check_test_directory()
 │   │   │       ├── check_running_containers()
-│   │   │       ├── stop_containers(project_name)
+│   │   │       ├── stop_containers(project_name, delete_images)
 │   │   │       ├── read_tracking_file(file_path)
 │   │   │       ├── write_tracking_file(file_path, data)
 │   │   │       ├── get_tracking_param(file_path, param_name)
@@ -190,26 +193,14 @@ quickscale
 │   │   │   ├── handle_service_error(e, action)
 │   │   │   ├── ServiceUpCommand {}
 │   │   │   │   ├── __init__(self)
-│   │   │   │   ├── _find_available_ports(self, start_offset)
 │   │   │   │   ├── _extract_port_values(self, env_content)
-│   │   │   │   ├── _check_and_update_pg_port(self, pg_port)
-│   │   │   │   ├── _check_and_update_web_port(self, web_port)
-│   │   │   │   ├── _update_env_content(self, env_content, updated_ports)
-│   │   │   │   ├── _update_env_file_ports(self, env)
 │   │   │   │   ├── _is_port_in_use(self, port)
-│   │   │   │   ├── _is_feature_enabled(self, env_value)
-│   │   │   │   ├── _update_docker_compose_ports(self, updated_ports)
 │   │   │   │   ├── _check_port_availability(self, env)
 │   │   │   │   ├── _prepare_environment_and_ports(self, no_cache)
-│   │   │   │   ├── _find_ports_for_retry(self, retry_count, max_retries, no_cache)
 │   │   │   │   ├── _start_docker_services(self, env, no_cache, timeout)
 │   │   │   │   ├── _handle_docker_process_error(self, e, env)
 │   │   │   │   ├── _verify_services_running(self, env)
-│   │   │   │   ├── _start_stopped_containers(self)
-│   │   │   │   ├── _start_container(self, container_name, status)
-│   │   │   │   ├── _print_service_info(self, updated_ports)
-│   │   │   │   ├── _handle_retry_attempt(self, retry_count, max_retries, env, updated_ports, no_cache)
-│   │   │   │   ├── _start_services_with_retry(self, max_retries, no_cache)
+│   │   │   │   ├── _print_service_info(self, updated_ports, elapsed_time)
 │   │   │   │   └── execute(self, no_cache)
 │   │   │   ├── ServiceDownCommand {}
 │   │   │   │   ├── __init__(self)
@@ -222,7 +213,7 @@ quickscale
 │   │   │       └── execute(self)
 │   │   ├── service_generator_commands.py
 │   │   │   ├── ServiceGeneratorCommand {}
-│   │   │   │   ├── execute(self, service_name, service_type, output_dir, credit_cost, description, skip_db_config)
+│   │   │   │   ├── execute(self, service_name, service_type, output_dir, credit_cost, description, skip_db_config, free)
 │   │   │   │   ├── _validate_service_name(self, service_name)
 │   │   │   │   ├── _configure_service_in_database(self, service_name, description, credit_cost)
 │   │   │   │   ├── _to_class_name(self, service_name)
@@ -250,7 +241,7 @@ quickscale
 │   │   │   └── find_default_config()
 │   │   └── settings.py
 │   │       └── validate_production_settings()
-│   ├── templates
+│   ├── project_templates
 │   │   ├── admin_dashboard
 │   │   │   ├── migrations
 │   │   │   │   ├── 0001_initial.py
@@ -460,8 +451,7 @@ quickscale
 │   │   │   │       └── _validate_api_key(self, api_key_data)
 │   │   │   ├── asgi.py
 │   │   │   ├── context_processors.py
-│   │   │   │   ├── project_settings(request)
-│   │   │   │   └── settings_context(request)
+│   │   │   │   └── project_settings(request)
 │   │   │   ├── email_settings.py
 │   │   │   │   └── validate_email_settings()
 │   │   │   ├── env_utils.py
@@ -510,6 +500,8 @@ quickscale
 │   │   │   │   ├── 0007_add_text_processing_service.py
 │   │   │   │   │   ├── create_text_processing_service(apps, schema_editor)
 │   │   │   │   │   ├── remove_text_processing_service(apps, schema_editor)
+│   │   │   │   │   └── Migration {}
+│   │   │   │   ├── 0008_allow_zero_cost_services.py
 │   │   │   │   │   └── Migration {}
 │   │   │   │   └── __init__.py
 │   │   │   ├── templates
@@ -695,6 +687,9 @@ quickscale
 │   │   │       └── forEach(button => {
         button.addEventListener('click', function()
 │   │   ├── logs
+│   │   │   ├── error.log
+│   │   │   ├── quickscale.log
+│   │   │   └── security.log
 │   │   ├── public
 │   │   │   ├── migrations
 │   │   │   │   ├── 0001_initial.py
@@ -852,8 +847,7 @@ quickscale
 │   │   │   │   │       ├── test_sync_product_from_stripe_reads_credit_amount_from_metadata(self)
 │   │   │   │   │       ├── test_sync_product_from_stripe_different_metadata_keys(self)
 │   │   │   │   │       ├── test_sync_product_from_stripe_invalid_credit_amount(self)
-│   │   │   │   │       ├── test_sync_product_from_stripe_no_metadata(self)
-│   │   │   │   │       └── test_sync_product_to_stripe_includes_credit_amount_in_metadata(self)
+│   │   │   │   │       └── test_sync_product_from_stripe_no_metadata(self)
 │   │   │   │   ├── test_stripe_manager.py
 │   │   │   │   │   └── StripeManagerTest {}
 │   │   │   │   │       ├── setUp(self)
@@ -918,9 +912,9 @@ quickscale
 │   │   │   │   └── StripeProductAdmin {}
 │   │   │   │       ├── price_per_credit_display(self, obj)
 │   │   │   │       ├── get_urls(self)
-│   │   │   │       ├── sync_product(self, request, object_id)
+│   │   │   │       ├── sync_product_from_stripe(self, request, object_id)
 │   │   │   │       ├── get_actions(self, request)
-│   │   │   │       ├── sync_selected(self, request, queryset)
+│   │   │   │       ├── sync_selected_from_stripe(self, request, queryset)
 │   │   │   │       ├── sync_all_products_view(self, request)
 │   │   │   │       ├── has_add_permission(self, request)
 │   │   │   │       └── changelist_view(self, request, extra_context)
@@ -937,7 +931,6 @@ quickscale
 │   │   │   │       ├── price_per_credit(self)
 │   │   │   │       ├── is_subscription(self)
 │   │   │   │       ├── is_one_time(self)
-│   │   │   │       ├── sync_with_stripe(self)
 │   │   │   │       └── clean(self)
 │   │   │   ├── stripe_manager.py
 │   │   │   │   ├── StripeConfigurationError {}
@@ -974,7 +967,6 @@ quickscale
 │   │   │   │       ├── create_checkout_session(self, price_id, quantity, success_url, cancel_url, customer_email, customer_id, metadata, mode)
 │   │   │   │       ├── retrieve_checkout_session(self, session_id, include_line_items)
 │   │   │   │       ├── create_refund(self, payment_intent_id, amount, reason, metadata)
-│   │   │   │       ├── sync_product_to_stripe(self, product_obj)
 │   │   │   │       ├── sync_product_from_stripe(self, stripe_product_id, product_model)
 │   │   │   │       └── sync_products_from_stripe(self, product_model)
 │   │   │   ├── urls.py
@@ -1060,8 +1052,13 @@ quickscale
 │   │   │   ├── components
 │   │   │   │   ├── enhanced_password_input.html
 │   │   │   │   ├── footer.html
+│   │   │   │   ├── hero_banner.html
 │   │   │   │   ├── messages.html
 │   │   │   │   └── navbar.html
+│   │   │   ├── credits
+│   │   │   │   ├── buy_credits.html
+│   │   │   │   ├── dashboard.html
+│   │   │   │   └── services.html
 │   │   │   ├── public
 │   │   │   │   ├── about.html
 │   │   │   │   ├── contact.html
@@ -1074,14 +1071,11 @@ quickscale
 │   │   │   │   └── status.html
 │   │   │   ├── users
 │   │   │   │   ├── account_locked.html
+│   │   │   │   ├── account_security.html
 │   │   │   │   ├── api_key_generated.html
 │   │   │   │   ├── api_keys.html
-│   │   │   │   ├── login.html
-│   │   │   │   ├── login_form.html
 │   │   │   │   ├── profile.html
 │   │   │   │   ├── profile_form.html
-│   │   │   │   ├── signup.html
-│   │   │   │   ├── signup_form.html
 │   │   │   │   └── two_factor_settings.html
 │   │   │   ├── 429.html
 │   │   │   ├── admin_test.html
@@ -1098,6 +1092,7 @@ quickscale
 │   │   │   │   │       ├── test_fieldset_organization(self)
 │   │   │   │   │       ├── test_sync_action(self)
 │   │   │   │   │       ├── test_bulk_sync_action(self)
+│   │   │   │   │       ├── test_sync_all_action(self)
 │   │   │   │   │       ├── test_add_permission_disabled(self)
 │   │   │   │   │       └── test_add_url_redirects(self)
 │   │   │   │   ├── test_models.py
@@ -1129,7 +1124,14 @@ quickscale
 │   │   │   ├── management
 │   │   │   │   ├── commands
 │   │   │   │   │   ├── __init__.py
-│   │   │   │   │   └── create_default_users.py
+│   │   │   │   │   ├── create_default_users.py
+│   │   │   │   │   │   └── Command {}
+│   │   │   │   │   │       ├── add_arguments(self, parser)
+│   │   │   │   │   │       └── handle(self)
+│   │   │   │   │   ├── diagnose_login.py
+│   │   │   │   │   │   └── Command {}
+│   │   │   │   │   │       └── handle(self)
+│   │   │   │   │   └── fix_login.py
 │   │   │   │   │       └── Command {}
 │   │   │   │   │           ├── add_arguments(self, parser)
 │   │   │   │   │           └── handle(self)
@@ -1286,34 +1288,14 @@ quickscale
 │   │   │   │   │       ├── test_two_factor_status_user_enabled(self)
 │   │   │   │   │       ├── test_two_factor_status_user_disabled(self)
 │   │   │   │   │       └── test_views_require_login(self)
-│   │   │   │   ├── test_user_admin_grouping.py
-│   │   │   │   │   └── UserAdminGroupingTest {}
-│   │   │   │   │       ├── test_email_address_not_registered_separately(self)
-│   │   │   │   │       ├── test_custom_user_admin_has_email_inline(self)
-│   │   │   │   │       ├── test_email_address_inline_configuration(self)
-│   │   │   │   │       ├── test_custom_user_admin_includes_email_status(self)
-│   │   │   │   │       ├── test_email_verified_status_method(self)
-│   │   │   │   │       └── test_admin_fieldsets_include_all_user_fields(self)
-│   │   │   │   └── test_views_security.py
-│   │   │   │       └── SecurityViewsTestCase {}
-│   │   │   │           ├── setUp(self)
-│   │   │   │           ├── create_post_request(self, data, path)
-│   │   │   │           ├── create_get_request(self, path)
-│   │   │   │           ├── test_login_view_get_request(self, mock_render)
-│   │   │   │           ├── test_login_view_successful_login(self, mock_login, mock_redirect, mock_messages)
-│   │   │   │           ├── test_login_view_invalid_credentials(self, mock_render)
-│   │   │   │           ├── test_login_view_nonexistent_user(self, mock_render)
-│   │   │   │           ├── test_login_view_account_lockout_progression(self, mock_render)
-│   │   │   │           ├── test_login_view_locked_account(self, mock_render)
-│   │   │   │           ├── test_login_view_expired_lockout(self, mock_login, mock_redirect, mock_messages)
-│   │   │   │           ├── test_login_view_remaining_attempts_message(self, mock_render)
-│   │   │   │           ├── test_login_view_form_validation_error(self, mock_render)
-│   │   │   │           ├── test_login_view_htmx_request(self, mock_render, mock_response)
-│   │   │   │           ├── test_login_view_htmx_successful_login(self, mock_response)
-│   │   │   │           ├── test_lockout_creation_for_new_user(self)
-│   │   │   │           ├── test_lockout_logging_integration(self)
-│   │   │   │           ├── test_failed_login_logging_integration(self, mock_log)
-│   │   │   │           └── test_security_headers_preserved(self)
+│   │   │   │   └── test_user_admin_grouping.py
+│   │   │   │       └── UserAdminGroupingTest {}
+│   │   │   │           ├── test_email_address_not_registered_separately(self)
+│   │   │   │           ├── test_custom_user_admin_has_email_inline(self)
+│   │   │   │           ├── test_email_address_inline_configuration(self)
+│   │   │   │           ├── test_custom_user_admin_includes_email_status(self)
+│   │   │   │           ├── test_email_verified_status_method(self)
+│   │   │   │           └── test_admin_fieldsets_include_all_user_fields(self)
 │   │   │   ├── adapters.py
 │   │   │   │   ├── AccountAdapter {}
 │   │   │   │   │   ├── is_open_for_signup(self, request)
@@ -1366,11 +1348,14 @@ quickscale
 │   │   │   │   └── UsersConfig {}
 │   │   │   │       └── ready(self)
 │   │   │   ├── forms.py
-│   │   │   │   ├── EnhancedSignupForm {}
-│   │   │   │   │   ├── Meta {}
-│   │   │   │   │   ├── clean_email(self)
-│   │   │   │   │   └── save(self, commit)
-│   │   │   │   ├── EnhancedLoginForm {}
+│   │   │   │   ├── CustomSignupForm {}
+│   │   │   │   │   └── __init__(self)
+│   │   │   │   ├── CustomLoginForm {}
+│   │   │   │   │   └── __init__(self)
+│   │   │   │   ├── CustomResetPasswordForm {}
+│   │   │   │   │   └── __init__(self)
+│   │   │   │   ├── CustomChangePasswordForm {}
+│   │   │   │   │   └── __init__(self)
 │   │   │   │   └── ProfileForm {}
 │   │   │   │       ├── Meta {}
 │   │   │   │       ├── clean_website(self)
@@ -1421,7 +1406,6 @@ quickscale
 │   │   │   │   ├── log_failed_login_attempt(sender, credentials, request)
 │   │   │   │   ├── log_email_confirmation(sender, request, email_address)
 │   │   │   │   └── log_user_creation(sender, instance, created)
-│   │   │   ├── signup.html
 │   │   │   ├── urls.py
 │   │   │   ├── validators.py
 │   │   │   │   ├── PasswordStrengthValidator {}
@@ -1433,9 +1417,7 @@ quickscale
 │   │   │   │       ├── validate(self, password, user)
 │   │   │   │       └── get_help_text(self)
 │   │   │   ├── views.py
-│   │   │   │   ├── login_view(request)
-│   │   │   │   ├── logout_view(request)
-│   │   │   │   ├── signup_view(request)
+│   │   │   │   ├── account_security_view(request)
 │   │   │   │   ├── profile_view(request)
 │   │   │   │   ├── api_keys_view(request)
 │   │   │   │   ├── generate_api_key_view(request)
@@ -1634,6 +1616,10 @@ quickscale
 │   │   ├── stripe
 │   │   │   ├── __init__.py
 │   │   │   └── settings.py
+│   │   ├── stripe_manager
+│   │   │   ├── __init__.py
+│   │   │   ├── urls.py
+│   │   │   └── views.py
 │   │   ├── __init__.py
 │   │   ├── api_middleware.py
 │   │   │   └── APIKeyAuthenticationMiddleware {}
@@ -1684,6 +1670,7 @@ quickscale
 │   │   │   ├── dummy_profile(request)
 │   │   │   ├── dummy_logout(request)
 │   │   │   ├── dummy_signup(request)
+│   │   │   ├── dummy_account_security(request)
 │   │   │   ├── dummy_login(request)
 │   │   │   ├── dummy_user_dashboard(request)
 │   │   │   ├── dummy_service_list(request)
@@ -1924,8 +1911,7 @@ quickscale
 │   │   │       ├── test_project_workflow(self, script_runner, tmp_path)
 │   │   │       ├── test_end_user_workflow_cli_part(self, mock_init_execute, mock_subprocess_run, script_runner, tmp_path)
 │   │   │       ├── test_docker_services_cli_part(self, mock_subprocess_run, script_runner, tmp_path)
-│   │   │       ├── test_environment_validation_cli_integration(self, mock_validate, script_runner, tmp_path)
-│   │   │       └── test_port_fallback_functionality(self, mock_subprocess_run, mock_is_port_in_use, script_runner, tmp_path)
+│   │   │       └── test_environment_validation_cli_integration(self, mock_validate, script_runner, tmp_path)
 │   │   ├── test_cli_messages.py
 │   │   │   ├── mock_message_manager()
 │   │   │   └── TestCliMessageConsistency {}
@@ -2018,6 +2004,12 @@ quickscale
 │   │   │       ├── test_success_output_format(self, capfd)
 │   │   │       ├── test_error_output_format(self, capfd)
 │   │   │       └── test_template_based_messages(self, capfd)
+│   │   ├── test_navigation_flows.py
+│   │   │   └── NavigationFlowIntegrationTests {}
+│   │   │       ├── setUp(self)
+│   │   │       ├── test_signup_login_dashboard_flow(self)
+│   │   │       ├── test_billing_account_services_navigation(self)
+│   │   │       └── test_admin_dashboard_navigation(self)
 │   │   ├── test_project_settings.py
 │   │   │   ├── MockSettings {}
 │   │   │   ├── MockResponse {}
@@ -2049,12 +2041,22 @@ quickscale
 │   │   │   │   ├── test_migration_consistency(self)
 │   │   │   │   ├── test_complete_service_workflow_integration(self)
 │   │   │   │   └── test_file_structure_completeness(self)
-│   │   │   └── ServiceFrameworkBehaviorTests {}
+│   │   │   ├── ServiceFrameworkBehaviorTests {}
+│   │   │   │   ├── setUp(self)
+│   │   │   │   ├── test_base_service_contract_enforcement(self)
+│   │   │   │   ├── test_service_registry_contract(self)
+│   │   │   │   ├── test_credit_integration_contract(self)
+│   │   │   │   └── test_example_services_follow_contract(self)
+│   │   │   └── ZeroCostServiceIntegrationTests {}
 │   │   │       ├── setUp(self)
-│   │   │       ├── test_base_service_contract_enforcement(self)
-│   │   │       ├── test_service_registry_contract(self)
-│   │   │       ├── test_credit_integration_contract(self)
-│   │   │       └── test_example_services_follow_contract(self)
+│   │   │       ├── test_service_model_allows_zero_cost(self)
+│   │   │       ├── test_base_service_handles_zero_cost(self)
+│   │   │       ├── test_migration_exists_for_zero_cost(self)
+│   │   │       ├── test_configure_service_command_supports_free_flag(self)
+│   │   │       ├── test_service_generator_supports_free_flag(self)
+│   │   │       ├── test_cli_supports_free_flag(self)
+│   │   │       ├── test_command_manager_supports_free_flag(self)
+│   │   │       └── test_zero_cost_service_integration_complete(self)
 │   │   ├── test_sprint13_end_to_end.py
 │   │   │   ├── Sprint13EndToEndWorkflowTests {}
 │   │   │   │   ├── setUp(self)
@@ -2081,26 +2083,32 @@ quickscale
 │   │   │       ├── tearDown(self)
 │   │   │       ├── test_efficient_database_queries(self)
 │   │   │       └── test_analytics_caching_considerations(self)
-│   │   └── test_sprint13_integration.py
-│   │       ├── Sprint13ServiceAdminIntegrationTests {}
-│   │       │   ├── setUp(self)
-│   │       │   ├── tearDown(self)
-│   │       │   ├── test_service_admin_enhanced_configuration_in_generated_project(self)
-│   │       │   ├── test_service_usage_admin_enhanced_configuration_in_generated_project(self)
-│   │       │   ├── test_admin_dashboard_service_views_in_generated_project(self)
-│   │       │   ├── test_admin_dashboard_service_urls_in_generated_project(self)
-│   │       │   ├── test_service_admin_template_in_generated_project(self)
-│   │       │   ├── test_service_detail_template_in_generated_project(self)
-│   │       │   ├── test_service_analytics_admin_template_in_generated_project(self)
-│   │       │   ├── test_admin_dashboard_index_service_integration_in_generated_project(self)
-│   │       │   ├── test_service_models_support_sprint13_features_in_generated_project(self)
-│   │       │   └── test_django_admin_service_analytics_url_configuration(self)
-│   │       └── Sprint13ServiceManagementWorkflowTests {}
-│   │           ├── setUp(self)
-│   │           ├── tearDown(self)
-│   │           ├── test_service_management_complete_workflow_integration(self)
-│   │           ├── test_service_admin_dashboard_navigation_integration(self)
-│   │           └── test_service_analytics_data_consistency(self)
+│   │   ├── test_sprint13_integration.py
+│   │   │   ├── Sprint13ServiceAdminIntegrationTests {}
+│   │   │   │   ├── setUp(self)
+│   │   │   │   ├── tearDown(self)
+│   │   │   │   ├── test_service_admin_enhanced_configuration_in_generated_project(self)
+│   │   │   │   ├── test_service_usage_admin_enhanced_configuration_in_generated_project(self)
+│   │   │   │   ├── test_admin_dashboard_service_views_in_generated_project(self)
+│   │   │   │   ├── test_admin_dashboard_service_urls_in_generated_project(self)
+│   │   │   │   ├── test_service_admin_template_in_generated_project(self)
+│   │   │   │   ├── test_service_detail_template_in_generated_project(self)
+│   │   │   │   ├── test_service_analytics_admin_template_in_generated_project(self)
+│   │   │   │   ├── test_admin_dashboard_index_service_integration_in_generated_project(self)
+│   │   │   │   ├── test_service_models_support_sprint13_features_in_generated_project(self)
+│   │   │   │   └── test_django_admin_service_analytics_url_configuration(self)
+│   │   │   └── Sprint13ServiceManagementWorkflowTests {}
+│   │   │       ├── setUp(self)
+│   │   │       ├── tearDown(self)
+│   │   │       ├── test_service_management_complete_workflow_integration(self)
+│   │   │       ├── test_service_admin_dashboard_navigation_integration(self)
+│   │   │       └── test_service_analytics_data_consistency(self)
+│   │   └── test_template_page_rendering.py
+│   │       ├── test_public_page_renders_ok(client, url_name, kwargs)
+│   │       ├── test_user_page_renders_ok(client, url_name, kwargs, django_user_model)
+│   │       ├── test_admin_page_renders_ok(client, url_name, kwargs, django_user_model)
+│   │       ├── test_stripe_page_renders_ok(client, url_name, kwargs, django_user_model, settings)
+│   │       └── test_404_page_renders(client)
 │   ├── stripe_manager
 │   │   ├── __init__.py
 │   │   ├── apps.py
@@ -2156,25 +2164,12 @@ quickscale
 │   │   │   │       ├── test_init_command_success(self, mock_mkdir, mock_copytree, init_command)
 │   │   │   │       ├── test_env_file_creation(self, mock_copy2, mock_mkdir, mock_copytree, init_command)
 │   │   │   │       └── test_template_variables(self, mock_truediv, mock_read_text, init_command)
-│   │   │   ├── test_project_name.py
-│   │   │   │   ├── init_command()
-│   │   │   │   ├── test_env()
-│   │   │   │   ├── test_project_name_in_env_file(mock_write_text, mock_read_text, mock_copy2, mock_mkdir, mock_copytree, init_command, test_env)
-│   │   │   │   ├── test_project_name_default_in_env_file(mock_write_text, mock_read_text, mock_copy2, mock_mkdir, mock_copytree, init_command, test_env)
-│   │   │   │   └── test_project_name_in_templates(mock_write_text, mock_read_text, mock_copy2, mock_mkdir, mock_copytree, init_command, test_env)
-│   │   │   └── test_service_commands_message_manager.py
-│   │   │       ├── mock_message_manager()
-│   │   │       ├── mock_project_not_found()
-│   │   │       ├── mock_project_found()
-│   │   │       └── TestServiceCommandsMessageManager {}
-│   │   │           ├── test_up_command_project_not_found(self, mock_message_manager, mock_project_not_found)
-│   │   │           ├── test_down_command_project_not_found(self, mock_message_manager, mock_project_not_found)
-│   │   │           ├── test_logs_command_project_not_found(self, mock_message_manager, mock_project_not_found)
-│   │   │           ├── test_status_command_project_not_found(self, mock_message_manager, mock_project_not_found)
-│   │   │           ├── test_down_command_success(self, mock_message_manager, mock_project_found)
-│   │   │           ├── test_status_command_success(self, mock_message_manager, mock_project_found)
-│   │   │           ├── test_up_command_retry_failure(self, mock_message_manager, mock_project_found)
-│   │   │           └── test_start_services_with_retry_failure(self, mock_message_manager, mock_project_found)
+│   │   │   └── test_project_name.py
+│   │   │       ├── init_command()
+│   │   │       ├── test_env()
+│   │   │       ├── test_project_name_in_env_file(mock_write_text, mock_read_text, mock_copy2, mock_mkdir, mock_copytree, init_command, test_env)
+│   │   │       ├── test_project_name_default_in_env_file(mock_write_text, mock_read_text, mock_copy2, mock_mkdir, mock_copytree, init_command, test_env)
+│   │   │       └── test_project_name_in_templates(mock_write_text, mock_read_text, mock_copy2, mock_mkdir, mock_copytree, init_command, test_env)
 │   │   ├── fixtures
 │   │   │   └── docker-compose.yml
 │   │   ├── utils
@@ -2330,27 +2325,6 @@ quickscale
 │   │   │       ├── test_is_open_for_signup(self, MockSocialAccountAdapter)
 │   │   │       ├── test_pre_social_login(self, MockSocialAccountAdapter)
 │   │   │       └── test_populate_user(self, MockSocialAccountAdapter)
-│   │   ├── test_auth_forms.py
-│   │   │   ├── MockCustomLoginForm()
-│   │   │   ├── MockCustomSignupForm()
-│   │   │   ├── MockCustomResetPasswordForm()
-│   │   │   ├── MockCustomResetPasswordKeyForm()
-│   │   │   ├── MockCustomChangePasswordForm()
-│   │   │   ├── MockProfileForm()
-│   │   │   ├── TestCustomLoginForm {}
-│   │   │   │   └── test_initialization(self, MockCustomLoginForm)
-│   │   │   ├── TestCustomSignupForm {}
-│   │   │   │   ├── test_required_fields(self, MockCustomSignupForm)
-│   │   │   │   ├── test_field_styling(self, MockCustomSignupForm)
-│   │   │   │   └── test_save_method(self, MockCustomSignupForm)
-│   │   │   ├── TestCustomResetPasswordForm {}
-│   │   │   │   └── test_initialization(self, MockCustomResetPasswordForm)
-│   │   │   ├── TestCustomResetPasswordKeyForm {}
-│   │   │   │   └── test_initialization(self, MockCustomResetPasswordKeyForm)
-│   │   │   ├── TestCustomChangePasswordForm {}
-│   │   │   │   └── test_initialization(self, MockCustomChangePasswordForm)
-│   │   │   └── TestProfileForm {}
-│   │   │       └── test_initialization(self, MockProfileForm)
 │   │   ├── test_cli_commands.py
 │   │   │   └── TestCLICommands {}
 │   │   │       ├── test_version_command(self, capsys)
@@ -2537,8 +2511,7 @@ quickscale
 │   │   │   │   └── test_purchase_success_view_updated(self)
 │   │   │   ├── CreditPurchaseTemplateTests {}
 │   │   │   │   ├── setUp(self)
-│   │   │   │   ├── test_buy_credits_template_exists(self)
-│   │   │   │   └── test_buy_credits_template_uses_products(self)
+│   │   │   │   └── test_buy_credits_template_exists(self)
 │   │   │   ├── StripeCustomerModelTests {}
 │   │   │   │   ├── setUp(self)
 │   │   │   │   ├── test_stripe_customer_model_exists(self)
@@ -2731,6 +2704,9 @@ quickscale
 │   │   │       ├── test_migration_includes_indexes(self)
 │   │   │       ├── test_payment_creation_in_webhook_handlers(self)
 │   │   │       └── test_payment_creation_in_success_views(self)
+│   │   ├── test_navigation.py
+│   │   │   └── NavigationBarTests {}
+│   │   │       └── setUp(self)
 │   │   ├── test_payment_sprint8.py
 │   │   │   ├── Sprint8PaymentModelTests {}
 │   │   │   │   ├── setUp(self)
@@ -2751,6 +2727,32 @@ quickscale
 │   │   │   └── Sprint8ValidationTests {}
 │   │   │       ├── setUp(self)
 │   │   │       └── test_sprint8_requirements_implemented(self)
+│   │   ├── test_plan_change_edge_cases.py
+│   │   │   ├── PlanChangeEdgeCaseTemplateValidationTest {}
+│   │   │   │   ├── setUp(self)
+│   │   │   │   ├── test_plan_change_credit_transfer_logic_exists(self)
+│   │   │   │   ├── test_atomic_transaction_support_exists(self)
+│   │   │   │   ├── test_multiple_credit_type_handling_exists(self)
+│   │   │   │   ├── test_credit_expiration_logic_exists(self)
+│   │   │   │   ├── test_stripe_product_interval_support_exists(self)
+│   │   │   │   ├── test_concurrent_operation_protection_exists(self)
+│   │   │   │   ├── test_plan_upgrade_downgrade_support_exists(self)
+│   │   │   │   └── test_webhook_plan_change_handling_exists(self)
+│   │   │   ├── CreditTransferValidationTest {}
+│   │   │   │   ├── setUp(self)
+│   │   │   │   ├── test_negative_transaction_support_exists(self)
+│   │   │   │   ├── test_credit_type_conversion_logic_exists(self)
+│   │   │   │   └── test_balance_calculation_by_type_exists(self)
+│   │   │   ├── ErrorHandlingValidationTest {}
+│   │   │   │   ├── setUp(self)
+│   │   │   │   ├── test_insufficient_credits_error_exists(self)
+│   │   │   │   ├── test_invalid_product_error_handling_exists(self)
+│   │   │   │   └── test_duplicate_prevention_exists(self)
+│   │   │   └── AuditTrailValidationTest {}
+│   │   │       ├── setUp(self)
+│   │   │       ├── test_transaction_logging_exists(self)
+│   │   │       ├── test_payment_tracking_exists(self)
+│   │   │       └── test_service_usage_tracking_exists(self)
 │   │   ├── test_production_security.py
 │   │   │   └── TestProductionSecurity {}
 │   │   │       ├── test_production_requires_strong_secret_key(self)
@@ -2858,108 +2860,14 @@ quickscale
 │   │   │       ├── test_service_down_command_error_handling(self)
 │   │   │       ├── test_service_logs_command_error_handling(self)
 │   │   │       ├── test_service_status_command_error_handling(self)
-│   │   │       ├── test_env_file_port_update_error_handling(self)
 │   │   │       ├── test_port_availability_check_web_port_available(self)
-│   │   │       ├── test_port_availability_check_web_port_in_use_with_fallback(self)
-│   │   │       ├── test_port_availability_check_web_port_in_use_without_fallback(self)
-│   │   │       ├── test_port_availability_check_db_port_in_use_with_fallback(self)
-│   │   │       ├── test_port_availability_check_db_port_in_use_without_fallback(self)
-│   │   │       ├── test_port_availability_check_no_available_alternative(self)
+│   │   │       ├── test_port_availability_check_web_port_in_use(self)
+│   │   │       ├── test_port_availability_check_db_port_in_use(self)
 │   │   │       ├── test_execute_with_port_availability_check(self)
-│   │   │       ├── test_is_feature_enabled_truthy_values(self)
-│   │   │       ├── test_is_feature_enabled_falsy_values(self)
-│   │   │       ├── test_port_fallback_with_various_boolean_formats(self)
-│   │   │       ├── test_is_feature_enabled_with_inline_comments(self)
-│   │   │       ├── test_service_up_command_no_cache(self, mock_get_env_value, mock_print_service_info, mock_verify_services_running, mock_get_project_state)
-│   │   │       └── test_service_up_command_default_cache(self, mock_get_env_value, mock_check_project_exists)
-│   │   ├── test_service_commands_docker_compose.py
-│   │   │   └── TestServiceCommandDockerComposePortHandling {}
-│   │   │       ├── test_extract_port_values_custom(self)
-│   │   │       ├── test_update_env_content_custom(self)
-│   │   │       ├── test_update_docker_compose_ports_no_changes(self)
-│   │   │       ├── test_update_docker_compose_ports_file_not_exists(self)
-│   │   │       ├── test_update_docker_compose_ports_web_port(self)
-│   │   │       ├── test_update_docker_compose_ports_pg_port(self)
-│   │   │       ├── test_update_docker_compose_ports_both_ports(self)
-│   │   │       ├── test_update_docker_compose_ports_single_line_format(self)
-│   │   │       ├── test_update_docker_compose_ports_file_exception(self)
-│   │   │       ├── test_print_service_info_no_ports(self)
-│   │   │       ├── test_print_service_info_with_updated_web_port(self)
-│   │   │       ├── test_check_and_update_web_port_available(self)
-│   │   │       ├── test_check_and_update_web_port_in_use(self)
-│   │   │       ├── test_check_and_update_pg_port_available(self)
-│   │   │       └── test_check_and_update_pg_port_in_use(self)
-│   │   ├── test_service_commands_docker_compose_fixed.py
-│   │   │   └── TestServiceCommandDockerComposePortHandling {}
-│   │   │       ├── test_extract_port_values(self)
-│   │   │       ├── test_update_env_content(self)
-│   │   │       ├── test_update_docker_compose_direct_port_specification(self)
-│   │   │       ├── test_update_docker_compose_for_specific_edge_cases(self)
-│   │   │       ├── test_print_service_info_success(self)
-│   │   │       ├── test_print_service_info_with_db_port(self)
-│   │   │       └── test_print_service_info_with_no_ports(self)
-│   │   ├── test_service_commands_extended.py
-│   │   │   └── TestServiceUpCommandExtended {}
-│   │   │       ├── test_start_docker_services(self)
-│   │   │       ├── test_handle_docker_process_error_non_special_code(self)
-│   │   │       ├── test_handle_docker_process_error_special_code(self)
-│   │   │       ├── test_get_docker_compose_logs_success(self)
-│   │   │       ├── test_get_docker_compose_logs_exception(self)
-│   │   │       ├── test_check_if_services_running_despite_error_success(self)
-│   │   │       ├── test_check_if_services_running_despite_error_failure(self)
-│   │   │       ├── test_check_if_services_running_despite_error_exception(self)
-│   │   │       ├── test_verify_services_running_success(self)
-│   │   │       ├── test_verify_services_running_db_missing(self)
-│   │   │       ├── test_verify_services_running_exception(self)
-│   │   │       ├── test_start_stopped_containers(self)
-│   │   │       ├── test_start_container_success(self)
-│   │   │       ├── test_start_container_failure(self)
-│   │   │       ├── test_start_container_exception(self)
-│   │   │       ├── test_find_ports_for_retry_first_attempt(self)
-│   │   │       ├── test_find_ports_for_retry_later_attempts(self)
-│   │   │       ├── test_find_ports_for_retry_empty_result(self)
-│   │   │       ├── test_start_services_with_retry_first_attempt_success(self)
-│   │   │       ├── test_start_services_with_retry_multiple_attempts(self)
-│   │   │       ├── test_start_services_with_retry_all_attempts_fail(self)
-│   │   │       ├── test_start_services_with_retry_prepare_environment_error(self)
-│   │   │       ├── test_handle_retry_attempt_no_retry(self)
-│   │   │       ├── test_handle_retry_attempt_first_retry(self)
-│   │   │       ├── test_handle_retry_attempt_no_new_ports(self)
-│   │   │       ├── test_prepare_environment_and_ports_success(self)
-│   │   │       └── test_prepare_environment_and_ports_with_error(self)
-│   │   ├── test_service_commands_find_ports.py
-│   │   │   └── TestServiceCommandPortFinding {}
-│   │   │       ├── test_find_available_ports_success(self)
-│   │   │       ├── test_find_available_ports_with_offset(self)
-│   │   │       ├── test_find_available_ports_insufficient(self)
-│   │   │       ├── test_find_available_ports_empty(self)
-│   │   │       ├── test_find_ports_for_retry_first_attempt(self)
-│   │   │       ├── test_find_ports_for_retry_middle_attempt(self)
-│   │   │       ├── test_find_ports_for_retry_last_attempt(self)
-│   │   │       ├── test_is_port_in_use_available(self)
-│   │   │       ├── test_is_port_in_use_unavailable(self)
-│   │   │       ├── test_update_env_file_ports_file_not_exists(self)
-│   │   │       ├── test_update_env_file_ports_no_port_changes(self)
-│   │   │       ├── test_update_env_file_ports_with_changes(self)
-│   │   │       ├── test_update_env_file_ports_file_exception(self)
-│   │   │       ├── test_prepare_environment_and_ports_success_mock(self)
-│   │   │       ├── test_prepare_environment_and_ports_with_exception_mock(self)
-│   │   │       └── test_handle_retry_attempt_calls_update_docker_compose(self)
-│   │   ├── test_service_commands_find_ports_fixed.py
-│   │   │   └── TestServiceCommandPortFindingFixed {}
-│   │   │       ├── test_prepare_environment_and_ports_simple(self)
-│   │   │       ├── test_find_ports_for_retry_fallback_to_random(self)
-│   │   │       ├── test_is_port_in_use_with_connect_ex_zero(self)
-│   │   │       ├── test_is_port_in_use_with_connect_ex_non_zero(self)
-│   │   │       ├── test_handle_socket_timeout_safely(self)
-│   │   │       ├── test_handle_socket_error_safely(self)
-│   │   │       ├── test_check_port_availability_all_ports_available(self)
-│   │   │       ├── test_prepare_environment_and_ports_with_port_updates(self)
-│   │   │       ├── test_find_ports_for_retry_with_retry_count(self)
-│   │   │       ├── test_find_available_ports_with_random_number_generation(self)
-│   │   │       ├── test_check_port_availability_with_both_ports_in_use(self)
-│   │   │       ├── test_find_ports_for_retry_with_different_retry_counts(self)
-│   │   │       └── test_prepare_environment_and_ports_with_complex_error(self)
+│   │   │       ├── test_is_port_in_use_true(self)
+│   │   │       ├── test_is_port_in_use_false(self)
+│   │   │       ├── test_service_up_command_no_cache(self, mock_print_service_info, mock_verify_services_running, mock_get_project_state)
+│   │   │       └── test_service_up_command_default_cache(self)
 │   │   ├── test_service_commands_operations.py
 │   │   │   └── TestServiceOperations {}
 │   │   │       ├── test_service_down_execute(self)
@@ -2971,36 +2879,23 @@ quickscale
 │   │   │       ├── test_service_status_execute_no_project(self)
 │   │   │       ├── test_service_status_execute_with_error(self)
 │   │   │       └── test_service_logs_execute_with_error(self)
-│   │   ├── test_service_commands_retry.py
-│   │   │   └── TestServiceCommandRetryHandling {}
-│   │   │       ├── test_handle_retry_attempt_no_retries_needed(self)
-│   │   │       ├── test_handle_retry_attempt_first_retry(self)
-│   │   │       ├── test_handle_retry_attempt_no_new_ports(self)
-│   │   │       ├── test_start_services_with_retry_first_attempt_success(self)
-│   │   │       ├── test_start_services_with_retry_first_attempt_fails(self)
-│   │   │       ├── test_start_services_with_retry_all_attempts_fail(self)
-│   │   │       ├── test_start_services_with_retry_prepare_exception(self)
-│   │   │       ├── test_execute_with_successful_start(self)
-│   │   │       └── test_execute_without_project(self)
-│   │   ├── test_service_commands_retry_fixed.py
-│   │   │   └── TestServiceCommandRetryHandlingFixed {}
-│   │   │       ├── test_handle_retry_attempt_simple(self)
-│   │   │       ├── test_handle_retry_attempt_progressive(self)
-│   │   │       ├── test_start_services_with_retry_basic_success(self)
-│   │   │       ├── test_handle_docker_process_error_success(self)
-│   │   │       ├── test_get_docker_compose_logs_success(self)
-│   │   │       ├── test_check_if_services_running_despite_error_false(self)
-│   │   │       ├── test_check_if_services_running_despite_error_true(self)
-│   │   │       ├── test_handle_retry_attempt_properly_handled(self)
-│   │   │       ├── test_handle_retry_attempt_with_different_retry_numbers(self)
-│   │   │       ├── test_handle_retry_attempt_with_proactive_port_finding(self)
-│   │   │       ├── test_start_services_with_retry_interrupted_by_exception(self)
-│   │   │       ├── test_start_services_with_retry_special_error_code(self)
-│   │   │       ├── test_services_with_retry_error_recovery(self)
-│   │   │       ├── test_handle_docker_process_error_with_special_code(self)
-│   │   │       ├── test_handle_docker_process_error_with_non_special_code(self)
-│   │   │       ├── test_execute_with_custom_retry_count(self)
-│   │   │       └── test_execute_with_custom_retry_count_from_env(self)
+│   │   ├── test_service_commands_simplified.py
+│   │   │   └── TestServiceUpCommandSimplified {}
+│   │   │       ├── test_port_validation_success(self)
+│   │   │       ├── test_port_validation_web_port_failure(self)
+│   │   │       ├── test_port_validation_db_port_failure(self)
+│   │   │       ├── test_docker_startup_success(self)
+│   │   │       ├── test_docker_startup_failure(self)
+│   │   │       ├── test_docker_startup_timeout(self)
+│   │   │       ├── test_service_verification_success(self)
+│   │   │       ├── test_service_verification_missing_db(self)
+│   │   │       ├── test_execute_success(self)
+│   │   │       ├── test_execute_port_validation_failure(self)
+│   │   │       ├── test_execute_docker_failure(self)
+│   │   │       ├── test_is_port_in_use_true(self)
+│   │   │       ├── test_is_port_in_use_false(self)
+│   │   │       ├── test_prepare_environment_and_ports_success(self)
+│   │   │       └── test_prepare_environment_and_ports_failure(self)
 │   │   ├── test_services_sprint10.py
 │   │   │   ├── ServicesAppStructureTests {}
 │   │   │   │   ├── setUp(self)
@@ -3139,19 +3034,6 @@ quickscale
 │   │   │       ├── test_required_vars_by_component(self)
 │   │   │       ├── test_actual_module_validate_production_settings(self)
 │   │   │       └── test_actual_module_REQUIRED_VARS(self)
-│   │   ├── test_simplified_docker_error_handling.py
-│   │   │   └── TestSimplifiedDockerErrorHandling {}
-│   │   │       ├── setup_method(self)
-│   │   │       ├── test_handle_docker_process_error_raises_service_error(self)
-│   │   │       ├── test_handle_docker_process_error_logs_error_details(self)
-│   │   │       ├── test_handle_docker_process_error_with_no_output(self)
-│   │   │       ├── test_handle_docker_process_error_trusts_exit_codes(self)
-│   │   │       ├── test_start_docker_services_uses_timeout_constant(self)
-│   │   │       ├── test_start_docker_services_timeout_expired_raises_service_error(self)
-│   │   │       ├── test_verify_services_running_uses_timeout_constant(self)
-│   │   │       ├── test_start_container_uses_timeout_constant(self)
-│   │   │       ├── test_retry_logic_uses_delay_constants(self)
-│   │   │       └── test_error_messages_are_actionable(self)
 │   │   ├── test_sprint13_fixes.py
 │   │   │   ├── ServiceUsageAnalyticsTemplateFixTests {}
 │   │   │   │   ├── setUp(self)
@@ -3654,6 +3536,48 @@ quickscale
 │   │   │       ├── test_service_activation_deactivation(self)
 │   │   │       ├── test_concurrent_service_usage(self)
 │   │   │       └── test_service_usage_with_expired_credits(self)
+│   │   ├── test_sprint24_zero_cost_services.py
+│   │   │   ├── TestZeroCostServiceTemplateValidation {}
+│   │   │   │   ├── setUp(self)
+│   │   │   │   ├── test_service_model_template_allows_zero_cost(self)
+│   │   │   │   ├── test_service_model_template_validation_logic(self)
+│   │   │   │   └── test_service_model_template_string_representation(self)
+│   │   │   ├── TestZeroCostServiceBaseTemplate {}
+│   │   │   │   ├── setUp(self)
+│   │   │   │   ├── test_base_service_template_handles_zero_cost(self)
+│   │   │   │   └── test_base_service_template_credit_consumption(self)
+│   │   │   ├── TestZeroCostServiceCLI {}
+│   │   │   │   ├── setUp(self)
+│   │   │   │   ├── tearDown(self)
+│   │   │   │   ├── test_service_generator_with_free_flag(self, mock_message)
+│   │   │   │   └── test_service_generator_free_overrides_credit_cost(self, mock_message)
+│   │   │   └── TestZeroCostServiceFileValidation {}
+│   │   │       ├── setUp(self)
+│   │   │       ├── test_migration_exists_for_zero_cost(self)
+│   │   │       ├── test_configure_service_command_supports_free_flag(self)
+│   │   │       └── test_cli_supports_free_flag(self)
+│   │   ├── test_sprint24_zero_cost_services_simple.py
+│   │   │   ├── TestZeroCostServiceGenerator {}
+│   │   │   │   ├── setUp(self)
+│   │   │   │   ├── tearDown(self)
+│   │   │   │   ├── test_service_generator_free_flag_sets_zero_cost(self)
+│   │   │   │   ├── test_service_generator_free_overrides_credit_cost(self)
+│   │   │   │   ├── test_service_generator_without_free_flag(self)
+│   │   │   │   ├── test_configure_service_in_database_uses_free_flag(self, mock_subprocess)
+│   │   │   │   └── test_configure_service_in_database_uses_credit_cost(self, mock_subprocess)
+│   │   │   ├── TestZeroCostServiceCommandManager {}
+│   │   │   │   ├── setUp(self)
+│   │   │   │   └── test_command_manager_generate_service_with_free_flag(self)
+│   │   │   ├── TestZeroCostServiceValidation {}
+│   │   │   │   ├── setUp(self)
+│   │   │   │   ├── test_validate_service_name_with_free_services(self)
+│   │   │   │   └── test_to_class_name_with_free_services(self)
+│   │   │   └── TestZeroCostServiceFileContent {}
+│   │   │       ├── setUp(self)
+│   │   │       ├── test_service_model_allows_zero_cost(self)
+│   │   │       ├── test_migration_exists_for_zero_cost(self)
+│   │   │       ├── test_configure_service_command_supports_free_flag(self)
+│   │   │       └── test_cli_supports_free_flag(self)
 │   │   ├── test_stripe_config.py
 │   │   │   └── StripeConfigurationTests {}
 │   │   │       ├── setUp(self)
@@ -3694,6 +3618,84 @@ quickscale
 │   │   │   ├── test_stripe_import()
 │   │   │   ├── test_custom_stripe_app_import(mock_is_feature_enabled, mock_get_env)
 │   │   │   └── test_stripe_manager_init(mock_is_feature_enabled, mock_get_env)
+│   │   ├── test_stripe_integration_sprint24.py
+│   │   │   ├── MockStripeProduct {}
+│   │   │   │   ├── __init__(self)
+│   │   │   │   └── save(self)
+│   │   │   ├── TestStripeManagerSingletonPattern {}
+│   │   │   │   ├── setUp(self)
+│   │   │   │   ├── test_singleton_pattern(self)
+│   │   │   │   ├── test_initialization_only_once(self)
+│   │   │   │   ├── test_configuration_error_handling(self)
+│   │   │   │   └── test_api_key_validation(self)
+│   │   │   ├── TestStripeAPIIntegration {}
+│   │   │   │   ├── setUp(self)
+│   │   │   │   ├── test_api_client_property(self)
+│   │   │   │   ├── test_connectivity_check(self)
+│   │   │   │   └── test_ensure_stripe_available(self)
+│   │   │   ├── TestCustomerManagement {}
+│   │   │   │   ├── setUp(self)
+│   │   │   │   ├── test_create_customer_success(self)
+│   │   │   │   ├── test_create_customer_with_metadata(self)
+│   │   │   │   ├── test_create_customer_error(self)
+│   │   │   │   ├── test_retrieve_customer_success(self)
+│   │   │   │   ├── test_retrieve_customer_not_found(self)
+│   │   │   │   ├── test_get_customer_by_user_with_stripe_customer(self)
+│   │   │   │   └── test_get_customer_by_user_without_stripe_customer(self)
+│   │   │   ├── TestProductManagement {}
+│   │   │   │   ├── setUp(self)
+│   │   │   │   ├── test_create_product_success(self)
+│   │   │   │   ├── test_create_product_with_metadata(self)
+│   │   │   │   ├── test_create_product_with_price_success(self)
+│   │   │   │   ├── test_retrieve_product_success(self)
+│   │   │   │   ├── test_retrieve_product_not_found(self)
+│   │   │   │   ├── test_list_products_active_only(self)
+│   │   │   │   └── test_list_products_all_products(self)
+│   │   │   ├── TestSubscriptionManagement {}
+│   │   │   │   ├── setUp(self)
+│   │   │   │   ├── test_create_subscription_success(self)
+│   │   │   │   ├── test_create_subscription_with_metadata(self)
+│   │   │   │   ├── test_retrieve_subscription_success(self)
+│   │   │   │   ├── test_update_subscription_success(self)
+│   │   │   │   ├── test_cancel_subscription_at_period_end(self)
+│   │   │   │   └── test_cancel_subscription_immediately(self)
+│   │   │   ├── TestPaymentOperations {}
+│   │   │   │   ├── setUp(self)
+│   │   │   │   ├── test_create_payment_intent_success(self)
+│   │   │   │   ├── test_create_payment_intent_with_customer(self)
+│   │   │   │   ├── test_retrieve_payment_intent_success(self)
+│   │   │   │   ├── test_confirm_payment_intent_success(self)
+│   │   │   │   ├── test_cancel_payment_intent_success(self)
+│   │   │   │   ├── test_create_checkout_session_success(self)
+│   │   │   │   ├── test_retrieve_checkout_session_success(self)
+│   │   │   │   └── test_create_refund_success(self)
+│   │   │   ├── TestUnidirectionalProductSync {}
+│   │   │   │   ├── setUp(self)
+│   │   │   │   ├── test_sync_product_from_stripe_success(self)
+│   │   │   │   ├── test_sync_product_from_stripe_missing_credit_amount(self)
+│   │   │   │   ├── test_sync_product_from_stripe_invalid_credit_amount(self)
+│   │   │   │   └── test_sync_products_from_stripe_bulk_sync(self)
+│   │   │   ├── TestWebhookSecurity {}
+│   │   │   │   ├── setUp(self)
+│   │   │   │   ├── test_webhook_signature_verification(self)
+│   │   │   │   └── test_webhook_invalid_signature(self)
+│   │   │   ├── TestWebhookProcessing {}
+│   │   │   │   ├── setUp(self)
+│   │   │   │   ├── test_webhook_checkout_session_completed(self)
+│   │   │   │   ├── test_webhook_subscription_updated(self)
+│   │   │   │   ├── test_webhook_invoice_payment_succeeded(self)
+│   │   │   │   └── test_webhook_invoice_payment_failed(self)
+│   │   │   ├── TestErrorHandlingAndFallbacks {}
+│   │   │   │   ├── setUp(self)
+│   │   │   │   ├── test_api_unavailable_fallback(self)
+│   │   │   │   ├── test_connectivity_test_disabled(self)
+│   │   │   │   └── test_sync_with_stripe_disabled(self)
+│   │   │   ├── TestIntegrationScenarios {}
+│   │   │   │   ├── setUp(self)
+│   │   │   │   ├── test_complete_payment_flow(self)
+│   │   │   │   ├── test_subscription_lifecycle_flow(self)
+│   │   │   │   └── test_error_recovery_scenarios(self)
+│   │   │   └── create_mock_model()
 │   │   ├── test_stripe_migration.py
 │   │   │   └── TestStripeMigration {}
 │   │   │       ├── setUp(self)
@@ -3743,6 +3745,30 @@ quickscale
 │   │   │       ├── test_settings_validation_with_missing_settings(self, mock_warning)
 │   │   │       ├── test_settings_validation_with_valid_settings(self, mock_info)
 │   │   │       └── test_settings_validation_with_partial_settings(self, mock_warning)
+│   │   ├── test_subscription_lifecycle_validation.py
+│   │   │   ├── SubscriptionLifecycleTemplateValidationTest {}
+│   │   │   │   ├── setUp(self)
+│   │   │   │   ├── test_user_subscription_model_exists(self)
+│   │   │   │   ├── test_payment_model_exists(self)
+│   │   │   │   ├── test_credit_account_model_exists(self)
+│   │   │   │   ├── test_credit_transaction_model_exists(self)
+│   │   │   │   ├── test_stripe_product_model_exists(self)
+│   │   │   │   └── test_stripe_customer_model_exists(self)
+│   │   │   ├── PlanChangeTemplateValidationTest {}
+│   │   │   │   ├── setUp(self)
+│   │   │   │   ├── test_subscription_credit_allocation_method_exists(self)
+│   │   │   │   ├── test_credit_transfer_functionality_exists(self)
+│   │   │   │   ├── test_balance_calculation_methods_exist(self)
+│   │   │   │   └── test_credit_expiration_handling_exists(self)
+│   │   │   ├── WebhookProcessingTemplateValidationTest {}
+│   │   │   │   ├── setUp(self)
+│   │   │   │   ├── test_webhook_views_exist(self)
+│   │   │   │   └── test_subscription_event_handling_exists(self)
+│   │   │   └── IntegrationTemplateValidationTest {}
+│   │   │       ├── setUp(self)
+│   │   │       ├── test_admin_dashboard_integration_exists(self)
+│   │   │       ├── test_template_files_exist(self)
+│   │   │       └── test_stripe_integration_exists(self)
 │   │   ├── test_system_commands.py
 │   │   │   └── TestCheckCommand {}
 │   │   │       ├── test_check_docker_compose_found(self)
@@ -3774,8 +3800,6 @@ quickscale
 │   │   │       ├── test_docker_ps_check_timeout_is_short(self)
 │   │   │       ├── test_docker_container_start_timeout_is_medium(self)
 │   │   │       ├── test_docker_operations_timeout_is_short(self)
-│   │   │       ├── test_service_stabilization_delay_is_reasonable(self)
-│   │   │       ├── test_retry_pause_delay_is_short(self)
 │   │   │       ├── test_postgres_connection_timeout_is_short(self)
 │   │   │       ├── test_docker_info_timeout_is_very_short(self)
 │   │   │       ├── test_docker_pull_timeout_is_medium(self)
@@ -3954,9 +3978,9 @@ quickscale
 ├── TECHNICAL_DOCS.md
 ├── USER_GUIDE.md
 ├── compile_docs.sh
-├── last_test_run.log
 ├── pyproject.toml
 ├── pytest.ini
+├── pytest_render_debug.log
 ├── requirements-dev.txt
 ├── requirements-test.txt
 ├── run_tests.sh

@@ -16,6 +16,7 @@ Ideal for **solo developers** or small teams looking to turn their ideas into pr
 1.  Install: `pip install quickscale`
 2.  Create project: `quickscale init awesome-project`
 3.  Configure: Review and edit `.env` file with your settings
+    - To set your project name (used in About and other pages), add `PROJECT_NAME=YourAppName` to your `.env` file.
 4.  Start: `quickscale up`
 5.  Access: `http://localhost:8000`
 
@@ -45,7 +46,7 @@ Available commands:
   ps             - Show the status of running services
   shell          - Enter an interactive bash shell in the web container
   django-shell   - Enter the Django shell in the web container
-  destroy        - Permanently destroy the current project (Warning deletes all code)
+  destroy        - Permanently destroy the current project (Warning deletes all code; by default keeps Docker images)
   help           - Show this help message
   version        - Show the current version of QuickScale
 ```
@@ -58,6 +59,8 @@ quickscale logs web               # View logs from the web service
 quickscale shell                  # Enter an interactive bash shell in the web container
 quickscale django-shell           # Enter the Django shell in the web container
 quickscale down                   # Stop the services
+quickscale destroy                # Destroy project, containers, and volumes (keeps Docker images for fast rebuild)
+quickscale destroy --delete-images # Destroy project, containers, volumes, and Docker images (slower rebuild)
 ```
 
 ## STARTER PAGES
@@ -81,13 +84,19 @@ quickscale down                   # Stop the services
 
 ## STARTER DATABASE
 
-- User: 
-  - email: user@test.com
-  - password: userpasswd
+QuickScale automatically creates default test accounts for immediate use:
 
-- Administrator: 
-  - email: admin@test.com
-  - password: adminpasswd
+- **User Account**: 
+  - Email: `user@test.com`
+  - Password: `userpasswd`
+  - Access: User dashboard and features
+
+- **Administrator Account**: 
+  - Email: `admin@test.com`
+  - Password: `adminpasswd`
+  - Access: Admin dashboard, user management, and all features
+
+**Note**: These accounts are created automatically when you run `quickscale up` for the first time. If you encounter login issues, ensure you're using the exact email addresses and passwords shown above.
 
 ## DOCUMENTATION
 

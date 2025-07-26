@@ -19,7 +19,7 @@ class TestSprint17CreditAdjustmentForms(unittest.TestCase):
     def setUp(self):
         """Set up test environment."""
         self.base_path = Path(os.path.dirname(os.path.dirname(os.path.dirname(__file__))))
-        self.credits_app_path = self.base_path / 'quickscale' / 'templates' / 'credits'
+        self.credits_app_path = self.base_path / 'quickscale' / 'project_templates' / 'credits'
         self.forms_py = self.credits_app_path / 'forms.py'
     
     def test_admin_credit_adjustment_form_exists(self):
@@ -75,7 +75,7 @@ class TestSprint17CreditAdjustmentViews(unittest.TestCase):
     def setUp(self):
         """Set up test environment."""
         self.base_path = Path(os.path.dirname(os.path.dirname(os.path.dirname(__file__))))
-        self.admin_dashboard_path = self.base_path / 'quickscale' / 'templates' / 'admin_dashboard'
+        self.admin_dashboard_path = self.base_path / 'quickscale' / 'project_templates' / 'admin_dashboard'
         self.views_py = self.admin_dashboard_path / 'views.py'
     
     def test_user_credit_adjustment_view_exists(self):
@@ -150,8 +150,8 @@ class TestSprint17AuditLoggingIntegration(unittest.TestCase):
     def setUp(self):
         """Set up test environment."""
         self.base_path = Path(os.path.dirname(os.path.dirname(os.path.dirname(__file__))))
-        self.admin_dashboard_path = self.base_path / 'quickscale' / 'templates' / 'admin_dashboard'
-        self.credits_path = self.base_path / 'quickscale' / 'templates' / 'credits'
+        self.admin_dashboard_path = self.base_path / 'quickscale' / 'project_templates' / 'admin_dashboard'
+        self.credits_path = self.base_path / 'quickscale' / 'project_templates' / 'credits'
         
         self.utils_py = self.admin_dashboard_path / 'utils.py'
         self.models_py = self.admin_dashboard_path / 'models.py'
@@ -262,7 +262,7 @@ class TestSprint17CreditHistoryTemplate(unittest.TestCase):
     def setUp(self):
         """Set up test environment."""
         self.base_path = Path(os.path.dirname(os.path.dirname(os.path.dirname(__file__))))
-        self.templates_path = self.base_path / 'quickscale' / 'templates' / 'templates'
+        self.templates_path = self.base_path / 'quickscale' / 'project_templates' / 'templates'
         self.credit_history_template = (
             self.templates_path / 'admin_dashboard' / 'partials' / 'credit_history.html'
         )
@@ -318,7 +318,7 @@ class TestSprint17CreditAdjustmentFormTemplate(unittest.TestCase):
     def setUp(self):
         """Set up test environment."""
         self.base_path = Path(os.path.dirname(os.path.dirname(os.path.dirname(__file__))))
-        self.templates_path = self.base_path / 'quickscale' / 'templates' / 'templates'
+        self.templates_path = self.base_path / 'quickscale' / 'project_templates' / 'templates'
         self.credit_form_template = (
             self.templates_path / 'admin_dashboard' / 'partials' / 'credit_adjustment_form.html'
         )
@@ -393,7 +393,7 @@ class TestSprint17UserDetailIntegration(unittest.TestCase):
     def setUp(self):
         """Set up test environment."""
         self.base_path = Path(os.path.dirname(os.path.dirname(os.path.dirname(__file__))))
-        self.templates_path = self.base_path / 'quickscale' / 'templates' / 'templates'
+        self.templates_path = self.base_path / 'quickscale' / 'project_templates' / 'templates'
         self.user_detail_template = self.templates_path / 'admin_dashboard' / 'user_detail.html'
     
     def test_user_detail_credit_integration(self):
@@ -434,12 +434,12 @@ class TestSprint17ValidationCriteria(unittest.TestCase):
         """Test that admin credit adjustment functionality is complete."""
         # Check that all required components exist
         required_files = [
-            'quickscale/templates/credits/forms.py',
-            'quickscale/templates/admin_dashboard/views.py',
-            'quickscale/templates/admin_dashboard/utils.py',
-            'quickscale/templates/admin_dashboard/models.py',
-            'quickscale/templates/templates/admin_dashboard/partials/credit_adjustment_form.html',
-            'quickscale/templates/templates/admin_dashboard/partials/credit_history.html'
+            'quickscale/project_templates/credits/forms.py',
+            'quickscale/project_templates/admin_dashboard/views.py',
+            'quickscale/project_templates/admin_dashboard/utils.py',
+            'quickscale/project_templates/admin_dashboard/models.py',
+            'quickscale/project_templates/templates/admin_dashboard/partials/credit_adjustment_form.html',
+            'quickscale/project_templates/templates/admin_dashboard/partials/credit_history.html'
         ]
         
         for file_path in required_files:
@@ -449,7 +449,7 @@ class TestSprint17ValidationCriteria(unittest.TestCase):
     
     def test_credit_adjustment_validation_complete(self):
         """Test that credit adjustment validation is properly implemented."""
-        forms_py = self.base_path / 'quickscale' / 'templates' / 'credits' / 'forms.py'
+        forms_py = self.base_path / 'quickscale' / 'project_templates' / 'credits' / 'forms.py'
         
         with open(forms_py, 'r') as f:
             forms_content = f.read()
@@ -469,8 +469,8 @@ class TestSprint17ValidationCriteria(unittest.TestCase):
     
     def test_audit_logging_complete(self):
         """Test that audit logging for credit adjustments is complete."""
-        utils_py = self.base_path / 'quickscale' / 'templates' / 'admin_dashboard' / 'utils.py'
-        models_py = self.base_path / 'quickscale' / 'templates' / 'admin_dashboard' / 'models.py'
+        utils_py = self.base_path / 'quickscale' / 'project_templates' / 'admin_dashboard' / 'utils.py'
+        models_py = self.base_path / 'quickscale' / 'project_templates' / 'admin_dashboard' / 'models.py'
         
         # Check utils.py for logging function
         with open(utils_py, 'r') as f:
@@ -493,7 +493,7 @@ class TestSprint17ValidationCriteria(unittest.TestCase):
     def test_credit_history_display_complete(self):
         """Test that credit history display functionality is complete."""
         history_template = (
-            self.base_path / 'quickscale' / 'templates' / 'templates' / 
+            self.base_path / 'quickscale' / 'project_templates' / 'templates' / 
             'admin_dashboard' / 'partials' / 'credit_history.html'
         )
         
@@ -523,7 +523,7 @@ class TestSprint17IntegrationPoints(unittest.TestCase):
     
     def test_integration_with_existing_credit_system(self):
         """Test that Sprint 17 integrates properly with existing credit system."""
-        admin_py = self.base_path / 'quickscale' / 'templates' / 'credits' / 'admin.py'
+        admin_py = self.base_path / 'quickscale' / 'project_templates' / 'credits' / 'admin.py'
         
         with open(admin_py, 'r') as f:
             admin_content = f.read()
@@ -540,7 +540,7 @@ class TestSprint17IntegrationPoints(unittest.TestCase):
     
     def test_integration_with_admin_dashboard(self):
         """Test that Sprint 17 integrates with existing admin dashboard."""
-        views_py = self.base_path / 'quickscale' / 'templates' / 'admin_dashboard' / 'views.py'
+        views_py = self.base_path / 'quickscale' / 'project_templates' / 'admin_dashboard' / 'views.py'
         
         with open(views_py, 'r') as f:
             views_content = f.read()
@@ -563,7 +563,7 @@ class TestUserDetailTemplateRendering(unittest.TestCase):
         """Set up test environment."""
         self.base_path = Path(os.path.dirname(os.path.dirname(os.path.dirname(__file__))))
         self.user_detail_template = (
-            self.base_path / 'quickscale' / 'templates' / 'templates' / 
+            self.base_path / 'quickscale' / 'project_templates' / 'templates' / 
             'admin_dashboard' / 'user_detail.html'
         )
     
@@ -631,7 +631,7 @@ class TestHTMXIntegrationFixes(unittest.TestCase):
         """Set up test environment."""
         self.base_path = Path(os.path.dirname(os.path.dirname(os.path.dirname(__file__))))
         self.user_detail_template = (
-            self.base_path / 'quickscale' / 'templates' / 'templates' / 
+            self.base_path / 'quickscale' / 'project_templates' / 'templates' / 
             'admin_dashboard' / 'user_detail.html'
         )
     
@@ -687,7 +687,7 @@ class TestHTMXIntegrationFixes(unittest.TestCase):
     def test_htmx_endpoints_accessibility(self):
         """Test that HTMX endpoints are properly configured."""
         # Check URLs are properly configured
-        urls_py = self.base_path / 'quickscale' / 'templates' / 'admin_dashboard' / 'urls.py'
+        urls_py = self.base_path / 'quickscale' / 'project_templates' / 'admin_dashboard' / 'urls.py'
         
         with open(urls_py, 'r') as f:
             urls_content = f.read()
@@ -704,7 +704,7 @@ class TestHTMXIntegrationFixes(unittest.TestCase):
     
     def test_htmx_response_format(self):
         """Test that HTMX endpoints return proper HTML responses."""
-        views_py = self.base_path / 'quickscale' / 'templates' / 'admin_dashboard' / 'views.py'
+        views_py = self.base_path / 'quickscale' / 'project_templates' / 'admin_dashboard' / 'views.py'
         
         with open(views_py, 'r') as f:
             views_content = f.read()
@@ -737,15 +737,15 @@ class TestTemplateUIConsistency(unittest.TestCase):
         """Set up test environment."""
         self.base_path = Path(os.path.dirname(os.path.dirname(os.path.dirname(__file__))))
         self.user_detail_template = (
-            self.base_path / 'quickscale' / 'templates' / 'templates' / 
+            self.base_path / 'quickscale' / 'project_templates' / 'templates' / 
             'admin_dashboard' / 'user_detail.html'
         )
         self.credit_form_template = (
-            self.base_path / 'quickscale' / 'templates' / 'templates' / 
+            self.base_path / 'quickscale' / 'project_templates' / 'templates' / 
             'admin_dashboard' / 'partials' / 'credit_adjustment_form.html'
         )
         self.credit_history_template = (
-            self.base_path / 'quickscale' / 'templates' / 'templates' / 
+            self.base_path / 'quickscale' / 'project_templates' / 'templates' / 
             'admin_dashboard' / 'partials' / 'credit_history.html'
         )
     
@@ -842,7 +842,7 @@ class TestRegressionPrevention(unittest.TestCase):
         """Set up test environment."""
         self.base_path = Path(os.path.dirname(os.path.dirname(os.path.dirname(__file__))))
         self.user_detail_template = (
-            self.base_path / 'quickscale' / 'templates' / 'templates' / 
+            self.base_path / 'quickscale' / 'project_templates' / 'templates' / 
             'admin_dashboard' / 'user_detail.html'
         )
     
@@ -922,7 +922,7 @@ class TestCreditAdjustmentFormFix(unittest.TestCase):
     def setUp(self):
         """Set up test environment."""
         self.base_path = Path(os.path.dirname(os.path.dirname(os.path.dirname(__file__))))
-        self.form_template = self.base_path / 'quickscale' / 'templates' / 'templates' / 'admin_dashboard' / 'partials' / 'credit_adjustment_form.html'
+        self.form_template = self.base_path / 'quickscale' / 'project_templates' / 'templates' / 'admin_dashboard' / 'partials' / 'credit_adjustment_form.html'
     
     def test_form_submission_state_management(self):
         """Test that form submission state is properly managed to prevent infinite processing."""
