@@ -35,7 +35,7 @@ class TestSprint15UserSearchTemplates(unittest.TestCase):
     def test_admin_dashboard_views_template_contains_user_search(self):
         """Test that admin_dashboard views template contains user search functionality."""
         # Get the path to the admin_dashboard views template
-        views_template_path = Path(__file__).parent.parent.parent / "quickscale" / "templates" / "admin_dashboard" / "views.py"
+        views_template_path = Path(__file__).parent.parent.parent / "quickscale" / "project_templates" / "admin_dashboard" / "views.py"
         
         # Check that the template file exists
         self.assertTrue(views_template_path.exists(), "Admin dashboard views template should exist")
@@ -59,7 +59,7 @@ class TestSprint15UserSearchTemplates(unittest.TestCase):
     def test_admin_dashboard_views_template_contains_user_detail(self):
         """Test that admin_dashboard views template contains user detail functionality."""
         # Get the path to the admin_dashboard views template
-        views_template_path = Path(__file__).parent.parent.parent / "quickscale" / "templates" / "admin_dashboard" / "views.py"
+        views_template_path = Path(__file__).parent.parent.parent / "quickscale" / "project_templates" / "admin_dashboard" / "views.py"
         
         # Read the template content
         with open(views_template_path, 'r') as f:
@@ -80,7 +80,7 @@ class TestSprint15UserSearchTemplates(unittest.TestCase):
     def test_admin_dashboard_urls_template_contains_user_management_routes(self):
         """Test that admin_dashboard URLs template contains user management routes."""
         # Get the path to the admin_dashboard URLs template
-        urls_template_path = Path(__file__).parent.parent.parent / "quickscale" / "templates" / "admin_dashboard" / "urls.py"
+        urls_template_path = Path(__file__).parent.parent.parent / "quickscale" / "project_templates" / "admin_dashboard" / "urls.py"
         
         # Check that the template file exists
         self.assertTrue(urls_template_path.exists(), "Admin dashboard URLs template should exist")
@@ -98,7 +98,7 @@ class TestSprint15UserSearchTemplates(unittest.TestCase):
     def test_user_search_template_structure(self):
         """Test that user search template has proper structure."""
         # Get the path to the user search template
-        template_path = Path(__file__).parent.parent.parent / "quickscale" / "templates" / "templates" / "admin_dashboard" / "user_search.html"
+        template_path = Path(__file__).parent.parent.parent / "quickscale" / "project_templates" / "templates" / "admin_dashboard" / "user_search.html"
         
         # Check that the template file exists (if it does, test its content)
         if template_path.exists():
@@ -116,7 +116,7 @@ class TestSprint15UserSearchTemplates(unittest.TestCase):
     def test_user_detail_template_structure(self):
         """Test that user detail template has proper structure."""
         # Get the path to the user detail template
-        template_path = Path(__file__).parent.parent.parent / "quickscale" / "templates" / "templates" / "admin_dashboard" / "user_detail.html"
+        template_path = Path(__file__).parent.parent.parent / "quickscale" / "project_templates" / "templates" / "admin_dashboard" / "user_detail.html"
         
         # Check that the template file exists (if it does, test its content)
         if template_path.exists():
@@ -145,7 +145,7 @@ class TestSprint15PermissionControls(unittest.TestCase):
     def test_admin_views_have_staff_permission_decorators(self):
         """Test that admin views have proper staff permission decorators."""
         # Get the path to the admin_dashboard views template
-        views_template_path = Path(__file__).parent.parent.parent / "quickscale" / "templates" / "admin_dashboard" / "views.py"
+        views_template_path = Path(__file__).parent.parent.parent / "quickscale" / "project_templates" / "admin_dashboard" / "views.py"
         
         # Read the template content
         with open(views_template_path, 'r') as f:
@@ -191,7 +191,7 @@ class TestSprint15PermissionControls(unittest.TestCase):
     def test_login_required_decorators_present(self):
         """Test that login required decorators are present."""
         # Get the path to the admin_dashboard views template
-        views_template_path = Path(__file__).parent.parent.parent / "quickscale" / "templates" / "admin_dashboard" / "views.py"
+        views_template_path = Path(__file__).parent.parent.parent / "quickscale" / "project_templates" / "admin_dashboard" / "views.py"
         
         # Read the template content
         with open(views_template_path, 'r') as f:
@@ -219,7 +219,7 @@ class TestSprint15SearchFunctionality(unittest.TestCase):
     def test_search_query_implementation(self):
         """Test that search query implementation is correct."""
         # Get the path to the admin_dashboard views template
-        views_template_path = Path(__file__).parent.parent.parent / "quickscale" / "templates" / "admin_dashboard" / "views.py"
+        views_template_path = Path(__file__).parent.parent.parent / "quickscale" / "project_templates" / "admin_dashboard" / "views.py"
         
         # Read the template content
         with open(views_template_path, 'r') as f:
@@ -238,7 +238,7 @@ class TestSprint15SearchFunctionality(unittest.TestCase):
     def test_pagination_implementation(self):
         """Test that pagination implementation is correct."""
         # Get the path to the admin_dashboard views template
-        views_template_path = Path(__file__).parent.parent.parent / "quickscale" / "templates" / "admin_dashboard" / "views.py"
+        views_template_path = Path(__file__).parent.parent.parent / "quickscale" / "project_templates" / "admin_dashboard" / "views.py"
         
         # Read the template content
         with open(views_template_path, 'r') as f:
@@ -267,7 +267,7 @@ class TestSprint15UserDetailImplementation(unittest.TestCase):
     def test_user_detail_error_handling(self):
         """Test that user detail view has proper error handling."""
         # Get the path to the admin_dashboard views template
-        views_template_path = Path(__file__).parent.parent.parent / "quickscale" / "templates" / "admin_dashboard" / "views.py"
+        views_template_path = Path(__file__).parent.parent.parent / "quickscale" / "project_templates" / "admin_dashboard" / "views.py"
         
         # Read the template content
         with open(views_template_path, 'r') as f:
@@ -284,7 +284,7 @@ class TestSprint15UserDetailImplementation(unittest.TestCase):
     def test_user_detail_context_variables(self):
         """Test that user detail view provides comprehensive context."""
         # Get the path to the admin_dashboard views template
-        views_template_path = Path(__file__).parent.parent.parent / "quickscale" / "templates" / "admin_dashboard" / "views.py"
+        views_template_path = Path(__file__).parent.parent.parent / "quickscale" / "project_templates" / "admin_dashboard" / "views.py"
         
         # Read the template content
         with open(views_template_path, 'r') as f:
@@ -333,7 +333,7 @@ class TestSprint15TemplateGeneration(ProjectTestMixin, unittest.TestCase):
     def test_admin_dashboard_app_configuration(self):
         """Test that admin_dashboard app is properly configured."""
         # Check for apps.py
-        apps_path = Path(__file__).parent.parent.parent / "quickscale" / "templates" / "admin_dashboard" / "apps.py"
+        apps_path = Path(__file__).parent.parent.parent / "quickscale" / "project_templates" / "admin_dashboard" / "apps.py"
         
         if apps_path.exists():
             with open(apps_path, 'r') as f:
@@ -358,7 +358,7 @@ class TestSprint15IntegrationPoints(unittest.TestCase):
     def test_user_model_integration(self):
         """Test that user search integrates with CustomUser model."""
         # Get the path to the admin_dashboard views template
-        views_template_path = Path(__file__).parent.parent.parent / "quickscale" / "templates" / "admin_dashboard" / "views.py"
+        views_template_path = Path(__file__).parent.parent.parent / "quickscale" / "project_templates" / "admin_dashboard" / "views.py"
         
         # Read the template content
         with open(views_template_path, 'r') as f:
@@ -373,7 +373,7 @@ class TestSprint15IntegrationPoints(unittest.TestCase):
     def test_credit_system_integration(self):
         """Test that user detail integrates with credit system."""
         # Get the path to the admin_dashboard views template
-        views_template_path = Path(__file__).parent.parent.parent / "quickscale" / "templates" / "admin_dashboard" / "views.py"
+        views_template_path = Path(__file__).parent.parent.parent / "quickscale" / "project_templates" / "admin_dashboard" / "views.py"
         
         # Read the template content
         with open(views_template_path, 'r') as f:
@@ -392,7 +392,7 @@ class TestSprint15IntegrationPoints(unittest.TestCase):
     def test_subscription_system_integration(self):
         """Test that user detail integrates with subscription system."""
         # Get the path to the admin_dashboard views template
-        views_template_path = Path(__file__).parent.parent.parent / "quickscale" / "templates" / "admin_dashboard" / "views.py"
+        views_template_path = Path(__file__).parent.parent.parent / "quickscale" / "project_templates" / "admin_dashboard" / "views.py"
         
         # Read the template content
         with open(views_template_path, 'r') as f:
@@ -417,7 +417,7 @@ class TestSprint15CodeQuality(unittest.TestCase):
     def test_proper_imports_organization(self):
         """Test that imports are properly organized."""
         # Get the path to the admin_dashboard views template
-        views_template_path = Path(__file__).parent.parent.parent / "quickscale" / "templates" / "admin_dashboard" / "views.py"
+        views_template_path = Path(__file__).parent.parent.parent / "quickscale" / "project_templates" / "admin_dashboard" / "views.py"
         
         # Read the template content
         with open(views_template_path, 'r') as f:
@@ -442,7 +442,7 @@ class TestSprint15CodeQuality(unittest.TestCase):
     def test_proper_docstrings(self):
         """Test that functions have proper docstrings."""
         # Get the path to the admin_dashboard views template
-        views_template_path = Path(__file__).parent.parent.parent / "quickscale" / "templates" / "admin_dashboard" / "views.py"
+        views_template_path = Path(__file__).parent.parent.parent / "quickscale" / "project_templates" / "admin_dashboard" / "views.py"
         
         # Read the template content
         with open(views_template_path, 'r') as f:
@@ -457,7 +457,7 @@ class TestSprint15CodeQuality(unittest.TestCase):
     def test_proper_logging_usage(self):
         """Test that proper logging is used."""
         # Get the path to the admin_dashboard views template
-        views_template_path = Path(__file__).parent.parent.parent / "quickscale" / "templates" / "admin_dashboard" / "views.py"
+        views_template_path = Path(__file__).parent.parent.parent / "quickscale" / "project_templates" / "admin_dashboard" / "views.py"
         
         # Read the template content
         with open(views_template_path, 'r') as f:
@@ -483,7 +483,7 @@ class TestSprint15SearchLogic(unittest.TestCase):
     def test_search_filter_logic_correctness(self):
         """Test that search filter logic only returns matching users."""
         # Get the path to the admin_dashboard views template
-        views_template_path = Path(__file__).parent.parent.parent / "quickscale" / "templates" / "admin_dashboard" / "views.py"
+        views_template_path = Path(__file__).parent.parent.parent / "quickscale" / "project_templates" / "admin_dashboard" / "views.py"
         
         # Read the template content
         with open(views_template_path, 'r') as f:
@@ -513,7 +513,7 @@ class TestSprint15SearchLogic(unittest.TestCase):
     def test_empty_string_search_bug_fixed(self):
         """Test that empty string search bug is fixed for single-word queries."""
         # Get the path to the admin_dashboard views template
-        views_template_path = Path(__file__).parent.parent.parent / "quickscale" / "templates" / "admin_dashboard" / "views.py"
+        views_template_path = Path(__file__).parent.parent.parent / "quickscale" / "project_templates" / "admin_dashboard" / "views.py"
         
         # Read the template content
         with open(views_template_path, 'r') as f:

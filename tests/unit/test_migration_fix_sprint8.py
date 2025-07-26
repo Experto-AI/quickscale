@@ -10,7 +10,7 @@ class Sprint8MigrationFixTests(unittest.TestCase):
     def setUp(self):
         """Set up test environment."""
         self.quickscale_root = Path(__file__).parent.parent.parent
-        self.credits_migrations_dir = self.quickscale_root / "quickscale" / "templates" / "credits" / "migrations"
+        self.credits_migrations_dir = self.quickscale_root / "quickscale" / "project_templates" / "credits" / "migrations"
     
     def test_payment_migration_exists(self):
         """Test that the Payment model migration file exists."""
@@ -107,7 +107,7 @@ class Sprint8MigrationFixTests(unittest.TestCase):
     def test_payment_creation_in_webhook_handlers(self):
         """Test that Payment records are created in webhook handlers."""
         # Check that Payment model is imported in webhook views
-        webhook_views_file = self.quickscale_root / "quickscale" / "templates" / "stripe_manager" / "views.py"
+        webhook_views_file = self.quickscale_root / "quickscale" / "project_templates" / "stripe_manager" / "views.py"
         
         with open(webhook_views_file, 'r') as f:
             webhook_content = f.read()
@@ -127,7 +127,7 @@ class Sprint8MigrationFixTests(unittest.TestCase):
     def test_payment_creation_in_success_views(self):
         """Test that Payment records are created in success views as fallback."""
         # Check credit purchase success view
-        credits_views_file = self.quickscale_root / "quickscale" / "templates" / "credits" / "views.py"
+        credits_views_file = self.quickscale_root / "quickscale" / "project_templates" / "credits" / "views.py"
         
         with open(credits_views_file, 'r') as f:
             credits_content = f.read()
@@ -138,7 +138,7 @@ class Sprint8MigrationFixTests(unittest.TestCase):
                      "Credits views should check for existing payments")
         
         # Check subscription success view
-        admin_views_file = self.quickscale_root / "quickscale" / "templates" / "admin_dashboard" / "views.py"
+        admin_views_file = self.quickscale_root / "quickscale" / "project_templates" / "admin_dashboard" / "views.py"
         
         with open(admin_views_file, 'r') as f:
             admin_content = f.read()

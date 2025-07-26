@@ -1,0 +1,114 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}Payment Failed{% endblock %}
+
+{% block content %}
+<div class="container">
+    <h1 class="title has-text-centered my-5">Payment Failed</h1>
+    
+    <div class="box">
+        <div class="notification is-danger is-light">
+            <strong>❌ Payment Not Completed</strong>
+            <p>There was an issue processing your payment, or the payment was cancelled.</p>
+        </div>
+        
+        {% if session_data and not session_data.error %}
+        <div class="content">
+            <h3 class="subtitle">Session Information</h3>
+            
+            <div class="columns">
+                <div class="column">
+                    <table class="table is-fullwidth">
+                        <tbody>
+                            {% if session_data.amount_total %}
+                            <tr>
+                                <td><strong>Attempted Amount</strong></td>
+                                <td>{{ session_data.currency }} {{ session_data.amount_total|floatformat:2 }}</td>
+                            </tr>
+                            {% endif %}
+                            
+                            {% if session_data.created %}
+                            <tr>
+                                <td><strong>Session Created</strong></td>
+                                <td>{{ session_data.created|date:"F j, Y g:i A" }}</td>
+                            </tr>
+                            {% endif %}
+                        </tbody>
+                    </table>
+                </div>
+                
+                {% if session_data.purchase_type == 'credit_product' %}
+                <div class="column">
+                    <div class="box has-background-warning-light">
+                        <h4 class="title is-5">Cancelled Purchase</h4>
+                        
+                        {% if session_data.product_name %}
+                        <p><strong>Product:</strong> {{ session_data.product_name }}</p>
+                        {% endif %}
+                        
+                        {% if session_data.credit_amount %}
+                        <p><strong>Credits (Not Purchased):</strong> 
+                            <span class="tag is-warning">{{ session_data.credit_amount }} credits</span>
+                        </p>
+                        {% endif %}
+                        
+                        {% if session_data.product_description %}
+                        <p><strong>Description:</strong> {{ session_data.product_description }}</p>
+                        {% endif %}
+                    </div>
+                </div>
+                {% endif %}
+            </div>
+            
+            {% if session_id %}
+            <div class="notification is-info is-light">
+                <p><strong>Session ID:</strong> <code>{{ session_id }}</code></p>
+                <p class="is-size-7 mt-2">Reference this ID if you need to contact support about this issue.</p>
+            </div>
+            {% endif %}
+        </div>
+        {% elif session_data.error %}
+        <div class="notification is-warning">
+            <p><strong>Session information unavailable:</strong> {{ session_data.error }}</p>
+            {% if session_id %}
+            <p><strong>Session ID:</strong> <code>{{ session_id }}</code></p>
+            {% endif %}
+        </div>
+        {% endif %}
+        
+        <div class="content">
+            <h4 class="subtitle">What you can do:</h4>
+            <ul>
+                <li>Check your payment method details and try again</li>
+                <li>Try a different payment method</li>
+                <li>Contact support if the problem persists</li>
+            </ul>
+        </div>
+        
+        <div class="has-text-centered mt-5">
+            {% if session_data.purchase_type == 'credit_product' %}
+            <a href="{% url 'credits:buy_credits' %}" class="button is-warning">
+                <span class="icon">
+                    <i class="fas fa-redo"></i>
+                </span>
+                <span>Try Credit Purchase Again</span>
+            </a>
+            {% else %}
+            <a href="{% url 'stripe:plan_comparison' %}" class="button is-warning">
+                <span class="icon">
+                    <i class="fas fa-redo"></i>
+                </span>
+                <span>Try Again</span>
+            </a>
+            {% endif %}
+            <a href="{% url 'admin_dashboard:index' %}" class="button is-link is-light">
+                <span class="icon">
+                    <i class="fas fa-home"></i>
+                </span>
+                <span>Go to Dashboard</span>
+            </a>
+        </div>
+    </div>
+</div>
+{% endblock %} 

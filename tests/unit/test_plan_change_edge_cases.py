@@ -14,10 +14,10 @@ class PlanChangeEdgeCaseTemplateValidationTest(TestCase):
     
     def setUp(self):
         """Set up paths to template files."""
-        self.base_path = Path(__file__).parent.parent.parent / "quickscale" / "templates"
-        self.credits_models_path = self.base_path / "credits" / "models.py"
-        self.stripe_models_path = self.base_path / "stripe_manager" / "models.py"
-        self.stripe_views_path = self.base_path / "stripe_manager" / "views.py"
+        self.base_path = Path(__file__).parent.parent.parent
+        self.credits_models_path = self.base_path / "quickscale" / "project_templates" / "credits" / "models.py"
+        self.stripe_models_path = self.base_path / "quickscale" / "project_templates" / "stripe_manager" / "models.py"
+        self.stripe_views_path = self.base_path / "quickscale" / "project_templates" / "stripe_manager" / "views.py"
     
     def test_plan_change_credit_transfer_logic_exists(self):
         """Test that plan change credit transfer logic exists."""
@@ -135,7 +135,7 @@ class CreditTransferValidationTest(TestCase):
     
     def setUp(self):
         """Set up paths to template files."""
-        self.base_path = Path(__file__).parent.parent.parent / "quickscale" / "templates"
+        self.base_path = Path(__file__).parent.parent.parent / "quickscale" / "project_templates"
         self.credits_models_path = self.base_path / "credits" / "models.py"
     
     def test_negative_transaction_support_exists(self):
@@ -187,7 +187,7 @@ class ErrorHandlingValidationTest(TestCase):
     
     def setUp(self):
         """Set up paths to template files."""
-        self.base_path = Path(__file__).parent.parent.parent / "quickscale" / "templates"
+        self.base_path = Path(__file__).parent.parent.parent / "quickscale" / "project_templates"
         self.credits_models_path = self.base_path / "credits" / "models.py"
         self.stripe_models_path = self.base_path / "stripe_manager" / "models.py"
     
@@ -234,7 +234,7 @@ class AuditTrailValidationTest(TestCase):
     
     def setUp(self):
         """Set up paths to template files."""
-        self.base_path = Path(__file__).parent.parent.parent / "quickscale" / "templates"
+        self.base_path = Path(__file__).parent.parent.parent / "quickscale" / "project_templates"
         self.credits_models_path = self.base_path / "credits" / "models.py"
     
     def test_transaction_logging_exists(self):

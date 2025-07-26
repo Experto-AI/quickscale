@@ -1,0 +1,115 @@
+{% load static %}
+
+<nav class="navbar" role="navigation" aria-label="main navigation" x-data="{ mobileMenu: false }">
+    <div class="navbar-brand">
+        <a class="navbar-item" href="{% url 'public:index' %}">
+            {{ project_name }}
+        </a>
+
+        <a role="button" class="navbar-burger" aria-label="menu" aria-expanded="false"
+           @click="mobileMenu = !mobileMenu" :class="{ 'is-active': mobileMenu }">
+            <span aria-hidden="true"></span>
+            <span aria-hidden="true"></span>
+            <span aria-hidden="true"></span>
+        </a>
+    </div>
+
+    <div class="navbar-menu" :class="{ 'is-active': mobileMenu }">
+        <div class="navbar-start">
+            <a class="navbar-item" href="{% url 'public:about' %}" hx-boost="true">
+                About
+            </a>
+            <a class="navbar-item" href="{% url 'public:contact' %}" hx-boost="true">
+                Contact
+            </a>
+            <a class="navbar-item" href="{% url 'api:api_docs' %}">
+                API Docs
+            </a>
+            {% if stripe_enabled %}
+            <a class="navbar-item" href="{% url 'stripe:plan_comparison' %}" hx-boost="true">
+                Plans
+            </a>
+            {% endif %}
+            {% if user.is_authenticated %}
+            <a class="navbar-item" href="{% url 'services:list' %}" hx-boost="true">
+                Services
+            </a>
+            {% endif %}
+        </div>
+
+        <div class="navbar-end">
+            {% if user.is_authenticated %}
+                <div class="navbar-item has-dropdown is-hoverable" x-data="{ open: false }" @mouseenter="open = true" @mouseleave="open = false">
+                    <a class="navbar-link">
+                        <span class="icon"><i class="fas fa-user-circle"></i></span>
+                        <span>{% if user.get_full_name %}{{ user.get_full_name }}{% else %}{{ user.email }}{% endif %}</span>
+                    </a>
+                    <div class="navbar-dropdown is-right" x-show="open" @click.away="open = false" style="min-width: 220px;">
+                        {% if user.is_staff %}
+                        <a class="navbar-item" href="{% url 'admin_dashboard:index' %}">
+                            <span class="icon"><i class="fas fa-tools"></i></span>
+                            <span>Admin Dashboard</span>
+                        </a>
+                        <a class="navbar-item" href="{% url 'admin_dashboard:user_dashboard' %}">
+                            <span class="icon"><i class="fas fa-tachometer-alt"></i></span>
+                            <span>My Dashboard</span>
+                        </a>
+                        <a class="navbar-item" href="{% url 'users:account_security' %}">
+                            <span class="icon"><i class="fas fa-lock"></i></span>
+                            <span>Account Security</span>
+                        </a>
+                        {% if stripe_enabled %}
+                        <a class="navbar-item" href="{% url 'admin_dashboard:subscription' %}">
+                            <span class="icon"><i class="fas fa-credit-card"></i></span>
+                            <span>Subscription & Billing</span>
+                        </a>
+                        <a class="navbar-item" href="{% url 'credits:dashboard' %}">
+                            <span class="icon"><i class="fas fa-coins"></i></span>
+                            <span>Credits</span>
+                        </a>
+                        {% endif %}
+                        {% else %}
+                        <a class="navbar-item" href="{% url 'admin_dashboard:user_dashboard' %}">
+                            <span class="icon"><i class="fas fa-tachometer-alt"></i></span>
+                            <span>My Dashboard</span>
+                        </a>
+                        <a class="navbar-item" href="{% url 'users:account_security' %}">
+                            <span class="icon"><i class="fas fa-lock"></i></span>
+                            <span>Account Security</span>
+                        </a>
+                        {% if stripe_enabled %}
+                        <a class="navbar-item" href="{% url 'admin_dashboard:subscription' %}">
+                            <span class="icon"><i class="fas fa-credit-card"></i></span>
+                            <span>Subscription & Billing</span>
+                        </a>
+                        <a class="navbar-item" href="{% url 'credits:dashboard' %}">
+                            <span class="icon"><i class="fas fa-coins"></i></span>
+                            <span>Credits</span>
+                        </a>
+                        {% endif %}
+                        {% endif %}
+                        <hr class="navbar-divider">
+                        <form method="post" action="{% url 'account_logout' %}" style="display: block;">
+                            {% csrf_token %}
+                            <button type="submit" class="navbar-item has-text-danger">
+                                <span class="icon"><i class="fas fa-sign-out-alt"></i></span>
+                                <span>Logout</span>
+                            </button>
+                        </form>
+                    </div>
+                </div>
+            {% else %}
+                <div class="navbar-item">
+                    <div class="buttons">
+                        <a class="button is-primary" href="{% url 'account_signup' %}">
+                            <strong>Sign up</strong>
+                        </a>
+                        <a class="button is-light" href="{% url 'account_login' %}">
+                            Log in
+                        </a>
+                    </div>
+                </div>
+            {% endif %}
+        </div>
+    </div>
+</nav>

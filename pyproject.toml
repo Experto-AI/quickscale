@@ -53,6 +53,6 @@ version = {attr = "quickscale.__version__"}
 
 [tool.setuptools.package-data]
 quickscale = [
-    "templates/**/*",
+    "project_templates/**/*",
     "commands/**/*"
 ]

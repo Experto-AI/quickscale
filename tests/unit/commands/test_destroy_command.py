@@ -43,19 +43,24 @@ class TestDestroyProjectCommand(unittest.TestCase):
             'project_dir': '/path/to/test-project',
             'containers': None
         }
-        
         # Simulate user confirming the destruction
         with patch.object(self.command, '_confirm_destruction', return_value=True):
+            # Default: should NOT delete images
             result = self.command.execute()
-        
-        # Verify the correct functions were called
-        mock_stop.assert_called_once_with('test-project')
-        mock_chdir.assert_called_once_with('..')
-        mock_rmtree.assert_called_once_with('/path/to/test-project')
-        
-        # Verify the result
-        self.assertTrue(result['success'])
-        self.assertEqual(result['project'], 'test-project')
+            mock_stop.assert_called_with('test-project', delete_images=False)
+            mock_chdir.assert_called_with('..')
+            mock_rmtree.assert_called_with('/path/to/test-project')
+            self.assertTrue(result['success'])
+            self.assertEqual(result['project'], 'test-project')
+            self.assertFalse(result['images_deleted'])
+
+            # With delete_images True
+            mock_stop.reset_mock()
+            result2 = self.command.execute(True)
+            mock_stop.assert_called_with('test-project', delete_images=True)
+            self.assertTrue(result2['success'])
+            self.assertEqual(result2['project'], 'test-project')
+            self.assertTrue(result2['images_deleted'])
     
     @patch('quickscale.commands.project_manager.ProjectManager.get_project_state')
     def test_execute_with_project_cancelled(self, mock_get_state):
@@ -95,9 +100,8 @@ class TestDestroyProjectCommand(unittest.TestCase):
         result = self.command.execute()
         
         # Verify the correct functions were called
-        mock_stop.assert_called_once_with('test-project')
+        mock_stop.assert_called_once_with('test-project', delete_images=False)
         mock_rmtree.assert_called_once_with(Path('test-project'))
-        
         # Verify the result
         self.assertTrue(result['success'])
         self.assertEqual(result['project'], 'test-project')
@@ -140,8 +144,7 @@ class TestDestroyProjectCommand(unittest.TestCase):
         result = self.command.execute()
         
         # Verify the correct functions were called
-        mock_stop.assert_called_once_with('test-project')
-        
+        mock_stop.assert_called_once_with('test-project', delete_images=False)
         # Verify the result
         self.assertTrue(result['success'])
         self.assertTrue(result['containers_only'])

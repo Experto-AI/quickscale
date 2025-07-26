@@ -46,7 +46,7 @@ class TestStripeCustomerModel:
     def test_model_attributes(self):
         """Test that StripeCustomer model has the expected fields."""
         # Check if the model file exists
-        model_path = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), 'quickscale/templates/stripe_manager/models.py')
+        model_path = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), 'quickscale/project_templates/stripe_manager/models.py')
         assert os.path.exists(model_path), "StripeCustomer model file not found"
         
         # Read the file content

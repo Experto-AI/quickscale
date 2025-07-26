@@ -15,7 +15,7 @@ Sprint 2 has been successfully implemented in the QuickScale project generator, 
 ### Backend Implementation ✅
 
 #### 1. Enhanced Admin Interface
-**File**: `quickscale/templates/credits/admin.py`
+**File**: `quickscale/project_templates/credits/admin.py`
 - ✅ Enhanced `CreditAccountAdmin` with custom actions and views
 - ✅ Added `credit_actions` column with Add/Remove credit buttons
 - ✅ Implemented `bulk_add_credits` action for bulk operations  
@@ -24,7 +24,7 @@ Sprint 2 has been successfully implemented in the QuickScale project generator, 
 - ✅ Made transactions read-only to preserve data integrity
 
 #### 2. Admin Forms
-**File**: `quickscale/templates/credits/forms.py` (New)
+**File**: `quickscale/project_templates/credits/forms.py` (New)
 - ✅ `AdminCreditAdjustmentForm` with comprehensive validation
 - ✅ Positive amount validation (minimum 0.01 credits)
 - ✅ Required reason field validation
@@ -34,8 +34,8 @@ Sprint 2 has been successfully implemented in the QuickScale project generator, 
 
 #### 3. Admin Templates
 **Files**: 
-- `quickscale/templates/templates/admin/credits/credit_adjustment.html` (New)
-- `quickscale/templates/templates/admin/credits/bulk_credit_adjustment.html` (New)
+- `quickscale/project_templates/templates/admin/credits/credit_adjustment.html` (New)
+- `quickscale/project_templates/templates/admin/credits/bulk_credit_adjustment.html` (New)
 
 - ✅ Responsive form layouts with account information display
 - ✅ Current balance display and warnings for removals

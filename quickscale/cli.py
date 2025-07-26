@@ -167,7 +167,7 @@ Stop all Docker containers for the current QuickScale project.
 This will stop both the web and database services.
         """)
         
-    subparsers.add_parser("destroy", 
+    destroy_parser = subparsers.add_parser("destroy", 
         help="Destroy the current project in local development mode",
         description="""
 WARNING: This command will permanently delete:
@@ -175,8 +175,14 @@ WARNING: This command will permanently delete:
 - All Docker containers and volumes
 - All database data
 
+By default, Docker images are NOT deleted (for faster rebuilds). To also delete images, pass --delete-images.
+
 This action cannot be undone. Use 'down' instead if you just want to stop services.
         """)
+    destroy_parser.add_argument(
+        "--delete-images",
+        action="store_true",
+        help="Also delete Docker images (slower rebuild, default: keep images)")
 
 
 def setup_utility_parsers(subparsers: argparse._SubParsersAction) -> None:

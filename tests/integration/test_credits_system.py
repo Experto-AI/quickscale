@@ -139,7 +139,7 @@ class TestCreditsSystemFunctionality:
     def test_credit_models_structure(self):
         """Test credit models have correct structure."""
         # This would test the models in isolation
-        models_file = Path(__file__).parent.parent.parent / "quickscale" / "templates" / "credits" / "models.py"
+        models_file = Path(__file__).parent.parent.parent / "quickscale" / "project_templates" / "credits" / "models.py"
         
         with open(models_file, 'r') as f:
             models_content = f.read()
@@ -161,7 +161,7 @@ class TestCreditsSystemFunctionality:
     
     def test_credit_views_structure(self):
         """Test credit views have correct structure."""
-        views_file = Path(__file__).parent.parent.parent / "quickscale" / "templates" / "credits" / "views.py"
+        views_file = Path(__file__).parent.parent.parent / "quickscale" / "project_templates" / "credits" / "views.py"
         
         with open(views_file, 'r') as f:
             views_content = f.read()
@@ -179,7 +179,7 @@ class TestCreditsSystemFunctionality:
     
     def test_credit_urls_structure(self):
         """Test credit URLs have correct structure."""
-        urls_file = Path(__file__).parent.parent.parent / "quickscale" / "templates" / "credits" / "urls.py"
+        urls_file = Path(__file__).parent.parent.parent / "quickscale" / "project_templates" / "credits" / "urls.py"
         
         with open(urls_file, 'r') as f:
             urls_content = f.read()
@@ -193,7 +193,7 @@ class TestCreditsSystemFunctionality:
     
     def test_credit_admin_structure(self):
         """Test credit admin has correct structure."""
-        admin_file = Path(__file__).parent.parent.parent / "quickscale" / "templates" / "credits" / "admin.py"
+        admin_file = Path(__file__).parent.parent.parent / "quickscale" / "project_templates" / "credits" / "admin.py"
         
         with open(admin_file, 'r') as f:
             admin_content = f.read()
@@ -213,7 +213,7 @@ class TestCreditsSystemFunctionality:
     
     def test_credit_migration_structure(self):
         """Test credit migration has correct structure."""
-        migration_file = Path(__file__).parent.parent.parent / "quickscale" / "templates" / "credits" / "migrations" / "0001_initial.py"
+        migration_file = Path(__file__).parent.parent.parent / "quickscale" / "project_templates" / "credits" / "migrations" / "0001_initial.py"
         
         with open(migration_file, 'r') as f:
             migration_content = f.read()
@@ -234,7 +234,7 @@ class TestCreditsSystemFunctionality:
     
     def test_credit_template_structure(self):
         """Test credit template has correct structure."""
-        template_file = Path(__file__).parent.parent.parent / "quickscale" / "templates" / "credits" / "templates" / "credits" / "dashboard.html"
+        template_file = Path(__file__).parent.parent.parent / "quickscale" / "project_templates" / "credits" / "templates" / "credits" / "dashboard.html"
         
         with open(template_file, 'r') as f:
             template_content = f.read()

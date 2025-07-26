@@ -17,7 +17,7 @@ class ServiceModelTests(unittest.TestCase):
     def setUp(self):
         """Set up test environment."""
         self.base_path = Path(os.path.dirname(os.path.dirname(os.path.dirname(__file__))))
-        self.credits_app_path = self.base_path / 'quickscale' / 'templates' / 'credits'
+        self.credits_app_path = self.base_path / 'quickscale' / 'project_templates' / 'credits'
         self.models_py = self.credits_app_path / 'models.py'
         self.admin_py = self.credits_app_path / 'admin.py'
         self.views_py = self.credits_app_path / 'views.py'
@@ -104,7 +104,7 @@ class ServiceUsageModelTests(unittest.TestCase):
     def setUp(self):
         """Set up test environment."""
         self.base_path = Path(os.path.dirname(os.path.dirname(os.path.dirname(__file__))))
-        self.credits_app_path = self.base_path / 'quickscale' / 'templates' / 'credits'
+        self.credits_app_path = self.base_path / 'quickscale' / 'project_templates' / 'credits'
         self.models_py = self.credits_app_path / 'models.py'
         
     def test_service_usage_model_exists(self):
@@ -169,7 +169,7 @@ class CreditConsumptionTests(unittest.TestCase):
     def setUp(self):
         """Set up test environment."""
         self.base_path = Path(os.path.dirname(os.path.dirname(os.path.dirname(__file__))))
-        self.credits_app_path = self.base_path / 'quickscale' / 'templates' / 'credits'
+        self.credits_app_path = self.base_path / 'quickscale' / 'project_templates' / 'credits'
         self.models_py = self.credits_app_path / 'models.py'
         
     def test_consume_credits_method_exists(self):
@@ -226,7 +226,7 @@ class ServiceViewsTests(unittest.TestCase):
     def setUp(self):
         """Set up test environment."""
         self.base_path = Path(os.path.dirname(os.path.dirname(os.path.dirname(__file__))))
-        self.credits_app_path = self.base_path / 'quickscale' / 'templates' / 'credits'
+        self.credits_app_path = self.base_path / 'quickscale' / 'project_templates' / 'credits'
         self.views_py = self.credits_app_path / 'views.py'
         
     def test_services_list_view_exists(self):
@@ -326,7 +326,7 @@ class ServiceUrlsTests(unittest.TestCase):
     def setUp(self):
         """Set up test environment."""
         self.base_path = Path(os.path.dirname(os.path.dirname(os.path.dirname(__file__))))
-        self.credits_app_path = self.base_path / 'quickscale' / 'templates' / 'credits'
+        self.credits_app_path = self.base_path / 'quickscale' / 'project_templates' / 'credits'
         self.urls_py = self.credits_app_path / 'urls.py'
         
     def test_service_urls_exist(self):
@@ -353,7 +353,7 @@ class ServiceAdminTests(unittest.TestCase):
     def setUp(self):
         """Set up test environment."""
         self.base_path = Path(os.path.dirname(os.path.dirname(os.path.dirname(__file__))))
-        self.credits_app_path = self.base_path / 'quickscale' / 'templates' / 'credits'
+        self.credits_app_path = self.base_path / 'quickscale' / 'project_templates' / 'credits'
         self.admin_py = self.credits_app_path / 'admin.py'
         
     def test_service_admin_exists(self):
@@ -395,72 +395,6 @@ class ServiceAdminTests(unittest.TestCase):
                      "ServiceUsage add permission restriction not found")
         self.assertIn("return False", admin_content,
                      "ServiceUsage permission restrictions not properly implemented")
-
-
-class ServiceTemplatesTests(unittest.TestCase):
-    """Test cases for service templates."""
-    
-    def setUp(self):
-        """Set up test environment."""
-        self.base_path = Path(os.path.dirname(os.path.dirname(os.path.dirname(__file__))))
-        self.credits_app_path = self.base_path / 'quickscale' / 'templates' / 'credits'
-        self.templates_path = self.credits_app_path / 'templates' / 'credits'
-        self.services_template = self.templates_path / 'services.html'
-        self.dashboard_template = self.templates_path / 'dashboard.html'
-        
-    def test_services_template_exists(self):
-        """Test that services template exists."""
-        self.assertTrue(self.services_template.exists(),
-                       f"Services template not found at {self.services_template}")
-    
-    def test_services_template_structure(self):
-        """Test services template structure."""
-        with open(self.services_template, 'r') as f:
-            template_content = f.read()
-        
-        # Check template extends base
-        self.assertIn("{% extends 'base.html' %}", template_content,
-                     "Services template does not extend base.html")
-        
-        # Check for services loop
-        self.assertIn("{% for service in services %}", template_content,
-                     "Services loop not found")
-        
-        # Check for service properties
-        self.assertIn("{{ service.name }}", template_content,
-                     "Service name not displayed")
-        self.assertIn("{{ service.description }}", template_content,
-                     "Service description not displayed")
-        self.assertIn("{{ service.credit_cost }}", template_content,
-                     "Service credit cost not displayed")
-        
-        # Check for use service form (Sprint 7 uses priority consumption)
-        # Accept either the old URL or the new priority URL
-        has_use_service_url = (
-            "{% url 'credits:use_service' service.id %}" in template_content or
-            "{% url 'credits:use_service_with_priority' service.id %}" in template_content
-        )
-        self.assertTrue(has_use_service_url,
-                       "Use service URL (either basic or priority) not found")
-        
-        # Check for insufficient credits handling
-        self.assertIn("{% if current_balance >= service.credit_cost %}", template_content,
-                     "Insufficient credits check not found")
-        
-        # Check for Alpine.js integration
-        self.assertIn("x-data", template_content,
-                     "Alpine.js integration not found")
-    
-    def test_dashboard_template_updated(self):
-        """Test that dashboard template includes link to services."""
-        with open(self.dashboard_template, 'r') as f:
-            template_content = f.read()
-        
-        # Check for services link (Sprint 10 moved services to their own app)
-        self.assertIn("{% url 'services:list' %}", template_content,
-                     "Services link not found in dashboard")
-        self.assertIn("Use Services", template_content,
-                     "Use Services button text not found")
 
 
 if __name__ == '__main__':

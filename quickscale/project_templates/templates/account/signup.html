@@ -1,0 +1,84 @@
+{% extends "base.html" %}
+{% load i18n %}
+
+{% block title %}{% trans "Sign Up" %} - {{ project_name }}{% endblock %}
+
+{% block content %}
+{% include "components/hero_banner.html" with title=_("Sign Up") subtitle=_("Create your account") color="primary" %}
+
+<section class="section">
+    <div class="container">
+        <div class="columns is-centered">
+            <div class="column is-half">
+                <div class="box">
+                    <form method="post" action="{% url 'account_signup' %}">
+                        {% csrf_token %}
+                        
+                        {% if form.non_field_errors %}
+                            <div class="notification is-danger">
+                                {% for error in form.non_field_errors %}
+                                    {{ error }}
+                                {% endfor %}
+                            </div>
+                        {% endif %}
+                        
+                        <div class="field">
+                            <label class="label">{{ form.email.label }}</label>
+                            <div class="control">
+                                {{ form.email }}
+                            </div>
+                            {% if form.email.errors %}
+                                <p class="help is-danger">{{ form.email.errors.0 }}</p>
+                            {% endif %}
+                        </div>
+                        
+                        <div class="field">
+                            <label class="label">{{ form.password1.label }}</label>
+                            <div class="control">
+                                {{ form.password1 }}
+                            </div>
+                            {% if form.password1.errors %}
+                                <p class="help is-danger">{{ form.password1.errors.0 }}</p>
+                            {% endif %}
+                            {% if form.password1.help_text %}
+                                <p class="help">{{ form.password1.help_text }}</p>
+                            {% endif %}
+                        </div>
+                        
+                        <div class="field">
+                            <label class="label">{{ form.password2.label }}</label>
+                            <div class="control">
+                                {{ form.password2 }}
+                            </div>
+                            {% if form.password2.errors %}
+                                <p class="help is-danger">{{ form.password2.errors.0 }}</p>
+                            {% endif %}
+                        </div>
+                        
+                        {% if redirect_field_value %}
+                            <input type="hidden" name="{{ redirect_field_name }}" value="{{ redirect_field_value }}" />
+                        {% endif %}
+                        
+                        <div class="field">
+                            <div class="control">
+                                <button class="button is-primary is-fullwidth" type="submit">
+                                    <span class="icon is-small">
+                                        <i class="fas fa-user-plus"></i>
+                                    </span>
+                                    <span>{% trans "Sign Up" %}</span>
+                                </button>
+                            </div>
+                        </div>
+                    </form>
+                    
+                    <hr>
+                    
+                    <div class="has-text-centered">
+                        <p>{% trans "Already have an account?" %} <a href="{% url 'account_login' %}" class="has-text-primary">{% trans "Sign In" %}</a></p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</section>
+{% endblock %} 

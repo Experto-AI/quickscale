@@ -1,0 +1,332 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}Credits Dashboard{% endblock %}
+
+{% block content %}
+<div class="container">
+    <div class="columns">
+        <div class="column is-12">
+            <h1 class="title">Credits Dashboard</h1>
+            
+            <!-- Current Balance Section with Credit Breakdown -->
+            <div class="box">
+                <div class="level">
+                    <div class="level-left">
+                        <div class="level-item">
+                            <div>
+                                <p class="heading">Current Balance</p>
+                                <p class="title is-3" id="credit-balance">{{ current_balance }} credits</p>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="level-right">
+                        <div class="level-item">
+                            <a href="{% url 'credits:dashboard' %}" class="button is-primary">
+                                <span class="icon">
+                                    <i class="fas fa-sync-alt"></i>
+                                </span>
+                                <span>Refresh</span>
+                            </a>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- Credit Breakdown by Type -->
+                <div class="columns">
+                    <div class="column is-6">
+                        <div class="box has-background-info-light">
+                            <h4 class="subtitle is-6">
+                                <span class="icon">
+                                    <i class="fas fa-calendar-alt"></i>
+                                </span>
+                                Subscription Credits
+                            </h4>
+                            <p class="title is-4" id="subscription-balance">
+                                {% with balance_details=credit_account.get_balance_details %}
+                                    {{ balance_details.subscription.amount }} credits
+                                {% endwith %}
+                            </p>
+                            {% with balance_details=credit_account.get_balance_details %}
+                                {% if balance_details.subscription.expires_at %}
+                                    <p class="has-text-warning">
+                                        <span class="icon">
+                                            <i class="fas fa-clock"></i>
+                                        </span>
+                                        Expires: {{ balance_details.subscription.expires_at|date:"M d, Y" }}
+                                    </p>
+                                {% else %}
+                                    <p class="has-text-grey">No expiration date</p>
+                                {% endif %}
+                            {% endwith %}
+                            <p class="is-size-7 has-text-grey">Monthly credits from subscription plan</p>
+                        </div>
+                    </div>
+                    <div class="column is-6">
+                        <div class="box has-background-success-light">
+                            <h4 class="subtitle is-6">
+                                <span class="icon">
+                                    <i class="fas fa-infinity"></i>
+                                </span>
+                                Pay-as-You-Go Credits
+                            </h4>
+                            <p class="title is-4" id="payg-balance">
+                                {% with balance_details=credit_account.get_balance_details %}
+                                    {{ balance_details.pay_as_you_go.amount }} credits
+                                {% endwith %}
+                            </p>
+                            <p class="has-text-success">
+                                <span class="icon">
+                                    <i class="fas fa-check"></i>
+                                </span>
+                                Never expire
+                            </p>
+                            <p class="is-size-7 has-text-grey">Credits purchased individually</p>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- Credit Consumption Priority Info -->
+                <div class="notification is-info is-light">
+                    <p><strong>Credit Usage Priority:</strong> Subscription credits are consumed first, then pay-as-you-go credits.</p>
+                </div>
+            </div>
+            
+            <!-- Recent Purchase Details -->
+            {% if purchase_transaction_data and not purchase_transaction_data.error and not purchase_transaction_data.no_session %}
+            <div class="box has-background-success-light">
+                <h2 class="subtitle has-text-success">
+                    <span class="icon">
+                        <i class="fas fa-check-circle"></i>
+                    </span>
+                    Recent Purchase Completed Successfully!
+                </h2>
+                
+                <div class="columns">
+                    <div class="column">
+                        <table class="table is-fullwidth">
+                            <tbody>
+                                {% if purchase_transaction_data.payment_intent_id %}
+                                <tr>
+                                    <td><strong>Payment ID</strong></td>
+                                    <td><code>{{ purchase_transaction_data.payment_intent_id }}</code></td>
+                                </tr>
+                                {% endif %}
+                                
+                                {% if purchase_transaction_data.amount_total %}
+                                <tr>
+                                    <td><strong>Amount Paid</strong></td>
+                                    <td>{{ purchase_transaction_data.currency }} {{ purchase_transaction_data.amount_total|floatformat:2 }}</td>
+                                </tr>
+                                {% endif %}
+                                
+                                {% if purchase_transaction_data.credit_amount %}
+                                <tr>
+                                    <td><strong>Credits Added</strong></td>
+                                    <td>
+                                        <span class="tag is-success is-large">+{{ purchase_transaction_data.credit_amount }} credits</span>
+                                    </td>
+                                </tr>
+                                {% endif %}
+                                
+                                {% if purchase_transaction_data.new_balance %}
+                                <tr>
+                                    <td><strong>New Balance</strong></td>
+                                    <td><strong>{{ purchase_transaction_data.new_balance }} credits</strong></td>
+                                </tr>
+                                {% endif %}
+                            </tbody>
+                        </table>
+                    </div>
+                    
+                    <div class="column">
+                        {% if purchase_transaction_data.product_name %}
+                        <div class="box has-background-info-light">
+                            <h4 class="title is-6">Product Details</h4>
+                            <p><strong>{{ purchase_transaction_data.product_name }}</strong></p>
+                            
+                            {% if purchase_transaction_data.product_description %}
+                            <p class="is-size-7">{{ purchase_transaction_data.product_description }}</p>
+                            {% endif %}
+                            
+                            {% if purchase_transaction_data.price_per_credit %}
+                            <p><strong>Price per Credit:</strong> {{ purchase_transaction_data.currency }} {{ purchase_transaction_data.price_per_credit|floatformat:4 }}</p>
+                            {% endif %}
+                            
+                            {% if purchase_transaction_data.credit_type %}
+                            <p><strong>Credit Type:</strong> {{ purchase_transaction_data.credit_type }}</p>
+                            {% endif %}
+                        </div>
+                        {% endif %}
+                        
+                        {% if purchase_transaction_data.duplicate_processing %}
+                        <div class="notification is-warning is-light">
+                            <p><strong>Note:</strong> This payment was already processed. No duplicate credits were added.</p>
+                        </div>
+                        {% endif %}
+                    </div>
+                </div>
+                
+                {% if purchase_transaction_data.session_id %}
+                <div class="notification is-info is-light">
+                    <p class="is-size-7"><strong>Transaction Reference:</strong> <code>{{ purchase_transaction_data.session_id }}</code></p>
+                </div>
+                {% endif %}
+            </div>
+            {% elif purchase_transaction_data.error %}
+            <div class="box has-background-warning-light">
+                <div class="notification is-warning">
+                    <strong>Purchase completed with limited details</strong>
+                    <p>{{ purchase_transaction_data.error }}</p>
+                </div>
+            </div>
+            {% endif %}
+
+            <!-- Recent Transactions Section -->
+            <div class="box">
+                <h2 class="subtitle">Recent Transactions</h2>
+                
+                {% if recent_transactions %}
+                    <div class="table-container">
+                        <table class="table is-fullwidth is-striped">
+                            <thead>
+                                <tr>
+                                    <th>Date</th>
+                                    <th>Amount</th>
+                                    <th>Description</th>
+                                    <th>Type</th>
+                                    <th>Expiration</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for transaction in recent_transactions %}
+                                <tr>
+                                    <td>{{ transaction.created_at|date:"M d, Y g:i A" }}</td>
+                                    <td>
+                                        <span class="tag {% if transaction.amount >= 0 %}is-success{% else %}is-danger{% endif %}">
+                                            {% if transaction.amount >= 0 %}+{% endif %}{{ transaction.amount }} credits
+                                        </span>
+                                    </td>
+                                    <td>{{ transaction.description }}</td>
+                                    <td>
+                                        <span class="tag is-light">
+                                            {{ transaction.get_credit_type_display }}
+                                        </span>
+                                    </td>
+                                    <td>
+                                        {% if transaction.expires_at %}
+                                            {% if transaction.is_expired %}
+                                                <span class="tag is-danger">Expired</span>
+                                            {% else %}
+                                                <span class="tag is-warning">{{ transaction.expires_at|date:"M d, Y" }}</span>
+                                            {% endif %}
+                                        {% else %}
+                                            <span class="tag is-success">Never</span>
+                                        {% endif %}
+                                    </td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                {% else %}
+                    <div class="notification is-info is-light">
+                        <p><strong>No transactions yet!</strong></p>
+                        <p>Your credit transactions will appear here once you start using credits.</p>
+                    </div>
+                {% endif %}
+            </div>
+
+            <!-- Available Services Section -->
+            {% if available_services %}
+            <div class="box">
+                <h2 class="subtitle">Available Services</h2>
+                <div class="columns is-multiline">
+                    {% for service in available_services %}
+                    <div class="column is-6-tablet is-4-desktop">
+                        <div class="card">
+                            <div class="card-content">
+                                <div class="media">
+                                    <div class="media-content">
+                                        <p class="title is-6">{{ service.name }}</p>
+                                        <p class="subtitle is-7">
+                                            <span class="tag is-primary">{{ service.credit_cost }} credits</span>
+                                        </p>
+                                    </div>
+                                </div>
+                                <div class="content">
+                                    <p class="is-size-7">{{ service.description|truncatewords:10 }}</p>
+                                    {% if service.user_usage_count > 0 %}
+                                        <p class="has-text-grey-dark">
+                                            <small>
+                                                <span class="icon is-small">
+                                                    <i class="fas fa-history"></i>
+                                                </span>
+                                                Used {{ service.user_usage_count }} time{{ service.user_usage_count|pluralize }}
+                                            </small>
+                                        </p>
+                                    {% endif %}
+                                </div>
+                            </div>
+                            <footer class="card-footer">
+                                {% if current_balance >= service.credit_cost %}
+                                    <a href="{% url 'services:use_form' service.id %}" class="card-footer-item button is-success is-small">
+                                        <span class="icon">
+                                            <i class="fas fa-play"></i>
+                                        </span>
+                                        <span>Use Service</span>
+                                    </a>
+                                {% else %}
+                                    <div class="card-footer-item">
+                                        <button class="button is-danger is-small" disabled title="Insufficient credits">
+                                            <span class="icon">
+                                                <i class="fas fa-ban"></i>
+                                            </span>
+                                            <span>Insufficient Credits</span>
+                                        </button>
+                                    </div>
+                                {% endif %}
+                            </footer>
+                        </div>
+                    </div>
+                    {% endfor %}
+                </div>
+                <div class="has-text-centered">
+                    <a href="{% url 'services:list' %}" class="button is-link">
+                        <span class="icon">
+                            <i class="fas fa-list"></i>
+                        </span>
+                        <span>View All Services</span>
+                    </a>
+                </div>
+            </div>
+            {% endif %}
+
+            <!-- Quick Actions Section -->
+            <div class="box">
+                <h2 class="subtitle">Quick Actions</h2>
+                <div class="buttons">
+                    <a href="{% url 'services:list' %}" class="button is-success">
+                        <span class="icon">
+                            <i class="fas fa-cogs"></i>
+                        </span>
+                        <span>Use Services</span>
+                    </a>
+                    <a href="{% url 'credits:buy_credits' %}" class="button is-info">
+                        <span class="icon">
+                            <i class="fas fa-shopping-cart"></i>
+                        </span>
+                        <span>Buy Credits</span>
+                    </a>
+                    <button class="button is-warning" disabled>
+                        <span class="icon">
+                            <i class="fas fa-star"></i>
+                        </span>
+                        <span>Subscribe (Coming Soon)</span>
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

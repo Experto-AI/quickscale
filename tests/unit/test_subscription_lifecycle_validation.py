@@ -15,7 +15,7 @@ class SubscriptionLifecycleTemplateValidationTest(TestCase):
     
     def setUp(self):
         """Set up paths to template files."""
-        self.base_path = Path(__file__).parent.parent.parent / "quickscale" / "templates"
+        self.base_path = Path(__file__).parent.parent.parent / "quickscale" / "project_templates"
         self.credits_models_path = self.base_path / "credits" / "models.py"
         self.stripe_models_path = self.base_path / "stripe_manager" / "models.py"
     
@@ -150,7 +150,7 @@ class PlanChangeTemplateValidationTest(TestCase):
     
     def setUp(self):
         """Set up paths to template files."""
-        self.base_path = Path(__file__).parent.parent.parent / "quickscale" / "templates"
+        self.base_path = Path(__file__).parent.parent.parent / "quickscale" / "project_templates"
         self.credits_models_path = self.base_path / "credits" / "models.py"
     
     def test_subscription_credit_allocation_method_exists(self):
@@ -210,7 +210,7 @@ class WebhookProcessingTemplateValidationTest(TestCase):
     
     def setUp(self):
         """Set up paths to template files."""
-        self.base_path = Path(__file__).parent.parent.parent / "quickscale" / "templates"
+        self.base_path = Path(__file__).parent.parent.parent / "quickscale" / "project_templates"
         self.stripe_views_path = self.base_path / "stripe_manager" / "views.py"
     
     def test_webhook_views_exist(self):
@@ -247,7 +247,7 @@ class IntegrationTemplateValidationTest(TestCase):
     
     def setUp(self):
         """Set up paths to template files."""
-        self.base_path = Path(__file__).parent.parent.parent / "quickscale" / "templates"
+        self.base_path = Path(__file__).parent.parent.parent / "quickscale" / "project_templates"
     
     def test_admin_dashboard_integration_exists(self):
         """Test that admin dashboard integration exists."""

@@ -14,14 +14,14 @@ class URLNamespaceConfigurationTest(unittest.TestCase):
         """Set up test environment."""
         self.base_path = Path(os.path.dirname(os.path.dirname(os.path.dirname(__file__))))
         self.url_files = {
-            'core': self.base_path / 'quickscale' / 'templates' / 'core' / 'urls.py',
-            'credits': self.base_path / 'quickscale' / 'templates' / 'credits' / 'urls.py',
-            'api': self.base_path / 'quickscale' / 'templates' / 'api' / 'urls.py',
-            'public': self.base_path / 'quickscale' / 'templates' / 'public' / 'urls.py',
-            'users': self.base_path / 'quickscale' / 'templates' / 'users' / 'urls.py',
-            'stripe_manager': self.base_path / 'quickscale' / 'templates' / 'stripe_manager' / 'urls.py',
-            'admin_dashboard': self.base_path / 'quickscale' / 'templates' / 'admin_dashboard' / 'urls.py',
-            'services': self.base_path / 'quickscale' / 'templates' / 'services' / 'urls.py'
+            'core': self.base_path / 'quickscale' / 'project_templates' / 'core' / 'urls.py',
+            'credits': self.base_path / 'quickscale' / 'project_templates' / 'credits' / 'urls.py',
+            'api': self.base_path / 'quickscale' / 'project_templates' / 'api' / 'urls.py',
+            'public': self.base_path / 'quickscale' / 'project_templates' / 'public' / 'urls.py',
+            'users': self.base_path / 'quickscale' / 'project_templates' / 'users' / 'urls.py',
+            'stripe_manager': self.base_path / 'quickscale' / 'project_templates' / 'stripe_manager' / 'urls.py',
+            'admin_dashboard': self.base_path / 'quickscale' / 'project_templates' / 'admin_dashboard' / 'urls.py',
+            'services': self.base_path / 'quickscale' / 'project_templates' / 'services' / 'urls.py'
         }
 
     def test_public_namespace_exists(self):
@@ -114,7 +114,7 @@ class MiddlewareConfigurationTest(unittest.TestCase):
     def setUp(self):
         """Set up test environment."""
         self.base_path = Path(os.path.dirname(os.path.dirname(os.path.dirname(__file__))))
-        self.settings_file = self.base_path / 'quickscale' / 'templates' / 'core' / 'settings.py'
+        self.settings_file = self.base_path / 'quickscale' / 'project_templates' / 'core' / 'settings.py'
 
     def test_middleware_order(self):
         """Test that middleware is in the correct order."""
@@ -167,10 +167,10 @@ class SettingsOrganizationTest(unittest.TestCase):
         """Set up test environment."""
         self.base_path = Path(os.path.dirname(os.path.dirname(os.path.dirname(__file__))))
         self.settings_files = {
-            'main': self.base_path / 'quickscale' / 'templates' / 'core' / 'settings.py',
-            'email': self.base_path / 'quickscale' / 'templates' / 'core' / 'email_settings.py',
-            'security': self.base_path / 'quickscale' / 'templates' / 'core' / 'security_settings.py',
-            'logging': self.base_path / 'quickscale' / 'templates' / 'core' / 'logging_settings.py'
+            'main': self.base_path / 'quickscale' / 'project_templates' / 'core' / 'settings.py',
+            'email': self.base_path / 'quickscale' / 'project_templates' / 'core' / 'email_settings.py',
+            'security': self.base_path / 'quickscale' / 'project_templates' / 'core' / 'security_settings.py',
+            'logging': self.base_path / 'quickscale' / 'project_templates' / 'core' / 'logging_settings.py'
         }
 
     def test_modular_settings_import(self):
@@ -274,11 +274,11 @@ class DatabaseModelsSOLIDPrinciplesTests(unittest.TestCase):
         """Set up test environment."""
         self.base_path = Path(os.path.dirname(os.path.dirname(os.path.dirname(__file__))))
         self.models_files = {
-            'credits': self.base_path / 'quickscale' / 'templates' / 'credits' / 'models.py',
-            'users': self.base_path / 'quickscale' / 'templates' / 'users' / 'models.py',
-            'stripe_manager': self.base_path / 'quickscale' / 'templates' / 'stripe_manager' / 'models.py',
-            'admin_dashboard': self.base_path / 'quickscale' / 'templates' / 'admin_dashboard' / 'models.py',
-            'services': self.base_path / 'quickscale' / 'templates' / 'services' / 'models.py'
+            'credits': self.base_path / 'quickscale' / 'project_templates' / 'credits' / 'models.py',
+            'users': self.base_path / 'quickscale' / 'project_templates' / 'users' / 'models.py',
+            'stripe_manager': self.base_path / 'quickscale' / 'project_templates' / 'stripe_manager' / 'models.py',
+            'admin_dashboard': self.base_path / 'quickscale' / 'project_templates' / 'admin_dashboard' / 'models.py',
+            'services': self.base_path / 'quickscale' / 'project_templates' / 'services' / 'models.py'
         }
     
     def test_single_responsibility_principle_credits_models(self):
@@ -382,9 +382,9 @@ class DatabaseRelationshipsValidationTests(unittest.TestCase):
     def setUp(self):
         """Set up test environment."""
         self.base_path = Path(os.path.dirname(os.path.dirname(os.path.dirname(__file__))))
-        self.credits_models = self.base_path / 'quickscale' / 'templates' / 'credits' / 'models.py'
-        self.stripe_models = self.base_path / 'quickscale' / 'templates' / 'stripe_manager' / 'models.py'
-        self.admin_models = self.base_path / 'quickscale' / 'templates' / 'admin_dashboard' / 'models.py'
+        self.credits_models = self.base_path / 'quickscale' / 'project_templates' / 'credits' / 'models.py'
+        self.stripe_models = self.base_path / 'quickscale' / 'project_templates' / 'stripe_manager' / 'models.py'
+        self.admin_models = self.base_path / 'quickscale' / 'project_templates' / 'admin_dashboard' / 'models.py'
     
     def test_foreign_key_relationships_credits(self):
         """Test foreign key relationships in credits models."""
@@ -465,8 +465,8 @@ class DatabasePerformancePatternTests(unittest.TestCase):
     def setUp(self):
         """Set up test environment."""
         self.base_path = Path(os.path.dirname(os.path.dirname(os.path.dirname(__file__))))
-        self.credits_models = self.base_path / 'quickscale' / 'templates' / 'credits' / 'models.py'
-        self.stripe_models = self.base_path / 'quickscale' / 'templates' / 'stripe_manager' / 'models.py'
+        self.credits_models = self.base_path / 'quickscale' / 'project_templates' / 'credits' / 'models.py'
+        self.stripe_models = self.base_path / 'quickscale' / 'project_templates' / 'stripe_manager' / 'models.py'
     
     def test_database_indexes_credits(self):
         """Test that proper database indexes are defined."""
@@ -527,10 +527,10 @@ class MigrationHistoryConsistencyTests(unittest.TestCase):
         """Set up test environment."""
         self.base_path = Path(os.path.dirname(os.path.dirname(os.path.dirname(__file__))))
         self.migrations_dirs = {
-            'credits': self.base_path / 'quickscale' / 'templates' / 'credits' / 'migrations',
-            'stripe_manager': self.base_path / 'quickscale' / 'templates' / 'stripe_manager' / 'migrations',
-            'users': self.base_path / 'quickscale' / 'templates' / 'users' / 'migrations',
-            'admin_dashboard': self.base_path / 'quickscale' / 'templates' / 'admin_dashboard' / 'migrations'
+            'credits': self.base_path / 'quickscale' / 'project_templates' / 'credits' / 'migrations',
+            'stripe_manager': self.base_path / 'quickscale' / 'project_templates' / 'stripe_manager' / 'migrations',
+            'users': self.base_path / 'quickscale' / 'project_templates' / 'users' / 'migrations',
+            'admin_dashboard': self.base_path / 'quickscale' / 'project_templates' / 'admin_dashboard' / 'migrations'
         }
     
     def test_migration_naming_consistency(self):
@@ -563,7 +563,7 @@ class ModelBusinessLogicSeparationTests(unittest.TestCase):
     def setUp(self):
         """Set up test environment."""
         self.base_path = Path(os.path.dirname(os.path.dirname(os.path.dirname(__file__))))
-        self.credits_models = self.base_path / 'quickscale' / 'templates' / 'credits' / 'models.py'
+        self.credits_models = self.base_path / 'quickscale' / 'project_templates' / 'credits' / 'models.py'
     
     def test_credit_account_business_logic(self):
         """Test that CreditAccount has proper business logic separation."""

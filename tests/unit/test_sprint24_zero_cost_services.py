@@ -29,7 +29,7 @@ class TestZeroCostServiceTemplateValidation(unittest.TestCase):
     
     def test_service_model_template_allows_zero_cost(self):
         """Test that Service model template allows 0.0 credit cost."""
-        credits_models_path = self.base_path / 'quickscale' / 'templates' / 'credits' / 'models.py'
+        credits_models_path = self.base_path / 'quickscale' / 'project_templates' / 'credits' / 'models.py'
         
         with open(credits_models_path, 'r') as f:
             models_content = f.read()
@@ -48,7 +48,7 @@ class TestZeroCostServiceTemplateValidation(unittest.TestCase):
     
     def test_service_model_template_validation_logic(self):
         """Test that Service model template has proper validation logic."""
-        credits_models_path = self.base_path / 'quickscale' / 'templates' / 'credits' / 'models.py'
+        credits_models_path = self.base_path / 'quickscale' / 'project_templates' / 'credits' / 'models.py'
         
         with open(credits_models_path, 'r') as f:
             models_content = f.read()
@@ -67,7 +67,7 @@ class TestZeroCostServiceTemplateValidation(unittest.TestCase):
     
     def test_service_model_template_string_representation(self):
         """Test that Service model template has proper string representation."""
-        credits_models_path = self.base_path / 'quickscale' / 'templates' / 'credits' / 'models.py'
+        credits_models_path = self.base_path / 'quickscale' / 'project_templates' / 'credits' / 'models.py'
         
         with open(credits_models_path, 'r') as f:
             models_content = f.read()
@@ -94,7 +94,7 @@ class TestZeroCostServiceBaseTemplate(unittest.TestCase):
     
     def test_base_service_template_handles_zero_cost(self):
         """Test that BaseService template handles zero-cost services."""
-        base_service_path = self.base_path / 'quickscale' / 'templates' / 'services' / 'base.py'
+        base_service_path = self.base_path / 'quickscale' / 'project_templates' / 'services' / 'base.py'
         
         with open(base_service_path, 'r') as f:
             base_content = f.read()
@@ -113,7 +113,7 @@ class TestZeroCostServiceBaseTemplate(unittest.TestCase):
     
     def test_base_service_template_credit_consumption(self):
         """Test that BaseService template has proper credit consumption logic."""
-        base_service_path = self.base_path / 'quickscale' / 'templates' / 'services' / 'base.py'
+        base_service_path = self.base_path / 'quickscale' / 'project_templates' / 'services' / 'base.py'
         
         with open(base_service_path, 'r') as f:
             base_content = f.read()
@@ -214,7 +214,7 @@ class TestZeroCostServiceFileValidation(unittest.TestCase):
     
     def test_migration_exists_for_zero_cost(self):
         """Test that migration exists for zero-cost service support."""
-        migrations_path = self.base_path / 'quickscale' / 'templates' / 'credits' / 'migrations'
+        migrations_path = self.base_path / 'quickscale' / 'project_templates' / 'credits' / 'migrations'
         migration_file = migrations_path / '0008_allow_zero_cost_services.py'
         
         if migration_file.exists():
@@ -228,7 +228,7 @@ class TestZeroCostServiceFileValidation(unittest.TestCase):
     
     def test_configure_service_command_supports_free_flag(self):
         """Test that configure_service management command supports --free flag."""
-        command_path = self.base_path / 'quickscale' / 'templates' / 'services' / 'management' / 'commands' / 'configure_service.py'
+        command_path = self.base_path / 'quickscale' / 'project_templates' / 'services' / 'management' / 'commands' / 'configure_service.py'
         
         if command_path.exists():
             with open(command_path, 'r') as f:

@@ -4,7 +4,7 @@ Tests for Sprint 18 Payment Admin Tools functionality.
 Tests payment search, payment investigation, and refund initiation features
 for admin users in the QuickScale project generator template.
 
-This test validates the template files in quickscale/templates/admin_dashboard/
+This test validates the template files in quickscale/project_templates/admin_dashboard/
 to ensure Sprint 18 features are properly implemented.
 """
 
@@ -20,10 +20,10 @@ class Sprint18TemplateValidationTests(unittest.TestCase):
     def setUp(self):
         """Set up test environment."""
         self.base_path = Path(__file__).parent.parent.parent
-        self.admin_dashboard_path = self.base_path / 'quickscale' / 'templates' / 'admin_dashboard'
+        self.admin_dashboard_path = self.base_path / 'quickscale' / 'project_templates' / 'admin_dashboard'
         self.views_file = self.admin_dashboard_path / 'views.py'
         self.urls_file = self.admin_dashboard_path / 'urls.py'
-        self.templates_path = self.base_path / 'quickscale' / 'templates' / 'templates' / 'admin_dashboard'
+        self.templates_path = self.base_path / 'quickscale' / 'project_templates' / 'templates' / 'admin_dashboard'
 
     def test_payment_search_view_exists_in_template(self):
         """Test that payment_search view exists in admin_dashboard views template."""
@@ -104,7 +104,7 @@ class Sprint18PaymentSearchTests(unittest.TestCase):
     def setUp(self):
         """Set up test environment."""
         self.base_path = Path(__file__).parent.parent.parent
-        self.views_file = self.base_path / 'quickscale' / 'templates' / 'admin_dashboard' / 'views.py'
+        self.views_file = self.base_path / 'quickscale' / 'project_templates' / 'admin_dashboard' / 'views.py'
 
     def test_payment_search_filtering_logic(self):
         """Test that payment search implements proper filtering logic."""
@@ -141,7 +141,7 @@ class Sprint18PaymentInvestigationTests(unittest.TestCase):
     def setUp(self):
         """Set up test environment."""
         self.base_path = Path(__file__).parent.parent.parent
-        self.views_file = self.base_path / 'quickscale' / 'templates' / 'admin_dashboard' / 'views.py'
+        self.views_file = self.base_path / 'quickscale' / 'project_templates' / 'admin_dashboard' / 'views.py'
 
     def test_payment_investigation_data_gathering(self):
         """Test that payment investigation gathers comprehensive data."""
@@ -175,7 +175,7 @@ class Sprint18RefundInitiationTests(unittest.TestCase):
     def setUp(self):
         """Set up test environment."""
         self.base_path = Path(__file__).parent.parent.parent
-        self.views_file = self.base_path / 'quickscale' / 'templates' / 'admin_dashboard' / 'views.py'
+        self.views_file = self.base_path / 'quickscale' / 'project_templates' / 'admin_dashboard' / 'views.py'
 
     def test_refund_validation_logic(self):
         """Test that refund initiation implements proper validation."""
@@ -210,7 +210,7 @@ class Sprint18RequirementsValidationTests(unittest.TestCase):
     def setUp(self):
         """Set up test environment."""
         self.base_path = Path(__file__).parent.parent.parent
-        self.views_file = self.base_path / 'quickscale' / 'templates' / 'admin_dashboard' / 'views.py'
+        self.views_file = self.base_path / 'quickscale' / 'project_templates' / 'admin_dashboard' / 'views.py'
 
     def test_payment_search_requirements(self):
         """Test that payment search meets ROADMAP.md requirements."""
@@ -246,7 +246,7 @@ class Sprint18SecurityValidationTests(unittest.TestCase):
     def setUp(self):
         """Set up test environment."""
         self.base_path = Path(__file__).parent.parent.parent
-        self.views_file = self.base_path / 'quickscale' / 'templates' / 'admin_dashboard' / 'views.py'
+        self.views_file = self.base_path / 'quickscale' / 'project_templates' / 'admin_dashboard' / 'views.py'
 
     def test_staff_permission_requirements(self):
         """Test that all payment admin tools require staff permissions."""

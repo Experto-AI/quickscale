@@ -23,9 +23,14 @@ class DestroyProjectCommand(Command):
         print(f"This will DELETE ALL CODE in the '{project_name}' directory.")
         print("Use 'quickscale down' to just stop services.")
         return input("Permanently destroy this project? (y/N): ").strip().lower() == 'y'
-    
-    def execute(self) -> Dict[str, Any]:
-        """Destroy the current project."""
+
+    def _ask_delete_images(self) -> bool:
+        """Ask user if Docker images should also be deleted."""
+        resp = input("Also delete Docker images? (y/N): ").strip().lower()
+        return resp == 'y'
+    # No prompt; use CLI flag only
+    def execute(self, delete_images: bool = False) -> Dict[str, Any]:
+        """Destroy the current project. Optionally delete Docker images if delete_images is True."""
         try:
             state = ProjectManager.get_project_state()
             
@@ -33,11 +38,10 @@ class DestroyProjectCommand(Command):
             if state['has_project']:
                 if not self._confirm_destruction(state['project_name']):
                     return {'success': False, 'reason': 'cancelled'}
-                
-                ProjectManager.stop_containers(state['project_name'])
+                ProjectManager.stop_containers(state['project_name'], delete_images=delete_images)
                 os.chdir('..')
                 shutil.rmtree(state['project_dir'])
-                return {'success': True, 'project': state['project_name']}
+                return {'success': True, 'project': state['project_name'], 'images_deleted': delete_images}
             
             # Case 2: No project in current directory but containers exist
             if state['containers']:
@@ -48,17 +52,17 @@ class DestroyProjectCommand(Command):
                     print(f"Found project '{project_name}' and containers: {', '.join(containers)}")
                     if not self._confirm_destruction(project_name):
                         return {'success': False, 'reason': 'cancelled'}
-                    
-                    ProjectManager.stop_containers(project_name)
+                    ProjectManager.stop_containers(project_name, delete_images=delete_images)
                     shutil.rmtree(Path(project_name))
-                    return {'success': True, 'project': project_name}
+                    return {'success': True, 'project': project_name, 'images_deleted': delete_images}
                 else:
                     print(f"Found containers for '{project_name}', but no project directory.")
                     if input("Stop and remove these containers? (y/N): ").strip().lower() != 'y':
                         return {'success': False, 'reason': 'cancelled'}
                     
-                    ProjectManager.stop_containers(project_name)
-                    return {'success': True, 'containers_only': True}
+                    delete_images = False  # Default to False, no prompt
+                    ProjectManager.stop_containers(project_name, delete_images=delete_images)
+                    return {'success': True, 'containers_only': True, 'images_deleted': delete_images}
             
             # No project or containers found
             print(ProjectManager.PROJECT_NOT_FOUND_MESSAGE)

@@ -2,6 +2,42 @@
 
 All notable changes to this project will be documented in this file.
 
+## v0.36.0 (2025-07-25)
+v0.36.0 feat: Webpage Navigation and User-Facing HTML Template Reorganization for Improved User Experience
+
+This release delivers a comprehensive reorganization of user-facing HTML templates and navigation, streamlining authentication, account management, billing, and service flows for improved clarity and usability. The update consolidates authentication templates, groups related pages, redesigns dashboards, and updates navigation to minimize friction and enhance the user journey.
+
+- Backend Implementation:
+  - Deduplicated all login, signup, and account-related templates, consolidating into a unified authentication set.
+  - Grouped user account management pages (Profile, API Keys, Password, 2FA) under a single "Account" section.
+  - Redesigned the user dashboard to provide a true overview, including credits, recent activity, quick links to services, profile, and billing.
+  - Grouped credits and billing-related pages (Dashboard, Buy Credits, Plans, Subscription) under a "Billing" or "Credits" section.
+  - Ensured all services-related pages are accessible from a unified "Services" section.
+  - Streamlined public pages (Home, About, Contact) and separated them from authenticated user flows.
+  - Updated navigation bar to reflect new groupings and user journey for public, authenticated, and admin users.
+  - Refactored page content and sections for logical grouping and minimal workflow friction.
+  - Migrated all custom UI JavaScript to Alpine.js, with Stripe checkout logic as the only exception.
+
+- Frontend Implementation:
+  - Updated navbar links and dropdowns to use new account management URLs and groupings.
+  - Enhanced dashboard and profile forms with Alpine.js for improved interactivity.
+  - Improved credit dashboard and buy credits page with detailed credit information and purchase options.
+  - Added Django Admin card to admin dashboard and enhanced API keys management interface.
+  - Integrated hero banner component across service, audit log, user dashboard, and API keys pages.
+
+- Testing:
+  - Created and updated unit and integration tests for navigation, authentication, and dashboard flows.
+  - Manually tested all navigation links and user flows for both public and authenticated users.
+  - Validated all forms (login, signup, profile, API keys, credits purchase) after reorganization.
+  - Checked for broken links, missing templates, and orphaned pages.
+  - Updated backend logic tests dependent on template or navigation changes.
+
+- Documentation:
+  - Updated documentation to clarify Alpine.js-only policy and Stripe exception.
+  - Added notes on new navigation and page groupings for improved developer onboarding.
+
+This release completes the Webpage Navigation and User-Facing HTML Template Reorganization sprint, delivering a streamlined, intuitive, and user-friendly experience validated by comprehensive tests and updated documentation.
+
 ## v0.35.0 (2025-07-19)
 v0.35.0 feat: Stripe Integration Review, Security Enhancements, and Zero-Cost Services
 
@@ -591,7 +627,7 @@ v0.12.0 feat: Implement Basic Stripe Checkout Flow
 - Implemented webhook handler for processing checkout completion events
 - Refactored the project roadmap to separate completed work from future sprints:
 - Completed core checkout functionality
-- Moved subscription model and advanced features to next sprint
+- Moved subscription model and advanced features to next sprint in the roadmap
 
 This PR completes all core checkout functionality, providing users with a secure and straightforward way to purchase subscriptions. The implementation uses Stripe's hosted checkout page for maximum security and simplicity, with full integration into our authentication system.
 The remaining subscription management functionality (subscription model, lifecycle hooks, and comprehensive testing) has been moved to next sprint in the roadmap.

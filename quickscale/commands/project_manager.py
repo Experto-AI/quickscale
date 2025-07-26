@@ -70,9 +70,12 @@ class ProjectManager:
         }
     
     @staticmethod
-    def stop_containers(project_name: str) -> None:
-        """Stop and remove Docker containers."""
-        subprocess.run(["docker", "compose", "-p", project_name, "down", "-v", "--rmi", "all"], check=True)
+    def stop_containers(project_name: str, delete_images: bool = True) -> None:
+        """Stop and remove Docker containers. Optionally delete images."""
+        cmd = ["docker", "compose", "-p", project_name, "down", "-v"]
+        if delete_images:
+            cmd += ["--rmi", "all"]
+        subprocess.run(cmd, check=True)
     
     @staticmethod
     def read_tracking_file(file_path: str) -> Optional[Dict[str, Any]]:
