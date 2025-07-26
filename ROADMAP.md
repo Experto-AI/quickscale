@@ -76,106 +76,50 @@ For more details refer to the [CHANGELOG](CHANGELOG.md).
 
 ---
 
-### Sprint 25: Review Webpage Navigation and User-Facing HTML Templates for Improved User Experience (v0.36.0)
+### Sprint 26: Simplified Sync-Back Implementation (v0.37.0)
 
-**Changes: Reorganize User-Facing HTML Templates and Navigation**
-- ✅ Review and deduplicate all login/signup/account-related templates, consolidating into a single set for authentication.
-- ✅ Group all user account management pages (Profile, API Keys, Password, 2FA) under a unified "Account" section.
-- ✅ Redesign the user dashboard to provide a true overview (credits, recent activity, quick links to services, profile, billing).
-- ✅ Group all credits and billing-related pages (Dashboard, Buy Credits, Plans, Subscription) under a "Billing" or "Credits" section.
-- ✅ Ensure all services-related pages are accessible from a single "Services" section.
-- ✅ Streamline the public pages (Home, About, Contact) and ensure they are clearly separated from authenticated user flows.
-- ✅ Update the navigation bar to reflect the new groupings and user journey:
-    - Public: Home, About, Contact, Plans (if enabled), Login/Signup
-    - Authenticated: Dashboard, Services, Account, Billing/Credits, Logout
-    - Admin: Admin Dashboard (if staff)
-- ✅ Refactor the content and sections within each page for logical grouping and minimal friction in user workflows.
+**Goal**: Implement minimal viable sync-back functionality following KISS principles
 
-**Review**
-- ✅ Review the new navigation and page groupings for clarity and ease of use.
-- ✅ Ensure all user flows (signup, login, service usage, billing, profile management) are intuitive and require minimal clicks.
-- ✅ Validate that all essential features are still accessible and nothing important is hidden or removed.
+**Planning Principles Applied:**
+- **KISS**: Simple two-mode detection (development/production) instead of four modes
+- **DRY**: Reuse existing CLI patterns and file operations
+- **Explicit Failure**: Clear error messages for unsupported scenarios
+- **Focused Implementation**: Single sprint delivering working functionality
 
-**Tests / Debug**
-- ✅ Create unit tests
-- ✅ Create integration tests
-- ✅ Manually test all navigation links and user flows for both public and authenticated users.
-- ✅ Validate that all forms (login, signup, profile, API keys, credits purchase) work as expected after reorganization.
-- ✅ Check for broken links, missing templates, or orphaned pages.
-- ✅ Update or add unit/integration tests for any backend logic that depends on template or navigation changes.
+**Core Implementation**
+- ✅ **Simple Installation Detection**: Check if `.git` directory exists and templates are writable
+  - ✅ Two modes only: `development` (Git clone + editable install) or `production` (pip install)
+  - ✅ Simple error message for production mode with setup instructions
+- ✅ **Basic CLI Command**: Add `quickscale sync-back <project-path>` with two flags
+  - ✅ `--preview`: Show which files would be copied/skipped
+  - ✅ `--apply`: Copy files from project back to templates
+- ✅ **Simple File Processing**: Copy files that exist in both locations
+  - ✅ **Safe Files (Direct Copy)**: Templates (*.html), static files (*.css, *.js, *.svg, *.png, etc.), documentation (*.md, *.txt)
+  - ✅ **Careful Files (Variable Restoration)**: Settings files (settings.py, urls.py) - replace actual values with template variables
+  - ✅ **Never Sync (Auto-Skip)**: Database files (*.sqlite3, *.db), migrations (*/migrations/*.py), logs (logs/*, *.log), cache (__pycache__/*, *.pyc), environment files (.env, .env.*)
+  - ✅ **New Files**: Detect and include new files in safe/careful categories
+  - ✅ **Deleted Files**: Detect files removed from project and offer to delete from templates
 
-**Additional Notes:**
-- ✅ All custom UI JavaScript is now Alpine.js (except Stripe checkout POST/redirect logic, which is allowed and documented).
-- ✅ Documentation updated to clarify Alpine.js-only policy and Stripe exception.
-
----
-
-### Sprint 26: Reverse Development Workflow Implementation (v0.37.0)
-
-**Goal**: Implement a one-shot sync-back command for real-time syncing between generated projects and QuickScale templates with enhanced safety and cross-platform compatibility
-
-**Deep Analysis**
-- **Component Architecture Study**: Analyze template generation system, variable replacement patterns, and file safety for real-time development
-- **Code Pattern Identification**: Document template processing differences between `$variable` (generation-time) and `{{ variable }}` (runtime) patterns
-- **Simplified Strategy Exploration**: Research optimal one-shot sync-back approach combining preview reports with manual approval
-- **Cross-Platform Compatibility**: Ensure Windows, macOS, and Linux support with no OS-specific dependencies
-- **Documentation Review**: Complete sync-back workflow documentation with safety guidelines and best practices
-
-**One-Shot Sync-Back Command Implementation**
-- [ ] **Preview Report Generation**: Generate a detailed report of changes, including added, modified, deleted, and ignored files
-  - [ ] Categorize files into safe, careful, and never-sync groups
-  - [ ] Detect template variables and ensure preservation
-  - [ ] Provide a summary of changes for review
-- [ ] **Sync-Back Execution**: Apply changes based on the preview report
-  - [ ] Copy safe files directly
-  - [ ] Restore template variables in careful files
-  - [ ] Skip never-sync files
-- [ ] **Enhanced CLI Integration**: Add granular control commands
-  - [ ] `quickscale sync-back --preview` - Show changes without applying
-  - [ ] `quickscale sync-back --apply` - Apply all changes
-  - [ ] `quickscale sync-back --interactive` - Review and approve changes file-by-file
-
-**Cross-Platform Safety Enhancements**
-- [ ] **No OS Dependencies**: Avoid symlinks or file watchers
-  - [ ] Use standard file operations (e.g., rsync, shutil)
-  - [ ] Ensure compatibility with all platforms
-- [ ] **Enhanced Safety Mechanisms**: Multiple layers of protection
-  - [ ] Pre-operation validation and conflict detection
-  - [ ] Backup creation before applying changes
-  - [ ] Emergency recovery procedures
-
-**Validation and Testing Framework**
-- [ ] **Comprehensive Testing Suite**: Multi-platform validation
-  - [ ] Test on Windows, macOS, and Linux environments
-  - [ ] Test with different Python and Django versions
-  - [ ] Test Docker integration and volume mounting
-  - [ ] Test template generation with sync-back changes
-- [ ] **Safety Testing**: Edge case and failure scenario testing
-  - [ ] Test file corruption and restoration
-  - [ ] Test concurrent access and file locking
+**Basic Testing**
+  - ✅ Test installation mode detection
+  - ✅ Test file categorization by extension and path
+  - ✅ Test safe file copying (templates, static, docs)
+  - ✅ Test careful file variable restoration (settings.py, urls.py)
+  - ✅ Test never-sync file skipping (database, migrations, logs)
+  - ✅ Test new file detection and inclusion
+  - ✅ Test deleted file detection and removal
+  - ✅ Test CLI command integration
 
 **Success Criteria - Must deliver:**
-- [ ] **One-Shot Sync-Back Command**: Preview, apply, and interactive modes
-- [ ] **Cross-Platform Compatibility**: Works reliably on Windows, macOS, and Linux
-- [ ] **Enhanced CLI Interface**: Granular control with multiple sync modes
-- [ ] **Comprehensive Safety**: Multiple backup layers and recovery mechanisms
-- [ ] **Updated Tests**: Complete test coverage including cross-platform scenarios
-- [ ] **Documentation**: Updated workflow guide with simplified approach and platform considerations
+- ✅ **Working Command**: `quickscale sync-back --preview` and `--apply` work reliably
+- ✅ **Clear User Experience**: Helpful error for pip users, working functionality for Git users
+- ✅ **Basic Safety**: Backup before applying changes, clear preview before execution
+- ✅ **Essential Testing**: Core functionality tested and validated
 
-**Developer Experience Benefits:**
-- **Simplicity**: One command to sync changes back to templates
-- **Cross-Platform**: Works consistently across all development environments
-- **Explicit Control**: Preview and approve changes before applying
-- **Template Safety**: Variable mapping prevents template corruption
-- **Recovery Options**: Multiple backup and restoration points for safety
-
-**Phase Rollout Strategy:**
-1. **Week 1**: Implement preview report generation
-2. **Week 2**: Add sync-back execution with safety mechanisms
-3. **Week 3**: Integrate CLI commands and cross-platform testing
-4. **Week 4**: Comprehensive testing, documentation, and validation
-
-**Validation**: Developers can safely improve QuickScale templates through a one-shot sync-back command with appropriate safety measures for different file types and cross-platform reliability
+**Validation**: 
+- ✅ Developer can modify templates in generated project and sync back to QuickScale templates
+- ✅ Command fails gracefully for pip-installed users with clear guidance
+- ✅ Basic functionality works on Linux (primary development platform)
 
 ---
 
