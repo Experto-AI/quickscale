@@ -171,13 +171,36 @@ class JsonResponse:
         self.status_code = status
 
 
-# Add mocked objects to sys.modules
-sys.modules['django.http'] = MagicMock(JsonResponse=JsonResponse)
-sys.modules['quickscale.project_templates.stripe.views'] = MagicMock(webhook_endpoint=webhook_endpoint)
-sys.modules['quickscale.project_templates.stripe.stripe_manager'] = MagicMock(
-    StripeManager=StripeManager,
-    get_stripe_manager=get_stripe_manager
-)
+# Store original modules for cleanup
+_test_specific_modules = {}
+
+
+def _setup_test_modules():
+    """Set up test-specific module mocks."""
+    global _test_specific_modules
+    _test_specific_modules = {
+        'django.http': sys.modules.get('django.http'),
+        'quickscale.project_templates.stripe.views': sys.modules.get('quickscale.project_templates.stripe.views'),
+        'quickscale.project_templates.stripe.stripe_manager': sys.modules.get('quickscale.project_templates.stripe.stripe_manager')
+    }
+    
+    # Add mocked objects to sys.modules
+    sys.modules['django.http'] = MagicMock(JsonResponse=JsonResponse)
+    sys.modules['quickscale.project_templates.stripe.views'] = MagicMock(webhook_endpoint=webhook_endpoint)
+    sys.modules['quickscale.project_templates.stripe.stripe_manager'] = MagicMock(
+        StripeManager=StripeManager,
+        get_stripe_manager=get_stripe_manager
+    )
+
+
+def _cleanup_test_modules():
+    """Clean up test-specific module mocks."""
+    global _test_specific_modules
+    for module, original in _test_specific_modules.items():
+        if original is None:
+            sys.modules.pop(module, None)
+        else:
+            sys.modules[module] = original
 
 
 @contextmanager
@@ -201,6 +224,12 @@ def stripe_test_mode():
 
 class TestStripeRealAPI(unittest.TestCase):
     """Test the StripeManager with real Stripe API in test mode."""
+
+    @classmethod
+    def setUpClass(cls):
+        """Set up class-level resources."""
+        # Set up test-specific module mocks
+        _setup_test_modules()
 
     def setUp(self):
         """Set up test environment."""
@@ -229,6 +258,8 @@ class TestStripeRealAPI(unittest.TestCase):
         """Clean up class-level resources."""
         # Clean up module mocks after all tests in this class
         _cleanup_module_mocks()
+        # Clean up test-specific module mocks
+        _cleanup_test_modules()
 
     def test_stripe_manager_initialization(self):
         """Test StripeManager initializes correctly with test API key."""
@@ -237,184 +268,190 @@ class TestStripeRealAPI(unittest.TestCase):
             self.assertFalse(manager.is_mock_mode, "StripeManager should not be in mock mode with valid API key")
             self.assertEqual(manager.stripe.api_key, 'sk_test_51ExampleTestKeyDummyValue')
 
-    @patch('stripe.Customer.create')
-    def test_create_customer_calls_real_api(self, mock_create):
+    def test_create_customer_calls_real_api(self):
         """Test that create_customer calls the real Stripe API."""
-        # Set up mock return value
-        mock_create.return_value = {
-            'id': 'cus_test_real_123',
-            'email': 'test@example.com',
-            'name': 'Test User'
-        }
-        
-        with stripe_test_mode():
-            customer = self.manager.create_customer(
-                email='test@example.com',
-                name='Test User',
-                metadata={'test_key': 'test_value'}
-            )
+        # Mock the stripe module's Customer.create method directly
+        with patch.object(self.manager._stripe.Customer, 'create') as mock_create:
+            # Set up mock return value
+            mock_create.return_value = {
+                'id': 'cus_test_real_123',
+                'email': 'test@example.com',
+                'name': 'Test User'
+            }
             
-            # Verify the API was called with correct parameters
-            mock_create.assert_called_once()
-            call_kwargs = mock_create.call_args.kwargs
-            self.assertEqual(call_kwargs['email'], 'test@example.com')
-            self.assertEqual(call_kwargs['name'], 'Test User')
-            self.assertEqual(call_kwargs['metadata'], {'test_key': 'test_value'})
-            
-            # Verify the returned customer matches what we expect
-            self.assertEqual(customer['id'], 'cus_test_real_123')
-            self.assertEqual(customer['email'], 'test@example.com')
-            self.assertEqual(customer['name'], 'Test User')
+            with stripe_test_mode():
+                customer = self.manager.create_customer(
+                    email='test@example.com',
+                    name='Test User',
+                    metadata={'test_key': 'test_value'}
+                )
+                
+                # Verify the API was called with correct parameters
+                mock_create.assert_called_once()
+                call_kwargs = mock_create.call_args.kwargs
+                self.assertEqual(call_kwargs['email'], 'test@example.com')
+                self.assertEqual(call_kwargs['name'], 'Test User')
+                self.assertEqual(call_kwargs['metadata'], {'test_key': 'test_value'})
+                
+                # Verify the returned customer matches what we expect
+                self.assertEqual(customer['id'], 'cus_test_real_123')
+                self.assertEqual(customer['email'], 'test@example.com')
+                self.assertEqual(customer['name'], 'Test User')
 
-    @patch('stripe.Product.create')
-    def test_create_product_calls_real_api(self, mock_create):
+    def test_create_product_calls_real_api(self):
         """Test that create_product calls the real Stripe API."""
-        # Set up mock return value
-        mock_create.return_value = {
-            'id': 'prod_test_real_123',
-            'name': 'Test Product',
-            'description': 'A test product',
-            'active': True
-        }
-        
-        with stripe_test_mode():
-            product = self.manager.create_product(
-                name='Test Product',
-                description='A test product',
-                metadata={'test_key': 'test_value'}
-            )
+        # Mock the stripe module's Product.create method directly
+        with patch.object(self.manager._stripe.Product, 'create') as mock_create:
+            # Set up mock return value
+            mock_create.return_value = {
+                'id': 'prod_test_real_123',
+                'name': 'Test Product',
+                'description': 'A test product',
+                'active': True
+            }
             
-            # Verify the API was called with correct parameters
-            mock_create.assert_called_once()
-            call_kwargs = mock_create.call_args.kwargs
-            self.assertEqual(call_kwargs['name'], 'Test Product')
-            self.assertEqual(call_kwargs['description'], 'A test product')
-            self.assertEqual(call_kwargs['metadata'], {'test_key': 'test_value'})
-            
-            # Verify the returned product matches what we expect
-            self.assertEqual(product['id'], 'prod_test_real_123')
-            self.assertEqual(product['name'], 'Test Product')
-            self.assertEqual(product['description'], 'A test product')
-            self.assertTrue(product['active'])
+            with stripe_test_mode():
+                product = self.manager.create_product(
+                    name='Test Product',
+                    description='A test product',
+                    metadata={'test_key': 'test_value'}
+                )
+                
+                # Verify the API was called with correct parameters
+                mock_create.assert_called_once()
+                call_kwargs = mock_create.call_args.kwargs
+                self.assertEqual(call_kwargs['name'], 'Test Product')
+                self.assertEqual(call_kwargs['description'], 'A test product')
+                self.assertEqual(call_kwargs['metadata'], {'test_key': 'test_value'})
+                
+                # Verify the returned product matches what we expect
+                self.assertEqual(product['id'], 'prod_test_real_123')
+                self.assertEqual(product['name'], 'Test Product')
+                self.assertEqual(product['description'], 'A test product')
+                self.assertTrue(product['active'])
 
-    @patch('stripe.Price.create')
-    def test_create_price_calls_real_api(self, mock_create):
+    def test_create_price_calls_real_api(self):
         """Test that create_price calls the real Stripe API."""
-        # Set up mock return value
-        mock_create.return_value = {
-            'id': 'price_test_real_123',
-            'product': 'prod_test_real_123',
-            'unit_amount': 1000,
-            'currency': 'usd',
-            'active': True
-        }
-        
-        with stripe_test_mode():
-            price = self.manager.create_price(
-                product_id='prod_test_real_123',
-                unit_amount=1000,
-                currency='usd',
-                metadata={'test_key': 'test_value'}
-            )
+        # Mock the stripe module's Price.create method directly
+        with patch.object(self.manager._stripe.Price, 'create') as mock_create:
+            # Set up mock return value
+            mock_create.return_value = {
+                'id': 'price_test_real_123',
+                'product': 'prod_test_real_123',
+                'unit_amount': 1000,
+                'currency': 'usd',
+                'active': True
+            }
             
-            # Verify the API was called with correct parameters
-            mock_create.assert_called_once()
-            call_kwargs = mock_create.call_args.kwargs
-            self.assertEqual(call_kwargs['product'], 'prod_test_real_123')
-            self.assertEqual(call_kwargs['unit_amount'], 1000)
-            self.assertEqual(call_kwargs['currency'], 'usd')
-            self.assertEqual(call_kwargs['metadata'], {'test_key': 'test_value'})
-            
-            # Verify the returned price matches what we expect
-            self.assertEqual(price['id'], 'price_test_real_123')
-            self.assertEqual(price['product'], 'prod_test_real_123')
-            self.assertEqual(price['unit_amount'], 1000)
-            self.assertEqual(price['currency'], 'usd')
-            self.assertTrue(price['active'])
+            with stripe_test_mode():
+                price = self.manager.create_price(
+                    product_id='prod_test_real_123',
+                    unit_amount=1000,
+                    currency='usd',
+                    metadata={'test_key': 'test_value'}
+                )
+                
+                # Verify the API was called with correct parameters
+                mock_create.assert_called_once()
+                call_kwargs = mock_create.call_args.kwargs
+                self.assertEqual(call_kwargs['product'], 'prod_test_real_123')
+                self.assertEqual(call_kwargs['unit_amount'], 1000)
+                self.assertEqual(call_kwargs['currency'], 'usd')
+                self.assertEqual(call_kwargs['metadata'], {'test_key': 'test_value'})
+                
+                # Verify the returned price matches what we expect
+                self.assertEqual(price['id'], 'price_test_real_123')
+                self.assertEqual(price['product'], 'prod_test_real_123')
+                self.assertEqual(price['unit_amount'], 1000)
+                self.assertEqual(price['currency'], 'usd')
+                self.assertTrue(price['active'])
 
-    @patch('stripe.Product.retrieve')
-    def test_retrieve_product_calls_real_api(self, mock_retrieve):
+    def test_retrieve_product_calls_real_api(self):
         """Test that retrieve_product calls the real Stripe API."""
-        # Set up mock return value
-        mock_retrieve.return_value = {
-            'id': 'prod_test_real_123',
-            'name': 'Test Product',
-            'description': 'A test product',
-            'active': True
-        }
-        
-        with stripe_test_mode():
-            product = self.manager.retrieve_product('prod_test_real_123')
+        # Mock the stripe module's Product.retrieve method directly
+        with patch.object(self.manager._stripe.Product, 'retrieve') as mock_retrieve:
+            # Set up mock return value
+            mock_retrieve.return_value = {
+                'id': 'prod_test_real_123',
+                'name': 'Test Product',
+                'description': 'A test product',
+                'active': True
+            }
             
-            # Verify the API was called with correct parameters
-            mock_retrieve.assert_called_once_with('prod_test_real_123')
-            
-            # Verify the returned product matches what we expect
-            self.assertEqual(product['id'], 'prod_test_real_123')
-            self.assertEqual(product['name'], 'Test Product')
-            self.assertEqual(product['description'], 'A test product')
-            self.assertTrue(product['active'])
+            with stripe_test_mode():
+                product = self.manager.retrieve_product('prod_test_real_123')
+                
+                # Verify the API was called with correct parameters
+                mock_retrieve.assert_called_once_with('prod_test_real_123')
+                
+                # Verify the returned product matches what we expect
+                self.assertEqual(product['id'], 'prod_test_real_123')
+                self.assertEqual(product['name'], 'Test Product')
+                self.assertEqual(product['description'], 'A test product')
+                self.assertTrue(product['active'])
 
-    @patch('stripe.Product.list')
-    def test_list_products_calls_real_api(self, mock_list):
+    def test_list_products_calls_real_api(self):
         """Test that list_products calls the real Stripe API."""
-        # Set up mock return value
-        mock_list.return_value = {
-            'data': [
-                {
-                    'id': 'prod_test_real_123',
-                    'name': 'Test Product 1',
-                    'active': True
-                },
-                {
-                    'id': 'prod_test_real_456',
-                    'name': 'Test Product 2',
-                    'active': True
-                }
-            ]
-        }
-        
-        with stripe_test_mode():
-            products = self.manager.list_products()
+        # Mock the stripe module's Product.list method directly
+        with patch.object(self.manager._stripe.Product, 'list') as mock_list:
+            # Set up mock return value
+            mock_list.return_value = {
+                'data': [
+                    {
+                        'id': 'prod_test_real_123',
+                        'name': 'Test Product 1',
+                        'active': True
+                    },
+                    {
+                        'id': 'prod_test_real_456',
+                        'name': 'Test Product 2',
+                        'active': True
+                    }
+                ]
+            }
             
-            # Verify the API was called with correct parameters
-            mock_list.assert_called_once_with(active=True)
-            
-            # Verify the returned products match what we expect
-            self.assertEqual(len(products), 2)
-            self.assertEqual(products[0]['id'], 'prod_test_real_123')
-            self.assertEqual(products[0]['name'], 'Test Product 1')
-            self.assertEqual(products[1]['id'], 'prod_test_real_456')
-            self.assertEqual(products[1]['name'], 'Test Product 2')
+            with stripe_test_mode():
+                products = self.manager.list_products()
+                
+                # Verify the API was called with correct parameters
+                mock_list.assert_called_once_with(active=True)
+                
+                # Verify the returned products match what we expect
+                self.assertEqual(len(products), 2)
+                self.assertEqual(products[0]['id'], 'prod_test_real_123')
+                self.assertEqual(products[0]['name'], 'Test Product 1')
+                self.assertEqual(products[1]['id'], 'prod_test_real_456')
+                self.assertEqual(products[1]['name'], 'Test Product 2')
 
-    @patch('stripe.Webhook.construct_event')
-    def test_webhook_handling(self, mock_construct_event):
+    def test_webhook_handling(self):
         """Test that webhook handling uses the real Stripe API."""
-        # Create a mock request
-        class MockRequest:
-            method = 'POST'
-            body = b'{"type": "product.created", "data": {"object": {"id": "prod_123"}}}'
-            META = {'HTTP_STRIPE_SIGNATURE': 'test_signature'}
-        
-        # Set up mock return value for construct_event
-        mock_construct_event.return_value = {
-            'type': 'product.created',
-            'data': {'object': {'id': 'prod_123'}}
-        }
-        
-        with stripe_test_mode():
-            request = MockRequest()
-            response = webhook_endpoint(request)
+        # Mock the stripe module's Webhook.construct_event method directly
+        with patch.object(self.manager._stripe.Webhook, 'construct_event') as mock_construct_event:
+            # Create a mock request
+            class MockRequest:
+                method = 'POST'
+                body = b'{"type": "product.created", "data": {"object": {"id": "prod_123"}}}'
+                META = {'HTTP_STRIPE_SIGNATURE': 'test_signature'}
             
-            # Verify the API was called with correct parameters
-            mock_construct_event.assert_called_once_with(
-                request.body, 
-                request.META['HTTP_STRIPE_SIGNATURE'], 
-                'whsec_test'
-            )
+            # Set up mock return value for construct_event
+            mock_construct_event.return_value = {
+                'type': 'product.created',
+                'data': {'object': {'id': 'prod_123'}}
+            }
             
-            # Verify the response is successful
-            self.assertEqual(response.status_code, 200)
+            with stripe_test_mode():
+                request = MockRequest()
+                response = webhook_endpoint(request)
+                
+                # Verify the API was called with correct parameters
+                mock_construct_event.assert_called_once_with(
+                    request.body, 
+                    request.META['HTTP_STRIPE_SIGNATURE'], 
+                    'whsec_test'
+                )
+                
+                # Verify the response is successful
+                self.assertEqual(response.status_code, 200)
 
 
 # Add pytest fixture for cleanup

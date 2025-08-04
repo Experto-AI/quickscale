@@ -2,7 +2,15 @@
 
 This document guides the quality control stage of programming, where you ensure changes comply with project standards and quality requirements.
 
-**📋 Usage Note:** This file contains complete quality control guidance with embedded references to shared principles. You only need to attach `CONTRIBUTING.md` and `QUALITY.md` - all shared guidelines are referenced within this document.
+**📋 Usage Note:** This file contains ### Testing Quality
+- [ ] NO global mocking contamination - verified via testing standards
+- [ ] Test isolation verified - tests pass individually AND as suite
+- [ ] Implementation was written before tests
+- [ ] Tests focus on behavior, not implementation details
+- [ ] External dependencies are properly mocked
+- [ ] All important code paths are covered
+- [ ] Edge cases and error conditions are tested
+- [ ] Tests are well-organized and logically structuredlity control guidance with embedded references to shared principles. You only need to attach `CONTRIBUTING.md` and `QUALITY.md` - all shared guidelines are referenced within this document.
 
 ## Quality Control Principles
 
@@ -78,6 +86,21 @@ Reference: [Code Principles - Explicit Failure](shared/code_principles.md#explic
 - Ensure error messages are clear and actionable
 
 ## Testing Quality Assurance
+
+### Verify Test Contamination Prevention
+Reference: [Testing Standards](shared/testing_standards.md)
+
+**CRITICAL: Check for Global Mocking Contamination**
+- ❌ **REJECT:** Any test using global `sys.modules` mocking without proper cleanup
+- ❌ **REJECT:** Any test modifying global state without restoration
+- ❌ **REJECT:** Any test with shared mutable data between test methods
+- ✅ **REQUIRE:** Proper `tearDownClass` for any global module modifications
+
+**Test Isolation Verification:**
+- Run each test individually - must pass
+- Run all tests as suite - must pass
+- No side effects between tests
+- No dependency on test execution order
 
 ### Verify Implementation-First Testing Approach
 Reference: [Testing Standards](shared/testing_standards.md)
@@ -202,6 +225,11 @@ Before considering implementation complete, verify:
 - [ ] No silent fallbacks exist
 
 ### Testing Quality
+- [ ] NO global mocking contamination - all `sys.modules` modifications have proper cleanup
+- [ ] Test isolation verified - tests pass individually AND as suite
+- [ ] No shared mutable state between tests
+- [ ] Environment restoration - all global state properly restored
+- [ ] Proper cleanup patterns - tearDown/tearDownClass implemented where needed
 - [ ] Implementation was written before tests
 - [ ] Tests focus on behavior, not implementation details
 - [ ] External dependencies are properly mocked

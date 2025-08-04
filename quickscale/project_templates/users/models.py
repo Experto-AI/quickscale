@@ -141,28 +141,58 @@ class AccountLockout(models.Model):
         """Increment failed login attempts and trigger account lockout when threshold is exceeded."""
         from django.conf import settings
         from .security_logger import log_account_lockout
+        import logging
         
-        self.failed_attempts += 1
-        self.last_failed_attempt = timezone.now()
+        logger = logging.getLogger(__name__)
         
-        # Get lockout settings from Django settings
-        max_attempts = getattr(settings, 'ACCOUNT_LOCKOUT_MAX_ATTEMPTS', 5)
-        lockout_duration = getattr(settings, 'ACCOUNT_LOCKOUT_DURATION', 300)  # 5 minutes
-        
-        if self.failed_attempts >= max_attempts:
-            self.is_locked = True
-            self.locked_until = timezone.now() + timedelta(seconds=lockout_duration)
+        try:
+            self.failed_attempts += 1
+            self.last_failed_attempt = timezone.now()
             
-            # Log lockout event
-            log_account_lockout(
-                user_email=self.user.email,
-                request=request,
-                lockout_duration=lockout_duration,
-                failed_attempts=self.failed_attempts
-            )
-        
-        self.save()
-        return self.is_locked
+            # Get lockout settings from Django settings
+            max_attempts = getattr(settings, 'ACCOUNT_LOCKOUT_MAX_ATTEMPTS', 5)
+            lockout_duration = getattr(settings, 'ACCOUNT_LOCKOUT_DURATION', 300)  # 5 minutes
+            
+            # Check if lockout should be triggered
+            # Only lock if max_attempts > 0 (boundary condition for zero attempts)
+            if max_attempts > 0 and self.failed_attempts >= max_attempts:
+                self.is_locked = True
+                
+                # Handle zero lockout duration (boundary condition)
+                if lockout_duration > 0:
+                    self.locked_until = timezone.now() + timedelta(seconds=lockout_duration)
+                    
+                    # Try to log lockout event, but don't let logging errors prevent lockout
+                    try:
+                        log_account_lockout(
+                            user_email=self.user.email,
+                            request=request,
+                            lockout_duration=lockout_duration,
+                            failed_attempts=self.failed_attempts
+                        )
+                    except Exception as e:
+                        # Log the error but don't prevent lockout from working
+                        logger.error(f"Failed to log account lockout event: {e}")
+                else:
+                    # Zero duration means immediate unlock
+                    self.locked_until = timezone.now()
+            
+            self.save()
+            return self.is_locked
+            
+        except Exception as e:
+            # Handle any unexpected errors (like timezone errors)
+            logger.error(f"Error in increment_failed_attempts: {e}")
+            # Re-raise to maintain existing behavior for critical errors
+            raise
+    
+    def record_failed_attempt(self, request=None):
+        """Alias for increment_failed_attempts to support test compatibility."""
+        return self.increment_failed_attempts(request)
+    
+    def reset_lockout(self):
+        """Alias for reset_failed_attempts to support test compatibility."""
+        return self.reset_failed_attempts()
     
     def check_lockout_expired(self):
         """Check if account lockout period has expired and automatically unlock the account."""

@@ -89,7 +89,7 @@ class TestRequiredVarsValidation(unittest.TestCase):
             except ValueError as e:
                 self.fail(f"validate_required_vars should not raise error for empty component: {e}")
     
-    def test_required_vars_structure(self):
+    def test_required_vars_structure_and_completeness(self):
         """Test that REQUIRED_VARS contains all expected components and variables."""
         # Test that it's a dictionary
         self.assertIsInstance(REQUIRED_VARS, dict)
@@ -99,14 +99,6 @@ class TestRequiredVarsValidation(unittest.TestCase):
         for component in expected_components:
             self.assertIn(component, REQUIRED_VARS)
             self.assertIsInstance(REQUIRED_VARS[component], list)
-    
-    def test_required_vars_completeness(self):
-        """Test that REQUIRED_VARS contains all expected components and variables."""
-        # Check for expected components
-        self.assertIn('web', REQUIRED_VARS)
-        self.assertIn('db', REQUIRED_VARS)
-        self.assertIn('email', REQUIRED_VARS)
-        self.assertIn('stripe', REQUIRED_VARS)
         
         # Check for expected variables in each component
         self.assertIn('WEB_PORT', REQUIRED_VARS['web'])

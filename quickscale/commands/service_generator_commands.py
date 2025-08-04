@@ -21,7 +21,11 @@ class ServiceGeneratorCommand(Command):
         
         # Validate service name
         if not self._validate_service_name(service_name):
-            raise ValueError(f"Invalid service name: {service_name}")
+            return {
+                "success": False,
+                "error": f"Invalid service name: {service_name}",
+                "message": "Service name must be a valid Python identifier using snake_case (e.g., text_analyzer, sentiment_processor)"
+            }
         
         # Generate description if not provided
         if not description:
@@ -63,21 +67,25 @@ class ServiceGeneratorCommand(Command):
         # Render template
         rendered_content = render_template(template_content, variables)
         
-        # Write service file
-        with open(service_file_path, 'w', encoding='utf-8') as f:
-            f.write(rendered_content)
-        
-        MessageManager.success(f"Service template generated: {service_file_path}")
-        
-        # Generate usage example
-        example_file_path = target_dir / f"{service_name}_example.py"
-        example_content = self._get_usage_example_template()
-        rendered_example = render_template(example_content, variables)
-        
-        with open(example_file_path, 'w', encoding='utf-8') as f:
-            f.write(rendered_example)
-        
-        MessageManager.success(f"Usage example generated: {example_file_path}")
+        try:
+            # Write service file
+            with open(service_file_path, 'w', encoding='utf-8') as f:
+                f.write(rendered_content)
+            
+            MessageManager.success(f"Service template generated: {service_file_path}")
+            
+            # Generate usage example
+            example_file_path = target_dir / f"{service_name}_example.py"
+            example_content = self._get_usage_example_template()
+            rendered_example = render_template(example_content, variables)
+            
+            with open(example_file_path, 'w', encoding='utf-8') as f:
+                f.write(rendered_example)
+            
+            MessageManager.success(f"Usage example generated: {example_file_path}")
+            
+        except (PermissionError, OSError) as e:
+            return {"success": False, "error": str(e)}
         
         result = {
             "success": True,
@@ -135,11 +143,21 @@ class ServiceGeneratorCommand(Command):
     
     def _validate_service_name(self, service_name: str) -> bool:
         """Validate service name follows Python naming conventions."""
+        import keyword
+        
         if not service_name:
             return False
         
         # Must be valid Python identifier
         if not service_name.isidentifier():
+            return False
+        
+        # Should not be a Python keyword
+        if keyword.iskeyword(service_name):
+            return False
+        
+        # Should not start with underscore (reserved for special methods/private)
+        if service_name.startswith('_'):
             return False
         
         # Should not start with uppercase (by convention)
@@ -474,7 +492,7 @@ class ValidateServiceCommand(Command):
         if show_tips:
             ServiceDevelopmentHelper.display_development_tips()
             MessageManager.info("")
-        
+
         service_file_path: Optional[Path] = None
 
         if not name_or_path:
@@ -492,13 +510,24 @@ class ValidateServiceCommand(Command):
             service_file_path = Path.cwd() / "services" / f"{name_or_path}_service.py"
 
         if not service_file_path or not service_file_path.exists():
-            raise CommandError(f"Service file not found at: {service_file_path}\n\nSuggestion: Ensure the service name is correct or provide the full path to the service file.")
+            return {
+                "valid": False,
+                "validation_completed": True,
+                "error": f"Service file not found at: {service_file_path}"
+            }
 
-        validate_service_file(str(service_file_path))
-        
-        return {"validation_completed": True}
-
-
+        try:
+            validate_service_file(str(service_file_path))
+            return {
+                "valid": True,
+                "validation_completed": True
+            }
+        except CommandError:
+            return {
+                "valid": False,
+                "validation_completed": True,
+                "error": "Service validation failed due to structural issues"
+            }
 class ServiceExamplesCommand(Command):
     """Command to show available service examples."""
     
@@ -528,4 +557,9 @@ class ServiceExamplesCommand(Command):
             return {"examples": filtered_examples, "count": len(filtered_examples)}
         else:
             show_service_examples()
-            return {"examples_displayed": True} 
+            examples = ServiceDevelopmentHelper.get_service_examples()
+            return {
+                "examples_displayed": True,
+                "examples": examples,
+                "count": len(examples)
+            } 

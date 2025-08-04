@@ -13,7 +13,8 @@ from typing import List, Optional, Tuple, Dict, Any, NoReturn
 from quickscale.utils.timeout_constants import POSTGRES_CONNECTION_TIMEOUT
 
 # Determine the correct docker compose command
-DOCKER_COMPOSE_COMMAND = "docker compose" if shutil.which("docker-compose") is None else "docker-compose"
+_docker_compose_cmd = "docker compose" if shutil.which("docker-compose") is None else "docker-compose"
+DOCKER_COMPOSE_COMMAND = _docker_compose_cmd.split()
 
 def get_current_uid_gid() -> Tuple[int, int]:
     """Get current user and group IDs for container permissions."""
@@ -30,7 +31,10 @@ def is_binary_file(file_path: Path) -> bool:
     try:
         with open(file_path, 'rb') as file:
             chunk = file.read(chunk_size)
-            return b'\0' in chunk or not chunk.decode('utf-8')
+            # Empty files are text files, not binary
+            if not chunk:
+                return False
+            return b'\0' in chunk
     except (UnicodeDecodeError, IOError):
         return True
 
@@ -123,7 +127,7 @@ def wait_for_postgres(
             db_name = os.environ.get('DB_NAME', 'quickscale')
             
             result = subprocess.run(
-                [DOCKER_COMPOSE_COMMAND, "exec", "-e", f"PGUSER={pg_user}", "db", "pg_isready", "-U", pg_user, "-d", db_name],
+                DOCKER_COMPOSE_COMMAND + ["exec", "-e", f"PGUSER={pg_user}", "db", "pg_isready", "-U", pg_user, "-d", db_name],
                 check=False,
                 capture_output=True,
                 text=True,
@@ -136,9 +140,11 @@ def wait_for_postgres(
         except (subprocess.SubprocessError, subprocess.TimeoutExpired) as e:
             logger.debug(f"PostgreSQL check failed: {e}")
         
-        sleep_time = min(delay * (2 ** (attempt - 1)), 5)  # Cap max sleep at 5 seconds
-        logger.info(f"Attempt {attempt}/{max_attempts}, waiting {sleep_time}s...")
-        time.sleep(sleep_time)
+        # Only sleep if this is not the last attempt
+        if attempt < max_attempts:
+            sleep_time = min(delay * (2 ** (attempt - 1)), 5)  # Cap max sleep at 5 seconds
+            logger.info(f"Attempt {attempt}/{max_attempts}, waiting {sleep_time}s...")
+            time.sleep(sleep_time)
     
     logger.error("PostgreSQL failed to start")
     return False
@@ -170,7 +176,7 @@ def fix_permissions(
     
     try:
         subprocess.run(
-            [DOCKER_COMPOSE_COMMAND, "run", "--rm", "--user", pg_user, "web",
+            DOCKER_COMPOSE_COMMAND + ["run", "--rm", "--user", pg_user, "web",
              "chown", "-R", f"{uid}:{gid}", f"/app/{directory}"],
             check=True,
             capture_output=True,

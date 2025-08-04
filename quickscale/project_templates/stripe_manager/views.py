@@ -83,6 +83,10 @@ def webhook(request: HttpRequest) -> HttpResponse:
     if not sig_header:
         return JsonResponse({'error': 'No Stripe signature header'}, status=400)
     
+    # Get fresh instance of StripeManager
+    from stripe_manager.stripe_manager import StripeManager
+    stripe_manager = StripeManager.get_instance()
+    
     try:
         # Verify and construct the event
         event = stripe_manager.client.webhooks.construct_event(
@@ -431,17 +435,17 @@ def _handle_subscription_event(subscription_data, event_action):
         
         if subscription_data.get('current_period_start'):
             current_period_start = timezone.datetime.fromtimestamp(
-                subscription_data['current_period_start'], tz=timezone.utc
+                subscription_data['current_period_start'], tz=timezone.UTC
             )
         
         if subscription_data.get('current_period_end'):
             current_period_end = timezone.datetime.fromtimestamp(
-                subscription_data['current_period_end'], tz=timezone.utc
+                subscription_data['current_period_end'], tz=timezone.UTC
             )
         
         if subscription_data.get('canceled_at'):
             canceled_at = timezone.datetime.fromtimestamp(
-                subscription_data['canceled_at'], tz=timezone.utc
+                subscription_data['canceled_at'], tz=timezone.UTC
             )
         
         # Get product ID from subscription items

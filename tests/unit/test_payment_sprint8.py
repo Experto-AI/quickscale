@@ -326,7 +326,7 @@ class Sprint8PaymentModelTests(unittest.TestCase):
             self.assertIn(element, views_content,
                          f"Filtering element '{element}' not found in views")
 
-    def test_pagination_implementation(self):
+    def test_payment_pagination_implementation(self):
         """Test that pagination is properly implemented."""
         with open(self.admin_dashboard_views, 'r') as f:
             views_content = f.read()

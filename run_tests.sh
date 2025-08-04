@@ -233,50 +233,43 @@ cleanup_test_containers() {
 
 # Parse arguments
 COVERAGE=0
-PARALLEL=0
 INTEGRATION=1
 UNIT=1
-SKIP_DOCKER_CHECK=0
-SKIP_CLEANUP=0
 RUN_UNIT=0
 RUN_INTEGRATION=0
 RUN_E2E=0
+RUN_DJANGO_COMPONENTS=0
 QUIET=0
 VERBOSE=0
-FORCE_CLEAN=0
-RETRY_E2E=0
 EXITFIRST=0
-MEMORY_LIMIT="4G"
+FAILURES_ONLY=0
 
 print_usage() {
     echo "Usage: $0 [options]"
     echo "Options:"
     echo "  -c, --coverage     Run tests with coverage report"
-    echo "  -p, --parallel     Run tests in parallel using pytest-xdist"
     echo "  -u, --unit         Run only unit tests (fast, no external dependencies)"
     echo "  -i, --integration  Run only integration tests (medium speed, some external dependencies)"
     echo "  -e, --e2e          Run only end-to-end tests (slow, full system tests with Docker)"
-    echo "  -s, --skip-docker  Skip Docker availability check"
-    echo "  -n, --no-cleanup   Skip Docker container cleanup"
-    echo "  -f, --force-clean  Force Docker resource cleanup before running tests"
-    echo "  -r, --retry        Retry e2e tests once if they fail"
-    echo "  -m, --memory LIMIT Set Docker memory limit (default: 4G)"
+    echo "  -d, --django       Run only Django component tests (models, views, utils)"
     echo "  -q, --quiet        Run tests in quiet mode (less verbose output)"
     echo "  -v, --verbose      Run tests in verbose mode (more detailed output)"
     echo "  -x, --exitfirst    Exit on first test failure"
+    echo "  -f, --failures-only    Show only failed tests and warnings (LLM-optimized: suppresses passed tests for minimal context pollution)"
     echo "  -h, --help         Show this help message"
     echo ""
     echo "Examples:"
     echo "  $0 -u              # Run only unit tests"
     echo "  $0 -e              # Run only end-to-end tests"
+    echo "  $0 -d              # Run only Django component tests"
     echo "  $0 -u -i           # Run both unit and integration tests"
     echo "  $0 -u -i -e        # Run all tests (unit, integration, and end-to-end)"
-    echo "  $0 -c -p           # Run all tests with coverage in parallel"
-    echo "  $0 -e -r           # Run e2e tests with retry on failure"
-    echo "  $0 -e -f           # Run e2e tests with forced Docker cleanup"
+    echo "  $0 -u -i -d        # Run unit, integration and Django component tests"
+    echo "  $0 -c              # Run all tests with coverage"
     echo "  $0 -q              # Run tests in quiet mode"
     echo "  $0 -v              # Run tests in verbose mode"
     echo "  $0 -x              # Stop on first test failure"
+    echo "  $0 --failures-only # Show only failed tests and warnings (LLM-optimized output)"
     exit 1
 }
 
@@ -284,10 +277,6 @@ while [[ $# -gt 0 ]]; do
     case "$1" in
         -c|--coverage)
             COVERAGE=1
-            shift
-            ;;
-        -p|--parallel)
-            PARALLEL=1
             shift
             ;;
         -u|--unit)
@@ -302,25 +291,9 @@ while [[ $# -gt 0 ]]; do
             RUN_E2E=1
             shift
             ;;
-        -s|--skip-docker)
-            SKIP_DOCKER_CHECK=1
+        -d|--django)
+            RUN_DJANGO_COMPONENTS=1
             shift
-            ;;
-        -n|--no-cleanup)
-            SKIP_CLEANUP=1
-            shift
-            ;;
-        -f|--force-clean)
-            FORCE_CLEAN=1
-            shift
-            ;;
-        -r|--retry)
-            RETRY_E2E=1
-            shift
-            ;;
-        -m|--memory)
-            MEMORY_LIMIT="$2"
-            shift 2
             ;;
         -q|--quiet)
             QUIET=1
@@ -334,6 +307,10 @@ while [[ $# -gt 0 ]]; do
             EXITFIRST=1
             shift
             ;;
+        -f|--failures-only)
+            FAILURES_ONLY=1
+            shift
+            ;;
         -h|--help)
             print_usage
             ;;
@@ -344,37 +321,20 @@ while [[ $# -gt 0 ]]; do
     esac
 done
 
-# Run Docker check if not skipped and we're running integration or E2E tests
-if [[ $SKIP_DOCKER_CHECK -eq 0 && ( $RUN_INTEGRATION -eq 1 || $RUN_E2E -eq 1 || $SELECTED_TESTS -eq 0 ) ]]; then
-    if ! check_docker; then
-        echo ""
-        echo -e "\033[33mWARNING: Docker check failed but continuing with tests.\033[0m"
-        echo -e "\033[33mAdd --skip-docker flag to suppress this check.\033[0m"
-        echo ""
-        # Give the user a chance to abort
-        if [[ $QUIET -eq 0 ]]; then
-            read -p "Press Enter to continue with tests, or Ctrl+C to abort..." 
-        fi
-    fi
-fi
-
 # Add test selection paths
 test_paths=()
 SELECTED_TESTS=0
-if [[ $RUN_UNIT -eq 1 || $RUN_INTEGRATION -eq 1 || $RUN_E2E -eq 1 ]]; then
+if [[ $RUN_UNIT -eq 1 || $RUN_INTEGRATION -eq 1 || $RUN_E2E -eq 1 || $RUN_DJANGO_COMPONENTS -eq 1 ]]; then
     SELECTED_TESTS=1
 fi
 
 # If running e2e tests, set specific env variables
-if [[ $RUN_E2E -eq 1 || ($SELECTED_TESTS -eq 0 && $RUN_INTEGRATION -eq 0 && $RUN_UNIT -eq 0) ]]; then
+if [[ $RUN_E2E -eq 1 || ($SELECTED_TESTS -eq 0 && $RUN_INTEGRATION -eq 0 && $RUN_UNIT -eq 0 && $RUN_DJANGO_COMPONENTS -eq 0) ]]; then
     if [[ $QUIET -eq 0 ]]; then
         echo "Setting up environment for E2E tests..."
     fi
     
-    # Set environment variables for Docker memory limits
-    export DOCKER_MEMORY_LIMIT=$MEMORY_LIMIT
-    export DOCKER_BUILD_MEMORY=$MEMORY_LIMIT
-    export DOCKER_OPTS="--memory=$MEMORY_LIMIT --memory-swap=$MEMORY_LIMIT"
+    # Set environment variables for E2E tests
     export PYTHONMALLOC=malloc
     export QUICKSCALE_TEST_BUILD=1
     export QUICKSCALE_SKIP_MIGRATIONS=1
@@ -384,21 +344,13 @@ if [[ $RUN_E2E -eq 1 || ($SELECTED_TESTS -eq 0 && $RUN_INTEGRATION -eq 0 && $RUN
     # Extend Docker timeouts for better test stability
     export DOCKER_CLIENT_TIMEOUT=180
     
-    # Use force cleanup if requested
-    if [[ $FORCE_CLEAN -eq 1 ]]; then
-        if [[ $QUIET -eq 0 ]]; then
-            echo "Performing forced Docker resource cleanup..."
-        fi
-        free_docker_resources
-    fi
-    
     if [[ $QUIET -eq 0 ]]; then
-        echo "E2E test environment configured with memory limit: $MEMORY_LIMIT"
+        echo "E2E test environment configured"
     fi
 fi
 
 # Clean up existing Docker containers if we're running integration or E2E tests
-if [[ $SKIP_CLEANUP -eq 0 && ( $RUN_INTEGRATION -eq 1 || $RUN_E2E -eq 1 || $SELECTED_TESTS -eq 0 ) ]]; then
+if [[ $RUN_INTEGRATION -eq 1 || $RUN_E2E -eq 1 || $SELECTED_TESTS -eq 0 ]]; then
     cleanup_test_containers
 fi
 
@@ -430,18 +382,36 @@ if [[ $COVERAGE -eq 1 ]]; then
     CMD="$CMD --cov=quickscale --cov-report=term --cov-report=html"
 fi
 
-# Add parallel option if requested
-if [[ $PARALLEL -eq 1 ]]; then
-    CMD="$CMD -n auto"
-fi
-
 # Add exitfirst option if requested
 if [[ $EXITFIRST -eq 1 ]]; then
     CMD="$CMD --exitfirst"
 fi
 
-# Add flag to show skipped tests with reasons
-CMD="$CMD -rsx"
+# Configure output based on flags
+if [[ $FAILURES_ONLY -eq 1 ]]; then
+    # LLM-optimized failures-only mode: show ONLY failures and warnings, suppress passed tests
+    # This minimizes context pollution for LLM analysis while preserving critical error information
+    if [[ $EXITFIRST -eq 1 ]]; then
+        # Single failure mode: stop on first failure for focused debugging, do not shows warnings
+        CMD="$CMD --tb=short -q --disable-warnings -o log_cli=false"
+        # Note: --exitfirst is already added above, no need to duplicate
+    else
+        # Multiple failures mode: show up to 5 failures for broader context and all warnings
+        CMD="$CMD --tb=short -q -o log_cli=false --maxfail=5"
+    fi
+    
+    # Add a note about LLM optimization
+    if [[ $QUIET -eq 0 ]]; then
+        if [[ $EXITFIRST -eq 1 ]]; then
+            echo "Failures-only mode: Stopping on first failure for focused LLM analysis."
+        else
+            echo "Failures-only mode: Showing up to 5 failures for LLM context efficiency. Combine with -x for single-failure mode."
+        fi
+    fi
+else
+    # Standard mode: show failed tests with moderate detail
+    CMD="$CMD -rf --tb=short"
+fi
 
 if [[ $SELECTED_TESTS -eq 1 ]]; then
     # User selected specific tests
@@ -454,69 +424,36 @@ if [[ $SELECTED_TESTS -eq 1 ]]; then
     if [[ $RUN_E2E -eq 1 ]]; then
         test_paths+=("tests/e2e/")
     fi
+    if [[ $RUN_DJANGO_COMPONENTS -eq 1 ]]; then
+        test_paths+=("tests/unit/django_components/" "tests/integration/django_apps/" "tests/e2e/django_workflows/")
+    fi
 else
-    # Default: run unit, integration, and e2e tests
+    # Default: run unit, integration, and e2e tests (template validation is optional)
     test_paths+=("tests/unit/" "tests/integration/" "tests/e2e/")
 fi
 
 CMD="$CMD ${test_paths[@]}"
 
-# Add pytest options to fix common issues
-CMD="$CMD --no-header --tb=native"
+# Add pytest options to fix common issues (unless in failures-only mode)
+if [[ $FAILURES_ONLY -eq 0 ]]; then
+    CMD="$CMD --no-header --tb=native"
+fi
 
 # Show the command
 if [[ $QUIET -eq 0 ]]; then
     echo "Running: $CMD"
 fi
 
-# Run the tests with special handling for E2E tests
+# Run the tests
 set +e  # Allow script to continue if tests fail
 
-if [[ $RUN_E2E -eq 1 && $RETRY_E2E -eq 1 && ($RUN_UNIT -eq 0 && $RUN_INTEGRATION -eq 0) ]]; then
-    # Special case: Running only E2E tests with retry option
-    if [[ $QUIET -eq 0 ]]; then
-        echo "Running E2E tests with retry option..."
-    fi
-    
-    # First attempt
-    $CMD
-    EXIT_CODE=$?
-    
-    # If failed, retry after cleanup
-    if [[ $EXIT_CODE -ne 0 ]]; then
-        if [[ $QUIET -eq 0 ]]; then
-            echo -e "\033[33mE2E tests failed with exit code $EXIT_CODE. Retrying after cleanup...\033[0m"
-            
-            # Check container health to help diagnose issues
-            echo "Checking container health before cleanup..."
-            verify_container_health
-        fi
-        
-        # Clean up Docker resources
-        cleanup_test_containers
-        free_docker_resources
-        
-        # Wait a moment for Docker to stabilize
-        sleep 5
-        
-        if [[ $QUIET -eq 0 ]]; then
-            echo "Running E2E tests (second attempt)..."
-        fi
-        
-        # Second attempt
-        $CMD
-        EXIT_CODE=$?
-    fi
-else
-    # Normal execution for other test types
-    $CMD
-    EXIT_CODE=$?
-    
-    # Check container health if e2e tests failed
-    if [[ $EXIT_CODE -ne 0 && ($RUN_E2E -eq 1 || $SELECTED_TESTS -eq 0) && $QUIET -eq 0 ]]; then
-        echo "Checking container health after test failure..."
-        verify_container_health
-    fi
+$CMD
+EXIT_CODE=$?
+
+# Check container health if e2e tests failed
+if [[ $EXIT_CODE -ne 0 && ($RUN_E2E -eq 1 || $SELECTED_TESTS -eq 0) && $QUIET -eq 0 ]]; then
+    echo "Checking container health after test failure..."
+    verify_container_health
 fi
 
 set -e
@@ -533,15 +470,12 @@ if [[ $EXIT_CODE -ne 0 && ($RUN_E2E -eq 1 || $SELECTED_TESTS -eq 0) ]]; then
     echo "   E2E Test Failure - Troubleshooting Tips"
     echo "===================================================================="
     echo " Try the following for more reliable tests:"
-    echo "  1. Run with forced cleanup:       $0 -e -f"
-    echo "  2. Run with retry option:         $0 -e -r"
-    echo "  3. Increase memory limit:         $0 -e -m 6G"
-    echo "  4. Manual Docker cleanup:         docker system prune -a"
-    echo "  5. Check Docker logs:             docker logs <container-id>"
-    echo "  6. Verify Docker health:          docker inspect <container-id> | grep Health"
-    echo "  7. Run only e2e tests:            $0 -e"
-    echo "  8. Run tests with more verbose output: $0 -e -v"
-    echo "  9. Stop on first failure:         $0 -e -x"
+    echo "  1. Manual Docker cleanup:         docker system prune -a"
+    echo "  2. Check Docker logs:             docker logs <container-id>"
+    echo "  3. Verify Docker health:          docker inspect <container-id> | grep Health"
+    echo "  4. Run only e2e tests:            $0 -e"
+    echo "  5. Run tests with more verbose output: $0 -e -v"
+    echo "  6. Stop on first failure:         $0 -e -x"
     echo "===================================================================="
     
     # Try to provide some diagnostic information

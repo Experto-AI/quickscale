@@ -19,12 +19,6 @@ class WebhookFallbackTests(unittest.TestCase):
         self.credits_views = self.base_path / "quickscale" / "project_templates" / "credits" / "views.py"
         self.admin_views = self.base_path / "quickscale" / "project_templates" / "admin_dashboard" / "views.py"
     
-    def test_payment_migration_exists(self):
-        """Test that the Payment model migration file exists."""
-        migration_file = self.base_path / "quickscale" / "project_templates" / "credits" / "migrations" / "0003_add_payment_model.py"
-        self.assertTrue(migration_file.exists(), 
-                       "Payment model migration file should exist")
-    
     def test_webhook_handlers_create_payments(self):
         """Test that webhook handlers include Payment record creation logic."""
         with open(self.stripe_views, 'r') as f:

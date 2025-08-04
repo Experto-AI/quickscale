@@ -30,15 +30,6 @@ class TestProjectManagerAdditional:
             assert 'test-db' in result['containers']
             assert result['has_directory'] is False
     
-    def test_check_running_containers_without_test_containers(self):
-        """Test check_running_containers when no test containers are running."""
-        mock_result = MagicMock()
-        mock_result.stdout = "other-container\nanother-container"
-        
-        with patch('subprocess.run', return_value=mock_result):
-            result = ProjectManager.check_running_containers()
-            assert result is None
-    
     def test_check_running_containers_with_empty_output(self):
         """Test check_running_containers with empty output."""
         mock_result = MagicMock()

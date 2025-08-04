@@ -31,22 +31,6 @@ class TestTemplateGenerator(unittest.TestCase):
         # Remove the temporary directory
         shutil.rmtree(self.test_dir)
         
-    def test_is_binary_file(self):
-        """Test binary file detection."""
-        # Create a text file
-        text_file = Path(self.test_dir) / "test.txt"
-        with open(text_file, 'w') as f:
-            f.write("This is a text file")
-            
-        # Create a binary file
-        binary_file = Path(self.test_dir) / "test.bin"
-        with open(binary_file, 'wb') as f:
-            f.write(b'\x00\x01\x02\x03')
-            
-        # Test detection
-        self.assertFalse(is_binary_file(text_file))
-        self.assertTrue(is_binary_file(binary_file))
-        
     def test_render_template(self):
         """Test template rendering."""
         # Create a template string

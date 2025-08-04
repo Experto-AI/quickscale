@@ -1,0 +1,60 @@
+<!-- API Key Management Section (Partial) -->
+<div x-data="{ 
+    showForm: false,
+    submitForm() {
+        // Let HTMX handle the form submission
+        // The store will close the form automatically after success
+    }
+}">
+    <div class="level">
+        <div class="level-left">
+            <div class="level-item">
+                <button class="button is-primary" @click="showForm = true">
+                    <span class="icon">
+                        <i class="fas fa-plus"></i>
+                    </span>
+                    <span>Generate New Key</span>
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Generate API Key Form (hidden by default) -->
+    <div x-show="showForm" x-transition class="box">
+        <h3 class="title is-5">Generate New API Key</h3>
+        <form hx-post="{% url 'users:generate_api_key' %}" hx-target="#api-keys-container" hx-swap="outerHTML" x-ref="generateForm">
+            {% csrf_token %}
+            <div class="field">
+                <label class="label">Key Name (Optional)</label>
+                <div class="control">
+                    <input class="input" type="text" name="name" placeholder="e.g., Production Server, Development, Mobile App">
+                </div>
+                <p class="help">Give your API key a descriptive name to help you identify it later.</p>
+            </div>
+            <div class="field is-grouped">
+                <div class="control">
+                    <button type="submit" class="button is-primary">Generate API Key</button>
+                </div>
+                <div class="control">
+                    <button type="button" class="button is-light" @click="showForm = false; $refs.generateForm.reset()">Cancel</button>
+                </div>
+            </div>
+        </form>
+    </div>
+</div>
+
+<div id="api-keys-container">
+    <!-- API Keys List -->
+    {% include "users/partials/api_keys_list.html" %}
+</div>
+
+<!-- Hidden forms for actions -->
+<form id="revoke-form" style="display: none;" hx-post="{% url 'users:revoke_api_key' %}" hx-target="#api-keys-container" hx-swap="outerHTML">
+    {% csrf_token %}
+    <input type="hidden" name="api_key_id" id="revoke-key-id">
+</form>
+
+<form id="regenerate-form" style="display: none;" hx-post="{% url 'users:regenerate_api_key' %}" hx-target="#api-keys-container" hx-swap="outerHTML">
+    {% csrf_token %}
+    <input type="hidden" name="api_key_id" id="regenerate-key-id">
+</form>

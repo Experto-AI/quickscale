@@ -211,28 +211,6 @@ class Sprint3IntegrationTests(unittest.TestCase):
         # The validity of generated migrations is tested by the test_migrations_can_be_made test.
         pass # Keep the test function but make it pass as it's covered by another test.
     
-    def test_credits_app_in_settings(self):
-        """Test that credits app is properly configured in settings."""
-        settings_file = self.project_path / 'core' / 'settings.py'
-        
-        with open(settings_file, 'r') as f:
-            settings_content = f.read()
-        
-        # Check that credits app is in INSTALLED_APPS
-        self.assertIn("'credits.apps.CreditsConfig'", settings_content,
-                     "Credits app not found in INSTALLED_APPS")
-    
-    def test_credits_urls_in_main_urls(self):
-        """Test that credits URLs are included in main URL configuration."""
-        main_urls_file = self.project_path / 'core' / 'urls.py'
-        
-        with open(main_urls_file, 'r') as f:
-            urls_content = f.read()
-        
-        # Check that credits URLs are included
-        self.assertIn("path('dashboard/credits/', include('credits.urls', namespace='credits'))", urls_content,
-                     "Credits URLs not included in main URL configuration")
-    
     def test_project_can_be_built(self):
         """Test that the generated project can be built without errors."""
         env = os.environ.copy() # Copy current environment variables

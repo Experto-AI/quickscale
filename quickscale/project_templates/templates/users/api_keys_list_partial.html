@@ -1,0 +1,89 @@
+{% if api_keys %}
+    <div class="table-container">
+        <table class="table is-fullwidth is-striped">
+            <thead>
+                <tr>
+                    <th>Name</th>
+                    <th>Key Prefix</th>
+                    <th>Status</th>
+                    <th>Created</th>
+                    <th>Last Used</th>
+                    <th>Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for api_key in api_keys %}
+                <tr>
+                    <td><strong>{{ api_key.name|default:"Unnamed Key" }}</strong></td>
+                    <td><code class="has-background-light">{{ api_key.prefix }}...****</code></td>
+                    <td>
+                        {% if api_key.is_active %}
+                            <span class="tag is-success">Active</span>
+                        {% else %}
+                            <span class="tag is-danger">Revoked</span>
+                        {% endif %}
+                        {% if api_key.is_expired %}
+                            <span class="tag is-warning">Expired</span>
+                        {% endif %}
+                    </td>
+                    <td>{{ api_key.created_at|date:'M j, Y' }}</td>
+                    <td>
+                        {% if api_key.last_used_at %}
+                            {{ api_key.last_used_at|date:'M j, Y' }}
+                        {% else %}
+                            <span class="has-text-grey">Never</span>
+                        {% endif %}
+                    </td>
+                    <td>
+                        {% if api_key.is_active %}
+                            <div class="dropdown" x-data="{ open: false }">
+                                <div class="dropdown-trigger">
+                                    <button class="button is-small" @click="open = !open">
+                                        <span class="icon is-small">
+                                            <i class="fas fa-ellipsis-v"></i>
+                                        </span>
+                                    </button>
+                                </div>
+                                <div class="dropdown-menu" :class="{ 'is-active': open }" @click.outside="open = false">
+                                    <div class="dropdown-content">
+                                        <a class="dropdown-item button is-rounded regenerate-btn"
+                                           data-key-id="{{ api_key.id }}"
+                                           data-key-name="{{ api_key.name|default:'Unnamed Key' }}">
+                                            <span class="icon">
+                                                <i class="fas fa-sync-alt"></i>
+                                            </span>
+                                            <span>Regenerate</span>
+                                        </a>
+                                        <a class="dropdown-item button is-danger is-rounded revoke-btn"
+                                           data-key-id="{{ api_key.id }}"
+                                           data-key-name="{{ api_key.name|default:'Unnamed Key' }}">
+                                            <span class="icon">
+                                                <i class="fas fa-times"></i>
+                                            </span>
+                                            <span>Revoke</span>
+                                        </a>
+                                    </div>
+                                </div>
+                            </div>
+                        {% else %}
+                            <span class="has-text-grey">—</span>
+                        {% endif %}
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+{% else %}
+    <div class="notification is-info is-light">
+        <p class="has-text-centered">
+            <span class="icon is-large">
+                <i class="fas fa-key fa-2x"></i>
+            </span>
+        </p>
+        <p class="has-text-centered">
+            <strong>No API keys yet</strong><br>
+            Generate your first API key to start using our services programmatically.
+        </p>
+    </div>
+{% endif %}

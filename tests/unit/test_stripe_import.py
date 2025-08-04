@@ -4,7 +4,10 @@ import sys
 import os
 from unittest.mock import patch, MagicMock
 import quickscale.project_templates as templates
-from quickscale.project_templates.stripe_manager.tests.mock_env_utils import get_env, is_feature_enabled
+
+# Import mock utilities from their new location in integration tests
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), '../integration/django_apps/stripe_integration'))
+from mock_env_utils import get_env, is_feature_enabled
 
 if not hasattr(templates, 'stripe_manager'):
     pytest.skip('Skipping stripe tests as quickscale.project_templates.stripe_manager not available', allow_module_level=True)

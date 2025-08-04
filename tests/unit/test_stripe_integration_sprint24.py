@@ -44,8 +44,9 @@ if not settings.configured:
 import django
 django.setup()
 
-# Import mock utilities
-from quickscale.project_templates.stripe_manager.tests.mock_env_utils import get_env, is_feature_enabled
+# Import mock utilities from their new location in integration tests
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), '../integration/django_apps/stripe_integration'))
+from mock_env_utils import get_env, is_feature_enabled
 
 # Create a mock for 'core.env_utils' module
 mock_env_utils = MagicMock()
@@ -81,6 +82,21 @@ class MockStripeProduct:
 
 class TestStripeManagerSingletonPattern(TestCase):
     """Test StripeManager singleton pattern and initialization."""
+    
+    @classmethod
+    def setUpClass(cls):
+        """Store original modules before mocking."""
+        super().setUpClass()
+        cls.original_env_utils = sys.modules.get('core.env_utils')
+    
+    @classmethod
+    def tearDownClass(cls):
+        """Restore original modules after all tests."""
+        if cls.original_env_utils is not None:
+            sys.modules['core.env_utils'] = cls.original_env_utils
+        else:
+            sys.modules.pop('core.env_utils', None)
+        super().tearDownClass()
     
     def setUp(self):
         """Set up test environment."""

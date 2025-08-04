@@ -2,6 +2,33 @@
 
 All notable changes to this project will be documented in this file.
 
+## v0.38.0 (2025-08-04)
+v0.38.0 feat: Manual Polish, Test Reorganization, and LLM-Friendly Testing
+
+This release delivers a comprehensive manual polish of the codebase, focusing on test structure, deduplication, and improved developer experience for both humans and AI coding assistants. The update addresses directory structure rationale, reorganizes and consolidates tests, introduces LLM-friendly test output modes, and removes obsolete authentication/account security code and related tests.
+
+- Backend Implementation:
+  - Reorganized and consolidated test directories for improved logical structure and maintainability.
+  - Removed duplicated and overlapping tests across modules, ensuring DRY and KISS principles.
+  - Enhanced test output configuration with new LLM-friendly and failures-only modes for efficient debugging and AI analysis.
+  - Refactored and cleaned up authentication and account security code, removing unused signals, validators, views, and URL configurations.
+  - Improved error handling and validation in command and Stripe integration tests.
+  - Updated test scripts to support minimal and focused output for LLM workflows.
+  - Enhanced debugging guidelines and documentation for test failures and root cause analysis.
+- Frontend Implementation:
+  - Some user-facing bugfixing.
+- Testing:
+  - Consolidated and enhanced unit and integration tests for commands, Stripe integration, subscription lifecycle, and service generation.
+  - Added and updated scripts for running tests with LLM-friendly and failures-only output modes.
+  - Improved test isolation, teardown, and contamination prevention across all test modules.
+  - Removed obsolete and redundant tests for authentication, account security, and two-factor authentication.
+- Documentation:
+  - Updated documentation to clarify test directory structure, LLM-friendly test running, and debugging procedures.
+  - Added usage instructions for new test output modes and enhanced root cause analysis guidelines.
+  - Documented rationale for directory and test organization in ROADMAP.md and related docs.
+
+This release completes the Manual Polish sprint, delivering a cleaner, more maintainable codebase with improved test structure, developer experience, and documentation. The changes ensure robust test coverage, efficient debugging, and a solid foundation for future development.
+
 ## v0.37.0 (2025-07-26)
 v0.37.0 feat: Simplified Sync-Back Command for Reverse Development Workflow
 
