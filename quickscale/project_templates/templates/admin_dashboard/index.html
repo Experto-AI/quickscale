@@ -12,12 +12,12 @@
 
 <section class="section">
     <div class="container">
-        <div class="columns is-multiline is-mobile">
-            <div class="column is-one-third">
-                <div class="card">
-                    <div class="card-content">
+        <div class="columns is-multiline is-mobile is-flex is-align-items-stretch" style="margin-bottom: 0;">
+            <div class="column is-one-third is-flex" style="padding-bottom: 0;">
+                <div class="card is-flex is-flex-direction-column" style="flex: 1 1 auto; height: 100%; margin-bottom: 0;">
+                    <div class="card-content" style="padding-bottom: 0.5rem;">
                         <p class="title is-4">Users</p>
-                        <p class="subtitle is-6">Manage system users</p>
+                        <p class="subtitle is-6"><a href="{% url 'admin_dashboard:user_search' %}">Manage system users</a></p>
                         <div class="content">
                             <ul>
                                 <li>Search and view users</li>
@@ -26,17 +26,15 @@
                             </ul>
                         </div>
                     </div>
-                    <footer class="card-footer">
-                        <a href="{% url 'admin_dashboard:user_search' %}" class="card-footer-item">Search Users</a>
-                    </footer>
+                    <!-- Footer removed as requested -->
                 </div>
             </div>
             
-            <div class="column is-one-third">
-                <div class="card">
-                    <div class="card-content">
+            <div class="column is-one-third is-flex" style="padding-bottom: 0;">
+                <div class="card is-flex is-flex-direction-column" style="flex: 1 1 auto; height: 100%; margin-bottom: 0;">
+                    <div class="card-content" style="padding-bottom: 0.5rem;">
                         <p class="title is-4">Settings</p>
-                        <p class="subtitle is-6">System configuration</p>
+                        <p class="subtitle is-6"><a href="#">System configuration</a></p>
                         <div class="content">
                             <ul>
                                 <li>General settings</li>
@@ -45,17 +43,15 @@
                             </ul>
                         </div>
                     </div>
-                    <footer class="card-footer">
-                        <a href="#" class="card-footer-item">Configure</a>
-                    </footer>
+                    <!-- Footer removed as requested -->
                 </div>
             </div>
             
-            <div class="column is-one-third">
-                <div class="card">
-                    <div class="card-content">
+            <div class="column is-one-third is-flex" style="padding-bottom: 0;">
+                <div class="card is-flex is-flex-direction-column" style="flex: 1 1 auto; height: 100%; margin-bottom: 0;">
+                    <div class="card-content" style="padding-bottom: 0.5rem;">
                         <p class="title is-4">Analytics</p>
-                        <p class="subtitle is-6">Business metrics & insights</p>
+                        <p class="subtitle is-6"><a href="{% url 'admin_dashboard:analytics_dashboard' %}">Business metrics & insights</a></p>
                         <div class="content">
                             <ul>
                                 <li>Revenue trends & charts</li>
@@ -64,17 +60,15 @@
                             </ul>
                         </div>
                     </div>
-                    <footer class="card-footer">
-                        <a href="{% url 'admin_dashboard:analytics_dashboard' %}" class="card-footer-item">View Analytics</a>
-                    </footer>
+                    <!-- Footer removed as requested -->
                 </div>
             </div>
             
-            <div class="column is-one-third">
-                <div class="card">
-                    <div class="card-content">
+            <div class="column is-one-third is-flex" style="padding-bottom: 0;">
+                <div class="card is-flex is-flex-direction-column" style="flex: 1 1 auto; height: 100%; margin-bottom: 0;">
+                    <div class="card-content" style="padding-bottom: 0.5rem;">
                         <p class="title is-4">Products</p>
-                        <p class="subtitle is-6">Stripe product management</p>
+                        <p class="subtitle is-6"><a href="{% url 'admin_dashboard:product_admin' %}">Stripe product management</a></p>
                         <div class="content">
                             <ul>
                                 <li>View products</li>
@@ -83,17 +77,15 @@
                             </ul>
                         </div>
                     </div>
-                    <footer class="card-footer">
-                        <a href="{% url 'admin_dashboard:product_admin' %}" class="card-footer-item">Manage Products</a>
-                    </footer>
+                    <!-- Footer removed as requested -->
                 </div>
             </div>
             
-            <div class="column is-one-third">
-                <div class="card">
-                    <div class="card-content">
+            <div class="column is-one-third is-flex" style="padding-bottom: 0;">
+                <div class="card is-flex is-flex-direction-column" style="flex: 1 1 auto; height: 100%; margin-bottom: 0;">
+                    <div class="card-content" style="padding-bottom: 0.5rem;">
                         <p class="title is-4">Services</p>
-                        <p class="subtitle is-6">Service management & analytics</p>
+                        <p class="subtitle is-6"><a href="{% url 'admin_dashboard:service_admin' %}">Service management & analytics</a></p>
                         <div class="content">
                             <ul>
                                 <li>Manage service status</li>
@@ -102,17 +94,15 @@
                             </ul>
                         </div>
                     </div>
-                    <footer class="card-footer">
-                        <a href="{% url 'admin_dashboard:service_admin' %}" class="card-footer-item">Manage Services</a>
-                    </footer>
+                    <!-- Footer removed as requested -->
                 </div>
             </div>
 
-            <div class="column is-one-third">
-                <div class="card">
+            <div class="column is-one-third is-flex" style="padding-bottom: 0;">
+                <div class="card is-flex is-flex-direction-column" style="flex: 1 1 auto; height: 100%; margin-bottom: 0;">
                     <div class="card-content">
                         <p class="title is-4">Payment Tools</p>
-                        <p class="subtitle is-6">Payment support & admin tools</p>
+                        <p class="subtitle is-6"><a href="{% url 'admin_dashboard:payment_search' %}">Payment support & admin tools</a></p>
                         <div class="content">
                             <ul>
                                 <li>Search and filter payments</li>
@@ -121,17 +111,15 @@
                             </ul>
                         </div>
                     </div>
-                    <footer class="card-footer">
-                        <a href="{% url 'admin_dashboard:payment_search' %}" class="card-footer-item">Search Payments</a>
-                    </footer>
+                    <!-- Footer removed as requested -->
                 </div>
             </div>
 
-            <div class="column is-one-third">
-                <div class="card">
+            <div class="column is-one-third is-flex" style="padding-bottom: 0;">
+                <div class="card is-flex is-flex-direction-column" style="flex: 1 1 auto; height: 100%; margin-bottom: 0;">
                     <div class="card-content">
                         <p class="title is-4">Audit Log</p>
-                        <p class="subtitle is-6">Admin action tracking</p>
+                        <p class="subtitle is-6"><a href="{% url 'admin_dashboard:audit_log' %}">Admin action tracking</a></p>
                         <div class="content">
                             <ul>
                                 <li>Track admin actions</li>
@@ -140,17 +128,15 @@
                             </ul>
                         </div>
                     </div>
-                    <footer class="card-footer">
-                        <a href="{% url 'admin_dashboard:audit_log' %}" class="card-footer-item">View Audit Log</a>
-                    </footer>
+                    <!-- Footer removed as requested -->
                 </div>
             </div>
 
-            <div class="column is-one-third">
-                <div class="card">
+            <div class="column is-one-third is-flex" style="padding-bottom: 0;">
+                <div class="card is-flex is-flex-direction-column" style="flex: 1 1 auto; height: 100%; margin-bottom: 0;">
                     <div class="card-content">
                         <p class="title is-4">Django Admin</p>
-                        <p class="subtitle is-6">System administration</p>
+                        <p class="subtitle is-6"><a href="/admin/" target="_blank">System administration</a></p>
                         <div class="content">
                             <ul>
                                 <li>Full database access</li>
@@ -159,9 +145,7 @@
                             </ul>
                         </div>
                     </div>
-                    <footer class="card-footer">
-                        <a href="/admin/" class="card-footer-item" target="_blank">Open Django Admin</a>
-                    </footer>
+                    <!-- Footer removed as requested -->
                 </div>
             </div>
         </div>

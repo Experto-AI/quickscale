@@ -1,0 +1,71 @@
+<div class="box notification is-success" x-data="{ show: true }" x-show="show" x-transition></div>
+    <div class="notification is-warning">
+        <p class="has-text-weight-bold">
+            <span class="icon">
+                <i class="fas fa-exclamation-triangle"></i>
+            </span>
+            Important Security Notice
+        </p>
+        <p>This is the only time you will see your API key. Copy it now and store it securely. If you lose this key, you will need to regenerate it.</p>
+    </div>
+    <div class="field">
+        <label class="label">Your New API Key</label>
+        <div class="field has-addons">
+            <div class="control is-expanded">
+                <input 
+                    class="input is-family-monospace" 
+                    type="text" 
+                    value="{{ full_key }}" 
+                    readonly 
+                    id="api-key-value"
+                    x-ref="apiKey"
+                >
+            </div>
+            <div class="control">
+                <button 
+                    class="button is-primary" 
+                    x-data="{ copied: false }"
+                    @click="navigator.clipboard.writeText('{{ full_key }}').then(() => { copied = true; setTimeout(() => copied = false, 2000); })"
+                    :class="{ 'is-success': copied }"
+                >
+                    <span class="icon">
+                        <i class="fas" :class="copied ? 'fa-check' : 'fa-copy'"></i>
+                    </span>
+                    <span x-text="copied ? 'Copied!' : 'Copy'"></span>
+                </button>
+            </div>
+        </div>
+    </div>
+    <div class="content">
+        <h4 class="title is-5">API Key Details</h4>
+        <ul>
+            <li><strong>Name:</strong> {{ api_key.name|default:"Unnamed Key" }}</li>
+            <li><strong>Key ID:</strong> <code>{{ api_key.prefix }}...****</code></li>
+            <li><strong>Created:</strong> {{ api_key.created_at|date:'F j, Y \a\t g:i A' }}</li>
+            <li><strong>Status:</strong> <span class="tag is-success">Active</span></li>
+        </ul>
+    </div>
+    <div class="notification is-info is-light">
+        <p class="has-text-weight-bold">How to use your API key:</p>
+        <p>Include it in the Authorization header of your HTTP requests:</p>
+        <pre class="has-background-light p-3 mt-2"><code>Authorization: Bearer {{ full_key }}</code></pre>
+    </div>
+    <div class="field is-grouped">
+        <div class="control">
+            <button class="button is-primary" @click="show = false; $dispatch('refresh-api-keys')">
+                <span class="icon">
+                    <i class="fas fa-arrow-left"></i>
+                </span>
+                <span>Back to API Keys</span>
+            </button>
+        </div>
+        <div class="control">
+            <a href="{% url 'api:api_docs' %}" class="button is-link">
+                <span class="icon">
+                    <i class="fas fa-book"></i>
+                </span>
+                <span>View API Documentation</span>
+            </a>
+        </div>
+    </div>
+</div>

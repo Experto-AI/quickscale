@@ -21,6 +21,12 @@ mock_env_utils_module.get_env = MagicMock(return_value='test_value')
 mock_env_utils_module.is_feature_enabled = MagicMock(return_value=True)
 mock_core_module.env_utils = mock_env_utils_module
 
+# Store original modules for cleanup
+_original_modules = {}
+for module_name in ['stripe', 'core', 'core.env_utils']:
+    if module_name in sys.modules:
+        _original_modules[module_name] = sys.modules[module_name]
+
 # Add modules to sys.modules
 sys.modules['stripe'] = mock_stripe_module
 sys.modules['core'] = mock_core_module
@@ -270,35 +276,35 @@ def webhook(request):
         self.webhook_spec.loader.exec_module(self.webhook_module)
         
     def tearDown(self):
-        """Restore original environment and clean up test files."""
+        """Clean up test environment."""
+        # Restore environment
         os.environ.clear()
         os.environ.update(self.original_env)
-        refresh_env_cache()
         
-        # Clean up test files
-        if os.path.exists(os.path.join(os.path.dirname(__file__), f"{self.test_module_name}.py")):
-            os.remove(os.path.join(os.path.dirname(__file__), f"{self.test_module_name}.py"))
-        
-        if os.path.exists(os.path.join(os.path.dirname(__file__), f"{self.webhook_module_name}.py")):
-            os.remove(os.path.join(os.path.dirname(__file__), f"{self.webhook_module_name}.py"))
-        
-        # Clean up cache files
-        for suffix in [".pyc", "__pycache__"]:
-            cache_file = os.path.join(os.path.dirname(__file__), f"{self.test_module_name}{suffix}")
-            if os.path.exists(cache_file):
-                if os.path.isdir(cache_file):
-                    import shutil
-                    shutil.rmtree(cache_file)
-                else:
-                    os.remove(cache_file)
+        # Clean up the test module file
+        test_module_file = os.path.join(os.path.dirname(__file__), f"{self.test_module_name}.py")
+        if os.path.exists(test_module_file):
+            os.remove(test_module_file)
             
-            cache_file = os.path.join(os.path.dirname(__file__), f"{self.webhook_module_name}{suffix}")
-            if os.path.exists(cache_file):
-                if os.path.isdir(cache_file):
-                    import shutil
-                    shutil.rmtree(cache_file)
-                else:
-                    os.remove(cache_file)
+        # Clean up sys.modules
+        if self.test_module_name in sys.modules:
+            del sys.modules[self.test_module_name]
+            
+    @classmethod
+    def tearDownClass(cls):
+        """Clean up global module mocking."""
+        # Restore original modules
+        for module_name, original_module in _original_modules.items():
+            sys.modules[module_name] = original_module
+        
+        # Remove mocked modules that weren't originally present
+        modules_to_remove = []
+        for module_name in ['stripe', 'core', 'core.env_utils']:
+            if module_name not in _original_modules and module_name in sys.modules:
+                modules_to_remove.append(module_name)
+        
+        for module_name in modules_to_remove:
+            del sys.modules[module_name]
 
     def test_stripe_manager_singleton(self):
         """Test that StripeManager is a singleton."""

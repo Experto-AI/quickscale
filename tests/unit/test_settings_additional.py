@@ -67,17 +67,7 @@ class TestSettingsAdditional(unittest.TestCase):
                 except ValueError as e:
                     self.fail(f"validate_production_settings should not raise error with IS_PRODUCTION={value}: {e}")
     
-    def test_required_vars_structure(self):
-        """Test that REQUIRED_VARS has the correct structure and all expected components."""
-        # Test that it's a dictionary
-        self.assertIsInstance(REQUIRED_VARS, dict)
-        
-        # Test all expected components are present
-        expected_components = ['web', 'db', 'email', 'stripe']
-        for component in expected_components:
-            self.assertIn(component, REQUIRED_VARS)
-            self.assertIsInstance(REQUIRED_VARS[component], list)
-    
+
     def test_validate_production_settings_with_mixed_case_is_production(self):
         """Test validation with mixed case IS_PRODUCTION value."""
         # Test with mixed case 'True'

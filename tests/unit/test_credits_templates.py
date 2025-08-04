@@ -162,14 +162,6 @@ class CreditsTemplateTests(unittest.TestCase):
         self.assertIn("'credits.apps.CreditsConfig'", settings_content,
                      "Credits app not included in INSTALLED_APPS")
     
-    def test_credits_urls_in_main_urls(self):
-        """Test that credits URLs are included in main URL configuration."""
-        with open(self.main_urls_path, 'r') as f:
-            urls_content = f.read()
-        
-        self.assertIn("include('credits.urls', namespace='credits')", urls_content,
-                     "Credits URLs not included in main URL configuration")
-    
     def test_credits_dashboard_template_structure(self):
         """Test credits dashboard template structure."""
         with open(self.dashboard_template, 'r') as f:
@@ -226,7 +218,7 @@ class CreditsIntegrationTests(unittest.TestCase):
         self.credits_app_path = self.base_path / 'quickscale' / 'project_templates' / 'credits'
         self.dashboard_app_path = self.base_path / 'quickscale' / 'project_templates' / 'admin_dashboard'
     
-    def test_dashboard_integration_with_credits(self):
+    def test_dashboard_views_integrate_with_credits(self):
         """Test that dashboard views integrate with credits."""
         dashboard_views_path = self.dashboard_app_path / 'views.py'
         

@@ -103,9 +103,9 @@ class CommandManager:
         """Check if required tools are available."""
         self.execute_command('check', print_info=print_info)
     
-    def sync_back_project(self, project_path: str, preview: bool = False, apply: bool = False) -> None:
+    def sync_back_project(self, project_path: str, preview: bool = False, apply: bool = False, interactive: bool = False) -> None:
         """Sync changes from generated project back to templates."""
-        self.execute_command('sync-back', project_path, preview=preview, apply=apply)
+        self.execute_command('sync-back', project_path, preview=preview, apply=apply, interactive=interactive)
     
     def generate_service(self, service_name: str, service_type: str = "basic", output_dir: Optional[str] = None, credit_cost: float = 1.0, description: Optional[str] = None, skip_db_config: bool = False, free: bool = False) -> Dict[str, Any]:
         """Generate a new service template."""
@@ -168,7 +168,8 @@ class CommandManager:
             return self.sync_back_project(
                 project_path=args.project_path,
                 preview=getattr(args, 'preview', False),
-                apply=getattr(args, 'apply', False)
+                apply=getattr(args, 'apply', False),
+                interactive=getattr(args, 'interactive', False)
             )
         return None
     

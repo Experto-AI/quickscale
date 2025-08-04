@@ -58,7 +58,10 @@ class AccountLockoutMiddleware:
                     else:
                         # Force logout prevents bypassing lockout through session persistence
                         # This ensures the user must go through login flow when lockout expires
-                        logout(request)
+                        try:
+                            logout(request)
+                        except Exception as e:
+                            logger.error(f"Failed to logout user {request.user.id} during lockout: {e}")
                         
                         # Time calculations provide user feedback on lockout duration
                         time_remaining = lockout.time_until_unlock

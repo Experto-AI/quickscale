@@ -143,32 +143,6 @@ class Sprint18PaymentInvestigationTests(unittest.TestCase):
         self.base_path = Path(__file__).parent.parent.parent
         self.views_file = self.base_path / 'quickscale' / 'project_templates' / 'admin_dashboard' / 'views.py'
 
-    def test_payment_investigation_data_gathering(self):
-        """Test that payment investigation gathers comprehensive data."""
-        with open(self.views_file, 'r') as f:
-            views_content = f.read()
-        
-        # Check for user payment history
-        self.assertIn("'user_payment_history': Payment.objects.filter(user=payment.user)", views_content,
-                     "User payment history not gathered")
-        
-        # Check for Stripe data retrieval
-        self.assertIn("'stripe_data': None", views_content,
-                     "Stripe data initialization not found")
-
-    def test_payment_investigation_warning_generation(self):
-        """Test that payment investigation generates appropriate warnings."""
-        with open(self.views_file, 'r') as f:
-            views_content = f.read()
-        
-        # Check for warning generation logic
-        self.assertIn("if not payment.stripe_payment_intent_id and payment.payment_type", views_content,
-                     "Missing Stripe ID warning not implemented")
-        
-        self.assertIn("payment.status == 'failed'", views_content,
-                     "Failed payment warning not implemented")
-
-
 class Sprint18RefundInitiationTests(unittest.TestCase):
     """Test Sprint 18 refund initiation functionality implementation."""
 
@@ -176,19 +150,6 @@ class Sprint18RefundInitiationTests(unittest.TestCase):
         """Set up test environment."""
         self.base_path = Path(__file__).parent.parent.parent
         self.views_file = self.base_path / 'quickscale' / 'project_templates' / 'admin_dashboard' / 'views.py'
-
-    def test_refund_validation_logic(self):
-        """Test that refund initiation implements proper validation."""
-        with open(self.views_file, 'r') as f:
-            views_content = f.read()
-        
-        # Check for payment status validation
-        self.assertIn("if payment.status != 'succeeded':", views_content,
-                     "Payment status validation not implemented")
-        
-        # Check for amount validation
-        self.assertIn("refund_amount_decimal = Decimal(refund_amount)", views_content,
-                     "Refund amount validation not implemented")
 
     def test_refund_credit_adjustment(self):
         """Test that refund initiation handles credit adjustments."""

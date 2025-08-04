@@ -57,6 +57,43 @@ def update_user_permissions(user_id, permissions):
             time.sleep(0.1)
 ```
 
+
+
+#### Test Failures After Codebase Changes
+
+When a test fails after codebase changes:
+  - Always perform root cause analysis to determine if the test or the code is at fault
+  - If the test is outdated and should be updated to match intentional changes in requirements, update the test
+  - If the test is still valid and the code change introduced a regression, fix the code
+  - Never update a test just to make it pass—always confirm whether the test or the code is correct according to current requirements
+  - Always document your reasoning and the root cause for updating either the test or the code
+
+**Actionable Steps:**
+  - Investigate the failure:
+    - Read the test and understand what behavior it checks
+    - Review recent code changes that may have affected this behavior
+  - Determine intent:
+    - Clarify whether the tested behavior is still required by current project requirements
+    - If requirements changed, confirm with documentation, changelogs, or stakeholders
+  - Decide what to fix:
+    - If the test reflects current, intended behavior, fix the code to restore the expected outcome
+    - If the test is outdated due to intentional changes, update the test to match new requirements
+  - Document your reasoning:
+    - Clearly document why you updated the test or the code, referencing requirements or root cause analysis
+    - Add comments or commit messages explaining the decision
+  - Add regression tests:
+    - If a regression was found, add or update tests to prevent recurrence
+  - Verify thoroughly:
+    - Run the full test suite to ensure all related functionality works as intended
+
+**Example Decision Table:**
+
+| Situation                                 | Action                |
+|--------------------------------------------|-----------------------|
+| Test is valid, code is wrong (regression)  | Fix the code          |
+| Test is outdated, code is correct          | Update the test       |
+| Unclear (ambiguous requirements)           | Investigate, clarify, document decision |
+
 ## DMAIC Process for Structured Debugging
 
 ### Define: Clearly Define the Problem with Specific Symptoms and Success Criteria
@@ -165,6 +202,27 @@ Added section on proper parameter handling in queries
 
 ### Utilize Structured Logging and Debugging Tools for Systematic Problem Investigation
 Reference: [Code Principles - Systematic Debugging](shared/code_principles.md#employ-systematic-debugging-with-logging-tests-and-root-cause-documentation)
+
+### Test Output Analysis for Debugging
+
+When debugging test failures, use specialized output modes to focus on actual issues:
+
+```bash
+# Show only failed tests (filter out noise from passing tests)
+./run_tests.sh --failures-only --unit
+
+# Stop immediately at first failure (for focused debugging)
+./run_tests.sh --exitfirst --unit
+```
+
+**Why use these modes for debugging:**
+- **Eliminates noise**: Hundreds of passing tests contaminate the analysis context
+- **Focuses attention**: Only shows actual failures that need investigation
+- **Clean format**: Minimal output optimized for systematic analysis
+- **Immediate feedback**: Stop-on-first-failure prevents cascading failure noise
+- **Root cause clarity**: Clean output makes it easier to identify underlying issues
+
+**When debugging test failures, avoid standard verbose output** which includes irrelevant passing test information that obscures the actual problems requiring attention and contaminates the debugging context.
 
 ```python
 # Systematic debugging approach

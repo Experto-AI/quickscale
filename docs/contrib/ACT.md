@@ -384,6 +384,8 @@ def process_order(order_id):
     return True
 ```
 
+```
+
 ## Implementation Checklist
 
 During implementation, ensure you have:
@@ -411,6 +413,40 @@ During implementation, ensure you have:
 
 After completing implementation:
 1. Proceed to [QUALITY.md](QUALITY.md) for quality control
-2. Write tests for the implemented functionality
+2. Write tests following [shared/testing_standards.md](shared/testing_standards.md)
+3. Verify adherence to all standards
+4. Ensure documentation is complete
+
+## Implementation Checklist
+
+During implementation, ensure you have:
+
+- [ ] Applied SOLID principles appropriately
+- [ ] Used DRY to avoid code duplication
+- [ ] Applied KISS to keep solutions simple
+- [ ] Implemented explicit failure handling
+- [ ] Created focused, single-responsibility functions
+- [ ] Grouped related functionality logically
+- [ ] Used exceptions for error handling
+- [ ] Followed consistent naming conventions
+- [ ] Used appropriate type hints
+- [ ] Used f-strings for string formatting
+- [ ] Organized imports logically
+- [ ] Written clear docstrings
+- [ ] Added explanatory comments for complex logic
+- [ ] Used structured logging instead of print statements
+- [ ] Followed project architecture patterns
+- [ ] Maintained focus on the specific task
+- [ ] Preserved existing interfaces
+- [ ] Matched existing code style
+- [ ] Applied proper testing patterns - no global mocking contamination
+- [ ] Ensured test isolation - tests pass individually and as suite
+- [ ] Used proper cleanup patterns - all global state restored
+
+## Next Steps
+
+After completing implementation:
+1. Proceed to [QUALITY.md](QUALITY.md) for quality control
+2. Write tests using [TESTING_GUIDELINES.md](TESTING_GUIDELINES.md)
 3. Verify adherence to all standards
 4. Ensure documentation is complete 

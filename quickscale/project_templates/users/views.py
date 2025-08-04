@@ -1,4 +1,3 @@
-
 from django.contrib import messages
 from django.contrib.auth import get_user_model
 from django.contrib.auth.decorators import login_required
@@ -82,16 +81,7 @@ def profile_view(request: HttpRequest) -> HttpResponse:
 
 @login_required
 @require_http_methods(["GET"])
-def api_keys_view(request: HttpRequest) -> HttpResponse:
-    """Display user's API keys."""
-    is_htmx = request.headers.get('HX-Request') == 'true'
-    
-    api_keys = APIKey.objects.filter(user=request.user).order_by('-created_at')
-    
-    return render(request, 'users/api_keys.html', {
-        'api_keys': api_keys,
-        'is_htmx': is_htmx
-    })
+
 
 @login_required
 @csrf_protect
@@ -103,10 +93,8 @@ def generate_api_key_view(request: HttpRequest) -> HttpResponse:
     try:
         # Get the optional name for the API key
         name = request.POST.get('name', '').strip()
-        
         # Generate the API key
         full_key, prefix, secret_key = APIKey.generate_key()
-        
         # Create the API key record
         api_key = APIKey.objects.create(
             user=request.user,
@@ -114,28 +102,38 @@ def generate_api_key_view(request: HttpRequest) -> HttpResponse:
             hashed_key=APIKey.get_hashed_key(secret_key),
             name=name
         )
-        
         messages.success(request, 'API key generated successfully!')
-        
-        # Return the generated key template (shows raw key once)
+        if is_htmx:
+            # Return only the partial for HTMX requests
+            return render(request, 'users/_api_key_generated_partial.html', {
+                'api_key': api_key,
+                'full_key': full_key,
+                'is_htmx': is_htmx
+            })
+        # Return full page for normal requests
         return render(request, 'users/api_key_generated.html', {
             'api_key': api_key,
             'full_key': full_key,
             'is_htmx': is_htmx
         })
-        
     except ValidationError as e:
         messages.error(request, f'Validation error: {str(e)}')
     except Exception as e:
         messages.error(request, f'Error generating API key: {str(e)}')
-        
     if is_htmx:
         return render(request, 'users/api_keys.html', {
             'api_keys': APIKey.objects.filter(user=request.user).order_by('-created_at'),
             'is_htmx': is_htmx
         })
-    
     return redirect('users:api_keys')
+@login_required
+@require_http_methods(["GET"])
+def api_keys_list_partial(request: HttpRequest) -> HttpResponse:
+    """Return only the API keys list partial for HTMX refresh."""
+    api_keys = APIKey.objects.filter(user=request.user).order_by('-created_at')
+    return render(request, 'users/api_keys_list_partial.html', {
+        'api_keys': api_keys
+    })
 
 @login_required
 @csrf_protect

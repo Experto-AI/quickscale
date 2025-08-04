@@ -358,9 +358,9 @@ class LogScanner:
             # Get logs for both services
             for service in ["web", "db"]:
                 try:
-                    self.logger.debug(f"Running {DOCKER_COMPOSE_COMMAND} logs {service} in {self.project_dir}")
+                    self.logger.debug(f"Running {' '.join(DOCKER_COMPOSE_COMMAND)} logs {service} in {self.project_dir}")
                     result = subprocess.run(
-                        [DOCKER_COMPOSE_COMMAND, "logs", service],
+                        DOCKER_COMPOSE_COMMAND + ["logs", service],
                         capture_output=True,
                         text=True,
                         check=False,  # Don't raise an exception on non-zero exit
@@ -399,9 +399,9 @@ class LogScanner:
             
             # Run showmigrations to check for any unapplied migrations
             try:
-                self.logger.debug(f"Running {DOCKER_COMPOSE_COMMAND} exec -T web python manage.py showmigrations in {self.project_dir}")
+                self.logger.debug(f"Running {' '.join(DOCKER_COMPOSE_COMMAND)} exec -T web python manage.py showmigrations in {self.project_dir}")
                 result = subprocess.run(
-                    [DOCKER_COMPOSE_COMMAND, "exec", "-T", "web", 
+                    DOCKER_COMPOSE_COMMAND + ["exec", "-T", "web", 
                      "python", "manage.py", "showmigrations"],
                     capture_output=True,
                     text=True,

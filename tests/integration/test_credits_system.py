@@ -103,7 +103,7 @@ class TestCreditsSystemIntegration:
         
         assert credits_dashboard_template.exists(), "Credits dashboard template (credits/templates/credits/dashboard.html) not found in generated project."
     
-    def test_dashboard_template_shows_credits(self, credits_project):
+    def test_credits_dashboard_template_content(self, credits_project):
         """Test that the credits dashboard template contains expected content."""
         # Verify that the credits dashboard template contains key elements indicating credit information.
         credits_dashboard_template = (credits_project / "credits" / "templates" / 
@@ -123,12 +123,6 @@ class TestCreditsSystemIntegration:
     def test_user_can_access_credits_dashboard(self, credits_project, settings):
         """Test that an authenticated user can access the credits dashboard."""
         # This test requires running the generated Django project and using its test client.
-        # Due to limitations of the current environment, this test cannot be fully implemented as a functional test.
-
-    # This test is updated to verify that the credits dashboard template contains expected content.
-    def test_credits_dashboard_page_content(self, credits_project, settings):
-        """Test that the credits dashboard template contains expected content."""
-        # This test requires running the generated Django project and checking the rendered content.
         # Due to limitations of the current environment, this test cannot be fully implemented as a functional test.
 
 

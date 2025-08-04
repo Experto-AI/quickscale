@@ -170,16 +170,28 @@ class TestSyncBackCommand:
                 self.sync_back_cmd.execute("./project", preview=True)
 
     def test_execute_no_flags_error(self):
-        """Test execution without preview or apply flags shows error."""
+        """Test execution without preview, apply, or interactive flags shows error."""
         with patch.object(self.sync_back_cmd, '_detect_installation_mode', return_value='development'):
-            with pytest.raises(ValidationError, match="Must specify either --preview or --apply"):
+            with pytest.raises(ValidationError, match="Must specify either --preview, --apply, or --interactive"):
                 self.sync_back_cmd.execute("./project")
 
     def test_execute_both_flags_error(self):
-        """Test execution with both preview and apply flags shows error."""
+        """Test execution with multiple mode flags shows error."""
         with patch.object(self.sync_back_cmd, '_detect_installation_mode', return_value='development'):
-            with pytest.raises(ValidationError, match="Cannot specify both --preview and --apply"):
+            with pytest.raises(ValidationError, match="Cannot specify multiple modes"):
                 self.sync_back_cmd.execute("./project", preview=True, apply=True)
+
+    def test_execute_interactive_success(self):
+        """Test successful interactive execution."""
+        project_dir = self._create_temp_project()
+        templates_dir = self._create_temp_templates()
+        
+        with patch.object(self.sync_back_cmd, '_detect_installation_mode', return_value='development'), \
+             patch.object(self.sync_back_cmd, '_get_quickscale_templates_dir', return_value=templates_dir), \
+             patch.object(self.sync_back_cmd, '_interactive_changes') as mock_interactive:
+            
+            self.sync_back_cmd.execute(str(project_dir), interactive=True)
+            mock_interactive.assert_called_once()
 
     def test_execute_preview_success(self):
         """Test successful preview execution."""
