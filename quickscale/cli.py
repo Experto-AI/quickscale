@@ -402,10 +402,12 @@ WORKFLOW:
 3. Navigate to project: cd my-project
 4. Preview changes: quickscale sync-back --preview
 5. Apply changes: quickscale sync-back --apply
+6. Interactive mode: quickscale sync-back --interactive
 
 Alternative: Use from outside project directory:
 3. Preview changes: quickscale sync-back ./my-project --preview
 4. Apply changes: quickscale sync-back ./my-project --apply
+5. Interactive mode: quickscale sync-back ./my-project --interactive
 
 FILE CATEGORIZATION:
 - Safe Files (Direct Copy): Templates, static files, documentation
@@ -416,13 +418,15 @@ FILE CATEGORIZATION:
 Examples:
   quickscale sync-back --preview                 Show what would be synced (from current directory)
   quickscale sync-back --apply                   Apply sync-back changes (from current directory)
+  quickscale sync-back --interactive             Interactively review and apply changes (from current directory)
   quickscale sync-back ./my-project --preview    Show what would be synced (specify project path)
   quickscale sync-back ./my-project --apply      Apply changes (specify project path)
+  quickscale sync-back ./my-project --interactive Interactive mode (specify project path)
 
-Note: Always preview changes before applying them.
+Note: Always preview changes before applying them or use interactive mode for fine-grained control.
         """,
         formatter_class=argparse.RawDescriptionHelpFormatter,
-        usage="quickscale sync-back [project_path] [--preview | --apply]")
+        usage="quickscale sync-back [project_path] [--preview | --apply | --interactive]")
     
     sync_back_parser.add_argument(
         "project_path",
@@ -430,7 +434,7 @@ Note: Always preview changes before applying them.
         default=".",
         help="Path to the generated QuickScale project (defaults to current directory)")
     
-    # Create mutually exclusive group for preview/apply
+    # Create mutually exclusive group for preview/apply/interactive
     action_group = sync_back_parser.add_mutually_exclusive_group(required=True)
     action_group.add_argument(
         "--preview",
@@ -440,6 +444,10 @@ Note: Always preview changes before applying them.
         "--apply",
         action="store_true",
         help="Apply changes from project to templates")
+    action_group.add_argument(
+        "--interactive",
+        action="store_true",
+        help="Interactively review and apply changes file by file")
 
 
 def handle_init_command(args: argparse.Namespace) -> int:

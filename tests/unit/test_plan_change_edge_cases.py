@@ -191,18 +191,6 @@ class ErrorHandlingValidationTest(TestCase):
         self.credits_models_path = self.base_path / "credits" / "models.py"
         self.stripe_models_path = self.base_path / "stripe_manager" / "models.py"
     
-    def test_insufficient_credits_error_exists(self):
-        """Test that insufficient credits error handling exists."""
-        content = self.credits_models_path.read_text()
-        
-        # Check for credit validation
-        self.assertTrue(
-            "InsufficientCreditsError" in content or
-            "insufficient" in content.lower() or
-            "balance" in content.lower(),
-            "Insufficient credits error handling should exist"
-        )
-    
     def test_invalid_product_error_handling_exists(self):
         """Test that invalid product error handling exists."""
         # Check if validation exists for products

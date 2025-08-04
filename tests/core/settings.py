@@ -104,12 +104,13 @@ AUTH_USER_MODEL = 'users.CustomUser'
 
 # Django-allauth settings
 ACCOUNT_ADAPTER = 'users.adapters.AccountAdapter'
+LOGIN_URL = '/accounts/login/'
 LOGIN_REDIRECT_URL = '/'
 LOGOUT_REDIRECT_URL = '/'
 ACCOUNT_LOGIN_METHODS = {'email'}
 ACCOUNT_EMAIL_REQUIRED = True
 ACCOUNT_USERNAME_REQUIRED = False
-ACCOUNT_EMAIL_VERIFICATION = 'mandatory'
+ACCOUNT_EMAIL_VERIFICATION = 'none'  # Disable for tests
 ACCOUNT_UNIQUE_EMAIL = True
 
 # Enable Stripe for integration tests (use dummy keys)

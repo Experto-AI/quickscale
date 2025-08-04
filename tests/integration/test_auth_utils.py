@@ -44,5 +44,12 @@ def patch_django_for_e2e_testing():
         print(f"! Could not patch StaticFilesHandler: {str(e)}")
 
 
-# Apply the patches when this module is imported
-patch_django_for_e2e_testing() 
+
+# Pytest fixture to apply Django patches for e2e testing only when needed
+import pytest
+
+@pytest.fixture(scope="function")
+def patch_django_for_e2e():
+    patch_django_for_e2e_testing()
+    yield
+    # No unpatching logic here, as the patched methods are idempotent and do not use MagicMock

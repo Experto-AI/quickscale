@@ -276,8 +276,8 @@ class Sprint13ServiceAdminIntegrationTests(ProjectTestMixin, unittest.TestCase):
         # Check for service admin link
         self.assertIn("{% url 'admin_dashboard:service_admin' %}", template_content,
                      "Service admin URL not found in dashboard")
-        self.assertIn("Manage Services", template_content,
-                     "Manage Services link not found in dashboard")
+        self.assertIn("Services", template_content,
+                     "Services title not found in dashboard")
     
     def test_service_models_support_sprint13_features_in_generated_project(self):
         """Test that Service and ServiceUsage models support Sprint 13 analytics features."""

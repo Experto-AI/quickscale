@@ -47,13 +47,11 @@ class TestShellCommandExtended:
         
         with patch('quickscale.commands.project_manager.ProjectManager.get_project_state',
                   return_value={'has_project': True}), \
-             patch('subprocess.run', return_value=MagicMock(returncode=0)) as mock_run, \
-             patch('builtins.print') as mock_print:
+             patch('subprocess.run', return_value=MagicMock(returncode=0)) as mock_run:
             
             cmd.execute()
             
             # Verify subprocess.run was called correctly
-            mock_print.assert_called_with("Starting bash shell...")
             mock_run.assert_called_once()
             args, kwargs = mock_run.call_args
             assert "bash" in args[0]
@@ -66,13 +64,11 @@ class TestShellCommandExtended:
         
         with patch('quickscale.commands.project_manager.ProjectManager.get_project_state',
                   return_value={'has_project': True}), \
-             patch('subprocess.run', return_value=MagicMock(returncode=0)) as mock_run, \
-             patch('builtins.print') as mock_print:
+             patch('subprocess.run', return_value=MagicMock(returncode=0)) as mock_run:
             
             cmd.execute(command=test_command)
             
             # Verify subprocess.run was called correctly
-            mock_print.assert_called_with(f"Running command: {test_command}")
             mock_run.assert_called_once()
             args, kwargs = mock_run.call_args
             assert "bash" in args[0]
@@ -103,13 +99,15 @@ class TestDjangoShellCommandExtended:
         
         with patch('quickscale.commands.project_manager.ProjectManager.get_project_state',
                   return_value={'has_project': False}), \
-             patch('builtins.print') as mock_print:
+             patch('builtins.print') as mock_print, \
+             pytest.raises(SystemExit) as exc_info:
             
             cmd.execute()
             
-            # Verify django shell help was printed
+            # Verify django shell help was printed and exit code is 1
+            assert exc_info.value.code == 1
             assert mock_print.call_count >= 2
-            mock_print.assert_any_call("usage: quickscale django-shell")
+            mock_print.assert_any_call("Error: Not in a QuickScale project directory")
     
     def test_django_shell_command_success(self):
         """Test DjangoShellCommand.execute successfully running Django shell."""

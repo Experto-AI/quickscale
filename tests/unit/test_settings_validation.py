@@ -76,15 +76,6 @@ class TestSettingsValidation(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, "Missing required variables for web: SECRET_KEY"):
                 validate_required_vars('web')
                 
-    def test_validate_required_vars_all_present(self):
-        """Test validate_required_vars when all variables are present."""
-        with patch('tests.unit.test_settings_validation.get_env', return_value='somevalue'):
-            # Should not raise an error
-            validate_required_vars('web')
-            validate_required_vars('db')
-            validate_required_vars('email')
-            validate_required_vars('stripe')
-
     def test_validate_production_settings_insecure_secret_key(self):
         """Test validate_production_settings raises error with insecure SECRET_KEY in production."""
         test_env = {

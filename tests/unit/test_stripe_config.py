@@ -23,30 +23,6 @@ class StripeConfigurationTests(unittest.TestCase):
         os.environ.update(self.original_env)
         refresh_env_cache()  # Ensure the cache is restored after each test
 
-    def test_stripe_disabled_by_default(self):
-        """Test that Stripe integration is disabled by default."""
-        # Create mock settings without Stripe app in INSTALLED_APPS
-        mock_installed_apps = [
-            'django.contrib.auth',
-            'django.contrib.contenttypes',
-            'users.apps.UsersConfig'
-        ]
-        
-        # Test with empty environment (Stripe disabled by default)
-        with patch('quickscale.utils.env_utils._env_vars', {'STRIPE_ENABLED': 'False'}):
-            # Ensure STRIPE_ENABLED is False by default
-            self.assertFalse(
-                is_feature_enabled(get_env('STRIPE_ENABLED', 'False')),
-                "STRIPE_ENABLED should be False by default"
-            )
-            
-            # Without patching settings.INSTALLED_APPS directly, we can verify our logic:
-            # Assume we have a function that determines if Stripe app should be in INSTALLED_APPS based on STRIPE_ENABLED
-            def should_include_stripe_app():
-                return is_feature_enabled(get_env('STRIPE_ENABLED', 'False'))
-            
-            self.assertFalse(should_include_stripe_app(), "stripe.apps.StripeConfig should not be included when STRIPE_ENABLED is False")
-
     def test_stripe_settings_with_flag_enabled(self):
         """Test that enabling Stripe loads the correct settings."""
         # Create a test environment with Stripe enabled

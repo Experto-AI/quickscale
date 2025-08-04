@@ -1,0 +1,121 @@
+<!-- API Keys List (Partial) -->
+{% if api_keys %}
+    <div class="table-container">
+        <table class="table is-fullwidth is-striped">
+            <thead>
+                <tr>
+                    <th>Name</th>
+                    <th>Key Prefix</th>
+                    <th>Status</th>
+                    <th>Created</th>
+                    <th>Last Used</th>
+                    <th>Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for api_key in api_keys %}
+                <tr>
+                    <td>
+                        <strong>{{ api_key.name|default:"Unnamed Key" }}</strong>
+                    </td>
+                    <td>
+                        <code class="has-background-light">{{ api_key.prefix }}...****</code>
+                    </td>
+                    <td>
+                        {% if api_key.is_active %}
+                            <span class="tag is-success">Active</span>
+                        {% else %}
+                            <span class="tag is-danger">Revoked</span>
+                        {% endif %}
+                        {% if api_key.is_expired %}
+                            <span class="tag is-warning">Expired</span>
+                        {% endif %}
+                    </td>
+                    <td>{{ api_key.created_at|date:'M j, Y' }}</td>
+                    <td>
+                        {% if api_key.last_used_at %}
+                            {{ api_key.last_used_at|date:'M j, Y' }}
+                        {% else %}
+                            <span class="has-text-grey">Never</span>
+                        {% endif %}
+                    </td>
+                    <td>
+                        {% if api_key.is_active %}
+                            <div class="dropdown" x-data="{ 
+                                open: false,
+                                handleAction(action) {
+                                    let message = '';
+                                    if (action === 'revoke') {
+                                        message = `Are you sure you want to revoke the API key \"{{ api_key.name|default:'Unnamed Key'|escapejs }}\"? This action cannot be undone.`;
+                                    } else if (action === 'regenerate') {
+                                        message = `Are you sure you want to regenerate the API key \"{{ api_key.name|default:'Unnamed Key'|escapejs }}\"? The old key will be deactivated and you\\'ll need to update your applications with the new key.`;
+                                    }
+                                    
+                                    if (confirm(message)) {
+                                        const formId = action === 'revoke' ? 'revoke-form' : 'regenerate-form';
+                                        const inputId = action === 'revoke' ? 'revoke-key-id' : 'regenerate-key-id';
+                                        
+                                        document.getElementById(inputId).value = '{{ api_key.id }}';
+                                        const form = document.getElementById(formId);
+                                        
+                                        // Create submit button if it doesn't exist
+                                        let submitBtn = form.querySelector('button[type=submit]');
+                                        if (!submitBtn) {
+                                            submitBtn = document.createElement('button');
+                                            submitBtn.type = 'submit';
+                                            submitBtn.style.display = 'none';
+                                            form.appendChild(submitBtn);
+                                        }
+                                        submitBtn.click();
+                                    }
+                                    this.open = false;
+                                }
+                            }">
+                                <div class="dropdown-trigger">
+                                    <button class="button is-small" @click="open = !open">
+                                        <span class="icon is-small">
+                                            <i class="fas fa-ellipsis-v"></i>
+                                        </span>
+                                    </button>
+                                </div>
+                                <div class="dropdown-menu" :class="{ 'is-active': open }" @click.outside="open = false">
+                                    <div class="dropdown-content">
+                                        <button class="dropdown-item button is-rounded"
+                                                @click="handleAction('regenerate')">
+                                            <span class="icon">
+                                                <i class="fas fa-sync-alt"></i>
+                                            </span>
+                                            <span>Regenerate</span>
+                                        </button>
+                                        <button class="dropdown-item button is-danger is-rounded"
+                                                @click="handleAction('revoke')">
+                                            <span class="icon">
+                                                <i class="fas fa-times"></i>
+                                            </span>
+                                            <span>Revoke</span>
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
+                        {% else %}
+                            <span class="has-text-grey">—</span>
+                        {% endif %}
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+{% else %}
+    <div class="notification is-info is-light">
+        <p class="has-text-centered">
+            <span class="icon is-large">
+                <i class="fas fa-key fa-2x"></i>
+            </span>
+        </p>
+        <p class="has-text-centered">
+            <strong>No API keys yet</strong><br>
+            Generate your first API key to start using our services programmatically.
+        </p>
+    </div>
+{% endif %}

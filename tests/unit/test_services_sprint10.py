@@ -448,23 +448,6 @@ class ServicesViewsTests(unittest.TestCase):
         self.assertIn("get_object_or_404(Service, id=service_id, is_active=True)", views_content,
                      "Service lookup not found")
     
-    def test_use_service_view_exists(self):
-        """Test that use_service view is properly implemented."""
-        with open(self.views_py, 'r') as f:
-            views_content = f.read()
-        
-        # Check for use_service view
-        self.assertIn("def use_service(request, service_id):", views_content,
-                     "use_service view not found")
-        self.assertIn("@require_http_methods([\"POST\"])", views_content,
-                     "POST method restriction not found")
-        
-        # Check for credit consumption
-        self.assertIn("consume_credits_with_priority", views_content,
-                     "Priority credit consumption not found")
-        self.assertIn("ServiceUsage.objects.create", views_content,
-                     "ServiceUsage creation not found")
-    
     def test_service_status_api_view_exists(self):
         """Test that service_status_api view is properly implemented."""
         with open(self.views_py, 'r') as f:

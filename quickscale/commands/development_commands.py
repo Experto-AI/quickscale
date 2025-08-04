@@ -30,12 +30,12 @@ class ShellCommand(Command):
         
         try:
             if command:
-                print(f"Running command: {command}")
-                cmd_parts = [DOCKER_COMPOSE_COMMAND, "exec", "web", "bash", "-c", command]
+                # Execute shell command in the web container
+                cmd_parts = DOCKER_COMPOSE_COMMAND + ["exec", "web", "bash", "-c", command]
                 subprocess.run(cmd_parts, check=True)
             else:
-                print("Starting bash shell...")
-                subprocess.run([DOCKER_COMPOSE_COMMAND, "exec", "web", "bash"], check=True)
+                # Start interactive shell
+                subprocess.run(DOCKER_COMPOSE_COMMAND + ["exec", "web", "bash"], check=True)
         except subprocess.SubprocessError as e:
             context = {}
             if command:
@@ -45,6 +45,12 @@ class ShellCommand(Command):
                 e, 
                 context=context,
                 recovery="Make sure Docker services are running with 'quickscale up'"
+            )
+        except FileNotFoundError as e:
+            self.handle_error(
+                e,
+                context={"message": "Docker is not available"},
+                recovery="Install Docker and make sure it's in your PATH"
             )
         except KeyboardInterrupt:
             print("\nExited shell.")
@@ -57,14 +63,14 @@ class DjangoShellCommand(Command):
         """Enter Django shell in the web container."""
         state = ProjectManager.get_project_state()
         if not state['has_project']:
-            print("usage: quickscale django-shell")
-            print("\nOpen an interactive Django shell in the web container.")
-            return
+            print("Error: " + ProjectManager.PROJECT_NOT_FOUND_MESSAGE)
+            print("Suggestion: Make sure you're in a QuickScale project directory or create a new project with 'quickscale init <project_name>'")
+            sys.exit(1)
         
         try:
             print("Starting Django shell...")
             subprocess.run(
-                [DOCKER_COMPOSE_COMMAND, "exec", "web", "python", "manage.py", "shell"],
+                DOCKER_COMPOSE_COMMAND + ["exec", "web", "python", "manage.py", "shell"],
                 check=True
             )
         except subprocess.SubprocessError as e:
@@ -72,6 +78,12 @@ class DjangoShellCommand(Command):
                 e, 
                 context={"django_shell": True},
                 recovery="Make sure Docker services are running with 'quickscale up'"
+            )
+        except FileNotFoundError as e:
+            self.handle_error(
+                e,
+                context={"message": "Docker is not available"},
+                recovery="Install Docker and make sure it's in your PATH"
             )
         except KeyboardInterrupt:
             print("\nExited Django shell.")
@@ -96,12 +108,18 @@ class ManageCommand(Command):
         
         try:
             subprocess.run(
-                [DOCKER_COMPOSE_COMMAND, "exec", "web", "python", "manage.py"] + args,
+                DOCKER_COMPOSE_COMMAND + ["exec", "web", "python", "manage.py"] + args,
                 check=True
             )
+        except FileNotFoundError as e:
+            self.logger.error(f"File not found: {e}")
+            self.logger.info("Docker may not be installed or not available in PATH")
+            self.logger.info("Please install Docker and ensure it's available in your PATH")
         except subprocess.SubprocessError as e:
             self.handle_error(
                 e,
                 context={"manage_args": args},
                 recovery="Make sure Docker services are running with 'quickscale up'"
             )
+        except KeyboardInterrupt:
+            print("\nExited Django management command.")

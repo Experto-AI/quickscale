@@ -2,14 +2,10 @@
 
 This document contains detailed technical information about the QuickScale project, including the tech stack, project structure, development workflows, and more.
 
-QuickScale is a project generator that generates a project only once.
-It is not a generated django project, but a project generator that creates a django project from templates.
+This is a project generator that generates a project only once. 
+AI coding assistants must edit the templates and quickscale build associated files (root cause or source files), not project generated files (symptom generated or destination files).
 
-AI coding assistants must edit the template files (root cause or source files), not project generated files (destination files). When creating tests of fixing bugs, AI coding assistants must edit the template files in the QuickScale project generator, not the generated files in the deployed django project.
-
-
-The main command for end users is `quickscale init`, which creates a new project from templates.
-Project configuration is managed through environment variables with secure defaults.
+The most important command is `quickscale build`, which generates the project structure and files.
 
 ## TECHNICAL STACK
 - Django 5.0.1+ (backend framework)
@@ -17,130 +13,145 @@ Project configuration is managed through environment variables with secure defau
     - Psycopg2-binary 2.9.9+ (PostgreSQL adapter)
     - Python-dotenv 1.0.0+ (environment variables)
     - dj-database-url 2.1.0+ (database URL configuration)
-    - django-allauth 0.61.0+ (authentication)
+    - django-allauth 0.52.0+ (authentication)
     - Uvicorn 0.27.0+ (ASGI server)
-    - stripe 12.1.0+ (payment processing and billing)
-    - Pillow (image processing for user avatars and media)
+    - dj-stripe 2.9.0 (with stripe 8.0.0+) for payment processing
 - HTMX (frontend to backend communication for CRUD operations with the simplicity of HTML)
 - Alpine.js (simple vanilla JS library for DOM manipulation)
 - Bulma CSS (simple CSS styling without JavaScript) - Do not mix Tailwind or another alternatives
 - PostgreSQL (database) - Do not use SQLite nor MySQL
-- Configuration: Environment variables with secure defaults
-- Deployment: Docker + Uvicorn
+- Deployment: .env + Docker + Uvicorn
 
 ## PROJECT STRUCTURE
 
-### QuickScale Project Generator Structure
+### **Technology Constraints**
+❌ **Not Allowed:**
+- SQLite/MySQL (PostgreSQL only)
+- Vanilla JavaScript for UI (Alpine.js only, except Stripe checkout)
+- CSS frameworks other than Bulma
+- jQuery, React, Vue (Alpine.js only)
 
-This is the typical directory structure in the QuickScale project generator repository:
+✅ **Required:**
+- Type hints for all functions
+- F-strings for string formatting
+- Structured logging (no print statements)
+- Email-only authentication (no usernames)
 
+### **QuickScale Generator Structure**
 ```
 quickscale/
-├── commands/                 # Command system implementation
-├── config/                   # Configuration management
-├── cli.py                    # CLI Entry Point
-├── project_templates/        # Django project template files
-│   ├── common/               # Common Django app
-│   │   ├── migrations/       # Pre-generated migrations
-│   │   ├── templates/        # App-specific templates
-│   │   ├── apps.py           # App configuration
-│   │   ├── urls.py           # URL routing
-│   │   └── views.py          # View logic
-│   ├── core/                 # Core Django project
-│   │   ├── migrations/       # Pre-generated migrations
-│   │   ├── settings.py       # Main settings
-│   │   ├── urls.py           # Main URL routing
-│   │   ├── wsgi.py           # WSGI configuration
-│   │   ├── asgi.py           # ASGI configuration
-│   │   ├── email_settings.py # Email configuration
-│   │   ├── security_settings.py  # Security settings
-│   │   ├── context_processors.py # Context processors
-│   │   ├── test_settings.py  # Test configuration
-│   │   └── test_runner.py    # Custom test runner
-│   ├── credits/              # Credit system Django app
-│   │   ├── migrations/       # Pre-generated migrations
-│   │   ├── templates/        # App-specific templates
-│   │   ├── apps.py           # App configuration
-│   │   ├── models.py         # Credit models (CreditAccount, CreditTransaction, Service)
-│   │   ├── views.py          # Credit views and Stripe checkout
-│   │   ├── urls.py           # URL routing
-│   │   ├── admin.py          # Admin interface for credit management
-│   │   └── forms.py          # Admin forms for credit operations
-│   ├── admin_dashboard/      # Admin AdminDashboard Django app
-│   │   ├── migrations/       # Pre-generated migrations
-│   │   ├── templates/        # App-specific templates
-│   │   ├── tests/            # App-specific tests
-│   │   ├── templatetags/     # Custom template tags
-│   │   ├── apps.py           # App configuration
-│   │   ├── urls.py           # URL routing
-│   │   ├── views.py          # View logic
-│   │   ├── tests_product_admin.py   # Product admin tests
-│   │   └── tests_views_no_stripe.py # View tests without Stripe
-│   ├── stripe_manager/       # Stripe integration app
-│   │   ├── migrations/       # Pre-generated migrations
-│   │   ├── templates/        # App-specific templates
-│   │   │   └── stripe_manager/ # Stripe-specific templates
-│   │   │       ├── plan_comparison.html    # Plan comparison view
-│   │   │       ├── checkout_success.html   # Payment success page
-│   │   │       └── checkout_error.html     # Payment error page
-│   │   ├── tests/            # Comprehensive Stripe tests
-│   │   │   ├── test_models.py          # Model tests
-│   │   │   ├── test_admin.py           # Admin interface tests
-│   │   │   ├── test_webhooks.py        # Webhook handling tests
-│   │   │   ├── test_stripe_manager.py  # API integration tests
-│   │   │   ├── test_plan_views.py      # Plan management tests
-│   │   │   └── test_user_flows.py      # End-to-end user flow tests
-│   │   ├── __init__.py       # Package initialization
-│   │   ├── apps.py           # App configuration
-│   │   ├── admin.py          # Admin interface for Stripe products
-│   │   ├── models.py         # Stripe models (StripeProduct, StripeCustomer)
-│   │   ├── urls.py           # URL routing for webhooks and views
-│   │   ├── views.py          # View logic, webhooks & plan management
-│   │   └── stripe_manager.py # Stripe API integration and management
-│   ├── docs/                 # Documentation files
-│   ├── js/                   # JavaScript assets
-│   ├── logs/                 # Log files directory
-│   ├── public/               # Public Django app
-│   │   ├── migrations/       # Pre-generated migrations
-│   │   ├── templates/        # App-specific templates
-│   │   ├── apps.py           # App configuration
-│   │   ├── urls.py           # URL routing
-│   │   └── views.py          # View logic
-│   ├── static/               # Static files
-│   │   ├── css/              # CSS files
-│   │   ├── js/               # JavaScript files
-│   │   ├── favicon.svg       # SVG favicon
-│   │   ├── favicon.ico       # ICO favicon
-│   │   └── generate_favicon.sh # Favicon generation script
-│   ├── templates/            # Django HTML templates (no confusion now!)
-│   │   ├── account/          # Authentication templates
-│   │   │   └── email/        # Email templates
-│   │   ├── base/             # Base templates
-│   │   ├── components/       # Reusable components
-│   │   ├── admin_dashboard/  # Admin AdminDashboard templates
-│   │   ├── public/           # Public templates
-│   │   └── users/            # User templates
-│   ├── tests/                # Template tests
-│   ├── users/                # Users Django app
-│   │   ├── migrations/       # Pre-generated migrations
-│   │   ├── management/       # Management commands
-│   │   ├── tests/            # User tests
-│   │   ├── apps.py           # App configuration
-│   │   ├── urls.py           # URL routing
-│   │   ├── views.py          # View logic
-│   │   ├── models.py         # Custom user model
-│   │   ├── forms.py          # Authentication forms
-│   │   ├── adapters.py       # Auth adapters
-│   │   ├── admin.py          # Admin configuration
-│   │   └── validators.py     # Custom validators
-│   ├── Dockerfile            # Dockerfile for the web service
-│   ├── docker-compose.yml    # Docker Compose file
-│   ├── requirements.txt      # Python dependencies
-│   ├── entrypoint.sh         # Container entrypoint script
-│   ├── manage.py             # Django management script
-│   └── .dockerignore         # Docker ignore file
-├── tests/                    # Test suite
-└── utils/                    # Utility functions
+├── cli.py                        # Main CLI entry point
+├── commands/                     # Command pattern implementation
+│   ├── command_manager.py        # Command orchestration
+│   ├── command_base.py           # Base command interface
+│   ├── init_command.py           # Project initialization
+│   ├── service_commands.py       # Docker service management
+│   ├── development_commands.py   # Django shell, manage commands
+│   ├── project_commands.py       # Project lifecycle (destroy)
+│   ├── system_commands.py        # System checks and validation
+│   └── service_generator_commands.py  # AI service generation
+├── config/                       # Configuration management
+├── utils/                        # Shared utilities
+│   ├── error_manager.py          # Error handling and recovery
+│   ├── message_manager.py        # User messaging system
+│   ├── env_utils.py              # Environment configuration
+│   ├── service_dev_utils.py      # AI service development tools
+│   └── template_generator.py     # Template processing
+└── project_templates/            # Django project templates
+    ├── core/                     # Main Django settings and URLs
+    ├── users/                    # Authentication and user management
+    ├── credits/                  # Credit system and billing
+    ├── services/                 # AI service framework
+    ├── stripe_manager/           # Stripe integration
+    ├── admin_dashboard/          # Admin interface
+    ├── api/                      # API endpoints and documentation
+    ├── public/                   # Public pages
+    ├── common/                   # Shared Django app utilities
+    ├── templates/                # Base HTML templates
+    ├── static/                   # CSS, JS, images
+    ├── docker-compose.yml        # Container orchestration
+    ├── Dockerfile                # Web application container
+    └── manage.py                 # Django management script
+```
+
+### **Generated Project Structure**
+When `quickscale build my-project` runs, it creates:
+```
+my-project/
+├── core/                         # Django project settings and URLs
+├── users/                        # Custom user model and authentication
+├── credits/                      # Credit system and billing management
+├── services/                     # AI service framework (generated services)
+├── stripe_manager/               # Stripe integration and payment processing
+├── admin_dashboard/              # Admin interface and user management
+├── api/                          # RESTful API endpoints and documentation
+├── public/                       # Public pages (landing, about, contact)
+├── common/                       # Shared Django app utilities
+├── templates/                    # HTML templates (base, components, app-specific)
+├── static/                       # Frontend assets (CSS, JS, images)
+├── docker-compose.yml            # Container orchestration
+├── Dockerfile                    # Application container definition
+├── .env                          # Environment configuration
+├── requirements.txt              # Python dependencies
+└── manage.py                     # Django management script
+```
+
+### **Detailed Template Structure**
+```
+quickscale/project_templates/
+├── common/                   # Common Django app
+│   ├── migrations/           # Pre-generated migrations
+│   └── templates/            # App-specific templates
+├── core/                     # Core Django project
+│   └── migrations/           # Pre-generated migrations
+├── dashboard/                # Dashboard Django app
+│   ├── migrations/           # Pre-generated migrations
+│   └── templates/            # App-specific templates
+├── djstripe/                 # Django Stripe integration
+│   └── migrations/           # Pre-generated migrations
+├── docs/                     # Documentation files
+├── js/                       # JavaScript assets
+├── logs/                     # Log files directory
+├── public/                   # Public Django app
+│   ├── migrations/           # Pre-generated migrations
+│   ├── templates/            # App-specific templates
+│   ├── apps.py               # App configuration
+│   ├── urls.py               # URL routing
+│   └── views.py              # View logic
+├── static/                   # Static files
+│   ├── css/                  # CSS files
+│   ├── js/                   # JavaScript files
+│   ├── favicon.svg           # SVG favicon
+│   ├── favicon.ico           # ICO favicon
+│   └── generate_favicon.sh   # Favicon generation script
+├── templates/                # Django HTML templates
+│   ├── account/              # Authentication templates
+│   │   └── email/            # Email templates
+│   ├── base/                 # Base templates
+│   ├── components/           # Reusable components
+│   ├── admin_dashboard/      # Admin Dashboard templates
+│   ├── public/               # Public templates
+│   └── users/                # User templates
+├── tests/                    # Template tests
+├── users/                    # Users Django app
+│   ├── migrations/           # Pre-generated migrations
+│   ├── management/           # Management commands
+│   ├── tests/                # User tests
+│   ├── apps.py               # App configuration
+│   ├── urls.py               # URL routing
+│   ├── views.py              # View logic
+│   ├── models.py             # Custom user model
+│   ├── forms.py              # Authentication forms
+│   ├── adapters.py           # Auth adapters
+│   ├── admin.py              # Admin configuration
+│   └── validators.py         # Custom validators
+├── Dockerfile                # Dockerfile for the web service
+├── docker-compose.yml        # Docker Compose file
+├── requirements.txt          # Python dependencies
+├── entrypoint.sh             # Container entrypoint script
+├── manage.py                 # Django management script
+└── .dockerignore             # Docker ignore file
+```
 
 tests/
 ├── core/                     # Core functionality tests
@@ -156,56 +167,6 @@ tests/
 │   └── utils/                # Utility tests
 └── users/                    # User authentication tests
     └── migrations/           # Migration tests
-```
-
-### Generated Project Structure (Example)
-
-This is the typical directory structure created when you run `quickscale init`:
-
-```
-PROJECT_NAME/
-├── common/                 # Common Django app (shared models, utils)
-├── core/                   # Core Django project settings and configurations
-├── credits/                # Credit system app (account management, transactions)
-├── admin_dashboard/        # Admin dashboard app
-├── stripe_manager/         # Stripe integration app
-├── services/               # AI Services framework app
-│   ├── management/         # Service management commands
-│   │   └── commands/       # Django management commands
-│   │       └── configure_service.py # Service configuration command
-│   ├── templates/          # Service templates
-│   ├── base.py             # BaseService class for AI services
-│   ├── decorators.py       # Service registration decorators
-│   ├── examples.py         # Example service implementations
-│   ├── models.py           # Service models
-│   ├── urls.py             # Service URL routing
-│   └── views.py            # Service views
-├── api/                    # API framework app
-│   ├── templates/          # API documentation templates
-│   ├── utils.py            # API utilities and response handling
-│   ├── urls.py             # API URL routing
-│   └── views.py            # API endpoints and authentication
-├── docs/                   # Project-specific documentation
-│   ├── service_development_guide.md # Complete AI service development guide
-│   ├── template_customization_examples.md # Template customization examples
-│   ├── styling_guidelines.md # UI/UX styling guidelines
-│   └── auth_templates.md   # Authentication template documentation
-├── js/                     # JavaScript source files (e.g., Alpine.js components)
-├── logs/                   # Log files directory
-├── public/                 # Public-facing pages app (landing, about, contact)
-├── static/                 # Compiled static assets (CSS, JS, images)
-├── templates/              # Django HTML templates
-│   ├── account/            # Authentication templates (allauth)
-│   ├── base/               # Base layout templates
-│   ├── components/         # Reusable UI components (navbar, footer)
-│   ├── credits/            # Credit system templates
-│   ├── admin_dashboard/    # Admin AdminDashboard specific templates
-│   ├── api/                # API documentation templates
-│   ├── services/           # AI service templates
-│   ├── public/             # Public page templates
-│   └── users/              # User profile and settings templates
-├── tests/                  # Project tests
-└── users/                  # Custom user model and authentication logic
 ```
 
 ## PROJECT ARCHITECTURE
@@ -225,7 +186,7 @@ flowchart TD
  subgraph Commands["Command System"]
     direction TB
         command_base["Command (Base)"]
-        project_commands["Project Commands<br>(init, destroy)"]
+        project_commands["Project Commands<br>(build, destroy)"]
         service_commands["Service Commands<br>(up, down, logs, ps)"]
         dev_commands["Development Commands<br>(shell, django-shell)"]
         system_commands["System Commands<br>(check)"]
@@ -247,30 +208,25 @@ flowchart TD
     direction TB
         public_app["Public App"]
         users_app["Users App"]
-        admin_dashboard_app["Admin AdminDashboard App"]
+        dashboard_app["Dashboard App"]
         common_app["Common App"]
-        credits_app["Credits App<br>(Accounts, Transactions, Services)"]
-        stripe_app["Stripe Manager App<br>(Customer, Products, Webhooks)"]
-        services_app["Services App<br>(AI Framework, BaseService, Examples)"]
-        api_app["API App<br>(Authentication, Endpoints, Documentation)"]
   end
  subgraph Generated["Generated Project"]
     direction TB
         django_core["Django Core"]
         database["PostgreSQL"]
         auth["Authentication<br>(django-allauth)"]
-        stripe_manager["Stripe Integration<br>(Payments & Billing)"]
-        credit_system["Credit System<br>(Pay-as-you-go & Subscriptions)"]
+        djstripe["DjStripe<br>(Payments)"]
         Apps
   end
     user_input["User Input (CLI Commands)"] --> cli
     cli --> command_manager & project_manager & command_base & help_manager & config_manager
-    user_input -- init command --> project_commands
+    user_input -- build command --> project_commands
     command_manager --> command_base
     command_base --> project_commands & service_commands & dev_commands & system_commands & error_manager & logging_manager
     templates --> style_templates & js_templates
     project_commands --> templates
-    django_core --- database & auth & stripe_manager & Apps
+    django_core --- database & auth & djstripe & Apps
     templates -- generates --> Generated
     Generated -- runs with --> docker["Docker Services<br>(web, db)"]
     service_commands --> docker
@@ -278,162 +234,45 @@ flowchart TD
     Commands --> Utilities
     Utilities --> Templates
     Templates --> Generated
-    %% NOTE: Service startup is now fail-fast. Ports are checked once, and if in use, the process fails immediately. No retries or fallback.
-```
-
-### Generated Project Structure
-
-This component diagram shows the detailed structure of a generated Django project:
-
-```mermaid
----
-config:
-  layout: elk
----
-flowchart TD
- subgraph Django["Generated Django Project"]
-    direction TB
-        settings["core/settings.py<br>Main Configuration"]
-        urls["core/urls.py<br>URL Routing"]
-        wsgi["core/wsgi.py<br>WSGI App"]
-        asgi["core/asgi.py<br>ASGI App"]
-  end
- subgraph Users["users/"]
-    direction TB
-        users_models["models.py<br>CustomUser"]
-        users_forms["forms.py<br>Auth Forms"]
-        users_adapters["adapters.py<br>Auth Adapters"]
-        users_admin["admin.py<br>Admin UI"]
-  end
- subgraph Common["common/"]
-    direction TB
-        common_apps["apps.py<br>App Configuration"]
-        common_urls["urls.py<br>URL Routing"]
-        common_views["views.py<br>View Logic"]
-  end
- subgraph Public["public/"]
-    direction TB
-        public_views["views.py<br>Public Pages"]
-        public_urls["urls.py<br>Public Routes"]
-  end
- subgraph AdminDashboard["admin_dashboard/"]
-    direction TB
-        admin_dash_views["views.py<br>Admin Dashboard UI"]
-        admin_dash_urls["urls.py<br>Admin Dashboard Routes"]
-  end
- subgraph Credits["credits/"]
-    direction TB
-        credit_models["models.py<br>CreditAccount, CreditTransaction, Service"]
-        credit_views["views.py<br>Credit Dashboard & Purchase"]
-        credit_admin["admin.py<br>Credit Management"]
-  end
- subgraph Payments["stripe_manager/"]
-    direction TB
-        stripe_models["models.py<br>StripeCustomer, StripeProduct"]
-        payment_views["views.py<br>Payment Views & Webhooks"]
-        payment_utils["utils.py<br>Stripe Utilities"]
-        stripe_integration["stripe_manager.py<br>Stripe API Integration"]
-  end
- subgraph Services["services/"]
-    direction TB
-        services_base["base.py<br>BaseService Class"]
-        services_decorators["decorators.py<br>Service Registration"]
-        services_examples["examples.py<br>AI Service Examples"]
-        services_management["management/commands/<br>Service Configuration"]
-  end
- subgraph API["api/"]
-    direction TB
-        api_views["views.py<br>API Endpoints"]
-        api_utils["utils.py<br>Response Handling & Auth"]
-        api_urls["urls.py<br>API Routing"]
-  end
- subgraph Apps["Django Apps"]
-    direction TB
-        Users
-        Common
-        Public
-        AdminDashboard
-        Credits
-        Payments
-        Services
-        API
-  end
- subgraph Templates["templates/"]
-    direction TB
-        base["base.html<br>Base Template"]
-        components["components/<br>Reusable UI"]
-        acct_templates["account/<br>Auth Pages"]
-        admin_dash_templates["admin_dashboard/<br>Admin Dashboard UI"]
-        credit_templates["credits/<br>Credit Dashboard & Purchase"]
-  end
- subgraph Static["static/"]
-    direction TB
-        css["css/<br>Bulma Styles"]
-        js["js/<br>Alpine + HTMX"]
-        favicon["favicon.svg<br>Site Icon"]
-  end
- subgraph Frontend["Frontend Assets"]
-    direction TB
-        Templates
-        Static
-  end
- subgraph Infrastructure["Deployment Infrastructure"]
-    direction TB
-        dockerfile["Dockerfile"]
-        compose["docker-compose.yml"]
-        env["Environment<br>.env"]
-        entrypoint["entrypoint.sh"]
-  end
- subgraph Database["PostgreSQL Database"]
-    direction TB
-        users_table["users_customuser"]
-        profile_table["users_profile"]
-        stripe_customer_table["stripe_customer"]
-  end
-    settings --> urls & wsgi & asgi
-    dockerfile --> compose
-    env --> compose
-    entrypoint --> dockerfile
-    users_table --> profile_table & stripe_customer_table
-    Django --> Apps
-    Apps --> Frontend
-    Frontend --> Infrastructure
-    Infrastructure --> Database
-    urls -- includes --> Public & AdminDashboard & Payments
-    Users -- authenticates --> AdminDashboard
-    Common -- supports --> Public & AdminDashboard
-    Payments -- enables --> AdminDashboard
 ```
 
 ### Command Execution Sequence
 
-The following diagram illustrates the sequence of interactions when executing the `init` command:
+The following diagram illustrates the sequence of interactions when executing the `build` command:
 
 ```mermaid
 sequenceDiagram
     actor User
     participant CLI as cli.py
     participant CM as CommandManager
-    participant IC as InitCommand
+    participant BC as BuildCommand
     participant PM as ProjectManager
     participant TS as Template System
+    participant Docker as Docker Services
     
-    User->>CLI: quickscale init myproject
-    CLI->>CM: execute_command('init', 'myproject')
-    CM->>IC: execute('myproject')
+    User->>CLI: quickscale build myproject
+    CLI->>CM: execute_command('build', 'myproject')
+    CM->>BC: execute('myproject')
     
     %% Validation phase
-    IC->>IC: validate_project_name('myproject')
+    BC->>BC: validate_project_name('myproject')
+    BC->>PM: check_docker_available()
     
     %% Setup phase
-    IC->>PM: create_project_directory('myproject')
-    IC->>TS: copy_template_files('myproject')
-    IC->>PM: create_env_file('myproject')
+    BC->>PM: create_project_directory('myproject')
+    BC->>TS: copy_template_files('myproject')
+    BC->>PM: generate_env_file('myproject')
+    BC->>PM: generate_config_files('myproject')
+    
+    %% Launch phase
+    BC->>Docker: docker_compose_up('myproject')
+    Docker-->>BC: Container IDs
     
     %% Finalization
-    IC-->>CM: Success response
+    BC->>PM: verify_services_running('myproject')
+    BC-->>CM: Success response
     CM-->>CLI: Success response
-    CLI-->>User: Project created successfully, run 'quickscale up' to start
+    CLI-->>User: Project created successfully at http://localhost:8000
 ```
 
 ### Project Lifecycle State Diagram
@@ -449,7 +288,7 @@ config:
 stateDiagram
   direction TB
   [*] --> NonExistent:Initial State
-  NonExistent --> Created:quickscale init
+  NonExistent --> Created:quickscale build
   Created --> Running:quickscale up
   Running --> Stopped:quickscale down
   Stopped --> Running:quickscale up
@@ -494,13 +333,7 @@ flowchart TD
  subgraph External["External Services"]
     direction TB
         smtp["SMTP Server<br>Email Delivery<br>(Transactional Emails)"]
-        stripe_api["Stripe API<br>Payment Processing<br>(Products & Subscriptions)"]
-  end
- subgraph CreditSystem["Credit System Flow"]
-    direction TB
-        credit_purchase["Credit Purchase<br>(Pay-as-you-go & Subscriptions)"]
-        credit_validation["Credit Validation<br>(Service Usage)"]
-        credit_accounting["Credit Accounting<br>(Transactions & Balance)"]
+        stripe["Stripe API<br>Payment Processing<br>(Subscriptions &amp; Payments)"]
   end
     web -- CRUD<br>Operations --> db
     Client --> Host
@@ -509,15 +342,13 @@ flowchart TD
     browser -- HTTPS<br>Requests --> nginx
     nginx -- Proxies to<br>port 8000 --> web
     web -- Emails --> smtp
-    web -- Credit Purchase<br>& Webhooks --> stripe_api
-    stripe_api -- Payment Webhooks<br>& Product Sync --> web
-    web -- Credit Operations --> CreditSystem
-    CreditSystem -- Credit Data --> db
+    web -- Payment<br>Processing --> stripe
+    stripe -- Webhooks --> web
      browser:::client
      web:::container
      db:::container
      smtp:::external
-     stripe_manager:::external
+     stripe:::external
     classDef container fill:#e1f5fe,stroke:#01579b,stroke-width:1px
     classDef external fill:#fff8e1,stroke:#ff6f00,stroke-width:1px
     classDef client fill:#f1f8e9,stroke:#33691e,stroke-width:1px
@@ -537,71 +368,72 @@ config:
 classDiagram
 direction LR
     class Command {
-        +logger: Logger
-        +execute()*
-        +handle_error()
-        +safe_execute()
+	    +logger: Logger
+	    +execute()*
+	    +handle_error()
+	    +safe_execute()
     }
     class ProjectCommand {
-        +project_name: str
-        +validate_project_name()
+	    +project_name: str
+	    +validate_project_name()
     }
     class ServiceCommand {
-        +check_project_exists()
+	    +check_project_exists()
     }
     class DevelopmentCommand {
-        +setup_environment()
+	    +setup_environment()
     }
     class SystemCommand {
-        +check_dependencies()
+	    +check_dependencies()
     }
-    class InitCommand {
-        +execute(project_name)
-        +validate_project_name(project_name)
+    class BuildProjectCommand {
+	    +execute(project_name)
+	    +create_project_files()
+	    +setup_docker()
     }
     class DestroyProjectCommand {
-        +execute()
-        +prompt_confirmation()
-        +remove_project_files()
+	    +execute()
+	    +prompt_confirmation()
+	    +remove_project_files()
     }
     class ServiceUpCommand {
-        +execute()
-        +start_docker_services()
+	    +execute()
+	    +start_docker_services()
     }
     class ServiceDownCommand {
-        +execute()
-        +stop_docker_services()
+	    +execute()
+	    +stop_docker_services()
     }
     class ServiceLogsCommand {
-        +execute(service, follow, lines)
-        +stream_docker_logs()
+	    +execute(service, follow, lines)
+	    +stream_docker_logs()
     }
     class ServiceStatusCommand {
-        +execute()
-        +get_service_status()
+	    +execute()
+	    +get_service_status()
     }
     class ShellCommand {
-        +execute(django_shell)
-        +start_interactive_shell()
+	    +execute(django_shell)
+	    +start_interactive_shell()
     }
     class ManageCommand {
-        +execute(args)
-        +run_django_command()
+	    +execute(args)
+	    +run_django_command()
     }
     class CheckCommand {
-        +execute()
-        +check_requirements()
+	    +execute()
+	    +check_requirements()
     }
     class UntitledClass {
     }
 
-    <<abstract>> Command
+	<<abstract>> Command
 
     Command <|-- ProjectCommand
     Command <|-- ServiceCommand
     Command <|-- DevelopmentCommand
     Command <|-- SystemCommand
-    Command <|-- InitCommand
+    ProjectCommand <|-- BuildProjectCommand
     ProjectCommand <|-- DestroyProjectCommand
     ServiceCommand <|-- ServiceUpCommand
     ServiceCommand <|-- ServiceDownCommand
@@ -613,6 +445,107 @@ direction LR
     ServiceCommand -- UntitledClass
 ```
 
+### Generated Project Structure
+
+This component diagram shows the detailed structure of a generated Django project:
+
+```mermaid
+---
+config:
+  layout: elk
+---
+flowchart TD
+ subgraph Django["Generated Django Project"]
+    direction TB
+        settings["core/settings.py<br>Main Configuration"]
+        urls["core/urls.py<br>URL Routing"]
+        wsgi["core/wsgi.py<br>WSGI App"]
+        asgi["core/asgi.py<br>ASGI App"]
+  end
+ subgraph Users["users/"]
+    direction TB
+        users_models["models.py<br>CustomUser"]
+        users_forms["forms.py<br>Auth Forms"]
+        users_adapters["adapters.py<br>Auth Adapters"]
+        users_admin["admin.py<br>Admin UI"]
+  end
+ subgraph Common["common/"]
+    direction TB
+        common_models["models.py<br>Shared Models"]
+        common_middleware["middleware.py<br>Request Processing"]
+        common_utils["utils.py<br>Shared Utilities"]
+  end
+ subgraph Public["public/"]
+    direction TB
+        public_views["views.py<br>Public Pages"]
+        public_urls["urls.py<br>Public Routes"]
+  end
+ subgraph Dashboard["dashboard/"]
+    direction TB
+        dash_views["views.py<br>Dashboard UI"]
+        dash_urls["urls.py<br>Dashboard Routes"]
+  end
+ subgraph Payments["djstripe/"]
+    direction TB
+        payment_models["models.py<br>Subscription Models"]
+        payment_views["views.py<br>Payment Views"]
+        webhook["webhooks.py<br>Stripe Webhooks"]
+  end
+ subgraph Apps["Django Apps"]
+    direction TB
+        Users
+        Common
+        Public
+        Dashboard
+        Payments
+  end
+ subgraph Templates["templates/"]
+    direction TB
+        base["base.html<br>Base Template"]
+        components["components/<br>Reusable UI"]
+        acct_templates["account/<br>Auth Pages"]
+        dash_templates["dashboard/<br>Dashboard UI"]
+  end
+ subgraph Static["static/"]
+    direction TB
+        css["css/<br>Bulma Styles"]
+        js["js/<br>Alpine + HTMX"]
+        images["images/<br>UI Assets"]
+  end
+ subgraph Frontend["Frontend Assets"]
+    direction TB
+        Templates
+        Static
+  end
+ subgraph Infrastructure["Deployment Infrastructure"]
+    direction TB
+        dockerfile["Dockerfile"]
+        compose["docker-compose.yml"]
+        env["Environment<br>.env"]
+        entrypoint["entrypoint.sh"]
+  end
+ subgraph Database["PostgreSQL Database"]
+    direction TB
+        users_table["users_customuser"]
+        profile_table["users_profile"]
+        subscription_table["djstripe_subscription"]
+        customer_table["djstripe_customer"]
+  end
+    settings --> urls & wsgi & asgi
+    dockerfile --> compose
+    env --> compose
+    entrypoint --> dockerfile
+    users_table --> profile_table & customer_table
+    customer_table --> subscription_table
+    Django --> Apps
+    Apps --> Frontend
+    Frontend --> Infrastructure
+    Infrastructure --> Database
+    urls -- includes --> Public & Dashboard & Payments
+    Users -- authenticates --> Dashboard
+    Common -- supports --> Public & Dashboard
+    Payments -- enables --> Dashboard
+```
 
 ### Database ER Diagram
 
@@ -637,113 +570,577 @@ erDiagram
         avatar string
     }
     
-    %% Credit System Entities
-    CREDIT_ACCOUNTS {
+    CUSTOMERS {
         id int PK
         user_id int FK
-        created_at datetime
-        updated_at datetime
+        stripe_id string
+        livemode boolean
+        account_balance int
+        created datetime
     }
     
-    CREDIT_TRANSACTIONS {
+    %% Subscription related entities
+    SUBSCRIPTIONS {
         id int PK
-        user_id int FK
-        amount decimal
-        description string
-        credit_type string
-        expiration_date datetime
-        created_at datetime
-    }
-    
-    %% Subscription Management
-    USER_SUBSCRIPTIONS {
-        id int PK
-        user_id int FK
-        stripe_subscription_id string
-        stripe_product_id string
+        customer_id int FK
+        stripe_id string
         status string
         current_period_start datetime
         current_period_end datetime
-        cancel_at_period_end boolean
-        canceled_at datetime
-        created_at datetime
-        updated_at datetime
+        plan_id int FK
     }
     
-    %% Payment Processing
-    PAYMENTS {
+    PLANS {
         id int PK
-        user_id int FK
-        subscription_id int FK
-        amount decimal
-        currency string
-        payment_type string
-        stripe_payment_intent_id string
-        stripe_subscription_id string
-        stripe_invoice_id string
-        receipt_number string
-        receipt_data text
-        status string
-        created_at datetime
-        updated_at datetime
-    }
-    
-    SERVICES {
-        id int PK
-        name string
-        description text
-        credit_cost decimal
-        is_active boolean
-        created_at datetime
-        updated_at datetime
-    }
-    
-    SERVICE_USAGE {
-        id int PK
-        user_id int FK
-        service_id int FK
-        credits_consumed decimal
-        created_at datetime
-    }
-    
-    %% Stripe Integration Entities
-    STRIPE_CUSTOMERS {
-        id int PK
-        user_id int FK
         stripe_id string
-        email string
         name string
-        created_at datetime
-        updated_at datetime
-    }
-    
-    STRIPE_PRODUCTS {
-        id int PK
-        name string
-        description text
-        price decimal
-        currency string
+        amount int
         interval string
-        credit_amount int
-        display_order int
-        active boolean
+        trial_period_days int
+    }
+    
+    PAYMENT_METHODS {
+        id int PK
+        customer_id int FK
         stripe_id string
-        stripe_price_id string
-        created_at datetime
-        updated_at datetime
+        type string
+        card_brand string
+        card_last4 string
     }
     
     %% Entity relationships - arranged for better vertical flow
     USERS ||--o{ PROFILES : "has one"
-    USERS ||--o{ CREDIT_ACCOUNTS : "has one"
-    USERS ||--o{ CREDIT_TRANSACTIONS : "has many"
-    USERS ||--o{ USER_SUBSCRIPTIONS : "has many"
-    USERS ||--o{ PAYMENTS : "has many"
-    USERS ||--o{ SERVICE_USAGE : "has many"
-    USERS ||--o{ STRIPE_CUSTOMERS : "has one"
-    USER_SUBSCRIPTIONS ||--o{ PAYMENTS : "generates"
-    SERVICES ||--o{ SERVICE_USAGE : "consumed by"
-    STRIPE_PRODUCTS ||--o{ USER_SUBSCRIPTIONS : "defines plan"
+    USERS ||--o{ CUSTOMERS : "has one"
+    CUSTOMERS ||--o{ PAYMENT_METHODS : "can have many"
+    CUSTOMERS ||--o{ SUBSCRIPTIONS : "can have many"
+    SUBSCRIPTIONS }o--|| PLANS : "belongs to"
+```
+
+## COMPONENT INTEGRATION
+
+### **Core Architecture Flow**
+```
+CLI Commands → Template Generator → Django Project → Docker Services
+     ↓               ↓                    ↓              ↓
+  - shell          - Validation        - stripe_manager/
+```
+
+### **Django App Dependencies**
+```
+Core Layer:    core/ (settings, URLs, ASGI)
+Auth Layer:    users/ → common/
+Business:      credits/ → stripe_manager/ → services/
+Interface:     admin_dashboard/ → api/ → public/
+```
+
+### **Database Relationships**
+Essential relationships for understanding data flow:
+
+- **User** → **CreditAccount** (1:1) - User credit management
+- **User** → **Payments** (1:N) - Payment history
+- **User** → **ServiceUsage** (1:N) - Service consumption tracking
+- **CreditAccount** → **CreditTransactions** (1:N) - Credit movements
+- **Service** → **ServiceUsage** (1:N) - Service consumption records
+- **StripeProduct** → **UserSubscriptions** (1:N) - Subscription plans
+
+## DJANGO IMPLEMENTATION PATTERNS
+
+This section provides concrete Django patterns used throughout QuickScale for consistent development.
+
+### **View Patterns**
+
+#### **Function-Based Views with Decorators**
+Standard pattern for most views with proper type hints and decorators:
+
+```python
+from django.contrib.auth.decorators import login_required, user_passes_test
+from django.http import HttpRequest, HttpResponse
+from django.shortcuts import render, get_object_or_404
+
+@login_required
+@user_passes_test(lambda u: u.is_staff)
+def user_detail(request: HttpRequest, user_id: int) -> HttpResponse:
+    """Display detailed information for a specific user."""
+    user = get_object_or_404(CustomUser, id=user_id)
+    
+    # Log admin action for audit trail
+    log_admin_action(
+        user=request.user,
+        action='USER_VIEW',
+        description=f'Viewed details for user: {user.email}',
+        request=request
+    )
+    
+    context = {
+        'user': user,
+        'credit_balance': user.credit_account.get_balance(),
+        'is_htmx': request.headers.get('HX-Request', False),
+    }
+    return render(request, 'admin_dashboard/user_detail.html', context)
+```
+
+#### **Class-Based Views (Limited Use)**
+Used primarily for generic operations like ListView:
+
+```python
+from django.views.generic import ListView
+from django.contrib.auth.mixins import LoginRequiredMixin
+
+class PublicPlanListView(ListView):
+    """Displays available Stripe plans for public viewing."""
+    template_name = 'stripe_manager/plan_comparison.html'
+    context_object_name = 'plans'
+
+    def get_queryset(self):
+        """Fetch active products sorted by display_order."""
+        return StripeProduct.objects.filter(active=True).order_by('display_order')
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        context['stripe_enabled'] = stripe_enabled
+        return context
+```
+
+#### **API Views with HTMX Support**
+Pattern for API endpoints that work with both HTMX and JSON requests:
+
+```python
+@method_decorator(csrf_exempt, name='dispatch')
+class TextProcessingView(View):
+    """API endpoint for text processing services."""
+    
+    def post(self, request):
+        """Process text and return analysis results."""
+        try:
+            # Validate content type
+            if request.content_type != 'application/json':
+                return JsonResponse({
+                    'success': False,
+                    'error': 'Invalid content type'
+                }, status=400)
+
+            # Parse and validate data
+            data = json.loads(request.body)
+            text = data.get('text')
+            operation = data.get('operation')
+            
+            # Business logic here
+            result = self._process_text(text, operation)
+            
+            return JsonResponse({
+                'success': True,
+                'data': result
+            })
+            
+        except Exception as e:
+            logger.error(f"Error processing request: {e}")
+            return JsonResponse({
+                'success': False,
+                'error': 'Internal server error'
+            }, status=500)
+```
+
+### **Model Patterns**
+
+#### **Standard Model with Meta and Methods**
+QuickScale models follow this pattern with proper Meta classes and business logic methods:
+
+```python
+from django.db import models
+from django.contrib.auth import get_user_model
+from django.utils.translation import gettext_lazy as _
+
+User = get_user_model()
+
+class CreditAccount(models.Model):
+    """Manages user credit balances and transactions."""
+    
+    user = models.OneToOneField(
+        User,
+        on_delete=models.CASCADE,
+        related_name='credit_account',
+        verbose_name=_('User')
+    )
+    created_at = models.DateTimeField(
+        _('Created At'),
+        auto_now_add=True
+    )
+    updated_at = models.DateTimeField(
+        _('Updated At'),
+        auto_now=True
+    )
+
+    class Meta:
+        verbose_name = _('Credit Account')
+        verbose_name_plural = _('Credit Accounts')
+        indexes = [
+            models.Index(fields=['user']),
+        ]
+
+    def __str__(self) -> str:
+        return f"Credit Account for {self.user.email}"
+
+    def get_balance(self) -> Decimal:
+        """Calculate current available credit balance."""
+        # Business logic implementation
+        pass
+
+    @classmethod
+    def get_or_create_for_user(cls, user: User) -> 'CreditAccount':
+        """Get or create credit account for user."""
+        credit_account, created = cls.objects.get_or_create(user=user)
+        return credit_account
+```
+
+#### **Model with Choices and Validation**
+Pattern for models with status choices and custom validation:
+
+```python
+class Payment(models.Model):
+    """Model for tracking all payment transactions."""
+    
+    PAYMENT_TYPE_CHOICES = [
+        ('CREDIT_PURCHASE', _('Credit Purchase')),
+        ('SUBSCRIPTION', _('Subscription')),
+        ('REFUND', _('Refund')),
+    ]
+    
+    STATUS_CHOICES = [
+        ('pending', _('Pending')),
+        ('succeeded', _('Succeeded')),
+        ('failed', _('Failed')),
+        ('refunded', _('Refunded')),
+        ('cancelled', _('Cancelled')),
+    ]
+
+    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='payments')
+    amount = models.DecimalField(max_digits=10, decimal_places=2)
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='pending')
+    payment_type = models.CharField(max_length=20, choices=PAYMENT_TYPE_CHOICES)
+    
+    def clean(self):
+        """Custom validation for payment model."""
+        if self.amount <= 0:
+            raise ValidationError("Payment amount must be positive")
+```
+
+### **Form Patterns**
+
+#### **ModelForm with Custom Styling**
+Standard pattern for forms with Bulma CSS styling:
+
+```python
+from django import forms
+from django.contrib.auth import get_user_model
+from allauth.account.forms import SignupForm
+
+class ProfileForm(forms.ModelForm):
+    """Enhanced profile form with comprehensive validation."""
+    
+    class Meta:
+        model = get_user_model()
+        fields = ['first_name', 'last_name', 'bio', 'company', 'website']
+        widgets = {
+            'first_name': forms.TextInput(attrs={
+                'class': 'input',
+                'placeholder': 'First name'
+            }),
+            'bio': forms.Textarea(attrs={
+                'class': 'textarea',
+                'rows': 4,
+                'placeholder': 'Tell us about yourself'
+            }),
+        }
+
+    def clean_website(self):
+        """Validate website URL format."""
+        website = self.cleaned_data.get('website')
+        if website and not website.startswith(('http://', 'https://')):
+            website = f'https://{website}'
+        return website
+```
+
+#### **Custom Authentication Forms**
+Pattern for customizing django-allauth forms:
+
+```python
+from allauth.account.forms import LoginForm
+from django import forms
+
+class CustomLoginForm(LoginForm):
+    """Custom login form with proper CSS styling."""
+    
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        
+        # Apply Bulma CSS classes
+        self.fields['login'].widget.attrs.update({
+            'class': 'input',
+            'placeholder': 'Email address'
+        })
+        self.fields['password'].widget.attrs.update({
+            'class': 'input',
+            'placeholder': 'Password'
+        })
+```
+
+### **URL Patterns**
+
+#### **App-Level URL Configuration**
+Pattern for organizing URLs with proper namespacing:
+
+```python
+# app/urls.py
+from django.urls import path
+from . import views
+
+app_name = 'credits'
+
+urlpatterns = [
+    path('', views.credits_dashboard, name='dashboard'),
+    path('balance/', views.credit_balance_api, name='balance_api'),
+    path('buy/', views.buy_credits, name='buy_credits'),
+    path('services/<int:service_id>/use/', views.use_service, name='use_service'),
+]
+```
+
+#### **Main URL Configuration**
+Pattern for including app URLs in main project:
+
+```python
+# core/urls.py
+from django.contrib import admin
+from django.urls import path, include
+
+urlpatterns = [
+    path('admin/', admin.site.urls),
+    path('accounts/', include('allauth.urls')),
+    path('', include('public.urls')),
+    path('dashboard/', include('admin_dashboard.urls')),
+    path('credits/', include('credits.urls')),
+    path('api/', include('api.urls')),
+]
+```
+
+### **Template Patterns**
+
+#### **Base Template Extension**
+All templates must extend the base template:
+
+```html
+<!-- app/templates/app/template.html -->
+{% extends "base.html" %}
+{% load static %}
+
+{% block title %}Page Title{% endblock %}
+
+{% block content %}
+<div class="container">
+    <div class="columns">
+        <div class="column">
+            <!-- Content here -->
+        </div>
+    </div>
+</div>
+{% endblock %}
+```
+
+#### **HTMX Integration Pattern**
+Pattern for HTMX-enabled templates with Alpine.js:
+
+```html
+<div x-data="{ 
+    loading: false,
+    balance: {{ user.credit_account.get_balance }}
+}">
+    <button 
+        hx-post="{% url 'credits:use_service' service.id %}"
+        hx-target="#service-result"
+        hx-indicator="#loading"
+        @click="loading = true"
+        :disabled="loading || balance < {{ service.credit_cost }}"
+        class="button is-primary">
+        Use Service ({{ service.credit_cost }} credits)
+    </button>
+    
+    <div id="service-result"></div>
+    <div id="loading" class="is-hidden">Processing...</div>
+</div>
+```
+
+### **Error Handling Patterns**
+
+#### **Exception Handling in Views**
+Consistent error handling pattern:
+
+```python
+def payment_process(request: HttpRequest) -> HttpResponse:
+    """Process payment with comprehensive error handling."""
+    try:
+        # Business logic
+        payment = process_stripe_payment(request.POST.get('payment_id'))
+        
+        messages.success(request, 'Payment processed successfully')
+        return redirect('dashboard')
+        
+    except InsufficientCreditsError as e:
+        messages.error(request, f'Insufficient credits: {e}')
+        logger.warning(f"Insufficient credits for user {request.user.id}: {e}")
+        
+    except StripeConfigurationError as e:
+        messages.error(request, 'Payment system temporarily unavailable')
+        logger.error(f"Stripe configuration error: {e}")
+        
+    except Exception as e:
+        messages.error(request, 'An unexpected error occurred')
+        logger.exception(f"Unexpected error in payment processing: {e}")
+        
+    return redirect('payment_form')
+```
+
+#### **Custom Exception Classes**
+Pattern for domain-specific exceptions:
+
+```python
+# credits/models.py
+class InsufficientCreditsError(Exception):
+    """Raised when user doesn't have enough credits for an operation."""
+    def __init__(self, required: Decimal, available: Decimal):
+        self.required = required
+        self.available = available
+        super().__init__(
+            f"Insufficient credits. Required: {required}, Available: {available}"
+        )
+```
+
+### **Testing Patterns**
+
+#### **Model Testing Pattern**
+Standard pattern for testing models:
+
+```python
+from django.test import TestCase
+from django.contrib.auth import get_user_model
+from credits.models import CreditAccount
+
+User = get_user_model()
+
+class CreditAccountTestCase(TestCase):
+    """Test CreditAccount model functionality."""
+    
+    def setUp(self):
+        """Set up test data."""
+        self.user = User.objects.create_user(
+            email='test@example.com',
+            password='testpass123'
+        )
+        self.credit_account = CreditAccount.objects.create(user=self.user)
+    
+    def test_get_balance_calculation(self):
+        """Test balance calculation with multiple transactions."""
+        # Create test transactions
+        initial_balance = self.credit_account.get_balance()
+        
+        # Test business logic
+        self.assertEqual(initial_balance, Decimal('0.00'))
+```
+
+#### **View Testing Pattern**
+Pattern for testing views with authentication:
+
+```python
+class ViewTestCase(TestCase):
+    """Test view functionality."""
+    
+    def setUp(self):
+        """Set up test data and client."""
+        self.user = User.objects.create_user(
+            email='test@example.com',
+            password='testpass123'
+        )
+        self.client.login(email='test@example.com', password='testpass123')
+    
+    def test_dashboard_requires_login(self):
+        """Test that dashboard requires authentication."""
+        self.client.logout()
+        response = self.client.get(reverse('admin_dashboard:dashboard'))
+        self.assertEqual(response.status_code, 302)  # Redirect to login
+    
+    def test_dashboard_shows_credit_balance(self):
+        """Test dashboard displays user credit balance."""
+        response = self.client.get(reverse('admin_dashboard:dashboard'))
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'Credit Balance')
+```
+
+### **Import Organization Standards**
+
+#### **Standard Import Order**
+All Python files must follow this import organization:
+
+```python
+# Standard library imports
+import json
+import logging
+from datetime import datetime, timedelta
+from decimal import Decimal
+
+# Third-party imports
+from django.contrib.auth.decorators import login_required
+from django.http import HttpRequest, HttpResponse
+from django.shortcuts import render, get_object_or_404
+
+# Local application imports
+from core.env_utils import get_env
+from .models import CreditAccount, Payment
+from .forms import CreditPurchaseForm
+```
+
+#### **User Model Import Pattern**
+Always use dynamic user model import:
+
+```python
+from django.contrib.auth import get_user_model
+
+User = get_user_model()  # Never import User directly
+```
+
+### **File Organization Standards**
+
+#### **App Structure**
+Each Django app follows this exact structure:
+
+```
+app_name/
+├── __init__.py
+├── apps.py              # App configuration
+├── models.py            # Data models
+├── views.py             # View logic
+├── forms.py             # Form definitions (if needed)
+├── urls.py              # URL routing
+├── admin.py             # Admin configuration
+├── migrations/          # Database migrations
+├── templates/app_name/  # App-specific templates
+├── static/app_name/     # App-specific static files
+└── tests/               # App tests
+```
+
+#### **Template Organization**
+Templates are organized by app with base template inheritance:
+
+```
+templates/
+├── base.html                    # Main base template
+├── components/                  # Reusable components
+│   ├── navbar.html
+│   └── footer.html
+├── app_name/                    # App-specific templates
+│   ├── base_app.html           # App base template (extends base.html)
+│   ├── list.html
+│   └── detail.html
+└── account/                     # Authentication templates
+    ├── login.html
+    └── signup.html
 ```
 
 ## AUTHENTICATION
@@ -783,6 +1180,7 @@ The authentication system is configured in multiple files:
 - **Credit System Integration**: Each user automatically gets a linked `CreditAccount` model through a OneToOne relationship, enabling credit-based billing and service usage tracking.
 - **Custom Adapters**: The `AccountAdapter` and `SocialAccountAdapter` in `users.adapters` handle custom logic for email-only authentication and disable social login.
 - **Custom Forms**: Forms in `users.forms` provide additional styling and validation for login, signup, and password reset.
+- **Custom Templates**: All templates under `templates/account/` are customized for the QuickScale branding and user experience.
 - **Custom Templates**: All templates under `templates/account/` are customized for the QuickScale branding and user experience.
 
 ### Email Templates
@@ -1339,7 +1737,7 @@ The project uses Docker and Docker Compose for containerization:
 HTMX is used for dynamic content loading and form submissions without full page reloads:
 
 1. **Form submissions**: Login, signup, and contact forms
-2. **Dynamic content loading**: AdminDashboard components
+2. **Dynamic content loading**: Dashboard components
 3. **Real-time updates**: Notifications and messages
 
 ## ALPINE.JS INTEGRATION
@@ -1350,7 +1748,6 @@ Alpine.js is used for all client-side interactivity and state management:
 2. **Modal dialogs**: Confirmation dialogs
 3. **Form validation**: Client-side validation
 4. **Interactive UI components**: Password strength meters, toggles, etc.
-
 
 ### JavaScript Implementation Standards
 
@@ -1376,7 +1773,6 @@ Alpine.js is used for all client-side interactivity and state management:
 - **Subscription Management**: Complete subscription lifecycle management with plan upgrades, downgrades, and automatic credit transfer.
 - **Payment Processing**: Secure payment processing with receipt generation, audit trails, and multiple payment method support.
 - **Service Management**: Configurable services with credit cost validation, usage tracking, and priority-based consumption.
-- **Service Admin Interface**: Comprehensive service management through both Django admin and custom admin dashboard with real-time enable/disable, usage analytics, and bulk operations.
 - **AI Service Framework**: Complete framework for AI engineers to create and integrate AI services with automated credit consumption, template generation, and comprehensive development tools.
 - **Admin Dashboard**: Built-in admin interface for credit management, user account oversight, service configuration, and Stripe product synchronization.
 - **Modern Frontend**: Alpine.js and HTMX for interactive UI components without complex JavaScript frameworks.
@@ -1526,3 +1922,54 @@ templates/account/
 3. **Password Reset**: User requests reset → django-allauth sends secure email → user sets new password
 4. **Email Verification**: User clicks email link → django-allauth verifies → account fully activated
 
+## DEVELOPMENT WORKFLOW REFERENCE
+
+For comprehensive coding standards and development processes, refer to these workflow documents:
+
+### **📋 Coding Standards & Workflow Index**
+- **[CONTRIBUTING.md](./CONTRIBUTING.md)** - Complete coding standards and workflow navigation
+  - SOLID principles implementation guidance
+  - DRY, KISS, and explicit failure principles
+  - Code style standards (naming, imports, type hints)
+  - Testing requirements and patterns
+
+### **🔄 Development Stage Guidelines**
+- **[PLAN.md](./docs/contrib/PLAN.md)** - Planning and analysis stage
+  - Requirements analysis and clarification
+  - Architecture compliance planning
+  - Task boundary definition
+  - Implementation step planning
+
+- **[ACT.md](./docs/contrib/ACT.md)** - Implementation stage best practices
+  - SOLID principles during implementation
+  - Code structure and organization
+  - Django-specific implementation patterns
+  - Error handling and logging standards
+
+- **[QUALITY.md](./docs/contrib/QUALITY.md)** - Quality control and validation
+  - Code quality validation checklists
+  - Testing standards verification
+  - Architecture compliance checking
+  - Documentation quality assurance
+
+- **[DEBUG.md](./docs/contrib/DEBUG.md)** - Debugging and problem resolution
+  - Systematic debugging approaches
+  - Root cause analysis methodology
+  - DMAIC process for structured debugging
+  - Bug fixing best practices
+
+### **🎯 Quick Reference for AI Assistants**
+When working on QuickScale:
+
+1. **Always edit template files** in `quickscale/project_templates/`, not generated projects
+2. **Follow Django patterns** outlined in this document
+3. **Use coding standards** from CONTRIBUTING.md workflow
+4. **Apply systematic debugging** when issues arise
+5. **Validate quality** before considering implementation complete
+
+### **📚 Context Documents for LLM Tasks**
+For complete context when requesting LLM assistance, provide:
+- **README.md** - Project overview and features
+- **USER_GUIDE.md** - Usage instructions and commands  
+- **TECHNICAL_DOCS.md** - Architecture and implementation patterns (this document)
+- **CONTRIBUTING.md** - Coding standards and workflow index

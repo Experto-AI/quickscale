@@ -1,0 +1,13 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Subscription Activated!</title>
+</head>
+<body>
+    <h1>Subscription Activated!</h1>
+    <p>Your subscription has been successfully activated.</p>
+    {% if session_id %}
+        <p>Session ID: {{ session_id }}</p>
+    {% endif %}
+</body>
+</html>

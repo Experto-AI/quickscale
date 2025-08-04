@@ -252,7 +252,7 @@ class URLSecurityTests(unittest.TestCase):
             'api': self.base_path / 'quickscale' / 'project_templates' / 'api' / 'urls.py'
         }
     
-    def test_admin_url_patterns(self):
+    def test_admin_url_security_patterns(self):
         """Test that admin URLs are properly secured."""
         if self.url_files['admin_dashboard'].exists():
             with open(self.url_files['admin_dashboard'], 'r') as f:

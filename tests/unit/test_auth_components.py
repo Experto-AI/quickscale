@@ -314,7 +314,7 @@ class TestAccountAdapter:
 class TestSocialAccountAdapter:
     """Test cases for the social account adapter which is disabled by design."""
     
-    def test_is_open_for_signup(self, MockSocialAccountAdapter):
+    def test_social_is_open_for_signup(self, MockSocialAccountAdapter):
         """Test that social signup is disabled."""
         adapter = MockSocialAccountAdapter()
         request = Mock()
