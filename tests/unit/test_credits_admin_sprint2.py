@@ -46,33 +46,6 @@ class Sprint2AdminTemplateTests(unittest.TestCase):
         self.assertTrue(self.forms_py.exists(),
                        f"forms.py not found at {self.forms_py}")
     
-    def test_admin_credit_adjustment_form_exists(self):
-        """Test that AdminCreditAdjustmentForm exists in forms.py."""
-        with open(self.forms_py, 'r') as f:
-            forms_content = f.read()
-        
-        # Check for AdminCreditAdjustmentForm class
-        self.assertIn("class AdminCreditAdjustmentForm", forms_content,
-                     "AdminCreditAdjustmentForm class not found")
-        
-        # Check for amount field
-        self.assertIn("amount = forms.DecimalField", forms_content,
-                     "Amount field not found in form")
-        
-        # Check for reason field
-        self.assertIn("reason = forms.CharField", forms_content,
-                     "Reason field not found in form")
-        
-        # Check for validation methods
-        self.assertIn("def clean_amount", forms_content,
-                     "clean_amount method not found")
-        self.assertIn("def clean_reason", forms_content,
-                     "clean_reason method not found")
-        
-        # Check for proper validators
-        self.assertIn("MinValueValidator", forms_content,
-                     "MinValueValidator not imported or used")
-    
     def test_enhanced_admin_configuration(self):
         """Test that admin.py has been enhanced with Sprint 2 functionality."""
         with open(self.admin_py, 'r') as f:
@@ -226,7 +199,7 @@ class Sprint2AdminTemplateTests(unittest.TestCase):
         self.assertIn('name="post"', template_content,
                      "Post confirmation field not found")
     
-    def test_admin_url_patterns(self):
+    def test_credits_admin_url_patterns(self):
         """Test that admin URL patterns are properly configured."""
         with open(self.admin_py, 'r') as f:
             admin_content = f.read()

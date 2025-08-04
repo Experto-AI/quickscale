@@ -1,224 +1,159 @@
 # **QuickScale User Guide**
 
-Welcome to QuickScale! This guide will help you set up, use, and deploy your QuickScale project effectively.
+Welcome to QuickScale! This guide provides complete setup and deployment instructions for building SaaS applications with Django, Stripe billing, and AI service frameworks.
 
-This guide will help you to know the functionality sections and user flow of QuickScale.
+## **1. Installation & Setup**
 
----
+### **Prerequisites**
+- Python 3.11+ 
+- Docker & Docker Compose
+- Git (for development)
 
-## **1. Installation**
-
-QuickScale requires Python 3.11+ and Docker. Follow these steps to install QuickScale:
-
-1. **Install QuickScale**:
-   ```bash
-   pip install quickscale
-   ```
-
-2. **Verify Installation and Required Dependencies**:
-   ```bash
-   quickscale check
-   ```
-
----
-
-## **2. Creating a New Project**
-
-To create a new project, use the `quickscale init` command:
-
-1. **Initialize a Project**:
-   ```bash
-   quickscale init my-awesome-project
-   ```
-
-2. **Configure the Project**:
-   Review and edit `.env` file with your settings:
-   ```bash
-   cd my-awesome-project
-   # Edit .env file with your preferred editor
-   ```
-
-3. **Start the Services**:
-   ```bash
-   quickscale up
-   ```
-
-4. **Access the Application**:
-   Open your browser and go to `http://localhost:8000` or alternate port if specified in `.env`.
-
----
-
-## **3. Managing Your Project**
-
-QuickScale provides a CLI for managing your project. Below are the most common commands:
-
-### **3.1. Help**
-- **Initialize a Project**:
-  ```bash
-  quickscale help
-  ```
-
-### **3.2. Stopping and Starting Services**
-- **Stop Services**:
-  ```bash
-  quickscale down
-  ```
-- **Start Services (Again)**:
-  ```bash
-  quickscale up
-  ```
-
-### **3.3. Viewing Logs**
-- **View Logs for All Services**:
-  ```bash
-  quickscale logs
-  ```
-- **View Logs for a Specific Service**:
-  ```bash
-  quickscale logs web
-  quickscale logs db
-  ```
-
-### **3.4. Running Django Commands**
-- **Run Django Management Commands**:
-  ```bash
-  quickscale manage <command>
-  ```
-  Example:
-  ```bash
-  quickscale manage help
-  ```
-
-### **3.5. Accessing Shells**
-- **Interactive Bash Shell**:
-  ```bash
-  quickscale shell
-  ```
-- **Django Shell**:
-  ```bash
-  quickscale django-shell
-  ```
-
-### **3.6. AI Service Development**
-- **Generate AI Service Template**:
-  ```bash
-  quickscale generate-service my_ai_service
-  quickscale generate-service sentiment_analyzer --type text_processing
-  quickscale generate-service image_classifier --type image_processing
-  ```
-- **Configure Service in Database**:
-  ```bash
-  quickscale manage configure_service my_service --credit-cost 2.0 --description "My AI service"
-  ```
-
-### **3.7. Destroying a Project**
-
-**Permanently Delete a Project**:
-
+### **Install QuickScale**
 ```bash
-quickscale destroy
+# Install from PyPI
+pip install quickscale
+
+# Verify installation
+quickscale check
 ```
-> ⚠️ **Warning**: This will delete all project files, containers, and volumes, but will keep Docker images for faster rebuilds.
 
-To also delete Docker images (for a full clean, slower rebuild):
-
+### **Create Your First Project**
 ```bash
+# Initialize new SaaS project
+quickscale init my-saas-app
+
+# Navigate to project directory
+cd my-saas-app
+
+# Review configuration file
+cat .env
+
+# Start services
+quickscale up
+
+# Access application
+open http://localhost:8000
+```
+
+## **2. Project Management**
+
+### **Starting & Stopping Services**
+```bash
+# Start all services (web app + database)
+quickscale up
+
+# Start with Docker cache rebuild
+quickscale up --no-cache
+
+# Stop all services
+quickscale down
+
+# Check service status
+quickscale ps
+
+# View service logs
+quickscale logs              # All services
+quickscale logs web          # Web application only
+quickscale logs db           # Database only
+```
+
+### **Development Tools**
+```bash
+# Interactive bash shell in web container
+quickscale shell
+
+# Execute command in container
+quickscale shell -c "python manage.py showmigrations"
+
+# Django shell for model interaction
+quickscale django-shell
+
+# Run Django management commands
+quickscale manage migrate
+quickscale manage createsuperuser
+quickscale manage collectstatic
+```
+
+### **Project Cleanup**
+```bash
+# Remove project (keeps Docker images for faster rebuild)
+quickscale destroy
+
+# Remove project and Docker images (slower rebuild)
 quickscale destroy --delete-images
 ```
-> ⚠️ **Warning**: This will delete all project files, containers, volumes, and Docker images. Use only if you want a completely clean slate.
 
----
+### **AI Service Development**
+```bash
+# Generate AI service template
+quickscale generate-service my_ai_service
 
-## **4. Starter Accounts**
+# Generate specific service types
+quickscale generate-service sentiment_analyzer --type text_processing
+quickscale generate-service image_classifier --type image_processing
 
-QuickScale includes pre-configured accounts for testing:
+# Validate service implementation
+quickscale validate-service ./services/my_service.py
 
-- **User Account**:
-  - Email: `user@test.com`
-  - Password: `userpasswd`
+# Show available service examples
+quickscale show-service-examples
 
-- **Admin Account**:
-  - Email: `admin@test.com`
-  - Password: `adminpasswd`
+# Configure service in database
+quickscale manage configure_service my_service --credit-cost 2.0 --description "My AI service"
+```
 
----
+## **3. Default Accounts & Access**
+
+QuickScale creates test accounts automatically for immediate development:
+
+### **User Account**
+- **Email**: `user@test.com`
+- **Password**: `userpasswd`
+- **Access**: User dashboard, credit management, service usage
+
+### **Admin Account**  
+- **Email**: `admin@test.com`
+- **Password**: `adminpasswd`
+- **Access**: Admin dashboard, user management, payment tools, service analytics
+
+*Note: Change passwords in production environments*
+
+## **4. Configuration**
+
+Edit `.env` file in your project directory:
+
+```env
+# Project Settings
+PROJECT_NAME=MyAwesomeApp
+DEBUG=True
+SECRET_KEY=auto-generated
+
+# Database
+DB_NAME=myapp_db
+DB_USER=myapp_user
+DB_PASSWORD=auto-generated
+
+# Ports (auto-detected if in use)
+WEB_PORT=8000
+DB_PORT_EXTERNAL=5432
+
+# Stripe (optional for development)
+STRIPE_ENABLED=False
+STRIPE_SECRET_KEY=sk_test_...
+STRIPE_PUBLIC_KEY=pk_test_...
+STRIPE_WEBHOOK_SECRET=whsec_...
+```
 
 ## **5. Troubleshooting**
 
-### **5.1. Common Issues**
-- **Docker Not Running**:
-  Ensure Docker is installed and running on your system.
+### **Common Issues**
+- **Docker Not Running**: Ensure Docker is installed and running on your system
+- **Port Already in Use**: QuickScale will fail immediately if the configured port is in use
+- **Database Connection Errors**: Check `DB_USER`, `DB_PASSWORD`, and other database settings in `.env` file
+- ** Stripe Configuration**: If using Stripe, ensure `STRIPE_ENABLED` is set to `True` and keys are correct
 
-- **Port Already in Use**:
-  QuickScale will fail immediately if the configured port is in use. To resolve:
-  ```bash
-  sudo lsof -i :8000
-  sudo kill <PID>
-  # or edit your .env file to use a different WEB_PORT or DB_PORT_EXTERNAL
-  ```
-
-- **Environment Configuration**:
-  - Review and edit `.env` file for proper configuration
-  - Make sure required variables are set (check .env.example for reference)
-  - For production, ensure secure values are used (not default ones)
-
-#### **Important Environment Variables**
-
-**Basic Configuration:**
-```bash
-PROJECT_NAME=your-project-name
-WEB_PORT=8000
-DEBUG=True  # Set to False for production
-SECRET_KEY=your-secret-key  # Change for production
-```
-
-**Database Configuration:**
-```bash
-DB_HOST=db
-DB_PORT=5432
-DB_NAME=quickscale
-DB_USER=admin
-DB_PASSWORD=adminpasswd
-```
-
-**Email Configuration:**
-```bash
-EMAIL_HOST=smtp.example.com
-EMAIL_PORT=587
-EMAIL_HOST_USER=your-email@example.com
-EMAIL_HOST_PASSWORD=your-password
-EMAIL_USE_TLS=True
-DEFAULT_FROM_EMAIL=noreply@example.com
-```
-
-**Credit System (Optional):**
-```bash
-CREDIT_SYSTEM_ENABLED=True
-DEFAULT_CREDIT_BALANCE=0
-```
-
-**Stripe Payment Processing (Optional):**
-```bash
-STRIPE_ENABLED=True
-STRIPE_PUBLIC_KEY=pk_test_your_key_here
-STRIPE_SECRET_KEY=sk_test_your_key_here
-STRIPE_WEBHOOK_SECRET=whsec_your_webhook_secret
-STRIPE_LIVE_MODE=False  # Set to True for production
-```
-
-**Port Fallback (Optional):**
-```bash
-WEB_PORT_ALTERNATIVE_FALLBACK=yes
-DB_PORT_EXTERNAL_ALTERNATIVE_FALLBACK=yes
-```
-
-- **Database Connection Errors**:
-  - Verify your `DB_USER`, `DB_PASSWORD`, and other database settings in `.env` file
-  - Check if database service is running: `quickscale ps`
-  - View database logs: `quickscale logs db`
-  - View web server logs: `quickscale logs web`
-
-### **5.2. Logs**
+### **Logs**
 Check logs for detailed error messages:
 ```bash
 quickscale logs
@@ -226,353 +161,116 @@ quickscale logs web
 quickscale logs db
 ```
 
-### **5.3. Django Manage Commands**
-
-QuickScale seamlessly integrates with Django's management commands through the `quickscale manage` command. This allows you to run any Django management command within your project's Docker container.
-
-Common Django management commands:
+### **Django Management Commands**
+QuickScale integrates with Django's management commands through `quickscale manage`:
 
 ```bash
 # Database management
 quickscale manage migrate           # Run database migrations
-quickscale manage makemigrations    # Create new migrations based on model changes
-quickscale manage sqlmigrate app_name migration_name  # SQL statements for migration
-
-# Development server
-quickscale manage runserver         # Run development server (rarely needed as Docker handles this)
+quickscale manage makemigrations    # Create new migrations
 
 # User management
 quickscale manage createsuperuser   # Create a Django admin superuser
 quickscale manage changepassword    # Change a user's password
 
-# Application management
-quickscale manage startapp app_name # Create a new Django app
-quickscale manage shell             # Open Django interactive shell
-quickscale manage dbshell           # Open database shell
-
-# Static files
-quickscale manage collectstatic     # Collect static files
-quickscale manage findstatic        # Find static file locations
-
 # Testing
 quickscale manage test              # Run all tests
 quickscale manage test app_name     # Run tests for specific app
-quickscale manage test app.TestClass # Run tests in a specific test class
-quickscale manage test app.TestClass.test_method # Run a specific test method
 
-# Maintenance
-quickscale manage clearsessions     # Clear expired sessions
-quickscale manage flush             # Remove all data from database
-quickscale manage dumpdata          # Export data from database
-quickscale manage loaddata          # Import data to database
+# Static files
+quickscale manage collectstatic     # Collect static files
 
 # Inspection
 quickscale manage check             # Check for project issues
-quickscale manage diffsettings      # Display differences between current settings and Django defaults
-quickscale manage inspectdb         # Generate models from database
 quickscale manage showmigrations    # Show migration status
 ```
----
 
 ## **6. Using the Web Interface**
 
-Once your QuickScale project is running, you can access it through your web browser at `http://localhost:8000`.
+Once your QuickScale project is running, access it at `http://localhost:8000`.
 
-### **6.1. Public Pages**
+### **Authentication**
+- **Registration**: `/accounts/signup/` - Enter email/password, verify email to activate
+- **Login**: `/accounts/login/` - Use email/password to access dashboard
+- **Password Reset**: Click "Forgot Password?" and follow email instructions
 
-- **Home Page** (`/`): Landing page with project overview
-- **About Page** (`/about/`): Information about your project
-- **Contact Page** (`/contact/`): Contact form for user inquiries
-- **Login Page** (`/accounts/login/`): User authentication
-- **Sign Up Page** (`/accounts/signup/`): New user registration
-
-### **6.2. User Authentication**
-
-QuickScale uses email-based authentication:
-
-1. **Registration**:
-   - Go to `/accounts/signup/`
-   - Enter your email and password (no username required)
-   - Check your email for verification link
-   - Click the verification link to activate your account
-
-2. **Login**:
-   - Go to `/accounts/login/`
-   - Enter your email and password
-   - Access your user dashboard after successful login
-
-3. **Password Reset**:
-   - Click "Forgot Password?" on the login page
-   - Enter your email address
-   - Check email for reset instructions
-
-### **6.3. User Dashboard**
-
-After logging in, users can access:
-
-- **Profile Management** (`/users/profile/`): Update personal information
+### **User Dashboard** 
+- **Profile Management**: Update personal information
+- **Credit Balance**: View and manage credits (if enabled)
 - **Account Settings**: Change password and preferences
-- **Credit Dashboard** (`/admin_dashboard/`): View and manage credits (if credit system is enabled)
 
-### **6.4. Admin Areas**
-
-Staff users have access to additional features:
-
-- **Admin Dashboard** (`/admin_dashboard/`): User and system management
-- **Django Admin** (`/admin/`): Full administrative interface
+### **Admin Dashboard** (Staff only)
 - **User Management**: View and manage user accounts
-- **Credit Management**: Handle user credits and billing (if enabled)
-- **Payment Tools** (`/admin_dashboard/payments/search/`): Payment support and investigation
-  - Search and filter payments by multiple criteria
-  - Investigate payment details and user history
-  - Process basic refunds through Stripe integration
-  - View payment warnings and Stripe data
-- **Service Management** (`/admin_dashboard/services/`): Configure and monitor application services
-  - Enable/disable services in real-time
-  - View service usage analytics and statistics
-  - Monitor credit consumption per service
-  - Track unique users and service performance
-  - Bulk operations for service management
+- **Credit Administration**: Manual credit adjustments with audit trails
+- **Payment Tools**: Search payments, investigate issues, process refunds
+- **Service Management**: Enable/disable services, view analytics
+
+## **7. Credit System & Billing** (Optional)
+
+If Stripe is enabled, users can purchase and manage credits:
+
+### **Credit Types**
+- **Pay-as-you-go**: Never expire, used second
+- **Subscription**: Monthly allocation, used first
+
+### **Purchasing**
+- **One-time**: Select package, pay through Stripe checkout
+- **Subscription**: Choose plan (Basic/Pro), automatic monthly allocation
+
+### **Management**
+- View balance breakdown and transaction history
+- Upgrade/downgrade plans with automatic credit transfer
+- Cancel subscriptions while keeping unused credits
 
 ---
 
-## **7. Credit System & Billing**
+For more detailed information, see:
+- [**Technical Documentation**](./TECHNICAL_DOCS.md) - Architecture and development details
+- [**Contributing Guide**](./CONTRIBUTING.md) - Development guidelines
 
-If your project has the credit system enabled, users can purchase and manage credits for service usage.
+## **8. AI Service Development**
 
-### **7.1. Understanding Credits**
+QuickScale includes an AI service framework for creating credit-based AI services.
 
-- **Pay-as-you-go Credits**: Purchase credits once, use anytime (never expire)
-- **Subscription Credits**: Monthly credits that expire at the end of each billing period
-- **Credit Priority**: Subscription credits are used first, then pay-as-you-go credits
-
-### **7.2. Viewing Your Credit Balance**
-
-1. Log in to your account
-2. Go to the Admin Dashboard (`/admin_dashboard/`)
-3. View your current credit balance and breakdown
-4. See transaction history and usage patterns
-
-### **7.3. Purchasing Credits**
-
-**One-time Credit Purchase:**
-1. Navigate to the credit dashboard
-2. Select a credit package
-3. Complete payment through Stripe checkout
-4. Credits are added to your account immediately
-
-**Subscription Plans:**
-1. Compare available plans (Basic vs Pro)
-2. Select your preferred plan
-3. Complete subscription setup through Stripe
-4. Receive monthly credit allocation automatically
-
-### **7.4. Managing Subscriptions**
-
-- **View Current Plan**: See your active subscription details
-- **Upgrade/Downgrade**: Change plans with automatic credit transfer
-- **Cancel Subscription**: End recurring billing while keeping unused credits
-- **Billing History**: Access payment records and receipts
-
-### **7.5. Using Credits**
-
-Credits are automatically consumed when using services:
-- System checks available credits before allowing service access
-- Usage is tracked and displayed in your dashboard
-- Low balance warnings help you avoid service interruptions
-
----
-
-## **8. Payment & Billing**
-
-### **8.1. Payment Methods**
-
-QuickScale uses Stripe for secure payment processing:
-- Credit/debit cards
-- Digital wallets (Apple Pay, Google Pay)
-- Bank transfers (where available)
-
-### **8.2. Receipts and Invoices**
-
-- Automatic receipt generation for all payments
-- Downloadable receipts with unique reference numbers
-- Complete payment history accessible in your dashboard
-- Monthly invoices for subscription payments
-
-### **8.3. Payment Issues**
-
-If you experience payment problems:
-1. Check your payment method is valid and has sufficient funds
-2. Verify billing address information
-3. Contact support through the contact form
-4. Check your email for payment failure notifications
-
----
-
-## **9. Admin Payment Tools**
-
-### **9.1. Payment Search & Investigation**
-
-QuickScale provides comprehensive payment support tools for administrators to investigate and resolve payment issues.
-
-**Access Payment Tools:**
+**Quick Start:**
 ```bash
-# Access via admin dashboard
-/admin_dashboard/payments/search/
+# Generate a new AI service
+quickscale generate-service --name my-ai-service
+
+# View available service templates
+quickscale show-service-examples
+
+# Validate service configuration
+quickscale validate-service
 ```
 
-**Search Capabilities:**
-- **General Search**: Search across user emails, Stripe IDs, and payment descriptions
-- **Filtered Search**: Filter by payment type, status, amount ranges, and date ranges
-- **User-Specific Search**: Find all payments for a specific user
-- **Stripe ID Lookup**: Locate payments by exact Stripe Payment Intent ID
+**Service Features:**
+- **Credit Integration**: Automatic credit consumption and billing
+- **Template System**: Pre-built service templates and examples  
+- **API Endpoints**: RESTful API with authentication
+- **Usage Tracking**: Built-in usage analytics and monitoring
+- **Rate Limiting**: Configurable rate limiting and quotas
 
-**Payment Investigation:**
-- **Detailed Payment View**: Complete payment information with status and metadata
-- **User Payment History**: Last 10 payments from the same user for context
-- **Stripe Data Integration**: Real-time retrieval of Stripe payment intent details
-- **Warning System**: Automated detection of potential issues (missing IDs, failed payments)
-- **Refund History**: Display of related refund transactions
+**Service Templates Available:**
+- Text processing services
+- Image analysis services
+- API integration services
+- Custom AI model services
 
-### **9.2. Refund Processing**
-
-**Refund Capabilities:**
-- **Partial Refunds**: Process partial refunds for any amount up to the original payment
-- **Full Refunds**: Complete refund processing with automatic status updates
-- **Credit Adjustment**: Automatic credit removal for refunded credit purchases
-- **Audit Compliance**: Required admin notes and reason tracking for all refunds
-
-**Refund Process:**
-1. **Search Payment**: Use payment search to locate the payment to refund
-2. **Investigate**: Click "Investigate" to view detailed payment information
-3. **Initiate Refund**: Click "Initiate Refund" button for succeeded payments
-4. **Complete Form**: Enter refund amount, reason, and admin notes
-5. **Process**: Refund is processed through Stripe with automatic record creation
-
-**Refund Requirements:**
-- **Payment Status**: Only succeeded payments can be refunded
-- **Stripe Integration**: Valid Stripe Payment Intent ID required
-- **Admin Notes**: Detailed notes required for audit compliance
-- **Reason Selection**: Must select appropriate refund reason
-
-### **9.3. Audit & Compliance**
-
-**Audit Features:**
-- **Admin Action Logging**: All payment searches and refunds are logged
-- **Investigation Tracking**: Payment investigation activities recorded
-- **Refund Documentation**: Complete refund audit trail with admin attribution
-- **Warning Detection**: Automated flagging of unusual payment patterns
-
-**Compliance Tools:**
-- **Receipt Generation**: Access to complete payment receipt data
-- **Transaction History**: Full payment lifecycle tracking
-- **User Context**: User account information and payment patterns
-- **Stripe Integration**: Direct links to Stripe dashboard for detailed investigation
+For detailed AI service development, see [Technical Documentation](./TECHNICAL_DOCS.md).
 
 ---
 
-## **10. AI Service Development Guide**
+## **9. Testing QuickScale Codebase**
 
-QuickScale includes a comprehensive AI service framework that allows AI engineers to quickly create and deploy AI services with automatic credit consumption and billing.
+Install test dependencies and run the test suite:
 
-### **10.1. Getting Started with AI Services**
-
-**Generate Your First Service:**
-```bash
-# Basic AI service
-quickscale generate-service my_first_service
-
-# Text processing service (sentiment analysis, summarization, etc.)
-quickscale generate-service text_analyzer --type text_processing
-
-# Image processing service (classification, analysis, etc.)
-quickscale generate-service image_processor --type image_processing
-```
-
-**Configure Service in Database:**
-```bash
-# Configure service with credit cost
-quickscale manage configure_service my_first_service --credit-cost 1.0 --description "My first AI service"
-
-# List all configured services
-quickscale manage configure_service --list
-
-# Update existing service
-quickscale manage configure_service my_first_service --update --credit-cost 2.0
-```
-
-### **10.2. Service Development Workflow**
-
-1. **Generate Template**: Use `quickscale generate-service` to create service boilerplate
-2. **Implement Logic**: Add your AI processing logic to the `execute_service` method
-3. **Configure Database**: Set credit costs and activate the service
-4. **Test Service**: Use the generated example files to test your implementation
-5. **Deploy**: Service automatically integrates with credit system and admin interface
-
-### **10.3. Example Service Structure**
-
-```python
-@register_service("my_service_name")
-class MyAIService(BaseService):
-    """Your AI service description."""
-    
-    def execute_service(self, user: User, **kwargs) -> Dict[str, Any]:
-        """Implement your AI logic here."""
-        # 1. Validate inputs
-        input_data = kwargs.get('input_data')
-        if not input_data:
-            raise ValueError("input_data is required")
-        
-        # 2. Process with your AI model/API
-        result = your_ai_processing_function(input_data)
-        
-        # 3. Return structured results
-        return {
-            'status': 'completed',
-            'result': result,
-            'metadata': {
-                'service_name': 'my_service_name',
-                'processing_time': '50ms'
-            }
-        }
-```
-
-### **10.4. Service Integration Features**
-
-- **Automatic Credit Consumption**: Credits automatically deducted when service is used
-- **Usage Tracking**: Complete audit trail of service usage
-- **Admin Interface**: Real-time service management through admin dashboard
-- **API Integration**: Services automatically available via API endpoints
-- **Error Handling**: Consistent error patterns and validation
-- **Documentation**: Auto-generated usage examples and documentation
-
-### **10.5. Available Example Services**
-
-QuickScale includes several example services that demonstrate best practices:
-
-- **Text Sentiment Analysis**: Analyze sentiment with confidence scoring
-- **Keyword Extraction**: Extract important keywords from text
-- **Image Metadata Extraction**: Extract metadata from image files
-- **Data Validation**: Validate different data formats (text, email, JSON)
-
-For complete documentation, see the generated `docs/service_development_guide.md` in your project.
-
----
-
-## **11. Running Codebase Tests**
-
-QuickScale includes a comprehensive test suite to ensure functionality works as expected.
-
-First, install the test dependencies:
 
 ```bash
+# Install test dependencies
 pip install -r requirements-test.txt
-```
 
-The simplest way to run tests is using the `run_tests.sh` script:
-
-```bash
-# Run all tests (default)
+# Run all tests
 ./run_tests.sh
 
 # Run unit tests
@@ -586,6 +284,15 @@ The simplest way to run tests is using the `run_tests.sh` script:
 
 # Run with coverage report
 ./run_tests.sh --coverage
+
+# Show only failed tests
+./run_tests.sh --failures-only
+
+# Stop on first failure
+./run_tests.sh --exitfirst -u
+
+# Run specific test file, specially for debugging
+python -m pytest tests/unit/specific_unit_test.py
 ```
 
 For Django application tests, you can use the Django test runner through the QuickScale CLI:
@@ -595,74 +302,31 @@ For Django application tests, you can use the Django test runner through the Qui
 quickscale manage test
 ```
 
+## **10. Troubleshooting**
+
+**Common Issues:**
+
+- **Port conflicts**: Update ports in `.env` file
+- **Database connection**: Verify PostgreSQL is running and credentials are correct
+- **Static files**: Run `quickscale manage collectstatic`
+- **Migrations**: Run `quickscale manage migrate`
+
+**Getting Help:**
+- Check logs: `quickscale logs`
+- Verify configuration: `quickscale status`
+- See [Technical Documentation](./TECHNICAL_DOCS.md) for detailed troubleshooting
+
 ---
 
-## **12. Advanced CLI Features**
+## **Additional Resources**
 
-### **12.1. Shell Commands**
+- [Technical Documentation](./TECHNICAL_DOCS.md) - Architecture and development details
+- [Credit System Documentation](./docs/CREDIT_SYSTEM.md) - Credit system details
+- [Contributing Guide](./CONTRIBUTING.md) - Development guidelines  
+- [Roadmap](./ROADMAP.md) - Future development plans
+- [Changelog](./CHANGELOG.md) - Version history
+- [GitHub Repository](https://github.com/Experto-AI/quickscale) - Source code
 
-**Interactive Shell:**
-```bash
-quickscale shell
-```
-
-**Run Single Command:**
-```bash
-quickscale shell -c "ls -la"
-```
-
-### **12.2. Enhanced Logging**
-
-**View logs with timestamps:**
-```bash
-quickscale logs -t
-```
-
-**Follow logs continuously:**
-```bash
-quickscale logs -f
-```
-
-**View logs from specific time:**
-```bash
-quickscale logs --since 30m
-quickscale logs --since 2h
-```
-
-**Limit log lines:**
-```bash
-quickscale logs --lines 50
-```
-
-**Service-specific logs:**
-```bash
-quickscale logs web -t --lines 100
-quickscale logs db --since 1h
-```
-
-### **12.3. Service Status**
-
-Check running services:
-```bash
-quickscale ps
-```
-
-### **12.4. Automatic Port Fallback**
-
-- **[REMOVED]** QuickScale no longer provides automatic port fallback. You must set ports explicitly in `.env` and resolve conflicts yourself. If a port is in use, QuickScale will fail immediately with a clear error message.
-
-## **13. Additional Resources**
-
-- [Technical Documentation](./TECHNICAL_DOCS.md)
-- [Contributing Guide](./CONTRIBUTING.md)
-- [Roadmap](./ROADMAP.md)
-- [Changelog](./CHANGELOG.md)
-- [HomePage](https://github.com/Experto-AI/quickscale)
-- Other documentation links:
-  - [CREDIT_SYSTEM.md](./docs/CREDIT_SYSTEM.md) Credit System Documentation.
-  - [DATABASE_VARIABLES.md](./docs/DATABASE_VARIABLES.md) Database Environment Variables. 
-  - [MESSAGE_MANAGER.md](./docs/MESSAGE_MANAGER.md) Message Manager Utility.
-  
 ---
 
 Thank you for using QuickScale! 🚀

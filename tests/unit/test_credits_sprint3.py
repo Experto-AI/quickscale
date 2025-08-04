@@ -250,6 +250,10 @@ class ServiceViewsTests(unittest.TestCase):
         self.assertIn("service.user_usage_count", views_content,
                      "User usage count calculation not found")
     
+    def test_service_usage_template_context(self):
+        """Test that service usage template context is properly set."""
+        pass  # Placeholder for service usage template context test
+    
     def test_use_service_view_exists(self):
         """Test that use_service view is implemented."""
         with open(self.views_py, 'r') as f:

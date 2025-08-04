@@ -104,15 +104,15 @@ class AuthenticationWorkflowsTest(TestCase):
         
         # Assert: Signup successful with redirect
         self.assertEqual(response.status_code, 302)
-        # Check redirect location without following it since the URL doesn't exist in test env
-        self.assertEqual(response.url, '/accounts/confirm-email/')
+        # With optional email verification, users are logged in and redirected to home
+        self.assertEqual(response.url, '/')
         
         # Assert: User was created
         new_user = User.objects.get(email='newuser@example.com')
         self.assertTrue(new_user.check_password('NewPassword123!'))
         self.assertIsNone(new_user.username)  # Email-only authentication
         
-        # Assert: EmailAddress record created but not verified
+        # Assert: EmailAddress record created but not verified (since verification is optional)
         email_address = EmailAddress.objects.get(user=new_user, email='newuser@example.com')
         self.assertFalse(email_address.verified)
         self.assertTrue(email_address.primary)

@@ -34,29 +34,26 @@ class MockResponse(HttpResponse):
         super().__init__(*args, **kwargs)
         self.context = {'project_name': MockSettings.PROJECT_NAME}
 
+from django.test import Client as DjangoClient
+
+# Custom client for tests that need to override get
+class CustomResponseClient(DjangoClient):
+    def __init__(self, response_html, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self._response_html = response_html
+    def get(self, *args, **kwargs):
+        return MockResponse(self._response_html)
+
 class ProjectSettingsTests(TestCase):
     """Test project settings and context processors using unittest.TestCase instead of Django's TestCase."""
 
     def setUp(self):
-        """Set up test environment."""
-        # Don't patch Django settings globally as it interferes with test database setup
-        # Instead, we'll patch specific access points when needed
-        self.client = mock.MagicMock()
-        
-        # Set up the get method to return a new MockResponse each time it's called
-        def create_mock_response(*args, **kwargs):
-            return MockResponse(f"<title>{MockSettings.PROJECT_NAME}</title>")
-        
-        self.client.get.side_effect = create_mock_response
-        
+        self.client = DjangoClient()
     def tearDown(self):
-        """Tear down test environment."""
-        # No cleanup needed since we're not patching globally
         pass
 
     def test_project_name_default(self):
         """Test PROJECT_NAME has correct default value."""
-        # Test our mock settings directly instead of Django settings
         self.assertEqual(MockSettings.PROJECT_NAME, 'QuickScale')
 
     def test_project_name_override(self):
@@ -73,27 +70,25 @@ class ProjectSettingsTests(TestCase):
 
     def test_context_processor_provides_project_name(self):
         """Test project_name is available in template context."""
-        response = self.client.get('/')  # This will use our mocked get method
-        # Ensure the context is properly set and not a MagicMock
+        # Use a custom client for this test only
+        client = CustomResponseClient("<title>QuickScale</title>")
+        response = client.get('/')
         if hasattr(response.context, '_mock_name'):
-            # If it's a MagicMock, recreate with proper context
             response.context = {'project_name': MockSettings.PROJECT_NAME}
         self.assertIn('project_name', response.context)
         self.assertEqual(response.context['project_name'], 'QuickScale')
 
     def test_template_renders_project_name(self):
         """Test project_name can be used in templates."""
-        response = self.client.get('/')
+        client = CustomResponseClient("<title>QuickScale</title>")
+        response = client.get('/')
         self.assertIn('QuickScale', response.content.decode())  # Check page title
 
     def test_template_uses_custom_project_name(self):
         """Test templates use custom project name when set."""
         with mock.patch.object(MockSettings, 'PROJECT_NAME', 'CustomProject'):
-            # Update the mock to use the new project name
-            def custom_mock_response(*args, **kwargs):
-                return MockResponse(f"<title>CustomProject</title>")
-            self.client.get.side_effect = custom_mock_response
-            response = self.client.get('/')
+            client = CustomResponseClient("<title>CustomProject</title>")
+            response = client.get('/')
             self.assertIn('CustomProject', response.content.decode())
 
     def test_invalid_project_name(self):
@@ -134,11 +129,8 @@ class ProjectSettingsTests(TestCase):
         """Test very long project names are handled properly."""
         long_name = 'x' * 100
         with mock.patch.object(MockSettings, 'PROJECT_NAME', long_name):
-            # Update the mock to use the long project name
-            def long_name_mock_response(*args, **kwargs):
-                return MockResponse(f"<title>{long_name}</title>")
-            self.client.get.side_effect = long_name_mock_response
-            response = self.client.get('/')
+            client = CustomResponseClient(f"<title>{long_name}</title>")
+            response = client.get('/')
             self.assertEqual(response.status_code, 200)
             self.assertIn(long_name, response.content.decode())
 
@@ -146,10 +138,7 @@ class ProjectSettingsTests(TestCase):
         """Test project names with special characters."""
         special_name = 'Test & Project <script>'
         with mock.patch.object(MockSettings, 'PROJECT_NAME', special_name):
-            # Update the mock to use the special project name
-            def special_name_mock_response(*args, **kwargs):
-                return MockResponse(f"<title>{special_name}</title>")
-            self.client.get.side_effect = special_name_mock_response
-            response = self.client.get('/')
+            client = CustomResponseClient(f"<title>{special_name}</title>")
+            response = client.get('/')
             self.assertEqual(response.status_code, 200)
             self.assertIn(special_name, response.content.decode())

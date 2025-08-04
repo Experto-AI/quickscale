@@ -39,6 +39,27 @@ class InitCommand(Command):
         alphabet = string.ascii_letters + string.digits + "!@#$%^&*(-_=+)"
         return ''.join(secrets.choice(alphabet) for _ in range(length))
     
+    def _generate_random_password(self, length: int = 16) -> str:
+        """Generate a random password with specified length using alphanumeric characters only."""
+        alphabet = string.ascii_letters + string.digits
+        return ''.join(secrets.choice(alphabet) for _ in range(length))
+    
+    def _check_directory_exists(self, project_name: str) -> None:
+        """Check if project directory exists and is empty."""
+        project_dir = Path.cwd() / project_name
+        
+        if not project_dir.exists():
+            return  # Directory doesn't exist, which is fine
+            
+        try:
+            # Check if directory is empty
+            if not any(project_dir.iterdir()):
+                return  # Directory exists but is empty, which is fine
+            else:
+                raise ProjectError(f"Directory {project_name} already exists and is not empty")
+        except PermissionError as e:
+            raise ProjectError(f"Permission denied accessing directory {project_name}: {str(e)}")
+    
     def _get_template_variables(self, project_name: str) -> dict:
         """Get template variables for rendering project templates based on project name."""
         return {
@@ -91,13 +112,22 @@ class InitCommand(Command):
             shutil.copytree(template_dir, project_dir)
             self.logger.info(f"Created project directory: {project_dir}")
             
+            # Ensure .env.example is copied (sometimes missed by copytree)
+            source_env_example = template_dir / '.env.example'
+            dest_env_example = project_dir / '.env.example'
+            if source_env_example.exists() and not dest_env_example.exists():
+                # Create parent directory if it doesn't exist
+                dest_env_example.parent.mkdir(parents=True, exist_ok=True)
+                shutil.copy2(source_env_example, dest_env_example)
+                self.logger.info("Manually copied .env.example file")
+            
             # Synchronize modules from source code to the generated project
             self._sync_template_modules(project_dir, project_name)
             
-            # Create logs directory
+            # Ensure logs directory exists (should be copied but create if missing)
             logs_dir = project_dir / 'logs'
-            logs_dir.mkdir(exist_ok=True)
-            self.logger.info("Created logs directory")
+            logs_dir.mkdir(parents=True, exist_ok=True)
+            self.logger.info("Ensured logs directory exists")
             
             # Ensure .env file exists
             env_example = project_dir / '.env.example'
@@ -105,6 +135,10 @@ class InitCommand(Command):
             if env_example.exists() and not env_file.exists():
                 shutil.copy2(env_example, env_file)
                 self.logger.info("Created .env file from template")
+            elif not env_example.exists():
+                self.logger.warning(f".env.example not found at {env_example}")
+            elif env_file.exists():
+                self.logger.info(".env file already exists, not overwriting")
             
             self.logger.info(f"""
 Project {project_name} created successfully!

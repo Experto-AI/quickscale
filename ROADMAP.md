@@ -123,7 +123,189 @@ For more details refer to the [CHANGELOG](CHANGELOG.md).
 
 ---
 
-### Sprint 27: Payment Flow and Checkout Process Review - Part 2 (v0.38.0)
+### Sprint 27: Manual Polish (v0.38.0)
+
+- ✅ Why js and static/js directories in project templates?
+- ✅ Why tests in project templates instead of quickscale/tests?
+- ✅ Why docs in project templates instead of quickscale/docs?
+- ✅ Why services directory in root with tests inside?
+- ✅ Why /users/account-security/ and /users/api-keys/ two similar pages?
+- ✅ Why quickscale/project_templates/admin_dashboard/tests, quickscale/project_templates/credits/tests,
+     quickscale/project_templates/stripe_manager/tests and quickscale/project_templates/users/tests ?
+- ✅ Spot duplicated or overlapping tests (script) and fix/remove them.
+
+---
+
+### Sprint 28: Manual Polish (v0.39.0)
+- [ ] Why are we using SQLite3 for tests instead of PostgreSQL?
+- [ ] Reorganize tests into better logical structure.
+- [ ] Pay-as-you-go credit purchase + Service usage + Subscription flow + Service usage, 
+      shows all subscription consumption and none of Pay-as-you-go. 
+
+---
+
+## Sprint 29: Modular AI Assistant Documentation for QuickScale & Generated Projects (v0.40.0)
+
+### **Objective**
+Enable every QuickScale-generated project to include modular, DRY, and project-adapted AI assistant documentation, improving developer experience and AI coding assistant effectiveness.
+
+### **Scope & Deliverables**
+- Modularize all AI assistant documentation in the QuickScale codebase.
+- Create template versions for project generation.
+- Integrate documentation copying/adaptation into the `init` workflow.
+- Ensure docs are readable, relevant, and easy to update in both codebase and generated projects.
+- Document the workflow and usage for maintainers and end-users.
+
+### **Sprint Tasks**
+#### 1. **Design Modular Documentation Structure**
+   - [ ] Audit existing docs (PLAN.md, ACT.md, DEBUG.md, QUALITY.md, etc.).
+   - [ ] Define modular subparts (e.g. principles, patterns, testing, architecture, usage, contributing).
+   - [ ] Create a clear folder structure:
+     ```
+     quickscale/docs/ai_guidelines/
+         [README.md](http://_vscodecontentref_/0)
+         principles.md
+         patterns.md
+         testing.md
+         architecture.md
+         usage_examples.md
+         contributing.md
+     ```
+#### 2. **Create Template Versions for Project Generation**
+   - [ ] For each modular doc, create a `.md.template` version in:
+     ```
+     quickscale/project_templates/docs/ai_guidelines/
+         README.md.template
+         principles.md.template
+         patterns.md.template
+         testing.md.template
+         architecture.md.template
+         usage_examples.md.template
+         contributing.md.template
+     ```
+   - [ ] Add template variables (e.g. `{{ project_name }}`) for project-specific adaptation.
+#### 3. **Integrate Documentation into Project Generation**
+   - [ ] Update the `init` command to copy and render these templates into the generated project’s `docs/ai_guidelines/` folder.
+   - [ ] Ensure all relevant docs are included and adapted for the new project.
+   - [ ] Add a README in both locations explaining usage, update process, and modular structure.
+#### 4. **Document the Workflow**
+   - [ ] Write clear instructions for maintainers on updating modular docs and templates.
+   - [ ] Document for end-users and AI assistants how to use the docs in generated projects.
+#### 5. **Test and Validate**
+   - [ ] Run `quickscale init` and verify the generated project contains a complete, modular, and project-adapted AI guidelines folder.
+   - [ ] Ensure docs are readable, relevant, and easy to update in both codebase and generated projects.
+   - [ ] Get feedback from maintainers and users.
+
+### **Acceptance Criteria**
+- [ ] All AI assistant documentation is modularized in the QuickScale codebase.
+- [ ] Template versions exist and are used for project generation.
+- [ ] Generated projects contain a complete, adapted `docs/ai_guidelines/` folder.
+- [ ] Documentation is DRY, maintainable, and easy to update.
+- [ ] Clear instructions exist for maintainers and users.
+- [ ] Sprint is reviewed and signed off by project lead.
+
+### **Risks & Mitigations**
+- **Risk:** Documentation drift between codebase and templates.
+  - **Mitigation:** Document update workflow and add periodic review to future sprints.
+- **Risk:** Over-complexity for maintainers.
+  - **Mitigation:** Keep modular docs simple and well-documented.
+- **Risk:** Missed adaptation for project-specific context.
+  - **Mitigation:** Use template variables and test with multiple project types.
+
+### **Dependencies**
+- Existing documentation (PLAN.md, ACT.md, etc.)
+- Access to QuickScale codebase and project template system
+- Maintainer and user feedback
+
+### **Notes**
+- This sprint lays the foundation for future enhancements (sync command, IDE integration, interactive docs).
+- All changes should be backward compatible and not disrupt existing workflows.
+
+---
+
+### Sprint 30: Frontend Architecture Review (v0.41.0)
+**Goal**: Review HTMX/Alpine.js implementation and UI consistency
+
+**Deep Analysis**
+- **Component Architecture Study**: Analyze frontend architecture, template inheritance patterns, and component organization
+- **Code Pattern Identification**: Document HTMX implementation patterns, Alpine.js component structures, and UI consistency approaches
+- **Documentation Review**: Review frontend documentation, style guidelines, and interaction patterns
+
+**Template Architecture & Component System**
+- [ ] Review template inheritance hierarchy
+- [ ] Validate reusable component library
+- [ ] Check HTMX implementation patterns
+- [ ] Analyze Alpine.js component organization
+- [ ] Review Bulma CSS structure and customization
+
+**User Experience & Interaction Patterns**
+- [ ] Review form handling patterns
+- [ ] Validate UI/UX consistency across pages
+- [ ] Check responsive design implementation
+- [ ] Analyze JavaScript organization and efficiency
+- [ ] Review accessibility compliance
+
+**Hands-on**
+- [ ] Code refactoring of template components for better reusability
+- [ ] Integration verification of HTMX interactions
+- [ ] UI consistency improvements across pages
+- [ ] Performance optimization of JavaScript assets
+
+**Testing:**
+- [ ] Test template rendering
+- [ ] Test interactive components
+- [ ] Test responsive design
+
+**Success Criteria - Must deliver:**
+- [ ] **Updated Tests**: Test coverage for template rendering, HTMX interactions, and component functionality
+- [ ] **Documentation**: Updated frontend development guide with component patterns and style guidelines
+
+**Validation**: Frontend is modern, consistent, and user-friendly
+
+---
+
+### Sprint 31: Admin Dashboard & Tools Review (v0.42.0)
+**Goal**: Review admin interface and management tools
+
+**Deep Analysis**
+- **Component Architecture Study**: Analyze admin dashboard architecture, permission systems, and management tool organization
+- **Code Pattern Identification**: Document user management patterns, service administration interfaces, and real-time update mechanisms
+- **Documentation Review**: Review admin documentation, payment tools, and analytics features
+
+**Admin Dashboard Architecture**
+- [ ] Review admin dashboard structure and navigation
+- [ ] Validate permission and access control
+- [ ] Check user account management tools
+- [ ] Analyze service management interface
+- [ ] Review real-time updates mechanism
+
+**Payment & Analytics Tools**
+- [ ] Review payment investigation tools
+- [ ] Validate refund processing workflow
+- [ ] Check analytics and reporting features
+- [ ] Analyze bulk operation safety
+- [ ] Review audit logging completeness
+
+**Hands-on**
+- [ ] Code refactoring of admin interface for better usability
+- [ ] Integration verification of payment tools
+- [ ] Performance optimization of analytics features
+- [ ] Security hardening of admin operations
+
+**Testing:**
+- [ ] Test admin interface functionality
+- [ ] Test payment tools
+- [ ] Test analytics features
+
+**Success Criteria - Must deliver:**
+- [ ] **Updated Tests**: Comprehensive test coverage for admin functionality, payment tools, and analytics features
+- [ ] **Documentation**: Updated admin user guide with tool documentation and security procedures
+
+**Validation**: Admin tools are comprehensive and efficient
+
+---
+
+### Sprint 32: Payment Flow and Checkout Process Review - Part 2 (v0.43.0)
 **Goal**: Review Stripe API integration and payment processing
 
 **Deep Analysis**
@@ -149,7 +331,7 @@ For more details refer to the [CHANGELOG](CHANGELOG.md).
 
 ---
 
-### Sprint 28: Payment Flow and Checkout Process Review (v0.39.0)
+### Sprint 33: Payment Flow and Checkout Process Review (v0.44.0)
 **Goal**: Review and unify payment flow and checkout process across all payment types
 
 **Deep Analysis**
@@ -194,7 +376,7 @@ For more details refer to the [CHANGELOG](CHANGELOG.md).
 
 ---
 
-### Sprint 29: Refund Processing Workflow Analysis (v0.40.0)
+### Sprint 45: Refund Processing Workflow Analysis (v0.45.0)
 **Goal**: Analyze and enhance the admin refund processing system
 
 **Deep Analysis**
@@ -239,7 +421,7 @@ For more details refer to the [CHANGELOG](CHANGELOG.md).
 
 ---
 
-### Sprint 30: Webhook Event Processing Review (v0.41.0)
+### Sprint 35: Webhook Event Processing Review (v0.46.0)
 **Goal**: Review and optimize webhook event processing system
 
 **Deep Analysis**
@@ -284,7 +466,7 @@ For more details refer to the [CHANGELOG](CHANGELOG.md).
 
 ---
 
-### Sprint 31: AI Service Framework Review (v0.42.0)
+### Sprint 36: AI Service Framework Review (v0.47.0)
 **Goal**: Review AI service framework architecture and tools
 
 **Deep Analysis**
@@ -326,89 +508,7 @@ For more details refer to the [CHANGELOG](CHANGELOG.md).
 
 ---
 
-### Sprint 32: Frontend Architecture Review (v0.43.0)
-**Goal**: Review HTMX/Alpine.js implementation and UI consistency
-
-**Deep Analysis**
-- **Component Architecture Study**: Analyze frontend architecture, template inheritance patterns, and component organization
-- **Code Pattern Identification**: Document HTMX implementation patterns, Alpine.js component structures, and UI consistency approaches
-- **Documentation Review**: Review frontend documentation, style guidelines, and interaction patterns
-
-**Template Architecture & Component System**
-- [ ] Review template inheritance hierarchy
-- [ ] Validate reusable component library
-- [ ] Check HTMX implementation patterns
-- [ ] Analyze Alpine.js component organization
-- [ ] Review Bulma CSS structure and customization
-
-**User Experience & Interaction Patterns**
-- [ ] Review form handling patterns
-- [ ] Validate UI/UX consistency across pages
-- [ ] Check responsive design implementation
-- [ ] Analyze JavaScript organization and efficiency
-- [ ] Review accessibility compliance
-
-**Hands-on**
-- [ ] Code refactoring of template components for better reusability
-- [ ] Integration verification of HTMX interactions
-- [ ] UI consistency improvements across pages
-- [ ] Performance optimization of JavaScript assets
-
-**Testing:**
-- [ ] Test template rendering
-- [ ] Test interactive components
-- [ ] Test responsive design
-
-**Success Criteria - Must deliver:**
-- [ ] **Updated Tests**: Test coverage for template rendering, HTMX interactions, and component functionality
-- [ ] **Documentation**: Updated frontend development guide with component patterns and style guidelines
-
-**Validation**: Frontend is modern, consistent, and user-friendly
-
----
-
-### Sprint 33: Admin Dashboard & Tools Review (v0.44.0)
-**Goal**: Review admin interface and management tools
-
-**Deep Analysis**
-- **Component Architecture Study**: Analyze admin dashboard architecture, permission systems, and management tool organization
-- **Code Pattern Identification**: Document user management patterns, service administration interfaces, and real-time update mechanisms
-- **Documentation Review**: Review admin documentation, payment tools, and analytics features
-
-**Admin Dashboard Architecture**
-- [ ] Review admin dashboard structure and navigation
-- [ ] Validate permission and access control
-- [ ] Check user account management tools
-- [ ] Analyze service management interface
-- [ ] Review real-time updates mechanism
-
-**Payment & Analytics Tools**
-- [ ] Review payment investigation tools
-- [ ] Validate refund processing workflow
-- [ ] Check analytics and reporting features
-- [ ] Analyze bulk operation safety
-- [ ] Review audit logging completeness
-
-**Hands-on**
-- [ ] Code refactoring of admin interface for better usability
-- [ ] Integration verification of payment tools
-- [ ] Performance optimization of analytics features
-- [ ] Security hardening of admin operations
-
-**Testing:**
-- [ ] Test admin interface functionality
-- [ ] Test payment tools
-- [ ] Test analytics features
-
-**Success Criteria - Must deliver:**
-- [ ] **Updated Tests**: Comprehensive test coverage for admin functionality, payment tools, and analytics features
-- [ ] **Documentation**: Updated admin user guide with tool documentation and security procedures
-
-**Validation**: Admin tools are comprehensive and efficient
-
----
-
-### Sprint 34: Cross-System Integration Testing (v0.45.0)
+### Sprint 37: Cross-System Integration Testing (v0.48.0)
 **Goal**: Validate integration between all major system components
 
 **Deep Analysis**
@@ -449,7 +549,7 @@ For more details refer to the [CHANGELOG](CHANGELOG.md).
 
 ---
 
-### Sprint 35: Code Quality & Testing Infrastructure (v0.46.0)
+### Sprint 38: Code Quality & Testing Infrastructure (v0.49.0)
 **Goal**: Apply clean code standards and enhance testing infrastructure
 
 **Deep Analysis**
@@ -490,7 +590,7 @@ For more details refer to the [CHANGELOG](CHANGELOG.md).
 
 ---
 
-### Sprint 36: User Experience & Dogfooding (v0.47.0)
+### Sprint 39: User Experience & Dogfooding (v0.50.0)
 **Goal**: Validate user experience through internal testing and feedback
 
 **Deep Analysis**
@@ -534,7 +634,7 @@ For more details refer to the [CHANGELOG](CHANGELOG.md).
 
 ---
 
-### Sprint 37: Security & Performance Review (v0.48.0)
+### Sprint 40: Security & Performance Review (v0.51.0)
 **Goal**: Conduct security audit and performance optimization
 
 **Deep Analysis**
@@ -578,7 +678,7 @@ For more details refer to the [CHANGELOG](CHANGELOG.md).
 
 ---
 
-### Sprint 38: Documentation Consolidation (v0.49.0)
+### Sprint 41: Documentation Consolidation (v0.52.0)
 **Goal**: Consolidate and finalize all documentation for launch readiness
 
 **Deep Analysis**
@@ -619,7 +719,7 @@ For more details refer to the [CHANGELOG](CHANGELOG.md).
 
 ---
 
-### Sprint 39: Production Readiness & Deployment (v0.50.0)
+### Sprint 42: Production Readiness & Deployment (v0.53.0)
 **Goal**: Final production preparation and deployment optimization
 
 **Deep Analysis**
@@ -660,7 +760,7 @@ For more details refer to the [CHANGELOG](CHANGELOG.md).
 
 ---
 
-### Sprint 40: Final Polish & Launch Preparation (v1.0.0)
+### Sprint 43: Final Polish & Launch Preparation (v1.0.0)
 **Goal**: Final polish and official launch preparation
 
 **Deep Analysis**
@@ -691,9 +791,7 @@ For more details refer to the [CHANGELOG](CHANGELOG.md).
 - [ ] **Documentation**: Final documentation review with launch-ready user guides and technical documentation
 
 
-### Sprint 41: Manual Polish
-- [ ] Why js and static/js directories in project templates?
-- [ ] Why tests in project templates instead of quickscale/tests?
-- [ ] Why docs in project templates instead of quickscale/docs?
-- [ ] Why services directoty in root with tests inside?
+
+
+
 

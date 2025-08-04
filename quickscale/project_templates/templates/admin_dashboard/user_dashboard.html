@@ -13,26 +13,20 @@
             <div class="column is-half">
                 <div class="card">
                     <div class="card-content">
-                        <div class="level">
-                            <div class="level-left">
-                                <div class="level-item">
-                                    <div>
-                                        <p class="title is-4">
-                                            <span class="icon">
-                                                <i class="fas fa-coins"></i>
-                                            </span>
-                                            Credits
-                                        </p>
-                                        <p class="subtitle is-6">Your current balance</p>
-                                    </div>
+                        <div class="is-flex is-align-items-center is-justify-content-space-between mb-3">
+                            <div>
+                                <div class="is-flex is-align-items-center mb-1">
+                                    <span class="icon mr-2">
+                                        <i class="fas fa-coins"></i>
+                                    </span>
+                                    <span class="title is-4">Credits</span>
                                 </div>
+                                <span class="subtitle is-6 has-text-grey mb-2">Your current balance</span>
                             </div>
-                            <div class="level-right">
-                                <div class="level-item">
-                                    <div class="tags has-addons">
-                                        <span class="tag is-primary is-medium">{{ current_balance }}</span>
-                                        <span class="tag is-light is-medium">credits</span>
-                                    </div>
+                            <div>
+                                <div class="tags has-addons">
+                                    <span class="tag is-primary is-medium">{{ current_balance }}</span>
+                                    <span class="tag is-light is-medium">credits</span>
                                 </div>
                             </div>
                         </div>
@@ -91,28 +85,22 @@
             <div class="column is-half">
                 <div class="card">
                     <div class="card-content">
-                        <div class="level">
-                            <div class="level-left">
-                                <div class="level-item">
-                                    <div>
-                                        <p class="title is-4">
-                                            <span class="icon">
-                                                <i class="fas fa-calendar-alt"></i>
-                                            </span>
-                                            Subscription
-                                        </p>
-                                        <p class="subtitle is-6">Monthly plan status</p>
-                                    </div>
+                        <div class="is-flex is-align-items-center is-justify-content-space-between mb-3">
+                            <div>
+                                <div class="is-flex is-align-items-center mb-1">
+                                    <span class="icon mr-2">
+                                        <i class="fas fa-calendar-alt"></i>
+                                    </span>
+                                    <span class="title is-4">Subscription</span>
                                 </div>
+                                <span class="subtitle is-6 has-text-grey mb-2">Monthly plan status</span>
                             </div>
-                            <div class="level-right">
-                                <div class="level-item">
-                                    {% if subscription and subscription.is_active %}
-                                        <span class="tag is-medium is-success">Active</span>
-                                    {% else %}
-                                        <span class="tag is-medium is-light">No Subscription</span>
-                                    {% endif %}
-                                </div>
+                            <div>
+                                {% if subscription and subscription.is_active %}
+                                    <span class="tag is-medium is-success">Active</span>
+                                {% else %}
+                                    <span class="tag is-medium is-light">No Subscription</span>
+                                {% endif %}
                             </div>
                         </div>
                         

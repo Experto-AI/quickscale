@@ -11,9 +11,10 @@
         "head": true,
         "find": true,
         "grep": true,
-        "python -m pytest *": true,
-        "./run_tests.sh *": true,
         "tee": true,
-        "echo": true
+        "echo": true,
+        "python -m pytest": true,
+        "wc": true,
+        "./run_tests.sh": true
     }
 }

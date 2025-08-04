@@ -350,7 +350,7 @@ application = get_wsgi_application()
             assert "NEVER SYNC" in info_messages, "Should categorize never sync files"
 
     def test_sync_back_backup_creation(self):
-        """Test that backups are created before applying changes."""
+        """Test that sync-back apply shows warning about no backups."""
         project_dir = self._create_test_project()
         templates_dir = self._create_test_templates_dir()
         
@@ -358,20 +358,33 @@ application = get_wsgi_application()
                    return_value='development'), \
              patch('quickscale.commands.sync_back_command.SyncBackCommand._get_quickscale_templates_dir', 
                    return_value=templates_dir), \
-             patch('quickscale.utils.message_manager.MessageManager.info') as mock_info, \
+             patch('quickscale.utils.message_manager.MessageManager.warning') as mock_warning, \
              patch('quickscale.utils.message_manager.MessageManager.success'):
             
             # Execute sync-back apply
             self.command_manager.sync_back_project(str(project_dir), apply=True)
             
-            # Check that backup message was shown
-            info_messages = [call.args[0] for call in mock_info.call_args_list]
-            backup_message = any("backup" in msg.lower() for msg in info_messages)
-            assert backup_message, "Should mention backup creation"
+            # Check that warning message about no backups was shown
+            warning_messages = [call.args[0] for call in mock_warning.call_args_list]
+            no_backup_warning = any("no backup" in msg.lower() for msg in warning_messages)
+            assert no_backup_warning, "Should mention no backup warning"
+
+    def test_sync_back_interactive_mode(self):
+        """Test that sync-back interactive mode works correctly."""
+        project_dir = self._create_test_project()
+        templates_dir = self._create_test_templates_dir()
+        
+        with patch('quickscale.commands.sync_back_command.SyncBackCommand._detect_installation_mode', 
+                   return_value='development'), \
+             patch('quickscale.commands.sync_back_command.SyncBackCommand._get_quickscale_templates_dir', 
+                   return_value=templates_dir), \
+             patch('quickscale.commands.sync_back_command.SyncBackCommand._interactive_changes') as mock_interactive:
             
-            # Check that backup files were actually created
-            backup_files = list(templates_dir.rglob("*.bak"))
-            assert len(backup_files) > 0, "Should create backup files"
+            # Execute sync-back in interactive mode
+            self.command_manager.sync_back_project(str(project_dir), interactive=True)
+            
+            # Check that interactive_changes method was called
+            mock_interactive.assert_called_once()
 
     def test_sync_back_default_project_path(self):
         """Test that sync-back works with default project path (current directory)."""

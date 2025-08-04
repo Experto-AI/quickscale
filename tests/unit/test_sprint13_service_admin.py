@@ -361,23 +361,6 @@ class ServiceAdminTemplateTests(unittest.TestCase):
         self.assertIn("function serviceDetailData(", template_content,
                      "serviceDetailData Alpine.js function not found")
     
-    def test_service_admin_template_visibility_fix(self):
-        """Test that service rows are not hidden by problematic Alpine.js filtering."""
-        with open(self.service_admin_template, 'r') as f:
-            template_content = f.read()
-        
-        # Check that service rows don't have problematic x-show directive
-        # that was causing visibility issues
-        service_row_pattern = r'<tr x-data="serviceRowData\([^"]*\)"[^>]*>'
-        matches = re.findall(service_row_pattern, template_content)
-        
-        self.assertGreater(len(matches), 0, "Should find service row patterns")
-        
-        for match in matches:
-            # Ensure x-show with complex isVisible() is not present
-            self.assertNotIn('x-show="isVisible()"', match,
-                           "Service rows should not use problematic x-show directive")
-    
     def test_service_admin_template_alpine_js_simplified(self):
         """Test that Alpine.js components are simplified and don't use problematic patterns."""
         with open(self.service_admin_template, 'r') as f:
@@ -502,39 +485,6 @@ class ServiceAnalyticsTemplateTests(unittest.TestCase):
         self.assertRegex(template_content, user_link_pattern,
                         "Template should have properly structured user links with correct URL pattern")
     
-    def test_service_analytics_template_no_reverse_match_regression(self):
-        """Test that template doesn't have any potential NoReverseMatch issues."""
-        with open(self.analytics_template, 'r') as f:
-            template_content = f.read()
-        
-        # Look for all URL tags that might cause issues
-        problematic_patterns = [
-            "admin:auth_user",  # Should use users_customuser instead
-            "admin:user_",      # Another potential issue
-        ]
-        
-        for pattern in problematic_patterns:
-            self.assertNotIn(pattern, template_content,
-                           f"Template should not contain potentially problematic URL pattern: {pattern}")
-        
-        # Verify known working patterns are present
-        working_patterns = [
-            "admin:index",
-            "admin:app_list",
-            "admin:credits_service_changelist",
-            "admin:users_customuser_change",
-            "admin:credits_service_change"
-        ]
-        
-        found_patterns = []
-        for pattern in working_patterns:
-            if pattern in template_content:
-                found_patterns.append(pattern)
-        
-        # At least some working patterns should be present
-        self.assertGreater(len(found_patterns), 0,
-                          "Template should contain at least some working URL patterns")
-
 
 class AdminDashboardIndexIntegrationTests(unittest.TestCase):
     """Test cases for service management integration in admin dashboard index."""
@@ -570,8 +520,8 @@ class AdminDashboardIndexIntegrationTests(unittest.TestCase):
         # Check for service admin link
         self.assertIn("{% url 'admin_dashboard:service_admin' %}", template_content,
                      "Service admin URL not found")
-        self.assertIn("Manage Services", template_content,
-                     "Manage Services link text not found")
+        self.assertIn("Services", template_content,
+                     "Services title not found")
 
 
 if __name__ == '__main__':

@@ -177,6 +177,22 @@ class UserSubscription(models.Model):
         except StripeProduct.DoesNotExist:
             return None
 
+    def cancel_subscription(self, cancel_at_period_end=True):
+        """Cancel the subscription.
+        
+        Args:
+            cancel_at_period_end (bool): If True, cancel at the end of current period.
+                                       If False, cancel immediately.
+        """
+        if cancel_at_period_end:
+            self.cancel_at_period_end = True
+        else:
+            self.status = 'canceled'
+            self.canceled_at = timezone.now()
+        
+        self.save()
+        return self
+
     def allocate_monthly_credits(self):
         """Allocate monthly credits for this subscription period."""
         if not self.is_active:

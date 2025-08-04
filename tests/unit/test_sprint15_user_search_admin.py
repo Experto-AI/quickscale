@@ -235,7 +235,7 @@ class TestSprint15SearchFunctionality(unittest.TestCase):
         # Check for full name search support
         self.assertIn("query_parts = query.split()", content, "Should split query for full name search")
     
-    def test_pagination_implementation(self):
+    def test_user_pagination_implementation(self):
         """Test that pagination implementation is correct."""
         # Get the path to the admin_dashboard views template
         views_template_path = Path(__file__).parent.parent.parent / "quickscale" / "project_templates" / "admin_dashboard" / "views.py"

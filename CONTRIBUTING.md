@@ -22,6 +22,15 @@ This document is written for humans but also for AI coding assistants like GitHu
       - Use Specific Type Hints
       - Use Modern F-Strings
       - Structure Imports Logically
+    - Testing During Implementation
+      - Follow [Testing Standards](docs/contrib/shared/testing_standards.md) for contamination prevention
+      - Apply strict test isolation and cleanup practices
+      - When a test fails after code changes:
+        - Always perform root cause analysis to determine if the test or the code is at fault
+        - If the test reflects current, intended behavior, fix the code
+        - If the test is outdated due to changed requirements, update the test
+        - Never update a test just to make it pass—always confirm whether the test or the code is correct
+        - Always document your reasoning and the root cause for updating either the test or the code
     - Documentation During Implementation
       - Write Clear, Concise Docstrings
       - Document Only Functionality, Not Arguments or Returns
@@ -40,6 +49,12 @@ This document is written for humans but also for AI coding assistants like GitHu
     - Systematic Debugging Approach
       - Apply Root Cause Analysis
         - Systematically Investigate to Identify and Fix the Fundamental Root Cause of Issues
+      - Test Failures After Codebase Changes
+        - When a test fails after codebase changes, always perform root cause analysis to determine if the test or the code is at fault
+        - If the test reflects current, intended behavior, fix the code
+        - If the test is outdated due to changed requirements, update the test
+        - Never update a test just to make it pass—always confirm whether the test or the code is correct
+        - Always document your reasoning and the root cause for updating either the test or the code
     - DMAIC Process for Structured Debugging
       - Define: Clearly Define the Problem with Specific Symptoms and Success Criteria
       - Measure: Gather Quantitative Data and Create Reproducible Test Cases

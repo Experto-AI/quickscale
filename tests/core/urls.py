@@ -1,5 +1,6 @@
 from django.urls import path, include
 from django.http import HttpResponse
+from django.contrib.auth.decorators import login_required
 
 # Simple dummy views for test URLs
 def dummy_home(request):
@@ -27,8 +28,23 @@ def dummy_account_security(request):
 def dummy_login(request):
     return HttpResponse("Test Login")
 
+@login_required
 def dummy_user_dashboard(request):
-    return HttpResponse("Test User Dashboard")
+    html_content = """
+    <!DOCTYPE html>
+    <html>
+    <head><title>User Dashboard</title></head>
+    <body>
+        <h1>User Dashboard</h1>
+        <div class="subscription-info">
+            <h2>Subscription: Premium Plan</h2>
+            <p>Status: Active</p>
+            <p>Credits: 1000</p>
+        </div>
+    </body>
+    </html>
+    """
+    return HttpResponse(html_content)
 
 def dummy_service_list(request):
     return HttpResponse("Test Service List")
@@ -42,7 +58,7 @@ def dummy_service_use(request, service_id):
 urlpatterns = [
     path('accounts/', include('allauth.account.urls')),
     path('api/', include('api.urls')),
-    path('dashboard/credits/', include('credits.urls')),
+    path('dashboard/credits/', include('credits.urls', namespace='credits')),
     path('admin_dashboard/', include('admin_dashboard.urls')),
     # Add dummy public URLs for tests
     path('', dummy_home, name='home'),

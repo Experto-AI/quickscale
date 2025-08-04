@@ -12,6 +12,7 @@ import django
 from django.test.testcases import LiveServerTestCase
 from typing import Optional
 
+
 # Add tests directory to Python path to make tests/core and tests/users importable
 tests_dir = os.path.dirname(os.path.abspath(__file__))
 if tests_dir not in sys.path:

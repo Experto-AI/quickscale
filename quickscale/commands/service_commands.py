@@ -41,7 +41,7 @@ class ServiceUpCommand(Command):
     def _extract_port_values(self, env_content: str) -> Tuple[int, int]:
         """Extract current port values from env content."""
         pg_port_match = re.search(r'PG_PORT=(\d+)', env_content)
-        web_port_match = re.search(r'PORT=(\d+)', env_content)
+        web_port_match = re.search(r'^PORT=(\d+)', env_content, re.MULTILINE)
         
         pg_port = int(pg_port_match.group(1)) if pg_port_match else 5432
         web_port = int(web_port_match.group(1)) if web_port_match else 8000
@@ -111,7 +111,7 @@ class ServiceUpCommand(Command):
     def _start_docker_services(self, env: Dict, no_cache: bool = False, timeout: int = DOCKER_SERVICE_STARTUP_TIMEOUT) -> None:
         """Start the Docker services using docker-compose."""
         try:
-            command = [DOCKER_COMPOSE_COMMAND, "up", "--build", "-d"]
+            command = DOCKER_COMPOSE_COMMAND + ["up", "--build", "-d"]
             if no_cache:
                 command.append("--no-cache")
             
@@ -151,7 +151,7 @@ class ServiceUpCommand(Command):
     def _verify_services_running(self, env: Dict) -> None:
         """Verify that services are actually running."""
         try:
-            ps_result = subprocess.run(DOCKER_COMPOSE_COMMAND.split() + ["ps"], capture_output=True, text=True, check=True, env=env, timeout=DOCKER_PS_CHECK_TIMEOUT)
+            ps_result = subprocess.run(DOCKER_COMPOSE_COMMAND + ["ps"], capture_output=True, text=True, check=True, env=env, timeout=DOCKER_PS_CHECK_TIMEOUT)
             if "db" not in ps_result.stdout:
                 self.logger.warning("Database service not detected in running containers. Services may not be fully started.")
                 self.logger.debug(f"Docker compose ps output: {ps_result.stdout}")
@@ -188,7 +188,12 @@ class ServiceUpCommand(Command):
         start_time = time.time()
         
         try:
-            ProjectManager.get_project_state()
+            state = ProjectManager.get_project_state()
+            if not state['has_project']:
+                from quickscale.utils.message_manager import MessageManager
+                self.logger.error(ProjectManager.PROJECT_NOT_FOUND_MESSAGE)
+                MessageManager.error(ProjectManager.PROJECT_NOT_FOUND_MESSAGE, self.logger)
+                return
             
             # Prepare environment and validate ports once
             env, updated_ports = self._prepare_environment_and_ports(no_cache)
@@ -234,7 +239,7 @@ class ServiceDownCommand(Command):
             refresh_env_cache()
             
             MessageManager.info("Stopping services...", self.logger)
-            subprocess.run([DOCKER_COMPOSE_COMMAND, "down"], check=True, env=os.environ.copy())
+            subprocess.run(DOCKER_COMPOSE_COMMAND + ["down"], check=True, env=os.environ.copy())
             MessageManager.success("Services stopped successfully.", self.logger)
         except subprocess.SubprocessError as e:
             self.handle_error(
@@ -269,7 +274,7 @@ class ServiceLogsCommand(Command):
             from quickscale.utils.env_utils import refresh_env_cache
             refresh_env_cache()
             
-            cmd: List[str] = [DOCKER_COMPOSE_COMMAND, "logs", f"--tail={lines}"]
+            cmd: List[str] = DOCKER_COMPOSE_COMMAND + ["logs", f"--tail={lines}"]
             
             if follow:
                 cmd.append("-f")
@@ -321,7 +326,7 @@ class ServiceStatusCommand(Command):
             refresh_env_cache()
             
             MessageManager.info("Checking service status...", self.logger)
-            result = subprocess.run(DOCKER_COMPOSE_COMMAND.split() + ["ps"], check=True, capture_output=True, text=True, env=os.environ.copy())
+            result = subprocess.run(DOCKER_COMPOSE_COMMAND + ["ps"], check=True, capture_output=True, text=True, env=os.environ.copy())
             # Print the output directly to the user (not through logger)
             print(result.stdout)
         except subprocess.SubprocessError as e:

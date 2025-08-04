@@ -1,0 +1,1 @@
+"""Django admin unit tests."""

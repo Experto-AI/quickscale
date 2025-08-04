@@ -203,23 +203,37 @@ def subscription_page(request: HttpRequest) -> HttpResponse:
 @login_required
 def create_subscription_checkout(request: HttpRequest) -> HttpResponse:
     """Create a Stripe checkout session for subscription."""
+    is_ajax = request.headers.get('X-Requested-With') == 'XMLHttpRequest'
+    
     if request.method != 'POST':
-        messages.error(request, 'Invalid request method')
+        error_msg = 'Invalid request method'
+        if is_ajax:
+            return JsonResponse({'error': error_msg}, status=405)
+        messages.error(request, error_msg)
         return redirect('admin_dashboard:subscription')
     
     product_id = request.POST.get('product_id')
     if not product_id:
-        messages.error(request, 'Product ID is required')
+        error_msg = 'Product ID is required'
+        if is_ajax:
+            return JsonResponse({'error': error_msg}, status=400)
+        messages.error(request, error_msg)
         return redirect('admin_dashboard:subscription')
     
     if not stripe_enabled or not STRIPE_AVAILABLE:
-        messages.error(request, 'Stripe integration is not enabled')
+        error_msg = 'Stripe integration is not enabled'
+        if is_ajax:
+            return JsonResponse({'error': error_msg}, status=400)
+        messages.error(request, error_msg)
         return redirect('admin_dashboard:subscription')
     
     try:
         product = StripeProduct.objects.get(id=product_id, active=True, interval='month')
     except StripeProduct.DoesNotExist:
-        messages.error(request, 'Subscription product not found or inactive')
+        error_msg = 'Subscription product not found or inactive'
+        if is_ajax:
+            return JsonResponse({'error': error_msg}, status=404)
+        messages.error(request, error_msg)
         return redirect('admin_dashboard:subscription')
     
     try:
@@ -291,12 +305,19 @@ def create_subscription_checkout(request: HttpRequest) -> HttpResponse:
             }
             session = stripe_manager.client.checkout.sessions.create(**session_data)
         
-        return redirect(session.url)
+        # Return response based on request type
+        if is_ajax:
+            return JsonResponse({'url': session.url})
+        else:
+            return redirect(session.url)
         
     except Exception as e:
         logger.error(f"Failed to create subscription checkout: {str(e)}")
+        error_msg = f'Failed to create subscription checkout: {str(e)}'
+        if is_ajax:
+            return JsonResponse({'error': error_msg}, status=500)
         # For form submission, redirect back with error message
-        messages.error(request, f'Failed to create subscription checkout: {str(e)}')
+        messages.error(request, error_msg)
         return redirect('admin_dashboard:subscription')
 
 @login_required

@@ -41,6 +41,21 @@ class CheckCommand(Command):
     
     def _check_tool(self, tool: str, print_info: bool = False) -> bool:
         """Check if a specific tool is available in the PATH."""
+        if tool == "python":
+            # Check for python3 first, then python
+            for python_cmd in ["python3", "python"]:
+                path = shutil.which(python_cmd)
+                if path is not None:
+                    if print_info:
+                        try:
+                            version_info = subprocess.run([python_cmd, "--version"], check=True, capture_output=True, text=True)
+                            version = version_info.stdout.strip()
+                            print(f"\033[92m✓\033[0m python found: {version}")
+                        except subprocess.SubprocessError:
+                            print(f"\033[92m✓\033[0m python found at {path}")
+                    return True
+            return False
+        
         path = shutil.which(tool)
         if path is None:
             return False
@@ -49,10 +64,6 @@ class CheckCommand(Command):
             try:
                 if tool == "docker":
                     version_info = subprocess.run(["docker", "--version"], check=True, capture_output=True, text=True)
-                    version = version_info.stdout.strip()
-                    print(f"\033[92m✓\033[0m {tool} found: {version}")
-                elif tool == "python":
-                    version_info = subprocess.run(["python", "--version"], check=True, capture_output=True, text=True)
                     version = version_info.stdout.strip()
                     print(f"\033[92m✓\033[0m {tool} found: {version}")
                 else:

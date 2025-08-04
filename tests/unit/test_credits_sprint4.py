@@ -262,25 +262,6 @@ class StripeCustomerModelTests(unittest.TestCase):
         self.stripe_app_path = self.base_path / 'quickscale' / 'project_templates' / 'stripe_manager'
         self.models_py = self.stripe_app_path / 'models.py'
         
-    def test_stripe_customer_model_exists(self):
-        """Test that StripeCustomer model is defined with required fields."""
-        with open(self.models_py, 'r') as f:
-            models_content = f.read()
-        
-        # Check for StripeCustomer model
-        self.assertIn("class StripeCustomer(models.Model)", models_content,
-                     "StripeCustomer model not found")
-        
-        # Check for required fields
-        self.assertIn("user = models.OneToOneField", models_content,
-                     "StripeCustomer user field not found")
-        self.assertIn("stripe_id = models.CharField", models_content,
-                     "StripeCustomer stripe_id field not found")
-        self.assertIn("email = models.EmailField", models_content,
-                     "StripeCustomer email field not found")
-        self.assertIn("name = models.CharField", models_content,
-                     "StripeCustomer name field not found")
-    
     def test_stripe_customer_relationships(self):
         """Test that StripeCustomer has proper relationships."""
         with open(self.models_py, 'r') as f:

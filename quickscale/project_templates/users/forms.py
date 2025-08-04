@@ -31,7 +31,7 @@ class CustomSignupForm(SignupForm):
 
 
 class CustomLoginForm(LoginForm):
-    """Custom login form with proper CSS styling."""
+    """Custom login form with proper CSS styling and account lockout checking."""
     
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
@@ -44,6 +44,40 @@ class CustomLoginForm(LoginForm):
             'class': 'input',
             'placeholder': 'Password'
         })
+
+    def clean(self):
+        """Add account lockout validation to login form."""
+        cleaned_data = super().clean()
+        
+        # Get the login field (email)
+        login = cleaned_data.get('login')
+        if login:
+            try:
+                from django.contrib.auth import get_user_model
+                from .models import AccountLockout
+                
+                User = get_user_model()
+                user = User.objects.get(email=login)
+                
+                # Check if user has an active lockout
+                try:
+                    # Always fetch fresh data from database to avoid caching issues
+                    lockout = AccountLockout.objects.select_for_update().get(user=user)
+                    if lockout.is_locked:
+                        # Check if lockout has expired
+                        if not lockout.check_lockout_expired():
+                            # Account is still locked
+                            from django.forms import ValidationError
+                            raise ValidationError("Too many failed login attempts. Try again later.")
+                except AccountLockout.DoesNotExist:
+                    # No lockout record exists, user can proceed
+                    pass
+                    
+            except User.DoesNotExist:
+                # User doesn't exist, let normal validation handle it
+                pass
+        
+        return cleaned_data
 
 
 class CustomResetPasswordForm(ResetPasswordForm):

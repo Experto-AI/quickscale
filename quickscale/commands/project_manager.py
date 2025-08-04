@@ -30,7 +30,17 @@ class ProjectManager:
     @staticmethod
     def get_project_state() -> Dict[str, Any]:
         """Get comprehensive project state including directory and containers."""
-        current_dir = Path.cwd()
+        try:
+            current_dir = Path.cwd()
+        except OSError:
+            # Handle case where current directory cannot be determined
+            return {
+                'has_project': False,
+                'project_dir': None,
+                'project_name': None,
+                'containers': []
+            }
+            
         has_project = ProjectManager.check_project_exists(print_message=False)
         containers_info = ProjectManager.check_running_containers()
         

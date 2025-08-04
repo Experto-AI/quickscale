@@ -39,7 +39,7 @@ def log_user_logout(sender, request, user, **kwargs):
 
 @receiver(user_login_failed)
 def log_failed_login_attempt(sender, credentials, request, **kwargs):
-    """Log failed login attempts."""
+    """Log failed login attempts and handle account lockout."""
     # Extract email from credentials (django-allauth uses 'login' field for email)
     user_email = credentials.get('login') or credentials.get('email') or 'unknown'
     
@@ -48,6 +48,20 @@ def log_failed_login_attempt(sender, credentials, request, **kwargs):
         request=request,
         reason='invalid_credentials'
     )
+    
+    # Handle account lockout logic
+    try:
+        user = User.objects.get(email=user_email)
+        lockout, created = AccountLockout.objects.get_or_create(user=user)
+        lockout.record_failed_attempt()
+    except User.DoesNotExist:
+        # User doesn't exist, no lockout needed
+        pass
+    except Exception as e:
+        # Log error but don't crash the login process
+        import logging
+        logger = logging.getLogger(__name__)
+        logger.error(f"Error handling account lockout for {user_email}: {e}")
 
 
 @receiver(email_confirmed)

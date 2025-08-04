@@ -28,6 +28,24 @@ class TestStripeMigration(unittest.TestCase):
     Test class for verifying the migration from dj-stripe to Stripe official API.
     """
     
+    @classmethod
+    def setUpClass(cls):
+        """Store original modules before mocking."""
+        super().setUpClass()
+        cls.original_modules = {}
+        for module_name in ['stripe', 'core', 'core.env_utils']:
+            cls.original_modules[module_name] = sys.modules.get(module_name)
+    
+    @classmethod
+    def tearDownClass(cls):
+        """Restore original modules after all tests."""
+        for module_name, original_module in cls.original_modules.items():
+            if original_module is not None:
+                sys.modules[module_name] = original_module
+            else:
+                sys.modules.pop(module_name, None)
+        super().tearDownClass()
+    
     def setUp(self):
         """Set up test fixtures."""
         # Reset the mock for each test
