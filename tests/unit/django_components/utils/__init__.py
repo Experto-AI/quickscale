@@ -1,1 +1,0 @@
-"""Django utilities unit tests."""

@@ -303,7 +303,7 @@ stateDiagram
   Destroyed --> [*]
   note right of NonExistent : No project directory
   note right of Created : Files generated
-  note right of Running : Docker containers active
+  note right of Running : Docker containers active<br/>Default services created<br/>Test accounts available
   note right of Stopped : Docker containers stopped
   note right of Destroyed : All files removed
 ```
@@ -546,6 +546,34 @@ flowchart TD
     Common -- supports --> Public & Dashboard
     Payments -- enables --> Dashboard
 ```
+
+### Container Startup Process
+
+When a QuickScale project starts up (via `quickscale up`), the `entrypoint.sh` script orchestrates the initialization sequence:
+
+#### **Startup Sequence**
+1. **Environment Validation**: Verify required environment variables (DB_USER, DB_PASSWORD, DB_NAME)
+2. **Database Connection**: Wait for PostgreSQL to become available (up to 10 retries)
+3. **Database Migration**: Apply Django migrations (`python manage.py migrate --noinput`)
+4. **Superuser Creation**: Create Django superuser if specified in environment variables
+5. **Default Users**: Create test accounts (`user@test.com`, `admin@test.com`) 
+6. **Default Services**: Create example AI services for immediate testing
+7. **Static Files**: Collect static files (`python manage.py collectstatic --noinput`)
+8. **Service Start**: Launch the Django application server
+
+#### **Default Services Created**
+During startup, the following example services are automatically configured:
+- **text_sentiment_analysis** (1.0 credits): Sentiment analysis with confidence scoring
+- **image_metadata_extractor** (10.0 credits): Image format and metadata analysis
+- **demo_free_service** (0.0 credits): Free demonstration service
+
+These services provide immediate functionality for testing the AI service framework without requiring additional setup.
+
+#### **Management Commands**
+The following Django management commands are available for service management:
+- `python manage.py create_default_services`: Recreate default example services
+- `python manage.py configure_service <name>`: Configure individual services
+- `python manage.py configure_service --list`: List all configured services
 
 ### Database ER Diagram
 
@@ -1015,6 +1043,8 @@ class InsufficientCreditsError(Exception):
 
 ### **Testing Patterns**
 
+For comprehensive testing documentation, see the [Testing Guide](./docs/testing-guide.md).
+
 #### **Model Testing Pattern**
 Standard pattern for testing models:
 
@@ -1321,18 +1351,17 @@ The AI Service Framework enables AI engineers to rapidly create and integrate AI
 
 #### **Example Service Implementations**
 
-**Text Processing Services:**
-- **Sentiment Analysis**: Keyword-based sentiment scoring with confidence metrics
-- **Keyword Extraction**: Frequency-based keyword extraction with relevance scoring
+QuickScale automatically creates default example services during project initialization:
+
+**Default Services Created:**
+- **Text Sentiment Analysis** (1.0 credits): Keyword-based sentiment scoring with confidence metrics
+- **Image Metadata Extractor** (10.0 credits): Image format detection and technical metadata analysis
+- **Demo Free Service** (0.0 credits): Free demonstration service for testing the framework
+
+**Additional Service Templates:**
 - **Text Analysis**: Comprehensive text metrics and readability analysis
-
-**Image Processing Services:**
-- **Metadata Extraction**: Image format detection and size estimation
 - **Classification Ready**: Framework for implementing image classification services
-
-**Data Validation Services:**
-- **Multi-format Support**: Text, email, JSON, and generic data validation
-- **Comprehensive Validation**: Format checking, structure validation, and quality scoring
+- **Custom Services**: Generate new services using CLI templates
 
 ### Service Development Workflow
 
@@ -1970,6 +1999,8 @@ When working on QuickScale:
 ### **📚 Context Documents for LLM Tasks**
 For complete context when requesting LLM assistance, provide:
 - **README.md** - Project overview and features
-- **USER_GUIDE.md** - Usage instructions and commands  
+- **USER_GUIDE.md** - Usage instructions and commands
+- **TECHNICAL_DOCS.md** - Architecture and implementation details
+- **[Testing Guide](./docs/testing-guide.md)** - Comprehensive testing documentation  
 - **TECHNICAL_DOCS.md** - Architecture and implementation patterns (this document)
 - **CONTRIBUTING.md** - Coding standards and workflow index

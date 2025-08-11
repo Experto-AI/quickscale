@@ -1,1 +1,1 @@
-"""QuickScale integration tests package.""" 
+"""Cross-system integration tests."""

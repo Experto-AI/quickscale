@@ -1,4 +1,10 @@
-"""Initial migration for admin dashboard app."""
+"""Consolidated initial migration for admin_dashboard app.
+
+This migration creates the admin dashboard models:
+- AuditLog: Track admin actions for audit purposes
+
+Depends on users app for the CustomUser model.
+"""
 from django.db import migrations, models
 import django.db.models.deletion
 import django.utils.timezone
@@ -6,7 +12,7 @@ from django.conf import settings
 
 
 class Migration(migrations.Migration):
-    """Initial empty migration."""
+    """Initial migration for admin dashboard app."""
 
     initial = True
 
@@ -19,7 +25,7 @@ class Migration(migrations.Migration):
             name='AuditLog',
             fields=[
                 ('id', models.BigAutoField(auto_created=True, primary_key=True, serialize=False, verbose_name='ID')),
-                ('action', models.CharField(choices=[('USER_SEARCH', 'User Search'), ('USER_VIEW', 'User View'), ('USER_EDIT', 'User Edit'), ('CREDIT_ADJUSTMENT', 'Credit Adjustment'), ('SERVICE_TOGGLE', 'Service Toggle'), ('PRODUCT_SYNC', 'Product Sync'), ('ADMIN_LOGIN', 'Admin Login'), ('ADMIN_LOGOUT', 'Admin Logout'), ('OTHER', 'Other Action')], max_length=50)),
+                ('action', models.CharField(choices=[('USER_SEARCH', 'User Search'), ('USER_VIEW', 'User View'), ('USER_EDIT', 'User Edit'), ('CREDIT_ADJUSTMENT', 'Credit Adjustment'), ('SERVICE_TOGGLE', 'Service Toggle'), ('PRODUCT_SYNC', 'Product Sync'), ('ADMIN_LOGIN', 'Admin Login'), ('ADMIN_LOGOUT', 'Admin Logout'), ('PAYMENT_INVESTIGATION', 'Payment Investigation'), ('PAYMENT_REFUND', 'Payment Refund'), ('OTHER', 'Other Action')], max_length=50)),
                 ('description', models.TextField()),
                 ('timestamp', models.DateTimeField(default=django.utils.timezone.now)),
                 ('ip_address', models.GenericIPAddressField(blank=True, null=True)),

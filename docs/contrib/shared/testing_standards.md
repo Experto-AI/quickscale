@@ -322,29 +322,228 @@ The LLM-friendly modes support systematic testing by:
 - **Coverage gaps**: Highlight areas where test coverage may be insufficient
 - **Standards compliance**: Verify that tests follow proper isolation and cleanup practices
 
-## Testing Application by Stage
+## Test Categories and When to Use Them
 
-### Planning Stage
+### Quick Decision Tree
+
+```
+What are you testing?
+
+🔧 QuickScale CLI/Generator Logic
+└─ Unit Test (tests/quickscale_generator/)
+   └─ Mock all external dependencies
+
+🏛️ Django Functionality
+├─ Simple model/utility functions?
+│  └─ Unit Test (tests/django_functionality/domain/)
+│     └─ Use Django TestCase with PostgreSQL test database
+│
+└─ Requires Django URLs/templates/full app structure?
+   └─ Integration Test (tests/integration/)
+      └─ Use quickscale init + real project
+
+🎬 Complete User Journey
+└─ E2E Test (tests/e2e/)
+   └─ Docker environment + real services
+```
+
+### Unit Tests (`tests/quickscale_generator/` and domain-specific)
+**Purpose**: Test individual components in isolation with mocked dependencies.
+
+**When to Use**:
+- Testing QuickScale CLI commands and generator logic
+- Testing individual functions, classes, or modules
+- Testing business logic without external dependencies
+- Testing utility functions and helpers
+
+**Key Characteristics**:
+- **Fast execution** (< 1 second per test)
+- **PostgreSQL test database** for Django tests
+- **Use mocks** for external dependencies
+- **Test isolated behavior** of single components
+
+**Example - QuickScale Generator Unit Test**:
+```python
+# tests/quickscale_generator/cli/test_init_command.py
+@patch('quickscale.commands.init_command.os.makedirs')
+@patch('quickscale.commands.init_command.shutil.copytree')
+def test_init_command_creates_project_structure(mock_copytree, mock_makedirs):
+    """Test that init command creates proper project structure."""
+    # Arrange
+    project_name = "test_project"
+    
+    # Act
+    result = run_init_command(project_name)
+    
+    # Assert
+    assert result.success is True
+    mock_makedirs.assert_called_once()
+    mock_copytree.assert_called_once()
+```
+
+**Example - Django Component Unit Test**:
+```python
+# tests/django_functionality/credit_system/test_credit_models.py
+class TestCreditModel(TestCase):
+    """Unit tests for Credit model behavior."""
+    
+    def test_credit_consumption_calculation(self):
+        """Test credit consumption calculation logic."""
+        # Arrange
+        credit = Credit(amount=100, used=30)
+        
+        # Act
+        remaining = credit.get_remaining()
+        
+        # Assert
+        assert remaining == 70
+```
+
+### Integration Tests (`tests/integration/`)
+**Purpose**: Test how multiple components work together using real QuickScale projects.
+
+**When to Use**:
+- Authentication flows requiring Django URL resolution  
+- Complete payment workflows with Stripe integration
+- Cross-system interactions (auth + credits + payments)
+- Features requiring full Django project structure
+
+**Key Indicators**:
+- 🚨 Test fails with `"No module named 'core.urls'"`
+- 🚨 Test uses `reverse('account_login')` or similar
+- 🚨 Test requires allauth, admin, or complete Django ecosystem
+
+**Key Characteristics**:
+- **Use real QuickScale projects** created with `quickscale init` in `/tmp`
+- **PostgreSQL test database** in Docker container
+- **Test system boundaries** and component interactions
+- **Moderate execution time** (5-30 seconds per test)
+- Tests requiring allauth, admin, or complete Django ecosystem
+- Cross-app functionality (credits + stripe + auth)
+
+**Example - Integration Test with Dynamic Project**:
+```python
+# tests/integration/test_auth_credit_integration.py
+def test_user_registration_creates_credit_account(dynamic_project_generator):
+    """Test that user registration automatically creates credit account."""
+    # Arrange - Generate real QuickScale project
+    project_dir = dynamic_project_generator.generate_project("test_auth_credits")
+    
+    # Set up Django environment for the generated project
+    setup_django_for_project(project_dir)
+    
+    # Act - Use real Django test client
+    client = Client()
+    response = client.post('/accounts/signup/', {
+        'email': 'test@example.com',
+        'password1': 'testpass123',
+        'password2': 'testpass123'
+    })
+    
+    # Assert - Check real database state
+    user = User.objects.get(email='test@example.com')
+    credit_account = CreditAccount.objects.get(user=user)
+    assert credit_account.balance == 0
+    assert response.status_code == 302
+```
+
+### E2E Tests (`tests/e2e/`)
+**Purpose**: Test complete user workflows with Docker containerization.
+
+**When to Use**:
+- Testing complete user journeys from start to finish
+- Testing with real external services (Stripe, email)
+- Testing deployment and production-like scenarios
+- Testing performance and scalability
+
+**Key Characteristics**:
+- **Real Docker environment** with PostgreSQL database
+- **Real external dependencies**
+- **Slow execution** (30+ seconds per test)
+- **Production-like setup**
+
+### Database Configuration for Tests
+
+**PostgreSQL Test Database**: All tests use PostgreSQL via Docker for consistency with production.
+
+**Unit Tests**: Use `tests/docker-compose.test.yml` with PostgreSQL container  
+**Integration Tests**: Real projects use PostgreSQL via dynamic project generation  
+**E2E Tests**: Full Docker environment with PostgreSQL
+
+**Test Database Setup**:
+```bash
+# Start PostgreSQL test database
+docker-compose -f tests/docker-compose.test.yml up -d test-db
+
+# Run tests
+python -m pytest tests/
+
+# Cleanup
+docker-compose -f tests/docker-compose.test.yml down
+```
+
+**Example - E2E Test**:
+```python
+# tests/e2e/test_complete_user_journey.py
+def test_complete_subscription_workflow(docker_environment):
+    """Test complete user journey from signup to service usage."""
+    # Arrange - Real Docker environment
+    base_url = docker_environment.get_base_url()
+    
+    # Act & Assert - Real browser automation
+    with selenium_driver() as driver:
+        # User signs up
+        driver.get(f"{base_url}/accounts/signup/")
+        # ... complete browser workflow
+        
+        # User purchases credits
+        # ... real Stripe payment flow
+        
+        # User consumes credits
+        # ... real service usage
+```
+
+### Dynamic Project Generation Rules
+
+**ALWAYS use `quickscale init` for**:
+- Tests requiring Django URL resolution
+- Template rendering requiring full Django context  
+- Cross-app functionality tests
+- Admin interface tests
+
+**NEVER use for**:
+- Individual model method tests
+- Utility function tests
+- CLI command logic tests
+- Simple database operations
+
+### Testing Application by Stage
+
+### Planning Stage  
+- **Identify test category**: Use decision tree above
 - Plan for testable code design
-- Identify what needs to be tested
 - Consider test data requirements
+- **Plan dynamic project needs**: If integration tests needed, plan project structure
 
 ### Implementation Stage
 - Write implementation code first
 - Design for testability using dependency injection
 - Create focused, single-responsibility functions
+- **Consider URL structure**: If Django URLs needed, plan for integration tests
 
 ### Quality Control Stage
 - Write comprehensive tests after implementation
-- Verify all code paths are covered
+- **Verify correct test category**: Unit vs Integration vs E2E
 - Ensure tests focus on behavior, not implementation
 - Validate test isolation and proper mocking
+- **Validate dynamic project usage**: Ensure integration tests use real projects
 
 ### Debugging Stage
 - Use tests to reproduce bugs
 - Write regression tests for bug fixes
 - Verify that fixes don't break existing functionality
 - Use tests to validate root cause analysis
+- **Root cause analysis for test failures**: Determine if test or code is wrong
 
 ---
 

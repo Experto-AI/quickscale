@@ -1,0 +1,41 @@
+version: '3.8'
+
+services:
+  test-db:
+    image: postgres:15-alpine
+    container_name: quickscale_test_db
+    environment:
+      POSTGRES_DB: quickscale_test
+      POSTGRES_USER: test_user
+      POSTGRES_PASSWORD: test_pass
+    ports:
+      - "5433:5432"  # Different port to avoid conflicts with main DB
+    tmpfs:
+      # Use tmpfs for faster test database (in-memory)
+      - /var/lib/postgresql/data:noexec,nosuid,size=200m
+    command: >
+      postgres 
+      -c fsync=off 
+      -c synchronous_commit=off 
+      -c full_page_writes=off
+      -c wal_buffers=16MB 
+      -c shared_buffers=256MB
+      -c effective_cache_size=512MB
+      -c maintenance_work_mem=64MB
+      -c checkpoint_completion_target=0.9
+      -c random_page_cost=1.1
+      -c log_statement=none
+      -c log_duration=off
+      -c log_lock_waits=off
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U test_user -d quickscale_test"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    networks:
+      - quickscale_test
+
+networks:
+  quickscale_test:
+    driver: bridge

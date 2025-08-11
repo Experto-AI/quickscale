@@ -1,1 +1,0 @@
-"""Django component unit tests."""
