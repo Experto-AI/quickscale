@@ -87,6 +87,9 @@ def setup_core_env_utils_mock():
 def setup_django_settings():
     """Set up Django settings for e2e tests."""
     if not settings.configured:
+        # Import PostgreSQL test configuration
+        from core.test_db_config import get_test_db_config
+        
         # Get paths for templates
         quickscale_root = Path(__file__).parent.parent.parent.parent
         test_templates_path = quickscale_root / "tests" / "admin_dashboard" / "templates"
@@ -96,11 +99,12 @@ def setup_django_settings():
             DEBUG=True,
             USE_TZ=True,
             SECRET_KEY="test-key-for-django-e2e",
+            PROJECT_NAME="Test QuickScale E2E Project",
             STRIPE_SECRET_KEY="sk_test_123",
             STRIPE_PUBLIC_KEY="pk_test_123", 
             STRIPE_WEBHOOK_SECRET="whsec_test_123",
             STRIPE_ENABLED=True,
-            DATABASES={"default": {"ENGINE": "django.db.backends.sqlite3", "NAME": ":memory:"}},
+            DATABASES={"default": get_test_db_config()},
             INSTALLED_APPS=[
                 "django.contrib.auth",
                 "django.contrib.contenttypes",
@@ -136,6 +140,7 @@ def setup_django_settings():
                         'django.template.context_processors.request',
                         'django.contrib.auth.context_processors.auth',
                         'django.contrib.messages.context_processors.messages',
+                        'core.context_processors.project_settings',
                     ],
                 },
             }],

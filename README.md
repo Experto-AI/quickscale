@@ -48,6 +48,14 @@ quickscale manage <command>        # Run Django management commands
 quickscale sync-back [path]        # Sync changes back to templates (dev mode)
 ```
 
+### **Service Management**
+```bash
+# Default services are automatically created during 'quickscale up'
+quickscale manage create_default_services        # Recreate default example services
+quickscale manage configure_service <name>       # Configure individual services
+quickscale manage configure_service --list       # List all configured services
+```
+
 ### **AI Service Framework**
 ```bash
 quickscale generate-service <name>              # Generate AI service template
@@ -85,6 +93,7 @@ quickscale help                    # Show help
 - **BaseService Class**: Standard interface for all AI services with validation
 - **Service Management**: Enable/disable services, track usage, cost configuration
 - **API Ready**: RESTful API structure for service integration
+- **Example Services**: Pre-configured demonstration services including sentiment analysis, keyword extraction, and free demo services
 
 ### **Technical Stack**
 - **Backend**: Django 5.0+, PostgreSQL, Docker containerization
@@ -96,13 +105,16 @@ quickscale help                    # Show help
 
 QuickScale creates test accounts automatically for immediate development:
 
-- **User Account**: 
-  - Email: `user@test.com` | Password: `userpasswd`
-  - Access: User dashboard, billing, services
+Default accounts available after startup:
+- Regular User: user@test.com / userpasswd
+- Administrator: admin@test.com / adminpasswd
 
-- **Admin Account**: 
-  - Email: `admin@test.com` | Password: `adminpasswd`
-  - Access: Admin dashboard, user management, payment tools
+Default AI services available for testing:
+- Text Sentiment Analysis (1.0 credits)
+- Image Metadata Extractor (10.0 credits)
+- Demo Free Service (0.0 credits - FREE)
+
+Access services at: http://localhost:8000/services/
 
 *Note: Accounts are created automatically on first `quickscale up`. Change passwords in production.*
 
@@ -136,6 +148,7 @@ STRIPE_WEBHOOK_SECRET=whsec_...
 
 - [**User Guide**](./USER_GUIDE.md) - Complete setup, usage, and deployment guide
 - [**Technical Documentation**](./TECHNICAL_DOCS.md) - Architecture, API, and development details
+- [**Testing Guide**](./docs/testing-guide.md) - Comprehensive testing documentation
 - [**Contributing Guide**](./CONTRIBUTING.md) - Development guidelines and AI assistant rules
 - [**Roadmap**](./ROADMAP.md) - Future features and development plans
 - [**Changelog**](./CHANGELOG.md) - Release notes and version history

@@ -1,14 +1,33 @@
-"""Test settings for QuickScale template."""
+"""Test settings for QuickScale template - PostgreSQL only."""
 
 from .settings import *
 
-# Use SQLite for testing
+# Use PostgreSQL for testing - NO SQLite fallback
 DATABASES = {
     'default': {
-        'ENGINE': 'django.db.backends.sqlite3',
-        'NAME': ':memory:',
+        'ENGINE': 'django.db.backends.postgresql',
+        'NAME': get_env('TEST_DB_NAME', 'quickscale_test'),
+        'USER': get_env('TEST_DB_USER', 'test_user'),
+        'PASSWORD': get_env('TEST_DB_PASSWORD', 'test_pass'),
+        'HOST': get_env('TEST_DB_HOST', 'localhost'),
+        'PORT': get_env('TEST_DB_PORT', '5433'),
+        'OPTIONS': {
+            'connect_timeout': 10,
+        },
+        'TEST': {
+            'NAME': 'test_quickscale_test',
+        }
     }
 }
+
+# Fail hard if PostgreSQL is not available
+try:
+    import psycopg2
+except ImportError:
+    raise ImportError(
+        "PostgreSQL adapter (psycopg2) is required for testing. "
+        "Install it with: pip install psycopg2-binary"
+    )
 
 # Disable Stripe for testing
 STRIPE_ENABLED = False

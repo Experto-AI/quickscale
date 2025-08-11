@@ -1,18 +1,19 @@
-"""Initial migration for CustomUser model.
+"""Consolidated initial migration for users app.
 
-This is a pre-generated migration file to avoid memory issues during project creation.
-Instead of dynamically generating migrations during the build process, we include
-pre-created migration files in the templates, which significantly reduces memory usage
-and eliminates Out-of-Memory errors that could occur on systems with limited resources.
+This migration creates all user-related models in their final state:
+- CustomUser: Custom user model with email authentication and profile fields
+- AccountLockout: Account security and lockout management
+- TwoFactorAuth: Two-factor authentication settings
 
-This consolidated migration includes all CustomUser fields and options.
+Consolidates what was previously in 0001_initial.py and 0002_add_security_models.py
 """
 from django.db import migrations, models
+import django.db.models.deletion
 import django.utils.timezone
 
 
 class Migration(migrations.Migration):
-    """Initial migration for CustomUser model with all profile fields."""
+    """Consolidated initial migration for users app."""
 
     initial = True
 
@@ -52,6 +53,42 @@ class Migration(migrations.Migration):
             options={
                 'verbose_name': 'User',
                 'verbose_name_plural': 'Users',
+                'app_label': 'users',
+            },
+        ),
+        migrations.CreateModel(
+            name='AccountLockout',
+            fields=[
+                ('id', models.BigAutoField(auto_created=True, primary_key=True, serialize=False, verbose_name='ID')),
+                ('failed_attempts', models.IntegerField(default=0)),
+                ('last_failed_attempt', models.DateTimeField(blank=True, null=True)),
+                ('locked_until', models.DateTimeField(blank=True, null=True)),
+                ('is_locked', models.BooleanField(default=False)),
+                ('created_at', models.DateTimeField(auto_now_add=True)),
+                ('updated_at', models.DateTimeField(auto_now=True)),
+                ('user', models.OneToOneField(on_delete=django.db.models.deletion.CASCADE, related_name='lockout_status', to='users.customuser')),
+            ],
+            options={
+                'verbose_name': 'Account Lockout',
+                'verbose_name_plural': 'Account Lockouts',
+                'app_label': 'users',
+            },
+        ),
+        migrations.CreateModel(
+            name='TwoFactorAuth',
+            fields=[
+                ('id', models.BigAutoField(auto_created=True, primary_key=True, serialize=False, verbose_name='ID')),
+                ('is_enabled', models.BooleanField(default=False)),
+                ('secret_key', models.CharField(blank=True, max_length=32)),
+                ('backup_codes', models.JSONField(blank=True, default=list)),
+                ('last_used', models.DateTimeField(blank=True, null=True)),
+                ('created_at', models.DateTimeField(auto_now_add=True)),
+                ('updated_at', models.DateTimeField(auto_now=True)),
+                ('user', models.OneToOneField(on_delete=django.db.models.deletion.CASCADE, related_name='two_factor_auth', to='users.customuser')),
+            ],
+            options={
+                'verbose_name': 'Two-Factor Authentication',
+                'verbose_name_plural': 'Two-Factor Authentication Settings',
                 'app_label': 'users',
             },
         ),

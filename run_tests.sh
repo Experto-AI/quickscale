@@ -239,6 +239,8 @@ RUN_UNIT=0
 RUN_INTEGRATION=0
 RUN_E2E=0
 RUN_DJANGO_COMPONENTS=0
+RUN_GENERATOR=0
+RUN_DJANGO_FUNC=0
 QUIET=0
 VERBOSE=0
 EXITFIRST=0
@@ -252,6 +254,8 @@ print_usage() {
     echo "  -i, --integration  Run only integration tests (medium speed, some external dependencies)"
     echo "  -e, --e2e          Run only end-to-end tests (slow, full system tests with Docker)"
     echo "  -d, --django       Run only Django component tests (models, views, utils)"
+    echo "  --generator        Run only QuickScale generator/CLI tests"
+    echo "  --django-func      Run only Django functionality tests (authentication, credits, etc.)"
     echo "  -q, --quiet        Run tests in quiet mode (less verbose output)"
     echo "  -v, --verbose      Run tests in verbose mode (more detailed output)"
     echo "  -x, --exitfirst    Exit on first test failure"
@@ -262,6 +266,8 @@ print_usage() {
     echo "  $0 -u              # Run only unit tests"
     echo "  $0 -e              # Run only end-to-end tests"
     echo "  $0 -d              # Run only Django component tests"
+    echo "  $0 --generator     # Run only QuickScale generator tests"
+    echo "  $0 --django-func   # Run only Django functionality tests"
     echo "  $0 -u -i           # Run both unit and integration tests"
     echo "  $0 -u -i -e        # Run all tests (unit, integration, and end-to-end)"
     echo "  $0 -u -i -d        # Run unit, integration and Django component tests"
@@ -295,6 +301,14 @@ while [[ $# -gt 0 ]]; do
             RUN_DJANGO_COMPONENTS=1
             shift
             ;;
+        --generator)
+            RUN_GENERATOR=1
+            shift
+            ;;
+        --django-func)
+            RUN_DJANGO_FUNC=1
+            shift
+            ;;
         -q|--quiet)
             QUIET=1
             shift
@@ -324,12 +338,12 @@ done
 # Add test selection paths
 test_paths=()
 SELECTED_TESTS=0
-if [[ $RUN_UNIT -eq 1 || $RUN_INTEGRATION -eq 1 || $RUN_E2E -eq 1 || $RUN_DJANGO_COMPONENTS -eq 1 ]]; then
+if [[ $RUN_UNIT -eq 1 || $RUN_INTEGRATION -eq 1 || $RUN_E2E -eq 1 || $RUN_DJANGO_COMPONENTS -eq 1 || $RUN_GENERATOR -eq 1 || $RUN_DJANGO_FUNC -eq 1 ]]; then
     SELECTED_TESTS=1
 fi
 
 # If running e2e tests, set specific env variables
-if [[ $RUN_E2E -eq 1 || ($SELECTED_TESTS -eq 0 && $RUN_INTEGRATION -eq 0 && $RUN_UNIT -eq 0 && $RUN_DJANGO_COMPONENTS -eq 0) ]]; then
+if [[ $RUN_E2E -eq 1 || ($SELECTED_TESTS -eq 0 && $RUN_INTEGRATION -eq 0 && $RUN_UNIT -eq 0 && $RUN_DJANGO_COMPONENTS -eq 0 && $RUN_GENERATOR -eq 0 && $RUN_DJANGO_FUNC -eq 0) ]]; then
     if [[ $QUIET -eq 0 ]]; then
         echo "Setting up environment for E2E tests..."
     fi
@@ -393,11 +407,13 @@ if [[ $FAILURES_ONLY -eq 1 ]]; then
     # This minimizes context pollution for LLM analysis while preserving critical error information
     if [[ $EXITFIRST -eq 1 ]]; then
         # Single failure mode: stop on first failure for focused debugging, do not shows warnings
-        CMD="$CMD --tb=short -q --disable-warnings -o log_cli=false"
+        # CMD="$CMD --tb=short -q --disable-warnings -o log_cli=false"
+        CMD="$CMD --tb=native -q --disable-warnings -o log_cli=false"
         # Note: --exitfirst is already added above, no need to duplicate
     else
         # Multiple failures mode: show up to 5 failures for broader context and all warnings
-        CMD="$CMD --tb=short -q -o log_cli=false --maxfail=5"
+        # CMD="$CMD --tb=short -q -o log_cli=false --maxfail=5"
+        CMD="$CMD --tb=native -q -o log_cli=false --maxfail=5"
     fi
     
     # Add a note about LLM optimization
@@ -416,7 +432,7 @@ fi
 if [[ $SELECTED_TESTS -eq 1 ]]; then
     # User selected specific tests
     if [[ $RUN_UNIT -eq 1 ]]; then
-        test_paths+=("tests/unit/")
+        test_paths+=("tests/quickscale_generator/" "tests/django_functionality/")
     fi
     if [[ $RUN_INTEGRATION -eq 1 ]]; then
         test_paths+=("tests/integration/")
@@ -425,11 +441,17 @@ if [[ $SELECTED_TESTS -eq 1 ]]; then
         test_paths+=("tests/e2e/")
     fi
     if [[ $RUN_DJANGO_COMPONENTS -eq 1 ]]; then
-        test_paths+=("tests/unit/django_components/" "tests/integration/django_apps/" "tests/e2e/django_workflows/")
+        test_paths+=("tests/django_functionality/" "tests/e2e/django_workflows/")
+    fi
+    if [[ $RUN_GENERATOR -eq 1 ]]; then
+        test_paths+=("tests/quickscale_generator/")
+    fi
+    if [[ $RUN_DJANGO_FUNC -eq 1 ]]; then
+        test_paths+=("tests/django_functionality/")
     fi
 else
-    # Default: run unit, integration, and e2e tests (template validation is optional)
-    test_paths+=("tests/unit/" "tests/integration/" "tests/e2e/")
+    # Default: run quickscale_generator, django_functionality, integration, and e2e tests
+    test_paths+=("tests/quickscale_generator/" "tests/django_functionality/" "tests/integration/" "tests/e2e/")
 fi
 
 CMD="$CMD ${test_paths[@]}"
