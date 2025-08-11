@@ -13,12 +13,8 @@ from django.test.testcases import LiveServerTestCase
 from typing import Optional
 
 
-# Add tests directory to Python path to make tests/core and tests/users importable
-tests_dir = os.path.dirname(os.path.abspath(__file__))
-if tests_dir not in sys.path:
-    sys.path.insert(0, tests_dir)
-
 # Add project templates directory to Python path for Django app imports
+tests_dir = os.path.dirname(os.path.abspath(__file__))
 project_templates_dir = os.path.join(os.path.dirname(tests_dir), 'quickscale', 'project_templates')
 if project_templates_dir not in sys.path:
     sys.path.insert(0, project_templates_dir)
@@ -28,7 +24,8 @@ SERVICE_TIMEOUT = 30
 # Polling interval for checking service readiness (seconds)
 POLL_INTERVAL = 0.5
 
-os.environ.setdefault("DJANGO_SETTINGS_MODULE", "tests.core.settings")
+# Configure Django settings for testing with PostgreSQL
+os.environ.setdefault("DJANGO_SETTINGS_MODULE", "tests.test_settings")
 django.setup()
 
 @pytest.fixture(scope="session", autouse=True)

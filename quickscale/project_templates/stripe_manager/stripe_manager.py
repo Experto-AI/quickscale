@@ -5,7 +5,18 @@ import os
 import importlib.metadata
 from typing import Dict, Any, Optional, Union, List, Tuple
 from django.conf import settings
-from core.env_utils import get_env, is_feature_enabled
+
+try:
+    from core.env_utils import get_env, is_feature_enabled
+except ImportError:
+    # Fallback for test environment
+    def get_env(key: str, default: Any = None, from_env_file: bool = False) -> Any:
+        return os.environ.get(key, default)
+    
+    def is_feature_enabled(feature_key: str) -> bool:
+        value = os.environ.get(feature_key, '').lower()
+        return value in ('true', 'yes', '1', 'on', 'enabled', 't', 'y')
+
 # from stripe import StripeClient # Move this import
 import stripe
 

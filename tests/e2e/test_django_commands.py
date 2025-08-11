@@ -11,7 +11,7 @@ from tests.utils import (
     wait_for_docker_service,
     run_quickscale_command,
     is_docker_available,
-    create_test_project_structure,
+    DynamicProjectGenerator,
     find_available_ports
 )
 
@@ -63,9 +63,13 @@ class TestDjangoCommands:
         
         os.chdir(tmp_path)
         
-        # Create a test project structure
+        # Create a test project using DynamicProjectGenerator
         project_name = "django_test_project"
-        project_dir = create_test_project_structure(tmp_path, project_name)
+        generator = DynamicProjectGenerator(cleanup_on_exit=False)
+        project_dir = generator.generate_project(
+            project_name=project_name,
+            base_dir=tmp_path
+        )
         
         # Create a .env file with the appropriate port settings
         env_content = f"""

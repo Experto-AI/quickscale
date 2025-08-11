@@ -1,1 +1,0 @@
-"""Credit system integration tests."""

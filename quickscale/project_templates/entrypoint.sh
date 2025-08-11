@@ -89,6 +89,10 @@ fi
 echo "Creating default test accounts..."
 python manage.py create_default_users
 
+# Create default example services
+echo "Creating default example services..."
+python manage.py create_default_services
+
 # Collect static files
 echo "Collecting static files..."
 python manage.py collectstatic --noinput

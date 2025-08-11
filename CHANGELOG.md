@@ -2,6 +2,36 @@
 
 All notable changes to this project will be documented in this file.
 
+## v0.39.0 (2025-08-11)
+v0.39.0 feat: PostgreSQL Migration, Credit Priority Fix, and Production Readiness Enhancement
+
+This release delivers comprehensive production readiness improvements, including complete PostgreSQL migration for test-production parity, critical credit consumption priority bug fixes, enhanced test infrastructure, and automated default service initialization. The update ensures robust data consistency, improved testing capabilities, and streamlined project initialization for better developer experience.
+
+- Backend Implementation:
+  - Migrated all test infrastructure from SQLite to PostgreSQL for complete production-test parity and improved data consistency.
+  - Fixed critical credit consumption priority bug where pay-as-you-go purchases were incorrectly consuming subscription credits instead of pay-as-you-go credits.
+  - Consolidated Django migrations for users, credits, and admin_dashboard apps to improve database schema management.
+  - Enhanced project initialization with automatic creation of default example services upon startup.
+  - Implemented new management command to create default services including 'text_sentiment_analysis', 'image_metadata_extractor', and 'demo_free_service'.
+  - Removed obsolete Django apps (credits, stripe_manager, users) and related unused code for improved maintainability.
+  - Enhanced transaction handling for account lockout validation in login forms.
+- Frontend Implementation:
+  - Updated TECHNICAL_DOCS.md with detailed container startup process and default services documentation.
+  - Improved test execution commands in README for clarity and ease of use.
+- Testing:
+  - Introduced dynamic project generation for testing, replacing static fixtures for improved test reliability.
+  - Implemented comprehensive test suite for credit consumption priority bug fix with regression prevention.
+  - Added unit tests for logging and message management modules with complete coverage.
+  - Enhanced testing infrastructure with database readiness checks and recommended test runner script usage.
+  - Fixed relative path issues across multiple test files and consolidated test setup paths for improved maintainability.
+  - Removed consolidated test files for command utilities and Django components to eliminate redundancy.
+- Documentation:
+  - Updated testing infrastructure documentation with database readiness check procedures.
+  - Enhanced credit consumption logic documentation with new transaction types and priority handling.
+  - Added comprehensive details about container startup process and default services in technical documentation.
+
+This release completes the Manual Polish sprint (v0.39.0), delivering a production-ready foundation with PostgreSQL parity, fixed credit system logic, streamlined test infrastructure, and automated service initialization. The changes ensure robust data consistency, comprehensive test coverage, and improved developer experience for future development.
+
 ## v0.38.0 (2025-08-04)
 v0.38.0 feat: Manual Polish, Test Reorganization, and LLM-Friendly Testing
 
