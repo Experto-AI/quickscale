@@ -13,6 +13,7 @@
 
 2. **Core Infrastructure**:
    - ✅ Database connections (PostgreSQL)
+   - ✅ Production-test parity with PostgreSQL across all testing infrastructure
    - ✅ API routing framework (Django)
    - ✅ Project structure with proper separation of concerns
    - ✅ Docker containerization
@@ -21,6 +22,7 @@
    - ✅ HTMX integration for dynamic content loading
    - ✅ Alpine.js for client-side interactivity
    - ✅ CLI improvements and error handling
+   - ✅ Dynamic project generation for testing infrastructure
 
 3. **UI Components**:
    - ✅ Public pages (home, about, contact)
@@ -53,6 +55,7 @@
    - ✅ Pay-as-you-go credit purchase
    - ✅ Basic monthly subscription system
    - ✅ Credit type priority system
+   - ✅ Enhanced transaction handling for account lockout validation
    - ✅ Payment history & receipts
    - ✅ Service management admin interface
    - ✅ AI service framework foundation
@@ -64,303 +67,326 @@
    - ✅ BaseService class with credit integration
    - ✅ Service registration and discovery system
    - ✅ Example service implementations (text processing, image processing, data validation)
+   - ✅ Default service initialization with automatic creation upon project startup
+   - ✅ Management commands for default services (text_sentiment_analysis, image_metadata_extractor, demo_free_service)
    - ✅ Comprehensive service development documentation
    - ✅ API authentication framework
    - ✅ Service development utilities and validation tools
+
+7. **Testing Infrastructure**:
+   - ✅ Comprehensive unit and integration test coverage
+   - ✅ PostgreSQL-based testing for production parity
+   - ✅ Dynamic project generation for test reliability
+   - ✅ Test structure reorganization and logical grouping
+   - ✅ Database readiness checks and test runner optimization
+   - ✅ Credit consumption priority regression tests
+   - ✅ Logging and message management module tests
 
 For more details refer to the [CHANGELOG](CHANGELOG.md).
 
 ## Development Sprints
 
-**Philosophy**: Small, focused sprints that can be completed in 1-2 days. Each sprint delivers immediate value and can be verified independently. Customer-facing features first, admin tools second.
+### Sprint 28: Manual Polish (v0.39.0) - ✅ COMPLETED (2025-08-11)
+
+- ✅ Replace all SQLite usage in tests with PostgreSQL for production-test parity
+- ✅ Pay-as-you-go credit purchase + Service usage + Subscription flow + Service usage, 
+     shows all subscription consumption and none of Pay-as-you-go. 
+- ✅ Reorganize tests into better logical structure.
+- ✅ Consolidate all Django DB migrations.
 
 ---
 
-### Sprint 26: Simplified Sync-Back Implementation (v0.37.0)
+## Ultra-Minimal Beta (UMB) - v0.40.0: Quick Beta Launch with Feature Flags
 
-**Goal**: Implement minimal viable sync-back functionality following KISS principles
+**Goal**: Ship working beta in 1 week using feature flags to disable complex features while preserving all code.
 
-**Planning Principles Applied:**
-- **KISS**: Simple two-mode detection (development/production) instead of four modes
-- **DRY**: Reuse existing CLI patterns and file operations
-- **Explicit Failure**: Clear error messages for unsupported scenarios
-- **Focused Implementation**: Single sprint delivering working functionality
+**Philosophy**: Ship a **working demonstration** of core value, not a feature-complete platform.
 
-**Core Implementation**
-- ✅ **Simple Installation Detection**: Check if `.git` directory exists and templates are writable
-  - ✅ Two modes only: `development` (Git clone + editable install) or `production` (pip install)
-  - ✅ Simple error message for production mode with setup instructions
-- ✅ **Basic CLI Command**: Add `quickscale sync-back <project-path>` with two flags
-  - ✅ `--preview`: Show which files would be copied/skipped
-  - ✅ `--apply`: Copy files from project back to templates
-- ✅ **Simple File Processing**: Copy files that exist in both locations
-  - ✅ **Safe Files (Direct Copy)**: Templates (*.html), static files (*.css, *.js, *.svg, *.png, etc.), documentation (*.md, *.txt)
-  - ✅ **Careful Files (Variable Restoration)**: Settings files (settings.py, urls.py) - replace actual values with template variables
-  - ✅ **Never Sync (Auto-Skip)**: Database files (*.sqlite3, *.db), migrations (*/migrations/*.py), logs (logs/*, *.log), cache (__pycache__/*, *.pyc), environment files (.env, .env.*)
-  - ✅ **New Files**: Detect and include new files in safe/careful categories
-  - ✅ **Deleted Files**: Detect files removed from project and offer to delete from templates
+**Single Success Metric**: `quickscale init myproject && cd myproject && docker-compose up` → fully functional SaaS app in 5 minutes.
 
-**Basic Testing**
-  - ✅ Test installation mode detection
-  - ✅ Test file categorization by extension and path
-  - ✅ Test safe file copying (templates, static, docs)
-  - ✅ Test careful file variable restoration (settings.py, urls.py)
-  - ✅ Test never-sync file skipping (database, migrations, logs)
-  - ✅ Test new file detection and inclusion
-  - ✅ Test deleted file detection and removal
-  - ✅ Test CLI command integration
+### **Core-First Strategy: Feature Flags Instead of Code Deletion**
 
-**Success Criteria - Must deliver:**
-- ✅ **Working Command**: `quickscale sync-back --preview` and `--apply` work reliably
-- ✅ **Clear User Experience**: Helpful error for pip users, working functionality for Git users
-- ✅ **Basic Safety**: Backup before applying changes, clear preview before execution
-- ✅ **Essential Testing**: Core functionality tested and validated
+**Core Principle**: Keep all existing code but disable complex features through configuration.
 
-**Validation**: 
-- ✅ Developer can modify templates in generated project and sync back to QuickScale templates
-- ✅ Command fails gracefully for pip-installed users with clear guidance
-- ✅ Basic functionality works on Linux (primary development platform)
+**Implementation Approach**:
+1. **Settings-Based Feature Flags**: Add `settings/feature_flags.py` with beta-safe defaults
+2. **Conditional Code Execution**: Wrap complex features with `if settings.FEATURE_ENABLED:`
+3. **Template Conditional Rendering**: Use `{% if ENABLE_FEATURE %}` in templates
+4. **Test Markers**: Disable complex tests with `@pytest.mark.skipif(not settings.ENABLE_FEATURE)`
 
----
+#### **Ultra-Minimal Beta Scope (1 Week Implementation)**
 
-### Sprint 27: Manual Polish (v0.38.0)
+**Keep Only (Absolute Essentials)**:
+1. **Generator Core**: `quickscale init` command, project template generation, Docker setup with PostgreSQL
+2. **Basic Auth & UI**: User registration/login via django-allauth (no email verification), simple dashboard, minimal Bulma CSS
+3. **Simple Credit Demo**: Fixed 100 credits per new user (no payment required), single demo service: "Text Length Counter", basic credit deduction
+4. **Admin Essentials**: Django admin access, manual credit adjustment capability
 
-- ✅ Why js and static/js directories in project templates?
-- ✅ Why tests in project templates instead of quickscale/tests?
-- ✅ Why docs in project templates instead of quickscale/docs?
-- ✅ Why services directory in root with tests inside?
-- ✅ Why /users/account-security/ and /users/api-keys/ two similar pages?
-- ✅ Why quickscale/project_templates/admin_dashboard/tests, quickscale/project_templates/credits/tests,
-     quickscale/project_templates/stripe_manager/tests and quickscale/project_templates/users/tests ?
-- ✅ Spot duplicated or overlapping tests (script) and fix/remove them.
+**Disable via Feature Flags (Preserve All Code)**:
+```python
+# settings/feature_flags.py - Beta Configuration
+ENABLE_STRIPE = False               # Disable payment processing
+ENABLE_SUBSCRIPTIONS = False        # Hide subscription UI/logic
+ENABLE_CREDIT_TYPES = False         # Single credit pool only
+ENABLE_SERVICE_MARKETPLACE = False  # Show single demo service
+ENABLE_ADVANCED_ADMIN = False       # Basic Django admin only
+REQUIRE_EMAIL_VERIFICATION = False  # Optional login flow
+ENABLE_API_ENDPOINTS = False        # Web UI only
+ENABLE_ADVANCED_ERRORS = False      # Basic error pages
+ENABLE_WEBHOOKS = False             # No webhook processing
+ENABLE_SERVICE_GENERATOR = False    # Defer CLI commands
+```
 
----
+#### **7-Day Implementation Plan**
 
-### Sprint 28: Manual Polish (v0.39.0)
-- [ ] Why are we using SQLite3 for tests instead of PostgreSQL?
-- [ ] Reorganize tests into better logical structure.
-- [ ] Pay-as-you-go credit purchase + Service usage + Subscription flow + Service usage, 
-      shows all subscription consumption and none of Pay-as-you-go. 
+**Day 1-2: Feature Flag Implementation & Stabilization**
+- Create settings/feature_flags.py with beta-safe defaults
+- Wrap Stripe-related code with `if settings.ENABLE_STRIPE:`
+- Add conditional template rendering for complex features
+- Disable failing tests via pytest markers (not deletion)
+- Fix database connection issues (standardize to port 5432)
 
----
+**Day 3-4: Core Generator Polish**
+- Test `quickscale init` on clean Ubuntu/macOS systems
+- Verify Docker Compose setup works without errors
+- Ensure database migrations run successfully
+- Validate basic template rendering
 
-## Sprint 29: Modular AI Assistant Documentation for QuickScale & Generated Projects (v0.40.0)
+**Day 5-7: End-to-End Validation**
+- Install from pip on fresh systems
+- Manual testing of complete user journey
+- Fix any remaining critical issues
+- Write simple one-page getting started guide
 
-### **Objective**
-Enable every QuickScale-generated project to include modular, DRY, and project-adapted AI assistant documentation, improving developer experience and AI coding assistant effectiveness.
+#### **Beta User Experience (Target: 5 Minutes)**
+```bash
+# Installation and setup
+pip install quickscale
+quickscale init my-saas-app
+cd my-saas-app
+docker-compose up
 
-### **Scope & Deliverables**
-- Modularize all AI assistant documentation in the QuickScale codebase.
-- Create template versions for project generation.
-- Integrate documentation copying/adaptation into the `init` workflow.
-- Ensure docs are readable, relevant, and easy to update in both codebase and generated projects.
-- Document the workflow and usage for maintainers and end-users.
+# Usage (web browser)
+1. Open http://localhost:8000
+2. Click "Register" → create account (no email verification)
+3. See dashboard with "100 credits available"
+4. Click "Demo Service" → enter text → submit
+5. See result + "99 credits remaining"
+6. Admin can login to Django admin and adjust credits
+```
 
-### **Sprint Tasks**
-#### 1. **Design Modular Documentation Structure**
-   - [ ] Audit existing docs (PLAN.md, ACT.md, DEBUG.md, QUALITY.md, etc.).
-   - [ ] Define modular subparts (e.g. principles, patterns, testing, architecture, usage, contributing).
-   - [ ] Create a clear folder structure:
-     ```
-     quickscale/docs/ai_guidelines/
-         [README.md](http://_vscodecontentref_/0)
-         principles.md
-         patterns.md
-         testing.md
-         architecture.md
-         usage_examples.md
-         contributing.md
-     ```
-#### 2. **Create Template Versions for Project Generation**
-   - [ ] For each modular doc, create a `.md.template` version in:
-     ```
-     quickscale/project_templates/docs/ai_guidelines/
-         README.md.template
-         principles.md.template
-         patterns.md.template
-         testing.md.template
-         architecture.md.template
-         usage_examples.md.template
-         contributing.md.template
-     ```
-   - [ ] Add template variables (e.g. `{{ project_name }}`) for project-specific adaptation.
-#### 3. **Integrate Documentation into Project Generation**
-   - [ ] Update the `init` command to copy and render these templates into the generated project’s `docs/ai_guidelines/` folder.
-   - [ ] Ensure all relevant docs are included and adapted for the new project.
-   - [ ] Add a README in both locations explaining usage, update process, and modular structure.
-#### 4. **Document the Workflow**
-   - [ ] Write clear instructions for maintainers on updating modular docs and templates.
-   - [ ] Document for end-users and AI assistants how to use the docs in generated projects.
-#### 5. **Test and Validate**
-   - [ ] Run `quickscale init` and verify the generated project contains a complete, modular, and project-adapted AI guidelines folder.
-   - [ ] Ensure docs are readable, relevant, and easy to update in both codebase and generated projects.
-   - [ ] Get feedback from maintainers and users.
-
-### **Acceptance Criteria**
-- [ ] All AI assistant documentation is modularized in the QuickScale codebase.
-- [ ] Template versions exist and are used for project generation.
-- [ ] Generated projects contain a complete, adapted `docs/ai_guidelines/` folder.
-- [ ] Documentation is DRY, maintainable, and easy to update.
-- [ ] Clear instructions exist for maintainers and users.
-- [ ] Sprint is reviewed and signed off by project lead.
-
-### **Risks & Mitigations**
-- **Risk:** Documentation drift between codebase and templates.
-  - **Mitigation:** Document update workflow and add periodic review to future sprints.
-- **Risk:** Over-complexity for maintainers.
-  - **Mitigation:** Keep modular docs simple and well-documented.
-- **Risk:** Missed adaptation for project-specific context.
-  - **Mitigation:** Use template variables and test with multiple project types.
-
-### **Dependencies**
-- Existing documentation (PLAN.md, ACT.md, etc.)
-- Access to QuickScale codebase and project template system
-- Maintainer and user feedback
-
-### **Notes**
-- This sprint lays the foundation for future enhancements (sync command, IDE integration, interactive docs).
-- All changes should be backward compatible and not disrupt existing workflows.
+#### **Success Criteria**
+- ✅ Generator works on Ubuntu, macOS, Windows
+- ✅ Docker setup succeeds without PostgreSQL errors
+- ✅ User registration and demo service work end-to-end
+- ✅ Credit deduction functions correctly
+- ✅ Zero critical bugs in 5-minute user journey
+- ✅ Complete user journey works in under 5 minutes
+- ✅ Getting started documentation fits on one page
 
 ---
 
-### Sprint 30: Frontend Architecture Review (v0.41.0)
-**Goal**: Review HTMX/Alpine.js implementation and UI consistency
+## Post-Beta Progressive Feature Enablement
 
-**Deep Analysis**
-- **Component Architecture Study**: Analyze frontend architecture, template inheritance patterns, and component organization
-- **Code Pattern Identification**: Document HTMX implementation patterns, Alpine.js component structures, and UI consistency approaches
-- **Documentation Review**: Review frontend documentation, style guidelines, and interaction patterns
+### Sprint 30: Payment Foundation (v0.41.0 - UMB + 2 weeks)
 
-**Template Architecture & Component System**
+**Goal**: Re-enable Stripe integration for credit purchasing
+
+**Feature Flag Changes**:
+```python
+ENABLE_STRIPE = True                # Re-activate existing Stripe code
+ENABLE_SUBSCRIPTIONS = False        # Keep subscriptions disabled
+```
+
+**Implementation**:
+- Re-enable existing Stripe integration (already written and tested)
+- Single credit pack SKU (100 credits for $10)
+- All existing payment logic preserved and functional
+- Basic webhook processing for payment completion
+
+**Success Criteria**:
+- ✅ Credit purchase flow works end-to-end
+- ✅ Stripe test mode integration functional
+- ✅ Payment history and receipts working
+
+---
+
+### Sprint 31: Service Framework Activation (v0.42.0 - UMB + 4 weeks)
+
+**Goal**: Enable AI service generation and marketplace
+
+**Feature Flag Changes**:
+```python
+ENABLE_SERVICE_GENERATOR = True     # Re-activate service commands
+ENABLE_SERVICE_MARKETPLACE = True   # Show full service marketplace
+```
+
+**Implementation**:
+- Enable existing `quickscale generate-service` command
+- Activate existing service marketplace UI
+- All existing AI services become available
+- Service validation and deployment workflow
+
+**Success Criteria**:
+- ✅ Service generation workflow functional
+- ✅ Multiple services available in marketplace
+- ✅ Service credit consumption working
+
+---
+
+### Sprint 32: Subscription System (v0.43.0 - UMB + 6 weeks)
+
+**Goal**: Re-enable subscription features and complex credit logic
+
+**Feature Flag Changes**:
+```python
+ENABLE_SUBSCRIPTIONS = True         # Re-activate subscription features
+ENABLE_CREDIT_TYPES = True          # Enable complex credit logic
+```
+
+**Implementation**:
+- Re-enable existing subscription features with plan comparison
+- Activate existing upgrade/downgrade workflows
+- Complex credit priority system becomes active
+- Billing period tracking and management
+
+**Success Criteria**:
+- ✅ Subscription plans functional
+- ✅ Plan upgrade/downgrade working
+- ✅ Credit priority consumption working
+
+---
+
+### Sprint 33: Advanced Features & API (v0.44.0 - UMB + 8 weeks)
+
+**Goal**: Enable API endpoints and advanced admin tools
+
+**Feature Flag Changes**:
+```python
+ENABLE_API_ENDPOINTS = True         # Activate existing DRF endpoints
+ENABLE_ADVANCED_ADMIN = True        # Full admin tools
+ENABLE_WEBHOOKS = True              # Webhook processing
+ENABLE_ADVANCED_ERRORS = True       # Advanced error handling
+REQUIRE_EMAIL_VERIFICATION = True   # Full auth flow
+```
+
+**Implementation**:
+- All existing API endpoints and documentation
+- Full existing admin tools and analytics
+- Complete existing webhook processing system
+- Advanced error handling and recovery
+
+**Success Criteria**:
+- ✅ API endpoints functional with authentication
+- ✅ Advanced admin tools working
+- ✅ Complete webhook processing
+- ✅ Email verification system active
+
+---
+
+## Future Enhancement Sprints (Post-Beta Stabilization)
+
+### Sprint 34: Modular AI Assistant Documentation (v0.45.0 - UMB + 10 weeks)
+
+**Goal**: Enable every QuickScale-generated project to include modular, DRY, and project-adapted AI assistant documentation
+
+**Implementation**:
+- Modularize all AI assistant documentation in the QuickScale codebase
+- Create template versions for project generation
+- Integrate documentation copying/adaptation into the `init` workflow
+- Ensure docs are readable, relevant, and easy to update in both codebase and generated projects
+
+**Tasks**:
+- [ ] Audit existing docs (PLAN.md, ACT.md, DEBUG.md, QUALITY.md, etc.)
+- [ ] Create modular folder structure in `quickscale/docs/ai_guidelines/`
+- [ ] Create template versions in `quickscale/project_templates/docs/ai_guidelines/`
+- [ ] Update `init` command to copy and render templates
+- [ ] Document the workflow for maintainers and end-users
+
+**Success Criteria**:
+- [ ] All AI assistant documentation is modularized
+- [ ] Generated projects contain complete, adapted `docs/ai_guidelines/` folder
+- [ ] Documentation is DRY, maintainable, and easy to update
+
+---
+
+---
+
+### Sprint 35: Frontend Architecture Enhancement (v0.46.0 - UMB + 12 weeks)
+
+**Goal**: Review and enhance HTMX/Alpine.js implementation and UI consistency
+
+**Implementation**:
+- Review template inheritance hierarchy and reusable component library
+- Validate HTMX implementation patterns and Alpine.js component organization
+- Check responsive design implementation and JavaScript organization
+- Improve UI/UX consistency across pages
+
+**Tasks**:
 - [ ] Review template inheritance hierarchy
 - [ ] Validate reusable component library
 - [ ] Check HTMX implementation patterns
 - [ ] Analyze Alpine.js component organization
 - [ ] Review Bulma CSS structure and customization
+- [ ] Test template rendering and interactive components
 
-**User Experience & Interaction Patterns**
-- [ ] Review form handling patterns
-- [ ] Validate UI/UX consistency across pages
-- [ ] Check responsive design implementation
-- [ ] Analyze JavaScript organization and efficiency
-- [ ] Review accessibility compliance
-
-**Hands-on**
-- [ ] Code refactoring of template components for better reusability
-- [ ] Integration verification of HTMX interactions
-- [ ] UI consistency improvements across pages
-- [ ] Performance optimization of JavaScript assets
-
-**Testing:**
-- [ ] Test template rendering
-- [ ] Test interactive components
-- [ ] Test responsive design
-
-**Success Criteria - Must deliver:**
-- [ ] **Updated Tests**: Test coverage for template rendering, HTMX interactions, and component functionality
-- [ ] **Documentation**: Updated frontend development guide with component patterns and style guidelines
-
-**Validation**: Frontend is modern, consistent, and user-friendly
+**Success Criteria**:
+- [ ] Frontend is modern, consistent, and user-friendly
+- [ ] HTMX interactions working smoothly
+- [ ] Responsive design implementation validated
 
 ---
 
-### Sprint 31: Admin Dashboard & Tools Review (v0.42.0)
-**Goal**: Review admin interface and management tools
+### Sprint 36: Advanced Admin Dashboard & Tools (v0.47.0 - UMB + 14 weeks)
 
-**Deep Analysis**
-- **Component Architecture Study**: Analyze admin dashboard architecture, permission systems, and management tool organization
-- **Code Pattern Identification**: Document user management patterns, service administration interfaces, and real-time update mechanisms
-- **Documentation Review**: Review admin documentation, payment tools, and analytics features
+**Goal**: Enhance admin interface and management tools (enabled by ENABLE_ADVANCED_ADMIN flag)
 
-**Admin Dashboard Architecture**
+**Implementation**:
+- Review admin dashboard structure and navigation
+- Validate permission and access control systems
+- Enhance payment investigation tools and refund processing workflow
+- Improve analytics and reporting features
+
+**Tasks**:
 - [ ] Review admin dashboard structure and navigation
 - [ ] Validate permission and access control
 - [ ] Check user account management tools
-- [ ] Analyze service management interface
-- [ ] Review real-time updates mechanism
-
-**Payment & Analytics Tools**
 - [ ] Review payment investigation tools
 - [ ] Validate refund processing workflow
 - [ ] Check analytics and reporting features
-- [ ] Analyze bulk operation safety
-- [ ] Review audit logging completeness
-
-**Hands-on**
-- [ ] Code refactoring of admin interface for better usability
-- [ ] Integration verification of payment tools
-- [ ] Performance optimization of analytics features
 - [ ] Security hardening of admin operations
 
-**Testing:**
-- [ ] Test admin interface functionality
-- [ ] Test payment tools
-- [ ] Test analytics features
-
-**Success Criteria - Must deliver:**
-- [ ] **Updated Tests**: Comprehensive test coverage for admin functionality, payment tools, and analytics features
-- [ ] **Documentation**: Updated admin user guide with tool documentation and security procedures
-
-**Validation**: Admin tools are comprehensive and efficient
+**Success Criteria**:
+- [ ] Admin tools are comprehensive and efficient
+- [ ] Payment tools working reliably
+- [ ] Analytics features functional
 
 ---
 
-### Sprint 32: Payment Flow and Checkout Process Review - Part 2 (v0.43.0)
-**Goal**: Review Stripe API integration and payment processing
+### Sprint 37: Payment Flow Optimization & Unification (v0.48.0 - UMB + 16 weeks)
 
-**Deep Analysis**
-- **Component Architecture Study**: Analyze Stripe API integration architecture, webhook processing patterns, payment flow design and subscription upgrade/downgrade/cancellation handling
-- **Code Pattern Identification**: Document subscription lifecycle management patterns, credit transfer mechanisms, and error handling strategies
-- **Documentation Review**: Review Stripe subscription lifecycle management integration
-
-**Subscription Management Review**
-- [ ] Update subscription lifecycle management: Check plan change handling and credit transfer for upgrading
-- [ ] Update subscription lifecycle management: Check plan change handling and credit transfer for downgrading
-- [ ] Validate subscription lifecycle management: Check plan subscription cancellation handling
-
-**Testing:**
-- [ ] Test plan change handling and credit transfer for upgrading
-- [ ] Test plan change handling and credit transfer for downgrading
-- [ ] Test plan subscription cancellation handling
-
-**Success Criteria - Must deliver:**
-- [ ] **Updated Tests**: Comprehensive test coverage for Stripe subscription lifecycle management integration
-- [ ] **Documentation**: Updated Stripe integration documentation for lifecycle management integration
-
-**Validation**: Stripe subscription lifecycle management integration is secure and reliable and fully functional
-
----
-
-### Sprint 33: Payment Flow and Checkout Process Review (v0.44.0)
 **Goal**: Review and unify payment flow and checkout process across all payment types
 
-**Deep Analysis**
-- **Component Architecture Study**: Analyze dual checkout implementations, payment flow patterns, and session management strategies
-- **Code Pattern Identification**: Document checkout session handling, error response patterns, and metadata management approaches
-- **Documentation Review**: Review payment flow documentation, user experience patterns, and checkout integration guides
+**Implementation**:
+- Review dual checkout implementations (credits and stripe_manager apps)
+- Analyze payment session management and metadata handling
+- Create unified CheckoutHandler class for consistent payment processing
+- Implement standardized error handling and validation patterns
 
-**Payment Flow Unification**
-- [ ] Review dual checkout implementations (credits and stripe_manager apps)
+**Tasks**:
+- [ ] Review dual checkout implementations
 - [ ] Analyze payment session management and metadata handling
 - [ ] Check error handling consistency across checkout flows
-- [ ] Validate user authentication and payment method verification
-- [ ] Review checkout success/failure page handling
+- [ ] Create unified CheckoutHandler class
+- [ ] Implement standardized error handling patterns
+- [ ] Add comprehensive checkout flow logging
 
-**Checkout Process Optimization**
-- [ ] Create unified CheckoutHandler class for consistent payment processing
-- [ ] Implement standardized error handling and validation patterns
-- [ ] Enhance pre-checkout validation for authentication and product availability
-- [ ] Optimize checkout session metadata and tracking mechanisms
-- [ ] Improve checkout user experience and redirect handling
+**Success Criteria**:
+- [ ] Payment checkout process is unified, secure, and user-friendly
+- [ ] Single, consistent checkout flow across all payment types
+- [ ] Enhanced validation and error handling
 
-**Hands-on**
-- [ ] Implement unified checkout handler in stripe_manager/checkout_handler.py
-- [ ] Refactor credits/views.py to use unified checkout logic
-- [ ] Update stripe_manager/views.py checkout implementation
-- [ ] Add comprehensive checkout flow logging and debugging
-- [ ] Create standardized checkout templates and user experience
-
-**Testing:**
+---
 - [ ] Test unified checkout system with various payment scenarios
 - [ ] Test error handling and validation across all checkout flows
 - [ ] Test checkout session management and metadata handling
@@ -421,109 +447,187 @@ Enable every QuickScale-generated project to include modular, DRY, and project-a
 
 ---
 
-### Sprint 35: Webhook Event Processing Review (v0.46.0)
-**Goal**: Review and optimize webhook event processing system
+### Sprint 38: Advanced Webhook Event Processing (v0.49.0 - UMB + 18 weeks)
 
-**Deep Analysis**
-- **Component Architecture Study**: Analyze webhook event handling architecture, event validation patterns, and processing efficiency
-- **Code Pattern Identification**: Document event handler organization, retry mechanisms, and error recovery patterns
-- **Documentation Review**: Review webhook processing documentation, event handling guides, and monitoring systems
+**Goal**: Review and optimize webhook event processing system (enabled by ENABLE_WEBHOOKS flag)
 
-**Webhook Processing Optimization**
-- [ ] Review complex webhook handling in stripe_manager views
-- [ ] Analyze multiple event types with different processing logic
+**Implementation**:
+- Review complex webhook handling in stripe_manager views
+- Analyze multiple event types with different processing logic
+- Create WebhookEventProcessor class for modular event handling
+- Implement dedicated event handlers for each webhook type
+
+**Tasks**:
+- [ ] Review webhook event handling architecture
+- [ ] Analyze event validation patterns and processing efficiency
 - [ ] Check duplicate prevention mechanisms and event validation
-- [ ] Validate error handling and logging for webhook processing
-- [ ] Review webhook security and signature verification
-
-**Event Processing Enhancement**
 - [ ] Create WebhookEventProcessor class for modular event handling
-- [ ] Implement dedicated event handlers for each webhook type
-- [ ] Add retry mechanisms for failed webhook processing
-- [ ] Enhance event validation and error recovery
-- [ ] Implement webhook analytics and monitoring
-
-**Hands-on**
-- [ ] Implement modular webhook processor in stripe_manager/webhook_processor.py
-- [ ] Create dedicated event handlers for payment, subscription, and plan change events
+- [ ] Implement retry mechanisms for failed webhook processing
 - [ ] Add comprehensive event validation and error handling
-- [ ] Implement retry mechanisms and failure recovery
-- [ ] Create webhook processing analytics and monitoring tools
 
-**Testing:**
-- [ ] Test webhook event processor with various Stripe event types
-- [ ] Test retry mechanisms and error recovery for failed events
-- [ ] Test event validation and duplicate prevention
-- [ ] Test webhook analytics and monitoring capabilities
-
-**Success Criteria - Must deliver:**
-- [ ] **Modular Webhook Processing**: Organized, efficient webhook event handling
-- [ ] **Enhanced Error Recovery**: Retry mechanisms and robust error handling
-- [ ] **Updated Tests**: Complete test coverage for webhook event processing
-- [ ] **Documentation**: Updated webhook processing documentation with modular patterns
-
-**Validation**: Webhook event processing is modular, efficient, and reliable
+**Success Criteria**:
+- [ ] Webhook event processing is modular, efficient, and reliable
+- [ ] Enhanced error recovery with retry mechanisms
+- [ ] Complete test coverage for webhook event processing
 
 ---
 
-### Sprint 36: AI Service Framework Review (v0.47.0)
-**Goal**: Review AI service framework architecture and tools
+### Sprint 39: AI Service Framework Enhancement (v0.50.0 - UMB + 20 weeks)
 
-**Deep Analysis**
-- **Component Architecture Study**: Analyze AI service framework design, BaseService patterns, and service registration system
-- **Code Pattern Identification**: Document template generation mechanics, credit integration automation, and service discovery patterns
-- **Documentation Review**: Review service development documentation, CLI command system, and example implementations
+**Goal**: Review and enhance AI service framework architecture and tools (enabled by ENABLE_SERVICE_GENERATOR flag)
 
-**BaseService & Framework Architecture**
-- [ ] Review BaseService pattern and inheritance
-- [ ] Validate service registration system
-- [ ] Check template generation mechanics
-- [ ] Analyze credit integration automation
-- [ ] Review service discovery mechanisms
+**Implementation**:
+- Review BaseService pattern and inheritance
+- Validate service registration system and template generation mechanics
+- Enhance development tools and service examples
+- Optimize CLI command system for services
 
-**Development Tools & Service Examples**
+**Tasks**:
+- [ ] Review AI service framework design and BaseService patterns
+- [ ] Validate service registration system and discovery mechanisms
+- [ ] Check template generation mechanics and credit integration
 - [ ] Review CLI command system for services
 - [ ] Validate service configuration management
-- [ ] Check example service implementations
-- [ ] Analyze development workflow optimization
-- [ ] Review API integration and documentation
+- [ ] Optimize development workflow and API integration
 
-**Hands-on**
-- [ ] Code refactoring of BaseService class for better extensibility
-- [ ] Integration verification of service registration and discovery
-- [ ] Template generation optimization
-- [ ] CLI command improvements for service development
-
-**Testing:**
-- [ ] Test service generation
-- [ ] Test service registration
-- [ ] Test example services
-
-**Success Criteria - Must deliver:**
-- [ ] **Updated Tests**: Complete test coverage for service framework, template generation, and example services
-- [ ] **Documentation**: Updated AI service development guide with best practices and patterns
-
-**Validation**: AI service framework is developer-friendly and extensible
-
+**Success Criteria**:
+- [ ] AI service framework is developer-friendly and extensible
+- [ ] Complete test coverage for service framework and template generation
+- [ ] Updated AI service development guide with best practices
 
 ---
 
-### Sprint 37: Cross-System Integration Testing (v0.48.0)
+### Sprint 40: Cross-System Integration Testing (v0.51.0 - UMB + 22 weeks)
+
 **Goal**: Validate integration between all major system components
 
-**Deep Analysis**
-- **Integration Architecture Study**: Analyze component interactions, data flow between systems, and integration patterns
-- **Code Pattern Identification**: Document integration points, identify coupling issues, and analyze system boundaries
-- **Documentation Review**: Review integration documentation and system interaction patterns
+**Implementation**:
+- Test Auth → Credit system integration
+- Test Credit → Stripe payment integration
+- Test Service → Credit consumption integration
+- Test Admin → All system components integration
+- Validate end-to-end user workflows
 
-**Core System Integration Testing**
+**Tasks**:
 - [ ] Test Auth → Credit system integration
 - [ ] Test Credit → Stripe payment integration
 - [ ] Test Service → Credit consumption integration
 - [ ] Test Admin → All system components integration
 - [ ] Test Frontend → Backend API integration
+- [ ] Validate end-to-end user workflows
+- [ ] Check transaction rollback scenarios
+- [ ] Review data consistency across systems
 
-**Data Flow & Transaction Safety**
+**Success Criteria**:
+- [ ] All system integrations working reliably
+- [ ] End-to-end workflows validated
+- [ ] Transaction safety and data consistency verified
+
+---
+
+## Advanced Features & Optimization (Post-Integration)
+
+### Sprint 41: Performance & Scaling Optimization (v0.52.0 - UMB + 24 weeks)
+
+**Goal**: Optimize performance and prepare for scaling
+
+**Implementation**:
+- Implement caching with django-redis (per-view and low-level)
+- Add rate limiting with django-ratelimit
+- Optimize database queries with select_related/prefetch tuning
+- Add targeted indexes and optional partitioning
+
+**Tasks**:
+- [ ] Implement django-redis caching (per-view and low-level)
+- [ ] Add rate limiting with django-ratelimit
+- [ ] Optimize database queries and add targeted indexes
+- [ ] Implement optional partitioning for ServiceUsage/CreditTransaction
+- [ ] Add backpressure at service endpoints
+- [ ] Performance testing under load
+
+**Success Criteria**:
+- [ ] Significant performance improvements measured
+- [ ] Caching and rate limiting functional
+- [ ] Database queries optimized
+
+---
+
+### Sprint 42: Observability & Operations (v0.53.0 - UMB + 26 weeks)
+
+**Goal**: Add comprehensive observability and operations tools
+
+**Implementation**:
+- Integrate Sentry for error tracking (opt-in via env)
+- Add structured JSON logging with correlation IDs
+- Implement OpenTelemetry for Django/psycopg/Celery
+- Add Prometheus exporter and Grafana dashboards
+
+**Tasks**:
+- [ ] Integrate Sentry into templates (opt-in via env)
+- [ ] Implement structured JSON logging with correlation IDs
+- [ ] Add OpenTelemetry for Django/psycopg/Celery
+- [ ] Implement Prometheus exporter
+- [ ] Create Grafana dashboards
+- [ ] Define SLOs: webhook P99 latency, job success rate, API latency
+
+**Success Criteria**:
+- [ ] Comprehensive observability stack functional
+- [ ] SLOs defined and monitored
+- [ ] Error tracking and alerting working
+
+---
+
+### Sprint 43: Advanced Async Jobs & Queue System (v0.54.0 - UMB + 28 weeks)
+
+**Goal**: Implement advanced async job processing with Celery + Redis
+
+**Implementation**:
+- Add Celery + Redis services in Docker
+- Implement task routing, retries, timeouts, idempotency keys
+- Add async execution path with progress reporting
+- Create HTMX job status UI and callback/webhook support
+
+**Tasks**:
+- [ ] Add Celery + Redis services in Docker configuration
+- [ ] Implement task routing, retries, timeouts, idempotency keys
+- [ ] Add async execution path with progress reporting
+- [ ] Create HTMX job status UI for long-running tasks
+- [ ] Implement callback/webhook support for job completion
+- [ ] Add Flower (or Prometheus exporter) integration
+- [ ] Create basic task dashboards
+
+**Success Criteria**:
+- [ ] Async job system functional with Celery + Redis
+- [ ] Progress reporting and status UI working
+- [ ] Task monitoring and dashboards operational
+
+---
+
+### Sprint 44: API First & SDK Generation (v0.55.0 - UMB + 30 weeks)
+
+**Goal**: Implement comprehensive API with generated SDKs
+
+**Implementation**:
+- Adopt DRF (Django REST Framework) in templates
+- Add API key auth with per-key throttling/quotas
+- Generate OpenAPI schema via drf-spectacular
+- Create typed SDKs (Python/JS) via openapi-generator
+
+**Tasks**:
+- [ ] Adopt DRF in templates with API key authentication
+- [ ] Implement per-key throttling/quotas tied to plans/credits
+- [ ] Generate OpenAPI schema via drf-spectacular
+- [ ] Publish Postman collection
+- [ ] Generate typed SDKs (Python/JS) via openapi-generator
+- [ ] Create example notebooks and integrations
+- [ ] Add comprehensive API documentation
+
+**Success Criteria**:
+- [ ] Complete OpenAPI specification generated
+- [ ] SDKs released and functional
+- [ ] API throttling and quotas enforced
+
+---
 - [ ] Validate end-to-end user workflows
 - [ ] Test payment → credit → service usage flow
 - [ ] Check transaction rollback scenarios
@@ -665,59 +769,175 @@ Enable every QuickScale-generated project to include modular, DRY, and project-a
 - [ ] Performance optimization implementation
 - [ ] Security testing and validation
 
-**Testing:**
-- [ ] Run security scanning tools
-- [ ] Perform load testing
-- [ ] Validate performance improvements
+## Enterprise & Ecosystem Features (Long-term)
 
-**Success Criteria - Must deliver:**
-- [ ] **Updated Tests**: Security test coverage and performance test suite
-- [ ] **Documentation**: Updated security guide and performance optimization documentation
+### Sprint 45: Multi-tenancy & Organizations (v0.56.0 - UMB + 32 weeks)
 
-**Validation**: System is secure and performant
+**Goal**: Add optional multi-tenancy support for enterprise customers
+
+**Implementation**:
+- Add Organizations/teams model with roles and permissions
+- Implement seat counts and per-org quotas
+- Add billing alignment with organization structure
+- Migration-safe toggles to keep feature optional by default
+
+**Tasks**:
+- [ ] Design Organizations/teams models with roles
+- [ ] Implement seat-based billing and quotas
+- [ ] Add per-org quotas and billing alignment
+- [ ] Create migration-safe feature toggles
+- [ ] Add organization management UI
+- [ ] Implement team member invitation system
+
+**Success Criteria**:
+- [ ] Multi-tenancy system functional but optional
+- [ ] Organization billing and quotas working
+- [ ] Team management features operational
+
+---
+
+### Sprint 46: Advanced Payment Features (v0.57.0 - UMB + 34 weeks)
+
+**Goal**: Add enterprise payment features and tax support
+
+**Implementation**:
+- Add payment method management
+- Implement Stripe Customer Portal integration
+- Add tax/VAT support for international customers
+- Create cohesive checkout abstraction for one-time + subscriptions
+
+**Tasks**:
+- [ ] Implement payment method management
+- [ ] Add Stripe Customer Portal integration
+- [ ] Implement tax/VAT support
+- [ ] Create cohesive checkout abstraction
+- [ ] Add admin views for invoices, refunds, disputes
+- [ ] Implement comprehensive audit trails
+
+**Success Criteria**:
+- [ ] Payment method management functional
+- [ ] Tax/VAT handling working for international customers
+- [ ] Customer Portal integration operational
 
 ---
 
-### Sprint 41: Documentation Consolidation (v0.52.0)
-**Goal**: Consolidate and finalize all documentation for launch readiness
+### Sprint 47: Upgrade Assistant & Template Evolution (v0.58.0 - UMB + 36 weeks)
 
-**Deep Analysis**
-- **Documentation Architecture**: Analyze documentation structure, identify gaps, and assess user accessibility
-- **Content Quality Review**: Evaluate documentation accuracy, completeness, and user-friendliness
-- **Documentation Experience**: Test documentation workflows and validate examples
+**Goal**: Implement safe template upgrade mechanism
 
-**Documentation Consolidation**
-- [ ] Consolidate technical documentation from all previous sprints
-- [ ] Create comprehensive user onboarding guide
-- [ ] Finalize API documentation with examples
-- [ ] Create troubleshooting and FAQ sections
-- [ ] Validate all code examples and tutorials
+**Implementation**:
+- Introduce Copier or Cookiecutter + Cruft to track template origin
+- Create CLI command `quickscale upgrade-plan` to diff templates vs. project
+- Implement guided merges with guardrails
+- Add golden generated-project fixtures with compatibility tests
 
-**User Guide Enhancement**
-- [ ] Create step-by-step tutorials for common workflows
-- [ ] Add video or interactive guides for complex features
-- [ ] Test documentation with new users
-- [ ] Create deployment and production guides
-- [ ] Finalize contributor documentation
+**Tasks**:
+- [ ] Introduce Copier or Cookiecutter + Cruft integration
+- [ ] Create `quickscale upgrade-plan` CLI command
+- [ ] Implement guided merge system with guardrails
+- [ ] Add golden generated-project fixtures
+- [ ] Create compatibility tests across versions
+- [ ] Add upgrade documentation and best practices
 
-**Hands-on**
-- [ ] Documentation website or portal creation
-- [ ] Interactive example validation
-- [ ] Search and navigation optimization
-- [ ] Documentation testing with real users
-
-**Testing:**
-- [ ] Documentation accuracy testing
-- [ ] User workflow validation through docs
-- [ ] Example code execution testing
-
-**Success Criteria - Must deliver:**
-- [ ] **Updated Tests**: Documentation validation tests and example verification
-- [ ] **Documentation**: Complete, accurate, and user-friendly documentation suite
-
-**Validation**: Documentation is comprehensive and enables successful user adoption
+**Success Criteria**:
+- [ ] `quickscale upgrade-plan` succeeds on golden sample with non-trivial user edits
+- [ ] Template evolution and upgrade process documented
+- [ ] Backward compatibility maintained
 
 ---
+
+### Sprint 48: Usage Analytics & Quotas (v0.59.0 - UMB + 38 weeks)
+
+**Goal**: Add comprehensive analytics and quota management
+
+**Implementation**:
+- Create admin and user dashboards for credits, API calls, latency, errors
+- Add per-plan quotas and alerts
+- Implement export endpoints for analytics
+- Add privacy and retention guidance
+
+**Tasks**:
+- [ ] Create comprehensive admin dashboards
+- [ ] Add user analytics dashboards
+- [ ] Implement per-plan quotas and alerts
+- [ ] Add export endpoints for analytics
+- [ ] Implement privacy and retention controls
+- [ ] Add usage trend analysis and forecasting
+
+**Success Criteria**:
+- [ ] Analytics dashboards functional for admins and users
+- [ ] Quota management and alerting working
+- [ ] Privacy controls and data export operational
+
+---
+
+### Sprint 49: Ecosystem & Marketplace (v1.0.0 - UMB + 40 weeks)
+
+**Goal**: Create service ecosystem and marketplace
+
+**Implementation**:
+- Publish SDKs to PyPI/NPM with automated CI/CD
+- Create example services: LLM proxy, embeddings, OCR patterns
+- Build starter "Service Marketplace" UI
+- Add cost/latency best practices documentation
+
+**Tasks**:
+- [ ] Publish SDKs to PyPI/NPM
+- [ ] Wire codegen into CI/CD pipeline
+- [ ] Create example services with best practices
+- [ ] Build Service Marketplace UI to enable/disable services
+- [ ] Add cost/latency optimization documentation
+- [ ] Create service developer certification program
+
+**Success Criteria**:
+- [ ] SDKs available on public package managers
+- [ ] Service marketplace functional
+- [ ] Example services demonstrate best practices
+- [ ] **Version 1.0 Release Ready**
+
+---
+
+## Final Launch Preparation (v1.0.0)
+
+### Success Metrics for v1.0 Launch
+
+**Technical Quality**:
+- ✅ CI: >90% coverage for generator and critical templates; green across Python/Django matrix
+- ✅ Security: zero high vulnerabilities prior to release
+- ✅ Performance: optimized database queries and caching implemented
+- ✅ Reliability: 99.9% uptime for core services
+
+**Feature Completeness**:
+- ✅ Observability: traces on >90% of web and job requests; dashboards operational
+- ✅ Payments: 100% idempotent webhook processing under chaos tests
+- ✅ API: complete OpenAPI; SDKs released; throttling and quotas enforced
+- ✅ Upgrades: template evolution system functional
+
+**User Experience**:
+- ✅ Generator: `quickscale init` → working SaaS app in under 5 minutes
+- ✅ Documentation: comprehensive guides for all user types
+- ✅ Support: troubleshooting guides and community resources
+- ✅ Examples: real-world service implementations available
+
+**Business Readiness**:
+- ✅ Billing: enterprise payment features functional
+- ✅ Security: enterprise security standards met
+- ✅ Compliance: audit trails and data protection features
+- ✅ Scalability: performance tested under realistic load
+
+---
+
+## Implementation Notes
+
+**Feature Flag Strategy**: All complex features should be developed behind feature flags to enable progressive rollout and safe rollback.
+
+**Backward Compatibility**: Maintain API compatibility and provide clear migration paths for template updates.
+
+**Quality Gates**: Each sprint must include comprehensive testing and documentation updates.
+
+**User Feedback**: Regular feedback collection and incorporation throughout the development process.
+
+The roadmap prioritizes shipping a working beta quickly (1 week) while preserving all development work through feature flags, then progressively enabling features based on real user feedback and market validation.
 
 ### Sprint 42: Production Readiness & Deployment (v0.53.0)
 **Goal**: Final production preparation and deployment optimization

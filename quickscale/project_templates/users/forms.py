@@ -2,6 +2,7 @@
 from django import forms
 from django.contrib.auth import get_user_model
 from django.core.exceptions import ValidationError
+from django.db import transaction
 from django.utils.translation import gettext_lazy as _
 from allauth.account.forms import SignupForm, LoginForm, ResetPasswordForm, ChangePasswordForm
 
@@ -53,22 +54,21 @@ class CustomLoginForm(LoginForm):
         login = cleaned_data.get('login')
         if login:
             try:
-                from django.contrib.auth import get_user_model
                 from .models import AccountLockout
                 
                 User = get_user_model()
                 user = User.objects.get(email=login)
                 
-                # Check if user has an active lockout
+                # Check if user has an active lockout with proper transaction handling
                 try:
-                    # Always fetch fresh data from database to avoid caching issues
-                    lockout = AccountLockout.objects.select_for_update().get(user=user)
-                    if lockout.is_locked:
-                        # Check if lockout has expired
-                        if not lockout.check_lockout_expired():
-                            # Account is still locked
-                            from django.forms import ValidationError
-                            raise ValidationError("Too many failed login attempts. Try again later.")
+                    with transaction.atomic():
+                        # Always fetch fresh data from database to avoid caching issues
+                        lockout = AccountLockout.objects.select_for_update().get(user=user)
+                        if lockout.is_locked:
+                            # Check if lockout has expired
+                            if not lockout.check_lockout_expired():
+                                # Account is still locked
+                                raise ValidationError("Too many failed login attempts. Try again later.")
                 except AccountLockout.DoesNotExist:
                     # No lockout record exists, user can proceed
                     pass

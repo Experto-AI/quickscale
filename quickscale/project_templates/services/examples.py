@@ -514,3 +514,43 @@ def monitored_service_call(user, service_name: str, **kwargs):
             }
         }
 """
+
+
+@register_service("demo_free_service")
+class DemoFreeService(BaseService):
+    """Free demonstration service showing zero-cost AI operations."""
+    
+    def execute_service(self, user: User, message: str = "Hello, World!", **kwargs) -> Dict[str, Any]:
+        """Demonstrate a free service that doesn't consume credits."""
+        if not message or not message.strip():
+            message = "Hello, World!"
+        
+        # Simple demonstration processing
+        processed_message = message.strip().title()
+        word_count = len(message.split())
+        char_count = len(message)
+        
+        # Simulate some processing time
+        import time
+        time.sleep(0.1)  # Brief delay to simulate processing
+        
+        return {
+            'result': {
+                'original_message': message,
+                'processed_message': processed_message,
+                'analysis': {
+                    'word_count': word_count,
+                    'character_count': char_count,
+                    'is_greeting': 'hello' in message.lower(),
+                    'contains_punctuation': any(char in message for char in '.,!?;:')
+                }
+            },
+            'metadata': {
+                'service_name': 'demo_free_service',
+                'processing_time_ms': 100,
+                'cost': 'FREE',
+                'version': '1.0',
+                'description': 'This is a free demonstration service'
+            },
+            'success': True
+        }
