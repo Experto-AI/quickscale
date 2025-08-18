@@ -5,9 +5,8 @@ import os
 from unittest.mock import patch, MagicMock
 import quickscale.project_templates as templates
 
-# Import mock utilities from their current location
-sys.path.insert(0, os.path.dirname(__file__))
-from mock_env_utils import get_env, is_feature_enabled
+# Import centralized test utilities (DRY principle)
+from tests.test_utilities import TestUtilities
 
 if not hasattr(templates, 'stripe_manager'):
     pytest.skip('Skipping stripe tests as quickscale.project_templates.stripe_manager not available', allow_module_level=True)
@@ -49,7 +48,7 @@ def test_stripe_manager_init(mock_is_feature_enabled, mock_get_env):
 
         # Configure mock to return appropriate values for different keys
         mock_get_env.side_effect = lambda key, *args, **kwargs: {
-            'STRIPE_ENABLED': 'True',
+            'ENABLE_STRIPE': 'True',
             'STRIPE_SECRET_KEY': 'sk_test_12345',
             'STRIPE_PUBLIC_KEY': 'pk_test_12345',
             'STRIPE_WEBHOOK_SECRET': 'whsec_12345'

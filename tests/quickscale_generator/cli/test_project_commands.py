@@ -6,7 +6,7 @@ from unittest.mock import patch, MagicMock, mock_open
 from pathlib import Path
 
 from quickscale.commands.init_command import InitCommand
-from quickscale.utils.error_manager import ProjectError, ValidationError
+from quickscale.utils.error_manager import error_manager
 
 class TestInitCommand:
     

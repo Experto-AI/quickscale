@@ -59,6 +59,7 @@
                 <span>Back to API Keys</span>
             </button>
         </div>
+        {% if api_endpoints_enabled %}
         <div class="control">
             <a href="{% url 'api:api_docs' %}" class="button is-link">
                 <span class="icon">
@@ -67,5 +68,6 @@
                 <span>View API Documentation</span>
             </a>
         </div>
+        {% endif %}
     </div>
 </div>

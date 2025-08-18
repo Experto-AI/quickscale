@@ -87,14 +87,14 @@
         </div>
         
         <div class="has-text-centered mt-5">
-            {% if session_data.purchase_type == 'credit_product' %}
+            {% if session_data.purchase_type == 'credit_product' and ENABLE_CREDIT_PURCHASING %}
             <a href="{% url 'credits:buy_credits' %}" class="button is-warning">
                 <span class="icon">
                     <i class="fas fa-redo"></i>
                 </span>
                 <span>Try Credit Purchase Again</span>
             </a>
-            {% else %}
+            {% elif ENABLE_STRIPE %}
             <a href="{% url 'stripe:plan_comparison' %}" class="button is-warning">
                 <span class="icon">
                     <i class="fas fa-redo"></i>
@@ -102,12 +102,14 @@
                 <span>Try Again</span>
             </a>
             {% endif %}
+            {% if ENABLE_BASIC_ADMIN or ENABLE_ADVANCED_ADMIN %}
             <a href="{% url 'admin_dashboard:index' %}" class="button is-link is-light">
                 <span class="icon">
                     <i class="fas fa-home"></i>
                 </span>
                 <span>Go to Dashboard</span>
             </a>
+            {% endif %}
         </div>
     </div>
 </div>

@@ -7,6 +7,8 @@ import os
 from pathlib import Path
 import json
 
+from quickscale.config.generator_config import generator_config
+
 
 def _verify_container_status(self=None):
     """Verify that the containers are running and healthy."""
@@ -43,7 +45,7 @@ def _verify_container_status(self=None):
         if result['db']['running']:
             # Check db container health through pg_isready
             db_health = subprocess.run(
-                ['docker-compose', 'exec', 'db', 'pg_isready', '-d', os.environ.get('DB_NAME', 'quickscale')],
+                ['docker-compose', 'exec', 'db', 'pg_isready', '-d', generator_config.get_env('DB_NAME', 'quickscale')],
                 capture_output=True, text=True, check=False
             )
             result['db']['healthy'] = db_health.returncode == 0 and 'server is running' in db_health.stdout
@@ -93,10 +95,10 @@ import os
 # Connect to the database using DB_* variables
 try:
     # Get database configuration, preferring environment variables
-    db_name = os.environ.get('DB_NAME') or '{db_name}'
-    db_user = os.environ.get('DB_USER') or '{db_user}'
-    db_password = os.environ.get('DB_PASSWORD') or '{db_password}'
-    db_host = os.environ.get('DB_HOST') or '{db_host}'
+    db_name = generator_config.get_env('DB_NAME') or '{db_name}'
+    db_user = generator_config.get_env('DB_USER') or '{db_user}'
+    db_password = generator_config.get_env('DB_PASSWORD') or '{db_password}'
+    db_host = generator_config.get_env('DB_HOST') or '{db_host}'
     
     print(f"Connecting to database: {{db_name}} with user: {{db_user}} on host: {{db_host}}")
     

@@ -47,19 +47,29 @@ class CustomLoginForm(LoginForm):
         })
 
     def clean(self):
-        """Add account lockout validation to login form."""
+        """Add account lockout validation to login form with timing attack resistance."""
+        import time
+        start_time = time.time()
+        
         cleaned_data = super().clean()
         
         # Get the login field (email)
         login = cleaned_data.get('login')
         if login:
+            from .models import AccountLockout
+            
+            User = get_user_model()
+            
+            # Perform constant-time user lookup to prevent timing attacks
             try:
-                from .models import AccountLockout
-                
-                User = get_user_model()
                 user = User.objects.get(email=login)
-                
-                # Check if user has an active lockout with proper transaction handling
+                user_exists = True
+            except User.DoesNotExist:
+                user = None
+                user_exists = False
+            
+            # Always perform the lockout check to maintain consistent timing
+            if user_exists:
                 try:
                     with transaction.atomic():
                         # Always fetch fresh data from database to avoid caching issues
@@ -72,10 +82,20 @@ class CustomLoginForm(LoginForm):
                 except AccountLockout.DoesNotExist:
                     # No lockout record exists, user can proceed
                     pass
-                    
-            except User.DoesNotExist:
-                # User doesn't exist, let normal validation handle it
-                pass
+            else:
+                # Simulate database access time for non-existing users to prevent timing attacks
+                # This creates consistent timing regardless of whether user exists
+                try:
+                    with transaction.atomic():
+                        # Perform a lightweight query with similar complexity
+                        AccountLockout.objects.filter(user_id=-1).first()
+                except Exception:
+                    pass
+        
+        # Ensure minimum processing time to reduce timing variations
+        elapsed = time.time() - start_time
+        if elapsed < 0.05:  # Minimum 50ms processing time
+            time.sleep(0.05 - elapsed)
         
         return cleaned_data
 

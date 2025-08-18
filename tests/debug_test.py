@@ -1,27 +1,34 @@
 """Debug script to help diagnose test failures."""
 import os
-from quickscale.utils.env_utils import get_env, is_feature_enabled
+import sys
+
+# Add the parent directory to sys.path to access tests module
+parent_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+sys.path.insert(0, parent_dir)
+
+# Import centralized test utilities using DRY principles
+from tests.test_utilities import TestUtilities
 
 def validate_production_settings():
     """The validate_production_settings function to debug."""
     print("DEBUG: Called validate_production_settings")
     print(f"DEBUG: os.environ = {os.environ}")
     # Use IS_PRODUCTION (opposite of old DEBUG logic)
-    if is_feature_enabled(get_env('IS_PRODUCTION', 'False')):
+    if TestUtilities.is_feature_enabled(TestUtilities.TestUtilities.get_env('IS_PRODUCTION', 'False')):
         print("DEBUG: IS_PRODUCTION is True, checking settings")
-        if get_env('SECRET_KEY') == 'dev-only-dummy-key-replace-in-production':
+        if TestUtilities.TestUtilities.get_env('SECRET_KEY') == 'dev-only-dummy-key-replace-in-production':
             print("DEBUG: Insecure SECRET_KEY detected")
             raise ValueError("Production requires a secure SECRET_KEY")
-        if '*' in get_env('ALLOWED_HOSTS', '').split(','):
+        if '*' in TestUtilities.TestUtilities.get_env('ALLOWED_HOSTS', '').split(','):
             print("DEBUG: Wildcard in ALLOWED_HOSTS detected")
             raise ValueError("Production requires specific ALLOWED_HOSTS")
         # Check database settings
-        if get_env('DB_PASSWORD') in ['postgres', 'admin', 'adminpasswd', 'password']:
-            print(f"DEBUG: Insecure DB_PASSWORD detected: {get_env('DB_PASSWORD')}")
+        if TestUtilities.TestUtilities.get_env('DB_PASSWORD') in ['postgres', 'admin', 'adminpasswd', 'password']:
+            print(f"DEBUG: Insecure DB_PASSWORD detected: {TestUtilities.TestUtilities.get_env('DB_PASSWORD')}")
             raise ValueError("Production requires a secure database password")
         # Check email settings
-        if not is_feature_enabled(get_env('EMAIL_USE_TLS', 'True')):
-            print(f"DEBUG: EMAIL_USE_TLS is not True: {get_env('EMAIL_USE_TLS')}")
+        if not TestUtilities.is_feature_enabled(TestUtilities.TestUtilities.get_env('EMAIL_USE_TLS', 'True')):
+            print(f"DEBUG: EMAIL_USE_TLS is not True: {TestUtilities.TestUtilities.get_env('EMAIL_USE_TLS')}")
             raise ValueError("Production requires TLS for email")
     else:
         print("DEBUG: IS_PRODUCTION is False, skipping validation")

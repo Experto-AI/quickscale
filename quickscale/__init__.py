@@ -9,6 +9,3 @@ try:
 except ImportError:
     # Package not installed in environment
     pass
-
-# Import the initialize_env function to make it available at the package level
-from quickscale.utils.env_utils import initialize_env

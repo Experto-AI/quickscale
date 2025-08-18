@@ -105,7 +105,7 @@
         {% endif %}
         
         <div class="has-text-centered mt-5">
-            {% if transaction_data.purchase_type == 'credit_product' %}
+            {% if transaction_data.purchase_type == 'credit_product' and ENABLE_BASIC_CREDITS %}
             <a href="{% url 'credits:dashboard' %}" class="button is-primary">
                 <span class="icon">
                     <i class="fas fa-coins"></i>
@@ -113,12 +113,14 @@
                 <span>View Credit Dashboard</span>
             </a>
             {% endif %}
+            {% if ENABLE_BASIC_ADMIN or ENABLE_ADVANCED_ADMIN %}
             <a href="{% url 'admin_dashboard:index' %}" class="button is-link">
                 <span class="icon">
                     <i class="fas fa-home"></i>
                 </span>
                 <span>Go to Dashboard</span>
             </a>
+            {% endif %}
         </div>
     </div>
 </div>

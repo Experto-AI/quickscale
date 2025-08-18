@@ -968,7 +968,9 @@ foreach ($keywordsResult['data']['result']['keywords'] as $keyword) {
                             {% if user.is_authenticated %}
                             <li><a href="{% url 'users:api_keys' %}">Manage API Keys</a></li>
                             <li><a href="{% url 'users:profile' %}">Account Profile</a></li>
+                            {% if services_enabled %}
                             <li><a href="{% url 'services:list' %}">Available Services</a></li>
+                            {% endif %}
                             {% else %}
                             <li><a href="{% url 'account_signup' %}">Sign Up</a></li>
                             <li><a href="{% url 'account_login' %}">Log In</a></li>

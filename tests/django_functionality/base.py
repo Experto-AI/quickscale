@@ -22,20 +22,12 @@ def setup_django_template_path():
 
 def setup_core_env_utils_mock():
     """Set up mock for core.env_utils module."""
-    def get_env(key, default=None):
-        """Mock implementation of get_env."""
-        return os.environ.get(key, default)
-    
-    def is_feature_enabled(value):
-        """Mock implementation of is_feature_enabled."""
-        if not value:
-            return False
-        enabled_values = ('true', 'yes', '1', 'on', 'enabled', 'y', 't')
-        return str(value).lower() in enabled_values
+    # Import centralized test utilities (DRY principle)
+    from tests.test_utilities import TestUtilities
     
     mock_env_utils = MagicMock()
-    mock_env_utils.get_env = get_env
-    mock_env_utils.is_feature_enabled = is_feature_enabled
+    mock_env_utils.get_env = TestUtilities.get_env
+    mock_env_utils.is_feature_enabled = TestUtilities.is_feature_enabled
     
     # Store original module if it exists
     original_module = sys.modules.get('core.env_utils')
@@ -44,12 +36,48 @@ def setup_core_env_utils_mock():
     return mock_env_utils, original_module
 
 
+def setup_core_configuration_mock():
+    """Set up mock for core.configuration module."""
+    import types
+    
+    class MockStripeConfig:
+        secret_key = 'sk_test_mock'
+        api_version = '2023-10-16'
+
+    class MockConfig:
+        stripe = MockStripeConfig()
+        
+        def is_stripe_enabled_and_configured(self):
+            return True
+        
+        def get_env_bool(self, key, default):
+            return default
+
+    # Create module mock and set config as an attribute
+    mock_config_module = types.ModuleType('core.configuration')
+    mock_config_module.config = MockConfig()
+    
+    # Store original module if it exists
+    original_module = sys.modules.get('core.configuration')
+    sys.modules['core.configuration'] = mock_config_module
+    
+    return mock_config_module, original_module
+
+
 def cleanup_core_env_utils_mock(original_module):
     """Clean up mock for core.env_utils module."""
     if original_module is not None:
         sys.modules['core.env_utils'] = original_module
     else:
         sys.modules.pop('core.env_utils', None)
+
+
+def cleanup_core_configuration_mock(original_module):
+    """Clean up mock for core.configuration module."""
+    if original_module is not None:
+        sys.modules['core.configuration'] = original_module
+    else:
+        sys.modules.pop('core.configuration', None)
 
 
 def setup_django_settings():
@@ -80,7 +108,7 @@ def setup_django_settings():
             STRIPE_SECRET_KEY="sk_test_123",
             STRIPE_PUBLIC_KEY="pk_test_123",
             STRIPE_WEBHOOK_SECRET="whsec_test_123",
-            STRIPE_ENABLED=True,
+            ENABLE_STRIPE=True,
             DATABASES={"default": db_config},
             INSTALLED_APPS=[
                 "django.contrib.auth",
@@ -205,7 +233,7 @@ def setup_django_settings():
             STRIPE_SECRET_KEY="sk_test_123",
             STRIPE_PUBLIC_KEY="pk_test_123", 
             STRIPE_WEBHOOK_SECRET="whsec_test_123",
-            STRIPE_ENABLED=True,
+            ENABLE_STRIPE=True,
             DATABASES={"default": get_test_db_config()},
             INSTALLED_APPS=[
                 "django.contrib.auth",

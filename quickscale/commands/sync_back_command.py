@@ -8,7 +8,7 @@ from typing import Dict, List, Optional, Tuple, Set
 import logging
 
 from .command_base import Command
-from quickscale.utils.error_manager import CommandError, ValidationError
+from quickscale.utils.error_manager import error_manager
 from quickscale.utils.message_manager import MessageManager
 
 
@@ -61,17 +61,17 @@ class SyncBackCommand(Command):
         project_dir = Path(project_path).resolve()
         
         if not project_dir.exists():
-            raise ValidationError(f"Project directory does not exist: {project_dir}")
+            raise error_manager.ValidationError(f"Project directory does not exist: {project_dir}")
         
         if not project_dir.is_dir():
-            raise ValidationError(f"Path is not a directory: {project_dir}")
+            raise error_manager.ValidationError(f"Path is not a directory: {project_dir}")
         
         # Check for QuickScale project indicators
         docker_compose = project_dir / 'docker-compose.yml'
         manage_py = project_dir / 'manage.py'
         
         if not docker_compose.exists() or not manage_py.exists():
-            raise ValidationError(
+            raise error_manager.ValidationError(
                 f"Directory does not appear to be a QuickScale project: {project_dir}\n"
                 "Expected files: docker-compose.yml, manage.py"
             )
@@ -795,15 +795,15 @@ class SyncBackCommand(Command):
             MessageManager.info("3. Use sync-back: quickscale sync-back ./my-project --preview")
             MessageManager.info("")
             MessageManager.info("Alternative: Fork the repository and submit a pull request with your improvements.")
-            raise CommandError("Sync-back functionality requires development mode installation")
+            raise error_manager.CommandError("Sync-back functionality requires development mode installation")
         
         # Validate arguments
         mode_count = sum([preview, apply, interactive])
         if mode_count == 0:
-            raise ValidationError("Must specify either --preview, --apply, or --interactive")
+            raise error_manager.ValidationError("Must specify either --preview, --apply, or --interactive")
         
         if mode_count > 1:
-            raise ValidationError("Cannot specify multiple modes: choose one of --preview, --apply, or --interactive")
+            raise error_manager.ValidationError("Cannot specify multiple modes: choose one of --preview, --apply, or --interactive")
         
         # Validate project path
         project_dir = self._validate_project_path(project_path)

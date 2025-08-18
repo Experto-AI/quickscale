@@ -5,7 +5,7 @@ from pathlib import Path
 import pytest
 from unittest.mock import patch, MagicMock, mock_open
 from quickscale.commands.init_command import InitCommand
-from quickscale.utils.error_manager import ProjectError
+from quickscale.utils.error_manager import error_manager
 
 
 @pytest.fixture

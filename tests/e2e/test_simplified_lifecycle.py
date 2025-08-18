@@ -3,7 +3,7 @@ import os
 import subprocess
 import time
 from pathlib import Path
-from tests.utils import run_quickscale_command
+import tests.utils.utils as test_utils
 import pytest
 
 @pytest.mark.e2e
@@ -21,7 +21,7 @@ class TestSimplifiedLifecycle:
         
     def test_cli_help(self):
         """Test the CLI help command."""
-        result = run_quickscale_command('help')
+        result = test_utils.run_quickscale_command('help')
         assert 'Available commands:' in result.stdout
         assert 'init' in result.stdout
         assert 'up' in result.stdout

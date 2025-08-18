@@ -16,7 +16,7 @@ from quickscale.commands.service_generator_commands import (
     ValidateServiceCommand,
     ServiceExamplesCommand
 )
-from quickscale.utils.error_manager import ValidationError, ServiceError
+from quickscale.utils.error_manager import error_manager
 import unittest
 from tests.base_test_classes import CommandTestMixin
 
@@ -165,9 +165,8 @@ class TestValidateServiceCommand(unittest.TestCase, CommandTestMixin):
     @patch('pathlib.Path.exists')
     def test_execute_validation_failure(self, mock_exists, mock_validate):
         """Test validation failure."""
-        from quickscale.utils.error_manager import CommandError
         mock_exists.return_value = True
-        mock_validate.side_effect = CommandError("Validation failed")
+        mock_validate.side_effect = error_manager.CommandError("Validation failed")
         
         result = self.command.execute("/path/to/service.py")
         
@@ -294,21 +293,19 @@ class TestServiceDevUtilsIntegration:
     @patch('quickscale.utils.service_dev_utils.ServiceDevelopmentHelper.validate_service_structure')
     def test_validate_service_structure_missing_imports(self, mock_validate):
         """Test service structure validation with missing imports."""
-        from quickscale.utils.error_manager import ValidationError
-        mock_validate.side_effect = ValidationError("Missing required imports")
+        mock_validate.side_effect = error_manager.ValidationError("Missing required imports")
         
         from quickscale.utils.service_dev_utils import ServiceDevelopmentHelper
-        with pytest.raises(ValidationError):
+        with pytest.raises(error_manager.ValidationError):
             ServiceDevelopmentHelper.validate_service_structure("invalid_service.py")
 
     @patch('quickscale.utils.service_dev_utils.ServiceDevelopmentHelper.validate_service_structure')
     def test_validate_service_structure_missing_decorator(self, mock_validate):
         """Test service structure validation with missing decorator."""
-        from quickscale.utils.error_manager import ValidationError
-        mock_validate.side_effect = ValidationError("Missing @register_service decorator")
+        mock_validate.side_effect = error_manager.ValidationError("Missing @register_service decorator")
         
         from quickscale.utils.service_dev_utils import ServiceDevelopmentHelper
-        with pytest.raises(ValidationError):
+        with pytest.raises(error_manager.ValidationError):
             ServiceDevelopmentHelper.validate_service_structure("invalid_service.py")
 
     @patch('quickscale.utils.service_dev_utils.validate_service_file')
@@ -346,7 +343,6 @@ class TestErrorHandlingConsistency:
 
     def test_service_error_propagation(self):
         """Test that service errors are properly propagated."""
-        from quickscale.utils.error_manager import ServiceError
         
         # Mock the file writing operation to raise a service error
         with patch('builtins.open', side_effect=PermissionError("Cannot write file")):

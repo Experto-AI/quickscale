@@ -5,7 +5,7 @@ from typing import Dict, Any
 
 from quickscale.commands.command_manager import CommandManager
 from quickscale.commands.command_base import Command
-from quickscale.utils.error_manager import CommandError
+from quickscale.utils.error_manager import error_manager
 
 
 class MockCommand(Command):

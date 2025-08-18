@@ -20,10 +20,11 @@ from django.conf import settings
 from users.models import CustomUser
 from stripe_manager.stripe_manager import StripeManager
 from stripe_manager.models import StripeProduct
-from core.env_utils import get_env, is_feature_enabled
 
-# Check if Stripe is enabled using the same logic as in settings.py
-stripe_enabled = is_feature_enabled(get_env('STRIPE_ENABLED', 'False'))
+# Check if Stripe is enabled using configuration singleton
+from core.configuration import config
+stripe_enabled = config.is_stripe_enabled_and_configured()
+
 STRIPE_AVAILABLE = False
 
 try:

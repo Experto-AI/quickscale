@@ -8,9 +8,10 @@ from unittest.mock import patch, MagicMock, PropertyMock
 from django.test import TestCase, override_settings
 
 # Set up template path and Django settings
-from ..django_functionality.base import DjangoIntegrationTestCase, setup_django_template_path, setup_core_env_utils_mock, setup_django_settings
+from ..django_functionality.base import DjangoIntegrationTestCase, setup_django_template_path, setup_core_env_utils_mock, setup_core_configuration_mock, setup_django_settings
 setup_django_template_path()
 setup_core_env_utils_mock()
+setup_core_configuration_mock()
 setup_django_settings()
 
 from stripe_manager.stripe_manager import StripeManager
@@ -72,7 +73,7 @@ def create_mock_model(return_instance=None):
 
 
 @override_settings(
-    STRIPE_ENABLED=True,
+    ENABLE_STRIPE=True,
     STRIPE_LIVE_MODE=False,
     STRIPE_SECRET_KEY='sk_test_123',
     STRIPE_PUBLIC_KEY='pk_test_123',
@@ -89,11 +90,16 @@ class TestStripeCreditSync(TestCase):
         
         # Don't initialize the manager in setUp - let each test do it with proper mocks
     
-    @patch.dict(os.environ, {'STRIPE_ENABLED': 'true'})
-    @patch('stripe_manager.stripe_manager.is_feature_enabled', return_value=True)
+    @patch.dict(os.environ, {'ENABLE_STRIPE': 'true'})
+    @patch('stripe_manager.stripe_manager.config')
     @patch('stripe.StripeClient')
-    def test_sync_product_from_stripe_reads_credit_amount_from_metadata(self, mock_stripe_client, mock_is_feature_enabled):
+    def test_sync_product_from_stripe_reads_credit_amount_from_metadata(self, mock_stripe_client, mock_config):
         """Test that sync_product_from_stripe correctly reads credit amount from Stripe metadata."""
+        # Mock the configuration
+        mock_config.is_stripe_enabled_and_configured.return_value = True
+        mock_config.get_env_bool.return_value = True
+        mock_config.stripe.secret_key = 'sk_test_123'
+        
         # Mock the Stripe client
         stripe_mock = MagicMock()
         mock_stripe_client.return_value = stripe_mock
@@ -124,7 +130,7 @@ class TestStripeCreditSync(TestCase):
         }
         
         # Mock environment variables to enable Stripe
-        with patch.dict(os.environ, {'STRIPE_ENABLED': 'true'}):
+        with patch.dict(os.environ, {'ENABLE_STRIPE': 'true'}):
             # Mock the retrieve_product method to return our test data
             with patch.object(manager, 'retrieve_product', return_value=stripe_product_data):
                 # Mock the price retrieval
@@ -142,11 +148,15 @@ class TestStripeCreditSync(TestCase):
                 self.assertEqual(result.name, 'Premium Credits')
                 self.assertEqual(result.metadata, {'credit_amount': '2500'})
 
-    @patch.dict(os.environ, {'STRIPE_ENABLED': 'true'})
-    @patch('stripe_manager.stripe_manager.is_feature_enabled', return_value=True)
+    @patch.dict(os.environ, {'ENABLE_STRIPE': 'true'})
+    @patch('stripe_manager.stripe_manager.config')
     @patch('stripe.StripeClient')
-    def test_sync_product_from_stripe_different_metadata_keys(self, mock_stripe_client, mock_is_feature_enabled):
+    def test_sync_product_from_stripe_different_metadata_keys(self, mock_stripe_client, mock_config):
         """Test that sync_product_from_stripe handles different metadata key naming patterns."""
+        # Mock the configuration
+        mock_config.is_stripe_enabled_and_configured.return_value = True
+        mock_config.get_env_bool.return_value = True
+        mock_config.stripe.secret_key = 'sk_test_123'
         # Mock the Stripe client
         stripe_mock = MagicMock()
         mock_stripe_client.return_value = stripe_mock
@@ -158,11 +168,15 @@ class TestStripeCreditSync(TestCase):
 
 
 
-    @patch.dict(os.environ, {'STRIPE_ENABLED': 'true'})
-    @patch('stripe_manager.stripe_manager.is_feature_enabled', return_value=True)
+    @patch.dict(os.environ, {'ENABLE_STRIPE': 'true'})
+    @patch('stripe_manager.stripe_manager.config')
     @patch('stripe.StripeClient')
-    def test_sync_product_from_stripe_no_metadata(self, mock_stripe_client, mock_is_feature_enabled):
+    def test_sync_product_from_stripe_no_metadata(self, mock_stripe_client, mock_config):
         """Test that sync_product_from_stripe uses default credit amount when no metadata."""
+        # Mock the configuration
+        mock_config.is_stripe_enabled_and_configured.return_value = True
+        mock_config.get_env_bool.return_value = True
+        mock_config.stripe.secret_key = 'sk_test_123'
         # Mock the Stripe client
         stripe_mock = MagicMock()
         mock_stripe_client.return_value = stripe_mock

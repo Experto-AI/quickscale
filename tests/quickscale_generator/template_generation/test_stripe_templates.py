@@ -11,30 +11,25 @@ from pathlib import Path
 from django.test import TestCase
 from unittest.mock import patch, MagicMock
 
-from tests.utils import ProjectTestMixin
+from tests.utils import DynamicProjectTestCase
 
 
-class TestStripeTemplateGeneration(ProjectTestMixin, TestCase):
+class TestStripeTemplateGeneration(DynamicProjectTestCase):
     """Test that QuickScale generates working Stripe integration templates."""
 
     def setUp(self):
         """Set up test environment."""
         super().setUp()
-        # Create a temporary directory for the test project
-        self.test_dir = Path(tempfile.mkdtemp())
         self.project_name = "test_stripe_project"
-        self.project_path = self.test_dir / self.project_name
 
     def tearDown(self):
         """Clean up test environment."""
-        if self.test_dir.exists():
-            shutil.rmtree(self.test_dir)
         super().tearDown()
 
     def test_stripe_models_template_generation(self):
         """Test that Stripe models are correctly generated in project templates."""
         # Create test project
-        self.create_test_project()
+        self.project_path = self.create_test_project(self.project_name)
         
         # Check that stripe_manager models.py exists
         models_file = self.project_path / "stripe_manager" / "models.py"
@@ -55,7 +50,7 @@ class TestStripeTemplateGeneration(ProjectTestMixin, TestCase):
     def test_stripe_admin_template_generation(self):
         """Test that Stripe admin interface is correctly generated."""
         # Create test project
-        self.create_test_project()
+        self.project_path = self.create_test_project(self.project_name)
         
         # Check that stripe_manager admin.py exists
         admin_file = self.project_path / "stripe_manager" / "admin.py"
@@ -69,7 +64,7 @@ class TestStripeTemplateGeneration(ProjectTestMixin, TestCase):
     def test_stripe_urls_template_generation(self):
         """Test that Stripe URLs are correctly generated."""
         # Create test project
-        self.create_test_project()
+        self.project_path = self.create_test_project(self.project_name)
         
         # Check that stripe_manager urls.py exists
         urls_file = self.project_path / "stripe_manager" / "urls.py"
@@ -82,7 +77,7 @@ class TestStripeTemplateGeneration(ProjectTestMixin, TestCase):
     def test_stripe_views_template_generation(self):
         """Test that Stripe views are correctly generated."""
         # Create test project
-        self.create_test_project()
+        self.project_path = self.create_test_project(self.project_name)
         
         # Check that stripe_manager views.py exists
         views_file = self.project_path / "stripe_manager" / "views.py"
@@ -95,7 +90,7 @@ class TestStripeTemplateGeneration(ProjectTestMixin, TestCase):
     def test_stripe_migrations_template_generation(self):
         """Test that Stripe migrations are correctly generated."""
         # Create test project
-        self.create_test_project()
+        self.project_path = self.create_test_project(self.project_name)
         
         # Check that stripe_manager migrations directory exists
         migrations_dir = self.project_path / "stripe_manager" / "migrations"
@@ -108,7 +103,7 @@ class TestStripeTemplateGeneration(ProjectTestMixin, TestCase):
     def test_stripe_templates_generation(self):
         """Test that Stripe templates are correctly generated."""
         # Create test project
-        self.create_test_project()
+        self.project_path = self.create_test_project(self.project_name)
         
         # Check that stripe_manager templates exist
         templates_dir = self.project_path / "stripe_manager" / "templates" / "stripe_manager"
@@ -127,7 +122,7 @@ class TestStripeTemplateGeneration(ProjectTestMixin, TestCase):
     def test_stripe_app_registration(self):
         """Test that stripe_manager app is properly registered in settings."""
         # Create test project
-        self.create_test_project()
+        self.project_path = self.create_test_project(self.project_name)
         
         # Check that stripe_manager is in INSTALLED_APPS (using modern AppConfig format)
         settings_file = self.project_path / "core" / "settings.py"
@@ -137,7 +132,7 @@ class TestStripeTemplateGeneration(ProjectTestMixin, TestCase):
     def test_stripe_url_inclusion(self):
         """Test that stripe_manager URLs are included in main URL config."""
         # Create test project
-        self.create_test_project()
+        self.project_path = self.create_test_project(self.project_name)
         
         # Check that stripe URLs are included in main urls.py
         main_urls_file = self.project_path / "core" / "urls.py"

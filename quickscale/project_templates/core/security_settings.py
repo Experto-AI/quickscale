@@ -2,7 +2,7 @@
 import os
 from pathlib import Path
 
-from .env_utils import get_env, is_feature_enabled
+from .configuration import config
 
 
 class SecurityConfigurationError(Exception):
@@ -12,8 +12,8 @@ class SecurityConfigurationError(Exception):
 
 def validate_account_lockout_settings():
     """Validate account lockout configuration parameters."""
-    threshold = int(get_env('ACCOUNT_LOCKOUT_MAX_ATTEMPTS', '5'))
-    duration = int(get_env('ACCOUNT_LOCKOUT_DURATION', '300'))
+    threshold = config.get_env_int('ACCOUNT_LOCKOUT_MAX_ATTEMPTS', 5)
+    duration = config.get_env_int('ACCOUNT_LOCKOUT_DURATION', 300)
     
     if threshold < 3:
         raise SecurityConfigurationError(
@@ -37,8 +37,8 @@ def validate_account_lockout_settings():
 
 
 def validate_session_security_settings():
-    """Validate session security configuration."""
-    session_age = int(get_env('SESSION_COOKIE_AGE', '3600'))
+    """Validate session timeout configuration."""
+    session_age = config.get_env_int('SESSION_COOKIE_AGE', 3600)
     
     if session_age < 300:  # 5 minutes
         raise SecurityConfigurationError(
@@ -54,7 +54,7 @@ def validate_session_security_settings():
 def validate_production_security_settings():
     """Validate security settings for production environment."""
     if IS_PRODUCTION:
-        secret_key = get_env('SECRET_KEY', '')
+        secret_key = config.get_env('SECRET_KEY', '')
         if not secret_key or secret_key == 'dev-only-dummy-key-replace-in-production':
             raise SecurityConfigurationError(
                 "Production requires a secure SECRET_KEY different from default"
@@ -65,7 +65,7 @@ def validate_production_security_settings():
                 f"SECRET_KEY must be at least 32 characters for security, got {len(secret_key)}"
             )
         
-        allowed_hosts = get_env('ALLOWED_HOSTS', '')
+        allowed_hosts = config.get_env('ALLOWED_HOSTS', '')
         if '*' in allowed_hosts:
             raise SecurityConfigurationError(
                 "Production requires specific ALLOWED_HOSTS, wildcard '*' is not secure"
@@ -84,7 +84,7 @@ def validate_all_security_settings():
     validate_production_security_settings()
 
 # Determine environment
-IS_PRODUCTION = is_feature_enabled(get_env('IS_PRODUCTION', 'False'))
+IS_PRODUCTION = config.get_env_bool('IS_PRODUCTION', False)
 DEBUG = not IS_PRODUCTION
 
 # Security settings
@@ -94,7 +94,8 @@ X_FRAME_OPTIONS = 'DENY'
 SECURE_REFERRER_POLICY = 'strict-origin-when-cross-origin'
 
 # Session Security Configuration
-SESSION_COOKIE_AGE = int(get_env('SESSION_COOKIE_AGE', '3600'))  # 1 hour default
+# Session Configuration
+SESSION_COOKIE_AGE = int(config.get_env('SESSION_COOKIE_AGE', '3600'))  # 1 hour default
 SESSION_SAVE_EVERY_REQUEST = True  # Refresh session on every request
 SESSION_EXPIRE_AT_BROWSER_CLOSE = True  # Clear session when browser closes
 SESSION_COOKIE_NAME = 'quickscale_sessionid'  # Custom session cookie name
@@ -129,7 +130,7 @@ else:
 CSRF_TRUSTED_ORIGINS = []
 
 # Add all allowed hosts to trusted origins
-for host in get_env('ALLOWED_HOSTS', 'localhost,127.0.0.1').split(','):
+for host in config.get_env('ALLOWED_HOSTS', 'localhost,127.0.0.1').split(','):
     if host == '*':
         continue
     CSRF_TRUSTED_ORIGINS.extend([f"http://{host}", f"https://{host}"])
@@ -151,9 +152,9 @@ for host in DEVELOPMENT_HOSTS:
 # Handle HTTP_X_FORWARDED_PROTO when behind a proxy/load balancer
 SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
 
-# Account Lockout Settings
-ACCOUNT_LOCKOUT_MAX_ATTEMPTS = int(get_env('ACCOUNT_LOCKOUT_MAX_ATTEMPTS', '5'))
-ACCOUNT_LOCKOUT_DURATION = int(get_env('ACCOUNT_LOCKOUT_DURATION', '300'))  # 5 minutes in seconds
+# Account Lockout Configuration
+ACCOUNT_LOCKOUT_MAX_ATTEMPTS = int(config.get_env('ACCOUNT_LOCKOUT_MAX_ATTEMPTS', '5'))
+ACCOUNT_LOCKOUT_DURATION = int(config.get_env('ACCOUNT_LOCKOUT_DURATION', '300'))  # 5 minutes in seconds
 
 # Enhanced password strength validation (consistent 8 character minimum)
 AUTH_PASSWORD_VALIDATORS = [
@@ -216,13 +217,10 @@ if IS_PRODUCTION:
 try:
     validate_all_security_settings()
 except SecurityConfigurationError as e:
-    # Import time validation ensures configuration errors are caught during startup
-    import sys
-    print(f"Security Configuration Error: {e}", file=sys.stderr)
+    # Import-time validation: in production, fail-fast; in dev, warn to avoid container crash
+    import sys, warnings
+    print(f"Security Configuration Warning: {e}", file=sys.stderr)
     if IS_PRODUCTION:
-        # In production, configuration errors should prevent startup
         raise
     else:
-        # In development, log warning but allow startup for easier development
-        import warnings
-        warnings.warn(f"Security configuration issue: {e}", UserWarning)
+        warnings.warn(f"Security configuration issue (development mode): {e}", UserWarning)
