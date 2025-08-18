@@ -5,21 +5,24 @@ from django.views.decorators.csrf import csrf_exempt
 from django.contrib.auth.decorators import login_required
 from django.contrib.auth.models import User
 from django.contrib import messages
-from core.env_utils import get_env, is_feature_enabled
 from django.views.generic import ListView
 from django.views import View # Import Django's base View class
 from django.urls import reverse # Import reverse for getting login/signup URLs
 import logging
 import json
 
+# Import configuration singleton
+from core.configuration import config
+
 # Setup logging
 logger = logging.getLogger(__name__)
 
 # Import the StripeProduct model
 from .models import StripeProduct
+from django.conf import settings
 
-# Check if Stripe is enabled
-stripe_enabled = is_feature_enabled(get_env('STRIPE_ENABLED', 'False'))
+# Check if Stripe is enabled and configured
+stripe_enabled = config.is_stripe_enabled_and_configured()
 
 stripe_manager = None # Initialize to None
 
@@ -34,10 +37,10 @@ def status(request: HttpRequest) -> HttpResponse:
     """Display Stripe integration status."""
     context = {
         'stripe_enabled': True,
-        'stripe_public_key': get_env('STRIPE_PUBLIC_KEY', 'Not configured'),
-        'stripe_secret_key_set': bool(get_env('STRIPE_SECRET_KEY', '')),
-        'stripe_webhook_secret_set': bool(get_env('STRIPE_WEBHOOK_SECRET', '')),
-        'stripe_live_mode': get_env('STRIPE_LIVE_MODE', 'False'),
+        'stripe_public_key': config.stripe.public_key,
+        'stripe_secret_key_set': bool(config.stripe.secret_key),
+        'stripe_webhook_secret_set': bool(config.stripe.webhook_secret),
+        'stripe_live_mode': config.stripe.live_mode,
     }
     return render(request, 'stripe/status.html', context)
 
@@ -72,8 +75,8 @@ def webhook(request: HttpRequest) -> HttpResponse:
     if request.method != 'POST':
         return JsonResponse({'error': 'Invalid request method'}, status=405)
     
-    # Get the webhook secret
-    webhook_secret = get_env('STRIPE_WEBHOOK_SECRET', '')
+    # Get the webhook secret from configuration singleton
+    webhook_secret = config.stripe.webhook_secret
     if not webhook_secret:
         return JsonResponse({'error': 'Webhook secret not configured'}, status=500)
     

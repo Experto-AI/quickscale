@@ -152,7 +152,7 @@ CACHES = {
 }
 
 # Disable external services during testing
-STRIPE_ENABLED = False
+ENABLE_STRIPE = False
 STRIPE_LIVE_MODE = False
 # Add Stripe settings for tests that need them
 STRIPE_SECRET_KEY = ''  # Empty for tests that check missing key

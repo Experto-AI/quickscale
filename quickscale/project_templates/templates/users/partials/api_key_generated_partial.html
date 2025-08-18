@@ -75,12 +75,14 @@
             </span>
             <span>I've Saved My Key</span>
         </button>
+        {% if api_endpoints_enabled %}
         <a href="{% url 'api:api_docs' %}" class="button is-link">
             <span class="icon">
                 <i class="fas fa-book"></i>
             </span>
             <span>View API Documentation</span>
         </a>
+        {% endif %}
     </div>
 </div>
 

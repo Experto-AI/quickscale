@@ -12,13 +12,16 @@ from io import StringIO
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '../..')))
 
 # Mock modules needed for import resolution
+# Import centralized test utilities (DRY principle)
+from tests.test_utilities import TestUtilities
+
 mock_stripe_module = MagicMock()
 mock_core_module = MagicMock()
 mock_env_utils_module = MagicMock()
 
-# Setup mock env functions
-mock_env_utils_module.get_env = MagicMock(return_value='test_value')
-mock_env_utils_module.is_feature_enabled = MagicMock(return_value=True)
+# Configure mock env functions to delegate to TestUtilities directly
+mock_env_utils_module.get_env.side_effect = TestUtilities.get_env
+mock_env_utils_module.is_feature_enabled.side_effect = TestUtilities.is_feature_enabled
 mock_core_module.env_utils = mock_env_utils_module
 
 # Store original modules for cleanup
@@ -32,7 +35,7 @@ sys.modules['stripe'] = mock_stripe_module
 sys.modules['core'] = mock_core_module
 sys.modules['core.env_utils'] = mock_env_utils_module
 
-from quickscale.utils.env_utils import refresh_env_cache
+from quickscale.utils.env_utils import env_manager
 
 
 class MockResponse:
@@ -54,7 +57,7 @@ class TestStripeDirectAPI(unittest.TestCase):
     def setUp(self):
         """Set up test environment."""
         self.original_env = os.environ.copy()
-        refresh_env_cache()
+        env_manager.refresh_env_cache()
         
         # Create a simple mock for the StripeManager class
         self.test_module_name = 'test_stripe_manager'

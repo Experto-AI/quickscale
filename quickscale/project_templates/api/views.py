@@ -304,9 +304,12 @@ from django.views.decorators.http import require_GET
 @require_GET
 def api_docs(request):
     """Display the API documentation page."""
+    from core.configuration import config
+    
     context = {
         'page_title': 'API Documentation',
         'page_description': 'Complete API reference for AI engineers',
         'example_services': EXAMPLE_SERVICES,
+        'services_enabled': config.feature_flags.enable_demo_service or config.feature_flags.enable_service_marketplace,
     }
     return render(request, 'api/api_docs.html', context)

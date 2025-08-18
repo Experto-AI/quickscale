@@ -7,7 +7,7 @@ from django.http import HttpResponse
 from django.shortcuts import render
 from django.views.decorators.csrf import ensure_csrf_cookie
 import os
-from .env_utils import get_env, is_feature_enabled
+from .configuration import config
 from django.views.generic import RedirectView
 
 # Simple health check view for Docker healthcheck
@@ -26,30 +26,32 @@ urlpatterns = [
     path('admin/', admin.site.urls),
     # django-allauth URLs must come before our custom user URLs
     path('accounts/', include('allauth.urls')),
-    # Include public app URLs, but at the root level
+    # Core URLs (always included)
     path('', include('public.urls', namespace='public')),
     path('users/', include('users.urls', namespace='users')),
-    path('dashboard/', include('admin_dashboard.urls', namespace='admin_dashboard')),
-    path('dashboard/credits/', include('credits.urls', namespace='credits')),
-    path('services/', include('services.urls', namespace='services')),
     path('common/', include('common.urls', namespace='common')),
-    path('api/', include('api.urls', namespace='api')),  # API endpoints for AI services
     path('health/', health_check, name='health_check'),  # Health check endpoint
     path('admin-test/', admin_test, name='admin_test'),  # Admin CSRF test page
 ] + static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)
 
-# Include stripe URLs only if Stripe is enabled AND fully configured
-stripe_enabled = is_feature_enabled(get_env('STRIPE_ENABLED', 'False'))
-if stripe_enabled:
-    # Also check that all required settings are present
-    stripe_public_key = get_env('STRIPE_PUBLIC_KEY', '')
-    stripe_secret_key = get_env('STRIPE_SECRET_KEY', '')
-    stripe_webhook_secret = get_env('STRIPE_WEBHOOK_SECRET', '')
-    
-    if stripe_public_key and stripe_secret_key and stripe_webhook_secret:
-        urlpatterns += [
-            path('stripe/', include('stripe_manager.urls', namespace='stripe')),
-        ]
+# Feature-flagged URL patterns using configuration singleton
+if config.feature_flags.enable_basic_admin or config.feature_flags.enable_advanced_admin:
+    urlpatterns.append(path('dashboard/', include('admin_dashboard.urls', namespace='admin_dashboard')))
+
+if config.feature_flags.enable_basic_credits or config.feature_flags.enable_credit_types:
+    urlpatterns.append(path('dashboard/credits/', include('credits.urls', namespace='credits')))
+
+if config.feature_flags.enable_demo_service or config.feature_flags.enable_service_marketplace:
+    urlpatterns.append(path('services/', include('services.urls', namespace='services')))
+
+if config.feature_flags.enable_api_endpoints:
+    urlpatterns.append(path('api/', include('api.urls', namespace='api')))
+
+# Include stripe URLs only if Stripe is enabled and fully configured
+if config.is_stripe_enabled_and_configured():
+    urlpatterns += [
+        path('stripe/', include('stripe_manager.urls', namespace='stripe')),
+    ]
 
 # Static and media files for development environment
 if settings.DEBUG:

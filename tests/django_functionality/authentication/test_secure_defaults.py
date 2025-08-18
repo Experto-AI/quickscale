@@ -49,7 +49,7 @@ EMAIL_USE_TLS=True
 DEFAULT_FROM_EMAIL=noreply@example.com
 
 # Feature Flags
-STRIPE_ENABLED=False
+ENABLE_STRIPE=False
 """
         # Configure mocks
         mock_exists.return_value = True

@@ -33,6 +33,9 @@ def account_security_view(request: HttpRequest) -> HttpResponse:
         is_2fa_enabled = two_factor.is_enabled
         has_backup_codes = bool(two_factor.backup_codes)
         backup_codes_count = len(two_factor.backup_codes) if two_factor.backup_codes else 0
+    # Import configuration to check feature flags
+    from core.configuration import config
+    
     context = {
         'api_keys': api_keys,
         'two_factor_enabled': two_factor_enabled,
@@ -42,6 +45,7 @@ def account_security_view(request: HttpRequest) -> HttpResponse:
         'backup_codes_count': backup_codes_count,
         'issuer_name': issuer_name,
         'is_htmx': is_htmx,
+        'api_endpoints_enabled': config.feature_flags.enable_api_endpoints,
     }
     return render(request, 'users/account_security.html', context)
 
@@ -81,13 +85,22 @@ def profile_view(request: HttpRequest) -> HttpResponse:
 
 @login_required
 @require_http_methods(["GET"])
-
+def api_keys_view(request: HttpRequest) -> HttpResponse:
+    """Display user's API keys with feature flag context."""
+    from core.configuration import config
+    
+    api_keys = APIKey.objects.filter(user=request.user).order_by('-created_at')
+    return render(request, 'users/api_keys.html', {
+        'api_keys': api_keys,
+        'api_endpoints_enabled': config.feature_flags.enable_api_endpoints,
+    })
 
 @login_required
 @csrf_protect
 @require_http_methods(["POST"])
 def generate_api_key_view(request: HttpRequest) -> HttpResponse:
     """Generate a new API key for the user with proper error handling."""
+    from core.configuration import config
     is_htmx = request.headers.get('HX-Request') == 'true'
     
     try:
@@ -108,13 +121,15 @@ def generate_api_key_view(request: HttpRequest) -> HttpResponse:
             return render(request, 'users/_api_key_generated_partial.html', {
                 'api_key': api_key,
                 'full_key': full_key,
-                'is_htmx': is_htmx
+                'is_htmx': is_htmx,
+                'api_endpoints_enabled': config.feature_flags.enable_api_endpoints,
             })
         # Return full page for normal requests
         return render(request, 'users/api_key_generated.html', {
             'api_key': api_key,
             'full_key': full_key,
-            'is_htmx': is_htmx
+            'is_htmx': is_htmx,
+            'api_endpoints_enabled': config.feature_flags.enable_api_endpoints,
         })
     except ValidationError as e:
         messages.error(request, f'Validation error: {str(e)}')
@@ -123,7 +138,8 @@ def generate_api_key_view(request: HttpRequest) -> HttpResponse:
     if is_htmx:
         return render(request, 'users/api_keys.html', {
             'api_keys': APIKey.objects.filter(user=request.user).order_by('-created_at'),
-            'is_htmx': is_htmx
+            'is_htmx': is_htmx,
+            'api_endpoints_enabled': config.feature_flags.enable_api_endpoints,
         })
     return redirect('users:api_keys')
 @login_required
@@ -140,6 +156,7 @@ def api_keys_list_partial(request: HttpRequest) -> HttpResponse:
 @require_http_methods(["POST"])
 def revoke_api_key_view(request: HttpRequest) -> HttpResponse:
     """Revoke an API key with proper error handling."""
+    from core.configuration import config
     is_htmx = request.headers.get('HX-Request') == 'true'
     
     try:
@@ -162,7 +179,8 @@ def revoke_api_key_view(request: HttpRequest) -> HttpResponse:
     if is_htmx:
         return render(request, 'users/api_keys.html', {
             'api_keys': APIKey.objects.filter(user=request.user).order_by('-created_at'),
-            'is_htmx': is_htmx
+            'is_htmx': is_htmx,
+            'api_endpoints_enabled': config.feature_flags.enable_api_endpoints,
         })
     
     return redirect('users:api_keys')
@@ -172,6 +190,7 @@ def revoke_api_key_view(request: HttpRequest) -> HttpResponse:
 @require_http_methods(["POST"])
 def regenerate_api_key_view(request: HttpRequest) -> HttpResponse:
     """Regenerate an existing API key with proper error handling."""
+    from core.configuration import config
     is_htmx = request.headers.get('HX-Request') == 'true'
     
     try:
@@ -201,7 +220,8 @@ def regenerate_api_key_view(request: HttpRequest) -> HttpResponse:
         return render(request, 'users/api_key_generated.html', {
             'api_key': new_api_key,
             'full_key': full_key,
-            'is_htmx': is_htmx
+            'is_htmx': is_htmx,
+            'api_endpoints_enabled': config.feature_flags.enable_api_endpoints,
         })
         
     except ValidationError as e:
@@ -212,7 +232,8 @@ def regenerate_api_key_view(request: HttpRequest) -> HttpResponse:
     if is_htmx:
         return render(request, 'users/api_keys.html', {
             'api_keys': APIKey.objects.filter(user=request.user).order_by('-created_at'),
-            'is_htmx': is_htmx
+            'is_htmx': is_htmx,
+            'api_endpoints_enabled': config.feature_flags.enable_api_endpoints,
         })
     
     return redirect('users:api_keys')

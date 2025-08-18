@@ -2,8 +2,9 @@ import unittest
 from unittest.mock import patch
 import os
 
-from quickscale.utils.env_utils import refresh_env_cache
+from quickscale.utils.env_utils import env_manager
 from quickscale.config.settings import REQUIRED_VARS
+from quickscale.config.generator_config import generator_config
 
 
 class TestRequiredVarsValidation(unittest.TestCase):
@@ -17,17 +18,14 @@ class TestRequiredVarsValidation(unittest.TestCase):
         """Restore original environment after each test."""
         os.environ.clear()
         os.environ.update(self.original_env)
-        refresh_env_cache()
+        env_manager.refresh_env_cache()
     
     # Define validate_required_vars function for testing
     def validate_required_vars(self, component):
         """Validate required variables for a component."""
-        # We need to use the imported get_env from quickscale.utils.env_utils
-        from quickscale.utils.env_utils import get_env
-        
         missing = []
         for var in REQUIRED_VARS.get(component, []):
-            if not get_env(var):
+            if not generator_config.get_env(var):
                 missing.append(var)
         if missing:
             raise ValueError(f"Missing required variables for {component}: {', '.join(missing)}")
@@ -35,7 +33,7 @@ class TestRequiredVarsValidation(unittest.TestCase):
     def test_validate_required_vars_all_present(self):
         """Test that validate_required_vars passes when all required variables are present."""
         # Set up environment with all required variables for the web component
-        with patch('quickscale.utils.env_utils.get_env', return_value='test-value'):
+        with patch('quickscale.config.generator_config.generator_config.get_env', return_value='test-value'):
             try:
                 self.validate_required_vars('web')
             except ValueError as e:
@@ -44,7 +42,7 @@ class TestRequiredVarsValidation(unittest.TestCase):
     def test_validate_required_vars_all_missing(self):
         """Test that validate_required_vars raises error when all required variables are missing."""
         # Mock get_env to return an empty string (falsey value)
-        with patch('quickscale.utils.env_utils.get_env', return_value=''):
+        with patch('quickscale.config.generator_config.generator_config.get_env', return_value=''):
             with self.assertRaises(ValueError):
                 self.validate_required_vars('web')
     
@@ -54,7 +52,7 @@ class TestRequiredVarsValidation(unittest.TestCase):
         def mock_get_env(key, *args):
             return 'test-value' if key == 'WEB_PORT' else ''
         
-        with patch('quickscale.utils.env_utils.get_env', side_effect=mock_get_env):
+        with patch('quickscale.config.generator_config.generator_config.get_env', side_effect=mock_get_env):
             with self.assertRaises(ValueError) as context:
                 self.validate_required_vars('web')
             
@@ -65,7 +63,7 @@ class TestRequiredVarsValidation(unittest.TestCase):
     
     def test_validate_required_vars_unknown_component(self):
         """Test that validate_required_vars doesn't raise error for unknown components."""
-        with patch('quickscale.utils.env_utils.get_env', return_value=''):
+        with patch('quickscale.config.generator_config.generator_config.get_env', return_value=''):
             try:
                 self.validate_required_vars('unknown_component')
             except ValueError as e:
@@ -74,7 +72,7 @@ class TestRequiredVarsValidation(unittest.TestCase):
     def test_validate_required_vars_all_components(self):
         """Test validate_required_vars for all defined components."""
         # Test with all variables present for all components
-        with patch('quickscale.utils.env_utils.get_env', return_value='test-value'):
+        with patch('quickscale.config.generator_config.generator_config.get_env', return_value='test-value'):
             for component in REQUIRED_VARS:
                 try:
                     self.validate_required_vars(component)
@@ -83,7 +81,7 @@ class TestRequiredVarsValidation(unittest.TestCase):
     
     def test_validate_required_vars_empty_component(self):
         """Test validate_required_vars with an empty component name."""
-        with patch('quickscale.utils.env_utils.get_env', return_value=''):
+        with patch('quickscale.config.generator_config.generator_config.get_env', return_value=''):
             try:
                 self.validate_required_vars('')
             except ValueError as e:

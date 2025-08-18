@@ -8,7 +8,7 @@ from typing import List
 from quickscale.commands.development_commands import (
     ShellCommand, ManageCommand, DjangoShellCommand
 )
-from quickscale.utils.error_manager import ServiceError
+from quickscale.utils.error_manager import error_manager
 from tests.base_test_classes import CommandTestMixin, CommandErrorHandlingTestMixin
 
 

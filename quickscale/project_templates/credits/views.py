@@ -82,11 +82,14 @@ def create_checkout_session(request):
         return redirect('credits:buy_credits')
     
     from stripe_manager.models import StripeProduct
-    from core.env_utils import get_env, is_feature_enabled
+    from django.conf import settings
     
-    # Check if Stripe is enabled
-    if not is_feature_enabled(get_env('STRIPE_ENABLED', 'False')):
-        messages.error(request, 'Stripe integration is not enabled')
+    # Import configuration singleton
+    from core.configuration import config
+    
+    # Check if Stripe is enabled and configured using configuration singleton
+    if not config.is_stripe_enabled_and_configured():
+        messages.error(request, 'Stripe integration is not enabled or properly configured')
         return redirect('credits:buy_credits')
     
     try:

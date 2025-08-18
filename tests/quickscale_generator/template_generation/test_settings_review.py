@@ -6,6 +6,8 @@ import re
 from pathlib import Path
 from decimal import Decimal
 
+from quickscale.config.generator_config import generator_config
+
 
 class URLNamespaceConfigurationTest(unittest.TestCase):
     """Test URL namespace configuration and routing hierarchy."""
@@ -208,8 +210,11 @@ class SettingsOrganizationTest(unittest.TestCase):
             with open(self.settings_files['main'], 'r') as f:
                 content = f.read()
             
-            # Test that Stripe feature flag exists
-            self.assertIn("STRIPE_ENABLED", content, "Settings should define STRIPE_ENABLED")
+            # Test that configuration singleton is used for feature flags
+            self.assertIn("config.feature_flags.enable_stripe", content, 
+                         "Settings should use configuration singleton for Stripe feature flag")
+            self.assertIn("STRIPE_ENABLED = config.is_stripe_enabled_and_configured()", content,
+                         "Settings should define STRIPE_ENABLED from configuration singleton")
 
     def test_environment_first_configuration(self):
         """Test that configuration comes from environment variables."""
@@ -232,39 +237,49 @@ class SettingsOrganizationTest(unittest.TestCase):
 class ProductionValidationTest(unittest.TestCase):
     """Test production settings validation."""
 
-    @patch('quickscale.utils.env_utils.get_env')
-    @patch('quickscale.utils.env_utils.is_feature_enabled')
-    def test_production_validation_with_insecure_secret(self, mock_is_feature_enabled, mock_get_env):
+    def test_production_validation_with_insecure_secret(self):
         """Test that production validation fails with insecure SECRET_KEY."""
-        mock_is_feature_enabled.return_value = True  # IS_PRODUCTION = True
-        mock_get_env.side_effect = lambda key, default=None: {
+        # Test environment with insecure secret key
+        test_env = {
             'SECRET_KEY': 'dev-only-dummy-key-replace-in-production',
             'ALLOWED_HOSTS': 'example.com',
-        }.get(key, default)
+            'IS_PRODUCTION': 'true',
+        }
         
-        from quickscale.utils.env_utils import validate_production_settings
-        
-        with self.assertRaises(ValueError) as context:
-            validate_production_settings()
-        
-        self.assertIn("secure SECRET_KEY", str(context.exception))
+        # Update generator config cache with test environment
+        generator_config.update_cache_for_testing(test_env)
+        try:
+            from quickscale.utils.env_utils import env_manager
+            
+            with self.assertRaises(ValueError) as context:
+                env_manager.validate_production_settings()
+            
+            self.assertIn("secure SECRET_KEY", str(context.exception))
+        finally:
+            # Restore original cache
+            generator_config.refresh_cache()
 
-    @patch('quickscale.utils.env_utils.get_env')
-    @patch('quickscale.utils.env_utils.is_feature_enabled')
-    def test_production_validation_with_wildcard_hosts(self, mock_is_feature_enabled, mock_get_env):
+    def test_production_validation_with_wildcard_hosts(self):
         """Test that production validation fails with wildcard ALLOWED_HOSTS."""
-        mock_is_feature_enabled.return_value = True  # IS_PRODUCTION = True
-        mock_get_env.side_effect = lambda key, default=None: {
+        # Test environment with wildcard hosts
+        test_env = {
             'SECRET_KEY': 'secure-production-key-123',
             'ALLOWED_HOSTS': '*',
-        }.get(key, default)
+            'IS_PRODUCTION': 'true',
+        }
         
-        from quickscale.utils.env_utils import validate_production_settings
-        
-        with self.assertRaises(ValueError) as context:
-            validate_production_settings()
-        
-        self.assertIn("specific ALLOWED_HOSTS", str(context.exception))
+        # Update generator config cache with test environment
+        generator_config.update_cache_for_testing(test_env)
+        try:
+            from quickscale.utils.env_utils import env_manager
+            
+            with self.assertRaises(ValueError) as context:
+                env_manager.validate_production_settings()
+            
+            self.assertIn("specific ALLOWED_HOSTS", str(context.exception))
+        finally:
+            # Restore original cache
+            generator_config.refresh_cache()
 
 
 class DatabaseModelsSOLIDPrinciplesTests(unittest.TestCase):

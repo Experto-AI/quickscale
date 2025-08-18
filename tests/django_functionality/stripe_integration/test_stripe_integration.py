@@ -25,14 +25,20 @@ if not settings.configured:
     # Import PostgreSQL test configuration
     from core.test_db_config import get_test_db_config
     
+    # Set environment variables for Stripe before configuring Django
+    os.environ.update({
+        'ENABLE_STRIPE': 'true',
+        'STRIPE_SECRET_KEY': 'sk_test_123',
+        'STRIPE_PUBLIC_KEY': 'pk_test_123',
+        'STRIPE_WEBHOOK_SECRET': 'whsec_test_123',
+        'STRIPE_API_VERSION': '2023-08-16'
+    })
+    
     settings.configure(
         DEBUG=True,
         USE_TZ=True,
         SECRET_KEY="test-key",
-        STRIPE_SECRET_KEY="sk_test_123",
-        STRIPE_PUBLIC_KEY="pk_test_123",
-        STRIPE_WEBHOOK_SECRET="whsec_test_123",
-        STRIPE_ENABLED=True,
+        STRIPE_ENABLED=True,  # Set the computed setting directly for tests
         DATABASES={"default": get_test_db_config()},
         INSTALLED_APPS=[
             "django.contrib.auth",
@@ -47,15 +53,54 @@ if not settings.configured:
 import django
 django.setup()
 
-# Import mock utilities from their current location
-sys.path.insert(0, os.path.dirname(__file__))
-from mock_env_utils import get_env, is_feature_enabled
+# Import centralized test utilities (DRY principle)  
+from tests.test_utilities import TestUtilities
 
-# Create a mock for 'core.env_utils' module
+# Create a mock for 'core.env_utils' module that uses TestUtilities directly
 mock_env_utils = MagicMock()
-mock_env_utils.get_env = get_env
-mock_env_utils.is_feature_enabled = is_feature_enabled
+# Configure mock to delegate to TestUtilities methods directly
+mock_env_utils.get_env.side_effect = TestUtilities.get_env
+mock_env_utils.is_feature_enabled.side_effect = TestUtilities.is_feature_enabled
 sys.modules['core.env_utils'] = mock_env_utils
+
+# Create a mock for 'core.configuration' module
+class MockStripeConfig:
+    secret_key = 'sk_test_mock'
+    api_version = '2023-10-16'
+
+class MockConfig:
+    stripe = MockStripeConfig()
+    
+    def is_stripe_enabled_and_configured(self):
+        return True
+    
+    def get_env_bool(self, key, default):
+        return default
+
+# Create module mock and set config as an attribute
+import types
+mock_config_module = types.ModuleType('core.configuration')
+
+class MockStripeConfig:
+    secret_key = 'sk_test_mock'
+    api_version = '2023-10-16'
+
+class MockConfig:
+    stripe = MockStripeConfig()
+    
+    def is_stripe_enabled_and_configured(self):
+        return True
+    
+    def get_env_bool(self, key, default):
+        return default
+
+mock_config_module.config = MockConfig()
+sys.modules['core.configuration'] = mock_config_module
+
+# Global patch for all tests in this module
+from unittest.mock import patch
+config_patch = patch('quickscale.project_templates.stripe_manager.stripe_manager.config', MockConfig())
+config_patch.start()
 
 from django.test import TestCase, override_settings
 from quickscale.project_templates.stripe_manager.stripe_manager import StripeManager, StripeConfigurationError
@@ -107,46 +152,62 @@ class TestStripeManagerSingletonPattern(TestCase):
         StripeManager._instance = None
         StripeManager._initialized = False
         
-    @override_settings(STRIPE_SECRET_KEY="sk_test_123")
+    def tearDown(self):
+        """Clean up test environment."""
+        # Reset StripeManager singleton state after each test
+        StripeManager._instance = None
+        StripeManager._initialized = False
+        
+        # Reset configuration singleton for tests if available
+        try:
+            from core.configuration import ConfigurationManager
+            ConfigurationManager.reset_for_testing()
+        except ImportError:
+            pass  # No core configuration in test environment
+        
+    @patch.dict(os.environ, {'ENABLE_STRIPE': 'true'})
+    @override_settings(STRIPE_ENABLED=True, STRIPE_SECRET_KEY="sk_test_123")
     def test_singleton_pattern(self):
         """Test that StripeManager follows singleton pattern."""
-        with patch.dict(os.environ, {'STRIPE_ENABLED': 'true'}):
-            with patch('stripe.StripeClient') as mock_client:
-                # Get first instance
-                manager1 = StripeManager.get_instance()
+        with patch('stripe.StripeClient') as mock_client:
+            # Get first instance
+            manager1 = StripeManager.get_instance()
+            
+            # Get second instance
+            manager2 = StripeManager.get_instance()
+            
+            # Both should be the same instance
+            self.assertIs(manager1, manager2)
                 
-                # Get second instance
-                manager2 = StripeManager.get_instance()
-                
-                # Both should be the same instance
-                self.assertIs(manager1, manager2)
-                
-    @override_settings(STRIPE_SECRET_KEY="sk_test_123")
+    @patch.dict(os.environ, {'ENABLE_STRIPE': 'true'})
+    @override_settings(STRIPE_ENABLED=True, STRIPE_SECRET_KEY="sk_test_123")
     def test_initialization_only_once(self):
         """Test that initialization only happens once."""
-        with patch.dict(os.environ, {'STRIPE_ENABLED': 'true'}):
-            with patch('stripe.StripeClient') as mock_client:
-                # First call should initialize
-                manager1 = StripeManager.get_instance()
-                mock_client.assert_called_once()
-                
-                # Reset mock
-                mock_client.reset_mock()
-                
-                # Second call should not initialize again
-                manager2 = StripeManager.get_instance()
-                mock_client.assert_not_called()
+        with patch('stripe.StripeClient') as mock_client:
+            # First call should initialize
+            manager1 = StripeManager.get_instance()
+            mock_client.assert_called_once()
+            
+            # Reset mock
+            mock_client.reset_mock()
+            
+            # Second call should not initialize again
+            manager2 = StripeManager.get_instance()
+            mock_client.assert_not_called()
                 
     def test_configuration_error_handling(self):
         """Test handling of configuration errors."""
-        with patch.dict(os.environ, {'STRIPE_ENABLED': 'false'}):
+        with patch('quickscale.project_templates.stripe_manager.stripe_manager.config') as mock_config:
+            mock_config.is_stripe_enabled_and_configured.return_value = False
             with self.assertRaises(StripeConfigurationError):
                 StripeManager.get_instance()
                 
     @override_settings(STRIPE_SECRET_KEY=None)
     def test_api_key_validation(self):
         """Test API key validation during initialization."""
-        with patch.dict(os.environ, {'STRIPE_ENABLED': 'true'}):
+        with patch('quickscale.project_templates.stripe_manager.stripe_manager.config') as mock_config:
+            mock_config.is_stripe_enabled_and_configured.return_value = True
+            mock_config.stripe.secret_key = None  # No secret key
             with self.assertRaises(StripeConfigurationError):
                 StripeManager.get_instance()
 
@@ -154,16 +215,24 @@ class TestStripeManagerSingletonPattern(TestCase):
 class TestStripeAPIIntegration(TestCase):
     """Test Stripe API integration and error handling."""
     
-    @override_settings(STRIPE_SECRET_KEY="sk_test_123")
     def setUp(self):
         """Set up test environment."""
+        # Reset StripeManager singleton state
         StripeManager._instance = None
         StripeManager._initialized = False
         
-        with patch.dict(os.environ, {'STRIPE_ENABLED': 'true'}):
-            with patch('stripe.StripeClient') as mock_client:
-                self.mock_client = mock_client.return_value
-                self.manager = StripeManager.get_instance()
+        # Set up Stripe manager with mocked client
+        self.stripe_patcher = patch('stripe.StripeClient')
+        self.mock_stripe_client = self.stripe_patcher.start()
+        self.mock_client = self.mock_stripe_client.return_value
+        
+        self.manager = StripeManager.get_instance()
+        
+    def tearDown(self):
+        """Clean up test environment."""
+        self.stripe_patcher.stop()
+        StripeManager._instance = None
+        StripeManager._initialized = False
                 
     def test_api_client_property(self):
         """Test that client property returns the Stripe client."""
@@ -201,79 +270,175 @@ class TestStripeAPIIntegration(TestCase):
 class TestCustomerManagement(TestCase):
     """Test customer management operations."""
     
-    @override_settings(STRIPE_SECRET_KEY="sk_test_123")
     def setUp(self):
         """Set up test environment."""
         StripeManager._instance = None
         StripeManager._initialized = False
         
-        with patch.dict(os.environ, {'STRIPE_ENABLED': 'true'}):
-            with patch('stripe.StripeClient') as mock_client:
-                self.mock_client = mock_client.return_value
-                self.manager = StripeManager.get_instance()
-                
-    def test_create_customer_success(self):
+    @patch.dict(os.environ, {
+        'ENABLE_STRIPE': 'true',
+        'STRIPE_PUBLIC_KEY': 'pk_test_123',
+        'STRIPE_SECRET_KEY': 'sk_test_123',
+        'STRIPE_WEBHOOK_SECRET': 'whsec_test_123',
+        'STRIPE_API_VERSION': '2023-08-16'
+    })
+    @patch('stripe.StripeClient')
+    @override_settings(STRIPE_ENABLED=True, STRIPE_SECRET_KEY="sk_test_123", 
+                      STRIPE_PUBLIC_KEY="pk_test_123", STRIPE_WEBHOOK_SECRET="whsec_test_123")
+    def test_create_customer_success(self, mock_client_class):
         """Test successful customer creation."""
+        # Reset configuration singleton for the test environment
+        try:
+            from core.configuration import ConfigurationManager
+            ConfigurationManager.reset_for_testing()
+        except ImportError:
+            pass  # No core configuration in test environment
+            
+        mock_client = mock_client_class.return_value
+        manager = StripeManager.get_instance()
+        
         customer_data = {
             'id': 'cus_test_123',
             'email': 'test@example.com',
             'name': 'Test Customer'
         }
-        self.mock_client.customers.create.return_value = customer_data
+        mock_client.customers.create.return_value = customer_data
         
-        result = self.manager.create_customer('test@example.com', 'Test Customer')
+        result = manager.create_customer('test@example.com', 'Test Customer')
         
         self.assertEqual(result, customer_data)
-        self.mock_client.customers.create.assert_called_once_with(
+        mock_client.customers.create.assert_called_once_with(
             params={'email': 'test@example.com', 'name': 'Test Customer'}
         )
         
-    def test_create_customer_with_metadata(self):
+    @patch.dict(os.environ, {
+        'ENABLE_STRIPE': 'true',
+        'STRIPE_PUBLIC_KEY': 'pk_test_123',
+        'STRIPE_SECRET_KEY': 'sk_test_123',
+        'STRIPE_WEBHOOK_SECRET': 'whsec_test_123',
+        'STRIPE_API_VERSION': '2023-08-16'
+    })
+    @patch('stripe.StripeClient')
+    @override_settings(STRIPE_SECRET_KEY="sk_test_123")
+    def test_create_customer_with_metadata(self, mock_client_class):
         """Test customer creation with metadata."""
+        # Reset configuration singleton for the test environment
+        try:
+            from core.configuration import ConfigurationManager
+            ConfigurationManager.reset_for_testing()
+        except ImportError:
+            pass  # No core configuration in test environment
+            
+        mock_client = mock_client_class.return_value
+        manager = StripeManager.get_instance()
+        
         customer_data = {
             'id': 'cus_test_123',
             'email': 'test@example.com',
             'metadata': {'user_id': '123'}
         }
-        self.mock_client.customers.create.return_value = customer_data
+        mock_client.customers.create.return_value = customer_data
         
         metadata = {'user_id': '123'}
-        result = self.manager.create_customer('test@example.com', metadata=metadata)
+        result = manager.create_customer('test@example.com', metadata=metadata)
         
         self.assertEqual(result, customer_data)
-        self.mock_client.customers.create.assert_called_once_with(
+        mock_client.customers.create.assert_called_once_with(
             params={'email': 'test@example.com', 'metadata': metadata}
         )
         
-    def test_create_customer_error(self):
+    @patch.dict(os.environ, {
+        'ENABLE_STRIPE': 'true',
+        'STRIPE_PUBLIC_KEY': 'pk_test_123',
+        'STRIPE_SECRET_KEY': 'sk_test_123',
+        'STRIPE_WEBHOOK_SECRET': 'whsec_test_123',
+        'STRIPE_API_VERSION': '2023-08-16'
+    })
+    @patch('stripe.StripeClient')
+    @override_settings(STRIPE_SECRET_KEY="sk_test_123")
+    def test_create_customer_error(self, mock_client_class):
         """Test customer creation error handling."""
-        self.mock_client.customers.create.side_effect = Exception("API Error")
+        # Reset configuration singleton for the test environment
+        try:
+            from core.configuration import ConfigurationManager
+            ConfigurationManager.reset_for_testing()
+        except ImportError:
+            pass  # No core configuration in test environment
+            
+        mock_client = mock_client_class.return_value
+        manager = StripeManager.get_instance()
+        
+        mock_client.customers.create.side_effect = Exception("API Error")
         
         with self.assertRaises(Exception):
-            self.manager.create_customer('test@example.com')
+            manager.create_customer('test@example.com')
             
-    def test_retrieve_customer_success(self):
+    @patch.dict(os.environ, {
+        'ENABLE_STRIPE': 'true',
+        'STRIPE_PUBLIC_KEY': 'pk_test_123',
+        'STRIPE_SECRET_KEY': 'sk_test_123',
+        'STRIPE_WEBHOOK_SECRET': 'whsec_test_123',
+        'STRIPE_API_VERSION': '2023-08-16'
+    })
+    @patch('stripe.StripeClient')
+    @override_settings(STRIPE_SECRET_KEY="sk_test_123")            
+    def test_retrieve_customer_success(self, mock_client_class):
         """Test successful customer retrieval."""
+        mock_client = mock_client_class.return_value
+        manager = StripeManager.get_instance()
+        
         customer_data = {
             'id': 'cus_test_123',
             'email': 'test@example.com'
         }
-        self.mock_client.customers.retrieve.return_value = customer_data
+        mock_client.customers.retrieve.return_value = customer_data
         
-        result = self.manager.retrieve_customer('cus_test_123')
+        result = manager.retrieve_customer('cus_test_123')
         
         self.assertEqual(result, customer_data)
-        self.mock_client.customers.retrieve.assert_called_once_with('cus_test_123')
+        mock_client.customers.retrieve.assert_called_once_with('cus_test_123')
         
-    def test_retrieve_customer_not_found(self):
+    @patch.dict(os.environ, {
+        'ENABLE_STRIPE': 'true',
+        'STRIPE_PUBLIC_KEY': 'pk_test_123',
+        'STRIPE_SECRET_KEY': 'sk_test_123',
+        'STRIPE_WEBHOOK_SECRET': 'whsec_test_123',
+        'STRIPE_API_VERSION': '2023-08-16'
+    })
+    @patch('stripe.StripeClient')
+    @override_settings(STRIPE_SECRET_KEY="sk_test_123")
+    def test_retrieve_customer_not_found(self, mock_client_class):
         """Test customer retrieval when not found."""
-        self.mock_client.customers.retrieve.side_effect = Exception("Customer not found")
+        mock_client = mock_client_class.return_value
+        manager = StripeManager.get_instance()
+        
+        mock_client.customers.retrieve.side_effect = Exception("Customer not found")
         
         with self.assertRaises(Exception):
-            self.manager.retrieve_customer('cus_invalid')
+            manager.retrieve_customer('cus_invalid')
             
-    def test_get_customer_by_user_with_stripe_customer(self):
+    @patch.dict(os.environ, {
+        'ENABLE_STRIPE': 'true',
+        'STRIPE_PUBLIC_KEY': 'pk_test_123',
+        'STRIPE_SECRET_KEY': 'sk_test_123',
+        'STRIPE_WEBHOOK_SECRET': 'whsec_test_123',
+        'STRIPE_API_VERSION': '2023-08-16'
+    })
+    @patch('stripe.StripeClient')
+    @override_settings(STRIPE_SECRET_KEY="sk_test_123")
+    def test_get_customer_by_user_with_stripe_customer(self, mock_client_class):
         """Test getting customer by user with existing Stripe customer."""
+        mock_client = mock_client_class.return_value
+        
+        # Reset configuration singleton for the test environment
+        try:
+            from core.configuration import ConfigurationManager
+            ConfigurationManager.reset_for_testing()
+        except ImportError:
+            pass  # No core configuration in test environment
+            
+        manager = StripeManager.get_instance()
+        
         # Mock user with stripe_customer
         mock_user = MagicMock()
         mock_user.email = 'test@example.com'
@@ -281,24 +446,44 @@ class TestCustomerManagement(TestCase):
         mock_user.stripe_customer.stripe_id = 'cus_test_123'
         
         customer_data = {'id': 'cus_test_123', 'email': 'test@example.com'}
-        self.mock_client.customers.retrieve.return_value = customer_data
+        mock_client.customers.retrieve.return_value = customer_data
         
-        result = self.manager.get_customer_by_user(mock_user)
+        result = manager.get_customer_by_user(mock_user)
         
         self.assertEqual(result, customer_data)
-        self.mock_client.customers.retrieve.assert_called_once_with('cus_test_123')
+        mock_client.customers.retrieve.assert_called_once_with('cus_test_123')
         
-    def test_get_customer_by_user_without_stripe_customer(self):
+    @patch.dict(os.environ, {
+        'ENABLE_STRIPE': 'true',
+        'STRIPE_PUBLIC_KEY': 'pk_test_123',
+        'STRIPE_SECRET_KEY': 'sk_test_123',
+        'STRIPE_WEBHOOK_SECRET': 'whsec_test_123',
+        'STRIPE_API_VERSION': '2023-08-16'
+    })
+    @patch('stripe.StripeClient')
+    @override_settings(STRIPE_SECRET_KEY="sk_test_123")
+    def test_get_customer_by_user_without_stripe_customer(self, mock_client_class):
         """Test getting customer by user without Stripe customer."""
+        mock_client = mock_client_class.return_value
+        
+        # Reset configuration singleton for the test environment
+        try:
+            from core.configuration import ConfigurationManager
+            ConfigurationManager.reset_for_testing()
+        except ImportError:
+            pass  # No core configuration in test environment
+            
+        manager = StripeManager.get_instance()
+        
         # Mock user without stripe_customer
         mock_user = MagicMock()
         mock_user.email = 'test@example.com'
         mock_user.stripe_customer = None
         
-        result = self.manager.get_customer_by_user(mock_user)
+        result = manager.get_customer_by_user(mock_user)
         
         self.assertIsNone(result)
-        self.mock_client.customers.retrieve.assert_not_called()
+        mock_client.customers.retrieve.assert_not_called()
 
 
 class TestProductManagement(TestCase):
@@ -310,7 +495,7 @@ class TestProductManagement(TestCase):
         StripeManager._instance = None
         StripeManager._initialized = False
         
-        with patch.dict(os.environ, {'STRIPE_ENABLED': 'true'}):
+        with patch.dict(os.environ, {'ENABLE_STRIPE': 'true'}):
             with patch('stripe.StripeClient') as mock_client:
                 self.mock_client = mock_client.return_value
                 self.manager = StripeManager.get_instance()
@@ -435,7 +620,7 @@ class TestSubscriptionManagement(TestCase):
         StripeManager._instance = None
         StripeManager._initialized = False
         
-        with patch.dict(os.environ, {'STRIPE_ENABLED': 'true'}):
+        with patch.dict(os.environ, {'ENABLE_STRIPE': 'true'}):
             with patch('stripe.StripeClient') as mock_client:
                 self.mock_client = mock_client.return_value
                 self.manager = StripeManager.get_instance()
@@ -547,7 +732,7 @@ class TestPaymentOperations(TestCase):
         StripeManager._instance = None
         StripeManager._initialized = False
         
-        with patch.dict(os.environ, {'STRIPE_ENABLED': 'true'}):
+        with patch.dict(os.environ, {'ENABLE_STRIPE': 'true'}):
             with patch('stripe.StripeClient') as mock_client:
                 self.mock_client = mock_client.return_value
                 self.manager = StripeManager.get_instance()
@@ -708,7 +893,14 @@ class TestUnidirectionalProductSync(TestCase):
         StripeManager._instance = None
         StripeManager._initialized = False
         
-        with patch.dict(os.environ, {'STRIPE_ENABLED': 'true'}):
+        with patch.dict(os.environ, {'ENABLE_STRIPE': 'true'}):
+            # Reset configuration singleton to pick up test environment
+            try:
+                from core.configuration import ConfigurationManager
+                ConfigurationManager.reset_for_testing()
+            except ImportError:
+                pass  # No core configuration in test environment
+            
             with patch('stripe.StripeClient') as mock_client:
                 self.mock_client = mock_client.return_value
                 self.manager = StripeManager.get_instance()
@@ -740,21 +932,22 @@ class TestUnidirectionalProductSync(TestCase):
         
         # Mock the retrieve_product method and environment
         with patch.object(self.manager, 'retrieve_product', return_value=stripe_product_data):
-            with patch('quickscale.project_templates.stripe_manager.stripe_manager.get_env', return_value='true'):
-                with patch('quickscale.project_templates.stripe_manager.stripe_manager.is_feature_enabled', return_value=True):
-                    self.mock_client.prices.retrieve.return_value = stripe_price_data
-                    
-                    # Create a mock product model
-                    product_model = create_mock_model()
-                    
-                    # Execute the sync
-                    result = self.manager.sync_product_from_stripe('prod_test_123', product_model)
-                    
-                    # Verify the result
-                    self.assertIsNotNone(result)
-                    self.assertEqual(result.name, 'Premium Credits')
-                    self.assertEqual(result.credit_amount, 2500)
-                    self.assertEqual(result.display_order, 1)
+            with patch('quickscale.project_templates.stripe_manager.stripe_manager.config') as mock_config:
+                mock_config.get_env_bool.return_value = True
+                mock_config.is_stripe_enabled_and_configured.return_value = True
+                self.mock_client.prices.retrieve.return_value = stripe_price_data
+                
+                # Create a mock product model
+                product_model = create_mock_model()
+                
+                # Execute the sync
+                result = self.manager.sync_product_from_stripe('prod_test_123', product_model)
+                
+                # Verify the result
+                self.assertIsNotNone(result)
+                self.assertEqual(result.name, 'Premium Credits')
+                self.assertEqual(result.credit_amount, 2500)
+                self.assertEqual(result.display_order, 1)
             
     def test_sync_product_from_stripe_missing_credit_amount(self):
         """Test sync fails when credit_amount is missing from metadata."""
@@ -768,13 +961,14 @@ class TestUnidirectionalProductSync(TestCase):
         }
         
         with patch.object(self.manager, 'retrieve_product', return_value=stripe_product_data):
-            with patch('quickscale.project_templates.stripe_manager.stripe_manager.get_env', return_value='true'):
-                with patch('quickscale.project_templates.stripe_manager.stripe_manager.is_feature_enabled', return_value=True):
-                    product_model = create_mock_model()
-                    
-                    # Should return None due to missing credit_amount
-                    result = self.manager.sync_product_from_stripe('prod_test_123', product_model)
-                    self.assertIsNone(result)
+            with patch('quickscale.project_templates.stripe_manager.stripe_manager.config') as mock_config:
+                mock_config.get_env_bool.return_value = True
+                mock_config.is_stripe_enabled_and_configured.return_value = True
+                product_model = create_mock_model()
+                
+                # Should return None due to missing credit_amount
+                result = self.manager.sync_product_from_stripe('prod_test_123', product_model)
+                self.assertIsNone(result)
             
     def test_sync_product_from_stripe_invalid_credit_amount(self):
         """Test sync fails when credit_amount is invalid."""
@@ -790,13 +984,14 @@ class TestUnidirectionalProductSync(TestCase):
         }
         
         with patch.object(self.manager, 'retrieve_product', return_value=stripe_product_data):
-            with patch('quickscale.project_templates.stripe_manager.stripe_manager.get_env', return_value='true'):
-                with patch('quickscale.project_templates.stripe_manager.stripe_manager.is_feature_enabled', return_value=True):
-                    product_model = create_mock_model()
-                    
-                    # Should return None due to invalid credit_amount
-                    result = self.manager.sync_product_from_stripe('prod_test_123', product_model)
-                    self.assertIsNone(result)
+            with patch('quickscale.project_templates.stripe_manager.stripe_manager.config') as mock_config:
+                mock_config.get_env_bool.return_value = True
+                mock_config.is_stripe_enabled_and_configured.return_value = True
+                product_model = create_mock_model()
+                
+                # Should return None due to invalid credit_amount
+                result = self.manager.sync_product_from_stripe('prod_test_123', product_model)
+                self.assertIsNone(result)
             
     def test_sync_products_from_stripe_bulk_sync(self):
         """Test bulk sync of products from Stripe."""
@@ -822,10 +1017,11 @@ class TestUnidirectionalProductSync(TestCase):
         
         # Mock the list_products method and environment
         with patch.object(self.manager, 'list_products', return_value=stripe_products):
-            with patch('quickscale.project_templates.stripe_manager.stripe_manager.get_env', return_value='true'):
-                with patch('quickscale.project_templates.stripe_manager.stripe_manager.is_feature_enabled', return_value=True):
-                    # Mock individual product sync
-                    with patch.object(self.manager, 'sync_product_from_stripe') as mock_sync:
+            with patch('quickscale.project_templates.stripe_manager.stripe_manager.config') as mock_config:
+                mock_config.get_env_bool.return_value = True
+                mock_config.is_stripe_enabled_and_configured.return_value = True
+                # Mock individual product sync
+                with patch.object(self.manager, 'sync_product_from_stripe') as mock_sync:
                         mock_sync.return_value = MockStripeProduct()
                         
                         product_model = create_mock_model()
@@ -845,7 +1041,7 @@ class TestWebhookSecurity(TestCase):
         StripeManager._instance = None
         StripeManager._initialized = False
         
-        with patch.dict(os.environ, {'STRIPE_ENABLED': 'true'}):
+        with patch.dict(os.environ, {'ENABLE_STRIPE': 'true'}):
             with patch('stripe.StripeClient') as mock_client:
                 self.mock_client = mock_client.return_value
                 self.manager = StripeManager.get_instance()
@@ -898,7 +1094,7 @@ class TestWebhookProcessing(TestCase):
         StripeManager._instance = None
         StripeManager._initialized = False
         
-        with patch.dict(os.environ, {'STRIPE_ENABLED': 'true'}):
+        with patch.dict(os.environ, {'ENABLE_STRIPE': 'true'}):
             with patch('stripe.StripeClient') as mock_client:
                 self.mock_client = mock_client.return_value
                 self.manager = StripeManager.get_instance()
@@ -1024,7 +1220,14 @@ class TestErrorHandlingAndFallbacks(TestCase):
         
     def test_api_unavailable_fallback(self):
         """Test behavior when Stripe API is unavailable."""
-        with patch.dict(os.environ, {'STRIPE_ENABLED': 'true'}):
+        with patch.dict(os.environ, {'ENABLE_STRIPE': 'true'}):
+            # Reset configuration singleton to pick up test environment
+            try:
+                from core.configuration import ConfigurationManager
+                ConfigurationManager.reset_for_testing()
+            except ImportError:
+                pass  # No core configuration in test environment
+            
             with patch('stripe.StripeClient', side_effect=Exception("API unavailable")):
                 with self.assertRaises(StripeConfigurationError):
                     StripeManager.get_instance()
@@ -1033,9 +1236,16 @@ class TestErrorHandlingAndFallbacks(TestCase):
     def test_connectivity_test_disabled(self):
         """Test behavior when connectivity test is disabled."""
         with patch.dict(os.environ, {
-            'STRIPE_ENABLED': 'true',
+            'ENABLE_STRIPE': 'true',
             'STRIPE_CONNECTIVITY_TEST': 'false'
         }):
+            # Reset configuration singleton to pick up test environment
+            try:
+                from core.configuration import ConfigurationManager
+                ConfigurationManager.reset_for_testing()
+            except ImportError:
+                pass  # No core configuration in test environment
+            
             with patch('stripe.StripeClient') as mock_client:
                 # Should not fail even if connectivity test is disabled
                 manager = StripeManager.get_instance()
@@ -1043,7 +1253,14 @@ class TestErrorHandlingAndFallbacks(TestCase):
                 
     def test_sync_with_stripe_disabled(self):
         """Test sync behavior when Stripe is disabled."""
-        with patch.dict(os.environ, {'STRIPE_ENABLED': 'false'}):
+        with patch.dict(os.environ, {'ENABLE_STRIPE': 'false'}):
+            # Reset configuration singleton to pick up test environment
+            try:
+                from core.configuration import ConfigurationManager
+                ConfigurationManager.reset_for_testing()
+            except ImportError:
+                pass  # No core configuration in test environment
+            
             manager = StripeManager()
             product_model = create_mock_model()
             
@@ -1061,7 +1278,7 @@ class TestIntegrationScenarios(TestCase):
         StripeManager._instance = None
         StripeManager._initialized = False
         
-        with patch.dict(os.environ, {'STRIPE_ENABLED': 'true'}):
+        with patch.dict(os.environ, {'ENABLE_STRIPE': 'true'}):
             with patch('stripe.StripeClient') as mock_client:
                 self.mock_client = mock_client.return_value
                 self.manager = StripeManager.get_instance()

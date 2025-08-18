@@ -6,11 +6,12 @@ from unittest.mock import patch, MagicMock
 from decimal import Decimal
 
 # Set up Django for testing
-from ..base import DjangoModelTestCase, setup_django_template_path, setup_core_env_utils_mock, setup_django_settings
+from ..base import DjangoModelTestCase, setup_django_template_path, setup_core_env_utils_mock, setup_core_configuration_mock, setup_django_settings
 
 # Set up template path and environment
 setup_django_template_path()
 setup_core_env_utils_mock()
+setup_core_configuration_mock()
 setup_django_settings()
 
 # Import Django and initialize
@@ -34,7 +35,7 @@ class StripeManagerTests(DjangoModelTestCase):
         
         # Patch environment settings
         self.env_patcher = patch.dict(os.environ, {
-            'STRIPE_ENABLED': 'true',
+            'ENABLE_STRIPE': 'true',
             'STRIPE_SECRET_KEY': 'sk_test_123',
             'STRIPE_PUBLIC_KEY': 'pk_test_123',
             'STRIPE_WEBHOOK_SECRET': 'whsec_test_123'
@@ -49,64 +50,64 @@ class StripeManagerTests(DjangoModelTestCase):
         StripeManager._initialized = False
     
     @patch('stripe.StripeClient')
-    @patch('stripe_manager.stripe_manager.is_feature_enabled')
-    @patch('stripe_manager.stripe_manager.get_env')
-    def test_stripe_manager_initialization_with_valid_config(self, mock_get_env, mock_is_feature_enabled, mock_stripe_client):
+    @patch('stripe_manager.stripe_manager.config')
+    def test_stripe_manager_initialization_with_valid_config(self, mock_config, mock_stripe_client):
         """Test StripeManager initializes correctly with valid configuration."""
-        # Mock the environment functions to return the expected values
-        mock_is_feature_enabled.return_value = True
-        mock_get_env.return_value = 'true'  # For STRIPE_ENABLED check
+        # Mock the configuration
+        mock_config.is_stripe_enabled_and_configured.return_value = True
+        mock_config.get_env_bool.return_value = True
+        mock_config.stripe.secret_key = 'sk_test_123'
         
         # Mock the StripeClient to prevent real API calls
         mock_client_instance = MagicMock()
         mock_stripe_client.return_value = mock_client_instance
         
-        # Use override_settings to set Django settings
-        from django.test import override_settings
-        with override_settings(STRIPE_SECRET_KEY="sk_test_123"):
-            manager = StripeManager.get_instance()
-            
-            self.assertIsNotNone(manager)
-            self.assertIsInstance(manager, StripeManager)
-            self.assertTrue(StripeManager._initialized)
+        manager = StripeManager.get_instance()
+        
+        self.assertIsNotNone(manager)
+        self.assertIsInstance(manager, StripeManager)
+        self.assertTrue(StripeManager._initialized)
     
     @patch('stripe.StripeClient')
-    @patch('stripe_manager.stripe_manager.is_feature_enabled')
-    @patch('stripe_manager.stripe_manager.get_env')
-    def test_stripe_manager_singleton_behavior(self, mock_get_env, mock_is_feature_enabled, mock_stripe_client):
+    @patch('stripe_manager.stripe_manager.config')
+    def test_stripe_manager_singleton_behavior(self, mock_config, mock_stripe_client):
         """Test that StripeManager follows singleton pattern."""
-        # Mock the environment functions to return the expected values
-        mock_is_feature_enabled.return_value = True
-        mock_get_env.return_value = 'true'  # For STRIPE_ENABLED check
+        # Mock the configuration
+        mock_config.is_stripe_enabled_and_configured.return_value = True
+        mock_config.get_env_bool.return_value = True
+        mock_config.stripe.secret_key = 'sk_test_123'
         
         # Mock the StripeClient to prevent real API calls
         mock_client_instance = MagicMock()
         mock_stripe_client.return_value = mock_client_instance
         
-        # Use override_settings to set Django settings
-        from django.test import override_settings
-        with override_settings(STRIPE_SECRET_KEY="sk_test_123"):
-            manager1 = StripeManager.get_instance()
-            manager2 = StripeManager.get_instance()
-            
-            self.assertIs(manager1, manager2)
+        manager1 = StripeManager.get_instance()
+        manager2 = StripeManager.get_instance()
+        
+        self.assertIs(manager1, manager2)
     
-    def test_stripe_disabled_raises_error(self):
+    @patch('stripe_manager.stripe_manager.config')
+    def test_stripe_disabled_raises_error(self, mock_config):
         """Test that StripeManager raises error when Stripe is disabled."""
-        with patch.dict(os.environ, {'STRIPE_ENABLED': 'false'}):
-            # Reset singleton state
-            StripeManager._instance = None
-            StripeManager._initialized = False
-            
-            with self.assertRaises(StripeConfigurationError):
-                StripeManager.get_instance()
+        # Reset singleton state
+        StripeManager._instance = None
+        StripeManager._initialized = False
+        
+        # Mock config to indicate Stripe is disabled
+        mock_config.is_stripe_enabled_and_configured.return_value = False
+        
+        with self.assertRaises(StripeConfigurationError):
+            StripeManager.get_instance()
     
-    @patch('django.conf.settings.STRIPE_SECRET_KEY', '')
-    def test_missing_api_key_raises_error(self):
+    @patch('stripe_manager.stripe_manager.config')
+    def test_missing_api_key_raises_error(self, mock_config):
         """Test that StripeManager raises error when API key is missing."""
         # Reset singleton state
         StripeManager._instance = None
         StripeManager._initialized = False
+        
+        # Mock config to indicate Stripe is enabled but API key is missing
+        mock_config.is_stripe_enabled_and_configured.return_value = False
         
         with self.assertRaises(StripeConfigurationError):
             StripeManager.get_instance()

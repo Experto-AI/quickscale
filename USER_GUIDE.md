@@ -121,7 +121,7 @@ QuickScale creates test accounts automatically for immediate development:
 
 ## **4. Configuration**
 
-Edit `.env` file in your project directory:
+QuickScale uses a **Configuration Singleton** pattern for optimal performance and consistency. Edit `.env` file in your project directory:
 
 ```env
 # Project Settings
@@ -138,12 +138,39 @@ DB_PASSWORD=auto-generated
 WEB_PORT=8000
 DB_PORT_EXTERNAL=5432
 
-# Stripe (optional for development)
-STRIPE_ENABLED=False
+# Feature Flags (Control application functionality)
+ENABLE_STRIPE=False               # Payment processing and billing
+ENABLE_SUBSCRIPTIONS=False        # Subscription management
+ENABLE_API_ENDPOINTS=False        # RESTful API access
+ENABLE_SERVICE_GENERATOR=False    # AI service generation
+ENABLE_CREDIT_TYPES=False         # Multiple credit types (pay-as-you-go + subscription)
+ENABLE_ADVANCED_ADMIN=False       # Advanced admin features
+
+# Stripe (required when ENABLE_STRIPE=True)
 STRIPE_SECRET_KEY=sk_test_...
 STRIPE_PUBLIC_KEY=pk_test_...
 STRIPE_WEBHOOK_SECRET=whsec_...
 ```
+
+### **Configuration Features**
+
+**Performance Optimizations**:
+- **Single Environment Read**: Configuration loaded once at startup
+- **Cached Variables**: All settings cached in memory for fast access
+- **Lazy Loading**: Only validates settings for enabled features
+
+**Feature Flag System**:
+- **Progressive Enhancement**: Start with minimal features, enable as needed
+- **Safe Rollbacks**: Disable problematic features without code changes
+- **Environment-Specific**: Different configurations for development/production
+
+**Ultra-Minimal Beta Mode** (Default):
+- Basic authentication and user management
+- Simple credit system (fixed allocation)
+- Single demo AI service
+- Core admin functionality only
+
+Enable additional features by setting the corresponding `ENABLE_*` flags to `True`.
 
 ## **5. Troubleshooting**
 
@@ -151,7 +178,7 @@ STRIPE_WEBHOOK_SECRET=whsec_...
 - **Docker Not Running**: Ensure Docker is installed and running on your system
 - **Port Already in Use**: QuickScale will fail immediately if the configured port is in use
 - **Database Connection Errors**: Check `DB_USER`, `DB_PASSWORD`, and other database settings in `.env` file
-- ** Stripe Configuration**: If using Stripe, ensure `STRIPE_ENABLED` is set to `True` and keys are correct
+- ** Stripe Configuration**: If using Stripe, ensure `ENABLE_STRIPE` is set to `True` and keys are correct
 
 ### **Logs**
 Check logs for detailed error messages:

@@ -93,6 +93,7 @@
                             <li><strong>Revoke:</strong> Permanently deactivates the key</li>
                         </ul>
                         
+                        {% if api_endpoints_enabled %}
                         <p>
                             <a href="{% url 'api:api_docs' %}" class="button is-link is-small">
                                 <span class="icon">
@@ -101,6 +102,7 @@
                                 <span>View API Documentation</span>
                             </a>
                         </p>
+                        {% endif %}
                     </div>
                 </div>
 

@@ -5,10 +5,7 @@ import logging
 from unittest.mock import patch, MagicMock
 import pytest
 
-from quickscale.utils.error_manager import (
-    CommandError, ServiceError, ValidationError, ProjectError,
-    DatabaseError, handle_command_error, convert_exception
-)
+from quickscale.utils.error_manager import error_manager
 
 
 class TestErrorConversion:
@@ -21,10 +18,10 @@ class TestErrorConversion:
         error = subprocess.CalledProcessError(returncode=1, cmd=cmd, output=b"Error")
         
         # Convert the error
-        result = convert_exception(error)
+        result = error_manager.convert_exception(error)
         
         # Check it's properly converted to a ServiceError
-        assert isinstance(result, ServiceError)
+        assert isinstance(result, error_manager.ServiceError)
         assert "Docker command failed" in result.message
         assert result.recovery is not None
 
@@ -33,24 +30,24 @@ class TestErrorConversion:
         cmd = ["psql", "-U", "postgres"]
         error = subprocess.CalledProcessError(returncode=1, cmd=cmd, output=b"Error")
         
-        result = convert_exception(error)
+        result = error_manager.convert_exception(error)
         
-        assert isinstance(result, DatabaseError)
+        assert isinstance(result, error_manager.DatabaseError)
         assert "Database command failed" in result.message
         assert result.recovery is not None
     
     def test_convert_file_not_found(self):
         """Verify conversion of file not found errors."""
         error = FileNotFoundError("file.txt")
-        result = convert_exception(error)
+        result = error_manager.convert_exception(error)
         
-        assert isinstance(result, ProjectError)
+        assert isinstance(result, error_manager.ProjectError)
         assert "File not found" in result.message
         
     def test_convert_permission_error(self):
         """Verify conversion of permission errors."""
         error = PermissionError("Permission denied")
-        result = convert_exception(error)
+        result = error_manager.convert_exception(error)
         
         assert "Permission denied" in result.message
         assert result.recovery is not None
@@ -58,9 +55,9 @@ class TestErrorConversion:
     def test_convert_unknown_error(self):
         """Verify conversion of unregistered error types."""
         error = ValueError("Custom error")
-        result = convert_exception(error)
+        result = error_manager.convert_exception(error)
         
-        assert isinstance(result, CommandError)
+        assert isinstance(result, error_manager.CommandError)
         assert "An error occurred" in result.message
         assert str(error) in result.message
 
@@ -73,10 +70,10 @@ class TestErrorHandling:
     @patch("sys.exit")
     def test_handle_command_error(self, mock_exit, mock_recovery, mock_error):
         """Verify error handling with exiting."""
-        error = CommandError("Test error", 
+        error = error_manager.CommandError("Test error", 
                             details="Test details", 
                             recovery="Test recovery")
-        handle_command_error(error)
+        error_manager.handle_command_error(error)
         
         mock_error.assert_called_once_with("Test error", None)
         mock_recovery.assert_called_once_with("custom", suggestion="Test recovery")
@@ -86,8 +83,8 @@ class TestErrorHandling:
     @patch("quickscale.utils.message_manager.MessageManager.print_recovery_suggestion")
     def test_handle_error_no_exit(self, mock_recovery, mock_error):
         """Verify error handling without exiting."""
-        error = CommandError("Test error", recovery="Test recovery")
-        result = handle_command_error(error, exit_on_error=False)
+        error = error_manager.CommandError("Test error", recovery="Test recovery")
+        result = error_manager.handle_command_error(error, exit_on_error=False)
         
         mock_error.assert_called_once_with("Test error", None)
         mock_recovery.assert_called_once_with("custom", suggestion="Test recovery")
@@ -95,12 +92,12 @@ class TestErrorHandling:
 
     def test_error_hierarchy(self):
         """Verify error class hierarchy relationships."""
-        service_error = ServiceError("Service failed")
-        database_error = DatabaseError("Database failed")
+        service_error = error_manager.ServiceError("Service failed")
+        database_error = error_manager.DatabaseError("Database failed")
         
-        assert isinstance(service_error, CommandError)
-        assert isinstance(database_error, ServiceError)
-        assert isinstance(database_error, CommandError)
+        assert isinstance(service_error, error_manager.CommandError)
+        assert isinstance(database_error, error_manager.ServiceError)
+        assert isinstance(database_error, error_manager.CommandError)
 
 
 class TestCommandErrorProperties:
@@ -108,13 +105,13 @@ class TestCommandErrorProperties:
     
     def test_exit_codes(self):
         """Verify exit codes are set correctly for different error types."""
-        assert CommandError("error").exit_code == 1
-        assert ValidationError("error").exit_code == 7
-        assert DatabaseError("error").exit_code == 9
+        assert error_manager.CommandError("error").exit_code == 1
+        assert error_manager.ValidationError("error").exit_code == 7
+        assert error_manager.DatabaseError("error").exit_code == 9
     
     def test_error_details(self):
         """Verify error details storage."""
-        error = CommandError("message", details="details", recovery="recovery")
+        error = error_manager.CommandError("message", details="details", recovery="recovery")
         assert error.message == "message"
         assert error.details == "details"
         assert error.recovery == "recovery"

@@ -5,7 +5,7 @@ import logging
 from typing import List, NoReturn, Optional, Dict, Any
 from pathlib import Path
 
-from quickscale.utils.error_manager import ServiceError, CommandError
+from quickscale.utils.error_manager import error_manager
 from .command_base import Command
 from .project_manager import ProjectManager
 from .command_utils import DOCKER_COMPOSE_COMMAND
