@@ -3,44 +3,6 @@
 import os
 import sys
 from pathlib import Path
-
-
-def setup_core_env_utils_mock():
-    """Set up core.env_utils mock for e2e tests."""
-    def get_env(var_name, default=None):
-        """Mock implementation of get_env."""
-        return os.environ.get(var_name, default)
-    
-    def is_feature_enabled(feature_name):
-        """Mock implementation of is_feature_enabled."""
-        env_var = f"{feature_name.upper()}_ENABLED"
-        return os.environ.get(env_var, 'false').lower() == 'true'
-    
-    # Store original module if it exists
-    original_module = sys.modules.get('core.env_utils')
-    
-    # Create a simple object instead of MagicMock to avoid interference
-    class MockEnvUtils:
-        def __init__(self):
-            self.get_env = get_env
-            self.is_feature_enabled = is_feature_enabled
-    
-    sys.modules['core.env_utils'] = MockEnvUtils()
-    
-    return sys.modules['core.env_utils'], original_module
-
-
-def cleanup_core_env_utils_mock(original_module):
-    """Clean up core.env_utils mock for e2e tests."""
-    if original_module is not None:
-        sys.modules['core.env_utils'] = original_module
-    else:
-        sys.modules.pop('core.env_utils', None)
-
-
-import os
-import sys
-from pathlib import Path
 from unittest.mock import MagicMock
 from django.test import TestCase, TransactionTestCase, Client
 from django.conf import settings
@@ -63,25 +25,27 @@ def setup_core_env_utils_mock():
     # Store original module if it exists
     original_module = sys.modules.get('core.env_utils')
     
-    def get_env(key, default=None):
-        """Mock implementation of get_env."""
-        return os.environ.get(key, default)
-    
-    def is_feature_enabled(feature_name):
-        """Mock implementation of is_feature_enabled."""
-        env_var = f"{feature_name.upper()}_ENABLED"
-        return os.environ.get(env_var, 'false').lower() == 'true'
+    # Import centralized test utilities (DRY principle)
+    from tests.test_utilities import TestUtilities
     
     # Create a simple object instead of MagicMock to avoid interference
     class MockEnvUtils:
         def __init__(self):
-            self.get_env = get_env
-            self.is_feature_enabled = is_feature_enabled
+            self.get_env = TestUtilities.get_env
+            self.is_feature_enabled = TestUtilities.is_feature_enabled
     
     mock_module = MockEnvUtils()
     sys.modules['core.env_utils'] = mock_module
     
     return mock_module, original_module
+
+
+def cleanup_core_env_utils_mock(original_module):
+    """Clean up core.env_utils mock for e2e tests."""
+    if original_module is not None:
+        sys.modules['core.env_utils'] = original_module
+    else:
+        sys.modules.pop('core.env_utils', None)
 
 
 def setup_django_settings():
@@ -103,7 +67,7 @@ def setup_django_settings():
             STRIPE_SECRET_KEY="sk_test_123",
             STRIPE_PUBLIC_KEY="pk_test_123", 
             STRIPE_WEBHOOK_SECRET="whsec_test_123",
-            STRIPE_ENABLED=True,
+            ENABLE_STRIPE=True,
             DATABASES={"default": get_test_db_config()},
             INSTALLED_APPS=[
                 "django.contrib.auth",

@@ -85,6 +85,52 @@ check_docker() {
     return 0
 }
 
+# Start PostgreSQL test database for Django/e2e tests
+start_test_db() {
+    # Requires check_docker to have set DOCKER_COMPOSE_COMMAND
+    if [[ -z "$DOCKER_COMPOSE_COMMAND" ]]; then
+        check_docker || return 1
+    fi
+
+    # Only start if compose file exists
+    if [[ ! -f "tests/docker-compose.test.yml" ]]; then
+        return 0
+    fi
+
+    # Check if the container is already running
+    if docker ps --format '{{.Names}}' | grep -q '^quickscale_test_db$'; then
+        if [[ $QUIET -eq 0 ]]; then
+            echo "Test DB container already running."
+        fi
+        return 0
+    fi
+
+    if [[ $QUIET -eq 0 ]]; then
+        echo "Starting PostgreSQL test database (tests/docker-compose.test.yml)..."
+    fi
+
+    # Bring up the test DB
+    $DOCKER_COMPOSE_COMMAND -f tests/docker-compose.test.yml up -d >/dev/null 2>&1 || {
+        echo -e "\033[31mERROR: Failed to start test database via docker compose.\033[0m"
+        return 1
+    }
+
+    # Wait for healthcheck (max ~30s)
+    for i in {1..30}; do
+        STATUS=$(docker inspect --format='{{.State.Health.Status}}' quickscale_test_db 2>/dev/null || echo "")
+        if [[ "$STATUS" == "healthy" ]]; then
+            if [[ $QUIET -eq 0 ]]; then
+                echo "PostgreSQL test DB is healthy."
+            fi
+            return 0
+        fi
+        sleep 1
+    done
+
+    echo -e "\033[33mWARNING: Test DB did not report healthy in time; proceeding anyway.\033[0m"
+    return 0
+}
+
 # Function to verify health of containers
 verify_container_health() {
     if [[ $QUIET -eq 0 ]]; then
@@ -214,6 +260,19 @@ cleanup_test_containers() {
         
         if [[ $QUIET -eq 0 ]]; then
             echo "Dangling volumes have been removed."
+        fi
+    fi
+    
+    # Check for and remove test project named volumes (these cause database reuse issues)
+    if docker volume ls | grep -E "test_project.*postgres_data|real_test_project.*postgres_data" > /dev/null; then
+        if [[ $QUIET -eq 0 ]]; then
+            echo -e "\033[33mFound test project volumes. Cleaning up...\033[0m"
+        fi
+        
+        docker volume ls | grep -E "test_project.*postgres_data|real_test_project.*postgres_data" | awk '{print $2}' | xargs -r docker volume rm > /dev/null 2>&1 || true
+        
+        if [[ $QUIET -eq 0 ]]; then
+            echo "Test project volumes have been removed."
         fi
     fi
     
@@ -361,6 +420,10 @@ if [[ $RUN_E2E -eq 1 || ($SELECTED_TESTS -eq 0 && $RUN_INTEGRATION -eq 0 && $RUN
     if [[ $QUIET -eq 0 ]]; then
         echo "E2E test environment configured"
     fi
+
+    # Ensure Docker is available and start the Django test DB
+    check_docker || true
+    start_test_db || true
 fi
 
 # Clean up existing Docker containers if we're running integration or E2E tests

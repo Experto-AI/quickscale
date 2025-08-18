@@ -7,13 +7,13 @@ import importlib
 import time
 import shutil
 
-from quickscale.utils.env_utils import (
-    get_env,
-    refresh_env_cache
-)
+from quickscale.utils.env_utils import env_manager
+
+# Import centralized test utilities using DRY principles
+from tests.test_utilities import TestUtilities
 
 # Using run_quickscale_command from utils.py
-from tests.utils import run_quickscale_command
+import tests.utils.utils as test_utils
 
 class TestEnvFileLoading:
     """Test that environment files are correctly loaded during quickscale operations."""
@@ -77,22 +77,22 @@ PROJECT_NAME=test_project
         print(f".env file content:\n{modified_env}")
         
         # Force reload environment variables
-        refresh_env_cache()
+        env_manager.refresh_env_cache()
         env_utils_module = importlib.reload(__import__('quickscale.utils.env_utils'))
         # Explicitly initialize the environment after reload
-        env_utils_module.initialize_env()
+        env_manager.initialize_env()
         
         # Verify environment variables are loaded correctly
-        debug_value = get_env('DEBUG')
+        debug_value = TestUtilities.get_env('DEBUG')
         assert debug_value == 'True', f"DEBUG not loaded correctly. Got: '{debug_value}'"
         
-        secret_key = get_env('SECRET_KEY')
+        secret_key = TestUtilities.get_env('SECRET_KEY')
         assert secret_key == 'test_secret_key', f"SECRET_KEY not loaded correctly. Got: '{secret_key}'"
         
-        db_url = get_env('DATABASE_URL')
+        db_url = TestUtilities.get_env('DATABASE_URL')
         assert db_url == 'postgresql://postgres:password@db:5432/postgres', f"DATABASE_URL not loaded correctly. Got: '{db_url}'"
         
-        custom_var = get_env('TEST_CUSTOM_VARIABLE')
+        custom_var = TestUtilities.get_env('TEST_CUSTOM_VARIABLE')
         assert custom_var == 'test_value_456', f"Custom variable not loaded correctly. Got: '{custom_var}'"
         
         print("✅ Environment variables loaded correctly from .env file")
@@ -105,7 +105,7 @@ PROJECT_NAME=test_project
             shutil.copy(test_project_dir / '.env.example', env_path)
         
         # Initial load of environment
-        refresh_env_cache()
+        env_manager.refresh_env_cache()
         
         # Modify .env file with a new value
         initial_content = env_path.read_text()
@@ -113,13 +113,13 @@ PROJECT_NAME=test_project
         env_path.write_text(updated_content)
         
         # Before refresh, the new variable shouldn't be available
-        before_refresh = get_env('NEW_TEST_VAR')
+        before_refresh = TestUtilities.get_env('NEW_TEST_VAR')
         
         # Refresh the environment cache
-        refresh_env_cache()
+        env_manager.refresh_env_cache()
         
         # After refresh, the new variable should be available
-        after_refresh = get_env('NEW_TEST_VAR')
+        after_refresh = TestUtilities.get_env('NEW_TEST_VAR')
         
         # Verify the refresh behavior
         assert before_refresh != 'new_test_value', "Environment variable was loaded before refresh"

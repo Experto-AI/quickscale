@@ -32,7 +32,7 @@
                         </div>
                         
                         <!-- Credit Balance Breakdown -->
-                        {% if balance_breakdown %}
+                        {% if ENABLE_CREDIT_TYPES and balance_breakdown %}
                             <div class="content">
                                 <p class="has-text-weight-semibold">Balance Breakdown:</p>
                                 <div class="columns is-mobile">
@@ -75,13 +75,18 @@
                         {% endif %}
                     </div>
                     <footer class="card-footer">
+                        {% if ENABLE_BASIC_CREDITS or ENABLE_CREDIT_TYPES %}
                         <a href="{% url 'credits:dashboard' %}" class="card-footer-item">View Details</a>
+                        {% endif %}
+                        {% if ENABLE_STRIPE and ENABLE_CREDIT_PURCHASING %}
                         <a href="{% url 'credits:buy_credits' %}" class="card-footer-item">Buy Credits</a>
+                        {% endif %}
                     </footer>
                 </div>
             </div>
             
             <!-- Subscription Section -->
+            {% if ENABLE_STRIPE and ENABLE_SUBSCRIPTIONS %}
             <div class="column is-half">
                 <div class="card">
                     <div class="card-content">
@@ -154,6 +159,7 @@
                     </footer>
                 </div>
             </div>
+            {% endif %}
             
             <!-- Account Section -->
             <div class="column is-half">

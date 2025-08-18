@@ -17,7 +17,7 @@ from pathlib import Path
 from unittest.mock import patch, MagicMock, mock_open
 import os
 
-from tests.utils import ProjectTestMixin
+from tests.utils import DynamicProjectTestCase
 
 
 class TestSprint15UserSearchTemplates(unittest.TestCase):
@@ -310,13 +310,13 @@ class TestSprint15UserDetailImplementation(unittest.TestCase):
             self.assertIn(context_var, content, f"Should include {context_var} in context")
 
 
-class TestSprint15TemplateGeneration(ProjectTestMixin, unittest.TestCase):
+class TestSprint15TemplateGeneration(DynamicProjectTestCase):
     """Test Sprint 15 template generation and structure."""
     
     def test_project_structure_includes_user_management(self):
         """Test that generated project structure includes user management components."""
         # Create test project using the mixin's method
-        self.create_test_project()
+        self.project_path = self.create_test_project("test_sprint15_project")
         
         # Check that admin_dashboard app exists in the generated project
         admin_dashboard_path = self.project_path / "admin_dashboard"

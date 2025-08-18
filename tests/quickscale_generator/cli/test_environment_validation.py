@@ -5,7 +5,7 @@ from pathlib import Path
 import os
 
 from quickscale.commands.init_command import InitCommand
-from quickscale.utils.error_manager import ProjectError, ValidationError
+from quickscale.utils.error_manager import error_manager
 
 class TestEnvironmentValidation:
     """Tests for the environment validation functionality"""
@@ -53,13 +53,13 @@ class TestInitCommandValidation:
         invalid_names = ["123project", "project-name", "project.name", "project name"]
         
         for name in invalid_names:
-            with pytest.raises(ValidationError):
+            with pytest.raises(error_manager.ValidationError):
                 init_command.validate_project_name(name)
     
     def test_validate_project_dir_exists(self, init_command):
         """Test that validation fails when project directory already exists"""
         with patch('pathlib.Path.exists', return_value=True):
-            with pytest.raises(ProjectError):
+            with pytest.raises(error_manager.ProjectError):
                 init_command.validate_project_name("existing_project")
     
     @patch('shutil.copytree')
@@ -69,5 +69,5 @@ class TestInitCommandValidation:
         # Setup so template directory doesn't exist
         mock_exists.return_value = False
         
-        with pytest.raises(ProjectError, match="Template directory not found"):
+        with pytest.raises(error_manager.ProjectError, match="Template directory not found"):
             init_command.execute("test_project")

@@ -15,9 +15,10 @@ mock_stripe_module = MagicMock()
 mock_core_module = MagicMock()
 mock_env_utils_module = MagicMock()
 
-# Setup mock env functions
+# Setup mock env functions with custom test behavior
+# Note: Using custom mocks here instead of TestUtilities for specific test logic
 mock_env_utils_module.get_env = MagicMock(side_effect=lambda key, default=None: {
-    'STRIPE_ENABLED': 'True',
+    'ENABLE_STRIPE': 'True',
     'STRIPE_TEST_MODE': 'True'
 }.get(key, default))
 mock_env_utils_module.is_feature_enabled = MagicMock(return_value=True)
@@ -210,7 +211,7 @@ def stripe_test_mode():
     
     # Set up test environment variables
     os.environ.update({
-        'STRIPE_ENABLED': 'True',
+        'ENABLE_STRIPE': 'True',
         'STRIPE_TEST_MODE': 'True',
     })
     

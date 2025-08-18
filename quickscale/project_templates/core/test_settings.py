@@ -1,16 +1,17 @@
 """Test settings for QuickScale template - PostgreSQL only."""
 
 from .settings import *
+from .configuration import config
 
 # Use PostgreSQL for testing - NO SQLite fallback
 DATABASES = {
     'default': {
         'ENGINE': 'django.db.backends.postgresql',
-        'NAME': get_env('TEST_DB_NAME', 'quickscale_test'),
-        'USER': get_env('TEST_DB_USER', 'test_user'),
-        'PASSWORD': get_env('TEST_DB_PASSWORD', 'test_pass'),
-        'HOST': get_env('TEST_DB_HOST', 'localhost'),
-        'PORT': get_env('TEST_DB_PORT', '5433'),
+        'NAME': config.get_env('TEST_DB_NAME', 'quickscale_test'),
+        'USER': config.get_env('TEST_DB_USER', 'test_user'),
+        'PASSWORD': config.get_env('TEST_DB_PASSWORD', 'test_pass'),
+        'HOST': config.get_env('TEST_DB_HOST', 'localhost'),
+        'PORT': config.get_env('TEST_DB_PORT', '5433'),
         'OPTIONS': {
             'connect_timeout': 10,
         },

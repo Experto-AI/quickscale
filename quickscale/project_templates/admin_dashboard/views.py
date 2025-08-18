@@ -14,8 +14,8 @@ from django.http import HttpRequest, HttpResponse, JsonResponse
 from django.shortcuts import render, get_object_or_404, redirect
 from django.urls import reverse
 import json
+from core.configuration import config
 
-from core.env_utils import get_env, is_feature_enabled
 from .models import AuditLog
 from .utils import log_admin_action
 
@@ -25,8 +25,8 @@ logger = logging.getLogger(__name__)
 # Import the local StripeProduct model
 from stripe_manager.models import StripeProduct
 
-# Check if Stripe is enabled using the same logic as in settings.py
-stripe_enabled = is_feature_enabled(get_env('STRIPE_ENABLED', 'False'))
+# Check if Stripe is enabled using the configuration singleton
+stripe_enabled = config.is_stripe_enabled_and_configured()
 
 # Only attempt to import if Stripe is enabled and properly configured
 if stripe_enabled:
@@ -38,14 +38,10 @@ missing_api_keys = False
 
 # Only attempt to import if Stripe is enabled and properly configured
 if stripe_enabled:
-    # Also check that all required settings are present
-    stripe_public_key = get_env('STRIPE_PUBLIC_KEY', '')
-    stripe_secret_key = get_env('STRIPE_SECRET_KEY', '')
-    stripe_webhook_secret = get_env('STRIPE_WEBHOOK_SECRET', '')
-    
-    if not stripe_public_key or not stripe_secret_key or not stripe_webhook_secret:
+    # Also check that all required settings are present using configuration singleton
+    if not config.stripe.public_key or not config.stripe.secret_key or not config.stripe.webhook_secret:
         missing_api_keys = True
-    elif stripe_public_key and stripe_secret_key and stripe_webhook_secret:
+    elif config.stripe.public_key and config.stripe.secret_key and config.stripe.webhook_secret:
         try:
             # Get Stripe manager
             stripe_manager = StripeManager.get_instance()
@@ -839,8 +835,8 @@ def product_detail(request: HttpRequest, product_id: str) -> HttpResponse:
     Returns:
         Rendered product detail template
     """
-    # Check if Stripe is enabled
-    stripe_enabled = is_feature_enabled(get_env('STRIPE_ENABLED', 'False'))
+    # Check if Stripe is enabled using configuration singleton
+    stripe_enabled = config.is_stripe_enabled_and_configured()
     
     context = {
         'stripe_enabled': stripe_enabled,
@@ -908,8 +904,8 @@ def product_sync(request: HttpRequest, product_id: str) -> HttpResponse:
     if request.method != 'POST':
         return redirect('admin_dashboard:product_detail', product_id=product_id)
     
-    # Check if Stripe is enabled
-    stripe_enabled = is_feature_enabled(get_env('STRIPE_ENABLED', 'False'))
+    # Check if Stripe is enabled using configuration singleton
+    stripe_enabled = config.is_stripe_enabled_and_configured()
     
     if not stripe_enabled or not STRIPE_AVAILABLE or stripe_manager is None:
         messages.error(request, 'Stripe integration is not enabled or available')

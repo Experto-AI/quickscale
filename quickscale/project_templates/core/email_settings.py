@@ -2,23 +2,19 @@
 import os
 from pathlib import Path
 
-from dotenv import load_dotenv
-from .env_utils import get_env, is_feature_enabled
+from .configuration import config
 
-# Load environment variables
-load_dotenv()
+# Email Configuration using configuration singleton
+EMAIL_HOST = config.email.host
+EMAIL_PORT = config.email.port
+EMAIL_HOST_USER = config.email.user
+EMAIL_HOST_PASSWORD = config.email.password
+EMAIL_USE_TLS = config.email.use_tls
+EMAIL_USE_SSL = config.email.use_ssl
+DEFAULT_FROM_EMAIL = config.get_env('DEFAULT_FROM_EMAIL', 'noreply@example.com')
+SERVER_EMAIL = config.get_env('SERVER_EMAIL', 'server@example.com')
 
-# Email Configuration
-EMAIL_HOST = get_env('EMAIL_HOST', '')
-EMAIL_PORT = int(get_env('EMAIL_PORT', 587))
-EMAIL_HOST_USER = get_env('EMAIL_HOST_USER', '')
-EMAIL_HOST_PASSWORD = get_env('EMAIL_HOST_PASSWORD', '')
-EMAIL_USE_TLS = get_env('EMAIL_USE_TLS', 'True') == 'True'
-EMAIL_USE_SSL = get_env('EMAIL_USE_SSL', 'False') == 'True'
-DEFAULT_FROM_EMAIL = get_env('DEFAULT_FROM_EMAIL', 'noreply@example.com')
-SERVER_EMAIL = get_env('SERVER_EMAIL', 'server@example.com')
-
-IS_PRODUCTION = is_feature_enabled(get_env('IS_PRODUCTION', 'False'))
+IS_PRODUCTION = config.get_env_bool('IS_PRODUCTION', False)
 DEBUG = not IS_PRODUCTION
 EMAIL_BACKEND = 'django.core.mail.backends.console.EmailBackend' if DEBUG else 'django.core.mail.backends.smtp.EmailBackend'
 
@@ -27,9 +23,14 @@ def validate_email_settings():
     if not IS_PRODUCTION:
         return  # Skip validation in development
     
-    required_email_settings = ['EMAIL_HOST', 'EMAIL_HOST_USER', 'EMAIL_HOST_PASSWORD']
-    missing = [setting for setting in required_email_settings if not get_env(setting)]
-    if missing:
+    if not config.email.configured:
+        missing = []
+        if not config.email.host:
+            missing.append('EMAIL_HOST')
+        if not config.email.user:
+            missing.append('EMAIL_HOST_USER')
+        if not config.email.password:
+            missing.append('EMAIL_HOST_PASSWORD')
         raise ValueError(f"Production email settings missing: {', '.join(missing)}")
 
 # Validate email settings on import
@@ -39,7 +40,7 @@ validate_email_settings()
 ACCOUNT_UNIQUE_EMAIL = True
 # Email verification is optional by default for better UX with default accounts
 # Set ACCOUNT_EMAIL_VERIFICATION=mandatory in .env for stricter verification in production
-ACCOUNT_EMAIL_VERIFICATION = get_env('ACCOUNT_EMAIL_VERIFICATION', 'optional')
+ACCOUNT_EMAIL_VERIFICATION = config.get_env('ACCOUNT_EMAIL_VERIFICATION', 'optional')
 ACCOUNT_EMAIL_SUBJECT_PREFIX = '[QuickScale] '
 
 # Updated to new django-allauth format (replacing deprecated settings)

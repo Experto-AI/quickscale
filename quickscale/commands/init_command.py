@@ -6,7 +6,7 @@ from typing import Optional
 
 import secrets
 import string
-from ..utils.error_manager import ProjectError, ValidationError
+from ..utils.error_manager import error_manager
 from ..utils.template_generator import (
     copy_sync_modules,
     fix_imports,
@@ -27,12 +27,12 @@ class InitCommand(Command):
     def validate_project_name(self, project_name: str) -> None:
         """Validate the project name is a valid Python identifier."""
         if not project_name.isidentifier():
-            raise ValidationError("Project name must be a valid Python identifier")
+            raise error_manager.ValidationError("Project name must be a valid Python identifier")
         
         # Check if the project directory already exists
         project_dir = Path.cwd() / project_name
         if project_dir.exists():
-            raise ProjectError(f"Directory {project_name} already exists")
+            raise error_manager.ProjectError(f"Directory {project_name} already exists")
             
     def _generate_secret_key(self, length: int = 50) -> str:
         """Generate a cryptographically secure secret key with specified length."""
@@ -56,9 +56,9 @@ class InitCommand(Command):
             if not any(project_dir.iterdir()):
                 return  # Directory exists but is empty, which is fine
             else:
-                raise ProjectError(f"Directory {project_name} already exists and is not empty")
+                raise error_manager.ProjectError(f"Directory {project_name} already exists and is not empty")
         except PermissionError as e:
-            raise ProjectError(f"Permission denied accessing directory {project_name}: {str(e)}")
+            raise error_manager.ProjectError(f"Permission denied accessing directory {project_name}: {str(e)}")
     
     def _get_template_variables(self, project_name: str) -> dict:
         """Get template variables for rendering project templates based on project name."""
@@ -103,7 +103,7 @@ class InitCommand(Command):
         # Get template directory path
         template_dir = Path(__file__).parent.parent / 'project_templates'
         if not template_dir.exists():
-            raise ProjectError("Template directory not found")
+            raise error_manager.ProjectError("Template directory not found")
         
         # Create project directory
         project_dir = Path.cwd() / project_name
@@ -159,9 +159,9 @@ Documentation available at:
 ./docs/
 """)
         except OSError as e:
-            raise ProjectError(f"Failed to create project: {str(e)}")
+            raise error_manager.ProjectError(f"Failed to create project: {str(e)}")
         except Exception as e:
             # Clean up on failure
             if project_dir.exists():
                 shutil.rmtree(project_dir)
-            raise ProjectError(f"Unexpected error creating project: {str(e)}")
+            raise error_manager.ProjectError(f"Unexpected error creating project: {str(e)}")

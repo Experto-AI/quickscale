@@ -2,7 +2,14 @@ import os
 import pytest
 from unittest.mock import patch
 import re
-from quickscale.utils.env_utils import get_env, is_feature_enabled, refresh_env_cache
+import sys
+
+# Add the project root to sys.path to access tests module
+project_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
+sys.path.insert(0, project_root)
+
+# Import centralized test utilities using DRY principles
+from tests.test_utilities import TestUtilities
 
 # Import the functions that need to be tested
 # You may need to adjust the import path based on the actual project structure
@@ -13,16 +20,16 @@ except ImportError:
     def validate_production_settings():
         """Validate settings for production environment."""
         # Use IS_PRODUCTION (opposite of old DEBUG logic)
-        if is_feature_enabled(get_env('IS_PRODUCTION', 'False')):
-            if get_env('SECRET_KEY') == 'dev-only-dummy-key-replace-in-production':
+        if TestUtilities.is_feature_enabled(TestUtilities.get_env('IS_PRODUCTION', 'False')):
+            if TestUtilities.get_env('SECRET_KEY') == 'dev-only-dummy-key-replace-in-production':
                 raise ValueError("Production requires a secure SECRET_KEY")
-            if '*' in get_env('ALLOWED_HOSTS', '').split(','):
+            if '*' in TestUtilities.get_env('ALLOWED_HOSTS', '').split(','):
                 raise ValueError("Production requires specific ALLOWED_HOSTS")
             # Check database settings
-            if get_env('DB_PASSWORD') in ['postgres', 'admin', 'adminpasswd', 'password']:
+            if TestUtilities.get_env('DB_PASSWORD') in ['postgres', 'admin', 'adminpasswd', 'password']:
                 raise ValueError("Production requires a secure database password")
             # Check email settings
-            if not is_feature_enabled(get_env('EMAIL_USE_TLS', 'True')):
+            if not TestUtilities.is_feature_enabled(TestUtilities.get_env('EMAIL_USE_TLS', 'True')):
                 raise ValueError("Production requires TLS for email")
 
 
@@ -79,20 +86,20 @@ class TestProductionSecurity:
         # reasonably secure and clearly marked as non-production values
         
         with patch.dict(os.environ, {}, clear=True):
-            refresh_env_cache()  # Refresh the cache to pick up the new environment
+            TestUtilities.refresh_env_cache()  # Refresh the cache to pick up the new environment
             
             # Explicitly set a default value for testing, don't rely on environment
             default_secret_key = 'dev-only-dummy-key-replace-in-production'
             default_db_password = 'adminpasswd'
             
             # IS_PRODUCTION should be False by default for development ease
-            assert not is_feature_enabled(get_env('IS_PRODUCTION', 'False'))
+            assert not TestUtilities.is_feature_enabled(TestUtilities.get_env('IS_PRODUCTION', 'False'))
             
             # Secret key should be clearly marked as development-only
-            secret_key = get_env('SECRET_KEY', default_secret_key)
+            secret_key = TestUtilities.get_env('SECRET_KEY', default_secret_key)
             if secret_key == default_secret_key:
                 assert ('dev' in secret_key.lower() or 'dummy' in secret_key.lower())
             
             # Database password should not be extremely common or blank
-            db_password = get_env('DB_PASSWORD', default_db_password)
+            db_password = TestUtilities.get_env('DB_PASSWORD', default_db_password)
             assert db_password.lower() not in ['', 'password', '123456', 'admin']

@@ -7,13 +7,8 @@ from contextlib import contextmanager
 import time
 import re
 
-from tests.utils import (
-    wait_for_docker_service,
-    run_quickscale_command,
-    is_docker_available,
-    DynamicProjectGenerator,
-    find_available_ports
-)
+import tests.utils.utils as test_utils
+from tests.utils import DynamicProjectGenerator
 
 @pytest.mark.e2e
 class TestDjangoCommands:
@@ -30,7 +25,7 @@ class TestDjangoCommands:
     @pytest.fixture(scope="class", autouse=True)
     def check_docker(self):
         """Check if Docker is available before running any tests."""
-        is_docker_available()
+        test_utils.is_docker_available()
     
     @pytest.fixture(scope="class")
     def test_project(self, tmp_path_factory):
@@ -54,7 +49,7 @@ class TestDjangoCommands:
         #     return None
 
         # Find available ports for web and db
-        ports = find_available_ports(count=2, start_port=9000, end_port=10000)
+        ports = test_utils.find_available_ports(count=2, start_port=9000, end_port=10000)
         if not ports:
             pytest.skip("Could not find available ports for e2e tests")
             return None
@@ -91,30 +86,14 @@ class TestDjangoCommands:
         dc_content = dc_content.replace("8000:8000", f"{web_port}:8000")
         dc_content = dc_content.replace("5432:5432", f"{db_port}:5432")
         dc_path.write_text(dc_content)
-        
-        # Try to validate docker-compose configuration - REMOVED direct docker-compose config check
-        # with self.in_project_dir(project_dir):
-        #     try:
-        #         validate_result = subprocess.run(
-        #             ['docker-compose', 'config'], 
-        #             capture_output=True, 
-        #             text=True, 
-        #             check=False, 
-        #             timeout=10
-        #         )
-        #         if validate_result.returncode != 0:
-        #             print(f"Docker Compose validation failed: {validate_result.stderr}")
-        #             print("This might cause issues with service startup")
-        #     except Exception as e:
-        #         print(f"Error validating docker-compose.yml: {e}")
-        
+       
         # Try to start services
         with self.in_project_dir(project_dir):
             print(f"Starting services for project: {project_name} with ports web={web_port}, db={db_port}")
             
             # First make sure any previous services are stopped
             try:
-                down_result = run_quickscale_command('down', timeout=30, check=False)
+                down_result = test_utils.run_quickscale_command('down', timeout=30, check=False)
                 if down_result.returncode != 0:
                     print(f"Warning: Pre-startup cleanup failed: {down_result.stderr}")
             except Exception as e:
@@ -124,7 +103,7 @@ class TestDjangoCommands:
             try:
                 print(f"Starting services...")
                 # Use check=True to fail immediately if 'up' command fails
-                result = run_quickscale_command('up', ['-d'], timeout=180, check=True)
+                result = test_utils.run_quickscale_command('up', ['-d'], timeout=180, check=True)
                 print("Services started successfully via 'quickscale up'.")
             except Exception as e:
                 # If 'up' fails, fail the fixture setup
@@ -137,7 +116,7 @@ class TestDjangoCommands:
                 print("Waiting for services to initialize...")
                 time.sleep(15)
                 
-                ps_result = run_quickscale_command('ps', check=True, timeout=10)
+                ps_result = test_utils.run_quickscale_command('ps', check=True, timeout=10)
                 ps_output = ps_result.stdout
                 
                 # Assert that key services are running
@@ -161,7 +140,7 @@ class TestDjangoCommands:
         # Clean up after tests (keep check=False for cleanup)
         with self.in_project_dir(project_dir):
             print("Cleaning up test project...")
-            run_quickscale_command('down', timeout=30, check=False)
+            test_utils.run_quickscale_command('down', timeout=30, check=False)
     
     @contextmanager
     def in_project_dir(self, project_dir):

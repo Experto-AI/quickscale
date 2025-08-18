@@ -4,7 +4,12 @@ import sys
 from unittest.mock import patch, MagicMock
 import unittest
 
-from quickscale.utils.env_utils import get_env, is_feature_enabled, refresh_env_cache
+# Add the project root to sys.path to access tests module
+project_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
+sys.path.insert(0, project_root)
+
+# Import centralized test utilities using DRY principles
+from tests.test_utilities import TestUtilities
 
 # Configure logging for tests
 import logging
@@ -21,33 +26,32 @@ class StripeConfigurationTests(unittest.TestCase):
         """Restore original environment after each test."""
         os.environ.clear()
         os.environ.update(self.original_env)
-        refresh_env_cache()  # Ensure the cache is restored after each test
+        TestUtilities.refresh_env_cache()  # Ensure the cache is restored after each test
 
     def test_stripe_settings_with_flag_enabled(self):
         """Test that enabling Stripe loads the correct settings."""
         # Create a test environment with Stripe enabled
         test_env = {
-            'STRIPE_ENABLED': 'true',
+            'ENABLE_STRIPE': 'true',
             'STRIPE_PUBLIC_KEY': 'pk_test_example',
             'STRIPE_SECRET_KEY': 'sk_test_example',
             'STRIPE_WEBHOOK_SECRET': 'whsec_example',
         }
         
-        # Patch the environment cache
-        with patch('quickscale.utils.env_utils._env_vars', test_env):
-            with patch('quickscale.utils.env_utils._env_vars_from_file', {}):
-                # Test the flag is enabled
-                self.assertTrue(is_feature_enabled(get_env('STRIPE_ENABLED', 'False')), 
-                               "STRIPE_ENABLED should be True when set to 'true'")
+        # Patch the environment directly
+        with patch.dict(os.environ, test_env):
+            # Test the flag is enabled
+            self.assertTrue(TestUtilities.is_feature_enabled(TestUtilities.get_env('ENABLE_STRIPE', 'False')), 
+                           "ENABLE_STRIPE should be True when set to 'true'")
+            
+            # Verify settings values are retrieved correctly through get_env
+            self.assertEqual(TestUtilities.get_env('STRIPE_PUBLIC_KEY'), 'pk_test_example')
+            self.assertEqual(TestUtilities.get_env('STRIPE_SECRET_KEY'), 'sk_test_example')
+            self.assertEqual(TestUtilities.get_env('STRIPE_WEBHOOK_SECRET'), 'whsec_example')
+            
+            # Without patching settings.INSTALLED_APPS directly, we can verify our logic:
+            # Assume we have a function that determines if Stripe app should be in INSTALLED_APPS based on ENABLE_STRIPE
+            def should_include_stripe_app():
+                return TestUtilities.is_feature_enabled(TestUtilities.get_env('ENABLE_STRIPE', 'False'))
                 
-                # Verify settings values are retrieved correctly through get_env
-                self.assertEqual(get_env('STRIPE_PUBLIC_KEY'), 'pk_test_example')
-                self.assertEqual(get_env('STRIPE_SECRET_KEY'), 'sk_test_example')
-                self.assertEqual(get_env('STRIPE_WEBHOOK_SECRET'), 'whsec_example')
-                
-                # Without patching settings.INSTALLED_APPS directly, we can verify our logic:
-                # Assume we have a function that determines if Stripe app should be in INSTALLED_APPS based on STRIPE_ENABLED
-                def should_include_stripe_app():
-                    return is_feature_enabled(get_env('STRIPE_ENABLED', 'False'))
-                
-                self.assertTrue(should_include_stripe_app(), "stripe.apps.StripeConfig should be included when STRIPE_ENABLED is True")
+                self.assertTrue(should_include_stripe_app(), "stripe.apps.StripeConfig should be included when ENABLE_STRIPE is True")

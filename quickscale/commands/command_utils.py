@@ -11,6 +11,7 @@ import socket
 from pathlib import Path
 from typing import List, Optional, Tuple, Dict, Any, NoReturn
 from quickscale.utils.timeout_constants import POSTGRES_CONNECTION_TIMEOUT
+from quickscale.config.generator_config import generator_config
 
 # Determine the correct docker compose command
 _docker_compose_cmd = "docker compose" if shutil.which("docker-compose") is None else "docker-compose"
@@ -124,7 +125,7 @@ def wait_for_postgres(
     for attempt in range(1, max_attempts + 1):
         try:
             # Get database name from environment variables or use default
-            db_name = os.environ.get('DB_NAME', 'quickscale')
+            db_name = generator_config.get_env('DB_NAME', 'quickscale')
             
             result = subprocess.run(
                 DOCKER_COMPOSE_COMMAND + ["exec", "-e", f"PGUSER={pg_user}", "db", "pg_isready", "-U", pg_user, "-d", db_name],

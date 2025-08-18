@@ -18,8 +18,6 @@ from pathlib import Path
 from unittest.mock import patch, MagicMock, mock_open
 import os
 
-from tests.utils import ProjectTestMixin
-
 
 class TestSprint16AuditLogModelTemplate(unittest.TestCase):
     """Test Sprint 16 AuditLog model template generation."""

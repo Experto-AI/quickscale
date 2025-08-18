@@ -1,10 +1,16 @@
-"""Tests for Stripe settings validation."""
-import unittest
-from unittest.mock import patch, MagicMock
+"""Test for production settings validation."""
 import os
+import unittest
 import logging
+from unittest.mock import patch, MagicMock
+import sys
 
-from quickscale.utils.env_utils import refresh_env_cache, get_env, is_feature_enabled
+# Add the project root to sys.path to access tests module
+project_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
+sys.path.insert(0, project_root)
+
+# Import centralized test utilities using DRY principles
+from tests.test_utilities import TestUtilities
 
 
 class StripeSettingsValidationTest(unittest.TestCase):
@@ -14,26 +20,25 @@ class StripeSettingsValidationTest(unittest.TestCase):
         """Set up environment for each test."""
         self.original_env = os.environ.copy()
         # Clear any cached environment variables
-        refresh_env_cache()
+        TestUtilities.refresh_env_cache()
         
     def tearDown(self):
         """Restore original environment after each test."""
         os.environ.clear()
         os.environ.update(self.original_env)
-        refresh_env_cache()
+        TestUtilities.refresh_env_cache()
 
     def test_stripe_disabled_by_default(self):
         """Test that Stripe integration is disabled by default."""
-        with patch('quickscale.utils.env_utils._env_vars', {}):
-            with patch('quickscale.utils.env_utils._env_vars_from_file', {}):
-                self.assertFalse(is_feature_enabled(get_env('STRIPE_ENABLED', 'False')))
+        with patch.dict(os.environ, {}, clear=True):
+            self.assertFalse(TestUtilities.is_feature_enabled(TestUtilities.get_env('ENABLE_STRIPE', 'False')))
     
     @patch('logging.warning')
     def test_settings_validation_with_missing_settings(self, mock_warning):
         """Test validation logic when Stripe is enabled but required settings are missing."""
         # Mock environment variables
         test_env = {
-            'STRIPE_ENABLED': 'true',
+            'ENABLE_STRIPE': 'true',
             'STRIPE_PUBLIC_KEY': '',
             'STRIPE_SECRET_KEY': '',
             'STRIPE_WEBHOOK_SECRET': ''
@@ -44,16 +49,16 @@ class StripeSettingsValidationTest(unittest.TestCase):
             installed_apps = ['django.contrib.auth']
             
             # Mock the stripe_enabled_flag instead of importing from settings
-            stripe_enabled_flag = is_feature_enabled(get_env('STRIPE_ENABLED', 'False'))
+            stripe_enabled_flag = TestUtilities.is_feature_enabled(TestUtilities.get_env('ENABLE_STRIPE', 'False'))
             
             # Create a function that simulates the validation logic in settings.py
             def validate_stripe_settings():
                 if stripe_enabled_flag:
                     # Emulate the validation logic from settings.py
                     missing_settings = []
-                    stripe_public_key = get_env('STRIPE_PUBLIC_KEY', '')
-                    stripe_secret_key = get_env('STRIPE_SECRET_KEY', '')
-                    stripe_webhook_secret = get_env('STRIPE_WEBHOOK_SECRET', '')
+                    stripe_public_key = TestUtilities.get_env('STRIPE_PUBLIC_KEY', '')
+                    stripe_secret_key = TestUtilities.get_env('STRIPE_SECRET_KEY', '')
+                    stripe_webhook_secret = TestUtilities.get_env('STRIPE_WEBHOOK_SECRET', '')
                     
                     if not stripe_public_key:
                         missing_settings.append('STRIPE_PUBLIC_KEY')
@@ -89,7 +94,7 @@ class StripeSettingsValidationTest(unittest.TestCase):
         """Test validation logic when Stripe is enabled with valid settings."""
         # Mock environment variables
         test_env = {
-            'STRIPE_ENABLED': 'true',
+            'ENABLE_STRIPE': 'true',
             'STRIPE_PUBLIC_KEY': 'pk_test_valid',
             'STRIPE_SECRET_KEY': 'sk_test_valid',
             'STRIPE_WEBHOOK_SECRET': 'whsec_valid'
@@ -100,16 +105,16 @@ class StripeSettingsValidationTest(unittest.TestCase):
             installed_apps = ['django.contrib.auth']
             
             # Mock the stripe_enabled_flag instead of importing from settings
-            stripe_enabled_flag = is_feature_enabled(get_env('STRIPE_ENABLED', 'False'))
+            stripe_enabled_flag = TestUtilities.is_feature_enabled(TestUtilities.get_env('ENABLE_STRIPE', 'False'))
             
             # Create a function that simulates the validation logic in settings.py
             def validate_stripe_settings():
                 if stripe_enabled_flag:
                     # Emulate the validation logic from settings.py
                     missing_settings = []
-                    stripe_public_key = get_env('STRIPE_PUBLIC_KEY', '')
-                    stripe_secret_key = get_env('STRIPE_SECRET_KEY', '')
-                    stripe_webhook_secret = get_env('STRIPE_WEBHOOK_SECRET', '')
+                    stripe_public_key = TestUtilities.get_env('STRIPE_PUBLIC_KEY', '')
+                    stripe_secret_key = TestUtilities.get_env('STRIPE_SECRET_KEY', '')
+                    stripe_webhook_secret = TestUtilities.get_env('STRIPE_WEBHOOK_SECRET', '')
                     
                     if not stripe_public_key:
                         missing_settings.append('STRIPE_PUBLIC_KEY')
@@ -144,7 +149,7 @@ class StripeSettingsValidationTest(unittest.TestCase):
         """Test validation logic when Stripe is enabled but missing some settings."""
         # Mock environment variables with one missing setting
         test_env = {
-            'STRIPE_ENABLED': 'true',
+            'ENABLE_STRIPE': 'true',
             'STRIPE_PUBLIC_KEY': 'pk_test_valid',
             'STRIPE_SECRET_KEY': '',  # Missing
             'STRIPE_WEBHOOK_SECRET': 'whsec_valid'
@@ -155,16 +160,16 @@ class StripeSettingsValidationTest(unittest.TestCase):
             installed_apps = ['django.contrib.auth']
             
             # Mock the stripe_enabled_flag instead of importing from settings
-            stripe_enabled_flag = is_feature_enabled(get_env('STRIPE_ENABLED', 'False'))
+            stripe_enabled_flag = TestUtilities.is_feature_enabled(TestUtilities.get_env('ENABLE_STRIPE', 'False'))
             
             # Create a function that simulates the validation logic in settings.py
             def validate_stripe_settings():
                 if stripe_enabled_flag:
                     # Emulate the validation logic from settings.py
                     missing_settings = []
-                    stripe_public_key = get_env('STRIPE_PUBLIC_KEY', '')
-                    stripe_secret_key = get_env('STRIPE_SECRET_KEY', '')
-                    stripe_webhook_secret = get_env('STRIPE_WEBHOOK_SECRET', '')
+                    stripe_public_key = TestUtilities.get_env('STRIPE_PUBLIC_KEY', '')
+                    stripe_secret_key = TestUtilities.get_env('STRIPE_SECRET_KEY', '')
+                    stripe_webhook_secret = TestUtilities.get_env('STRIPE_WEBHOOK_SECRET', '')
                     
                     if not stripe_public_key:
                         missing_settings.append('STRIPE_PUBLIC_KEY')

@@ -10,30 +10,25 @@ import shutil
 from pathlib import Path
 from django.test import TestCase
 
-from tests.utils import ProjectTestMixin
+from tests.utils import DynamicProjectTestCase
 
 
-class TestUserTemplateGeneration(ProjectTestMixin, TestCase):
+class TestUserTemplateGeneration(DynamicProjectTestCase):
     """Test that QuickScale generates working User authentication templates."""
 
     def setUp(self):
         """Set up test environment."""
         super().setUp()
-        # Create a temporary directory for the test project
-        self.test_dir = Path(tempfile.mkdtemp())
         self.project_name = "test_user_project"
-        self.project_path = self.test_dir / self.project_name
 
     def tearDown(self):
         """Clean up test environment."""
-        if self.test_dir.exists():
-            shutil.rmtree(self.test_dir)
         super().tearDown()
 
     def test_user_models_template_generation(self):
         """Test that User models are correctly generated in project templates."""
         # Create test project
-        self.create_test_project()
+        self.project_path = self.create_test_project(self.project_name)
         
         # Check that users models.py exists
         models_file = self.project_path / "users" / "models.py"
@@ -48,7 +43,7 @@ class TestUserTemplateGeneration(ProjectTestMixin, TestCase):
     def test_user_forms_template_generation(self):
         """Test that User forms are correctly generated."""
         # Create test project
-        self.create_test_project()
+        self.project_path = self.create_test_project(self.project_name)
         
         # Check that users forms.py exists
         forms_file = self.project_path / "users" / "forms.py"
@@ -61,7 +56,7 @@ class TestUserTemplateGeneration(ProjectTestMixin, TestCase):
     def test_user_views_template_generation(self):
         """Test that User views are correctly generated."""
         # Create test project
-        self.create_test_project()
+        self.project_path = self.create_test_project(self.project_name)
         
         # Check that users views.py exists
         views_file = self.project_path / "users" / "views.py"
@@ -74,7 +69,7 @@ class TestUserTemplateGeneration(ProjectTestMixin, TestCase):
     def test_user_urls_template_generation(self):
         """Test that User URLs are correctly generated."""
         # Create test project
-        self.create_test_project()
+        self.project_path = self.create_test_project(self.project_name)
         
         # Check that users urls.py exists
         urls_file = self.project_path / "users" / "urls.py"
@@ -87,7 +82,7 @@ class TestUserTemplateGeneration(ProjectTestMixin, TestCase):
     def test_user_admin_template_generation(self):
         """Test that User admin interface is correctly generated."""
         # Create test project
-        self.create_test_project()
+        self.project_path = self.create_test_project(self.project_name)
         
         # Check that users admin.py exists
         admin_file = self.project_path / "users" / "admin.py"
@@ -100,7 +95,7 @@ class TestUserTemplateGeneration(ProjectTestMixin, TestCase):
     def test_user_migrations_template_generation(self):
         """Test that User migrations are correctly generated."""
         # Create test project
-        self.create_test_project()
+        self.project_path = self.create_test_project(self.project_name)
         
         # Check that users migrations directory exists
         migrations_dir = self.project_path / "users" / "migrations"
@@ -113,7 +108,7 @@ class TestUserTemplateGeneration(ProjectTestMixin, TestCase):
     def test_user_templates_generation(self):
         """Test that User templates are correctly generated."""
         # Create test project
-        self.create_test_project()
+        self.project_path = self.create_test_project(self.project_name)
         
         # Check that user templates exist in main templates directory
         templates_dir = self.project_path / "templates" / "users"
@@ -126,7 +121,7 @@ class TestUserTemplateGeneration(ProjectTestMixin, TestCase):
     def test_auth_templates_generation(self):
         """Test that authentication templates are correctly generated."""
         # Create test project
-        self.create_test_project()
+        self.project_path = self.create_test_project(self.project_name)
         
         # Check that account templates exist
         account_templates_dir = self.project_path / "templates" / "account"
@@ -143,7 +138,7 @@ class TestUserTemplateGeneration(ProjectTestMixin, TestCase):
     def test_user_middleware_generation(self):
         """Test that user security middleware is correctly generated."""
         # Create test project
-        self.create_test_project()
+        self.project_path = self.create_test_project(self.project_name)
         
         # Check that users middleware.py exists
         middleware_file = self.project_path / "users" / "middleware.py"
@@ -156,7 +151,7 @@ class TestUserTemplateGeneration(ProjectTestMixin, TestCase):
     def test_user_management_commands_generation(self):
         """Test that user management commands are correctly generated."""
         # Create test project
-        self.create_test_project()
+        self.project_path = self.create_test_project(self.project_name)
         
         # Check that management commands directory exists
         commands_dir = self.project_path / "users" / "management" / "commands"
@@ -169,7 +164,7 @@ class TestUserTemplateGeneration(ProjectTestMixin, TestCase):
     def test_user_app_registration(self):
         """Test that users app is properly registered in settings."""
         # Create test project
-        self.create_test_project()
+        self.project_path = self.create_test_project(self.project_name)
         
         # Check that users is in INSTALLED_APPS (using modern AppConfig format)
         settings_file = self.project_path / "core" / "settings.py"
@@ -183,7 +178,7 @@ class TestUserTemplateGeneration(ProjectTestMixin, TestCase):
     def test_allauth_configuration(self):
         """Test that django-allauth is properly configured."""
         # Create test project
-        self.create_test_project()
+        self.project_path = self.create_test_project(self.project_name)
         
         # Check that allauth is configured in settings
         settings_file = self.project_path / "core" / "settings.py"

@@ -5,9 +5,7 @@ import logging
 from pathlib import Path
 from typing import Optional, List, Any, NoReturn, Dict, Union
 
-from quickscale.utils.error_manager import (
-    CommandError, handle_command_error, convert_exception
-)
+from quickscale.utils.error_manager import error_manager
 
 
 class Command(abc.ABC):
@@ -37,9 +35,9 @@ class Command(abc.ABC):
                     exit_on_error: bool = True) -> Optional[NoReturn]:
         """Handle command errors with context."""
         if isinstance(error, str):
-            error_obj = CommandError(error, recovery=recovery)
-        elif not isinstance(error, CommandError):
-            error_obj = convert_exception(error)
+            error_obj = error_manager.CommandError(error, recovery=recovery)
+        elif not isinstance(error, error_manager.CommandError):
+            error_obj = error_manager.convert_exception(error)
             if recovery:
                 error_obj.recovery = recovery
         else:
@@ -55,7 +53,7 @@ class Command(abc.ABC):
             else:
                 error_obj.details = f"Context: {context_str}"
                 
-        return handle_command_error(error_obj, self.logger, exit_on_error)
+        return error_manager.handle_command_error(error_obj, self.logger, exit_on_error)
         
     def safe_execute(self, *args: Any, **kwargs: Any) -> Any:
         """Execute the command with error handling."""

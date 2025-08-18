@@ -6,16 +6,16 @@ import importlib.metadata
 from typing import Dict, Any, Optional, Union, List, Tuple
 from django.conf import settings
 
+# Use relative import for project templates
 try:
-    from core.env_utils import get_env, is_feature_enabled
+    from ..core.configuration import config
 except ImportError:
-    # Fallback for test environment
-    def get_env(key: str, default: Any = None, from_env_file: bool = False) -> Any:
-        return os.environ.get(key, default)
-    
-    def is_feature_enabled(feature_key: str) -> bool:
-        value = os.environ.get(feature_key, '').lower()
-        return value in ('true', 'yes', '1', 'on', 'enabled', 't', 'y')
+    # Fallback for testing context where relative imports might not work
+    from core.configuration import config
+
+def _is_testing():
+    """Check if we're in a test environment."""
+    return 'pytest' in os.environ.get('_', '') or 'test' in os.environ.get('DJANGO_SETTINGS_MODULE', '')
 
 # from stripe import StripeClient # Move this import
 import stripe
@@ -49,11 +49,11 @@ class StripeManager:
         if self.__class__._initialized:
             return
 
-        stripe_enabled = is_feature_enabled(get_env('STRIPE_ENABLED', 'False'))
-
-        if not stripe_enabled:
-            logger.warning("Stripe API is not enabled. Enable STRIPE_ENABLED in .env.")
-            raise StripeConfigurationError("Stripe integration is not enabled")
+        from django.conf import settings
+        
+        if not config.is_stripe_enabled_and_configured():
+            logger.warning("Stripe API is not enabled or not properly configured.")
+            raise StripeConfigurationError("Stripe integration is not enabled or properly configured")
 
         # Move the import here, inside the conditional block
         try:
@@ -71,8 +71,9 @@ class StripeManager:
         except Exception as e:
             logger.warning(f"Error retrieving Stripe package version from metadata: {e}")
 
-        # Get API key configuration
-        api_key = getattr(settings, 'STRIPE_SECRET_KEY', None)
+        # Get API key configuration from our configuration singleton
+        api_key = config.stripe.secret_key
+        
         if not api_key:
             logger.error("Stripe secret key not configured. Configure STRIPE_SECRET_KEY IN .env.")
             raise StripeConfigurationError("Stripe secret key not configured")
@@ -80,8 +81,8 @@ class StripeManager:
         # Set the global API key for the stripe module
         stripe.api_key = api_key
 
-        # Set API version from environment or default to a modern version
-        stripe_api_version = os.environ.get('STRIPE_API_VERSION', None)
+        # Set API version from configuration singleton
+        stripe_api_version = config.stripe.api_version
 
         # Configure Stripe API client using StripeClient
         try:
@@ -90,7 +91,7 @@ class StripeManager:
 
             # Optional connectivity test - don't fail initialization if this fails
             # This allows the app to start even when Stripe is temporarily unavailable
-            connectivity_test_enabled = is_feature_enabled(get_env('STRIPE_CONNECTIVITY_TEST', 'True'))
+            connectivity_test_enabled = config.get_env_bool('STRIPE_CONNECTIVITY_TEST', True)
             
             if connectivity_test_enabled:
                 try:
@@ -769,9 +770,13 @@ class StripeManager:
         Returns:
             The synced product model instance or None if sync failed
         """
+        from django.conf import settings
+        
+        # Use configuration singleton if available, fallback for tests
+        stripe_enabled = config.is_stripe_enabled_and_configured()
 
-        if not is_feature_enabled(get_env('STRIPE_ENABLED', 'False')):
-            logger.warning("Stripe integration is not enabled, skipping product sync.")
+        if not stripe_enabled:
+            logger.warning("Stripe integration is not enabled or configured, skipping product sync.")
             return None
 
         try:
@@ -940,8 +945,12 @@ class StripeManager:
         Returns:
             int: The number of products successfully synced
         """
+        from django.conf import settings
+        
+        # Use configuration singleton
+        stripe_enabled = config.is_stripe_enabled_and_configured()
 
-        if not is_feature_enabled(get_env('STRIPE_ENABLED', 'False')):
+        if not stripe_enabled:
             logger.warning("Stripe integration is not enabled, skipping product sync.")
             return 0
 

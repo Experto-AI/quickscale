@@ -4,14 +4,16 @@
 Tests for dashboard views when Stripe is disabled.
 
 These tests verify that the dashboard works correctly
-even when STRIPE_ENABLED is set to False.
+even when ENABLE_STRIPE is set to False.
 """
 
 from unittest.mock import patch
 from django.test import TestCase, override_settings
 from django.urls import reverse
 from django.contrib.auth import get_user_model
-from core.env_utils import get_env, is_feature_enabled
+
+# Check if Stripe is enabled using configuration singleton
+from core.configuration import config
 
 # Only import StripeConfigurationError if stripe is available (though these tests run when it's not enabled)
 # This is to avoid ImportErrors if the stripe package isn't installed at all.

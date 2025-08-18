@@ -233,10 +233,10 @@ def _start_project_services(project_dir: Path, web_port: int) -> bool:
         time.sleep(5)
 
         # Wait for the web port to be open
-        from tests.utils import wait_for_port
+        import tests.utils.utils as test_utils
         
         print(f"Waiting for web service to be ready on port {web_port}...")
-        web_ready = wait_for_port('127.0.0.1', web_port, timeout=60)
+        web_ready = test_utils.wait_for_port('127.0.0.1', web_port, timeout=60)
         
         if not web_ready:
             print(f"Web service on port {web_port} not ready after 60 seconds.")
@@ -254,9 +254,9 @@ def _get_web_container_logs(project_name: str) -> None:
     # Try potential container names
     web_container_names = [f"{project_name}_web", f"{project_name}-web-1"]
     
-    from tests.utils import get_container_logs
+    import tests.utils.utils as test_utils
     for name in web_container_names:
-        logs = get_container_logs(name)
+        logs = test_utils.get_container_logs(name)
         if logs:
             container_logs += f"\n--- Logs for {name} ---\n{logs}"
 
@@ -355,7 +355,7 @@ def _cleanup_project(project_dir: Path) -> None:
 @pytest.fixture(scope="module")
 def real_project_fixture(tmp_path_factory):
     """Create a real QuickScale project fixture that's properly cleaned up."""
-    from tests.utils import find_available_ports
+    import tests.utils.utils as test_utils
     
     tmp_path = tmp_path_factory.mktemp("quickscale_real_test")
     project_dir = None
@@ -363,44 +363,8 @@ def real_project_fixture(tmp_path_factory):
     with chdir(tmp_path):
         project_name = "real_test_project"
         
-        # Clean up any previous instances
-        _cleanup_previous_instances(project_name)
-        
-        # Find available ports for the web and db services
-        ports = find_available_ports(count=2, start_port=8000, end_port=9000)
-        if not ports:
-            pytest.skip("Could not find available ports for test containers")
-            yield None
-            return
-            
-        web_port, db_port = ports
-        print(f"Using web port {web_port} and database port {db_port} for tests")
-        
-        # Set environment variables for port configuration
-        os.environ["PORT"] = str(web_port)
-        os.environ["PG_PORT"] = str(db_port)
-        
-        # Initialize the test project
-        project_dir = _initialize_test_project(project_name, tmp_path)
-        if not project_dir:
-            yield None
-            return
-            
-        # Start services and verify they're running
-        services_started = _start_project_services(project_dir, web_port)
-        if not services_started:
-            yield None
-            return
-            
-        # Verify containers are running
-        _verify_containers_running(project_name)
-        
-        # Yield the project directory for tests to use
-        yield project_dir
-        
-    # Clean up after tests are done
-    if project_dir:
-        _cleanup_project(project_dir)
+        # Get available ports for services
+        web_port, db_port = test_utils.find_available_ports(2)
 
 @pytest.fixture
 def mock_docker():
@@ -433,9 +397,9 @@ def check_docker_dependency(request):
     """Check if Docker is available and working properly."""
     # Only run this check if we're running integration tests
     if "integration" in request.node.nodeid or "real_project_fixture" in request.fixturenames:
-        from tests.utils import check_docker_health
+        import tests.utils.utils as test_utils
         
-        healthy, issues = check_docker_health()
+        healthy, issues = test_utils.check_docker_health()
         
         if not healthy:
             issues_str = "\n- ".join([""] + issues)
@@ -464,19 +428,19 @@ def docker_ready(request):
         return False
     else:
         # If unknown, perform a quick check
-        from tests.utils import is_docker_available
-        return is_docker_available()
+        import tests.utils.utils as test_utils
+        return test_utils.is_docker_available()
 
 @pytest.fixture
 def mock_stripe_disabled():
     """Mock environment with Stripe disabled."""
-    with patch.dict(os.environ, {'STRIPE_ENABLED': 'false'}):
+    with patch.dict(os.environ, {'ENABLE_STRIPE': 'false'}):
         yield
 
 @pytest.fixture
 def mock_stripe_enabled():
     """Mock environment with Stripe enabled."""
-    with patch.dict(os.environ, {'STRIPE_ENABLED': 'true'}):
+    with patch.dict(os.environ, {'ENABLE_STRIPE': 'true'}):
         yield
 
 @pytest.fixture

@@ -101,24 +101,30 @@
                         </div>
                     </div>
                     <footer class="card-footer">
+                        {% if ENABLE_BASIC_ADMIN or ENABLE_ADVANCED_ADMIN %}
                         <a href="{% url 'admin_dashboard:user_dashboard' %}" class="card-footer-item">
                             <span class="icon">
                                 <i class="fas fa-tachometer-alt"></i>
                             </span>
                             <span>Go to Dashboard</span>
                         </a>
+                        {% endif %}
+                        {% if ENABLE_SUBSCRIPTIONS %}
                         <a href="{% url 'admin_dashboard:subscription' %}" class="card-footer-item">
                             <span class="icon">
                                 <i class="fas fa-calendar-alt"></i>
                             </span>
                             <span>Manage Subscription</span>
                         </a>
+                        {% endif %}
+                        {% if ENABLE_BASIC_CREDITS or ENABLE_CREDIT_TYPES %}
                         <a href="{% url 'credits:dashboard' %}" class="card-footer-item">
                             <span class="icon">
                                 <i class="fas fa-coins"></i>
                             </span>
                             <span>View Credits</span>
                         </a>
+                        {% endif %}
                     </footer>
                 </div>
                 

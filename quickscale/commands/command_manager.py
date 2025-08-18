@@ -10,7 +10,7 @@ from .service_generator_commands import ServiceGeneratorCommand, ValidateService
 from .sync_back_command import SyncBackCommand
 
 # Existing imports for utility functions and managers
-from quickscale.utils.error_manager import CommandError, handle_command_error
+from quickscale.utils.error_manager import error_manager
 from quickscale.utils.message_manager import MessageManager
 
 class CommandManager:

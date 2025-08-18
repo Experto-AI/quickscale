@@ -4,8 +4,14 @@ import re
 from pathlib import Path
 import unittest
 from unittest.mock import patch
+import sys
 
-from quickscale.utils.env_utils import get_env, is_feature_enabled, refresh_env_cache
+# Add the project root to sys.path to access tests module  
+project_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
+sys.path.insert(0, project_root)
+
+# Import centralized test utilities using DRY principles
+from tests.test_utilities import TestUtilities
 
 
 def load_env_file_to_environ(env_file_path):
@@ -80,7 +86,7 @@ class TestEnvTemplate(unittest.TestCase):
         # Restore original environment
         os.environ.clear()
         os.environ.update(self.original_env)
-        refresh_env_cache()  # Make sure we restore the cached environment too
+        TestUtilities.refresh_env_cache()  # Make sure we restore the cached environment too
         
     def test_env_example_exists(self):
         """Test that .env.example file exists in the templates directory."""
@@ -93,7 +99,7 @@ class TestEnvTemplate(unittest.TestCase):
             # Clear environment first to avoid interference
             with patch.dict(os.environ, {}, clear=True):
                 load_env_file_to_environ(self.env_example_path)
-                refresh_env_cache()  # Refresh env cache after loading
+                TestUtilities.refresh_env_cache()  # Refresh env cache after loading
                 # If loading succeeds, the test passes
                 self.assertTrue(len(os.environ) > 0, 
                               "Successfully loaded .env.example but no variables were found")
@@ -106,7 +112,7 @@ class TestEnvTemplate(unittest.TestCase):
         with patch.dict(os.environ, {}, clear=True):
             # Load env file
             load_env_file_to_environ(self.env_example_path)
-            refresh_env_cache()  # Refresh env cache after loading
+            TestUtilities.refresh_env_cache()  # Refresh env cache after loading
             
             # Core required variables based on documentation
             required_vars = [
@@ -122,7 +128,7 @@ class TestEnvTemplate(unittest.TestCase):
             # Additional variables to check
             additional_vars = [
                 'DB_PORT_EXTERNAL_ALTERNATIVE_FALLBACK',
-                'STRIPE_ENABLED',
+                'ENABLE_STRIPE',
                 'STRIPE_LIVE_MODE',
                 'WEB_PORT_ALTERNATIVE_FALLBACK',
                 'LOG_LEVEL'
@@ -131,7 +137,7 @@ class TestEnvTemplate(unittest.TestCase):
             # Check all required variables
             for var in required_vars:
                 # Using get_env with None default to see if it can retrieve the variable
-                value = get_env(var, None)
+                value = TestUtilities.get_env(var, None)
                 self.assertIsNotNone(value, f"Required variable '{var}' not retrieved by get_env")
                 # Also check that it's not empty (except for some variables that might be empty)
                 if var not in ['EMAIL_HOST_PASSWORD', 'EMAIL_HOST_USER', 'STRIPE_PUBLIC_KEY', 'STRIPE_SECRET_KEY', 'STRIPE_WEBHOOK_SECRET']:
@@ -139,7 +145,7 @@ class TestEnvTemplate(unittest.TestCase):
             
             # Check additional variables
             for var in additional_vars:
-                value = get_env(var, None)
+                value = TestUtilities.get_env(var, None)
                 self.assertIsNotNone(value, f"Additional variable '{var}' not retrieved by get_env")
                 self.assertTrue(value.strip(), f"Additional variable '{var}' has empty value")
     
@@ -149,28 +155,28 @@ class TestEnvTemplate(unittest.TestCase):
         with patch.dict(os.environ, {}, clear=True):
             # Load env file
             load_env_file_to_environ(self.env_example_path)
-            refresh_env_cache()  # Refresh env cache after loading
+            TestUtilities.refresh_env_cache()  # Refresh env cache after loading
             
             # Check boolean features that should be enabled or disabled
-            self.assertFalse(is_feature_enabled(get_env('IS_PRODUCTION')), 
+            self.assertFalse(TestUtilities.is_feature_enabled(TestUtilities.get_env('IS_PRODUCTION')), 
                            "IS_PRODUCTION should be False by default")
             
             # Check that EMAIL_USE_TLS is enabled
-            self.assertTrue(is_feature_enabled(get_env('EMAIL_USE_TLS')), 
+            self.assertTrue(TestUtilities.is_feature_enabled(TestUtilities.get_env('EMAIL_USE_TLS')), 
                           "EMAIL_USE_TLS should be True by default")
             
-            # Check that STRIPE_ENABLED is disabled
-            self.assertFalse(is_feature_enabled(get_env('STRIPE_ENABLED')), 
-                           "STRIPE_ENABLED should be False by default")
+            # Check that ENABLE_STRIPE is disabled
+            self.assertFalse(TestUtilities.is_feature_enabled(TestUtilities.get_env('ENABLE_STRIPE')), 
+                           "ENABLE_STRIPE should be False by default")
             
             # Check additional boolean features
-            self.assertFalse(is_feature_enabled(get_env('STRIPE_LIVE_MODE')), 
+            self.assertFalse(TestUtilities.is_feature_enabled(TestUtilities.get_env('STRIPE_LIVE_MODE')), 
                            "STRIPE_LIVE_MODE should be False by default")
             
-            self.assertTrue(is_feature_enabled(get_env('DB_PORT_EXTERNAL_ALTERNATIVE_FALLBACK')), 
+            self.assertTrue(TestUtilities.is_feature_enabled(TestUtilities.get_env('DB_PORT_EXTERNAL_ALTERNATIVE_FALLBACK')), 
                           "DB_PORT_EXTERNAL_ALTERNATIVE_FALLBACK should be True by default")
             
-            self.assertTrue(is_feature_enabled(get_env('WEB_PORT_ALTERNATIVE_FALLBACK')), 
+            self.assertTrue(TestUtilities.is_feature_enabled(TestUtilities.get_env('WEB_PORT_ALTERNATIVE_FALLBACK')), 
                           "WEB_PORT_ALTERNATIVE_FALLBACK should be True by default")
     
     def test_env_example_format_consistency(self):
@@ -223,16 +229,16 @@ class TestEnvTemplate(unittest.TestCase):
         with patch.dict(os.environ, {}, clear=True):
             # Load env file
             load_env_file_to_environ(self.env_example_path)
-            refresh_env_cache()  # Refresh env cache after loading
+            TestUtilities.refresh_env_cache()  # Refresh env cache after loading
             
             # Get variables that might contain credentials
             credentials = {
-                'EMAIL_HOST_USER': get_env('EMAIL_HOST_USER', ''),
-                'EMAIL_HOST_PASSWORD': get_env('EMAIL_HOST_PASSWORD', ''),
-                'SECRET_KEY': get_env('SECRET_KEY', ''),
-                'DB_PASSWORD': get_env('DB_PASSWORD', ''),
-                'STRIPE_SECRET_KEY': get_env('STRIPE_SECRET_KEY', ''),
-                'STRIPE_WEBHOOK_SECRET': get_env('STRIPE_WEBHOOK_SECRET', '')
+                'EMAIL_HOST_USER': TestUtilities.get_env('EMAIL_HOST_USER', ''),
+                'EMAIL_HOST_PASSWORD': TestUtilities.get_env('EMAIL_HOST_PASSWORD', ''),
+                'SECRET_KEY': TestUtilities.get_env('SECRET_KEY', ''),
+                'DB_PASSWORD': TestUtilities.get_env('DB_PASSWORD', ''),
+                'STRIPE_SECRET_KEY': TestUtilities.get_env('STRIPE_SECRET_KEY', ''),
+                'STRIPE_WEBHOOK_SECRET': TestUtilities.get_env('STRIPE_WEBHOOK_SECRET', '')
             }
             
             # Check if any credential looks like a real one
@@ -249,7 +255,7 @@ class TestEnvTemplate(unittest.TestCase):
                     )                    # Check for placeholder values in password fields
                     if 'PASSWORD' in key or 'SECRET' in key or 'KEY' in key:
                         # Special case for DB_PASSWORD when IS_PRODUCTION=False
-                        if key == 'DB_PASSWORD' and 'adminpasswd' in value.lower() and not is_feature_enabled(get_env('IS_PRODUCTION', 'False')):
+                        if key == 'DB_PASSWORD' and 'adminpasswd' in value.lower() and not TestUtilities.is_feature_enabled(TestUtilities.get_env('IS_PRODUCTION', 'False')):
                             continue
                         # Special case for SECRET_KEY with specific values
                         if key == 'SECRET_KEY' and (value == 'dev-only-dummy-key-replace-in-production' or 'dummy' in value.lower() or 'replace' in value.lower()):
@@ -270,10 +276,10 @@ class TestEnvTemplate(unittest.TestCase):
         with patch.dict(os.environ, {}, clear=True):
             # Load env file
             load_env_file_to_environ(self.env_example_path)
-            refresh_env_cache()  # Refresh env cache after loading
+            TestUtilities.refresh_env_cache()  # Refresh env cache after loading
             
             # Get LOG_LEVEL value
-            log_level = get_env('LOG_LEVEL', '')
+            log_level = TestUtilities.get_env('LOG_LEVEL', '')
             
             # Check that LOG_LEVEL has a valid value
             valid_log_levels = ['DEBUG', 'INFO', 'WARNING', 'ERROR', 'CRITICAL']

@@ -120,7 +120,7 @@ Access services at: http://localhost:8000/services/
 
 ## CONFIGURATION
 
-Edit `.env` file in your project directory:
+QuickScale uses a **Configuration Singleton** pattern for efficient environment management. Edit `.env` file in your project directory:
 
 ```env
 # Project Settings
@@ -137,12 +137,36 @@ DB_PASSWORD=auto-generated
 WEB_PORT=8000
 DB_PORT_EXTERNAL=5432
 
+# Feature Flags (Ultra-Minimal Beta Configuration)
+ENABLE_STRIPE=False               # Payment processing
+ENABLE_SUBSCRIPTIONS=False        # Subscription plans
+ENABLE_API_ENDPOINTS=False        # RESTful API access
+ENABLE_SERVICE_GENERATOR=False    # AI service CLI commands
+
 # Stripe (optional for development)
-STRIPE_ENABLED=False
 STRIPE_SECRET_KEY=sk_test_...
 STRIPE_PUBLIC_KEY=pk_test_...
 STRIPE_WEBHOOK_SECRET=whsec_...
 ```
+
+### **Configuration Architecture**
+
+QuickScale implements a **single-read, cached configuration system** that:
+- **Reads `.env` once** at startup for optimal performance
+- **Caches all environment variables** to avoid repeated file system access
+- **Uses feature flags** to enable/disable functionality without code changes
+- **Validates required settings** based on enabled features
+- **Supports different deployment modes** (development, production, testing)
+
+### **Feature Flag System**
+
+Control application features through environment variables:
+- `ENABLE_STRIPE=True` - Enable payment processing and billing
+- `ENABLE_SUBSCRIPTIONS=True` - Enable subscription plans and management
+- `ENABLE_API_ENDPOINTS=True` - Enable RESTful API endpoints
+- `ENABLE_SERVICE_GENERATOR=True` - Enable AI service generation commands
+
+*Note: The Ultra-Minimal Beta defaults to basic functionality only. Enable features as needed for your use case.*
 
 ## DOCUMENTATION
 
