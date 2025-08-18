@@ -9,9 +9,20 @@ from typing import Dict, Any
 import string
 
 
-def get_basic_service_template() -> str:
-    """Get the basic service template."""
-    return """\"\"\"
+class ServiceTemplateGenerator:
+    """Centralized service template generation and management.
+    
+    This class consolidates all service template functions into a single,
+    maintainable interface following DRY principles.
+    """
+    
+    def __init__(self):
+        """Initialize the ServiceTemplateGenerator."""
+        self._template_cache = {}
+    
+    def get_basic_service_template(self) -> str:
+        """Get the basic service template."""
+        return """\"\"\"
 ${service_description}
 
 This service demonstrates the basic pattern for creating AI services in QuickScale.
@@ -88,10 +99,9 @@ def use_${service_name}(user, input_data):
 \"\"\"
 """
 
-
-def get_text_processing_template() -> str:
-    """Get the text processing service template."""
-    return """\"\"\"
+    def get_text_processing_template(self) -> str:
+        """Get the text processing service template."""
+        return """\"\"\"
 ${service_description}
 
 This service provides text processing capabilities using the QuickScale framework.
@@ -156,7 +166,7 @@ class ${service_class_name}(BaseService):
             'features': {
                 'has_questions': '?' in text,
                 'has_exclamations': '!' in text,
-                'has_urls': bool(re.search(r'http[s]?://(?:[a-zA-Z]|[0-9]|[$-_@.&+]|[!*\\(\\),]|(?:%[0-9a-fA-F][0-9a-fA-F]))+', text)),
+                'has_urls': bool(re.search(r'http[s]?://(?:[a-zA-Z]|[0-9]|[$$-_@.&+]|[!*\\(\\),]|(?:%[0-9a-fA-F][0-9a-fA-F]))+', text)),
                 'has_emails': bool(re.search(r'\\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\\.[A-Z|a-z]{2,}\\b', text))
             },
             'metadata': {
@@ -248,10 +258,9 @@ def batch_process_texts(user, texts: List[str]):
 \"\"\"
 """
 
-
-def get_image_processing_template() -> str:
-    """Get the image processing service template."""
-    return """\"\"\"
+    def get_image_processing_template(self) -> str:
+        """Get the image processing service template."""
+        return """\"\"\"
 ${service_description}
 
 This service provides image processing capabilities using the QuickScale framework.
@@ -260,10 +269,12 @@ Optimized for analyzing and processing image data.
 
 import base64
 import io
-from typing import Dict, Any, Union, Optional
+from typing import Dict, Any, List, Optional
 from django.contrib.auth import get_user_model
 from services.base import BaseService
 from services.decorators import register_service
+from PIL import Image
+import hashlib
 
 User = get_user_model()
 
@@ -272,167 +283,125 @@ User = get_user_model()
 class ${service_class_name}(BaseService):
     \"\"\"${service_description}\"\"\"
     
-    def execute_service(self, user: User, image_data: Union[str, bytes] = None, **kwargs) -> Dict[str, Any]:
+    def execute_service(self, user: User, **kwargs) -> Dict[str, Any]:
         \"\"\"Process image and return analysis results.\"\"\"
-        # Input validation
-        if not image_data:
-            raise ValueError("Image data is required")
         
-        # Handle different input formats
-        if isinstance(image_data, str):
-            # Handle base64 encoded images
-            if image_data.startswith('data:image/'):
-                # Extract base64 data from data URL
-                image_data = image_data.split(',')[1]
+        # Input validation - support both file and base64 inputs
+        image_file = kwargs.get('image_file')
+        image_base64 = kwargs.get('image_base64')
+        image_url = kwargs.get('image_url')
+        
+        if not any([image_file, image_base64, image_url]):
+            raise ValueError("Either image_file, image_base64, or image_url is required")
+        
+        try:
+            # Process the image input
+            if image_file:
+                image = Image.open(image_file)
+            elif image_base64:
+                # Decode base64 image
+                image_data = base64.b64decode(image_base64)
+                image = Image.open(io.BytesIO(image_data))
+            elif image_url:
+                # TODO: Implement URL fetching
+                raise NotImplementedError("URL processing not yet implemented")
             
-            try:
-                # Decode base64 to bytes
-                image_bytes = base64.b64decode(image_data)
-            except Exception as e:
-                raise ValueError(f"Invalid base64 image data: {str(e)}")
-        else:
-            # Already bytes
-            image_bytes = image_data
-        
-        # Validate image size
-        max_size = kwargs.get('max_size_mb', 10)  # 10MB default
-        if len(image_bytes) > max_size * 1024 * 1024:
-            raise ValueError(f"Image too large (max {max_size}MB)")
-        
-        # TODO: Implement your image processing logic here
-        # Examples:
-        # - Image classification
-        # - Object detection
-        # - Face recognition
-        # - OCR (text extraction)
-        # - Image enhancement
-        # - Style transfer
-        
-        # Basic image analysis (placeholder)
-        image_info = self._analyze_image_data(image_bytes)
-        
-        # TODO: Replace with your AI model results
-        result = {
-            'image_info': image_info,
-            'analysis': {
-                'detected_objects': [],  # TODO: Add object detection
-                'classification': {
-                    'categories': [],  # TODO: Add classification results
-                    'confidence_scores': []
+            # Basic image analysis
+            width, height = image.size
+            format_type = image.format or 'Unknown'
+            mode = image.mode
+            
+            # Calculate file hash for uniqueness
+            image_bytes = io.BytesIO()
+            image.save(image_bytes, format=format_type if format_type != 'Unknown' else 'PNG')
+            image_hash = hashlib.md5(image_bytes.getvalue()).hexdigest()
+            
+            # TODO: Implement your image processing logic here
+            # Examples:
+            # - Object detection
+            # - Image classification
+            # - Face recognition
+            # - OCR (text extraction)
+            # - Image enhancement
+            # - Style transfer
+            
+            result = {
+                'image_info': {
+                    'width': width,
+                    'height': height,
+                    'format': format_type,
+                    'mode': mode,
+                    'size_bytes': len(image_bytes.getvalue()),
+                    'aspect_ratio': round(width / height, 2) if height > 0 else 0,
+                    'total_pixels': width * height,
+                    'hash': image_hash
                 },
-                'features': {
-                    'has_faces': False,  # TODO: Add face detection
-                    'has_text': False,   # TODO: Add OCR
-                    'dominant_colors': [],  # TODO: Add color analysis
-                    'brightness': 0.5,   # TODO: Add brightness analysis
-                    'contrast': 0.5      # TODO: Add contrast analysis
+                'analysis': {
+                    'colors': self._analyze_colors(image),
+                    'brightness': self._calculate_brightness(image),
+                    'contrast': self._calculate_contrast(image)
+                },
+                'metadata': {
+                    'service_name': '${service_name}',
+                    'processing_time_ms': 0,  # TODO: Add actual timing
+                    'model_version': '1.0'
                 }
-            },
-            'metadata': {
-                'service_name': '${service_name}',
-                'processing_time_ms': 0,  # TODO: Add actual timing
-                'model_version': '1.0',
-                'processing_resolution': image_info.get('estimated_dimensions', 'unknown')
             }
-        }
-        
-        return result
+            
+            return result
+            
+        except Exception as e:
+            raise ValueError(f"Error processing image: {str(e)}")
     
-    def _analyze_image_data(self, image_bytes: bytes) -> Dict[str, Any]:
-        \"\"\"Analyze basic image properties from byte data.\"\"\"
-        file_size = len(image_bytes)
+    def _analyze_colors(self, image: Image.Image) -> Dict[str, Any]:
+        \"\"\"Analyze the color distribution in the image.\"\"\"
+        # Convert to RGB if needed
+        if image.mode != 'RGB':
+            image = image.convert('RGB')
         
-        # Detect image format from headers
-        format_info = self._detect_image_format(image_bytes)
+        # Get dominant colors (simplified)
+        colors = image.getcolors(maxcolors=256*256*256)
+        if colors:
+            # Sort by frequency
+            colors.sort(key=lambda x: x[0], reverse=True)
+            dominant_color = colors[0][1]
+            
+            return {
+                'dominant_rgb': dominant_color,
+                'total_unique_colors': len(colors),
+                'is_grayscale': len(set(c[1] for c in colors[:10])) == 1
+            }
         
-        # Estimate dimensions based on file size (rough estimation)
-        estimated_dimensions = self._estimate_dimensions(file_size, format_info['format'])
-        
-        return {
-            'file_size_bytes': file_size,
-            'file_size_mb': round(file_size / (1024 * 1024), 2),
-            'format': format_info['format'],
-            'estimated_dimensions': estimated_dimensions,
-            'quality_estimate': self._estimate_quality(file_size, format_info['format'])
-        }
+        return {'error': 'Could not analyze colors'}
     
-    def _detect_image_format(self, image_bytes: bytes) -> Dict[str, Any]:
-        \"\"\"Detect image format from file headers.\"\"\"
-        if image_bytes.startswith(b'\\xFF\\xD8\\xFF'):
-            return {'format': 'jpeg', 'mime_type': 'image/jpeg'}
-        elif image_bytes.startswith(b'\\x89PNG\\r\\n\\x1a\\n'):
-            return {'format': 'png', 'mime_type': 'image/png'}
-        elif image_bytes.startswith(b'GIF8'):
-            return {'format': 'gif', 'mime_type': 'image/gif'}
-        elif image_bytes.startswith(b'RIFF') and b'WEBP' in image_bytes[:12]:
-            return {'format': 'webp', 'mime_type': 'image/webp'}
-        else:
-            return {'format': 'unknown', 'mime_type': 'application/octet-stream'}
+    def _calculate_brightness(self, image: Image.Image) -> float:
+        \"\"\"Calculate average brightness of the image.\"\"\"
+        grayscale = image.convert('L')
+        stat = grayscale.getextrema()
+        return (stat[0] + stat[1]) / 2 / 255.0
     
-    def _estimate_dimensions(self, file_size: int, format_type: str) -> str:
-        \"\"\"Estimate image dimensions based on file size and format.\"\"\"
-        # Very rough estimation based on typical compression ratios
-        if format_type == 'png':
-            # PNG is typically less compressed
-            if file_size < 100000:  # < 100KB
-                return "small (< 800x600)"
-            elif file_size < 1000000:  # < 1MB
-                return "medium (800x600 - 1920x1080)"
-            else:
-                return "large (> 1920x1080)"
-        else:
-            # JPEG and others are more compressed
-            if file_size < 50000:  # < 50KB
-                return "small (< 640x480)"
-            elif file_size < 500000:  # < 500KB
-                return "medium (640x480 - 1920x1080)"
-            else:
-                return "large (> 1920x1080)"
-    
-    def _estimate_quality(self, file_size: int, format_type: str) -> str:
-        \"\"\"Estimate image quality based on size and format.\"\"\"
-        if format_type == 'jpeg':
-            if file_size < 50000:
-                return "low"
-            elif file_size < 200000:
-                return "medium"
-            else:
-                return "high"
-        elif format_type == 'png':
-            return "lossless"
-        else:
-            return "unknown"
+    def _calculate_contrast(self, image: Image.Image) -> float:
+        \"\"\"Calculate contrast of the image.\"\"\"
+        grayscale = image.convert('L')
+        stat = grayscale.getextrema()
+        return (stat[1] - stat[0]) / 255.0
 
 
-# Advanced usage example:
+# Advanced usage examples:
 \"\"\"
 from services.decorators import create_service_instance
 from django.contrib.auth import get_user_model
-import base64
+from django.core.files.uploadedfile import InMemoryUploadedFile
 
 User = get_user_model()
 
 def process_uploaded_image(user, image_file):
-    # Read image file
-    image_data = image_file.read()
-    
     service = create_service_instance("${service_name}")
     if not service:
         return {'error': 'Image processing service not available'}
     
     try:
-        result = service.run(
-            user,
-            image_data=image_data,
-            max_size_mb=5  # 5MB limit
-        )
-        
-        # Add custom metadata
-        result['result']['upload_info'] = {
-            'original_filename': getattr(image_file, 'name', 'unknown'),
-            'upload_size': len(image_data)
-        }
-        
+        result = service.run(user, image_file=image_file)
         return result
     except Exception as e:
         return {'error': f'Image processing failed: {str(e)}'}
@@ -441,20 +410,18 @@ def process_base64_image(user, base64_string):
     service = create_service_instance("${service_name}")
     
     try:
-        result = service.run(user, image_data=base64_string)
+        result = service.run(user, image_base64=base64_string)
         return result
     except Exception as e:
         return {'error': f'Base64 image processing failed: {str(e)}'}
 
-# Batch image processing:
 def batch_process_images(user, image_files):
     service = create_service_instance("${service_name}")
     results = []
     
     for i, image_file in enumerate(image_files):
         try:
-            image_data = image_file.read()
-            result = service.run(user, image_data=image_data)
+            result = service.run(user, image_file=image_file)
             results.append({
                 'index': i,
                 'filename': getattr(image_file, 'name', f'image_{i}'),
@@ -477,42 +444,40 @@ def batch_process_images(user, image_files):
 \"\"\"
 """
 
+    def generate_service_file(self, service_name: str, service_type: str = "basic", 
+                             service_description: str = None) -> str:
+        """Generate a service file from templates."""
+        
+        # Convert service name to class name (PascalCase)
+        service_class_name = ''.join(word.capitalize() for word in service_name.split('_'))
+        if not service_class_name.endswith('Service'):
+            service_class_name += 'Service'
+        
+        # Default description if not provided
+        if not service_description:
+            service_description = f"AI service: {service_name.replace('_', ' ').title()}"
+        
+        # Template variables
+        template_vars = {
+            'service_name': service_name,
+            'service_class_name': service_class_name,
+            'service_description': service_description
+        }
+        
+        # Get appropriate template
+        if service_type == "text_processing":
+            template = self.get_text_processing_template()
+        elif service_type == "image_processing":
+            template = self.get_image_processing_template()
+        else:
+            template = self.get_basic_service_template()
+        
+        # Substitute variables in template
+        return string.Template(template).substitute(template_vars)
 
-def generate_service_file(service_name: str, service_type: str = "basic", 
-                         service_description: str = None) -> str:
-    """Generate a service file from templates."""
-    
-    # Convert service name to class name (PascalCase)
-    service_class_name = ''.join(word.capitalize() for word in service_name.split('_'))
-    if not service_class_name.endswith('Service'):
-        service_class_name += 'Service'
-    
-    # Default description if not provided
-    if not service_description:
-        service_description = f"AI service: {service_name.replace('_', ' ').title()}"
-    
-    # Template variables
-    template_vars = {
-        'service_name': service_name,
-        'service_class_name': service_class_name,
-        'service_description': service_description
-    }
-    
-    # Get appropriate template
-    if service_type == "text_processing":
-        template = get_text_processing_template()
-    elif service_type == "image_processing":
-        template = get_image_processing_template()
-    else:
-        template = get_basic_service_template()
-    
-    # Substitute variables in template
-    return string.Template(template).substitute(template_vars)
-
-
-def get_service_readme_template() -> str:
-    """Get README template for generated services."""
-    return """# ${service_name} Service
+    def get_service_readme_template(self) -> str:
+        """Get README template for generated services."""
+        return """# ${service_name} Service
 
 ${service_description}
 
@@ -640,4 +605,43 @@ quickscale validate-service services/${service_name}.py --tips
 - [ ] Add performance optimizations
 - [ ] Add monitoring and logging
 - [ ] Update documentation with actual functionality
-""" 
+"""
+
+    def get_available_templates(self) -> Dict[str, str]:
+        """Get a dictionary of available service template types."""
+        return {
+            'basic': 'Basic service template with placeholder logic',
+            'text_processing': 'Template optimized for text analysis and processing',
+            'image_processing': 'Template optimized for image analysis and processing'
+        }
+
+    def validate_service_name(self, service_name: str) -> bool:
+        """Validate that a service name is valid for Python and QuickScale."""
+        if not service_name:
+            return False
+        
+        # Must be valid Python identifier
+        if not service_name.replace('_', '').isalnum():
+            return False
+        
+        # Should use snake_case
+        if service_name != service_name.lower():
+            return False
+        
+        # Cannot start with number
+        if service_name[0].isdigit():
+            return False
+        
+        return True
+
+    def get_template_variables(self) -> Dict[str, str]:
+        """Get information about template variables used in service templates."""
+        return {
+            'service_name': 'The name of the service (snake_case)',
+            'service_class_name': 'The class name of the service (PascalCase)',
+            'service_description': 'Description of what the service does'
+        }
+
+
+# Create singleton instance for easy access
+service_template_generator = ServiceTemplateGenerator()

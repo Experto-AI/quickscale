@@ -6,7 +6,7 @@ from typing import Dict, Optional, Any
 from .command_base import Command
 from quickscale.utils.message_manager import MessageManager
 from quickscale.utils.template_generator import render_template
-from quickscale.utils.service_templates import generate_service_file, get_service_readme_template
+from quickscale.utils.service_templates import service_template_generator
 from quickscale.utils.timeout_constants import DOCKER_OPERATIONS_TIMEOUT
 
 
@@ -487,7 +487,7 @@ class ValidateServiceCommand(Command):
     def execute(self, name_or_path: Optional[str] = None, show_tips: bool = False) -> Dict[str, Any]:
         """Validate a service file and show development tips."""
         from quickscale.utils.service_dev_utils import validate_service_file, ServiceDevelopmentHelper
-        from quickscale.utils.error_manager import CommandError
+        from quickscale.utils.error_manager import error_manager
         
         if show_tips:
             ServiceDevelopmentHelper.display_development_tips()
@@ -496,7 +496,7 @@ class ValidateServiceCommand(Command):
         service_file_path: Optional[Path] = None
 
         if not name_or_path:
-            raise CommandError("Missing service name or file path. Please provide a service name or full path to the service file.")
+            raise error_manager.CommandError("Missing service name or file path. Please provide a service name or full path to the service file.")
 
         path_obj = Path(name_or_path)
 
@@ -522,7 +522,7 @@ class ValidateServiceCommand(Command):
                 "valid": True,
                 "validation_completed": True
             }
-        except CommandError:
+        except error_manager.CommandError:
             return {
                 "valid": False,
                 "validation_completed": True,

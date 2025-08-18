@@ -7,7 +7,7 @@ from unittest.mock import Mock, patch, MagicMock, mock_open
 from pathlib import Path
 
 from quickscale.commands.init_command import InitCommand
-from quickscale.utils.error_manager import ProjectError, ValidationError
+from quickscale.utils.error_manager import error_manager
 from tests.base_test_classes import CommandTestMixin
 
 
@@ -26,7 +26,7 @@ class TestInitCommand(CommandTestMixin):
     def test_validate_project_name_directory_exists(self):
         """Test project name validation when directory already exists."""
         with patch('pathlib.Path.exists', return_value=True):
-            with pytest.raises(ProjectError, match="already exists"):
+            with pytest.raises(error_manager.ProjectError, match="already exists"):
                 self.command.validate_project_name("existing_project")
     
     def test_check_directory_exists_empty(self):
@@ -46,14 +46,14 @@ class TestInitCommand(CommandTestMixin):
         """Test check_directory_exists when directory exists and is not empty."""
         with patch('pathlib.Path.exists', return_value=True):
             with patch('pathlib.Path.iterdir', return_value=['file1.txt']):
-                with pytest.raises(ProjectError, match="already exists and is not empty"):
+                with pytest.raises(error_manager.ProjectError, match="already exists and is not empty"):
                     self.command._check_directory_exists(self.test_project_name)
     
     def test_check_directory_exists_permission_error(self):
         """Test check_directory_exists with permission error."""
         with patch('pathlib.Path.exists', return_value=True):
             with patch('pathlib.Path.iterdir', side_effect=PermissionError("Permission denied")):
-                with pytest.raises(ProjectError, match="Permission denied"):
+                with pytest.raises(error_manager.ProjectError, match="Permission denied"):
                     self.command._check_directory_exists(self.test_project_name)
     
     def test_generate_secret_key(self):
@@ -124,14 +124,14 @@ class TestInitCommand(CommandTestMixin):
     
     def test_execute_validation_error(self):
         """Test project initialization with validation error."""
-        with pytest.raises(ValidationError):
+        with pytest.raises(error_manager.ValidationError):
             self.command.execute("123invalid")  # Invalid name
     
     @patch('pathlib.Path.exists', return_value=True)
     def test_execute_directory_error(self, mock_exists):
         """Test project initialization with directory error."""
         # Mock that project directory already exists
-        with pytest.raises(ProjectError, match="already exists"):
+        with pytest.raises(error_manager.ProjectError, match="already exists"):
             self.command.execute(self.test_project_name)
     
     @patch('pathlib.Path.exists')
@@ -141,7 +141,7 @@ class TestInitCommand(CommandTestMixin):
         # Mock template directory doesn't exist
         mock_exists.return_value = False
         
-        with pytest.raises(ProjectError, match="Template directory not found"):
+        with pytest.raises(error_manager.ProjectError, match="Template directory not found"):
             self.command.execute(self.test_project_name)
 
 
@@ -187,5 +187,5 @@ class TestInitCommandIntegration:
                 with patch('pathlib.Path.exists', return_value=True):
                     project_name = "test_cleanup_project"
                     
-                    with pytest.raises(ProjectError, match="Failed to create project"):
+                    with pytest.raises(error_manager.ProjectError, match="Failed to create project"):
                         self.command.execute(project_name)

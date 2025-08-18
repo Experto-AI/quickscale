@@ -7,16 +7,8 @@ import re
 import logging
 from pathlib import Path
 
-from quickscale.utils.env_utils import get_env, refresh_env_cache
-from tests.utils import (
-    run_quickscale_command,
-    is_docker_available,
-    find_available_ports,
-    wait_for_port,
-    wait_for_docker_service,
-    wait_for_container_health,
-    get_container_logs
-)
+from quickscale.utils.env_utils import env_manager
+import tests.utils.utils as test_utils
 
 # Configure logger
 logger = logging.getLogger(__name__)
@@ -34,7 +26,7 @@ class TestInitUpEnvLoading:
     @pytest.fixture(scope="class", autouse=True)
     def check_docker(self):
         """Check if Docker is available before running any tests."""
-        is_docker_available()
+        test_utils.is_docker_available()
     
     @pytest.fixture(scope="function")
     def clean_test_env(self, tmp_path):
@@ -48,7 +40,7 @@ class TestInitUpEnvLoading:
         # Clean up - stop any running containers
         try:
             # Use quickscale down instead of docker-compose down
-            run_quickscale_command('down', ['--remove-orphans'], check=False, timeout=30)
+            test_utils.run_quickscale_command('down', ['--remove-orphans'], check=False, timeout=30)
             # subprocess.run(
             #     ['docker-compose', 'down', '--remove-orphans'],
             #     check=False, capture_output=True, timeout=30
@@ -65,7 +57,7 @@ class TestInitUpEnvLoading:
         project_name = "env_test_project"
 
         # Find available ports for web and db
-        ports = find_available_ports(count=2, start_port=9000, end_port=10000)
+        ports = test_utils.find_available_ports(count=2, start_port=9000, end_port=10000)
         if not ports:
             pytest.skip("Could not find available ports for e2e tests")
             return
@@ -74,7 +66,7 @@ class TestInitUpEnvLoading:
         logger.info(f"Using ports - web: {web_port}, db: {db_port}")
 
         # Step 1: Initialize the project
-        init_result = run_quickscale_command('init', project_name)
+        init_result = test_utils.run_quickscale_command('init', project_name)
         assert init_result.returncode == 0, f"Init command failed: {init_result.stderr}"
 
         # Change to the project directory
@@ -147,7 +139,7 @@ class TestInitUpEnvLoading:
             'SERVER_EMAIL': 'server@example.com',
             
             # Payment Integration
-            'STRIPE_ENABLED': 'False',
+            'ENABLE_STRIPE': 'False',
             'STRIPE_LIVE_MODE': 'False',
             'STRIPE_PUBLIC_KEY': '',
             'STRIPE_SECRET_KEY': '',

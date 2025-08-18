@@ -23,8 +23,8 @@ class TestTimeoutConstants:
     
     def test_docker_service_startup_timeout_is_reasonable(self):
         """Test that Docker service startup timeout is reasonable."""
-        # Should be at least 3 minutes for e2e tests with fresh builds
-        assert DOCKER_SERVICE_STARTUP_TIMEOUT == 180
+        # Should be 5 minutes for e2e tests with fresh builds - increased from 180 to handle Docker timeouts
+        assert DOCKER_SERVICE_STARTUP_TIMEOUT == 300
         assert DOCKER_SERVICE_STARTUP_TIMEOUT >= 180 
     
     def test_docker_ps_check_timeout_is_short(self):
@@ -35,13 +35,14 @@ class TestTimeoutConstants:
     
     def test_docker_container_start_timeout_is_medium(self):
         """Test that Docker container start timeout is medium."""
-        # Should be reasonable for container startup
-        assert DOCKER_CONTAINER_START_TIMEOUT == 40
+        # Should be reasonable for container startup - increased from 40 to 60 for reliability
+        assert DOCKER_CONTAINER_START_TIMEOUT == 60
         assert 20 <= DOCKER_CONTAINER_START_TIMEOUT <= 60
     
     def test_docker_operations_timeout_is_short(self):
         """Test that general Docker operations timeout is short."""
-        assert DOCKER_OPERATIONS_TIMEOUT == 20
+        # Increased from 20 to 30 for better reliability
+        assert DOCKER_OPERATIONS_TIMEOUT == 30
         assert DOCKER_OPERATIONS_TIMEOUT < 60  # Should be under 1 minute
     
     def test_postgres_connection_timeout_is_short(self):
@@ -56,8 +57,9 @@ class TestTimeoutConstants:
     
     def test_docker_pull_timeout_is_medium(self):
         """Test that Docker pull timeout is medium length."""
-        assert DOCKER_PULL_TIMEOUT == 30
-        assert 15 <= DOCKER_PULL_TIMEOUT <= 60  # Between 15s and 1min
+        # Increased from 30 to 120 to handle slow networks and large base images
+        assert DOCKER_PULL_TIMEOUT == 120
+        assert 15 <= DOCKER_PULL_TIMEOUT <= 600  # Between 15s and 10min
     
     def test_docker_run_timeout_is_short(self):
         """Test that Docker run timeout is short."""

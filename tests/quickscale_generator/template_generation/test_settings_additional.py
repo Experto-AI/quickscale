@@ -2,8 +2,9 @@ import unittest
 from unittest.mock import patch
 import os
 
-from quickscale.utils.env_utils import refresh_env_cache
+from quickscale.utils.env_utils import env_manager
 from quickscale.config.settings import validate_production_settings, REQUIRED_VARS
+from quickscale.config.generator_config import generator_config
 
 
 class TestSettingsAdditional(unittest.TestCase):
@@ -17,14 +18,14 @@ class TestSettingsAdditional(unittest.TestCase):
         """Restore original environment after each test."""
         os.environ.clear()
         os.environ.update(self.original_env)
-        refresh_env_cache()  # Ensure the cache is restored after each test
+        env_manager.refresh_env_cache()  # Ensure the cache is restored after each test
     
     def test_production_validation_with_is_production_undefined(self):
         """Test validation when IS_PRODUCTION is not defined (should default to False)."""
         # Ensure IS_PRODUCTION is not in the environment
         test_env = {'SECRET_KEY': 'dev-only-dummy-key-replace-in-production'}
         
-        with patch('quickscale.utils.env_utils._env_vars', test_env):
+        with patch('quickscale.utils.env_utils.env_manager._env_vars', test_env):
             try:
                 validate_production_settings()
             except ValueError as e:
@@ -43,7 +44,7 @@ class TestSettingsAdditional(unittest.TestCase):
         truthy_values = ['true', 'True', 'yes', 'Yes', 'y', 'Y', '1', 'on', 'ON']
         for value in truthy_values:
             test_env = {**secure_settings, 'IS_PRODUCTION': value}
-            with patch('quickscale.utils.env_utils._env_vars', test_env):
+            with patch('quickscale.utils.env_utils.env_manager._env_vars', test_env):
                 try:
                     validate_production_settings()
                 except ValueError as e:
@@ -61,7 +62,7 @@ class TestSettingsAdditional(unittest.TestCase):
         
         for value in falsy_values:
             test_env = {**insecure_settings, 'IS_PRODUCTION': value}
-            with patch('quickscale.utils.env_utils._env_vars', test_env):
+            with patch('quickscale.utils.env_utils.env_manager._env_vars', test_env):
                 try:
                     validate_production_settings()
                 except ValueError as e:
@@ -77,9 +78,14 @@ class TestSettingsAdditional(unittest.TestCase):
             'ALLOWED_HOSTS': '*'
         }
         
-        with patch('quickscale.utils.env_utils._env_vars', test_env):
+        # Update generator config cache with test environment
+        generator_config.update_cache_for_testing(test_env)
+        try:
             with self.assertRaises(ValueError):
                 validate_production_settings()
+        finally:
+            # Restore original cache
+            generator_config.refresh_cache()
     
     def test_validate_production_settings_with_whitespace_in_is_production(self):
         """Test validation with whitespace in IS_PRODUCTION value."""
@@ -90,9 +96,14 @@ class TestSettingsAdditional(unittest.TestCase):
             'ALLOWED_HOSTS': '*'
         }
         
-        with patch('quickscale.utils.env_utils._env_vars', test_env):
+        # Update generator config cache with test environment
+        generator_config.update_cache_for_testing(test_env)
+        try:
             with self.assertRaises(ValueError):
                 validate_production_settings()
+        finally:
+            # Restore original cache
+            generator_config.refresh_cache()
     
     def test_multiple_hosts_in_allowed_hosts(self):
         """Test validation with multiple hosts in ALLOWED_HOSTS."""
@@ -105,11 +116,16 @@ class TestSettingsAdditional(unittest.TestCase):
             'EMAIL_USE_TLS': 'True'
         }
         
-        with patch('quickscale.utils.env_utils._env_vars', test_env):
+        # Update generator config cache with test environment
+        generator_config.update_cache_for_testing(test_env)
+        try:
             try:
                 validate_production_settings()
             except ValueError as e:
                 self.fail(f"validate_production_settings should not raise error with multiple hosts: {e}")
+        finally:
+            # Restore original cache
+            generator_config.refresh_cache()
         
         # Multiple hosts including wildcard (should fail)
         test_env = {
@@ -120,9 +136,14 @@ class TestSettingsAdditional(unittest.TestCase):
             'EMAIL_USE_TLS': 'True'
         }
         
-        with patch('quickscale.utils.env_utils._env_vars', test_env):
+        # Update generator config cache with test environment
+        generator_config.update_cache_for_testing(test_env)
+        try:
             with self.assertRaises(ValueError):
                 validate_production_settings()
+        finally:
+            # Restore original cache
+            generator_config.refresh_cache()
 
 
 if __name__ == '__main__':

@@ -8,7 +8,7 @@ from quickscale.commands.service_commands import (
     ServiceDownCommand, ServiceLogsCommand, ServiceStatusCommand
 )
 from quickscale.commands.project_manager import ProjectManager
-from quickscale.utils.error_manager import ServiceError
+from quickscale.utils.error_manager import error_manager
 
 
 class TestServiceOperations:

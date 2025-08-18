@@ -22,15 +22,17 @@
             <a class="navbar-item" href="{% url 'public:contact' %}" hx-boost="true">
                 Contact
             </a>
+            {% if ENABLE_API_ENDPOINTS %}
             <a class="navbar-item" href="{% url 'api:api_docs' %}">
                 API Docs
             </a>
-            {% if stripe_enabled %}
+            {% endif %}
+            {% if ENABLE_STRIPE and stripe_enabled %}
             <a class="navbar-item" href="{% url 'stripe:plan_comparison' %}" hx-boost="true">
                 Plans
             </a>
             {% endif %}
-            {% if user.is_authenticated %}
+            {% if user.is_authenticated and ENABLE_DEMO_SERVICE %}
             <a class="navbar-item" href="{% url 'services:list' %}" hx-boost="true">
                 Services
             </a>
@@ -45,48 +47,33 @@
                         <span>{% if user.get_full_name %}{{ user.get_full_name }}{% else %}{{ user.email }}{% endif %}</span>
                     </a>
                     <div class="navbar-dropdown is-right" x-show="open" @click.away="open = false" style="min-width: 220px;">
-                        {% if user.is_staff %}
+                        {% if user.is_staff and ENABLE_ADVANCED_ADMIN %}
                         <a class="navbar-item" href="{% url 'admin_dashboard:index' %}">
                             <span class="icon"><i class="fas fa-tools"></i></span>
                             <span>Admin Dashboard</span>
                         </a>
+                        {% endif %}
+                        {% if ENABLE_BASIC_ADMIN or ENABLE_ADVANCED_ADMIN %}
                         <a class="navbar-item" href="{% url 'admin_dashboard:user_dashboard' %}">
                             <span class="icon"><i class="fas fa-tachometer-alt"></i></span>
                             <span>My Dashboard</span>
                         </a>
+                        {% endif %}
                         <a class="navbar-item" href="{% url 'users:account_security' %}">
                             <span class="icon"><i class="fas fa-lock"></i></span>
                             <span>Account Security</span>
                         </a>
-                        {% if stripe_enabled %}
+                        {% if ENABLE_STRIPE and stripe_enabled and ENABLE_SUBSCRIPTIONS %}
                         <a class="navbar-item" href="{% url 'admin_dashboard:subscription' %}">
                             <span class="icon"><i class="fas fa-credit-card"></i></span>
                             <span>Subscription & Billing</span>
                         </a>
+                        {% endif %}
+                        {% if ENABLE_BASIC_CREDITS or ENABLE_CREDIT_TYPES %}
                         <a class="navbar-item" href="{% url 'credits:dashboard' %}">
                             <span class="icon"><i class="fas fa-coins"></i></span>
                             <span>Credits</span>
                         </a>
-                        {% endif %}
-                        {% else %}
-                        <a class="navbar-item" href="{% url 'admin_dashboard:user_dashboard' %}">
-                            <span class="icon"><i class="fas fa-tachometer-alt"></i></span>
-                            <span>My Dashboard</span>
-                        </a>
-                        <a class="navbar-item" href="{% url 'users:account_security' %}">
-                            <span class="icon"><i class="fas fa-lock"></i></span>
-                            <span>Account Security</span>
-                        </a>
-                        {% if stripe_enabled %}
-                        <a class="navbar-item" href="{% url 'admin_dashboard:subscription' %}">
-                            <span class="icon"><i class="fas fa-credit-card"></i></span>
-                            <span>Subscription & Billing</span>
-                        </a>
-                        <a class="navbar-item" href="{% url 'credits:dashboard' %}">
-                            <span class="icon"><i class="fas fa-coins"></i></span>
-                            <span>Credits</span>
-                        </a>
-                        {% endif %}
                         {% endif %}
                         <hr class="navbar-divider">
                         <form method="post" action="{% url 'account_logout' %}" style="display: block;">

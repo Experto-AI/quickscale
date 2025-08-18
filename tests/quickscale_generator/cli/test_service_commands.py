@@ -15,7 +15,7 @@ from quickscale.commands.service_commands import (
     ServiceUpCommand, ServiceDownCommand, ServiceLogsCommand,
     handle_service_error
 )
-from quickscale.utils.error_manager import ServiceError
+from quickscale.utils.error_manager import error_manager
 from tests.base_test_classes import ServiceCommandTestMixin
 
 

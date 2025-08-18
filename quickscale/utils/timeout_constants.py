@@ -6,13 +6,16 @@ project to improve maintainability and consistency.
 """
 
 # Docker service timeouts
-DOCKER_CONTAINER_START_TIMEOUT = 40   # Timeout for individual container startup
-DOCKER_SERVICE_STARTUP_TIMEOUT = 180  # Timeout for full service startup
-DOCKER_PS_CHECK_TIMEOUT = 10  # Timeout for docker-compose ps command
-DOCKER_PULL_TIMEOUT = 30      # < DOCKER_SERVICE_STARTUP_TIMEOUT
+DOCKER_CONTAINER_START_TIMEOUT = 60   # Timeout for individual container startup
+DOCKER_SERVICE_STARTUP_TIMEOUT = 300  # Timeout for starting services (after images are ready)
+DOCKER_PS_CHECK_TIMEOUT = 10          # Timeout for docker-compose ps command
+
+# Building and pulling images can be slow on first run or slow networks
+DOCKER_BUILD_TIMEOUT = 600     # Generous timeout for building the web image
+DOCKER_PULL_TIMEOUT = 120      # Generous timeout for pulling base images
 
 # General Docker operations timeout
-DOCKER_OPERATIONS_TIMEOUT = 20  # < DOCKER_CONTAINER_START_TIMEOUT
+DOCKER_OPERATIONS_TIMEOUT = 30  # < DOCKER_CONTAINER_START_TIMEOUT
 
 # PostgreSQL connection check timeout
 POSTGRES_CONNECTION_TIMEOUT = 5  # < DOCKER_INFO_TIMEOUT

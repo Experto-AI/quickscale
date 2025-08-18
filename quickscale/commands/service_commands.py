@@ -9,13 +9,15 @@ import re
 import time
 import random
 
-from quickscale.utils.env_utils import is_feature_enabled, get_env
-from quickscale.utils.error_manager import ServiceError, handle_command_error
+from quickscale.config.generator_config import generator_config
+from quickscale.utils.error_manager import error_manager
 from quickscale.utils.timeout_constants import (
     DOCKER_SERVICE_STARTUP_TIMEOUT,
     DOCKER_PS_CHECK_TIMEOUT,
     DOCKER_CONTAINER_START_TIMEOUT,
-    DOCKER_OPERATIONS_TIMEOUT
+    DOCKER_OPERATIONS_TIMEOUT,
+    DOCKER_PULL_TIMEOUT,
+    DOCKER_BUILD_TIMEOUT,
 )
 from .command_base import Command
 from .project_manager import ProjectManager
@@ -23,12 +25,12 @@ from .command_utils import DOCKER_COMPOSE_COMMAND, find_available_port
 
 def handle_service_error(e: subprocess.SubprocessError, action: str) -> NoReturn:
     """Handle service operation errors uniformly."""
-    error = ServiceError(
+    error = error_manager.ServiceError(
         f"Error {action}: {e}",
         details=str(e),
         recovery="Check Docker status and project configuration."
     )
-    handle_command_error(error)
+    error_manager.handle_command_error(error)
 
 class ServiceUpCommand(Command):
     """Starts project services."""
@@ -66,14 +68,14 @@ class ServiceUpCommand(Command):
         
         # Check if ports are available
         if self._is_port_in_use(web_port):
-            raise ServiceError(
+            raise error_manager.ServiceError(
                 f"Web port {web_port} is already in use",
                 details=f"Port {web_port} is occupied by another process",
                 recovery="Change WEB_PORT in your .env file or stop the process using this port"
             )
         
         if self._is_port_in_use(db_port):
-            raise ServiceError(
+            raise error_manager.ServiceError(
                 f"Database port {db_port} is already in use", 
                 details=f"Port {db_port} is occupied by another process",
                 recovery="Change DB_PORT_EXTERNAL in your .env file or stop the process using this port"
@@ -84,8 +86,7 @@ class ServiceUpCommand(Command):
     def _prepare_environment_and_ports(self, no_cache: bool = False) -> Tuple[Dict, Dict[str, int]]:
         """Prepare environment variables and check for port availability."""
         # Refresh environment cache to ensure .env file variables are loaded
-        from quickscale.utils.env_utils import refresh_env_cache
-        refresh_env_cache()
+        generator_config.refresh_cache()
         
         # Get environment variables for docker-compose (now includes .env file variables)
         env = os.environ.copy()
@@ -100,7 +101,7 @@ class ServiceUpCommand(Command):
                     env[key] = str(value)
                 updated_ports.update(new_ports)
                 self.logger.info(f"Using updated ports: {new_ports}")
-        except ServiceError as e:
+        except error_manager.ServiceError as e:
             self.logger.error(str(e))
             print(f"Error: {e}")  # User-facing error
             print(f"Recovery: {e.recovery}")
@@ -108,23 +109,34 @@ class ServiceUpCommand(Command):
             
         return env, updated_ports
         
-    def _start_docker_services(self, env: Dict, no_cache: bool = False, timeout: int = DOCKER_SERVICE_STARTUP_TIMEOUT) -> None:
-        """Start the Docker services using docker-compose."""
+    def _start_docker_services(self, env: Dict, no_cache: bool = False) -> None:
+        """Pull, build and start the Docker services using docker compose with sensible timeouts."""
         try:
-            command = DOCKER_COMPOSE_COMMAND + ["up", "--build", "-d"]
+            # 1) Pull images (especially postgres) – can be slow on first run
+            pull_cmd = DOCKER_COMPOSE_COMMAND + ["pull"]
+            self.logger.info("Pulling Docker images (this may take a while on first run)...")
+            subprocess.run(pull_cmd, check=True, env=env, capture_output=True, text=True, timeout=DOCKER_PULL_TIMEOUT)
+
+            # 2) Build the web image – can be expensive, give it more time
+            build_cmd = DOCKER_COMPOSE_COMMAND + ["build", "web"]
             if no_cache:
-                command.append("--no-cache")
-            
-            self.logger.info(f"Starting Docker services with timeout of {timeout} seconds...")
-            result = subprocess.run(command, check=True, env=env, capture_output=True, text=True, timeout=timeout)
+                build_cmd.append("--no-cache")
+            self.logger.info("Building web image...")
+            subprocess.run(build_cmd, check=True, env=env, capture_output=True, text=True, timeout=DOCKER_BUILD_TIMEOUT)
+
+            # 3) Start services detached
+            up_cmd = DOCKER_COMPOSE_COMMAND + ["up", "-d"]
+            self.logger.info("Starting services...")
+            subprocess.run(up_cmd, check=True, env=env, capture_output=True, text=True, timeout=DOCKER_SERVICE_STARTUP_TIMEOUT)
             self.logger.info("Services started successfully.")
         except subprocess.TimeoutExpired as e:
-            self.logger.error(f"Docker services startup timed out after {timeout} seconds")
-            from quickscale.utils.error_manager import ServiceError
-            raise ServiceError(
-                f"Docker services startup timed out after {timeout} seconds",
-                details=f"Command: {' '.join(command)}",
-                recovery="Try increasing the timeout or check for Docker performance issues."
+            cmd = locals().get('up_cmd') if 'up_cmd' in locals() else (locals().get('build_cmd') or locals().get('pull_cmd'))
+            timeout = e.timeout if hasattr(e, 'timeout') else None
+            self.logger.error(f"Docker operation timed out after {timeout or 'unknown'} seconds: {' '.join(cmd) if cmd else 'unknown command'}")
+            raise error_manager.ServiceError(
+                f"Docker operation timed out after {timeout or 'unknown'} seconds",
+                details=f"Command: {' '.join(cmd) if cmd else 'unknown'}",
+                recovery="Check your network and Docker performance; rerun 'quickscale up'"
             )
         except subprocess.CalledProcessError as e:
             self._handle_docker_process_error(e, env)
@@ -142,7 +154,7 @@ class ServiceUpCommand(Command):
         
         # Trust Docker's exit codes - if it failed, it failed
         # No complex fallback logic that masks real issues
-        raise ServiceError(
+        raise error_manager.ServiceError(
             f"Docker services failed to start (exit code: {e.returncode})",
             details=f"Command: {' '.join(e.cmd)}",
             recovery="Check Docker logs with 'quickscale logs' for detailed error information."
@@ -163,10 +175,9 @@ class ServiceUpCommand(Command):
     def _print_service_info(self, updated_ports: Dict[str, int], elapsed_time: float) -> None:
         """Print service information for the user."""
         from quickscale.utils.message_manager import MessageManager
-        from quickscale.utils.env_utils import get_env
         
-        web_port = updated_ports.get('PORT', get_env('WEB_PORT', '8000'))
-        db_port = updated_ports.get('PG_PORT', get_env('DB_PORT_EXTERNAL', '5432'))
+        web_port = updated_ports.get('PORT', generator_config.get_env('WEB_PORT', '8000'))
+        db_port = updated_ports.get('PG_PORT', generator_config.get_env('DB_PORT_EXTERNAL', '5432'))
         
         # Format elapsed time nicely
         if elapsed_time < 60:
@@ -210,8 +221,8 @@ class ServiceUpCommand(Command):
             # Print service information with timing
             self._print_service_info(updated_ports, elapsed_time)
             
-        except ServiceError as e:
-            handle_command_error(e)
+        except error_manager.ServiceError as e:
+            error_manager.handle_command_error(e)
         except Exception as e:
             self.handle_error(e, exit_on_error=True)
 
@@ -235,8 +246,7 @@ class ServiceDownCommand(Command):
         
         try:
             # Refresh environment cache to ensure .env file variables are loaded
-            from quickscale.utils.env_utils import refresh_env_cache
-            refresh_env_cache()
+            generator_config.refresh_cache()
             
             MessageManager.info("Stopping services...", self.logger)
             subprocess.run(DOCKER_COMPOSE_COMMAND + ["down"], check=True, env=os.environ.copy())
@@ -271,8 +281,7 @@ class ServiceLogsCommand(Command):
         
         try:
             # Refresh environment cache to ensure .env file variables are loaded
-            from quickscale.utils.env_utils import refresh_env_cache
-            refresh_env_cache()
+            generator_config.refresh_cache()
             
             cmd: List[str] = DOCKER_COMPOSE_COMMAND + ["logs", f"--tail={lines}"]
             
@@ -322,8 +331,7 @@ class ServiceStatusCommand(Command):
         
         try:
             # Refresh environment cache to ensure .env file variables are loaded
-            from quickscale.utils.env_utils import refresh_env_cache
-            refresh_env_cache()
+            generator_config.refresh_cache()
             
             MessageManager.info("Checking service status...", self.logger)
             result = subprocess.run(DOCKER_COMPOSE_COMMAND + ["ps"], check=True, capture_output=True, text=True, env=os.environ.copy())

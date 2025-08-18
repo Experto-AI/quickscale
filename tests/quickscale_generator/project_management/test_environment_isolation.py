@@ -2,7 +2,11 @@ import os
 import unittest
 from unittest.mock import patch, MagicMock
 import re
-from quickscale.utils.env_utils import get_env, is_feature_enabled, refresh_env_cache
+import sys
+
+# Add the project root to sys.path to access tests module
+project_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
+sys.path.insert(0, project_root)
 
 # Define any necessary test helpers or mock implementations
 def load_env_file(env_file_path):

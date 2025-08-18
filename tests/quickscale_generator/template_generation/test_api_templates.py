@@ -11,30 +11,25 @@ import shutil
 from pathlib import Path
 from django.test import TestCase
 
-from tests.utils import ProjectTestMixin
+from tests.utils import DynamicProjectTestCase
 
 
-class TestAPITemplateGeneration(ProjectTestMixin, TestCase):
+class TestAPITemplateGeneration(DynamicProjectTestCase):
     """Test that QuickScale generates working API authentication templates."""
 
     def setUp(self):
         """Set up test environment."""
         super().setUp()
-        # Create a temporary directory for the test project
-        self.test_dir = Path(tempfile.mkdtemp())
         self.project_name = "test_api_project"
-        self.project_path = self.test_dir / self.project_name
 
     def tearDown(self):
         """Clean up test environment."""
-        if self.test_dir.exists():
-            shutil.rmtree(self.test_dir)
         super().tearDown()
 
     def test_api_key_model_generation(self):
         """Test that APIKey model is correctly generated for API authentication."""
         # Create test project
-        self.create_test_project()
+        self.project_path = self.create_test_project(self.project_name)
         
         # Check that APIKey model exists in credits app
         models_file = self.project_path / "credits" / "models.py"
@@ -57,7 +52,7 @@ class TestAPITemplateGeneration(ProjectTestMixin, TestCase):
     def test_api_middleware_generation(self):
         """Test that API authentication middleware is correctly generated."""
         # Create test project
-        self.create_test_project()
+        self.project_path = self.create_test_project(self.project_name)
         
         # Check that API middleware exists
         middleware_file = self.project_path / "core" / "api_middleware.py"
@@ -77,7 +72,7 @@ class TestAPITemplateGeneration(ProjectTestMixin, TestCase):
     def test_api_views_generation(self):
         """Test that API views are correctly generated."""
         # Create test project
-        self.create_test_project()
+        self.project_path = self.create_test_project(self.project_name)
         
         # Check if api app exists or views are in another location
         api_app_path = self.project_path / "api"
@@ -91,7 +86,7 @@ class TestAPITemplateGeneration(ProjectTestMixin, TestCase):
     def test_api_urls_generation(self):
         """Test that API URLs are correctly generated."""
         # Create test project
-        self.create_test_project()
+        self.project_path = self.create_test_project(self.project_name)
         
         # Check main URLs include API routes
         main_urls_file = self.project_path / "core" / "urls.py"
@@ -101,7 +96,7 @@ class TestAPITemplateGeneration(ProjectTestMixin, TestCase):
     def test_api_key_management_views_generation(self):
         """Test that API key management views are correctly generated."""
         # Create test project
-        self.create_test_project()
+        self.project_path = self.create_test_project(self.project_name)
         
         # Check that API key management exists in users or credits app
         users_views_file = self.project_path / "users" / "views.py"
@@ -121,7 +116,7 @@ class TestAPITemplateGeneration(ProjectTestMixin, TestCase):
     def test_api_key_templates_generation(self):
         """Test that API key management templates are correctly generated."""
         # Create test project
-        self.create_test_project()
+        self.project_path = self.create_test_project(self.project_name)
         
         # Check for API key templates in users templates
         users_templates_dir = self.project_path / "templates" / "users"
@@ -149,7 +144,7 @@ class TestAPITemplateGeneration(ProjectTestMixin, TestCase):
     def test_service_usage_model_generation(self):
         """Test that ServiceUsage model is correctly generated for API tracking."""
         # Create test project
-        self.create_test_project()
+        self.project_path = self.create_test_project(self.project_name)
         
         # Check that ServiceUsage model exists
         models_file = self.project_path / "credits" / "models.py"
@@ -163,7 +158,7 @@ class TestAPITemplateGeneration(ProjectTestMixin, TestCase):
     def test_api_authentication_middleware_in_settings(self):
         """Test that API authentication middleware is properly configured in settings."""
         # Create test project
-        self.create_test_project()
+        self.project_path = self.create_test_project(self.project_name)
         
         # Check that API middleware is in MIDDLEWARE settings
         settings_file = self.project_path / "core" / "settings.py"

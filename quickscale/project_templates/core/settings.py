@@ -1,19 +1,25 @@
 """ Django settings for core project. """
 
+print("DEBUG: Starting settings.py import...")
+
 import os
 import logging
 from pathlib import Path
 
-from dotenv import load_dotenv
-import dj_database_url
+print("DEBUG: Basic imports successful...")
 
-from .env_utils import get_env, is_feature_enabled
+import dj_database_url
+from django.core.exceptions import ImproperlyConfigured
+
+print("DEBUG: Django imports successful...")
+
+# Configuration Singleton - single .env read and processing
+from .configuration import config
+
+print("DEBUG: Configuration import successful...")
 
 # Include email settings
 from .email_settings import *
-
-# Load environment variables
-load_dotenv()
 
 # Import centralized logging configuration
 from .logging_settings import LOGGING
@@ -21,34 +27,50 @@ from .logging_settings import LOGGING
 # Core Django Settings
 BASE_DIR = Path(__file__).resolve().parent.parent
 
-# Project settings
-PROJECT_NAME: str = get_env('PROJECT_NAME', 'QuickScale')
+# Project settings from configuration singleton
+PROJECT_NAME: str = config.get_env('PROJECT_NAME', 'QuickScale')
 
-# Core settings
-SECRET_KEY: str = get_env('SECRET_KEY', 'dev-only-dummy-key-replace-in-production')
-IS_PRODUCTION: bool = is_feature_enabled(get_env('IS_PRODUCTION', 'False'))
+# Core settings from configuration singleton
+SECRET_KEY: str = config.get_env('SECRET_KEY', 'dev-only-dummy-key-replace-in-production')
+IS_PRODUCTION: bool = config.get_env_bool('IS_PRODUCTION', False)
 DEBUG: bool = not IS_PRODUCTION
-ALLOWED_HOSTS: list[str] = get_env('ALLOWED_HOSTS', '*').split(',')
+ALLOWED_HOSTS: list[str] = config.get_env('ALLOWED_HOSTS', '*').split(',')
 
 # Import security settings
 from .security_settings import *
 
 # Two-Factor Authentication Settings (preparation)
-TWO_FACTOR_AUTH_ENABLED = is_feature_enabled(get_env('TWO_FACTOR_AUTH_ENABLED', 'False'))
-TWO_FACTOR_AUTH_ISSUER = get_env('TWO_FACTOR_AUTH_ISSUER', PROJECT_NAME)
-TWO_FACTOR_AUTH_BACKUP_CODES_COUNT = int(get_env('TWO_FACTOR_AUTH_BACKUP_CODES_COUNT', '10'))
+TWO_FACTOR_AUTH_ENABLED = config.feature_flags.enable_two_factor_auth
+TWO_FACTOR_AUTH_ISSUER = config.get_env('TWO_FACTOR_AUTH_ISSUER', PROJECT_NAME)
+TWO_FACTOR_AUTH_BACKUP_CODES_COUNT = int(config.get_env('TWO_FACTOR_AUTH_BACKUP_CODES_COUNT', '10'))
 
 # Validate production settings early
-try:
-    from .env_utils import validate_production_settings
-    validate_production_settings()
-except Exception as e:
-    if IS_PRODUCTION:
+if IS_PRODUCTION:
+    try:
+        # Validate configuration using singleton
+        summary = config.get_configuration_summary()
+        if not config.is_database_configured():
+            raise ValueError(f"Database configuration invalid: {config.database.error_message}")
+        if config.feature_flags.enable_stripe and not config.is_stripe_enabled_and_configured():
+            raise ValueError(f"Stripe configuration invalid: {config.stripe.error_message}")
+        if not config.is_email_configured():
+            raise ValueError(f"Email configuration invalid: {config.email.error_message}")
+        
+        # Additional production validations
+        if SECRET_KEY == 'dev-only-dummy-key-replace-in-production':
+            raise ValueError("Production requires a secure SECRET_KEY")
+        if '*' in ALLOWED_HOSTS:
+            raise ValueError("Production requires specific ALLOWED_HOSTS")
+        
+    except Exception as e:
         # In production, fail hard on validation errors
         raise ValueError(f"Production settings validation failed: {e}")
-    else:
-        # In development, just warn about validation issues
-        logging.warning(f"Settings validation warning: {e}")
+else:
+    # In development, just warn about validation issues
+    summary = config.get_configuration_summary()
+    for service, error in summary.get('configuration_errors', {}).items():
+        if error:
+            logging.warning(f"Configuration warning for {service}: {error}")
 
 # Logging configuration is now handled in logging_settings.py
 
@@ -67,54 +89,45 @@ INSTALLED_APPS = [
     'allauth',
     'allauth.account',  # Email authentication
     
-    # Local apps
+    # Core apps (always included)
     'public.apps.PublicConfig',
-    'admin_dashboard.apps.AdminDashboardConfig',
     'users.apps.UsersConfig',
     'common.apps.CommonConfig',
-    'credits.apps.CreditsConfig',
-    'services.apps.ServicesConfig',  # AI Service Framework
-    'stripe_manager.apps.StripeConfig',  # Always include for migrations
-    'api.apps.ApiConfig',  # API endpoints for AI services
 ]
 
-# Stripe configuration
-stripe_enabled_from_env = is_feature_enabled(get_env('STRIPE_ENABLED', 'False'))
-STRIPE_ENABLED = False  # Will be set to True only if properly configured
+# Feature-flagged apps using configuration singleton
+if config.feature_flags.enable_basic_admin or config.feature_flags.enable_advanced_admin:
+    INSTALLED_APPS.append('admin_dashboard.apps.AdminDashboardConfig')
 
-try:
-    # Only attempt to configure Stripe if it's enabled in the environment
-    if stripe_enabled_from_env:
-        # Direct Stripe integration settings
-        STRIPE_LIVE_MODE = is_feature_enabled(get_env('STRIPE_LIVE_MODE', 'False'))
-        STRIPE_PUBLIC_KEY = get_env('STRIPE_PUBLIC_KEY', '')
-        STRIPE_SECRET_KEY = get_env('STRIPE_SECRET_KEY', '')
-        STRIPE_WEBHOOK_SECRET = get_env('STRIPE_WEBHOOK_SECRET', '')
-        
-        # Check if all required Stripe settings are provided
-        missing_settings = []
-        if not STRIPE_PUBLIC_KEY:
-            missing_settings.append('STRIPE_PUBLIC_KEY')
-        if not STRIPE_SECRET_KEY:
-            missing_settings.append('STRIPE_SECRET_KEY')
-        if not STRIPE_WEBHOOK_SECRET:
-            missing_settings.append('STRIPE_WEBHOOK_SECRET')
-        if not get_env('STRIPE_API_VERSION'):
-            missing_settings.append('STRIPE_API_VERSION')
-            
-        if missing_settings:
-            logging.warning(f"Stripe integration is enabled but missing required settings: {', '.join(missing_settings)}")
-            logging.warning("Stripe integration will be disabled. Please provide all required settings.")
-            # Keep the app in INSTALLED_APPS for migrations but STRIPE_ENABLED remains False
-        else:
-            if isinstance(INSTALLED_APPS, tuple):
-                INSTALLED_APPS = list(INSTALLED_APPS)
-            logging.info("Stripe integration enabled and properly configured.")
-            STRIPE_ENABLED = True
+if config.feature_flags.enable_basic_credits or config.feature_flags.enable_credit_types:
+    INSTALLED_APPS.append('credits.apps.CreditsConfig')
+
+if config.feature_flags.enable_demo_service or config.feature_flags.enable_service_marketplace:
+    INSTALLED_APPS.append('services.apps.ServicesConfig')  # AI Service Framework
+
+if config.feature_flags.enable_api_endpoints:
+    INSTALLED_APPS.append('api.apps.ApiConfig')
+
+# Always include stripe_manager for migrations, but functionality is feature-flagged
+INSTALLED_APPS.append('stripe_manager.apps.StripeConfig')
+
+# Stripe configuration using configuration singleton
+STRIPE_ENABLED = config.is_stripe_enabled_and_configured()
+
+# Only configure Stripe if properly configured
+if STRIPE_ENABLED:
+    # Direct Stripe integration settings from configuration singleton
+    STRIPE_LIVE_MODE = config.stripe.live_mode
+    STRIPE_PUBLIC_KEY = config.stripe.public_key
+    STRIPE_SECRET_KEY = config.stripe.secret_key
+    STRIPE_WEBHOOK_SECRET = config.stripe.webhook_secret
+    STRIPE_API_VERSION = config.stripe.api_version
+    logging.info("Stripe integration enabled and properly configured.")
+else:
+    if config.feature_flags.enable_stripe:
+        logging.warning(f"Stripe integration enabled but not configured: {config.stripe.error_message}")
     else:
-        logging.info("Stripe integration is disabled in configuration.")
-except Exception as e:
-    logging.error(f"Failed to configure Stripe: {e}")
+        logging.info("Stripe integration disabled via feature flag.")
     # Keep the app in INSTALLED_APPS for migrations but STRIPE_ENABLED remains False
 
 # django-allauth configuration
@@ -168,6 +181,7 @@ TEMPLATES = [
         'OPTIONS': {
             'context_processors': [
                 'core.context_processors.project_settings',
+                'core.context_processors.feature_flags_context',
                 'django.template.context_processors.debug',
                 'django.template.context_processors.request',
                 'django.template.context_processors.csrf',
@@ -178,26 +192,49 @@ TEMPLATES = [
     },
 ]
 
-# Database Configuration
+# Database Configuration using configuration singleton
+# Debug: print configuration state
+print(f"DEBUG: Database configured: {config.is_database_configured()}")
+print(f"DEBUG: Database name: '{config.database.name}'")
+print(f"DEBUG: Database user: '{config.database.user}'")
+print(f"DEBUG: Database host: '{config.database.host}'")
+print(f"DEBUG: Database port: {config.database.port}")
+
+# Temporarily disable validation to test if it's causing the issue
+# if not config.is_database_configured():
+#     error_msg = f"Database configuration error: {config.database.error_message}"
+#     print(f"CRITICAL DATABASE ERROR: {error_msg}")
+#     if config.get_env('LOG_LEVEL', 'INFO').upper() == 'DEBUG':
+#         print("Available environment variables:")
+#         db_vars = {k: v for k, v in os.environ.items() if k.startswith('DB_')}
+#         for k, v in db_vars.items():
+#             if 'PASSWORD' in k:
+#                 print(f"  {k}: {'***' if v else 'NOT SET'}")
+#             else:
+#                 print(f"  {k}: {v}")
+#     raise ImproperlyConfigured(error_msg)
+
+print("DEBUG: Creating DATABASES dictionary...")
 DATABASES = {
     'default': {
         'ENGINE': 'django.db.backends.postgresql',
-        'NAME': get_env('DB_NAME', 'quickscale'),
-        'USER': get_env('DB_USER', 'admin'),
-        'PASSWORD': get_env('DB_PASSWORD', 'adminpasswd'),
-        'HOST': get_env('DB_HOST', 'db'),
-        'PORT': get_env('DB_PORT', '5432'),
+        'NAME': config.database.name,
+        'USER': config.database.user,
+        'PASSWORD': config.database.password,
+        'HOST': config.database.host,
+        'PORT': config.database.port,
     }
 }
+print(f"DEBUG: DATABASES created: {DATABASES}")
 
 # Log database connection information for debugging
-if get_env('LOG_LEVEL', 'INFO').upper() == 'DEBUG':
+if config.get_env('LOG_LEVEL', 'INFO').upper() == 'DEBUG':
     print("Database connection settings:")
     print(f"NAME: {DATABASES['default']['NAME']}")
     print(f"USER: {DATABASES['default']['USER']}")
     print(f"HOST: {DATABASES['default']['HOST']}")
     print(f"PORT: {DATABASES['default']['PORT']}")
-    print(f"DATABASE_URL: {os.environ.get('DATABASE_URL', 'Not set')}")
+    print(f"DATABASE_URL: {config.get_env('DATABASE_URL', 'Not set')}")
 
 # Custom User Model
 AUTH_USER_MODEL = 'users.CustomUser'
@@ -217,8 +254,8 @@ LOGIN_URL = 'account_login'
 LOGIN_REDIRECT_URL = '/'
 LOGOUT_REDIRECT_URL = '/'
 
-# Django Debug Toolbar - only in development
-if DEBUG:
+# Django Debug Toolbar - feature flagged using configuration singleton
+if DEBUG and config.feature_flags.enable_debug_toolbar:
     try:
         import debug_toolbar
         INSTALLED_APPS.append('debug_toolbar')

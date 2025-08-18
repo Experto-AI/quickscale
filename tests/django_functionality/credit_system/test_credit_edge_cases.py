@@ -37,7 +37,7 @@ User = get_user_model()
 
 
 @override_settings(
-    STRIPE_ENABLED=False,
+    ENABLE_STRIPE=False,
     STRIPE_LIVE_MODE=False,
 )
 class CreditConsumptionEdgeCaseTests(TestCase):
@@ -356,7 +356,7 @@ class CreditConsumptionEdgeCaseTests(TestCase):
 
 
 @override_settings(
-    STRIPE_ENABLED=False,
+    ENABLE_STRIPE=False,
     STRIPE_LIVE_MODE=False,
 )
 class ExpirationHandlingEdgeCaseTests(TestCase):
@@ -591,7 +591,7 @@ class ExpirationHandlingEdgeCaseTests(TestCase):
 
 
 @override_settings(
-    STRIPE_ENABLED=False,
+    ENABLE_STRIPE=False,
     STRIPE_LIVE_MODE=False,
 )
 class ServiceIntegrationEdgeCaseTests(TestCase):

@@ -13,11 +13,8 @@ from quickscale.commands import command_manager
 from quickscale.commands.init_command import InitCommand
 from quickscale.commands.project_manager import ProjectManager
 from quickscale.utils.help_manager import show_manage_help
-from quickscale.utils.error_manager import (
-    handle_command_error, CommandError, 
-    UnknownCommandError, ValidationError
-)
-from quickscale.utils.env_utils import get_env
+from quickscale.utils.error_manager import error_manager
+from quickscale.config.generator_config import generator_config
 
 
 # Ensure log directory exists
@@ -30,7 +27,7 @@ os.makedirs(log_dir, exist_ok=True)
 qs_logger = logging.getLogger('quickscale')
 
 # Set log level from environment variable (default INFO)
-LOG_LEVEL = get_env('LOG_LEVEL', 'INFO', from_env_file=True).upper()
+LOG_LEVEL = generator_config.get_env('LOG_LEVEL', 'INFO').upper()
 LOG_LEVEL_MAP = {
     'CRITICAL': logging.CRITICAL,
     'ERROR': logging.ERROR,
@@ -74,31 +71,31 @@ class QuickScaleArgumentParser(argparse.ArgumentParser):
         """Show error message and command help."""
         if "the following arguments are required" in message:
             self.print_usage()
-            error = ValidationError(
+            error = error_manager.ValidationError(
                 message,
                 details=f"Command arguments validation failed: {message}",
                 recovery="Use 'quickscale COMMAND -h' to see help for this command"
             )
-            handle_command_error(error)
+            error_manager.handle_command_error(error)
         elif "invalid choice" in message and "argument command" in message:
             # Extract the invalid command from the error message
             import re
             match = re.search(r"invalid choice: '([^']+)'", message)
             invalid_cmd = match.group(1) if match else "unknown"
             
-            error = UnknownCommandError(
+            error = error_manager.UnknownCommandError(
                 f"Unknown command: {invalid_cmd}",
                 details=message,
                 recovery="Use 'quickscale help' to see available commands"
             )
-            handle_command_error(error)
+            error_manager.handle_command_error(error)
         else:
             self.print_usage()
-            error = ValidationError(
+            error = error_manager.ValidationError(
                 message,
                 recovery="Use 'quickscale help' to see available commands"
             )
-            handle_command_error(error)
+            error_manager.handle_command_error(error)
 
 
 def create_parser() -> Tuple[QuickScaleArgumentParser, argparse._SubParsersAction]:
@@ -584,8 +581,8 @@ if __name__ == "__main__":
     if LOG_LEVEL == 'DEBUG':
         qs_logger.info(f"Loaded .env file from: {find_dotenv()}")
         # Show a few key environment variables 
-        qs_logger.info(f"PROJECT_NAME={os.environ.get('PROJECT_NAME', '???')}")
-        qs_logger.info(f"LOG_LEVEL={os.environ.get('LOG_LEVEL', '???')}")
+        qs_logger.info(f"PROJECT_NAME={generator_config.get_env('PROJECT_NAME', '???')}")
+        qs_logger.info(f"LOG_LEVEL={generator_config.get_env('LOG_LEVEL', '???')}")
     else:
         qs_logger.info("LOG_LEVEL is not set to DEBUG, skipping environment variable logging.")
 

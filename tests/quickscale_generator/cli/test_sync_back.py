@@ -7,7 +7,7 @@ from unittest.mock import patch, MagicMock
 import pytest
 
 from quickscale.commands.sync_back_command import SyncBackCommand
-from quickscale.utils.error_manager import CommandError, ValidationError
+from quickscale.utils.error_manager import error_manager
 
 
 class TestSyncBackCommand:
@@ -71,7 +71,7 @@ class TestSyncBackCommand:
 
     def test_validate_project_path_not_exists(self):
         """Test validation of non-existent project path."""
-        with pytest.raises(ValidationError, match="Project directory does not exist"):
+        with pytest.raises(error_manager.ValidationError, match="Project directory does not exist"):
             self.sync_back_cmd._validate_project_path("/non/existent/path")
 
     def test_validate_project_path_not_quickscale_project(self):
@@ -80,7 +80,7 @@ class TestSyncBackCommand:
         project_dir = Path(self.temp_dir) / "not_quickscale"
         project_dir.mkdir(parents=True)
         
-        with pytest.raises(ValidationError, match="does not appear to be a QuickScale project"):
+        with pytest.raises(error_manager.ValidationError, match="does not appear to be a QuickScale project"):
             self.sync_back_cmd._validate_project_path(str(project_dir))
 
     def test_categorize_file_safe_template(self):
@@ -166,19 +166,19 @@ class TestSyncBackCommand:
     def test_execute_production_mode_error(self):
         """Test execution in production mode shows error."""
         with patch.object(self.sync_back_cmd, '_detect_installation_mode', return_value='production'):
-            with pytest.raises(CommandError, match="Sync-back functionality requires development mode"):
+            with pytest.raises(error_manager.CommandError, match="Sync-back functionality requires development mode"):
                 self.sync_back_cmd.execute("./project", preview=True)
 
     def test_execute_no_flags_error(self):
         """Test execution without preview, apply, or interactive flags shows error."""
         with patch.object(self.sync_back_cmd, '_detect_installation_mode', return_value='development'):
-            with pytest.raises(ValidationError, match="Must specify either --preview, --apply, or --interactive"):
+            with pytest.raises(error_manager.ValidationError, match="Must specify either --preview, --apply, or --interactive"):
                 self.sync_back_cmd.execute("./project")
 
     def test_execute_both_flags_error(self):
         """Test execution with multiple mode flags shows error."""
         with patch.object(self.sync_back_cmd, '_detect_installation_mode', return_value='development'):
-            with pytest.raises(ValidationError, match="Cannot specify multiple modes"):
+            with pytest.raises(error_manager.ValidationError, match="Cannot specify multiple modes"):
                 self.sync_back_cmd.execute("./project", preview=True, apply=True)
 
     def test_execute_interactive_success(self):

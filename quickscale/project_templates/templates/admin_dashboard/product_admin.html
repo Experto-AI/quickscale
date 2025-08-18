@@ -35,7 +35,7 @@
 
         {% if not stripe_enabled %}
         <div class="notification is-warning">
-            <p>Stripe integration is not enabled. To enable Stripe, set STRIPE_ENABLED=true in your environment.</p>
+            <p>Stripe integration is not enabled. To enable Stripe, set ENABLE_STRIPE=true in your environment.</p>
         </div>
         {% elif not stripe_available %}
         <div class="notification is-danger">

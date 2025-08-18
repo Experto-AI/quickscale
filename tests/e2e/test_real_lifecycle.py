@@ -9,14 +9,7 @@ import shutil
 from pathlib import Path
 
 # Import quickscale test utils
-from tests.utils import (
-    run_quickscale_command,
-    remove_project_dir,
-    wait_for_port,
-    change_directory,
-    is_docker_available, # Keep for initial check if needed
-    find_available_ports as find_ports_util # Renamed to avoid conflict
-)
+import tests.utils.utils as test_utils
 
 @pytest.mark.e2e
 class TestRealLifecycle:
@@ -34,10 +27,10 @@ class TestRealLifecycle:
         """Verify that Docker is working correctly before running tests."""
         print("\n============== VERIFYING DOCKER AVAILABILITY ==============")
         # Use the utility function which might internally use quickscale check or docker info
-        is_docker_available()
+        test_utils.is_docker_available()
         # Optionally, run quickscale check for a more integrated check
         try:
-            check_result = run_quickscale_command(['check'], check=True, timeout=30)
+            check_result = test_utils.run_quickscale_command(['check'], check=True, timeout=30)
             print(f"QuickScale check successful: {check_result.stdout}")
             assert "Docker daemon is running" in check_result.stdout, "QuickScale check did not confirm Docker status."
         except Exception as e:
@@ -56,7 +49,7 @@ class TestRealLifecycle:
         try:
             print(f"Asserting containers for {project_name} are running using quickscale ps...")
             # Check container status with quickscale ps, fail if command fails
-            ps_result = run_quickscale_command(['ps'], check=True, timeout=15)
+            ps_result = test_utils.run_quickscale_command(['ps'], check=True, timeout=15)
             ps_output = ps_result.stdout.strip()
 
             # Debug output to understand actual format
@@ -102,7 +95,7 @@ class TestRealLifecycle:
         """Find available ports for web and PostgreSQL using the utility."""
         try:
             print("DEBUG: Starting find_available_ports method")
-            ports = find_ports_util(count=2, start_port=10000, end_port=65000)
+            ports = test_utils.find_available_ports(count=2, start_port=10000, end_port=65000)
             print(f"DEBUG: Got ports from find_ports_util: {ports}")
             if len(ports) < 2:
                 print("DEBUG: Not enough ports found")
@@ -179,22 +172,53 @@ class TestRealLifecycle:
             # Write updated .env file
             with open(env_file, 'w') as f:
                 f.write(env_content)
+                f.flush()  # Ensure data is written to disk
+                os.fsync(f.fileno())  # Force filesystem sync
             print(f"Updated .env file with custom ports: web={web_port}, db={pg_port}")
+            
+            # Debug: Verify the .env file was updated correctly
+            with open(env_file, 'r') as f:
+                updated_content = f.read()
+            web_port_lines = [line for line in updated_content.split('\n') if 'WEB_PORT=' in line and 'FALLBACK' not in line]
+            db_port_lines = [line for line in updated_content.split('\n') if 'DB_PORT_EXTERNAL=' in line and 'FALLBACK' not in line]
+            print(f"DEBUG: Updated .env file contains: {web_port_lines} {db_port_lines}")
+            
+            # Small delay to ensure file system operations are complete
+            import time
+            time.sleep(0.1)
+        else:
+            print(f"WARNING: .env file not found at {env_file}")
 
         return project_dir
     
     def _ensure_clean_environment(self):
         """Ensure clean environment before starting services."""
         print("Ensuring clean environment before starting services...")
-        down_result = run_quickscale_command(['down'], check=False, timeout=60)
+        down_result = test_utils.run_quickscale_command(['down'], check=False, timeout=60)
         print(f"Pre-up 'quickscale down' result: {down_result.returncode}")
     
-    def _start_services_and_verify(self, project_name, web_port):
+    def _start_services_and_verify(self, project_name, web_port, pg_port):
         """Start services and verify they are running correctly."""
         # Start services using quickscale up, expect success (check=True)
         print("Starting services with 'quickscale up'...")
+        
+        # Debug: Check what ports Docker Compose will use
         try:
-            up_result = run_quickscale_command(['up'], timeout=180, check=True)
+            with open('.env', 'r') as f:
+                env_content = f.read()
+            web_port_lines = [line for line in env_content.split('\n') if 'WEB_PORT=' in line and 'FALLBACK' not in line]
+            db_port_lines = [line for line in env_content.split('\n') if 'DB_PORT_EXTERNAL=' in line and 'FALLBACK' not in line]
+            print(f"DEBUG: .env file before 'quickscale up': {web_port_lines} {db_port_lines}")
+        except Exception as e:
+            print(f"DEBUG: Could not read .env file: {e}")
+        
+        # Set up environment variables to ensure consistency with .env file
+        env = os.environ.copy()
+        env['WEB_PORT'] = str(web_port)
+        env['DB_PORT_EXTERNAL'] = str(pg_port)
+        
+        try:
+            up_result = test_utils.run_quickscale_command(['up'], env=env, timeout=180, check=True)
             print(f"✅ 'quickscale up' succeeded.")
             print(f"STDOUT summary: {up_result.stdout[:200]}...")
         except Exception as e:
@@ -202,7 +226,7 @@ class TestRealLifecycle:
             print(f"❌ 'quickscale up' failed unexpectedly.")
             # Try getting logs for diagnostics before failing
             try:
-                logs_result = run_quickscale_command(['logs', '--lines', '50'], check=False, timeout=30)
+                logs_result = test_utils.run_quickscale_command(['logs', '--lines', '50'], check=False, timeout=30)
                 print(f"Last 50 lines of logs on failure:\n{logs_result.stdout}\n{logs_result.stderr}")
             except Exception as log_e:
                 print(f"Could not retrieve logs after 'up' failure: {log_e}")
@@ -216,7 +240,7 @@ class TestRealLifecycle:
         print("Getting detailed diagnostics before assertion...")
         try:
             # Get logs first
-            logs_result = run_quickscale_command(['logs', '--lines', '30'], check=False, timeout=30)
+            logs_result = test_utils.run_quickscale_command(['logs', '--lines', '30'], check=False, timeout=30)
             print(f"Service logs (last 30 lines):\n{logs_result.stdout}\n{logs_result.stderr}")
             
             # Check direct docker-compose status
@@ -260,12 +284,12 @@ class TestRealLifecycle:
 
         # Verify web port accessibility and fail if not ready
         print(f"Asserting web port {web_port} is available...")
-        port_ready = wait_for_port('localhost', web_port, timeout=30)
+        port_ready = test_utils.wait_for_port('localhost', web_port, timeout=30)
         if not port_ready:
             print(f"❌ Web service port {web_port} is not accessible after timeout.")
             # Get logs for debugging before failing
             try:
-                logs_result = run_quickscale_command(['logs', 'web', '--lines', '50'], check=False, timeout=30)
+                logs_result = test_utils.run_quickscale_command(['logs', 'web', '--lines', '50'], check=False, timeout=30)
                 print(f"Web service logs on port check failure:\n{logs_result.stdout}\n{logs_result.stderr}")
             except Exception as log_e:
                 print(f"Could not retrieve web logs: {log_e}")
@@ -282,7 +306,7 @@ class TestRealLifecycle:
 
         # Run quickscale init
         print(f"Running command: quickscale init {project_name}")
-        init_result = run_quickscale_command(['init', project_name], env=env, timeout=180, check=False)
+        init_result = test_utils.run_quickscale_command(['init', project_name], env=env, timeout=180, check=False)
 
         if init_result.returncode != 0:
             # Use fail instead of skip for init failure
@@ -321,7 +345,7 @@ class TestRealLifecycle:
             self._ensure_clean_environment()
 
             # Start services and verify they're running
-            self._start_services_and_verify(project_name, web_port)
+            self._start_services_and_verify(project_name, web_port, pg_port)
 
             project_info = {"dir": project_dir, "pg_port": pg_port, "web_port": web_port, "name": project_name}
             print("============== REAL PROJECT FIXTURE SETUP COMPLETE ==============")
@@ -344,7 +368,7 @@ class TestRealLifecycle:
                 try:
                     if Path(tmp_path / project_name).exists():
                         os.chdir(tmp_path / project_name)
-                        run_quickscale_command(['down'], check=False, timeout=60)
+                        test_utils.run_quickscale_command(['down'], check=False, timeout=60)
                         print("Successfully ran 'down' during cleanup")
                 except Exception as e:
                     print(f"Warning: Could not run 'down' during cleanup: {e}")
@@ -352,7 +376,7 @@ class TestRealLifecycle:
                 # Force removal of project directory to clean up
                 try:
                     os.chdir(original_dir) # Ensure we're out of the directory before removing
-                    remove_project_dir(tmp_path / project_name)
+                    test_utils.remove_project_dir(tmp_path / project_name)
                     print(f"Removed project directory: {tmp_path / project_name}")
                 except Exception as e:
                     print(f"Warning: Could not fully remove project directory: {e}")
@@ -372,14 +396,14 @@ class TestRealLifecycle:
         project_name = real_project["name"]
         web_port = real_project["web_port"]
 
-        with change_directory(project_dir):
+        with test_utils.change_directory(project_dir):
             print(f"Changed to project directory: {os.getcwd()}")
 
             # Assert containers are running using the strict helper
             self.assert_containers_running(project_name)
 
             # Verify port accessibility - make it an assertion
-            port_open = wait_for_port('localhost', web_port, timeout=10)
+            port_open = test_utils.wait_for_port('localhost', web_port, timeout=10)
             assert port_open, f"Web service port {web_port} is not accessible, even though 'quickscale ps' shows running."
 
     def test_02_down_command(self, real_project):
@@ -390,14 +414,14 @@ class TestRealLifecycle:
         project_dir = real_project["dir"]
         web_port = real_project["web_port"] # Keep for port check
 
-        with change_directory(project_dir):
+        with test_utils.change_directory(project_dir):
             # Run the quickscale down command
-            result = run_quickscale_command(['down'], check=True, timeout=60)
+            result = test_utils.run_quickscale_command(['down'], check=True, timeout=60)
             print(f"Down command output: {result.stdout}")
 
             # Verify services are stopped using quickscale ps
             time.sleep(5) # Give time for services to stop
-            ps_result = run_quickscale_command(['ps'], check=False, timeout=15) # Don't check=True, might return non-zero if nothing running
+            ps_result = test_utils.run_quickscale_command(['ps'], check=False, timeout=15) # Don't check=True, might return non-zero if nothing running
             ps_output = ps_result.stdout.lower()
             print(f"QuickScale PS output after down:\n{ps_result.stdout}")
 
@@ -417,12 +441,18 @@ class TestRealLifecycle:
         project_dir = real_project["dir"]
         project_name = real_project["name"]
         web_port = real_project["web_port"]
+        pg_port = real_project["pg_port"]
 
-        with change_directory(project_dir):
+        with test_utils.change_directory(project_dir):
+            # Set up environment variables to ensure consistency
+            env = os.environ.copy()
+            env['WEB_PORT'] = str(web_port)
+            env['DB_PORT_EXTERNAL'] = str(pg_port)
+            
             # Run the quickscale up command, expecting success (check=True)
             try:
                 print("Running 'quickscale up' again...")
-                result = run_quickscale_command(['up'], check=True, timeout=180)
+                result = test_utils.run_quickscale_command(['up'], env=env, check=True, timeout=180)
                 print(f"Up command output: {result.stdout}")
             except Exception as e:
                 pytest.fail(f"'quickscale up' failed unexpectedly: {e}")
@@ -433,11 +463,11 @@ class TestRealLifecycle:
             self.assert_containers_running(project_name)
 
             # Assert web service port is accessible again
-            port_ready = wait_for_port('localhost', web_port, timeout=30)
+            port_ready = test_utils.wait_for_port('localhost', web_port, timeout=30)
             if not port_ready:
                  # Get logs if port check fails before failing the test
                  try:
-                     logs_result = run_quickscale_command(['logs', 'web', '--lines', '50'], check=False, timeout=30)
+                     logs_result = test_utils.run_quickscale_command(['logs', 'web', '--lines', '50'], check=False, timeout=30)
                      print(f"Web logs on port check failure:\n{logs_result.stdout}\n{logs_result.stderr}")
                  except Exception as log_e:
                      print(f"Could not retrieve web logs: {log_e}")
@@ -451,12 +481,12 @@ class TestRealLifecycle:
         project_dir = real_project["dir"]
         project_name = real_project["name"]
 
-        with change_directory(project_dir):
+        with test_utils.change_directory(project_dir):
              # Assert services are running first
             self.assert_containers_running(project_name)
 
             # Run the quickscale ps command, expecting success (check=True)
-            result = run_quickscale_command(['ps'], check=True, timeout=30)
+            result = test_utils.run_quickscale_command(['ps'], check=True, timeout=30)
             print(f"PS command output: {result.stdout}")
 
             # Check output contains expected headers or service names and running status
@@ -473,18 +503,18 @@ class TestRealLifecycle:
         project_dir = real_project["dir"]
         project_name = real_project["name"]
 
-        with change_directory(project_dir):
+        with test_utils.change_directory(project_dir):
             # Assert services are running
             self.assert_containers_running(project_name)
 
             # Run the logs command, but don't check the return code since the command handling may report error
-            result = run_quickscale_command(['logs', '--lines', '20'], check=False, timeout=30)
+            result = test_utils.run_quickscale_command(['logs', '--lines', '20'], check=False, timeout=30)
             print(f"Logs command output (all services): {result.stdout}")
             # Skip return code assertion and just verify we got some output
             assert result.stdout, "Expected some log output but received none"
 
             # Run logs command specifically for web service
-            web_result = run_quickscale_command(['logs', 'web', '--lines', '20'], check=False, timeout=30)
+            web_result = test_utils.run_quickscale_command(['logs', 'web', '--lines', '20'], check=False, timeout=30)
             print(f"Web logs command output: {web_result.stdout}")
             # Skip return code assertion and just verify we got some output
             assert web_result.stdout, "Expected some web service log output but received none"
@@ -497,14 +527,14 @@ class TestRealLifecycle:
         project_dir = real_project["dir"]
         project_name = real_project["name"]
 
-        with change_directory(project_dir):
+        with test_utils.change_directory(project_dir):
             # Assert containers are running
             self.assert_containers_running(project_name)
 
             # Run a simple command using 'quickscale shell -c', expecting success (check=True)
             cmd_to_run = 'ls -la /app'
             try:
-                result = run_quickscale_command(['shell', '-c', cmd_to_run], check=True, timeout=30)
+                result = test_utils.run_quickscale_command(['shell', '-c', cmd_to_run], check=True, timeout=30)
                 print(f"Shell command ('{cmd_to_run}') output: {result.stdout}")
                 # Assert expected output
                 assert 'manage.py' in result.stdout or 'requirements.txt' in result.stdout, \
@@ -522,14 +552,14 @@ class TestRealLifecycle:
         project_dir = real_project["dir"]
         project_name = real_project["name"]
 
-        with change_directory(project_dir):
+        with test_utils.change_directory(project_dir):
             # Assert containers are running
             self.assert_containers_running(project_name)
 
             # Run a simple Django management command, expecting success (check=True)
             cmd_args = ['check']
             try:
-                result = run_quickscale_command(['manage'] + cmd_args, check=True, timeout=45)
+                result = test_utils.run_quickscale_command(['manage'] + cmd_args, check=True, timeout=45)
                 print(f"Django manage {' '.join(cmd_args)} output: {result.stdout}")
                 # Assert expected output
                 assert "System check identified no issues" in result.stdout, \
@@ -552,7 +582,7 @@ class TestRealLifecycle:
         project_dir = real_project["dir"]
         project_name = real_project["name"]
 
-        with change_directory(project_dir):
+        with test_utils.change_directory(project_dir):
             # Services should already be running from previous tests
             self.assert_containers_running(project_name)
 
@@ -561,7 +591,7 @@ class TestRealLifecycle:
             cmd_args_for_test = ['manage', 'test', 'public', '--noinput']
             try:
                 # Increased timeout as tests might take time
-                result = run_quickscale_command(cmd_args_for_test, timeout=180, check=True)
+                result = test_utils.run_quickscale_command(cmd_args_for_test, timeout=180, check=True)
                 print(f"Django manage test STDOUT: {result.stdout}")
                 if result.stderr: # Print stderr if any, even on success
                     print(f"Django manage test STDERR: {result.stderr}")
@@ -606,13 +636,13 @@ class TestRealLifecycle:
         project_dir = real_project["dir"]
         project_name = real_project["name"]
 
-        with change_directory(project_dir):
+        with test_utils.change_directory(project_dir):
             # Services should already be running
             self.assert_containers_running(project_name)
 
             # Run the check command via quickscale manage, expecting success
             try:
-                result = run_quickscale_command(['manage', 'check'], timeout=30, check=True)
+                result = test_utils.run_quickscale_command(['manage', 'check'], timeout=30, check=True)
                 assert "System check identified no issues" in result.stdout, (
                     f"Expected check output not found in successful command result:\n{result.stdout}"
                 )
@@ -628,13 +658,13 @@ class TestRealLifecycle:
         project_dir = real_project["dir"]
         project_name = real_project["name"]
 
-        with change_directory(project_dir):
+        with test_utils.change_directory(project_dir):
             # Services should already be running
             self.assert_containers_running(project_name)
 
             # Run the help command via quickscale manage, expecting success
             try:
-                result = run_quickscale_command(['manage', 'help'], timeout=30, check=True)
+                result = test_utils.run_quickscale_command(['manage', 'help'], timeout=30, check=True)
                 assert "Available subcommands" in result.stdout, (
                     f"Expected help output not found in successful command result:\n{result.stdout}"
                 )
