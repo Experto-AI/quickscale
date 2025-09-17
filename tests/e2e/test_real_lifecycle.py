@@ -1,15 +1,17 @@
 """Real-life integration tests for the QuickScale CLI command lifecycle."""
-import pytest
-import subprocess
-import time
 import os
 import re
 import socket
-import shutil
+import subprocess
+import time
 from pathlib import Path
 
+import pytest
+
 # Import quickscale test utils
-import tests.utils.utils as test_utils
+from tests import utils as test_utils
+from tests.utils.test_env_config import extended_docker_timeouts
+
 
 @pytest.mark.e2e
 class TestRealLifecycle:
@@ -21,6 +23,12 @@ class TestRealLifecycle:
     4. Up (restart services)
     5. Other commands (ps, logs, shell, manage)
     """
+
+    @pytest.fixture(scope="module", autouse=True)
+    def configure_docker_timeouts(self, extended_docker_timeouts):
+        """Configure extended Docker timeouts for E2E tests that involve real Docker operations."""
+        # The extended_docker_timeouts fixture handles the environment configuration
+        yield
 
     @pytest.fixture(scope="module", autouse=True)
     def verify_docker(self):
@@ -108,7 +116,7 @@ class TestRealLifecycle:
             pg_in_use = self.is_port_in_use(pg_port)
             print(f"DEBUG: Port in use check - Web: {web_in_use}, PG: {pg_in_use}")
             if web_in_use or pg_in_use:
-                 print(f"DEBUG: Port conflict detected after finding ports")
+                 print("DEBUG: Port conflict detected after finding ports")
                  pytest.skip(f"Port conflict detected immediately after finding ports ({web_port}, {pg_port})")
                  return None, None
             print("DEBUG: Returning available ports")
@@ -218,12 +226,13 @@ class TestRealLifecycle:
         env['DB_PORT_EXTERNAL'] = str(pg_port)
         
         try:
-            up_result = test_utils.run_quickscale_command(['up'], env=env, timeout=180, check=True)
-            print(f"✅ 'quickscale up' succeeded.")
+            # Use extended timeout to accommodate Docker pull operations (5 minutes + buffer)
+            up_result = test_utils.run_quickscale_command(['up'], env=env, timeout=360, check=True)
+            print("✅ 'quickscale up' succeeded.")
             print(f"STDOUT summary: {up_result.stdout[:200]}...")
         except Exception as e:
             # If 'up' fails, fail the fixture setup
-            print(f"❌ 'quickscale up' failed unexpectedly.")
+            print("❌ 'quickscale up' failed unexpectedly.")
             # Try getting logs for diagnostics before failing
             try:
                 logs_result = test_utils.run_quickscale_command(['logs', '--lines', '50'], check=False, timeout=30)

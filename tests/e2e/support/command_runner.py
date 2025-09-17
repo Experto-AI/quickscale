@@ -1,7 +1,6 @@
 """Command runner utilities for end-to-end tests."""
 import subprocess
-from pathlib import Path
-import os
+
 
 def run_quickscale_command(*args, capture_output=True, check=False):
     """Run a QuickScale command with the given arguments."""

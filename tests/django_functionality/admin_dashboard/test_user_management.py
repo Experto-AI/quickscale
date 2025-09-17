@@ -5,7 +5,12 @@ import pytest
 from django.test import TestCase, override_settings
 
 # Set up template path and Django settings
-from ..base import DjangoIntegrationTestCase, setup_django_template_path, setup_core_env_utils_mock, setup_django_settings
+from ..base import (
+    setup_core_env_utils_mock,
+    setup_django_settings,
+    setup_django_template_path,
+)
+
 setup_django_template_path()
 setup_core_env_utils_mock()
 setup_django_settings()

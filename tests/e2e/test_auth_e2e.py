@@ -1,30 +1,22 @@
 """End-to-end tests for authentication workflows in QuickScale."""
-import pytest
-import os
-import re
-import time
 import unittest
-from unittest.mock import patch, MagicMock
+
+import pytest
 
 # Disable all the problematic Django live server tests, but keep them for reference
 USE_DJANGO_LIVESERVER = True
 
 if USE_DJANGO_LIVESERVER:
-    from django.test import LiveServerTestCase
-    from django.core import mail
-    from django.urls import reverse
-    from django.contrib.auth import get_user_model
-    from django.contrib.sites.models import Site
-    from django.conf import settings
-    from django.core.management import call_command
+    pass
 
 try:
-    from selenium import webdriver
-    from selenium.webdriver.common.by import By
-    from selenium.webdriver.common.keys import Keys
-    from selenium.webdriver.support.ui import WebDriverWait
-    from selenium.webdriver.support import expected_conditions as EC
-    from selenium.common.exceptions import TimeoutException
+    # Import selenium components when implementing actual e2e tests
+    # from selenium import webdriver
+    # from selenium.webdriver.common.by import By
+    # from selenium.webdriver.common.keys import Keys
+    # from selenium.webdriver.support.ui import WebDriverWait
+    # from selenium.webdriver.support import expected_conditions as EC
+    # from selenium.common.exceptions import TimeoutException
     SELENIUM_AVAILABLE = True
 except ImportError:
     SELENIUM_AVAILABLE = False

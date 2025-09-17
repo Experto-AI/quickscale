@@ -2,14 +2,14 @@
 
 """Tests for Stripe template tags."""
 
-import os
-import sys
-import pytest
 from unittest import TestCase, mock
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock
+
+import pytest
 
 # Configure Django settings with all required settings directly
 from django.conf import settings
+
 if not settings.configured:
     # Import PostgreSQL test configuration
     from core.test_db_config import get_test_db_config
@@ -32,6 +32,7 @@ if not settings.configured:
 
 # Initialize Django
 import django
+
 django.setup()
 
 # First, define the mock classes
@@ -69,8 +70,10 @@ class MockPrices:
 
 
 # Define the mock functions
-mock_floatformat = lambda value, decimal_places: f"{float(value):.{decimal_places}f}"
-mock_mark_safe = lambda x: x
+def mock_floatformat(value, decimal_places):
+    return f"{float(value):.{decimal_places}f}"
+def mock_mark_safe(x):
+    return x
 
 
 # Tests that don't depend on the Django floatformat filter
@@ -82,9 +85,9 @@ class TestStripeTagsNonFormatting(TestCase):
         # Import the template tags
         try:
             from quickscale.project_templates.stripe_manager.templatetags.stripe_tags import (
+                get_stripe_price,
                 get_stripe_product_name,
                 get_stripe_product_status,
-                get_stripe_price
             )
             self.get_stripe_product_name = get_stripe_product_name
             self.get_stripe_product_status = get_stripe_product_status
@@ -213,7 +216,9 @@ def test_format_stripe_price():
         with mock.patch('django.utils.safestring.mark_safe', side_effect=mock_mark_safe):
             # Now it's safe to import our function
             try:
-                from quickscale.project_templates.stripe_manager.templatetags.stripe_tags import format_stripe_price
+                from quickscale.project_templates.stripe_manager.templatetags.stripe_tags import (
+                    format_stripe_price,
+                )
             except ImportError:
                 # Skip the test if template tags are not available in this context
                 pytest.skip("Template tags not available in this test context")
@@ -287,7 +292,6 @@ def test_template_tag_conditional_loading():
                 """
                 
                 # Test with stripe enabled - should attempt to load stripe_tags
-                from django.template import Engine, Context, TemplateSyntaxError
                 
                 # This is a simplified test since we can't fully replicate template parsing
                 # In a real situation, Django would try to load the template tag library

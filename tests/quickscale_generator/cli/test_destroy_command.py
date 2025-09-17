@@ -1,13 +1,10 @@
 """Unit tests for the DestroyProjectCommand class."""
-import os
-import shutil
-import unittest
 import subprocess
-from unittest.mock import patch, MagicMock, call
+import unittest
 from pathlib import Path
+from unittest.mock import MagicMock, patch
 
 from quickscale.commands.project_commands import DestroyProjectCommand
-from quickscale.commands.project_manager import ProjectManager
 
 
 class TestDestroyProjectCommand(unittest.TestCase):

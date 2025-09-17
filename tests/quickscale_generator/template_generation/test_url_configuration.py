@@ -10,8 +10,8 @@ This test suite validates:
 """
 
 import os
-import unittest
 import re
+import unittest
 from pathlib import Path
 
 
@@ -38,8 +38,8 @@ class URLRoutingHierarchyTests(unittest.TestCase):
             with open(self.url_files['core'], 'r') as f:
                 content = f.read()
             
-            # Should use include() for app URLs
-            self.assertIn("from django.urls import path, include", content,
+            # Should use include() for app URLs (imports are now sorted alphabetically)
+            self.assertIn("from django.urls import include, path", content,
                          "Core URLs should import include")
             
             # Should include app URLs with proper patterns

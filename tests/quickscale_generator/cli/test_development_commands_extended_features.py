@@ -1,13 +1,13 @@
 """Extended unit tests for development commands, focusing on the least-covered code."""
-import sys
-import subprocess
-from unittest.mock import patch, MagicMock, call
+from unittest.mock import MagicMock, patch
+
 import pytest
 
 from quickscale.commands.development_commands import (
-    ShellCommand, ManageCommand, DjangoShellCommand
+    DjangoShellCommand,
+    ManageCommand,
+    ShellCommand,
 )
-from quickscale.commands.project_manager import ProjectManager
 
 
 class TestShellCommandExtended:

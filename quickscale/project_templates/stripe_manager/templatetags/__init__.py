@@ -1,3 +1,3 @@
-"""Template tags for Stripe integration.""" 
+"""Template tags for Stripe integration."""
 
-# Template tag initialization 
+# Template tag initialization

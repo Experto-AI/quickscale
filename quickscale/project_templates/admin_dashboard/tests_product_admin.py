@@ -1,17 +1,11 @@
 """Tests for product management admin functionality."""
 
-import os
-from decimal import Decimal
-from unittest.mock import patch, MagicMock
+from unittest.mock import patch
 
+from core.configuration import config
+from django.contrib.auth import get_user_model
 from django.test import TestCase
 from django.urls import reverse
-from django.contrib.auth import get_user_model
-from django.conf import settings
-
-from users.models import CustomUser
-from stripe_manager.stripe_manager import StripeManager
-from core.configuration import config
 
 # Check if Stripe is enabled using configuration singleton (fail hard)
 stripe_enabled = config.is_stripe_enabled_and_configured()
@@ -28,7 +22,7 @@ except ImportError:
 if STRIPE_AVAILABLE:
     class ProductAdminTestCase(TestCase):
         """Test cases for product management in the admin."""
-        
+
         @classmethod
         def setUpTestData(cls) -> None:
             """Set up test data for all test methods."""
@@ -38,18 +32,18 @@ if STRIPE_AVAILABLE:
                 password='adminpassword',
                 is_active=True
             )
-            
+
             # Mock Stripe product using StripeManager
             cls.product = stripe_manager.create_product(
                 name='Test Product',
                 description='A test product',
                 metadata={'price': '9.99'}
             )
-        
+
         def setUp(self) -> None:
             """Set up before each test."""
             self.client.force_login(self.admin_user)
-        
+
         @patch('stripe.stripe_manager.StripeManager.list_products')
         def test_product_list_view(self, mock_list_products) -> None:
             """Test the product list view in admin."""
@@ -61,12 +55,12 @@ if STRIPE_AVAILABLE:
                 'active': True,
                 'metadata': {'price': '9.99'}
             }]
-            
+
             url = reverse('stripe:product_list')
             response = self.client.get(url)
             self.assertEqual(response.status_code, 200)
             self.assertContains(response, 'Test Product')
-        
+
         @patch('stripe.stripe_manager.StripeManager.retrieve_product')
         @patch('stripe.stripe_manager.StripeManager.get_product_prices')
         def test_product_detail_view(self, mock_get_prices, mock_retrieve_product) -> None:
@@ -79,7 +73,7 @@ if STRIPE_AVAILABLE:
                 'active': True,
                 'metadata': {'price': '9.99'}
             }
-            
+
             # Mock the get_product_prices method
             mock_get_prices.return_value = [{
                 'id': 'price_123',
@@ -88,7 +82,7 @@ if STRIPE_AVAILABLE:
                 'currency': 'usd',
                 'active': True
             }]
-            
+
             url = reverse('stripe:product_detail', args=[self.product['id']])
             response = self.client.get(url)
             self.assertEqual(response.status_code, 200)

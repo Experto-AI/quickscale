@@ -1,17 +1,18 @@
 """Two-factor authentication preparation views."""
 import json
 import logging
-from django.contrib.auth.decorators import login_required
-from django.contrib import messages
-from django.shortcuts import render, redirect
-from django.http import JsonResponse
-from django.conf import settings
-from django.views.decorators.http import require_http_methods
-from django.views.decorators.csrf import csrf_protect
-from django.core.exceptions import ValidationError
-from django.db import transaction, DatabaseError
-from django.utils import timezone
 from datetime import timedelta
+
+from django.conf import settings
+from django.contrib import messages
+from django.contrib.auth.decorators import login_required
+from django.db import DatabaseError, transaction
+from django.http import JsonResponse
+from django.shortcuts import redirect, render
+from django.utils import timezone
+from django.views.decorators.csrf import csrf_protect
+from django.views.decorators.http import require_http_methods
+
 from .models import TwoFactorAuth
 
 logger = logging.getLogger(__name__)
@@ -27,25 +28,25 @@ def validate_2fa_request(request):
     # Check if user is authenticated
     if not request.user.is_authenticated:
         raise TwoFactorValidationError("Authentication required")
-    
+
     # Check if 2FA is enabled in system settings
     if not getattr(settings, 'TWO_FACTOR_AUTH_ENABLED', False):
         raise TwoFactorValidationError("Two-factor authentication is not enabled in system settings")
-    
+
     # Check request method and content type for JSON requests
     if request.method == 'POST' and request.content_type == 'application/json':
         try:
             request.json = json.loads(request.body)
         except json.JSONDecodeError as e:
             raise TwoFactorValidationError(f"Invalid JSON in request body: {e}")
-    
+
     return True
 
 
 def validate_backup_codes_request(request):
     """Validate backup codes generation request."""
     validate_2fa_request(request)
-    
+
     # Check for recent backup code generation to prevent abuse
     try:
         two_factor = TwoFactorAuth.objects.get(user=request.user)
@@ -56,7 +57,7 @@ def validate_backup_codes_request(request):
                 raise TwoFactorValidationError("Backup codes were recently generated. Please wait before generating new codes.")
     except TwoFactorAuth.DoesNotExist:
         pass  # New user, allow generation
-    
+
     return True
 
 
@@ -67,10 +68,10 @@ def create_error_response(message, status=400, extra_data=None):
         'message': message,
         'timestamp': timezone.now().isoformat()
     }
-    
+
     if extra_data:
         response_data.update(extra_data)
-    
+
     return JsonResponse(response_data, status=status)
 
 
@@ -81,10 +82,10 @@ def two_factor_settings(request):
     if not getattr(settings, 'TWO_FACTOR_AUTH_ENABLED', False):
         messages.info(request, 'Two-factor authentication is not currently enabled in system settings.')
         return redirect('users:profile')
-    
+
     # Get or create 2FA settings
     two_factor, created = TwoFactorAuth.objects.get_or_create(user=request.user)
-    
+
     context = {
         'two_factor': two_factor,
         'is_enabled': two_factor.is_enabled,
@@ -93,7 +94,7 @@ def two_factor_settings(request):
         'system_enabled': getattr(settings, 'TWO_FACTOR_AUTH_ENABLED', False),
         'issuer_name': getattr(settings, 'TWO_FACTOR_AUTH_ISSUER', 'QuickScale'),
     }
-    
+
     return render(request, 'users/two_factor_settings.html', context)
 
 
@@ -105,7 +106,7 @@ def two_factor_setup_prepare(request):
     try:
         # Validate request
         validate_2fa_request(request)
-        
+
         # Check if user already has 2FA enabled
         try:
             two_factor = TwoFactorAuth.objects.get(user=request.user)
@@ -117,15 +118,15 @@ def two_factor_setup_prepare(request):
                 )
         except TwoFactorAuth.DoesNotExist:
             pass  # User doesn't have 2FA yet, proceed
-        
+
         # Log setup preparation attempt
         logger.info(f"User {request.user.id} ({request.user.email}) initiated 2FA setup preparation")
-        
+
         # This is a preparation endpoint - actual implementation would:
         # 1. Generate TOTP secret using pyotp
         # 2. Create QR code using qrcode library
         # 3. Return setup instructions and QR code data
-        
+
         return JsonResponse({
             'status': 'preparation',
             'message': 'Two-factor authentication setup is prepared but not yet implemented.',
@@ -133,7 +134,7 @@ def two_factor_setup_prepare(request):
             'timestamp': timezone.now().isoformat(),
             'next_steps': [
                 'Install pyotp library for TOTP generation',
-                'Install qrcode library for QR code generation', 
+                'Install qrcode library for QR code generation',
                 'Implement TOTP verification logic',
                 'Create setup and verification templates',
                 'Add middleware for 2FA verification'
@@ -149,7 +150,7 @@ def two_factor_setup_prepare(request):
                 'user_2fa_enabled': False
             }
         })
-        
+
     except TwoFactorValidationError as e:
         logger.warning(f"2FA setup validation failed for user {request.user.id}: {e}")
         return create_error_response(str(e))
@@ -170,25 +171,25 @@ def two_factor_generate_backup_codes(request):
     try:
         # Validate request with rate limiting check
         validate_backup_codes_request(request)
-        
+
         # Parse request parameters
         force_regenerate = False
         if hasattr(request, 'json') and isinstance(request.json, dict):
             force_regenerate = request.json.get('force_regenerate', False)
-        
+
         # Validate count parameter if provided
         backup_codes_count = getattr(settings, 'TWO_FACTOR_AUTH_BACKUP_CODES_COUNT', 10)
-        
+
         if backup_codes_count < 5 or backup_codes_count > 20:
             logger.warning(f"Invalid backup codes count in settings: {backup_codes_count}")
             backup_codes_count = 10  # Use safe default
-        
+
         with transaction.atomic():
             two_factor, created = TwoFactorAuth.objects.get_or_create(user=request.user)
-            
+
             # Check if regeneration is appropriate
             existing_codes_count = len(two_factor.backup_codes) if two_factor.backup_codes else 0
-            
+
             if existing_codes_count > 0 and not force_regenerate:
                 logger.info(f"User {request.user.id} has {existing_codes_count} existing backup codes")
                 return create_error_response(
@@ -199,14 +200,14 @@ def two_factor_generate_backup_codes(request):
                         'force_regenerate_required': True
                     }
                 )
-            
+
             # Generate backup codes using the model method
             try:
                 backup_codes = two_factor.generate_backup_codes(count=backup_codes_count)
-                
+
                 # Log successful generation
                 logger.info(f"User {request.user.id} ({request.user.email}) generated {len(backup_codes)} backup codes")
-                
+
                 return JsonResponse({
                     'status': 'success',
                     'message': 'Backup codes generated successfully.',
@@ -223,11 +224,11 @@ def two_factor_generate_backup_codes(request):
                         'Generate new codes if you lose access to these'
                     ]
                 })
-                
+
             except Exception as e:
                 logger.error(f"Failed to generate backup codes for user {request.user.id}: {e}")
                 raise TwoFactorValidationError("Failed to generate backup codes due to internal error")
-        
+
     except TwoFactorValidationError as e:
         logger.warning(f"Backup codes validation failed for user {request.user.id}: {e}")
         return create_error_response(str(e))
@@ -255,12 +256,12 @@ def two_factor_disable(request):
     try:
         # Validate request
         validate_2fa_request(request)
-        
+
         # Parse confirmation parameter
         confirmed = False
         if hasattr(request, 'json') and isinstance(request.json, dict):
             confirmed = request.json.get('confirmed', False)
-        
+
         if not confirmed:
             return create_error_response(
                 "Disabling 2FA requires explicit confirmation",
@@ -270,33 +271,33 @@ def two_factor_disable(request):
                     'security_warning': 'Disabling 2FA will reduce your account security'
                 }
             )
-        
+
         with transaction.atomic():
             try:
                 two_factor = TwoFactorAuth.objects.get(user=request.user)
-                
+
                 if not two_factor.is_enabled:
                     return create_error_response(
                         "Two-factor authentication is not currently enabled for this account",
                         status=409,
                         extra_data={'user_2fa_enabled': False}
                     )
-                
+
                 # Store previous state for logging
                 had_backup_codes = bool(two_factor.backup_codes)
                 backup_codes_count = len(two_factor.backup_codes) if two_factor.backup_codes else 0
-                
+
                 # Disable 2FA and clear sensitive data
                 two_factor.is_enabled = False
                 two_factor.secret_key = ''  # Clear the secret for security
                 two_factor.backup_codes = []  # Clear backup codes
                 two_factor.save()
-                
+
                 # Log security action
                 logger.warning(f"User {request.user.id} ({request.user.email}) disabled 2FA - had {backup_codes_count} backup codes")
-                
+
                 messages.success(request, 'Two-factor authentication has been disabled.')
-                
+
                 return JsonResponse({
                     'status': 'success',
                     'message': 'Two-factor authentication disabled successfully.',
@@ -307,14 +308,14 @@ def two_factor_disable(request):
                     },
                     'security_reminder': 'Your account security has been reduced. Consider re-enabling 2FA.'
                 })
-                
+
             except TwoFactorAuth.DoesNotExist:
                 return create_error_response(
                     "Two-factor authentication is not configured for this account",
                     status=404,
                     extra_data={'user_2fa_configured': False}
                 )
-            
+
     except TwoFactorValidationError as e:
         logger.warning(f"2FA disable validation failed for user {request.user.id}: {e}")
         return create_error_response(str(e))
@@ -341,9 +342,9 @@ def two_factor_status(request):
         # Basic validation
         if not request.user.is_authenticated:
             return create_error_response("Authentication required", status=401)
-        
+
         system_enabled = getattr(settings, 'TWO_FACTOR_AUTH_ENABLED', False)
-        
+
         if not system_enabled:
             return JsonResponse({
                 'status': 'success',
@@ -352,20 +353,20 @@ def two_factor_status(request):
                 'message': 'Two-factor authentication is not enabled in system settings.',
                 'timestamp': timezone.now().isoformat()
             })
-        
+
         try:
             two_factor = TwoFactorAuth.objects.get(user=request.user)
-            
+
             # Calculate status information
             backup_codes_count = len(two_factor.backup_codes) if two_factor.backup_codes else 0
             backup_codes_low = backup_codes_count > 0 and backup_codes_count < 3
-            
+
             # Check if codes are recently generated
             codes_recently_generated = (
-                two_factor.updated_at and 
+                two_factor.updated_at and
                 two_factor.updated_at > timezone.now() - timedelta(hours=24)
             )
-            
+
             status = {
                 'status': 'success',
                 'system_enabled': True,
@@ -380,20 +381,20 @@ def two_factor_status(request):
                 'timestamp': timezone.now().isoformat(),
                 'security_recommendations': []
             }
-            
+
             # Add security recommendations
             if not two_factor.is_enabled:
                 status['security_recommendations'].append('Enable 2FA for enhanced account security')
-            
+
             if two_factor.is_enabled and not two_factor.backup_codes:
                 status['security_recommendations'].append('Generate backup codes for emergency access')
-            
+
             if backup_codes_low:
                 status['security_recommendations'].append('Consider generating new backup codes - you have few remaining')
-            
+
             if two_factor.last_used and two_factor.last_used < timezone.now() - timedelta(days=30):
                 status['security_recommendations'].append('2FA has not been used recently - verify it is working')
-            
+
         except TwoFactorAuth.DoesNotExist:
             status = {
                 'status': 'success',
@@ -412,13 +413,13 @@ def two_factor_status(request):
                     'Generate backup codes after enabling 2FA'
                 ]
             }
-        
+
         return JsonResponse(status)
-        
+
     except Exception as e:
         logger.error(f"Error getting 2FA status for user {request.user.id}: {e}")
         return create_error_response(
             "An error occurred while retrieving 2FA status",
             status=500,
             extra_data={'error_type': 'internal_error'}
-        ) 
+        )

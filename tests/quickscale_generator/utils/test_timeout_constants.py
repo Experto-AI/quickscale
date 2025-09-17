@@ -5,16 +5,15 @@ Tests the centralized timeout configuration to ensure maintainability
 and consistency across Docker operations.
 """
 
-import pytest
 from quickscale.utils.timeout_constants import (
-    DOCKER_SERVICE_STARTUP_TIMEOUT,
-    DOCKER_PS_CHECK_TIMEOUT,
     DOCKER_CONTAINER_START_TIMEOUT,
-    DOCKER_OPERATIONS_TIMEOUT,
-    POSTGRES_CONNECTION_TIMEOUT,
     DOCKER_INFO_TIMEOUT,
+    DOCKER_OPERATIONS_TIMEOUT,
+    DOCKER_PS_CHECK_TIMEOUT,
     DOCKER_PULL_TIMEOUT,
-    DOCKER_RUN_TIMEOUT
+    DOCKER_RUN_TIMEOUT,
+    DOCKER_SERVICE_STARTUP_TIMEOUT,
+    POSTGRES_CONNECTION_TIMEOUT,
 )
 
 
@@ -56,9 +55,20 @@ class TestTimeoutConstants:
         assert DOCKER_INFO_TIMEOUT < 10  # Should be under 10s
     
     def test_docker_pull_timeout_is_medium(self):
-        """Test that Docker pull timeout is medium length."""
-        # Increased from 30 to 120 to handle slow networks and large base images
-        assert DOCKER_PULL_TIMEOUT == 120
+        """Test that Docker pull timeout is medium length or can be overridden by environment variable."""
+        # Default should be 120, but can be overridden by QUICKSCALE_DOCKER_PULL_TIMEOUT
+        import os
+        expected_default = 120
+        env_override = os.environ.get('QUICKSCALE_DOCKER_PULL_TIMEOUT')
+        
+        if env_override:
+            # If environment variable is set, DOCKER_PULL_TIMEOUT should match it
+            assert DOCKER_PULL_TIMEOUT == int(env_override)
+        else:
+            # If no environment variable, should be default
+            assert DOCKER_PULL_TIMEOUT == expected_default
+            
+        # Regardless of source, should be within reasonable bounds
         assert 15 <= DOCKER_PULL_TIMEOUT <= 600  # Between 15s and 10min
     
     def test_docker_run_timeout_is_short(self):

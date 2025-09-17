@@ -1,7 +1,9 @@
 """Context processors for Django templates."""
 from django.conf import settings
+
 from .configuration import config
 from .feature_flags import feature_flags
+
 
 def project_settings(request):
     """Make project settings available in templates.

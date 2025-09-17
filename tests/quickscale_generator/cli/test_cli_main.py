@@ -1,10 +1,17 @@
 """Comprehensive unit tests for CLI main function and argument parsing."""
 import sys
-import pytest
-from unittest.mock import patch, Mock, MagicMock
 from argparse import Namespace
+from unittest.mock import Mock, patch
 
-from quickscale.cli import main, create_parser, handle_init_command, handle_check_command_output, handle_log_scan_output
+import pytest
+
+from quickscale.cli import (
+    create_parser,
+    handle_check_command_output,
+    handle_init_command,
+    handle_log_scan_output,
+    main,
+)
 
 
 class TestCLIMain:
@@ -34,7 +41,7 @@ class TestCLIMain:
     def test_main_init_command_failure(self):
         """Test main function with init command failure."""
         with patch.object(sys, 'argv', ['quickscale', 'init', 'test-project']):
-            with patch('quickscale.cli.handle_init_command', return_value=1) as mock_handle:
+            with patch('quickscale.cli.handle_init_command', return_value=1):
                 result = main()
                 
                 assert result == 1
@@ -79,7 +86,7 @@ class TestCLIMain:
                 mock_manager.handle_command.side_effect = KeyError("Command 'unknown-command' not found")
                 
                 with pytest.raises(SystemExit) as exc_info:
-                    result = main()
+                    main()
                 
                 captured = capsys.readouterr()
                 
@@ -351,9 +358,14 @@ class TestCLIHelpers:
         
         # Import parser setup functions
         from quickscale.cli import (
-            setup_service_parsers, setup_utility_parsers, setup_logs_parser,
-            setup_manage_parser, setup_service_generator_parsers,
-            setup_sync_back_parser, setup_help_and_version_parsers, setup_init_parser
+            setup_help_and_version_parsers,
+            setup_init_parser,
+            setup_logs_parser,
+            setup_manage_parser,
+            setup_service_generator_parsers,
+            setup_service_parsers,
+            setup_sync_back_parser,
+            setup_utility_parsers,
         )
         
         # Set up all parsers
@@ -384,9 +396,14 @@ class TestCLIHelpers:
         
         # Import parser setup functions
         from quickscale.cli import (
-            setup_service_parsers, setup_utility_parsers, setup_logs_parser,
-            setup_manage_parser, setup_service_generator_parsers,
-            setup_sync_back_parser, setup_help_and_version_parsers, setup_init_parser
+            setup_help_and_version_parsers,
+            setup_init_parser,
+            setup_logs_parser,
+            setup_manage_parser,
+            setup_service_generator_parsers,
+            setup_service_parsers,
+            setup_sync_back_parser,
+            setup_utility_parsers,
         )
         
         # Set up all parsers

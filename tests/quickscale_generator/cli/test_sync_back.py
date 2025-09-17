@@ -1,9 +1,9 @@
 """Unit tests for sync-back command implementation."""
-import os
-import tempfile
 import shutil
+import tempfile
 from pathlib import Path
-from unittest.mock import patch, MagicMock
+from unittest.mock import patch
+
 import pytest
 
 from quickscale.commands.sync_back_command import SyncBackCommand

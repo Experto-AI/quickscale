@@ -1,9 +1,10 @@
 """Unit tests for CLI commands."""
 import sys
-from unittest.mock import patch, MagicMock
-import pytest
+from unittest.mock import patch
+
 from quickscale.cli import main
 from quickscale.commands import command_manager
+
 
 class TestCLICommands:
     """Test cases for individual CLI commands."""

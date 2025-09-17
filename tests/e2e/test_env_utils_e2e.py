@@ -1,19 +1,18 @@
 import os
-import pytest
-import tempfile
-import shutil
 import subprocess
-from pathlib import Path
 import sys
+import tempfile
+from pathlib import Path
+
+import pytest
 
 # Add the project root to sys.path to access tests module
 project_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 sys.path.insert(0, project_root)
 
 # Import centralized test utilities using DRY principles
-from tests.test_utilities import TestUtilities
-
 from quickscale.utils.env_utils import env_manager
+from tests.test_utilities import TestUtilities
 
 
 class TestEnvUtilsE2E:
@@ -66,35 +65,6 @@ class TestEnvUtilsE2E:
             
             # Restore the original working directory
             os.chdir(original_dir)
-    
-    @pytest.mark.skip("Legacy test - configuration singleton migration complete. .env file loading is handled by the configuration singleton in production, not in tests.")
-    def test_env_file_loading(self, temp_env_files):
-        """Test that .env files are loaded correctly and values are accessible."""
-        # Clear any existing environment variables that might interfere with the test
-        for key in os.environ.keys():
-            if key.startswith('TEST_') or key in ('DEBUG', 'PROJECT_NAME', 'LOG_LEVEL', 'FEATURE_ON', 'FEATURE_OFF'):
-                os.environ.pop(key, None)
-        
-        # Force reload the environment to pick up the new .env file
-        TestUtilities.refresh_env_cache()
-        
-        # Test accessing variables through get_env
-        assert TestUtilities.get_env('TEST_VAR') == 'test_value'
-        assert TestUtilities.get_env('DEBUG') == 'True'
-        assert TestUtilities.get_env('PROJECT_NAME') == 'test_project'
-        assert TestUtilities.get_env('LOG_LEVEL') == 'DEBUG'
-        
-        # Test accessing variables directly from .env file
-        assert TestUtilities.get_env('TEST_VAR', from_env_file=True) == 'test_value'
-        
-        # Test non-existent variable with default
-        assert TestUtilities.get_env('NON_EXISTENT', default='default_value') == 'default_value'
-        
-        # Test empty variable
-        assert TestUtilities.get_env('TEST_EMPTY') == ''
-        
-        # Test variable with comment
-        assert TestUtilities.get_env('FEATURE_COMMENTED') == 'true'
     
     def test_feature_enabled_check(self, temp_env_files):
         """Test that is_feature_enabled correctly interprets various boolean values."""
@@ -205,6 +175,7 @@ class TestEnvUtilsE2E:
         
         # One way is to use importlib to reload the module
         import importlib
+
         import quickscale.utils.env_utils
         
         # Force reload of the module

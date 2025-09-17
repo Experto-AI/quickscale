@@ -1,10 +1,11 @@
 """Tests for CLI command parameters and options."""
+from unittest.mock import patch
+
 import pytest
-import sys
-from unittest.mock import patch, MagicMock, ANY
+
 from quickscale.cli import main
-from quickscale.commands import command_manager
 from quickscale.commands.command_manager import CommandManager
+
 
 class TestCLIParameters:
     """Test CLI command parameters and options."""
@@ -41,7 +42,7 @@ class TestCLIParameters:
                 try:
                     main()
                     self._validate_function_calls(mock_func, expected_kwargs)
-                except (SystemExit, Exception) as e:
+                except (SystemExit, Exception):
                     # If the CLI exits or throws an exception, but the function was called,
                     # still validate that it was called with the right parameters
                     if mock_func.call_count > 0:

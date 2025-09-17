@@ -1,14 +1,14 @@
 """Test URL configuration that provides complete QuickScale URLs for authentication tests."""
 
-from django.contrib import admin
-from django.urls import path, include
-from django.conf import settings
-from django.conf.urls.static import static
-from django.http import HttpResponse
-
 # Import URL patterns from QuickScale templates to get proper structure
 import sys
 from pathlib import Path
+
+from django.conf import settings
+from django.conf.urls.static import static
+from django.contrib import admin
+from django.http import HttpResponse
+from django.urls import include, path
 
 # Add the project templates to Python path to import URL modules
 template_path = Path(__file__).parent.parent / 'quickscale' / 'project_templates'
@@ -58,6 +58,11 @@ public_patterns = [
 users_patterns = [
     path('profile/', lambda r: HttpResponse("User Profile"), name='profile'),
     path('security/', lambda r: HttpResponse("Account Security"), name='account_security'),
+    path('account-security/generate-api-key/', lambda r: HttpResponse("Generate API Key"), name='generate_api_key'),
+    path('account-security/revoke-api-key/', lambda r: HttpResponse("Revoke API Key"), name='revoke_api_key'),
+    path('account-security/regenerate-api-key/', lambda r: HttpResponse("Regenerate API Key"), name='regenerate_api_key'),
+    path('account-security/api-keys-list-partial/', lambda r: HttpResponse("API Keys List"), name='api_keys_list_partial'),
+    path('account-security/api-keys/', lambda r: HttpResponse("API Keys"), name='api_keys'),
 ]
 empty_users_patterns = (users_patterns, 'users')
 admin_dashboard_patterns = [
@@ -72,7 +77,7 @@ empty_credits_patterns = ([
     path('checkout/', lambda r: HttpResponse("Create checkout session"), name='create_checkout'),
     path('use/<int:service_id>/', lambda r, service_id: HttpResponse(f"Use service {service_id}\ninsufficient credits"), name='use_service'),
 ], 'credits')
-empty_common_patterns = ([], 'common')
+empty_common_patterns: tuple[list, str] = ([], 'common')
 
 # Minimal API patterns
 api_patterns = [

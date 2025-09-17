@@ -86,4 +86,4 @@ class Migration(migrations.Migration):
             model_name='stripecustomer',
             index=models.Index(fields=['user'], name='stripe_mana_user_id_4a8b5c_idx'),
         ),
-    ] 
+    ]

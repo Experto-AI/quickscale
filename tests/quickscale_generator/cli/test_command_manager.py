@@ -1,24 +1,24 @@
 """Unit tests for CommandManager."""
-import pytest
-from unittest.mock import Mock, patch, MagicMock
-from typing import Dict, Any
+from typing import Any, Optional
+from unittest.mock import Mock, patch
 
-from quickscale.commands.command_manager import CommandManager
+import pytest
+
 from quickscale.commands.command_base import Command
-from quickscale.utils.error_manager import error_manager
+from quickscale.commands.command_manager import CommandManager
 
 
 class MockCommand(Command):
     """Mock command for testing."""
     
-    def __init__(self, return_value: Any = None, should_raise: Exception = None):
+    def __init__(self, return_value: Any = None, should_raise: Optional[Exception] = None):
         """Initialize mock command."""
         super().__init__()
         self.return_value = return_value
         self.should_raise = should_raise
         self.call_count = 0
-        self.last_args = None
-        self.last_kwargs = None
+        self.last_args: Optional[tuple[Any, ...]] = None
+        self.last_kwargs: Optional[dict[str, Any]] = None
     
     def execute(self, *args: Any, **kwargs: Any) -> Any:
         """Execute mock command."""
@@ -39,13 +39,13 @@ class TestCommandManager:
         """Set up test fixtures."""
         self.command_manager = CommandManager()
     
-    def test_initialization(self):
+    def test_command_manager_initialization(self):
         """Test CommandManager initialization creates all commands."""
         expected_commands = {
             'init', 'destroy', 'up', 'down', 'logs', 'ps',
             'shell', 'django-shell', 'manage', 'check',
             'generate-service', 'validate-service', 'show-service-examples',
-            'sync-back', 'help', 'version'
+            'sync-back', 'help', 'version', 'crawl'
         }
         
         assert set(self.command_manager._commands.keys()) == expected_commands
@@ -279,8 +279,8 @@ class TestCommandManager:
         assert result == {'valid': True, 'issues': []}
     
     @patch('quickscale.commands.command_manager.ServiceExamplesCommand')
-    def test_show_service_examples(self, mock_examples_command):
-        """Test showing service examples."""
+    def test_show_service_examples_command_manager(self, mock_examples_command):
+        """Test showing service examples through command manager."""
         mock_instance = Mock()
         mock_instance.execute.return_value = {'examples': ['example1', 'example2']}
         mock_examples_command.return_value = mock_instance

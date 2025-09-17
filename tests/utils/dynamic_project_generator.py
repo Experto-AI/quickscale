@@ -11,13 +11,13 @@ Key principles:
 4. Ensure tests validate evolving templates correctly
 """
 
-import os
-import tempfile
-import shutil
-from pathlib import Path
-from typing import Optional, Dict, Any
-import subprocess
 import logging
+import os
+import shutil
+import subprocess
+import tempfile
+from pathlib import Path
+from typing import Any, Dict, Optional
 
 logger = logging.getLogger(__name__)
 
@@ -32,7 +32,7 @@ class DynamicProjectGenerator:
             cleanup_on_exit: Whether to automatically cleanup generated projects
         """
         self.cleanup_on_exit = cleanup_on_exit
-        self.generated_projects = []
+        self.generated_projects: list[Path] = []
     
     def generate_project(self, project_name: str, 
                         base_dir: Optional[Path] = None,
@@ -102,7 +102,7 @@ class DynamicProjectGenerator:
         finally:
             os.chdir(original_cwd)
     
-    def generate_service_in_project(self, project_dir: Path, 
+    def generate_service_in_project(self, project_dir: Path,
                                    service_name: str,
                                    service_type: str = "text_processing") -> Path:
         """Generate a service within an existing project.

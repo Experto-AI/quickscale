@@ -1,21 +1,23 @@
-from django.db import models, transaction
-from django.contrib.auth import get_user_model
-from django.core.validators import MinValueValidator
-from django.utils.translation import gettext_lazy as _
-from decimal import Decimal
-from datetime import datetime, timedelta
-from django.utils import timezone
-from django.contrib.auth.hashers import make_password, check_password
 import secrets
 import string
+from datetime import timedelta
+from decimal import Decimal
+from typing import Optional
+
+from django.contrib.auth import get_user_model
+from django.contrib.auth.hashers import check_password, make_password
 from django.core.exceptions import ValidationError
+from django.core.validators import MinValueValidator
+from django.db import models, transaction
+from django.utils import timezone
+from django.utils.translation import gettext_lazy as _
 
 User = get_user_model()
 
 
 class Service(models.Model):
     """Model representing services that consume credits."""
-    
+
     name = models.CharField(
         _('name'),
         max_length=100,
@@ -63,7 +65,7 @@ class Service(models.Model):
 
 class UserSubscription(models.Model):
     """Model representing a user's subscription status and billing information."""
-    
+
     STATUS_CHOICES = [
         ('active', _('Active')),
         ('canceled', _('Canceled')),
@@ -74,7 +76,7 @@ class UserSubscription(models.Model):
         ('trialing', _('Trialing')),
         ('paused', _('Paused')),
     ]
-    
+
     user = models.OneToOneField(
         User,
         on_delete=models.CASCADE,
@@ -159,7 +161,7 @@ class UserSubscription(models.Model):
         """Calculate days until next billing period."""
         if not self.current_period_end:
             return None
-        
+
         now = timezone.now()
         if self.current_period_end > now:
             delta = self.current_period_end - now
@@ -170,7 +172,7 @@ class UserSubscription(models.Model):
         """Get the associated StripeProduct for this subscription."""
         if not self.stripe_product_id:
             return None
-        
+
         from stripe_manager.models import StripeProduct
         try:
             return StripeProduct.objects.get(stripe_id=self.stripe_product_id)
@@ -189,7 +191,7 @@ class UserSubscription(models.Model):
         else:
             self.status = 'canceled'
             self.canceled_at = timezone.now()
-        
+
         self.save()
         return self
 
@@ -197,21 +199,21 @@ class UserSubscription(models.Model):
         """Allocate monthly credits for this subscription period."""
         if not self.is_active:
             return None
-        
+
         stripe_product = self.get_stripe_product()
         if not stripe_product:
             return None
-        
+
         # Create credit transaction for monthly allocation
         credit_account = CreditAccount.get_or_create_for_user(self.user)
         description = f"Monthly credits allocation - {stripe_product.name}"
-        
+
         # Calculate expiration date based on current period end
         expires_at = self.current_period_end
         if not expires_at:
             # Intelligent fallback based on actual billing interval from Stripe
             now = timezone.now()
-            
+
             if stripe_product.interval == 'month':
                 # Monthly subscription: 31 days from now (favorable to user)
                 expires_at = now + timedelta(days=31)
@@ -221,7 +223,7 @@ class UserSubscription(models.Model):
             else:
                 # One-time or unknown: default to 31 days (safe choice)
                 expires_at = now + timedelta(days=31)
-        
+
         with transaction.atomic():
             return credit_account.add_credits(
                 amount=Decimal(str(stripe_product.credit_amount)),
@@ -233,7 +235,7 @@ class UserSubscription(models.Model):
 
 class CreditAccount(models.Model):
     """Model representing a user's credit account with balance management."""
-    
+
     user = models.OneToOneField(
         User,
         on_delete=models.CASCADE,
@@ -283,18 +285,18 @@ class CreditAccount(models.Model):
 
     def get_balance_by_type(self) -> dict:
         """Get balance breakdown by credit type."""
-        from django.db.models import Sum, Q
-        
+        from django.db.models import Q, Sum
+
         # Calculate subscription balance (including subscription consumption)
         subscription_balance = self.user.credit_transactions.filter(
             Q(credit_type='SUBSCRIPTION') | Q(credit_type='SUBSCRIPTION_CONSUMPTION')
         ).aggregate(balance=Sum('amount'))['balance'] or Decimal('0.00')
-        
+
         # Calculate pay-as-you-go balance (including PAYG consumption)
         pay_as_you_go_balance = self.user.credit_transactions.filter(
             Q(credit_type__in=['PAYG_PURCHASE', 'ADMIN']) | Q(credit_type='PAYG_CONSUMPTION')
         ).aggregate(balance=Sum('amount'))['balance'] or Decimal('0.00')
-        
+
         return {
             'subscription': subscription_balance,
             'pay_as_you_go': pay_as_you_go_balance,
@@ -305,31 +307,31 @@ class CreditAccount(models.Model):
         """Add credits to the account and return the transaction."""
         if amount <= 0:
             raise ValueError("Amount must be positive")
-        
+
         if not description or description.strip() == "":
             raise ValueError("Description is required")
-        
+
         # Set expiration for subscription credits if not provided
         if credit_type == 'SUBSCRIPTION' and expires_at is None:
             # Try to get user's current subscription to determine interval
             try:
                 subscription = self.user.subscription
                 stripe_product = subscription.get_stripe_product()
-                
+
                 if stripe_product and stripe_product.interval == 'year':
                     # Annual subscription: 365 days from now
                     expires_at = timezone.now() + timedelta(days=365)
                 else:
                     # Monthly or unknown: 31 days from now (safe default)
                     expires_at = timezone.now() + timedelta(days=31)
-            except:
+            except Exception:
                 # No subscription or error: default to 31 days for subscription credits
                 expires_at = timezone.now() + timedelta(days=31)
-        
+
         with transaction.atomic():
             # Use select_for_update to prevent race conditions
             account = CreditAccount.objects.select_for_update().get(pk=self.pk)
-            
+
             credit_transaction = CreditTransaction.objects.create(
                 user=self.user,
                 amount=amount,
@@ -337,42 +339,42 @@ class CreditAccount(models.Model):
                 credit_type=credit_type,
                 expires_at=expires_at
             )
-            
+
             # Update account timestamp efficiently
             account.updated_at = models.functions.Now()
             account.save(update_fields=['updated_at'])
-            
+
             return credit_transaction
 
 
 
-    def consume_credits_with_priority(self, amount: Decimal, description: str) -> 'CreditTransaction':
+    def consume_credits_with_priority(self, amount: Decimal, description: str) -> Optional['CreditTransaction']:
         """Consume credits with priority: subscription credits first, then pay-as-you-go."""
         if amount <= 0:
             raise ValueError("Amount must be positive")
-        
+
         if not description or description.strip() == "":
             raise ValueError("Description is required")
-        
+
         with transaction.atomic():
             # Use select_for_update to prevent race conditions
             account = CreditAccount.objects.select_for_update().get(pk=self.pk)
-            
+
             # Check if user has enough available balance using optimized method
             available_balance = account.get_available_balance()
             if available_balance < amount:
                 raise InsufficientCreditsError(
                     f"Insufficient credits. Available balance: {available_balance}, Required: {amount}"
                 )
-            
+
             # Get current available credits by type to determine consumption split
             balance_breakdown = account.get_balance_by_type_available()
             subscription_available = balance_breakdown['subscription']
             payg_available = balance_breakdown['pay_as_you_go']
-            
+
             remaining_amount = amount
             transactions_created = []
-            
+
             # First, consume from subscription credits
             if remaining_amount > 0 and subscription_available > 0:
                 subscription_consumed = min(subscription_available, remaining_amount)
@@ -384,7 +386,7 @@ class CreditAccount(models.Model):
                 )
                 transactions_created.append(subscription_transaction)
                 remaining_amount -= subscription_consumed
-            
+
             # Then, consume from pay-as-you-go credits if needed
             if remaining_amount > 0 and payg_available > 0:
                 payg_consumed = min(payg_available, remaining_amount)
@@ -396,60 +398,62 @@ class CreditAccount(models.Model):
                 )
                 transactions_created.append(payg_transaction)
                 remaining_amount -= payg_consumed
-            
+
             # Verify all credits were consumed (should not happen due to earlier validation)
             if remaining_amount > 0:
                 raise InsufficientCreditsError(
                     f"Could not consume all credits. Remaining: {remaining_amount}"
                 )
-            
+
             # Update account timestamp efficiently
             account.updated_at = models.functions.Now()
             account.save(update_fields=['updated_at'])
-            
+
             # Return the first transaction (or a combined transaction record for compatibility)
             # For compatibility, we'll return the first transaction created
-            return transactions_created[0] if transactions_created else None
+            if not transactions_created:
+                raise InsufficientCreditsError("No credit transactions were created")
+            return transactions_created[0]
 
     def get_available_balance(self) -> Decimal:
         """Get available balance excluding expired subscription credits."""
-        from django.db.models import Sum, Q
-        
+        from django.db.models import Q, Sum
+
         # Get all positive transactions (credits added)
         positive_transactions = self.user.credit_transactions.filter(amount__gt=0)
-        
+
         # Filter out expired subscription credits
         available_transactions = positive_transactions.filter(
             Q(credit_type__in=['PAYG_PURCHASE', 'ADMIN']) |  # Pay-as-you-go never expire
             Q(credit_type='SUBSCRIPTION', expires_at__isnull=True) |  # No expiration set
             Q(credit_type='SUBSCRIPTION', expires_at__gt=timezone.now())  # Not expired yet
         )
-        
+
         # Calculate total available credits
         available_credits = available_transactions.aggregate(
             total=Sum('amount')
         )['total'] or Decimal('0.00')
-        
+
         # Subtract consumption (only the new specific types)
         consumed_credits = self.user.credit_transactions.filter(
             amount__lt=0,
             credit_type__in=['SUBSCRIPTION_CONSUMPTION', 'PAYG_CONSUMPTION']
         ).aggregate(total=Sum('amount'))['total'] or Decimal('0.00')
-        
+
         return available_credits + consumed_credits  # consumed_credits is negative
 
     def get_balance_by_type_available(self) -> dict:
         """Get balance breakdown by credit type, correctly handling targeted consumption transactions."""
-        from django.db.models import Sum, Q, Case, When, Value, DecimalField
-        
+        from django.db.models import Case, DecimalField, Q, Sum, Value, When
+
         # Get all transaction data in a single optimized query
         transaction_summary = self.user.credit_transactions.aggregate(
             # Get non-expired subscription credits (additions)
             subscription_credits=Sum(
                 Case(
                     When(
-                        Q(credit_type='SUBSCRIPTION') & 
-                        Q(amount__gt=0) & 
+                        Q(credit_type='SUBSCRIPTION') &
+                        Q(amount__gt=0) &
                         (Q(expires_at__isnull=True) | Q(expires_at__gt=timezone.now())),
                         then='amount'
                     ),
@@ -491,16 +495,16 @@ class CreditAccount(models.Model):
                 )
             )
         )
-        
+
         subscription_credits = transaction_summary['subscription_credits'] or Decimal('0.00')
         payg_credits = transaction_summary['payg_credits'] or Decimal('0.00')
         subscription_consumed = abs(transaction_summary['subscription_consumed'] or Decimal('0.00'))
         payg_consumed = abs(transaction_summary['payg_consumed'] or Decimal('0.00'))
-        
+
         # Apply targeted consumption directly (no priority logic needed - already targeted)
         subscription_balance = subscription_credits - subscription_consumed
         payg_balance = payg_credits - payg_consumed
-        
+
         return {
             'subscription': subscription_balance,
             'pay_as_you_go': payg_balance,
@@ -509,8 +513,8 @@ class CreditAccount(models.Model):
 
     def get_balance_details(self) -> dict:
         """Get detailed balance breakdown with expiration information using corrected consumption logic."""
-        from django.db.models import Sum, Q
-        
+        from django.db.models import Q, Sum
+
         # Get subscription credits with expiration info
         subscription_transactions = self.user.credit_transactions.filter(
             credit_type='SUBSCRIPTION',
@@ -518,11 +522,11 @@ class CreditAccount(models.Model):
         ).filter(
             Q(expires_at__isnull=True) | Q(expires_at__gt=timezone.now())
         )
-        
+
         subscription_amount = subscription_transactions.aggregate(
             total=Sum('amount')
         )['total'] or Decimal('0.00')
-        
+
         # Get earliest expiration date for subscription credits
         subscription_expiry = None
         if subscription_transactions.exists():
@@ -531,28 +535,28 @@ class CreditAccount(models.Model):
             ).order_by('expires_at').first()
             if earliest_expiry:
                 subscription_expiry = earliest_expiry.expires_at
-        
+
         # Get pay-as-you-go credits (never expire)
         pay_as_you_go_amount = self.user.credit_transactions.filter(
             credit_type__in=['PAYG_PURCHASE', 'ADMIN'],
             amount__gt=0
         ).aggregate(total=Sum('amount'))['total'] or Decimal('0.00')
-        
+
         # Get targeted consumption amounts (already specify which credit type)
         subscription_consumed = abs(self.user.credit_transactions.filter(
             credit_type='SUBSCRIPTION_CONSUMPTION',
             amount__lt=0
         ).aggregate(total=Sum('amount'))['total'] or Decimal('0.00'))
-        
+
         payg_consumed = abs(self.user.credit_transactions.filter(
             credit_type='PAYG_CONSUMPTION',
             amount__lt=0
         ).aggregate(total=Sum('amount'))['total'] or Decimal('0.00'))
-        
+
         # Apply targeted consumption directly
         subscription_balance = subscription_amount - subscription_consumed
         pay_as_you_go_balance = pay_as_you_go_amount - payg_consumed
-        
+
         return {
             'subscription': {
                 'amount': subscription_balance,
@@ -573,8 +577,7 @@ class CreditAccount(models.Model):
 
     def cleanup_expired_credits(self) -> int:
         """Mark expired subscription credits and return count of expired transactions."""
-        from django.db.models import Q
-        
+
         # Find expired subscription credits that haven't been processed
         expired_transactions = self.user.credit_transactions.filter(
             credit_type='SUBSCRIPTION',
@@ -582,40 +585,40 @@ class CreditAccount(models.Model):
             expires_at__lte=timezone.now(),
             expires_at__isnull=False
         )
-        
+
         expired_count = expired_transactions.count()
-        
+
         # The transactions remain in the database for audit purposes
         # The get_available_balance and related methods already filter them out
         # No need to delete or modify them
-        
+
         return expired_count
 
     def get_expiring_credits(self, days_ahead: int = 7) -> dict:
         """Get credits that will expire within the specified number of days."""
-        from django.db.models import Sum, Q
-        
+        from django.db.models import Sum
+
         cutoff_date = timezone.now() + timedelta(days=days_ahead)
-        
+
         expiring_transactions = self.user.credit_transactions.filter(
             credit_type='SUBSCRIPTION',
             amount__gt=0,
             expires_at__lte=cutoff_date,
             expires_at__gt=timezone.now()  # Not yet expired
         )
-        
+
         total_expiring = expiring_transactions.aggregate(
             total=Sum('amount')
         )['total'] or Decimal('0.00')
-        
+
         # Group by expiration date for detailed breakdown
         expiring_by_date = {}
-        for transaction in expiring_transactions:
-            date_key = transaction.expires_at.date()
+        for credit_transaction in expiring_transactions:
+            date_key = credit_transaction.expires_at.date()
             if date_key not in expiring_by_date:
                 expiring_by_date[date_key] = Decimal('0.00')
-            expiring_by_date[date_key] += transaction.amount
-        
+            expiring_by_date[date_key] += credit_transaction.amount
+
         return {
             'total_amount': total_expiring,
             'transaction_count': expiring_transactions.count(),
@@ -625,7 +628,7 @@ class CreditAccount(models.Model):
 
 class CreditTransaction(models.Model):
     """Model representing individual credit transactions."""
-    
+
     CREDIT_TYPE_CHOICES = [
         ('PAYG_PURCHASE', _('Pay-as-You-Go Purchase')),  # Align with docs terminology
         ('SUBSCRIPTION', _('Subscription')),
@@ -633,7 +636,7 @@ class CreditTransaction(models.Model):
         ('PAYG_CONSUMPTION', _('Pay-as-You-Go Consumption')),
         ('ADMIN', _('Admin Adjustment')),
     ]
-    
+
     user = models.ForeignKey(
         User,
         on_delete=models.CASCADE,
@@ -729,29 +732,29 @@ class CreditTransaction(models.Model):
         # Update deprecated PURCHASE type to new terminology
         if self.credit_type == 'PURCHASE':
             self.credit_type = 'PAYG_PURCHASE'
-        
+
         # Validate amount based on credit type
         if self.credit_type in ['SUBSCRIPTION_CONSUMPTION', 'PAYG_CONSUMPTION'] and self.amount >= 0:
             raise ValidationError({
                 'amount': _('Consumption transactions must have negative amounts')
             })
-        
+
         if self.credit_type in ['PAYG_PURCHASE', 'SUBSCRIPTION', 'ADMIN'] and self.amount <= 0:
             raise ValidationError({
                 'amount': _('Credit addition transactions must have positive amounts')
             })
-        
+
         # Validate expiration logic
         if self.credit_type == 'SUBSCRIPTION' and not self.expires_at:
             raise ValidationError({
                 'expires_at': _('Subscription credits must have an expiration date')
             })
-        
+
         if self.credit_type in ['PAYG_PURCHASE', 'ADMIN'] and self.expires_at:
             raise ValidationError({
                 'expires_at': _('Pay-as-you-go and admin credits should not have expiration dates')
             })
-        
+
         # Validate expiration date is in the future
         if self.expires_at and self.expires_at <= timezone.now():
             raise ValidationError({
@@ -769,7 +772,7 @@ class CreditTransaction(models.Model):
                     self.transaction_type = 'addition'
             else:
                 self.transaction_type = 'consumption'
-        
+
         # Auto-set source if not provided
         if not self.source:
             if self.credit_type == 'SUBSCRIPTION':
@@ -782,7 +785,7 @@ class CreditTransaction(models.Model):
                 self.source = 'admin_panel'
             else:
                 self.source = 'system'
-        
+
         if not skip_validation:
             self.clean()
         super().save(*args, **kwargs)
@@ -827,7 +830,7 @@ class CreditTransaction(models.Model):
 
 class ServiceUsage(models.Model):
     """Model for tracking service usage by users."""
-    
+
     user = models.ForeignKey(
         User,
         on_delete=models.CASCADE,
@@ -870,13 +873,13 @@ class ServiceUsage(models.Model):
 
 class Payment(models.Model):
     """Model for tracking all payment transactions."""
-    
+
     PAYMENT_TYPE_CHOICES = [
         ('CREDIT_PURCHASE', _('Credit Purchase')),
         ('SUBSCRIPTION', _('Subscription')),
         ('REFUND', _('Refund')),
     ]
-    
+
     STATUS_CHOICES = [
         ('pending', _('Pending')),
         ('succeeded', _('Succeeded')),
@@ -884,7 +887,7 @@ class Payment(models.Model):
         ('refunded', _('Refunded')),
         ('cancelled', _('Cancelled')),
     ]
-    
+
     user = models.ForeignKey(
         User,
         on_delete=models.CASCADE,
@@ -1020,7 +1023,7 @@ class Payment(models.Model):
         """Generate receipt data for this payment."""
         # Generate a receipt number based on payment ID and date
         receipt_number = f"RCP-{self.created_at.strftime('%Y%m%d')}-{self.id:06d}"
-        
+
         receipt_data = {
             'payment_id': self.id,
             'receipt_number': receipt_number,
@@ -1036,31 +1039,31 @@ class Payment(models.Model):
             'date': self.created_at.isoformat(),
             'payment_date': self.created_at.strftime('%Y-%m-%d'),
         }
-        
+
         # Add credit-specific information
         if self.credit_transaction:
             receipt_data['credits_added'] = str(abs(self.credit_transaction.amount))
             receipt_data['credit_type'] = self.credit_transaction.get_credit_type_display()
-        
+
         # Add subscription-specific information
         if self.subscription:
             stripe_product = self.subscription.get_stripe_product()
             if stripe_product:
                 receipt_data['plan_name'] = stripe_product.name
                 receipt_data['billing_interval'] = stripe_product.get_interval_display()
-        
+
         return receipt_data
 
     @classmethod
     def create_from_stripe_event(cls, user, stripe_event_data, payment_type='CREDIT_PURCHASE'):
         """Create a payment record from Stripe event data."""
         payment_intent = stripe_event_data.get('data', {}).get('object', {})
-        
+
         # Extract basic payment information
         amount = Decimal(str(payment_intent.get('amount', 0))) / 100  # Convert from cents
         currency = payment_intent.get('currency', 'usd').upper()
         status = payment_intent.get('status', 'pending')
-        
+
         # Map Stripe status to our status choices
         status_mapping = {
             'succeeded': 'succeeded',
@@ -1072,7 +1075,7 @@ class Payment(models.Model):
             'canceled': 'cancelled',
         }
         mapped_status = status_mapping.get(status, 'pending')
-        
+
         # Create payment record
         payment = cls.objects.create(
             user=user,
@@ -1083,17 +1086,17 @@ class Payment(models.Model):
             status=mapped_status,
             description=payment_intent.get('description', f'{payment_type.title()} Payment'),
         )
-        
+
         # Generate and store receipt data
         payment.receipt_data = payment.generate_receipt_data()
         payment.save()
-        
+
         return payment
 
 
 class APIKey(models.Model):
     """Model representing API keys for authentication with secure hashing."""
-    
+
     user = models.ForeignKey(
         User,
         on_delete=models.CASCADE,
@@ -1161,11 +1164,11 @@ class APIKey(models.Model):
         # Generate 4-character prefix (letters and numbers)
         prefix_chars = string.ascii_uppercase + string.digits
         prefix = ''.join(secrets.choice(prefix_chars) for _ in range(4))
-        
+
         # Generate 32-character secret key (letters, numbers, and safe symbols)
         secret_chars = string.ascii_letters + string.digits + '_-'
         secret_key = ''.join(secrets.choice(secret_chars) for _ in range(32))
-        
+
         # Return full key in format prefix.secret_key
         full_key = f"{prefix}.{secret_key}"
         return full_key, prefix, secret_key
@@ -1221,14 +1224,14 @@ def handle_plan_change_credit_transfer(user, current_product, new_product, new_s
         dict: Information about the transfer and payment creation
     """
     from decimal import Decimal
-    from stripe_manager.models import StripeProduct
+
     from django.db import transaction
-    
+
     # Get credit account and current balance breakdown
     credit_account = CreditAccount.get_or_create_for_user(user)
     current_balance = credit_account.get_balance_by_type_available()
     subscription_credits = current_balance['subscription']
-    
+
     # Transfer remaining subscription credits to pay-as-you-go credits
     transferred_credits = Decimal('0.00')
     if subscription_credits > 0:
@@ -1241,7 +1244,7 @@ def handle_plan_change_credit_transfer(user, current_product, new_product, new_s
                 description=deduction_description,
                 credit_type='SUBSCRIPTION'  # Remove from subscription credits
             )
-            
+
             # Then add them as pay-as-you-go credits using the positive add_credits method
             transfer_description = f"Plan change: transferred subscription credits from {current_product.name} to pay-as-you-go"
             credit_account.add_credits(
@@ -1250,7 +1253,7 @@ def handle_plan_change_credit_transfer(user, current_product, new_product, new_s
                 credit_type='PAYG_PURCHASE'  # Make them pay-as-you-go credits (never expire)
             )
             transferred_credits = subscription_credits
-    
+
     # Update local subscription record with new subscription ID and product
     try:
         subscription = user.subscription
@@ -1265,7 +1268,7 @@ def handle_plan_change_credit_transfer(user, current_product, new_product, new_s
             stripe_product_id=new_product.stripe_id,
             status='active'
         )
-    
+
     # Allocate new plan credits
     description = f"Plan change credits - {new_product.name} ({change_type})"
     credit_transaction = credit_account.add_credits(
@@ -1273,17 +1276,17 @@ def handle_plan_change_credit_transfer(user, current_product, new_product, new_s
         description=description,
         credit_type='SUBSCRIPTION'
     )
-    
+
     # Create Payment record for the plan change
     amount_total = session_data.get('amount_total', 0) / 100 if session_data.get('amount_total') else 0
     currency = session_data.get('currency', 'usd').upper()
-    
+
     # Check if Payment record already exists (prevent duplicates)
     existing_payment = Payment.objects.filter(
         user=user,
         stripe_subscription_id=new_subscription_id
     ).first()
-    
+
     payment = None
     if not existing_payment:
         payment = Payment.objects.create(
@@ -1297,11 +1300,11 @@ def handle_plan_change_credit_transfer(user, current_product, new_product, new_s
             credit_transaction=credit_transaction,
             subscription=subscription
         )
-        
+
         # Generate and save receipt data
         payment.receipt_data = payment.generate_receipt_data()
         payment.save()
-    
+
     return {
         'transferred_credits': transferred_credits,
         'new_plan_credits': new_product.credit_amount,
@@ -1312,4 +1315,4 @@ def handle_plan_change_credit_transfer(user, current_product, new_product, new_s
         'change_type': change_type,
         'old_plan': current_product.name,
         'new_plan': new_product.name,
-    } 
+    }

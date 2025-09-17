@@ -1,23 +1,20 @@
 """Utility functions for test stability and robustness."""
+import json
 import os
-import time
-import socket
-import subprocess
 import random
+import shutil
+import socket
 import string
+import subprocess
+import time
 from contextlib import contextmanager
 from pathlib import Path
-import shutil
-import json
-from typing import Optional, Any
-
 
 # ============================================================================
 # CENTRALIZED TEST UTILITIES (DRY Principle)
 # ============================================================================
 
 # Import centralized test utilities (DRY principle)
-from tests.test_utilities import TestUtilities
 
 
 # ============================================================================
@@ -87,8 +84,9 @@ def _check_port_usage(port):
             )
             if lsof.stdout:
                 print(f"Port {port} usage information:\n{lsof.stdout}")
-        except:
+        except Exception:
             pass  # lsof might not be available
+
 
 def wait_for_port(host, port, timeout=60, interval=1.0):
     """Wait for a port to be open on the given host with enhanced logging and diagnostics."""
@@ -156,7 +154,7 @@ def wait_for_docker_service(service_name, timeout=30, interval=0.5):
             check=False
         )
         print(f"Current Docker containers:\n{result.stdout}")
-    except:
+    except Exception:
         print("Failed to list Docker containers.")
         
     return False
@@ -586,8 +584,8 @@ def remove_project_dir(project_dir):
 @contextmanager
 def capture_output():
     """Context manager to capture stdout and stderr from subprocess calls."""
-    from io import StringIO
     import sys
+    from io import StringIO
     
     old_stdout, old_stderr = sys.stdout, sys.stderr
     captured_stdout, captured_stderr = StringIO(), StringIO()
@@ -1144,7 +1142,6 @@ class ProjectTestMixin:
     def setUp(self):
         """Set up test environment for project testing."""
         import tempfile
-        import shutil
         from pathlib import Path
         
         # Create temporary directory for test project
@@ -1162,7 +1159,12 @@ class ProjectTestMixin:
         """Create a test project using QuickScale templates."""
         import shutil
         from pathlib import Path
-        from quickscale.utils import copy_sync_modules, fix_imports, process_file_templates, remove_duplicated_templates
+
+        from quickscale.utils import (
+            copy_sync_modules,
+            fix_imports,
+            process_file_templates,
+        )
         
         # Get the base path to the QuickScale templates
         base_path = Path(__file__).parent.parent / 'quickscale' / 'project_templates'

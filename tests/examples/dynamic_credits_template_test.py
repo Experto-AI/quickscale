@@ -14,14 +14,14 @@ This approach ensures:
 """
 
 import unittest
-from pathlib import Path
+
 from tests.utils import DynamicTemplateTestCase
 
 
 class DynamicCreditsTemplateTests(DynamicTemplateTestCase):
     """Test cases for credits templates using dynamic project generation."""
     
-    def test_credits_app_structure_exists(self):
+    def test_dynamic_credits_app_structure_exists(self):
         """Test that all credits app files exist in generated project."""
         credits_app_path = self.get_app_path('credits')
         
@@ -58,8 +58,8 @@ class DynamicCreditsTemplateTests(DynamicTemplateTestCase):
         self.assertFileContains(models_py, "from django.contrib.auth import get_user_model",
                               "User model should be imported")
     
-    def test_credits_admin_configuration(self):
-        """Test credits admin configuration."""
+    def test_dynamic_credits_admin_configuration(self):
+        """Test credits admin configuration in dynamic template context."""
         admin_py = self.get_app_path('credits') / 'admin.py'
         
         # Check for admin registration
@@ -68,8 +68,8 @@ class DynamicCreditsTemplateTests(DynamicTemplateTestCase):
         self.assertFileContains(admin_py, "@admin.register(CreditTransaction)",
                               "CreditTransaction admin registration should exist")
     
-    def test_credits_urls_configuration(self):
-        """Test credits URL configuration."""
+    def test_dynamic_credits_urls_configuration(self):
+        """Test credits URL configuration in dynamic template context."""
         urls_py = self.get_app_path('credits') / 'urls.py'
         
         # Check for URL patterns
@@ -90,7 +90,7 @@ class DynamicCreditsTemplateTests(DynamicTemplateTestCase):
         self.assertFileContains(views_py, "from django.shortcuts import render",
                               "Django render should be imported")
     
-    def test_credits_templates_exist(self):
+    def test_dynamic_credits_templates_exist(self):
         """Test that credits templates are properly generated."""
         credits_templates_path = self.get_app_path('credits') / 'templates' / 'credits'
         
@@ -107,7 +107,7 @@ class DynamicCreditsTemplateTests(DynamicTemplateTestCase):
         self.assertFileContains(dashboard_template, "{% extends",
                               "Template should extend base template")
     
-    def test_credits_app_configuration(self):
+    def test_dynamic_credits_app_configuration(self):
         """Test credits app configuration."""
         apps_py = self.get_app_path('credits') / 'apps.py'
         

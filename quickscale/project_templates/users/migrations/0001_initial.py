@@ -7,9 +7,9 @@ This migration creates all user-related models in their final state:
 
 Consolidates what was previously in 0001_initial.py and 0002_add_security_models.py
 """
-from django.db import migrations, models
 import django.db.models.deletion
 import django.utils.timezone
+from django.db import migrations, models
 
 
 class Migration(migrations.Migration):
@@ -92,4 +92,4 @@ class Migration(migrations.Migration):
                 'app_label': 'users',
             },
         ),
-    ] 
+    ]

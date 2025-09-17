@@ -1,9 +1,9 @@
 """Test for production settings validation."""
-import os
-import unittest
 import logging
-from unittest.mock import patch, MagicMock
+import os
 import sys
+import unittest
+from unittest.mock import patch
 
 # Add the project root to sys.path to access tests module
 project_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))

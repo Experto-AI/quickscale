@@ -1,5 +1,4 @@
 """Configuration settings for QuickScale."""
-import os
 from quickscale.config.generator_config import generator_config
 
 

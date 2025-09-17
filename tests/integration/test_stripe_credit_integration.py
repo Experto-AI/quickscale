@@ -3,12 +3,18 @@
 """Tests for StripeManager sync functionality with credit amounts."""
 
 import os
-import sys
-from unittest.mock import patch, MagicMock, PropertyMock
+from unittest.mock import MagicMock, patch
+
 from django.test import TestCase, override_settings
 
 # Set up template path and Django settings
-from ..django_functionality.base import DjangoIntegrationTestCase, setup_django_template_path, setup_core_env_utils_mock, setup_core_configuration_mock, setup_django_settings
+from ..django_functionality.base import (
+    setup_core_configuration_mock,
+    setup_core_env_utils_mock,
+    setup_django_settings,
+    setup_django_template_path,
+)
+
 setup_django_template_path()
 setup_core_env_utils_mock()
 setup_core_configuration_mock()
@@ -162,7 +168,7 @@ class TestStripeCreditSync(TestCase):
         mock_stripe_client.return_value = stripe_mock
         
         # Initialize the manager
-        manager = StripeManager.get_instance()
+        StripeManager.get_instance()
         
         # Test different metadata key formats
 
@@ -182,6 +188,6 @@ class TestStripeCreditSync(TestCase):
         mock_stripe_client.return_value = stripe_mock
         
         # Initialize the manager
-        manager = StripeManager.get_instance()
+        StripeManager.get_instance()
         
         # Test with no metadata

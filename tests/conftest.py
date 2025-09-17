@@ -1,17 +1,16 @@
 """Pytest configuration and fixtures for testing."""
 import os
+import shutil
+import subprocess
 import sys
 import time
-import subprocess
-import shutil
-import pytest
 from contextlib import contextmanager
 from pathlib import Path
-from unittest.mock import patch
-import django
-from django.test.testcases import LiveServerTestCase
 from typing import Optional
+from unittest.mock import patch
 
+import django
+import pytest
 
 # Add project templates directory to Python path for Django app imports
 tests_dir = os.path.dirname(os.path.abspath(__file__))
@@ -39,7 +38,7 @@ def patch_django_for_bytes_path():
     """
     # Import the relevant classes
     from django.contrib.staticfiles.handlers import StaticFilesHandler
-    from django.core.handlers.wsgi import WSGIHandler, get_path_info
+    from django.core.handlers.wsgi import get_path_info
     
     # Patch 1: Fix the get_path_info function to always return a string
     original_get_path_info = get_path_info
@@ -291,7 +290,7 @@ def _verify_containers_running(project_name: str) -> bool:
             break
             
     if not web_running:
-        print(f"Web container not running after build. Checking Docker logs...")
+        print("Web container not running after build. Checking Docker logs...")
         # Get logs from container
         for name in web_container_names:
             try:
@@ -358,10 +357,8 @@ def real_project_fixture(tmp_path_factory):
     import tests.utils.utils as test_utils
     
     tmp_path = tmp_path_factory.mktemp("quickscale_real_test")
-    project_dir = None
     
     with chdir(tmp_path):
-        project_name = "real_test_project"
         
         # Get available ports for services
         web_port, db_port = test_utils.find_available_ports(2)
@@ -384,7 +381,7 @@ def retry(request):
             for attempt in range(retries):
                 try:
                     return func(*args, **kwargs)
-                except Exception as e:
+                except Exception:
                     if attempt == retries - 1:
                         raise
                     time.sleep(1)  # Wait between retries

@@ -1,10 +1,9 @@
 """Comprehensive unit tests for InitCommand."""
-import os
-import shutil
 import tempfile
-import pytest
-from unittest.mock import Mock, patch, MagicMock, mock_open
 from pathlib import Path
+from unittest.mock import patch
+
+import pytest
 
 from quickscale.commands.init_command import InitCommand
 from quickscale.utils.error_manager import error_manager
@@ -19,7 +18,7 @@ class TestInitCommand(CommandTestMixin):
         self.command = InitCommand()
         self.test_project_name = "test_project"
     
-    def test_initialization(self):
+    def test_init_command_initialization(self):
         """Test InitCommand initialization."""
         self.assert_command_initialized(self.command)
     
@@ -106,7 +105,7 @@ class TestInitCommand(CommandTestMixin):
     @patch('shutil.copytree')
     @patch('quickscale.commands.init_command.InitCommand._sync_template_modules')
     @patch('quickscale.commands.init_command.InitCommand.validate_project_name')
-    def test_execute_success(self, mock_validate, mock_sync, mock_copytree):
+    def test_execute_init_command_success(self, mock_validate, mock_sync, mock_copytree):
         """Test successful project initialization."""
         # Mock validation to pass
         mock_validate.return_value = None
@@ -122,7 +121,7 @@ class TestInitCommand(CommandTestMixin):
                     mock_copytree.assert_called_once()
                     mock_sync.assert_called_once()
     
-    def test_execute_validation_error(self):
+    def test_execute_init_command_validation_error(self):
         """Test project initialization with validation error."""
         with pytest.raises(error_manager.ValidationError):
             self.command.execute("123invalid")  # Invalid name

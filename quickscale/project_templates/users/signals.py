@@ -1,16 +1,21 @@
 """Signal handlers for authentication security logging."""
-from django.contrib.auth.signals import user_logged_in, user_logged_out, user_login_failed
-from django.dispatch import receiver
-from django.db.models.signals import post_save
-from django.contrib.auth import get_user_model
 from allauth.account.signals import email_confirmed
-from .security_logger import (
-    log_login_success, 
-    log_logout, 
-    log_login_failure,
-    log_email_verification
+from django.contrib.auth import get_user_model
+from django.contrib.auth.signals import (
+    user_logged_in,
+    user_logged_out,
+    user_login_failed,
 )
+from django.db.models.signals import post_save
+from django.dispatch import receiver
+
 from .models import AccountLockout
+from .security_logger import (
+    log_email_verification,
+    log_login_failure,
+    log_login_success,
+    log_logout,
+)
 
 User = get_user_model()
 
@@ -42,13 +47,13 @@ def log_failed_login_attempt(sender, credentials, request, **kwargs):
     """Log failed login attempts and handle account lockout."""
     # Extract email from credentials (django-allauth uses 'login' field for email)
     user_email = credentials.get('login') or credentials.get('email') or 'unknown'
-    
+
     log_login_failure(
         user_email=user_email,
         request=request,
         reason='invalid_credentials'
     )
-    
+
     # Handle account lockout logic
     try:
         user = User.objects.get(email=user_email)
@@ -95,4 +100,4 @@ def log_user_creation(sender, instance, created, **kwargs):
                 'is_active': instance.is_active,
                 'security_action': 'new_account'
             }
-        ) 
+        )

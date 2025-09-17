@@ -1,16 +1,22 @@
-from django.shortcuts import render, get_object_or_404
-from django.contrib.auth.decorators import login_required
-from django.http import JsonResponse
-from django.views.decorators.http import require_http_methods
-from django.contrib import messages
-from django.utils.translation import gettext_lazy as _
-from django.db import transaction
-from django.urls import reverse
-from django.shortcuts import redirect
-from django.conf import settings
 import logging
-from .models import CreditAccount, CreditTransaction, Service, ServiceUsage, InsufficientCreditsError
-from credits.models import Payment
+
+from django.conf import settings
+from django.contrib import messages
+from django.contrib.auth.decorators import login_required
+from django.db import transaction
+from django.http import JsonResponse
+from django.shortcuts import get_object_or_404, redirect, render
+from django.urls import reverse
+from django.views.decorators.http import require_http_methods
+
+from credits.models import (
+    CreditAccount,
+    CreditTransaction,
+    InsufficientCreditsError,
+    Payment,
+    Service,
+    ServiceUsage,
+)
 
 # Setup logging
 logger = logging.getLogger(__name__)
@@ -21,23 +27,23 @@ def credits_dashboard(request):
     """Display the user's credit dashboard with balance and recent transactions."""
     credit_account = CreditAccount.get_or_create_for_user(request.user)
     current_balance = credit_account.get_balance()
-    
+
     # Get recent 5 transactions
     recent_transactions = request.user.credit_transactions.all()[:5]
-    
+
     # Check for recent purchase transaction data in session
     purchase_transaction_data = request.session.pop('purchase_transaction_data', None)
-    
+
     # Get available services for dashboard preview (limited to 6)
     available_services = Service.objects.filter(is_active=True).order_by('name')[:6]
-    
+
     # Add usage count for each service by the current user
     for service in available_services:
         service.user_usage_count = ServiceUsage.objects.filter(
             user=request.user,
             service=service
         ).count()
-    
+
     context = {
         'credit_account': credit_account,
         'current_balance': current_balance,
@@ -45,7 +51,7 @@ def credits_dashboard(request):
         'purchase_transaction_data': purchase_transaction_data,  # For displaying detailed purchase info
         'available_services': available_services,  # For services section in dashboard
     }
-    
+
     return render(request, 'credits/dashboard.html', context)
 
 
@@ -54,21 +60,21 @@ def buy_credits(request):
     """Display available credit purchase options from Stripe products."""
     credit_account = CreditAccount.get_or_create_for_user(request.user)
     current_balance = credit_account.get_balance()
-    
+
     # Get active one-time purchase products (pay-as-you-go credits)
     from stripe_manager.models import StripeProduct
     products = StripeProduct.objects.filter(
-        active=True, 
+        active=True,
         interval='one-time'
     ).order_by('display_order', 'price')
-    
+
     context = {
         'products': products,
         'current_balance': current_balance,
         'credit_account': credit_account,
         'stripe_public_key': getattr(settings, 'STRIPE_PUBLIC_KEY', ''),
     }
-    
+
     return render(request, 'credits/buy_credits.html', context)
 
 
@@ -80,33 +86,31 @@ def create_checkout_session(request):
     if not product_id:
         messages.error(request, 'Product ID is required')
         return redirect('credits:buy_credits')
-    
-    from stripe_manager.models import StripeProduct
-    from django.conf import settings
-    
+
     # Import configuration singleton
     from core.configuration import config
-    
+    from stripe_manager.models import StripeProduct
+
     # Check if Stripe is enabled and configured using configuration singleton
     if not config.is_stripe_enabled_and_configured():
         messages.error(request, 'Stripe integration is not enabled or properly configured')
         return redirect('credits:buy_credits')
-    
+
     try:
         product = StripeProduct.objects.get(id=product_id, active=True)
     except StripeProduct.DoesNotExist:
         messages.error(request, 'Product not found or inactive')
         return redirect('credits:buy_credits')
-    
+
     try:
         # Import Stripe manager
         from stripe_manager.stripe_manager import StripeManager
         stripe_manager = StripeManager.get_instance()
-        
+
         # Create checkout session
         success_url = request.build_absolute_uri(reverse('credits:purchase_success'))
         cancel_url = request.build_absolute_uri(reverse('credits:purchase_cancel'))
-        
+
         # Create or get customer
         from stripe_manager.models import StripeCustomer
         stripe_customer, created = StripeCustomer.objects.get_or_create(
@@ -116,7 +120,7 @@ def create_checkout_session(request):
                 'name': f"{getattr(request.user, 'first_name', '')} {getattr(request.user, 'last_name', '')}".strip(),
             }
         )
-        
+
         # If customer doesn't have a Stripe ID, create one
         if not stripe_customer.stripe_id:
             stripe_customer_data = stripe_manager.create_customer(
@@ -126,7 +130,7 @@ def create_checkout_session(request):
             )
             stripe_customer.stripe_id = stripe_customer_data['id']
             stripe_customer.save()
-        
+
         # Create checkout session using Stripe price ID if available, otherwise create price data
         if product.stripe_price_id:
             # Use existing Stripe price through StripeManager
@@ -169,9 +173,9 @@ def create_checkout_session(request):
                 },
             }
             session = stripe_manager.client.checkout.sessions.create(**session_data)
-        
+
         return redirect(session.url)
-        
+
     except Exception as e:
         logger.error(f"Failed to create checkout session: {str(e)}")
         messages.error(request, f'Failed to create checkout session: {str(e)}')
@@ -183,16 +187,16 @@ def purchase_success(request):
     """Handle successful credit purchase with detailed transaction information."""
     session_id = request.GET.get('session_id')
     transaction_data = {}
-    
+
     if session_id:
         try:
             # Import Stripe manager
             from stripe_manager.stripe_manager import StripeManager
             stripe_manager = StripeManager.get_instance()
-            
+
             # Retrieve the session with detailed transaction information
             session_data = stripe_manager.retrieve_checkout_session(session_id, include_line_items=True)
-            
+
             # Extract comprehensive transaction details
             transaction_data = {
                 'session_id': session_id,
@@ -206,12 +210,12 @@ def purchase_success(request):
                 'created': session_data.get('created'),
                 'metadata': session_data.get('metadata', {}),
             }
-            
+
             # Get payment intent details
             if session_data.get('payment_intent_details'):
                 payment_intent = session_data['payment_intent_details']
                 transaction_data['payment_intent_id'] = payment_intent.get('id')
-                
+
                 # Add payment method details if available
                 if session_data.get('payment_method_details'):
                     payment_method = session_data['payment_method_details']
@@ -223,7 +227,7 @@ def purchase_success(request):
             elif session_data.get('payment_intent'):
                 # Fallback to basic payment intent ID if detailed data not available
                 transaction_data['payment_intent_id'] = session_data['payment_intent']
-            
+
             # Get customer details
             if session_data.get('customer_details'):
                 customer_details = session_data['customer_details']
@@ -231,7 +235,7 @@ def purchase_success(request):
                     'customer_email': customer_details.get('email', ''),
                     'customer_name': customer_details.get('name', ''),
                 })
-            
+
             # Get line items details if available
             if session_data.get('line_items_details') and session_data['line_items_details'].get('data'):
                 line_items = session_data['line_items_details']['data']
@@ -242,24 +246,24 @@ def purchase_success(request):
                         'line_item_quantity': line_item.get('quantity', 1),
                         'line_item_amount': line_item.get('amount_total', 0) / 100 if line_item.get('amount_total') else 0,
                     })
-            
+
             # Get metadata
             metadata = session_data.get('metadata', {})
             product_id = metadata.get('product_id')
             credit_amount = metadata.get('credit_amount')
-            
+
             # Add metadata to transaction data
             transaction_data.update({
                 'credit_amount': credit_amount,
                 'product_id': product_id,
                 'purchase_type': metadata.get('purchase_type'),
             })
-            
+
             if product_id and credit_amount:
                 from stripe_manager.models import StripeProduct
                 product = get_object_or_404(StripeProduct, id=product_id)
                 credit_account = CreditAccount.get_or_create_for_user(request.user)
-                
+
                 # Add product details to transaction data
                 transaction_data.update({
                     'product_name': product.name,
@@ -267,7 +271,7 @@ def purchase_success(request):
                     'price_per_credit': float(product.price_per_credit),
                     'credit_type': 'Pay-as-you-go' if product.is_one_time else 'Subscription',
                 })
-                
+
                 # Check if this payment was already processed
                 payment_intent_id = transaction_data.get('payment_intent_id', 'unknown')
                 existing_transaction = CreditTransaction.objects.filter(
@@ -275,7 +279,7 @@ def purchase_success(request):
                     description__contains=f"Payment ID: {payment_intent_id}",
                     credit_type='PURCHASE'
                 ).first()
-                
+
                 if not existing_transaction:
                     # Add credits to user account with enhanced description
                     description = (
@@ -286,32 +290,32 @@ def purchase_success(request):
                         f"Session: {session_id}, "
                         f"Customer: {transaction_data['customer_email']})"
                     )
-                    
+
                     new_transaction = credit_account.add_credits(
                         amount=int(credit_amount),
                         description=description,
                         credit_type='PURCHASE'
                     )
-                    
+
                     # Add transaction details to data
                     transaction_data.update({
                         'transaction_id': new_transaction.id,
                         'new_balance': float(credit_account.get_balance()),
                         'transaction_processed': True,
                     })
-                    
+
                     messages.success(
                         request,
                         f"Successfully purchased {credit_amount} credits! "
                         f"New balance: {credit_account.get_balance()} credits."
                     )
-                    
+
                     # Create Payment record as fallback if webhook hasn't processed yet
                     existing_payment = Payment.objects.filter(
                         user=request.user,
                         stripe_payment_intent_id=payment_intent_id
                     ).first()
-                    
+
                     if not existing_payment:
                         payment = Payment.objects.create(
                             user=request.user,
@@ -323,11 +327,11 @@ def purchase_success(request):
                             description=f"Credit Purchase - {product.name}",
                             credit_transaction=new_transaction
                         )
-                        
+
                         # Generate and save receipt data
                         payment.receipt_data = payment.generate_receipt_data()
                         payment.save()
-                        
+
                         logger.info(
                             f"Created Payment record ID {payment.id} as fallback for user {request.user.email}: "
                             f"Payment Intent: {payment_intent_id}"
@@ -340,7 +344,7 @@ def purchase_success(request):
                         'transaction_processed': False,
                         'duplicate_processing': True,
                     })
-                    
+
                     messages.info(
                         request,
                         f"This payment was already processed. "
@@ -349,7 +353,7 @@ def purchase_success(request):
             else:
                 messages.error(request, "Purchase information not found.")
                 transaction_data['error'] = 'Missing product or credit information'
-                
+
         except Exception as e:
             logger.error(f"Error processing credit purchase for session {session_id}: {e}")
             messages.error(request, f"Error processing purchase: {str(e)}")
@@ -357,10 +361,10 @@ def purchase_success(request):
     else:
         messages.success(request, "Thank you for your purchase!")
         transaction_data['no_session'] = True
-    
+
     # Store transaction data in session for display on success page
     request.session['purchase_transaction_data'] = transaction_data
-    
+
     return redirect('credits:dashboard')
 
 
@@ -377,7 +381,7 @@ def credit_balance_api(request):
     """API endpoint to get current credit balance."""
     credit_account = CreditAccount.get_or_create_for_user(request.user)
     balance = credit_account.get_balance()
-    
+
     return JsonResponse({
         'balance': float(balance),  # Convert Decimal to float
         'formatted_balance': f"{balance} credits"
@@ -389,23 +393,23 @@ def services_list(request):
     """Display available services for credit consumption."""
     credit_account = CreditAccount.get_or_create_for_user(request.user)
     current_balance = credit_account.get_balance()
-    
+
     # Get all active services
     services = Service.objects.filter(is_active=True).order_by('name')
-    
+
     # Add usage count for each service by the current user
     for service in services:
         service.user_usage_count = ServiceUsage.objects.filter(
             user=request.user,
             service=service
         ).count()
-    
+
     context = {
         'services': services,
         'current_balance': current_balance,
         'credit_account': credit_account,
     }
-    
+
     return render(request, 'credits/services.html', context)
 
 
@@ -415,7 +419,7 @@ def use_service(request, service_id):
     """Use a service and consume credits."""
     service = get_object_or_404(Service, id=service_id, is_active=True)
     credit_account = CreditAccount.get_or_create_for_user(request.user)
-    
+
     try:
         with transaction.atomic():
             # Consume credits from user account using priority system
@@ -423,21 +427,21 @@ def use_service(request, service_id):
                 amount=service.credit_cost,
                 description=f"Used service: {service.name}"
             )
-            
+
             # Create service usage record
-            service_usage = ServiceUsage.objects.create(
+            ServiceUsage.objects.create(
                 user=request.user,
                 service=service,
                 credit_transaction=credit_transaction
             )
-            
+
             messages.success(
                 request,
                 f"Successfully used {service.name}! {service.credit_cost} credits consumed. "
                 f"Remaining balance: {credit_account.get_available_balance()} credits."
             )
-            
-    except InsufficientCreditsError as e:
+
+    except InsufficientCreditsError:
         messages.error(
             request,
             f"Insufficient credits to use {service.name}. "
@@ -449,7 +453,7 @@ def use_service(request, service_id):
             request,
             f"An error occurred while using {service.name}: {str(e)}"
         )
-    
+
     return redirect('credits:services')
 
 
@@ -459,31 +463,31 @@ def use_service_with_priority(request, service_id):
     """Use a service and consume credits with priority system (subscription first)."""
     service = get_object_or_404(Service, id=service_id, is_active=True)
     credit_account = CreditAccount.get_or_create_for_user(request.user)
-    
+
     # Add logging for debugging
     logger.info(f"User {request.user.email} attempting to use service {service.name} (cost: {service.credit_cost})")
-    
+
     try:
         with transaction.atomic():
             # Get balance breakdown before consumption
             balance_before = credit_account.get_balance_by_type_available()
             logger.info(f"Balance before consumption: {balance_before}")
-            
+
             # Consume credits using priority system
             credit_transaction = credit_account.consume_credits_with_priority(
                 amount=service.credit_cost,
                 description=f"Used service: {service.name} (priority consumption)"
             )
             logger.info(f"Created credit transaction: ID={credit_transaction.id}, Amount={credit_transaction.amount}")
-            
+
             # Get balance breakdown after consumption
             balance_after = credit_account.get_balance_by_type_available()
             logger.info(f"Balance after consumption: {balance_after}")
-            
+
             # Calculate what was consumed from each type
             subscription_consumed = balance_before['subscription'] - balance_after['subscription']
             payg_consumed = balance_before['pay_as_you_go'] - balance_after['pay_as_you_go']
-            
+
             # Create service usage record
             service_usage = ServiceUsage.objects.create(
                 user=request.user,
@@ -491,23 +495,23 @@ def use_service_with_priority(request, service_id):
                 credit_transaction=credit_transaction
             )
             logger.info(f"Created service usage record: ID={service_usage.id}")
-            
+
             # Create detailed success message
             consumption_details = []
             if subscription_consumed > 0:
                 consumption_details.append(f"{subscription_consumed} subscription credits")
             if payg_consumed > 0:
                 consumption_details.append(f"{payg_consumed} pay-as-you-go credits")
-            
+
             consumption_msg = " + ".join(consumption_details) if consumption_details else f"{service.credit_cost} credits"
-            
+
             messages.success(
                 request,
                 f"Successfully used {service.name}! Consumed {consumption_msg}. "
                 f"Remaining balance: {credit_account.get_available_balance()} credits "
                 f"({balance_after['subscription']} subscription + {balance_after['pay_as_you_go']} pay-as-you-go)."
             )
-            
+
     except InsufficientCreditsError as e:
         balance_breakdown = credit_account.get_balance_by_type_available()
         logger.warning(f"Insufficient credits for user {request.user.email}: {e}")
@@ -524,7 +528,7 @@ def use_service_with_priority(request, service_id):
             request,
             f"An error occurred while using {service.name}: {str(e)}"
         )
-    
+
     return redirect('credits:services')
 
 
@@ -534,16 +538,16 @@ def service_usage_api(request, service_id):
     """API endpoint to get service usage information."""
     service = get_object_or_404(Service, id=service_id, is_active=True)
     credit_account = CreditAccount.get_or_create_for_user(request.user)
-    
+
     # Get user's usage count for this service
     usage_count = ServiceUsage.objects.filter(
         user=request.user,
         service=service
     ).count()
-    
+
     # Check if user has sufficient credits
     has_sufficient_credits = credit_account.get_balance() >= service.credit_cost
-    
+
     return JsonResponse({
         'service_id': service.id,
         'service_name': service.name,
@@ -552,4 +556,4 @@ def service_usage_api(request, service_id):
         'user_balance': float(credit_account.get_balance()),  # Convert Decimal to float
         'has_sufficient_credits': has_sufficient_credits,
         'formatted_cost': f"{service.credit_cost} credits"
-    }) 
+    })

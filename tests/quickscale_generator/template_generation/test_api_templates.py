@@ -5,10 +5,8 @@ templates as described in the README_API_TESTS.md.
 templates as described in docs/README_API_AUTH.md.
 """
 
-import os
-import tempfile
-import shutil
 from pathlib import Path
+
 from django.test import TestCase
 
 from tests.utils import DynamicProjectTestCase

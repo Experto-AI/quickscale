@@ -6,7 +6,8 @@ that can be imported by all test files, eliminating duplication and ensuring con
 """
 
 import os
-from typing import Optional, Any
+from typing import Optional
+
 
 class TestUtilities:
     """Centralized test utilities following DRY principles."""
@@ -109,7 +110,8 @@ class TestUtilities:
         if TestUtilities.is_feature_enabled(TestUtilities.get_env('IS_PRODUCTION', 'False')):
             if TestUtilities.get_env('SECRET_KEY') == 'dev-only-dummy-key-replace-in-production':
                 raise ValueError("Production requires a secure SECRET_KEY")
-            if '*' in TestUtilities.get_env('ALLOWED_HOSTS', '').split(','):
+            allowed_hosts = TestUtilities.get_env('ALLOWED_HOSTS', '')
+            if allowed_hosts and '*' in allowed_hosts.split(','):
                 raise ValueError("Production requires specific ALLOWED_HOSTS")
             if TestUtilities.get_env('DB_PASSWORD') in ['postgres', 'admin', 'adminpasswd', 'password', 'root']:
                 raise ValueError("Production requires a secure database password")

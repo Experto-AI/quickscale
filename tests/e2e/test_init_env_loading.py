@@ -1,11 +1,10 @@
+import importlib
 import os
-import pytest
-import subprocess
+import shutil
 import tempfile
 from pathlib import Path
-import importlib
-import time
-import shutil
+
+import pytest
 
 from quickscale.utils.env_utils import env_manager
 
@@ -13,7 +12,6 @@ from quickscale.utils.env_utils import env_manager
 from tests.test_utilities import TestUtilities
 
 # Using run_quickscale_command from utils.py
-import tests.utils.utils as test_utils
 
 class TestEnvFileLoading:
     """Test that environment files are correctly loaded during quickscale operations."""
@@ -78,7 +76,7 @@ PROJECT_NAME=test_project
         
         # Force reload environment variables
         env_manager.refresh_env_cache()
-        env_utils_module = importlib.reload(__import__('quickscale.utils.env_utils'))
+        importlib.reload(__import__('quickscale.utils.env_utils'))
         # Explicitly initialize the environment after reload
         env_manager.initialize_env()
         

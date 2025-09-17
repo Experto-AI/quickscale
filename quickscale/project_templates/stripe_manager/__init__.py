@@ -1,1 +1,1 @@
-"""Stripe integration app.""" 
+"""Stripe integration app."""

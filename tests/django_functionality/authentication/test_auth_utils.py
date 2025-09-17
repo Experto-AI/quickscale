@@ -1,7 +1,5 @@
 """Utilities to fix Django LiveServerTestCase for end-to-end testing."""
 
-import inspect
-import types
 
 
 def patch_django_for_e2e_testing():
@@ -36,10 +34,9 @@ def patch_django_for_e2e_testing():
             return path.startswith(self.base_url[2]) and not self.base_url[1]
         
         # Save the original method for debugging but don't call it
-        original_should_handle = StaticFilesHandler._should_handle
         # Replace the method with our fixed version
         StaticFilesHandler._should_handle = fixed_should_handle
-        print(f"✓ Patched StaticFilesHandler._should_handle to handle bytes")
+        print("✓ Patched StaticFilesHandler._should_handle to handle bytes")
     except (ImportError, AttributeError) as e:
         print(f"! Could not patch StaticFilesHandler: {str(e)}")
 
@@ -47,6 +44,7 @@ def patch_django_for_e2e_testing():
 
 # Pytest fixture to apply Django patches for e2e testing only when needed
 import pytest
+
 
 @pytest.fixture(scope="function")
 def patch_django_for_e2e():

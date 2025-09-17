@@ -1,7 +1,7 @@
 # Integration tests for authentication flows in django-allauth integration.
-import unittest
+from unittest.mock import Mock, patch
+
 import pytest
-from unittest.mock import Mock, patch, MagicMock
 
 
 @pytest.fixture
@@ -105,7 +105,7 @@ class TestAuthenticationFlow:
         }
         
         # Mock the send_mail function
-        send_mail = Mock()
+        Mock()
         
         # Execute password reset
         with patch('unittest.mock.Mock') as mock_send:
@@ -227,7 +227,7 @@ class TestIntegrationWithDjangoAllauth:
         }
         
         # Call the method
-        result = adapter.save_user(request=Mock(), user=user, form=form)
+        adapter.save_user(request=Mock(), user=user, form=form)
         
         # Verify the result
         assert adapter.save_user.called
@@ -242,7 +242,7 @@ class TestIntegrationWithDjangoAllauth:
         adapter.populate_user = Mock(return_value=Mock())
         
         # Call the method
-        result = adapter.populate_user(
+        adapter.populate_user(
             request=Mock(),
             sociallogin=Mock(account=mock_social_account)
         )

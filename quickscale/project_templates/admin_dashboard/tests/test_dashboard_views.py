@@ -1,6 +1,5 @@
-"""Migrated from template validation tests."""
+"""Migrated from template validation tests.
 
-"""
 Tests for dashboard views when Stripe is disabled.
 
 These tests verify that the dashboard works correctly
@@ -8,12 +7,12 @@ even when ENABLE_STRIPE is set to False.
 """
 
 from unittest.mock import patch
-from django.test import TestCase, override_settings
-from django.urls import reverse
+
 from django.contrib.auth import get_user_model
+from django.test import TestCase
+from django.urls import reverse
 
 # Check if Stripe is enabled using configuration singleton
-from core.configuration import config
 
 # Only import StripeConfigurationError if stripe is available (though these tests run when it's not enabled)
 # This is to avoid ImportErrors if the stripe package isn't installed at all.
@@ -21,10 +20,8 @@ try:
     from stripe_manager.stripe_manager import StripeConfigurationError
 except ImportError:
     # Define a dummy exception if stripe is not installed to avoid NameError
-    class StripeConfigurationError(Exception):
-        pass
+    StripeConfigurationError = type('StripeConfigurationError', (Exception,), {})
 
-from users.models import CustomUser
 
 class DashboardWithoutStripeIntegrationTests(TestCase):
     """Test admin dashboard views when Stripe is disabled."""

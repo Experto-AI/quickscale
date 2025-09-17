@@ -7,8 +7,8 @@ and caches them for optimal performance.
 """
 
 import os
-from typing import Dict, Optional, Any
 from dataclasses import dataclass
+from typing import Dict, Optional
 
 
 @dataclass
@@ -29,27 +29,41 @@ class GeneratorConfiguration:
     Reads .env files once at startup and caches all environment variables
     for consistent state and optimal performance.
     """
-    
+
     _instance: Optional['GeneratorConfiguration'] = None
     _env_cache: Optional[Dict[str, str]] = None
     _feature_flags: Optional[FeatureFlags] = None
-    
+
     def __new__(cls) -> 'GeneratorConfiguration':
         """Ensure singleton instance."""
         if cls._instance is None:
             cls._instance = super().__new__(cls)
         return cls._instance
-    
+
     def __init__(self) -> None:
         """Initialize configuration if not already done."""
         if self._env_cache is None:
             self._load_environment()
             self._feature_flags = self._compute_feature_flags()
-    
+
     def _load_environment(self) -> None:
-        """Load environment variables into cache."""
+        """Load environment variables into cache, including .env file."""
+        # First, try to load .env file if it exists
+        try:
+            from dotenv import load_dotenv
+            dotenv_path = os.path.join(os.getcwd(), '.env')
+            if os.path.exists(dotenv_path):
+                load_dotenv(dotenv_path=dotenv_path, override=True)
+        except ImportError:
+            # If python-dotenv is not available, skip .env loading
+            pass
+        except Exception:
+            # If .env loading fails for any reason, continue with os.environ
+            pass
+
+        # Cache the environment variables
         self._env_cache = dict(os.environ)
-    
+
     def _compute_feature_flags(self) -> FeatureFlags:
         """Compute all feature flags once at startup."""
         return FeatureFlags(
@@ -61,12 +75,12 @@ class GeneratorConfiguration:
             enable_credit_types=self._is_feature_enabled('ENABLE_CREDIT_TYPES'),
             require_email_verification=self._is_feature_enabled('REQUIRE_EMAIL_VERIFICATION'),
         )
-    
+
     def _is_feature_enabled(self, flag_name: str) -> bool:
         """Check if a feature flag is enabled."""
         value = self.get_env(flag_name, 'False').lower().strip()
         return value in ('true', '1', 'yes', 'on')
-    
+
     def get_env(self, key: str, default: str = '', from_env_file: bool = False) -> str:
         """Get environment variable from cache.
         
@@ -81,20 +95,22 @@ class GeneratorConfiguration:
         if self._env_cache is None:
             self._load_environment()
         
+        if self._env_cache is None:
+            return default
         return self._env_cache.get(key, default)
-    
+
     @property
     def feature_flags(self) -> FeatureFlags:
         """Access computed feature flags."""
         if self._feature_flags is None:
             self._feature_flags = self._compute_feature_flags()
         return self._feature_flags
-    
+
     def refresh_cache(self) -> None:
         """Refresh environment cache (for testing purposes)."""
         self._load_environment()
         self._feature_flags = self._compute_feature_flags()
-    
+
     def update_cache_for_testing(self, test_env: Dict[str, str]) -> None:
         """Update cache with test environment variables (for testing only)."""
         if self._env_cache is None:

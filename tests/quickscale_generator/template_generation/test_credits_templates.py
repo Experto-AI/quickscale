@@ -7,7 +7,6 @@ URL configuration, and that all necessary files exist for the credit system.
 
 import os
 import unittest
-import re
 from pathlib import Path
 
 
@@ -121,7 +120,7 @@ class CreditsTemplateTests(unittest.TestCase):
                      "login_required decorator not found")
     
     def test_credit_urls_configuration(self):
-        """Test credits URL configuration."""
+        """Test credits URL configuration in template generation context."""
         with open(self.urls_py, 'r') as f:
             urls_content = f.read()
         
@@ -138,7 +137,7 @@ class CreditsTemplateTests(unittest.TestCase):
                      "Balance API URL name not found")
     
     def test_credit_admin_configuration(self):
-        """Test credits admin configuration."""
+        """Test credits admin configuration in template generation context."""
         with open(self.admin_py, 'r') as f:
             admin_content = f.read()
         

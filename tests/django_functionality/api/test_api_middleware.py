@@ -1,12 +1,13 @@
 """Tests for API authentication middleware functionality."""
 import json
-from unittest.mock import patch, Mock
-from django.test import TestCase, RequestFactory
-from django.contrib.auth import get_user_model
-from django.utils import timezone
 from datetime import timedelta
+from unittest.mock import patch
+
 from core.api_middleware import APIKeyAuthenticationMiddleware
 from credits.models import APIKey
+from django.contrib.auth import get_user_model
+from django.test import RequestFactory, TestCase
+from django.utils import timezone
 
 User = get_user_model()
 
@@ -94,7 +95,7 @@ class APIKeyAuthenticationMiddlewareTest(TestCase):
         """Test rejection of expired API keys."""
         # Arrange: Create expired API key
         expired_key_full, expired_prefix, expired_secret = APIKey.generate_key()
-        expired_api_key = APIKey.objects.create(
+        APIKey.objects.create(
             user=self.user,
             prefix=expired_prefix,
             hashed_key=APIKey.get_hashed_key(expired_secret),
@@ -298,7 +299,8 @@ class APIKeyAuthenticationMiddlewareTest(TestCase):
         
         # Act: Mock database error during API key lookup
         import logging
-        import sys # For StreamHandler output
+        import sys  # For StreamHandler output
+
         from django.test import override_settings
 
         middleware_logger = logging.getLogger('core.api_middleware')

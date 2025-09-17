@@ -1,8 +1,8 @@
 import os
-import pytest
-from unittest.mock import patch
-import re
 import sys
+from unittest.mock import patch
+
+import pytest
 
 # Add the project root to sys.path to access tests module
 project_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))

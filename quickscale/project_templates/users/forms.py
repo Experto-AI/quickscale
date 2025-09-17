@@ -1,10 +1,14 @@
 """Enhanced profile forms for QuickScale users."""
+from allauth.account.forms import (
+    ChangePasswordForm,
+    LoginForm,
+    ResetPasswordForm,
+    SignupForm,
+)
 from django import forms
 from django.contrib.auth import get_user_model
 from django.core.exceptions import ValidationError
 from django.db import transaction
-from django.utils.translation import gettext_lazy as _
-from allauth.account.forms import SignupForm, LoginForm, ResetPasswordForm, ChangePasswordForm
 
 from .models import CustomUser
 
@@ -13,7 +17,7 @@ User = get_user_model()
 
 class CustomSignupForm(SignupForm):
     """Custom signup form with proper CSS styling."""
-    
+
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         # Apply Bulma CSS classes to form fields
@@ -33,7 +37,7 @@ class CustomSignupForm(SignupForm):
 
 class CustomLoginForm(LoginForm):
     """Custom login form with proper CSS styling and account lockout checking."""
-    
+
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         # Apply Bulma CSS classes to form fields
@@ -50,16 +54,16 @@ class CustomLoginForm(LoginForm):
         """Add account lockout validation to login form with timing attack resistance."""
         import time
         start_time = time.time()
-        
+
         cleaned_data = super().clean()
-        
+
         # Get the login field (email)
         login = cleaned_data.get('login')
         if login:
             from .models import AccountLockout
-            
+
             User = get_user_model()
-            
+
             # Perform constant-time user lookup to prevent timing attacks
             try:
                 user = User.objects.get(email=login)
@@ -67,7 +71,7 @@ class CustomLoginForm(LoginForm):
             except User.DoesNotExist:
                 user = None
                 user_exists = False
-            
+
             # Always perform the lockout check to maintain consistent timing
             if user_exists:
                 try:
@@ -91,18 +95,18 @@ class CustomLoginForm(LoginForm):
                         AccountLockout.objects.filter(user_id=-1).first()
                 except Exception:
                     pass
-        
+
         # Ensure minimum processing time to reduce timing variations
         elapsed = time.time() - start_time
         if elapsed < 0.05:  # Minimum 50ms processing time
             time.sleep(0.05 - elapsed)
-        
+
         return cleaned_data
 
 
 class CustomResetPasswordForm(ResetPasswordForm):
     """Custom password reset form with proper CSS styling."""
-    
+
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         # Apply Bulma CSS classes to form fields
@@ -114,7 +118,7 @@ class CustomResetPasswordForm(ResetPasswordForm):
 
 class CustomChangePasswordForm(ChangePasswordForm):
     """Custom password change form with proper CSS styling."""
-    
+
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         # Apply Bulma CSS classes to form fields
@@ -134,7 +138,7 @@ class CustomChangePasswordForm(ChangePasswordForm):
 
 class ProfileForm(forms.ModelForm):
     """Enhanced profile form with comprehensive validation and field organization."""
-    
+
     class Meta:
         model = CustomUser
         fields = [
@@ -142,7 +146,7 @@ class ProfileForm(forms.ModelForm):
             'job_title', 'company', 'website', 'location', 'twitter', 'linkedin',
             'github', 'email_notifications'
         ]
-        
+
         widgets = {
             'first_name': forms.TextInput(attrs={
                 'class': 'input',
@@ -193,14 +197,14 @@ class ProfileForm(forms.ModelForm):
                 'class': 'checkbox'
             }),
         }
-    
+
     def clean_website(self):
         """Validate and format website URL with protocol."""
         website = self.cleaned_data.get('website')
         if website and not website.startswith(('http://', 'https://')):
             website = f'https://{website}'
         return website
-    
+
     def clean_phone_number(self):
         """Basic phone number validation."""
         phone = self.cleaned_data.get('phone_number')
@@ -213,4 +217,4 @@ class ProfileForm(forms.ModelForm):
             # Check reasonable length (7-15 digits for international numbers)
             if len(phone_cleaned) < 7 or len(phone_cleaned) > 15:
                 raise ValidationError("Phone number must be between 7 and 15 digits.")
-        return phone  # Return original format for display 
+        return phone  # Return original format for display

@@ -1,6 +1,6 @@
 """Unit tests for credit_type field migration fix in QuickScale templates."""
-import unittest
 import os
+import unittest
 
 
 class CreditTypeMigrationFixTests(unittest.TestCase):

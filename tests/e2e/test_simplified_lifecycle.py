@@ -1,10 +1,10 @@
 """Simplified end-to-end tests for the QuickScale CLI."""
-import os
 import subprocess
-import time
-from pathlib import Path
-import tests.utils.utils as test_utils
+
 import pytest
+
+from tests import utils as test_utils
+
 
 @pytest.mark.e2e
 class TestSimplifiedLifecycle:

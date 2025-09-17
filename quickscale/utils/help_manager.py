@@ -3,12 +3,12 @@
 def show_manage_help() -> None:
     """Display Django management command help information."""
     from quickscale.utils.message_manager import MessageManager
-    
+
     MessageManager.info("QuickScale Django Management Commands")
     MessageManager.info("=====================================")
     MessageManager.info("\nThe 'manage' command allows you to run any Django management command.")
     MessageManager.info("\nCommon commands:")
-    
+
     commands = [
         ("Database:", ""),
         ("  migrate", "Apply database migrations"),
@@ -40,13 +40,13 @@ def show_manage_help() -> None:
         ("  inspectdb", "Generate models from database"),
         ("  showmigrations", "Show migration status"),
     ]
-    
+
     for cmd, desc in commands:
         if desc:
             MessageManager.info(f"{cmd.ljust(20)} {desc}")
         else:
             MessageManager.info(f"\n{cmd}")
-    
+
     MessageManager.info("\nDjango docs: https://docs.djangoproject.com/en/stable/ref/django-admin/")
     MessageManager.info("\nExample usage:\n  quickscale manage migrate")
     MessageManager.info("  quickscale manage test users")

@@ -154,8 +154,13 @@ quickscale/
 │   ├── development_commands.py   # Django shell, manage commands
 │   ├── project_commands.py       # Project lifecycle (destroy)
 │   ├── system_commands.py        # System checks and validation
+│   ├── crawl_command.py          # Application validation and testing
 │   └── service_generator_commands.py  # AI service generation
 ├── config/                       # Configuration management
+├── crawler/                      # Application validation framework
+│   ├── application_crawler.py    # Main crawler with authentication
+│   ├── crawler_config.py         # Crawler configuration and settings
+│   └── page_validator.py         # Page validation and testing logic
 ├── utils/                        # Shared utilities
 │   ├── error_manager.py          # Error handling and recovery
 │   ├── message_manager.py        # User messaging system

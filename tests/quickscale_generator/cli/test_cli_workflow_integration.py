@@ -1,13 +1,13 @@
 """Integration tests for CLI commands workflow."""
 import os
 import tempfile
-import subprocess
-import pytest
-from unittest.mock import Mock, patch, MagicMock
 from pathlib import Path
+from unittest.mock import Mock, patch
 
-from quickscale.commands.command_manager import CommandManager
+import pytest
+
 from quickscale.cli import main
+from quickscale.commands.command_manager import CommandManager
 
 
 class TestCLIWorkflowIntegration:
@@ -34,7 +34,7 @@ class TestCLIWorkflowIntegration:
                 project_name = "test_workflow_project"
                 
                 # Execute init command
-                result = self.command_manager.init_project(project_name)
+                self.command_manager.init_project(project_name)
                 
                 # Verify project directory was created
                 project_path = Path(temp_dir) / project_name
@@ -315,7 +315,7 @@ class TestCLIWorkflowIntegration:
             if i > 0:
                 # Commands should be different instances but same type
                 assert managers[i]._commands['check'] is not managers[0]._commands['check']
-                assert type(managers[i]._commands['check']) == type(managers[0]._commands['check'])
+                assert isinstance(managers[i]._commands['check'], type(managers[0]._commands['check']))
     
     def test_command_state_isolation(self):
         """Test that commands maintain proper state isolation."""
