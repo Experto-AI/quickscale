@@ -1,11 +1,11 @@
 """Tests for direct Stripe API implementation against real Stripe in test mode."""
 
-import unittest
-from unittest.mock import patch, MagicMock
+import logging
 import os
 import sys
-import logging
+import unittest
 from contextlib import contextmanager
+from unittest.mock import MagicMock, patch
 
 # Add parent directory to sys.path for imports
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '../..')))
@@ -154,7 +154,7 @@ def webhook_endpoint(request):
     
     try:
         # Verify and construct the event
-        event = mock_stripe_module.Webhook.construct_event(
+        mock_stripe_module.Webhook.construct_event(
             payload, sig_header, webhook_secret
         )
         return JsonResponse({'status': 'success'})
@@ -235,17 +235,19 @@ class TestStripeRealAPI(unittest.TestCase):
     def setUp(self):
         """Set up test environment."""
         self.original_env = os.environ.copy()
-        # Use a context manager for settings mock to avoid bleeding
-        self.settings_patcher = patch('quickscale.project_templates.stripe_manager.stripe_manager.settings')
-        self.mock_settings = self.settings_patcher.start()
-        self.mock_settings.STRIPE_SECRET_KEY = 'sk_test_51ExampleTestKeyDummyValue'
+        # Mock the config object instead of settings
+        self.config_patcher = patch('quickscale.project_templates.stripe_manager.stripe_manager.config')
+        self.mock_config = self.config_patcher.start()
+        # Configure the mock config object
+        self.mock_config.stripe.secret_key = 'sk_test_51ExampleTestKeyDummyValue'
+        self.mock_config.stripe.api_version = '2023-10-16'
         self.manager = get_stripe_manager()
 
     def tearDown(self):
         """Clean up test environment."""
-        # Stop the settings patcher to prevent mock bleeding
-        if hasattr(self, 'settings_patcher'):
-            self.settings_patcher.stop()
+        # Stop the config patcher to prevent mock bleeding
+        if hasattr(self, 'config_patcher'):
+            self.config_patcher.stop()
             
         # Restore original environment
         os.environ.clear()
@@ -262,7 +264,7 @@ class TestStripeRealAPI(unittest.TestCase):
         # Clean up test-specific module mocks
         _cleanup_test_modules()
 
-    def test_stripe_manager_initialization(self):
+    def test_stripe_manager_initialization_with_test_api(self):
         """Test StripeManager initializes correctly with test API key."""
         with stripe_test_mode():
             manager = get_stripe_manager()

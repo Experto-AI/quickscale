@@ -6,17 +6,18 @@ It's automatically run during project initialization to provide ready-to-use ser
 """
 
 import logging
+from decimal import Decimal
+
+from credits.models import Service
 from django.core.management.base import BaseCommand
 from django.db import transaction
-from credits.models import Service
-from decimal import Decimal
 
 logger = logging.getLogger(__name__)
 
 
 class Command(BaseCommand):
     """Management command to create default example services."""
-    
+
     help = 'Create default example services for demonstration'
 
     def add_arguments(self, parser):
@@ -30,7 +31,7 @@ class Command(BaseCommand):
     def handle(self, *args, **options):
         """Handle the command execution."""
         force = options.get('force', False)
-        
+
         try:
             with transaction.atomic():
                 self.create_default_services(force)
@@ -94,7 +95,7 @@ class Command(BaseCommand):
                 if force:
                     # Update existing service
                     service.description = service_data['description']
-                    service.credit_cost = service_data['credit_cost'] 
+                    service.credit_cost = service_data['credit_cost']
                     service.is_active = service_data['is_active']
                     service.save()
                     created_count += 1
@@ -123,7 +124,7 @@ class Command(BaseCommand):
                     "You can now test these services at: http://localhost:8000/services/"
                 )
             )
-        
+
         if skipped_count > 0:
             self.stdout.write(
                 self.style.WARNING(

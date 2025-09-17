@@ -7,11 +7,8 @@ always test against current template state rather than historical snapshots.
 """
 
 import unittest
-import tempfile
-import shutil
 from pathlib import Path
-from typing import Optional, Dict, Any
-import os
+from typing import Any, Dict, Optional
 
 from .dynamic_project_generator import DynamicProjectGenerator
 

@@ -412,9 +412,9 @@ if [[ $RUN_E2E -eq 1 || ($SELECTED_TESTS -eq 0 && $RUN_INTEGRATION -eq 0 && $RUN
     export QUICKSCALE_TEST_BUILD=1
     export QUICKSCALE_SKIP_MIGRATIONS=1
     export QUICKSCALE_E2E_TEST=1
-    export COMPOSE_HTTP_TIMEOUT=180
     
-    # Extend Docker timeouts for better test stability
+    # Docker Compose timeouts for general stability (not QuickScale-specific)
+    export COMPOSE_HTTP_TIMEOUT=180
     export DOCKER_CLIENT_TIMEOUT=180
     
     if [[ $QUIET -eq 0 ]]; then

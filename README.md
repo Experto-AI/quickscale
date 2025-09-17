@@ -1,5 +1,29 @@
 # **🚀 QuickScale**  
 
+---
+
+## ⚠️ **BREAKING CHANGE NOTICE** 
+
+**🔥 QuickScale is evolving into a completely new architecture!**
+
+We are transitioning from a **static project generator** to a **WordPress-like layered platform** for Django SaaS applications with industry specialization. This represents a **complete architectural redesign** that will **NOT be backward compatible** with existing QuickScale projects.
+
+### **What's Changing:**
+- **From**: Static project generator → Independent Django projects
+- **To**: QuickScale core application + theme/skin/plugin layer system → Deployed applications
+- **New Features**: Industry-specific business themes, visual presentation skins, community marketplace
+- **Benefits**: Shared updates, vertical market specialization, clean separation of concerns
+
+### **Migration Impact:**
+- ⚠️ **No Backward Compatibility**: Existing projects will not migrate to the new system
+- ⚠️ **Fresh Architecture**: This will be an entirely new platform in the next release, not an update
+- ✅ **Current Version Stable**: v0.41.0 remains fully functional for existing projects
+
+### **Learn More:**
+📖 **Read the complete evolution plan**: [QUICKSCALE_EVOLUTION.md](./QUICKSCALE_EVOLUTION.md)
+
+---
+
 **A Django SaaS project generator for AI Engineers and Python developers**  
 
 QuickScale is a project generator that creates production-ready Django SaaS applications with Stripe billing, credit systems, AI service frameworks, and comprehensive admin tools. Build and deploy AI-powered SaaS applications quickly with minimal setup.
@@ -63,6 +87,12 @@ quickscale generate-service <name> --type text  # Generate text processing servi
 quickscale generate-service <name> --free       # Generate free service (no credits)
 quickscale validate-service <path>              # Validate service implementation
 quickscale show-service-examples                # Show example service implementations
+```
+
+### **Application Validation**
+```bash
+quickscale crawl --url <url>                    # Validate application functionality
+quickscale crawl --admin --url <url> -v         # Test admin authentication and pages
 ```
 
 ### **System Tools**

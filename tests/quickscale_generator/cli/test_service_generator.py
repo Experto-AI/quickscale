@@ -4,20 +4,19 @@ This file consolidates all service generator command tests following DRY princip
 Replaces: test_service_generator_comprehensive.py, test_service_generator_commands.py,
 test_service_generator_commands_complete.py, test_service_generator_simple.py and related duplicates.
 """
-import os
-import tempfile
 import shutil
+import tempfile
+import unittest
+from unittest.mock import mock_open, patch
+
 import pytest
-from pathlib import Path
-from unittest.mock import patch, Mock, MagicMock, call, mock_open
 
 from quickscale.commands.service_generator_commands import (
+    ServiceExamplesCommand,
     ServiceGeneratorCommand,
     ValidateServiceCommand,
-    ServiceExamplesCommand
 )
 from quickscale.utils.error_manager import error_manager
-import unittest
 from tests.base_test_classes import CommandTestMixin
 
 
@@ -67,7 +66,7 @@ class TestServiceGeneratorCommand(unittest.TestCase, CommandTestMixin):
     @patch('builtins.open', new_callable=mock_open)
     @patch('pathlib.Path.exists')
     @patch('pathlib.Path.mkdir')
-    def test_execute_success(self, mock_mkdir, mock_exists, mock_file):
+    def test_execute_service_generation_success(self, mock_mkdir, mock_exists, mock_file):
         """Test successful service generation."""
         # Mock file doesn't exist (no conflicts)
         mock_exists.return_value = False
@@ -89,8 +88,8 @@ class TestServiceGeneratorCommand(unittest.TestCase, CommandTestMixin):
         self.assertFalse(result["success"])
         self.assertIn("Invalid service name", result["error"])
 
-    def test_execute_validation_error(self):
-        """Test execution with validation error."""
+    def test_execute_service_generation_validation_error(self):
+        """Test execution with service generation validation error."""
         result = self.command.execute("invalid-service")
         
         self.assertFalse(result["success"])
@@ -151,7 +150,7 @@ class TestValidateServiceCommand(unittest.TestCase, CommandTestMixin):
 
     @patch('quickscale.utils.service_dev_utils.validate_service_file')
     @patch('pathlib.Path.exists')
-    def test_execute_success(self, mock_exists, mock_validate):
+    def test_execute_service_validation_success(self, mock_exists, mock_validate):
         """Test successful service validation."""
         mock_exists.return_value = True
         mock_validate.return_value = None  # validate_service_file doesn't return a value, just raises on error
@@ -172,8 +171,8 @@ class TestValidateServiceCommand(unittest.TestCase, CommandTestMixin):
         
         self.assertFalse(result["valid"])
 
-    def test_execute_file_not_found(self):
-        """Test execution with non-existent file."""
+    def test_execute_service_validation_file_not_found(self):
+        """Test execution with non-existent service file."""
         result = self.command.execute("/non/existent/path.py")
         
         self.assertFalse(result["valid"])
@@ -228,7 +227,7 @@ class TestServiceExamplesCommand(CommandTestMixin):
         assert "service" in result.lower()
 
     @patch('quickscale.utils.service_dev_utils.ServiceDevelopmentHelper.get_service_examples')
-    def test_execute_success(self, mock_get_examples):
+    def test_execute_show_examples_success(self, mock_get_examples):
         """Test successful example display."""
         mock_examples = [
             {
@@ -318,8 +317,8 @@ class TestServiceDevUtilsIntegration:
         assert result is True
 
     @patch('quickscale.utils.service_dev_utils.show_service_examples')
-    def test_show_service_examples(self, mock_show):
-        """Test showing service examples."""
+    def test_show_service_examples_utility(self, mock_show):
+        """Test showing service examples utility function."""
         mock_show.return_value = None
         
         from quickscale.utils.service_dev_utils import show_service_examples

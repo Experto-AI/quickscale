@@ -1,19 +1,16 @@
 """Commands for development and Django shell operations."""
-import sys
 import subprocess
-import logging
-from typing import List, NoReturn, Optional, Dict, Any
-from pathlib import Path
+import sys
+from typing import List, Optional
 
-from quickscale.utils.error_manager import error_manager
 from .command_base import Command
-from .project_manager import ProjectManager
 from .command_utils import DOCKER_COMPOSE_COMMAND
+from .project_manager import ProjectManager
 
 
 class ShellCommand(Command):
     """Opens an interactive shell in the web container."""
-    
+
     def execute(self, command: Optional[str] = None) -> None:
         """Enter a shell in the web container with optional command execution."""
         state = ProjectManager.get_project_state()
@@ -27,7 +24,7 @@ class ShellCommand(Command):
             print("  quickscale shell              # Open an interactive bash shell")
             print("  quickscale shell -c 'ls -la'  # Run 'ls -la' command in the web container")
             return
-        
+
         try:
             if command:
                 # Execute shell command in the web container
@@ -40,9 +37,9 @@ class ShellCommand(Command):
             context = {}
             if command:
                 context["command"] = command
-            
+
             self.handle_error(
-                e, 
+                e,
                 context=context,
                 recovery="Make sure Docker services are running with 'quickscale up'"
             )
@@ -58,7 +55,7 @@ class ShellCommand(Command):
 
 class DjangoShellCommand(Command):
     """Opens the Django interactive shell in the web container."""
-    
+
     def execute(self) -> None:
         """Enter Django shell in the web container."""
         state = ProjectManager.get_project_state()
@@ -66,7 +63,7 @@ class DjangoShellCommand(Command):
             print("Error: " + ProjectManager.PROJECT_NOT_FOUND_MESSAGE)
             print("Suggestion: Make sure you're in a QuickScale project directory or create a new project with 'quickscale init <project_name>'")
             sys.exit(1)
-        
+
         try:
             print("Starting Django shell...")
             subprocess.run(
@@ -75,7 +72,7 @@ class DjangoShellCommand(Command):
             )
         except subprocess.SubprocessError as e:
             self.handle_error(
-                e, 
+                e,
                 context={"django_shell": True},
                 recovery="Make sure Docker services are running with 'quickscale up'"
             )
@@ -91,7 +88,7 @@ class DjangoShellCommand(Command):
 
 class ManageCommand(Command):
     """Runs Django management commands."""
-    
+
     def execute(self, args: List[str]) -> None:
         """Run Django management commands."""
         state = ProjectManager.get_project_state()
@@ -99,13 +96,13 @@ class ManageCommand(Command):
             print("Error: " + ProjectManager.PROJECT_NOT_FOUND_MESSAGE)
             print("Suggestion: Make sure you're in a QuickScale project directory or create a new project with 'quickscale init <project_name>'")
             sys.exit(1)
-        
+
         # Check if no Django management command was specified
         if not args:
             print("Error: No Django management command specified")
             print("Suggestion: Run 'quickscale manage help' to see available commands")
             sys.exit(1)
-        
+
         try:
             subprocess.run(
                 DOCKER_COMPOSE_COMMAND + ["exec", "web", "python", "manage.py"] + args,

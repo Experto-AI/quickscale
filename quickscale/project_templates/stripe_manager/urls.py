@@ -1,5 +1,6 @@
 """URL patterns for the Stripe app."""
 from django.urls import path
+
 from . import views
 
 app_name = 'stripe'
@@ -13,4 +14,4 @@ urlpatterns = [
     path('create-checkout-session/', views.CheckoutView.as_view(), name='create_checkout_session'),
     path('checkout/success/', views.checkout_success_view, name='checkout_success'),
     path('checkout/cancel/', views.checkout_cancel_view, name='checkout_cancel'),
-] 
+]

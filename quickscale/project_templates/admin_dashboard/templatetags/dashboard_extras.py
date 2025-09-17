@@ -1,7 +1,6 @@
 """Template tags for dashboard app."""
 
 from django import template
-from decimal import Decimal
 
 register = template.Library()
 
@@ -57,4 +56,4 @@ def savings_per_credit(basic_price, basic_credits, pro_price, pro_credits):
         pro_cost = cost_per_credit(pro_price, pro_credits)
         return round(basic_cost - pro_cost, 2)
     except (ValueError, TypeError):
-        return 0 
+        return 0

@@ -7,9 +7,6 @@ and audit logging have been properly generated in the QuickScale project templat
 
 import os
 import unittest
-import tempfile
-import shutil
-import re
 from pathlib import Path
 
 

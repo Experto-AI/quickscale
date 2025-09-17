@@ -1,14 +1,15 @@
 """Integration tests for email verification workflows (Sprint 21)."""
-from django.test import TestCase, Client, override_settings
-from django.urls import reverse
-from django.contrib.auth import get_user_model
-from django.core import mail
-from django.utils import timezone
-from django.contrib.sites.models import Site
+from datetime import timedelta
+from unittest.mock import patch
+
 from allauth.account.models import EmailAddress, EmailConfirmation
 from allauth.account.utils import send_email_confirmation
-from unittest.mock import patch
-from datetime import timedelta
+from django.contrib.auth import get_user_model
+from django.contrib.sites.models import Site
+from django.core import mail
+from django.test import Client, TestCase, override_settings
+from django.urls import reverse
+from django.utils import timezone
 
 User = get_user_model()
 

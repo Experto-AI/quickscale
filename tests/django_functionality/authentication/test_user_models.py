@@ -1,12 +1,18 @@
 """Tests for Django user models and utilities."""
 
-import pytest
 from io import StringIO
-from django.core.management import call_command
+
+import pytest
 from django.contrib.auth import get_user_model
+from django.core.management import call_command
 
 # Set up Django for testing
-from ..base import DjangoModelTestCase, setup_django_template_path, setup_core_env_utils_mock, setup_django_settings
+from ..base import (
+    DjangoModelTestCase,
+    setup_core_env_utils_mock,
+    setup_django_settings,
+    setup_django_template_path,
+)
 
 # Set up template path and environment
 setup_django_template_path()
@@ -15,6 +21,7 @@ setup_django_settings()
 
 # Import Django and initialize
 import django
+
 django.setup()
 
 User = get_user_model()

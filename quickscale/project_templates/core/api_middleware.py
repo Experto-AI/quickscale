@@ -1,9 +1,9 @@
 """API authentication middleware for QuickScale."""
+import logging
+from typing import Dict, Optional
+
 from django.http import JsonResponse
 from django.utils.deprecation import MiddlewareMixin
-from django.utils import timezone
-import logging
-from django.contrib.auth.models import AnonymousUser
 
 logger = logging.getLogger(__name__)
 
@@ -11,7 +11,7 @@ logger = logging.getLogger(__name__)
 class APIKeyAuthenticationMiddleware(MiddlewareMixin):
     """Middleware to authenticate API requests using API keys."""
 
-    def process_request(self, request):
+    def process_request(self, request) -> Optional[JsonResponse]:
         """Process API requests and validate API keys."""
         # Only apply to /api/ routes
         if not request.path.startswith('/api/'):
@@ -27,7 +27,7 @@ class APIKeyAuthenticationMiddleware(MiddlewareMixin):
 
         # Extract API key from Authorization header
         api_key_data = self._extract_api_key(request)
-        
+
         if not api_key_data:
             logger.debug("API key not provided or malformed")
             return JsonResponse({
@@ -51,7 +51,7 @@ class APIKeyAuthenticationMiddleware(MiddlewareMixin):
             else:
                 # In production, re-raise to let proper error handling deal with it
                 raise
-        
+
         if not user:
             return JsonResponse({
                 'error': 'Invalid API key',
@@ -61,37 +61,37 @@ class APIKeyAuthenticationMiddleware(MiddlewareMixin):
         # Attach user to request for API views
         request.user = user
         request.api_authenticated = True
-        
+
         return None
 
-    def _extract_api_key(self, request):
+    def _extract_api_key(self, request) -> Optional[Dict[str, str]]:
         """Extract API key from Authorization header and parse prefix.secret format."""
         auth_header = request.META.get('HTTP_AUTHORIZATION', '')
-        
+
         if not auth_header:
             return None
-            
+
         if not auth_header.startswith('Bearer '):
             logger.debug("Authorization header does not use Bearer format")
             return None
-            
+
         full_key = auth_header[7:]  # Remove 'Bearer ' prefix
-        
+
         # Parse prefix.secret_key format
         if '.' not in full_key:
             logger.debug("API key missing required '.' separator")
             return None
-            
+
         prefix, secret_key = full_key.split('.', 1)
         return {'full_key': full_key, 'prefix': prefix, 'secret_key': secret_key}
 
-    def _validate_api_key(self, api_key_data):
+    def _validate_api_key(self, api_key_data: Dict[str, str]):
         """Validate the API key using secure hash comparison and return associated user."""
         from credits.models import APIKey
-        
+
         prefix = api_key_data['prefix']
         secret_key = api_key_data['secret_key']
-        
+
         try:
             # Find API key by prefix
             api_key_obj = APIKey.objects.select_related('user').get(
@@ -101,18 +101,18 @@ class APIKeyAuthenticationMiddleware(MiddlewareMixin):
         except APIKey.DoesNotExist:
             logger.warning(f"API key not found for prefix: {prefix}")
             return None
-        
+
         # Check if API key is expired
         if api_key_obj.is_expired:
             logger.warning(f"Expired API key attempt: {prefix}")
             return None
-        
+
         # Verify secret key using secure hash comparison
         if not api_key_obj.verify_secret_key(secret_key):
             logger.warning(f"Invalid secret key attempt for prefix: {prefix}")
             return None
-        
+
         # Update last used timestamp
         api_key_obj.update_last_used()
-        
+
         return api_key_obj.user

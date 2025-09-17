@@ -1,11 +1,10 @@
 """Base classes for Django workflow e2e tests."""
 
-import os
 import sys
 from pathlib import Path
-from unittest.mock import MagicMock
-from django.test import TestCase, TransactionTestCase, Client
+
 from django.conf import settings
+from django.test import Client, TestCase, TransactionTestCase
 
 
 def setup_django_template_path():

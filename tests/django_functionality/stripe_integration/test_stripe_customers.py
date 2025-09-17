@@ -1,15 +1,12 @@
 """Test the StripeCustomer model implementation."""
-import pytest
 import os
 import re
-import sys
-from unittest.mock import Mock, patch
+from unittest.mock import Mock
+
+import pytest
 
 # This is a template validation test, no Django setup needed
 
-from django.conf import settings
-from django.contrib.auth import get_user_model
-from django.db import models
 
 # Define what the model should look like for testing
 class MockStripeCustomer:

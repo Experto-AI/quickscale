@@ -7,9 +7,10 @@ and configuration in the project template.
 
 import os
 import sys
-import pytest
-from unittest.mock import patch, MagicMock
 from pathlib import Path
+from unittest.mock import MagicMock, patch
+
+import pytest
 
 # Add the project templates directory to Python path for testing
 templates_path = Path(__file__).parent.parent.parent.parent / "quickscale" / "project_templates"
@@ -33,32 +34,16 @@ class TestDjangoFeatureFlagIntegration:
              patch('django.conf.settings.configure'):
             
             # Import and execute settings
-            import core.settings as settings_module
             
             # Reload the feature flags to pick up environment changes
             from core.feature_flags import FeatureFlags
             flags = FeatureFlags()
             
             # Check that core apps are always included
-            expected_core_apps = [
-                'django.contrib.admin',
-                'django.contrib.auth',
-                'public.apps.PublicConfig',
-                'users.apps.UsersConfig',
-                'common.apps.CommonConfig',
-            ]
             
             # In beta mode with basic features enabled
-            expected_feature_apps = [
-                'credits.apps.CreditsConfig',  # ENABLE_BASIC_CREDITS=True
-                'services.apps.ServicesConfig',  # ENABLE_DEMO_SERVICE=True
-                'stripe_manager.apps.StripeConfig',  # Always included for migrations
-            ]
             
             # Apps that should NOT be included in beta mode
-            not_expected_apps = [
-                'api.apps.ApiConfig',  # ENABLE_API_ENDPOINTS=False
-            ]
             
             # Check feature flag states
             assert flags.is_enabled('ENABLE_BASIC_CREDITS') is True
@@ -72,7 +57,6 @@ class TestDjangoFeatureFlagIntegration:
         'ENABLE_ADVANCED_ADMIN': 'True',
         'ENABLE_SUBSCRIPTIONS': 'True',
         'ENABLE_SERVICE_MARKETPLACE': 'True',
-        'ENABLE_STRIPE': 'True',
         'STRIPE_PUBLIC_KEY': 'pk_test_mock',
         'STRIPE_SECRET_KEY': 'sk_test_mock',
         'STRIPE_WEBHOOK_SECRET': 'whsec_mock',
@@ -84,7 +68,6 @@ class TestDjangoFeatureFlagIntegration:
              patch('django.conf.settings.configure'):
             
             # Import and execute settings  
-            import core.settings as settings_module
             
             # Reload feature flags
             from core.feature_flags import FeatureFlags

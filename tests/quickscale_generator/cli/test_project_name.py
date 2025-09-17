@@ -1,11 +1,12 @@
 """Unit tests for PROJECT_NAME handling in init command."""
-import os
 import logging
+import os
 from pathlib import Path
+from unittest.mock import MagicMock, patch
+
 import pytest
-from unittest.mock import patch, MagicMock, mock_open
+
 from quickscale.commands.init_command import InitCommand
-from quickscale.utils.error_manager import error_manager
 
 
 @pytest.fixture

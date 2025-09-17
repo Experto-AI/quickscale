@@ -4,15 +4,16 @@ Django management command to configure services in the database.
 This command allows easy configuration of AI services without using the admin interface.
 """
 
+from decimal import Decimal
+
+from credits.models import Service
 from django.core.management.base import BaseCommand, CommandError
 from django.db import transaction
-from credits.models import Service
-from decimal import Decimal
 
 
 class Command(BaseCommand):
     """Management command to configure AI services."""
-    
+
     help = 'Configure AI services in the database'
 
     def add_arguments(self, parser):
@@ -48,7 +49,7 @@ class Command(BaseCommand):
         )
         parser.add_argument(
             '--inactive',
-            action='store_true', 
+            action='store_true',
             help='Set service as inactive'
         )
         parser.add_argument(
@@ -75,13 +76,13 @@ class Command(BaseCommand):
             raise CommandError("The following arguments are required: service_name for create/update operations.")
 
         description = options['description'] or f"AI service: {service_name}"
-        
+
         # Handle --free flag (overrides --credit-cost)
         if options['free']:
             credit_cost = Decimal('0.0')
         else:
             credit_cost = Decimal(str(options['credit_cost']))
-        
+
         is_active = not options['inactive']  # Default to active unless --inactive is set
 
         try:
@@ -129,12 +130,12 @@ class Command(BaseCommand):
         """Update an existing service."""
         try:
             service = Service.objects.get(name=name)
-            
+
             # Store old values for comparison
             old_cost = service.credit_cost
             old_active = service.is_active
             old_description = service.description
-            
+
             # Update the service
             service.description = description
             service.credit_cost = credit_cost
@@ -144,7 +145,7 @@ class Command(BaseCommand):
             self.stdout.write(
                 self.style.SUCCESS(f"✅ Updated service '{name}'")
             )
-            
+
             # Show what changed
             if old_cost != credit_cost:
                 self.stdout.write(f"   Credit cost: {old_cost} → {credit_cost}")
@@ -153,7 +154,7 @@ class Command(BaseCommand):
                 old_status = "active" if old_active else "inactive"
                 self.stdout.write(f"   Status: {old_status} → {status}")
             if old_description != description:
-                self.stdout.write(f"   Description updated")
+                self.stdout.write("   Description updated")
 
         except Service.DoesNotExist:
             self.stdout.write(
@@ -165,7 +166,7 @@ class Command(BaseCommand):
     def list_services(self):
         """List all configured services."""
         services = Service.objects.all().order_by('name')
-        
+
         if not services.exists():
             self.stdout.write(
                 self.style.WARNING("No services configured yet.")
@@ -174,14 +175,14 @@ class Command(BaseCommand):
 
         self.stdout.write(self.style.SUCCESS("📋 Configured Services:"))
         self.stdout.write("")
-        
+
         for service in services:
             status_icon = "✅" if service.is_active else "❌"
             status_text = "active" if service.is_active else "inactive"
-            
+
             self.stdout.write(f"{status_icon} {service.name}")
             if service.credit_cost == 0:
-                self.stdout.write(f"   Cost: Free")
+                self.stdout.write("   Cost: Free")
             else:
                 self.stdout.write(f"   Cost: {service.credit_cost} credits")
             self.stdout.write(f"   Status: {status_text}")
@@ -193,13 +194,13 @@ class Command(BaseCommand):
         """Display information about a service."""
         status_icon = "✅" if service.is_active else "❌"
         status_text = "active" if service.is_active else "inactive"
-        
+
         self.stdout.write(f"   {status_icon} Current configuration:")
         self.stdout.write(f"     Name: {service.name}")
         if service.credit_cost == 0:
-            self.stdout.write(f"     Cost: Free")
+            self.stdout.write("     Cost: Free")
         else:
             self.stdout.write(f"     Cost: {service.credit_cost} credits")
         self.stdout.write(f"     Status: {status_text}")
         if service.description:
-            self.stdout.write(f"     Description: {service.description}") 
+            self.stdout.write(f"     Description: {service.description}")

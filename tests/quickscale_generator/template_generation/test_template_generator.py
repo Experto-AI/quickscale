@@ -1,18 +1,11 @@
 """Unit tests for template generation module."""
-import os
-import tempfile
 import shutil
-from pathlib import Path
+import tempfile
 import unittest
+from pathlib import Path
 from unittest import mock
 
-from quickscale.utils.template_generator import (
-    copy_sync_modules,
-    fix_imports,
-    process_file_templates,
-    render_template,
-    is_binary_file
-)
+from quickscale.utils.template_generator import render_template
 
 
 class TestTemplateGenerator(unittest.TestCase):

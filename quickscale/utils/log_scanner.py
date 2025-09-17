@@ -1,16 +1,18 @@
 """Log scanning for critical errors and warnings in build processes and container logs."""
-import re
-import os
-from pathlib import Path
-from typing import Dict, List, Optional, Tuple, Set, Any
 import logging
+import os
+import re
+from pathlib import Path
+from typing import Any, Dict, List, Optional
+
+logger = logging.getLogger(__name__)
 
 class LogPattern:
     """Represents a log pattern to search for in logs."""
-    
-    def __init__(self, 
-                 pattern: str, 
-                 severity: str = "error", 
+
+    def __init__(self,
+                 pattern: str,
+                 severity: str = "error",
                  description: str = "",
                  context_lines: int = 0):
         """Initialize a log pattern with regex matching configuration."""
@@ -22,10 +24,10 @@ class LogPattern:
 
 class LogIssue:
     """Represents an issue found during log scanning."""
-    
-    def __init__(self, 
-                 message: str, 
-                 severity: str, 
+
+    def __init__(self,
+                 message: str,
+                 severity: str,
                  source: str,
                  line_number: Optional[int] = None,
                  context: Optional[List[str]] = None):
@@ -35,7 +37,7 @@ class LogIssue:
         self.source = source
         self.line_number = line_number
         self.context = context or []
-    
+
     def __str__(self) -> str:
         """Return a string representation of the issue."""
         return f"[{self.severity.upper()}] {self.message} (Source: {self.source})"
@@ -43,77 +45,77 @@ class LogIssue:
 
 class LogScanner:
     """Scans logs for critical errors and warnings."""
-    
+
     # Define log patterns to look for in different log sources
     PATTERNS = {
         "build": [
             # Specific patterns first
             LogPattern(
-                r"Failed to start services", 
+                r"Failed to start services",
                 "error",
                 "Docker services failed to start"
             ),
             LogPattern(
-                r"Error creating project", 
+                r"Error creating project",
                 "error",
                 "Project creation failed"
             ),
             LogPattern(
-                r"Database setup failed", 
+                r"Database setup failed",
                 "error",
                 "Database initialization failed"
             ),
             LogPattern(
-                r"Migration.*failed", 
-                "error", 
+                r"Migration.*failed",
+                "error",
                 "Migration failure detected"
             ),
             LogPattern(
-                r"Error verifying container status", 
-                "warning", 
+                r"Error verifying container status",
+                "warning",
                 "Container verification issue"
             ),
             LogPattern(
-                r"WARN\[\d+\].*", 
+                r"WARN\[\d+\].*",
                 "warning",
                 "Docker compose warning"
             ),
             LogPattern(
-                r"Error: .*", 
+                r"Error: .*",
                 "error",
                 "Build process error"
             ),
             LogPattern(
-                r"The \"[^\"]+\" variable is not set", 
+                r"The \"[^\"]+\" variable is not set",
                 "warning",
                 "Docker environment variable not set"
             ),
             LogPattern(
-                r"FATAL:.*role .* does not exist", 
+                r"FATAL:.*role .* does not exist",
                 "error",
                 "PostgreSQL role/user does not exist"
             ),
             # Generic patterns to catch other issues
             LogPattern(
-                r"(?i)\b(error|exception|fail|failed|failure)\b(?!.*OK)", 
+                r"(?i)\b(error|exception|fail|failed|failure)\b(?!.*OK)",
                 "error",
                 "Generic error detected",
                 context_lines=2
             ),
             LogPattern(
-                r"(?i)\b(fatal|killed|crash)\b(?!.*OK)", 
+                r"(?i)\b(fatal|killed|crash)\b(?!.*OK)",
                 "error",
                 "Fatal error detected",
                 context_lines=2
             ),
             LogPattern(
-                r"(?i)\babort\b(?!.*normal)", 
+                r"(?i)\babort\b(?!.*normal)",
                 "error",
                 "Abort detected",
                 context_lines=2
             ),
             LogPattern(
-                r"(?i)\b(warn|warning)\b(?!.*404)(?!.*development server)(?!.*trust authentication)", 
+                r"(?i)\b(warn|warning)\b(?!.*404)(?!.*development server)(?!.*trust authentication)",
                 "warning",
                 "Generic warning detected",
                 context_lines=1
@@ -122,77 +124,77 @@ class LogScanner:
         "container": [
             # Specific patterns first
             LogPattern(
-                r"Traceback \(most recent call last\):", 
-                "error", 
-                "Python exception in container", 
+                r"Traceback \(most recent call last\):",
+                "error",
+                "Python exception in container",
                 context_lines=5
             ),
             LogPattern(
-                r"\bERROR\b.*\b(Django|Uvicorn|Gunicorn)\b", 
-                "error", 
-                "Server error detected", 
+                r"\bERROR\b.*\b(Django|Uvicorn|Gunicorn)\b",
+                "error",
+                "Server error detected",
                 context_lines=2
             ),
             LogPattern(
-                r"ConnectionRefused|ConnectionError", 
-                "error", 
-                "Connection error", 
+                r"ConnectionRefused|ConnectionError",
+                "error",
+                "Connection error",
                 context_lines=1
             ),
             LogPattern(
-                r"OperationalError", 
-                "error", 
-                "Database operational error", 
+                r"OperationalError",
+                "error",
+                "Database operational error",
                 context_lines=1
             ),
             LogPattern(
-                r"Permission denied", 
-                "error", 
-                "Permission issue detected", 
+                r"Permission denied",
+                "error",
+                "Permission issue detected",
                 context_lines=1
             ),
             LogPattern(
-                r"The \S+ variable is not set", 
+                r"The \S+ variable is not set",
                 "warning",
                 "Environment variable not set",
                 context_lines=0
             ),
             LogPattern(
-                r"WARN\[\d+\].*", 
+                r"WARN\[\d+\].*",
                 "warning",
                 "Docker compose warning"
             ),
             LogPattern(
-                r"warning: enabling \"trust\" authentication for local connections", 
+                r"warning: enabling \"trust\" authentication for local connections",
                 "warning",
                 "PostgreSQL using trust authentication"
             ),
             LogPattern(
-                r"FATAL:.*role .* does not exist", 
+                r"FATAL:.*role .* does not exist",
                 "error",
                 "PostgreSQL role/user does not exist"
             ),
             # Generic patterns to catch other issues
             LogPattern(
-                r"(?i)\b(error|exception|fail|failed|failure)\b(?!.*OK)", 
+                r"(?i)\b(error|exception|fail|failed|failure)\b(?!.*OK)",
                 "error",
                 "Generic error detected",
                 context_lines=2
             ),
             LogPattern(
-                r"(?i)\b(fatal|killed|crash)\b(?!.*OK)", 
+                r"(?i)\b(fatal|killed|crash)\b(?!.*OK)",
                 "error",
                 "Fatal error detected",
                 context_lines=2
             ),
             LogPattern(
-                r"(?i)\babort\b(?!.*normal)", 
+                r"(?i)\babort\b(?!.*normal)",
                 "error",
                 "Abort detected",
                 context_lines=2
             ),
             LogPattern(
-                r"(?i)\b(warn|warning)\b(?!.*404)(?!.*development server)(?!.*trust authentication)", 
+                r"(?i)\b(warn|warning)\b(?!.*404)(?!.*development server)(?!.*trust authentication)",
                 "warning",
                 "Generic warning detected",
                 context_lines=1
@@ -201,69 +203,69 @@ class LogScanner:
         "migration": [
             # Specific patterns first
             LogPattern(
-                r"Traceback \(most recent call last\):", 
-                "error", 
-                "Exception during migration", 
+                r"Traceback \(most recent call last\):",
+                "error",
+                "Exception during migration",
                 context_lines=5
             ),
             LogPattern(
-                r"Migration.*failed", 
-                "error", 
-                "Migration failure", 
+                r"Migration.*failed",
+                "error",
+                "Migration failure",
                 context_lines=2
             ),
             LogPattern(
-                r"RuntimeWarning", 
-                "warning", 
-                "Runtime warning during migration", 
+                r"RuntimeWarning",
+                "warning",
+                "Runtime warning during migration",
                 context_lines=1
             ),
             LogPattern(
-                r"OperationalError", 
-                "error", 
-                "Database operational error", 
+                r"OperationalError",
+                "error",
+                "Database operational error",
                 context_lines=1
             ),
             LogPattern(
-                r"\[ \] [0-9]{4}_.*", 
-                "warning", 
-                "Unapplied migration detected", 
+                r"\[ \] [0-9]{4}_.*",
+                "warning",
+                "Unapplied migration detected",
                 context_lines=0
             ),
             LogPattern(
-                r"No migrations to apply", 
+                r"No migrations to apply",
                 "info",
                 "No pending migrations",
                 context_lines=0
             ),
             # Generic patterns to catch other issues
             LogPattern(
-                r"(?i)\b(error|exception|fail|failed|failure)\b(?!.*OK)", 
+                r"(?i)\b(error|exception|fail|failed|failure)\b(?!.*OK)",
                 "error",
                 "Generic error detected",
                 context_lines=2
             ),
             LogPattern(
-                r"(?i)\b(fatal|killed|crash)\b(?!.*OK)", 
+                r"(?i)\b(fatal|killed|crash)\b(?!.*OK)",
                 "error",
                 "Fatal error detected",
                 context_lines=2
             ),
             LogPattern(
-                r"(?i)\babort\b(?!.*normal)", 
+                r"(?i)\babort\b(?!.*normal)",
                 "error",
                 "Abort detected",
                 context_lines=2
             ),
             LogPattern(
-                r"(?i)\b(warn|warning)\b(?!.*404)(?!.*development server)(?!.*trust authentication)", 
+                r"(?i)\b(warn|warning)\b(?!.*404)(?!.*development server)(?!.*trust authentication)",
                 "warning",
                 "Generic warning detected",
                 context_lines=1
             )
         ]
     }
-    
+
     def __init__(self, project_dir: Path, logger: Optional[logging.Logger] = None):
         """Initialize log scanner with project directory configuration."""
         # Ensure project_dir is an absolute path and exists
@@ -276,7 +278,7 @@ class LogScanner:
         self.issues: List[LogIssue] = []
         self.logs_accessed = False  # Track if any logs were successfully accessed
         self.logger.debug(f"Log scanner initialized with project directory: {self.project_dir}")
-    
+
     def _find_build_log_path(self) -> Optional[Path]:
         """Find the build log file path from possible locations."""
         possible_locations = [
@@ -284,13 +286,13 @@ class LogScanner:
             self.project_dir.parent / "quickscale_build_log.txt",
             Path(self.project_dir.name) / "quickscale_build_log.txt"
         ]
-        
+
         for build_log_path in possible_locations:
             self.logger.debug(f"Looking for build log at {build_log_path}")
             if build_log_path.exists():
                 self.logger.info(f"Found build log at {build_log_path}")
                 return build_log_path
-        
+
         # If we couldn't find the build log file, log a warning
         self.logger.warning("Build log not found in any of the expected locations")
         return None
@@ -327,7 +329,7 @@ class LogScanner:
         build_log_path = self._find_build_log_path()
         if not build_log_path:
             return []
-        
+
         try:
             # First check if the log contains Docker warnings
             with open(build_log_path, 'r') as f:
@@ -335,7 +337,7 @@ class LogScanner:
                 self._check_for_docker_warnings(content)
         except Exception as e:
             self.logger.warning(f"Error checking build log for warnings: {e}")
-        
+
         # Now scan the file for issues
         issues = self._scan_file(build_log_path, "build")
         if issues is not None:
@@ -343,18 +345,19 @@ class LogScanner:
             # Log how many issues were found
             self.logger.debug(f"Found {len(issues)} issues in build log")
             return issues
-        
+
         return []
-    
+
     def scan_container_logs(self) -> List[LogIssue]:
         """Scan container logs for issues."""
         issues = []
-        
+
         # Use docker-compose logs to get container logs without temporary files
         try:
             import subprocess
+
             from ..commands.command_utils import DOCKER_COMPOSE_COMMAND
-            
+
             # Get logs for both services
             for service in ["web", "db"]:
                 try:
@@ -366,11 +369,11 @@ class LogScanner:
                         check=False,  # Don't raise an exception on non-zero exit
                         cwd=str(self.project_dir)  # Run in the project directory
                     )
-                    
+
                     if result.returncode != 0:
                         self.logger.warning(f"Failed to get logs for {service} service: {result.stderr}")
                         continue
-                    
+
                     # Process the logs directly from the command output
                     if result.stdout:
                         self.logger.debug(f"Obtained {len(result.stdout.splitlines())} log lines for {service} service")
@@ -379,36 +382,37 @@ class LogScanner:
                         self.logs_accessed = True  # Mark that we successfully accessed logs
                     else:
                         self.logger.warning(f"No logs found for {service} service")
-                    
+
                 except Exception as e:
                     self.logger.warning(f"Error processing logs for {service} service: {e}")
-        
+
         except (subprocess.SubprocessError, FileNotFoundError) as e:
             self.logger.warning(f"Failed to scan container logs: {e}")
-        
+
         return issues
-    
+
     def scan_migration_logs(self) -> List[LogIssue]:
         """Scan migration logs for issues."""
         issues = []
-        
+
         # Get migration information directly
         try:
             import subprocess
+
             from ..commands.command_utils import DOCKER_COMPOSE_COMMAND
-            
+
             # Run showmigrations to check for any unapplied migrations
             try:
                 self.logger.debug(f"Running {' '.join(DOCKER_COMPOSE_COMMAND)} exec -T web python manage.py showmigrations in {self.project_dir}")
                 result = subprocess.run(
-                    DOCKER_COMPOSE_COMMAND + ["exec", "-T", "web", 
+                    DOCKER_COMPOSE_COMMAND + ["exec", "-T", "web",
                      "python", "manage.py", "showmigrations"],
                     capture_output=True,
                     text=True,
                     check=False,  # Don't raise an exception on non-zero exit
                     cwd=str(self.project_dir)  # Run in the project directory
                 )
-                
+
                 if result.returncode != 0:
                     self.logger.warning(f"Failed to check migrations: {result.stderr}")
                 else:
@@ -422,25 +426,25 @@ class LogScanner:
                         self.logger.warning("No migration status output found")
             except Exception as e:
                 self.logger.warning(f"Error processing migration logs: {e}")
-        
+
         except (subprocess.SubprocessError, FileNotFoundError) as e:
             self.logger.warning(f"Failed to scan migration logs: {e}")
-        
+
         return issues
-    
+
     def scan_all_logs(self) -> List[LogIssue]:
         """Scan all logs for issues."""
         # Reset issues list and logs_accessed flag
         self.issues = []
         self.logs_accessed = False
-        
+
         # Scan all log sources
         self.issues.extend(self.scan_build_log())
         self.issues.extend(self.scan_container_logs())
         self.issues.extend(self.scan_migration_logs())
-        
+
         return self.issues
-    
+
     def _scan_file(self, file_path: Path, source_type: str) -> Optional[List[LogIssue]]:
         """Scan a log file for issues.
         
@@ -452,37 +456,37 @@ class LogScanner:
             List of LogIssue objects or None if file couldn't be accessed
         """
         issues = []
-        
+
         try:
             with open(file_path, "r") as f:
                 content = f.read()
                 lines = content.splitlines()
-                
+
                 # Check if content contains Docker warnings (for debugging)
                 if "WARN[" in content:
                     self.logger.debug(f"Content of {file_path} contains Docker warnings")
-                
+
                 patterns = self.PATTERNS.get(source_type.split(":")[0], [])
                 self.logger.debug(f"Using {len(patterns)} patterns for source type {source_type}")
-                
+
                 for pattern in patterns:
                     # Log the pattern we're using (for debugging)
                     self.logger.debug(f"Scanning with pattern: {pattern.pattern.pattern}")
                     matches = list(pattern.pattern.finditer(content))
                     self.logger.debug(f"Pattern matched {len(matches)} times")
-                    
+
                     for match in matches:
                         line_number = content[:match.start()].count('\n') + 1
                         message = match.group(0).strip()
                         self.logger.debug(f"Match found at line {line_number}: {message}")
-                        
+
                         # Get context lines if needed
                         context = []
                         if pattern.context_lines > 0:
                             start_line = max(0, line_number - pattern.context_lines - 1)
                             end_line = min(len(lines), line_number + pattern.context_lines)
                             context = lines[start_line:end_line]
-                        
+
                         # Create issue
                         issue = LogIssue(
                             message=message,
@@ -492,36 +496,36 @@ class LogScanner:
                             context=context
                         )
                         issues.append(issue)
-            
+
             return issues
-        
+
         except (FileNotFoundError, PermissionError) as e:
             self.logger.warning(f"Failed to scan log file {file_path}: {e}")
             return None
-    
+
     def _scan_content(self, content: str, source_type: str) -> List[LogIssue]:
         """Scan log content directly for issues using pattern matching."""
         issues = []
         lines = content.splitlines()
-        
+
         patterns = self.PATTERNS.get(source_type.split(":")[0], [])
         for pattern in patterns:
             for match in pattern.pattern.finditer(content):
                 line_number = content[:match.start()].count('\n') + 1
                 message = match.group(0).strip()
-                
+
                 # Skip known false positives
                 if self._is_false_positive(message, source_type, lines, line_number):
                     self.logger.debug(f"Skipping false positive: {message}")
                     continue
-                
+
                 # Get context lines if needed
                 context = []
                 if pattern.context_lines > 0:
                     start_line = max(0, line_number - pattern.context_lines - 1)
                     end_line = min(len(lines), line_number + pattern.context_lines)
                     context = lines[start_line:end_line]
-                
+
                 # Create issue
                 issue = LogIssue(
                     message=message,
@@ -531,9 +535,9 @@ class LogScanner:
                     context=context
                 )
                 issues.append(issue)
-        
+
         return issues
-    
+
     def _check_static_files_false_positive(self, message: str) -> bool:
         """Check for static files related false positives."""
         return "Static files not accessible yet" in message
@@ -543,16 +547,16 @@ class LogScanner:
         # PostgreSQL trust authentication warning is expected during initialization
         if "trust authentication" in message or "enabling \"trust\" authentication" in message:
             return True
-            
+
         # Specific PostgreSQL initdb trust authentication warning
         if "initdb: warning: enabling" in message and "trust" in message and "authentication for local connections" in message:
             return True
-            
+
         return False
 
     def _check_postgres_status_false_positive(self, message: str) -> bool:
         """Check for PostgreSQL normal status messages that look like errors."""
-        return ("database system was shut down" in message or 
+        return ("database system was shut down" in message or
                 "database system is ready to accept connections" in message)
 
     def _check_django_migration_false_positive(self, message: str, lines: List[str], line_number: int) -> bool:
@@ -563,11 +567,11 @@ class LogScanner:
             for i in range(max(0, line_number), min(len(lines), line_number + 5)):
                 if "Continuing despite error with auth migrations" in lines[i]:
                     return True
-            
+
         # Django missing migrations warning during build is handled by auto-generation
         if "have changes that are not yet reflected in a migration" in message:
             return True
-            
+
         return False
 
     def _check_docker_connection_false_positive(self, message: str, lines: List[str], line_number: int) -> bool:
@@ -586,12 +590,12 @@ class LogScanner:
             context_start = max(0, line_number - 5)
             context_end = min(len(lines), line_number + 5)
             context = lines[context_start:context_end]
-            
+
             # If the error is followed by "Migrations applied successfully", it's a false positive
             for line in context:
                 if "Migrations for" in line and "applied successfully" in line:
                     return True
-                    
+
             # Skip errors about continuing after auth migrations which are handled
             if "Continuing despite error with auth migrations" in message:
                 return True
@@ -608,10 +612,10 @@ class LogScanner:
             self._check_docker_connection_false_positive(message, lines, line_number),
             self._check_migration_error_false_positive(message, source_type, lines, line_number)
         ]
-        
+
         # If any check returns True, this is a false positive
         return any(checks)
-    
+
     def generate_summary(self) -> Dict[str, Any]:
         """Generate a summary of issues found during log scanning."""
         # Check if any logs were successfully accessed
@@ -626,7 +630,7 @@ class LogScanner:
                 "logs_accessed": False,  # Important flag to indicate no logs were accessed
                 "real_errors": False
             }
-            
+
         if not self.issues:
             return {
                 "total_issues": 0,
@@ -638,37 +642,37 @@ class LogScanner:
                 "logs_accessed": True,  # Logs were accessed but no issues found
                 "real_errors": False
             }
-        
+
         # Filter out PostgreSQL trust authentication warnings
         filtered_issues = []
         for issue in self.issues:
-            if (issue.severity == "warning" and 
+            if (issue.severity == "warning" and
                 ("trust authentication" in issue.message or "enabling \"trust\" authentication" in issue.message)):
                 # Skip this warning
                 continue
             filtered_issues.append(issue)
-        
+
         # Count issues by severity and source
         error_count = sum(1 for issue in filtered_issues if issue.severity == "error")
         warning_count = sum(1 for issue in filtered_issues if issue.severity == "warning")
-        
+
         # Analyze error issues to check if they're real errors
         error_issues = [issue for issue in filtered_issues if issue.severity == "error"]
-        real_errors = any(self._analyze_migration_issue(issue) for issue in error_issues 
+        real_errors = any(self._analyze_migration_issue(issue) for issue in error_issues
                           if "migration" in issue.source or "apply" in issue.message.lower())
-        
-        issues_by_source = {}
+
+        issues_by_source: dict[str, list[LogIssue]] = {}
         for issue in filtered_issues:
             if issue.source not in issues_by_source:
                 issues_by_source[issue.source] = []
             issues_by_source[issue.source].append(issue)
-        
+
         issues_by_severity = {
             "error": [issue for issue in filtered_issues if issue.severity == "error"],
             "warning": [issue for issue in filtered_issues if issue.severity == "warning"],
             "info": [issue for issue in filtered_issues if issue.severity == "info"]
         }
-        
+
         return {
             "total_issues": len(filtered_issues),
             "error_count": error_count,
@@ -679,7 +683,7 @@ class LogScanner:
             "logs_accessed": True,
             "real_errors": real_errors
         }
-    
+
     def _print_no_logs_message(self) -> None:
         """Print a message when no logs could be accessed."""
         print("\n⚠️ Could not access any log files for scanning")
@@ -705,7 +709,7 @@ class LogScanner:
         """Print context lines for an issue."""
         if not issue.context:
             return
-        
+
         for i, line in enumerate(issue.context):
             prefix = ">> " if i == len(issue.context) // 2 else "   "
             print(f"      {prefix}{line}")
@@ -714,17 +718,17 @@ class LogScanner:
         """Print critical (error) issues."""
         if not error_issues:
             return
-        
+
         print("\n❌ Critical Issues:")
-        
+
         # Add note about false positives if we have migration errors that are false positives
-        has_migration_errors = any("migration" in issue.source or "apply" in issue.message.lower() 
+        has_migration_errors = any("migration" in issue.source or "apply" in issue.message.lower()
                                    for issue in error_issues)
-        
+
         if has_migration_errors and not has_real_errors:
             print("   Note: The following errors are likely false positives from normal operation")
             print("   Migration names containing 'error' or database shutdown messages are usually normal")
-            
+
         for issue in error_issues:
             source_label = f" ({issue.source})" if issue.source else ""
             print(f"   * {issue.message}{source_label}")
@@ -734,12 +738,12 @@ class LogScanner:
         """Print warning issues."""
         if not warning_issues:
             return
-        
+
         print("\n⚠️ Warnings:")
-        
+
         # Add note about expected warnings
         print("   Note: Most warnings below are expected during normal development and startup")
-        
+
         for issue in warning_issues:
             source_label = f" ({issue.source})" if issue.source else ""
             print(f"   * {issue.message}{source_label}")
@@ -748,50 +752,50 @@ class LogScanner:
     def print_summary(self) -> None:
         """Print a summary of issues found during scanning."""
         summary = self.generate_summary()  # This already filters out PostgreSQL trust warnings
-        
+
         # Check if any logs were successfully accessed
         if not summary.get("logs_accessed", False):
             self._print_no_logs_message()
             return
-        
+
         # If no issues found after filtering, print a success message
         if summary["total_issues"] == 0:
             self._print_no_issues_message()
             return
-        
+
         # Print issue counts
         self._print_issue_counts(
             summary["total_issues"],
             summary["error_count"],
             summary["warning_count"]
         )
-        
+
         # Print critical issues
         self._print_critical_issues(
             summary["issues_by_severity"].get("error", []),
             summary.get("real_errors", False)
         )
-        
+
         # Print warnings
         self._print_warning_issues(
             summary["issues_by_severity"].get("warning", [])
         )
-        
+
         # Print a separator line
         print("\n" + "-" * 50)
-    
+
     def _analyze_migration_issue(self, issue: LogIssue) -> bool:
         """Analyze a migration issue to determine if it's a real error or false positive."""
         # If the issue is related to migrations and contains "OK" or "[X]", it's a false positive
         message = issue.message.lower()
-        
+
         # If it has indication of successful completion, it's not a real error
         if "... ok" in message or "[x]" in message:
             return False
-            
+
         # If it contains error-like words but is actually a migration name, it's a false positive
         if ("error" in message or "validator" in message) and (
             "apply" in message or "migration" in message):
             return False
-            
-        return True 
+
+        return True

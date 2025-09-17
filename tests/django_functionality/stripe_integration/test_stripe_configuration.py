@@ -1,18 +1,19 @@
 """Tests for Stripe configuration and feature flag."""
 import os
 import sys
-from unittest.mock import patch, MagicMock
 import unittest
+from unittest.mock import patch
 
 # Add the project root to sys.path to access tests module
 project_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
 sys.path.insert(0, project_root)
 
 # Import centralized test utilities using DRY principles
-from tests.test_utilities import TestUtilities
-
 # Configure logging for tests
 import logging
+
+from tests.test_utilities import TestUtilities
+
 logger = logging.getLogger(__name__)
 
 class StripeConfigurationTests(unittest.TestCase):

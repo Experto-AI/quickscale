@@ -1,9 +1,10 @@
 """Custom user model for email-only authentication."""
+from datetime import timedelta
+
 from django.contrib.auth.models import AbstractUser, BaseUserManager
 from django.db import models
-from django.utils.translation import gettext_lazy as _
 from django.utils import timezone
-from datetime import timedelta
+from django.utils.translation import gettext_lazy as _
 
 
 class CustomUserManager(BaseUserManager):
@@ -17,7 +18,7 @@ class CustomUserManager(BaseUserManager):
         # Make username optional and set to empty string if not provided
         extra_fields.setdefault('username', extra_fields.get('username', ''))
         user = self.model(email=email, **extra_fields)
-        
+
         if password:
             user.set_password(password)
         user.save(using=self._db)
@@ -33,13 +34,13 @@ class CustomUserManager(BaseUserManager):
             raise ValueError(_('Superuser must have is_staff=True.'))
         if extra_fields.get('is_superuser') is not True:
             raise ValueError(_('Superuser must have is_superuser=True.'))
-            
+
         return self.create_user(email, password, **extra_fields)
 
 
 class CustomUser(AbstractUser):
     """Custom user model for email-only authentication."""
-    
+
     # Set username to null since we're using email for authentication
     username = models.CharField(
         _('username'),
@@ -48,16 +49,16 @@ class CustomUser(AbstractUser):
         null=True,
         help_text=_('Optional. 150 characters or fewer. Letters, digits and @/./+/-/_ only.'),
     )
-    
+
     # Make email required and unique
     email = models.EmailField(
-        _('email address'), 
+        _('email address'),
         unique=True,
         error_messages={
             'unique': _('A user with that email already exists.'),
         },
     )
-    
+
     # Additional profile fields
     bio = models.TextField(_('bio'), blank=True)
     phone_number = models.CharField(_('phone number'), max_length=20, blank=True)
@@ -66,38 +67,38 @@ class CustomUser(AbstractUser):
     company = models.CharField(_('company'), max_length=100, blank=True)
     website = models.URLField(_('website'), blank=True)
     location = models.CharField(_('location'), max_length=100, blank=True)
-    
+
     # Social media profiles
     twitter = models.CharField(_('twitter'), max_length=100, blank=True, help_text=_('Twitter username'))
     linkedin = models.CharField(_('linkedin'), max_length=100, blank=True, help_text=_('LinkedIn username'))
     github = models.CharField(_('github'), max_length=100, blank=True, help_text=_('GitHub username'))
-    
+
     # Notification preferences
     email_notifications = models.BooleanField(_('email notifications'), default=True)
-    
+
     # Set email as the USERNAME_FIELD
     USERNAME_FIELD = 'email'
-    REQUIRED_FIELDS = []  # Email already implied by USERNAME_FIELD
-    
+    REQUIRED_FIELDS: list[str] = []  # Email already implied by USERNAME_FIELD
+
     objects = CustomUserManager()
-    
+
     class Meta:
         app_label = "users"
-    
+
     def __str__(self):
         """Return string representation of the user."""
         return self.email
-        
+
     def get_full_name(self):
         """Return the full name of the user or email if not available."""
         if self.first_name and self.last_name:
             return f"{self.first_name} {self.last_name}"
-        return self.email 
+        return self.email
 
 
 class AccountLockout(models.Model):
     """Track account lockout status and failed login attempts."""
-    
+
     user = models.OneToOneField(
         CustomUser,
         on_delete=models.CASCADE,
@@ -109,26 +110,26 @@ class AccountLockout(models.Model):
     is_locked = models.BooleanField(default=False)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
-    
+
     class Meta:
         verbose_name = _('Account Lockout')
         verbose_name_plural = _('Account Lockouts')
         app_label = "users"
-    
+
     def __str__(self):
         return f"{self.user.email} - {'Locked' if self.is_locked else 'Active'}"
-    
+
     def reset_failed_attempts(self):
         """Reset failed login attempt counter when user successfully authenticates or lockout expires."""
         from .security_logger import log_account_unlock
-        
+
         was_locked = self.is_locked
         self.failed_attempts = 0
         self.last_failed_attempt = None
         self.is_locked = False
         self.locked_until = None
         self.save()
-        
+
         # Log unlock event if account was previously locked
         if was_locked:
             log_account_unlock(
@@ -136,32 +137,34 @@ class AccountLockout(models.Model):
                 user_id=self.user.id,
                 unlock_method='automatic_expiry'
             )
-    
+
     def increment_failed_attempts(self, request=None):
         """Increment failed login attempts and trigger account lockout when threshold is exceeded."""
-        from django.conf import settings
-        from .security_logger import log_account_lockout
         import logging
-        
+
+        from django.conf import settings
+
+        from .security_logger import log_account_lockout
+
         logger = logging.getLogger(__name__)
-        
+
         try:
             self.failed_attempts += 1
             self.last_failed_attempt = timezone.now()
-            
+
             # Get lockout settings from Django settings
             max_attempts = getattr(settings, 'ACCOUNT_LOCKOUT_MAX_ATTEMPTS', 5)
             lockout_duration = getattr(settings, 'ACCOUNT_LOCKOUT_DURATION', 300)  # 5 minutes
-            
+
             # Check if lockout should be triggered
             # Only lock if max_attempts > 0 (boundary condition for zero attempts)
             if max_attempts > 0 and self.failed_attempts >= max_attempts:
                 self.is_locked = True
-                
+
                 # Handle zero lockout duration (boundary condition)
                 if lockout_duration > 0:
                     self.locked_until = timezone.now() + timedelta(seconds=lockout_duration)
-                    
+
                     # Try to log lockout event, but don't let logging errors prevent lockout
                     try:
                         log_account_lockout(
@@ -176,56 +179,56 @@ class AccountLockout(models.Model):
                 else:
                     # Zero duration means immediate unlock
                     self.locked_until = timezone.now()
-            
+
             self.save()
             return self.is_locked
-            
+
         except Exception as e:
             # Handle any unexpected errors (like timezone errors)
             logger.error(f"Error in increment_failed_attempts: {e}")
             # Re-raise to maintain existing behavior for critical errors
             raise
-    
+
     def record_failed_attempt(self, request=None):
         """Alias for increment_failed_attempts to support test compatibility."""
         return self.increment_failed_attempts(request)
-    
+
     def reset_lockout(self):
         """Alias for reset_failed_attempts to support test compatibility."""
         return self.reset_failed_attempts()
-    
+
     def check_lockout_expired(self):
         """Check if account lockout period has expired and automatically unlock the account."""
         if self.is_locked and self.locked_until and timezone.now() > self.locked_until:
             self.reset_failed_attempts()
             return True
         return False
-    
+
     @property
     def time_until_unlock(self):
         """Return remaining lockout duration as timedelta or None if account is not locked."""
         if not self.is_locked or not self.locked_until:
             return None
-        
+
         time_remaining = self.locked_until - timezone.now()
         if time_remaining.total_seconds() <= 0:
             return None
-        
+
         return time_remaining
-    
+
     @property
     def lockout_duration_minutes(self):
         """Return total lockout duration in minutes for user-friendly display purposes."""
         if not self.locked_until or not self.last_failed_attempt:
             return 0
-        
+
         duration = self.locked_until - self.last_failed_attempt
         return int(duration.total_seconds() / 60)
 
 
 class TwoFactorAuth(models.Model):
     """Two-factor authentication settings for users (preparation)."""
-    
+
     user = models.OneToOneField(
         CustomUser,
         on_delete=models.CASCADE,
@@ -237,29 +240,29 @@ class TwoFactorAuth(models.Model):
     last_used = models.DateTimeField(null=True, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
-    
+
     class Meta:
         verbose_name = _('Two-Factor Authentication')
         verbose_name_plural = _('Two-Factor Authentication Settings')
         app_label = "users"
-    
+
     def __str__(self):
         return f"{self.user.email} - {'Enabled' if self.is_enabled else 'Disabled'}"
-    
+
     def generate_backup_codes(self, count=10):
         """Generate cryptographically secure backup codes for emergency 2FA bypass scenarios."""
         import secrets
         import string
-        
+
         self.backup_codes = []
-        for _ in range(count):
+        for i in range(count):
             # Generate 8-character backup code
-            code = ''.join(secrets.choice(string.ascii_uppercase + string.digits) for _ in range(8))
+            code = ''.join(secrets.choice(string.ascii_uppercase + string.digits) for j in range(8))
             self.backup_codes.append(code)
-        
+
         self.save()
         return self.backup_codes
-    
+
     def use_backup_code(self, code):
         """Validate and consume a backup code for 2FA authentication, removing it from available codes."""
         if code in self.backup_codes:
@@ -267,4 +270,4 @@ class TwoFactorAuth(models.Model):
             self.last_used = timezone.now()
             self.save()
             return True
-        return False 
+        return False

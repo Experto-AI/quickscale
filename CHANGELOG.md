@@ -2,53 +2,102 @@
 
 All notable changes to this project will be documented in this file.
 
-# v0.40.0 feat: Ultra-Minimal Beta (UMB) - Feature Flag Implementation
+## v0.41.0 feat: Core Generator Polish & Docker Testing Enhancements
+
+Comprehensive Docker timeout configurations, testing infrastructure improvements, and architectural documentation updates. The update ensures the core `quickscale init` generator works flawlessly across different environments with enhanced Docker stability and improved E2E testing capabilities.
+
+- Backend Implementation:
+  - Docker Timeout Management: Enhanced timeout configurations with environment variable support for Docker pull operations, allowing flexible timeout overrides for E2E tests
+  - Testing Infrastructure: Introduced comprehensive fixtures and context managers for managing Docker timeouts in test environments, promoting cleaner test setups
+  - Test Runner Improvements: Updated `run_tests.sh` with Docker Compose timeout configurations for improved stability during extended test suites
+  - Environment Configuration: Added environment variable support for Docker pull timeouts with validation against overrides in timeout constants
+
+- Testing Enhancements:
+  - E2E Test Stability: Created specialized fixtures in `test_real_lifecycle.py` to configure extended Docker timeouts for end-to-end tests
+  - Test Environment Management: Implemented `test_env_config.py` with context managers for managing Docker configurations in test environments
+  - Timeout Validation: Enhanced `test_timeout_constants.py` to validate Docker pull timeout behavior against environment variable overrides
+  - Quality Assurance: All critical code quality checks passing (1349+ tests passed, comprehensive coverage maintained)
+
+- Documentation & Architecture:
+  - Roadmap Updates: Comprehensive updates to reflect transition to layered architecture for QuickScale
+  - Architectural Evolution: Updated vision and objectives to emphasize creation-time assembly model and independent maintenance for themes, skins, and plugins
+  - Community Marketplace: Established framework for community marketplace development with enhanced ecosystem support
+  - Implementation Clarity: Revised tasks and success criteria to align with new architectural framework and evolution process
+
+- Core Generator Validation:
+  - Application Crawler: Webscraper implementation with login capabilities to crawl complete applications and validate rendering across environments
+  - Docker Environment Testing: Comprehensive validation of `quickscale init` across clean environments with different project configurations
+  - Template Rendering: Complete validation of core templates, CSS/JS assets, and responsive design functionality
+  - Integration Flow: End-to-end testing of user onboarding, demo service execution, and credit deduction mechanisms
+
+- Completion:
+  - ✅ Webscraper integration with E2E testing capabilities
+  - ✅ Generator environment testing across multiple scenarios
+  - ✅ Docker Compose validation and PostgreSQL container startup verification
+  - ✅ Database migration testing with rollback scenarios
+  - ✅ Authentication flow testing with feature flag compliance
+  - ✅ Edge case handling for special characters and file permissions
+  - ✅ Admin panel validation with proper CSS/JS framework detection
+  - ✅ Code quality validation (fix, critical, full) with comprehensive test coverage
+  - ✅ Duplicate code analysis and cleanup
+
+- Quality Assurance:
+  - All tests passing (1349+ passed, 12 skipped)
+  - Critical code quality checks: ✅ PASS
+  - Full code quality validation: ✅ PASS
+  - Duplicate code analysis: ✅ CLEAN
+  - Docker timeout stability: ✅ ENHANCED
+  - E2E test reliability: ✅ IMPROVED
+
+This release ensures robust generator functionality with enhanced Docker stability and comprehensive testing coverage, preparing the foundation for the next phase of architectural evolution toward the layered QuickScale ecosystem.
+
+## v0.40.0 feat: Ultra-Minimal Beta (UMB) - Feature Flag Implementation
 
 This release delivers the Ultra-Minimal Beta (UMB) through comprehensive feature flag implementation, configuration architecture improvements, and test infrastructure cleanup. The update enables shipping a working demonstration of core value while preserving all existing code through settings-based feature flags, ensuring production readiness with improved performance and maintainability.
 
-## Backend Implementation:
-- **Feature Flag Infrastructure**: Implemented centralized `FeatureFlags` class with environment-based configuration and template context processor for conditional rendering
-- **Configuration Singleton Migration**: Created unified `ConfigurationManager` singleton pattern eliminating multiple .env reads, achieving 95% faster environment variable access performance
-- **Environment Management**: Introduced `EnvironmentManager` class consolidating environment variable management and validation with backward compatibility
-- **Service Template Generation**: Implemented `ServiceTemplateGenerator` class for centralized service template management with enhanced functionality
-- **Docker Service Management**: Enhanced Docker service management with improved timeouts, health checks, and environment loading flexibility
+- Backend Implementation:
+  - Feature Flag Infrastructure: Implemented centralized `FeatureFlags` class with environment-based configuration and template context processor for conditional rendering
+  - Configuration Singleton Migration: Created unified `ConfigurationManager` singleton pattern eliminating multiple .env reads, achieving 95% faster environment variable access performance
+  - Environment Management: Introduced `EnvironmentManager` class consolidating environment variable management and validation with backward compatibility
+  - Service Template Generation: Implemented `ServiceTemplateGenerator` class for centralized service template management with enhanced functionality
+  - Docker Service Management: Enhanced Docker service management with improved timeouts, health checks, and environment loading flexibility
 
-## Frontend Implementation:
-- **Template Conditional Rendering**: Added `{% if ENABLE_FEATURE %}` blocks in templates with conditional navigation items for disabled features
-- **Beta Configuration**: Updated dashboard to show only enabled features with feature flag-controlled UI elements
-- **Environment Configuration**: Updated `.env.example` with comprehensive feature flag documentation and clear categorization of beta vs production features
+- Frontend Implementation:
+  - Template Conditional Rendering: Added `{% if ENABLE_FEATURE %}` blocks in templates with conditional navigation items for disabled features
+  - Beta Configuration: Updated dashboard to show only enabled features with feature flag-controlled UI elements
+  - Environment Configuration: Updated `.env.example` with comprehensive feature flag documentation and clear categorization of beta vs production features
 
-## Testing:
-- **Test Architecture Cleanup**: Eliminated DRY violations in test infrastructure, standardized import patterns, and removed deprecated code across 1296+ tests
-- **Configuration Testing**: Added comprehensive feature flag system validation tests and beta mode configuration validation (30 passing tests)
-- **Test Utilities Centralization**: Consolidated test utilities into centralized `TestUtilities` class for improved maintainability and reduced duplication
-- **Import Pattern Standardization**: Fixed import/re-export violations in Stripe integration tests with proper delegation pattern
+- Testing:
+  - Test Architecture Cleanup: Eliminated DRY violations in test infrastructure, standardized import patterns, and removed deprecated code across 1296+ tests
+  - Configuration Testing: Added comprehensive feature flag system validation tests and beta mode configuration validation (30 passing tests)
+  - Test Utilities Centralization: Consolidated test utilities into centralized `TestUtilities` class for improved maintainability and reduced duplication
+  - Import Pattern Standardization: Fixed import/re-export violations in Stripe integration tests with proper delegation pattern
 
-## Documentation:
-- **Management Commands**: Added `test_feature_flags` command for system validation, debugging, and feature flag status reporting
-- **Configuration Architecture**: Documented unified configuration singleton for performance and consistency with clear migration guidance
-- **Feature Flag Strategy**: Implemented settings-based feature flags with beta-safe defaults and conditional code execution patterns
+- Documentation:
+  - Management Commands: Added `test_feature_flags` command for system validation, debugging, and feature flag status reporting
+  - Configuration Architecture: Documented unified configuration singleton for performance and consistency with clear migration guidance
+  - Feature Flag Strategy: Implemented settings-based feature flags with beta-safe defaults and conditional code execution patterns
 
-## Feature Flag Implementation:
-**Ultra-Minimal Beta Scope - Enabled Features**:
-- Generator Core: `quickscale init` command with project template generation and Docker setup
-- Basic Auth & UI: User registration/login via django-allauth with simple dashboard
-- Simple Credit Demo: Fixed 100 credits per new user with single demo service
-- Admin Essentials: Django admin access with manual credit adjustment capability
+- Feature Flag Implementation 
+  - Ultra-Minimal Beta Scope - Enabled Features:
+  - Generator Core: `quickscale init` command with project template generation and Docker setup
+  - Basic Auth & UI: User registration/login via django-allauth with simple dashboard
+  - Simple Credit Demo: Fixed 100 credits per new user with single demo service
+  - Admin Essentials: Django admin access with manual credit adjustment capability
 
-**Disabled via Feature Flags (Code Preserved)**:
-```python
-ENABLE_STRIPE = False               # Disable payment processing
-ENABLE_SUBSCRIPTIONS = False        # Hide subscription UI/logic
-ENABLE_CREDIT_TYPES = False         # Single credit pool only
-ENABLE_SERVICE_MARKETPLACE = False  # Show single demo service
-ENABLE_ADVANCED_ADMIN = False       # Basic Django admin only
-REQUIRE_EMAIL_VERIFICATION = False  # Optional login flow
-ENABLE_API_ENDPOINTS = False        # Web UI only
-ENABLE_ADVANCED_ERRORS = False      # Basic error pages
-ENABLE_WEBHOOKS = False             # No webhook processing
-ENABLE_SERVICE_GENERATOR = False    # Defer CLI commands
-```
+- Disabled via Feature Flags (Code Preserved):
+  ```python
+  ENABLE_STRIPE = False               # Disable payment processing
+  ENABLE_SUBSCRIPTIONS = False        # Hide subscription UI/logic
+  ENABLE_CREDIT_TYPES = False         # Single credit pool only
+  ENABLE_SERVICE_MARKETPLACE = False  # Show single demo service
+  ENABLE_ADVANCED_ADMIN = False       # Basic Django admin only
+  REQUIRE_EMAIL_VERIFICATION = False  # Optional login flow
+  ENABLE_API_ENDPOINTS = False        # Web UI only
+  ENABLE_ADVANCED_ERRORS = False      # Basic error pages
+  ENABLE_WEBHOOKS = False             # No webhook processing
+  ENABLE_SERVICE_GENERATOR = False    # Defer CLI commands
+  ```
 
 This release completes the Ultra-Minimal Beta (UMB) - Feature Flag Implementation sprint, delivering a working beta that includes only essential features while preserving all production code for future enablement. The implementation ensures robust configuration architecture, clean test infrastructure, and optimal performance through the Configuration Singleton pattern.
 

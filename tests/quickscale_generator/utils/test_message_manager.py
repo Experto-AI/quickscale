@@ -1,10 +1,10 @@
 """Tests for message_manager module."""
-import sys
 import logging
-import pytest
-from unittest.mock import patch, MagicMock
+import sys
 from io import StringIO
-from typing import Dict, List
+from unittest.mock import MagicMock, patch
+
+import pytest
 
 from quickscale.utils.message_manager import MessageManager, MessageType
 

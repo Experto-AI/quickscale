@@ -1,15 +1,15 @@
+from core.configuration import config
+from credits.models import APIKey
 from django.contrib import messages
 from django.contrib.auth import get_user_model
 from django.contrib.auth.decorators import login_required
-from django.http import HttpRequest, HttpResponse, JsonResponse
-from django.shortcuts import redirect, render, get_object_or_404
-from django.views.decorators.http import require_http_methods
-from django.views.decorators.csrf import csrf_protect
-from django import forms
 from django.core.exceptions import ValidationError
+from django.http import HttpRequest, HttpResponse
+from django.shortcuts import get_object_or_404, redirect, render
+from django.views.decorators.csrf import csrf_protect
+from django.views.decorators.http import require_http_methods
+
 from .forms import ProfileForm
-from .models import AccountLockout
-from credits.models import APIKey
 
 User = get_user_model()
 
@@ -33,9 +33,7 @@ def account_security_view(request: HttpRequest) -> HttpResponse:
         is_2fa_enabled = two_factor.is_enabled
         has_backup_codes = bool(two_factor.backup_codes)
         backup_codes_count = len(two_factor.backup_codes) if two_factor.backup_codes else 0
-    # Import configuration to check feature flags
-    from core.configuration import config
-    
+
     context = {
         'api_keys': api_keys,
         'two_factor_enabled': two_factor_enabled,
@@ -54,13 +52,13 @@ def account_security_view(request: HttpRequest) -> HttpResponse:
 def profile_view(request: HttpRequest) -> HttpResponse:
     """Display and update user profile."""
     is_htmx = request.headers.get('HX-Request') == 'true'
-    
+
     if request.method == "POST":
         form = ProfileForm(request.POST, request.FILES, instance=request.user)
         if form.is_valid():
             form.save()
             messages.success(request, 'Profile updated successfully!')
-            
+
             if is_htmx:
                 # Return the updated profile form for HTMX
                 return render(request, 'users/profile_form.html', {
@@ -77,7 +75,7 @@ def profile_view(request: HttpRequest) -> HttpResponse:
                 })
     else:
         form = ProfileForm(instance=request.user)
-    
+
     return render(request, 'users/profile.html', {
         'form': form,
         'is_htmx': is_htmx
@@ -88,7 +86,7 @@ def profile_view(request: HttpRequest) -> HttpResponse:
 def api_keys_view(request: HttpRequest) -> HttpResponse:
     """Display user's API keys with feature flag context."""
     from core.configuration import config
-    
+
     api_keys = APIKey.objects.filter(user=request.user).order_by('-created_at')
     return render(request, 'users/api_keys.html', {
         'api_keys': api_keys,
@@ -102,7 +100,7 @@ def generate_api_key_view(request: HttpRequest) -> HttpResponse:
     """Generate a new API key for the user with proper error handling."""
     from core.configuration import config
     is_htmx = request.headers.get('HX-Request') == 'true'
-    
+
     try:
         # Get the optional name for the API key
         name = request.POST.get('name', '').strip()
@@ -158,31 +156,31 @@ def revoke_api_key_view(request: HttpRequest) -> HttpResponse:
     """Revoke an API key with proper error handling."""
     from core.configuration import config
     is_htmx = request.headers.get('HX-Request') == 'true'
-    
+
     try:
         api_key_id = request.POST.get('api_key_id')
         if not api_key_id:
             raise ValidationError('API key ID is required.')
-            
+
         api_key = get_object_or_404(APIKey, id=api_key_id, user=request.user)
-        
+
         api_key.is_active = False
         api_key.save()
-        
+
         messages.success(request, 'API key revoked successfully!')
-        
+
     except ValidationError as e:
         messages.error(request, f'Validation error: {str(e)}')
     except Exception as e:
         messages.error(request, f'Error revoking API key: {str(e)}')
-    
+
     if is_htmx:
         return render(request, 'users/api_keys.html', {
             'api_keys': APIKey.objects.filter(user=request.user).order_by('-created_at'),
             'is_htmx': is_htmx,
             'api_endpoints_enabled': config.feature_flags.enable_api_endpoints,
         })
-    
+
     return redirect('users:api_keys')
 
 @login_required
@@ -192,21 +190,21 @@ def regenerate_api_key_view(request: HttpRequest) -> HttpResponse:
     """Regenerate an existing API key with proper error handling."""
     from core.configuration import config
     is_htmx = request.headers.get('HX-Request') == 'true'
-    
+
     try:
         api_key_id = request.POST.get('api_key_id')
         if not api_key_id:
             raise ValidationError('API key ID is required.')
-            
+
         old_api_key = get_object_or_404(APIKey, id=api_key_id, user=request.user)
-        
+
         # Revoke the old key
         old_api_key.is_active = False
         old_api_key.save()
-        
+
         # Generate new key
         full_key, prefix, secret_key = APIKey.generate_key()
-        
+
         # Create new API key record
         new_api_key = APIKey.objects.create(
             user=request.user,
@@ -214,26 +212,26 @@ def regenerate_api_key_view(request: HttpRequest) -> HttpResponse:
             hashed_key=APIKey.get_hashed_key(secret_key),
             name=old_api_key.name
         )
-        
+
         messages.success(request, 'API key regenerated successfully!')
-        
+
         return render(request, 'users/api_key_generated.html', {
             'api_key': new_api_key,
             'full_key': full_key,
             'is_htmx': is_htmx,
             'api_endpoints_enabled': config.feature_flags.enable_api_endpoints,
         })
-        
+
     except ValidationError as e:
         messages.error(request, f'Validation error: {str(e)}')
     except Exception as e:
         messages.error(request, f'Error regenerating API key: {str(e)}')
-        
+
     if is_htmx:
         return render(request, 'users/api_keys.html', {
             'api_keys': APIKey.objects.filter(user=request.user).order_by('-created_at'),
             'is_htmx': is_htmx,
             'api_endpoints_enabled': config.feature_flags.enable_api_endpoints,
         })
-    
+
     return redirect('users:api_keys')

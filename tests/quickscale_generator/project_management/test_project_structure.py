@@ -1,8 +1,10 @@
 """Test QuickScale project structure against documentation."""
 import os
 import re
-import pytest
 from pathlib import Path
+
+import pytest
+
 
 def get_expected_structure_from_docs():
     """Extract the expected directory structure from TECHNICAL_DOCS.md."""
@@ -13,7 +15,7 @@ def get_expected_structure_from_docs():
     content = docs_path.read_text()
     
     # Find all code blocks containing project structure
-    structure_blocks = re.findall(r'```\s*(.*?)```', content, re.DOTALL)
+    re.findall(r'```\s*(.*?)```', content, re.DOTALL)
     
     # Define the directories we're expecting based on the docs
     # Rather than parsing the structure from the markdown which can be error-prone,
@@ -156,7 +158,7 @@ def test_template_structure_correctness():
     expected_template_dirs = get_template_structure_from_docs()
     
     # Get the actual template directories
-    actual_template_dirs = get_actual_template_structure()
+    get_actual_template_structure()
     
     # Check for templates in wrong locations
     template_files_in_wrong_locations = []
@@ -455,7 +457,7 @@ def get_docker_file_locations():
 def test_docker_files_in_correct_locations():
     """Test that Docker files are in the correct locations."""
     # Get expected Docker files from docs
-    expected_docker_files = get_docker_files_from_docs()
+    get_docker_files_from_docs()
     
     # Get actual Docker file locations
     actual_docker_files = get_docker_file_locations()

@@ -1,6 +1,7 @@
 """Signal handlers for admin dashboard audit logging."""
 from django.contrib.auth.signals import user_logged_in, user_logged_out
 from django.dispatch import receiver
+
 from .utils import log_admin_action
 
 
@@ -25,4 +26,4 @@ def log_admin_logout(sender, request, user, **kwargs):
             action='ADMIN_LOGOUT',
             description=f'Admin user {user.email} logged out',
             request=request
-        ) 
+        )

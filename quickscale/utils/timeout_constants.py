@@ -4,6 +4,7 @@ Timeout constants for Docker operations and service management.
 This module centralizes all timeout configurations used throughout the QuickScale
 project to improve maintainability and consistency.
 """
+import os
 
 # Docker service timeouts
 DOCKER_CONTAINER_START_TIMEOUT = 60   # Timeout for individual container startup
@@ -12,7 +13,9 @@ DOCKER_PS_CHECK_TIMEOUT = 10          # Timeout for docker-compose ps command
 
 # Building and pulling images can be slow on first run or slow networks
 DOCKER_BUILD_TIMEOUT = 600     # Generous timeout for building the web image
-DOCKER_PULL_TIMEOUT = 120      # Generous timeout for pulling base images
+
+# Allow environment variable override for Docker pull timeout (especially useful for E2E tests)
+DOCKER_PULL_TIMEOUT = int(os.environ.get('QUICKSCALE_DOCKER_PULL_TIMEOUT', 120))  # Default 120, overridable for tests
 
 # General Docker operations timeout
 DOCKER_OPERATIONS_TIMEOUT = 30  # < DOCKER_CONTAINER_START_TIMEOUT

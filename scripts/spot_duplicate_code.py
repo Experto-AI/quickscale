@@ -1,13 +1,13 @@
-import os
 import ast
-import hashlib
-from collections import defaultdict
 import difflib
+import hashlib
+import os
 import sys
+from collections import defaultdict
 
 TEST_DIRS = [
     'tests',
-    'quickscale/tests',
+    'quickscale',
 ]
 
 def find_py_files():
@@ -86,7 +86,7 @@ def main():
                 docstring_map[docstring_hash].append((func_name, file_path))
             if enable_short_bodies and short_body:
                 # Only consider short bodies (<= 3 lines after def)
-                lines = [l for l in short_body.splitlines() if l.strip() and not l.strip().startswith('"""')]
+                lines = [line for line in short_body.splitlines() if line.strip() and not line.strip().startswith('"""')]
                 if 0 < len(lines) <= 3:
                     short_body_hash = hashlib.md5(short_body.strip().encode('utf-8')).hexdigest()
                     short_body_map[short_body_hash].append((func_name, file_path))

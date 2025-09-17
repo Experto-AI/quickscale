@@ -1,8 +1,7 @@
 """Unit tests for user admin components."""
 
-import unittest
 import os
-import sys
+import unittest
 
 
 class UserAdminComponentTests(unittest.TestCase):

@@ -4,10 +4,8 @@ This test validates that QuickScale generates working user authentication templa
 including models, views, forms, and security features.
 """
 
-import os
-import tempfile
-import shutil
 from pathlib import Path
+
 from django.test import TestCase
 
 from tests.utils import DynamicProjectTestCase

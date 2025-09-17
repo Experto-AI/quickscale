@@ -1,10 +1,8 @@
 """Tests for Settings & URL Configuration Review in Sprint 20."""
-import unittest
-from unittest.mock import patch, MagicMock
 import os
 import re
+import unittest
 from pathlib import Path
-from decimal import Decimal
 
 from quickscale.config.generator_config import generator_config
 

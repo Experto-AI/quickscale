@@ -1,16 +1,22 @@
 """End-to-end tests for payment and subscription workflows."""
 
-import pytest
-from decimal import Decimal
 from datetime import timedelta
-from unittest.mock import patch, MagicMock
+from decimal import Decimal
+from unittest.mock import MagicMock, patch
+
+import pytest
+from django.contrib.auth import get_user_model
 from django.test import Client
 from django.urls import reverse
-from django.contrib.auth import get_user_model
 from django.utils import timezone
 
 # Set up Django for testing
-from ..base import PaymentWorkflowTestCase, setup_django_template_path, setup_core_env_utils_mock, setup_django_settings
+from ..base import (
+    PaymentWorkflowTestCase,
+    setup_core_env_utils_mock,
+    setup_django_settings,
+    setup_django_template_path,
+)
 
 # Set up template path and environment
 setup_django_template_path()
@@ -19,11 +25,12 @@ setup_django_settings()
 
 # Import Django and initialize
 import django
+
 django.setup()
 
 # Import the modules we're testing
-from credits.models import CreditAccount, CreditTransaction, UserSubscription, Service
-from stripe_manager.models import StripeProduct, StripeCustomer
+from credits.models import CreditAccount, CreditTransaction, Service, UserSubscription
+from stripe_manager.models import StripeCustomer, StripeProduct
 
 User = get_user_model()
 
@@ -97,25 +104,6 @@ class PaymentSubscriptionWorkflowTests(PaymentWorkflowTestCase):
         self.assertIn(checkout_response.status_code, [200, 302])
         
         # Step 4: Simulate successful payment webhook
-        webhook_payload = {
-            'type': 'customer.subscription.created',
-            'data': {
-                'object': {
-                    'id': 'sub_test123',
-                    'customer': 'cus_test123',
-                    'status': 'active',
-                    'current_period_start': 1640995200,
-                    'current_period_end': 1643673600,
-                    'items': {
-                        'data': [{
-                            'price': {
-                                'id': self.stripe_product.stripe_price_id
-                            }
-                        }]
-                    }
-                }
-            }
-        }
         
         # Create Stripe customer record
         StripeCustomer.objects.create(
@@ -134,8 +122,9 @@ class PaymentSubscriptionWorkflowTests(PaymentWorkflowTestCase):
         )
         
         # Simulate credit allocation that would happen in webhook processing
-        from django.utils import timezone
         from datetime import timedelta
+
+        from django.utils import timezone
         
         credit_account = CreditAccount.get_or_create_for_user(self.user)
         CreditTransaction.objects.create(
@@ -366,6 +355,6 @@ class PaymentSubscriptionWorkflowTests(PaymentWorkflowTestCase):
         # TODO: KNOWN ISSUE - Same credit consumption bug as other tests
         # Skip verification until consume_credits_with_priority bug is fixed
         credit_account.refresh_from_db()
-        updated_balance = credit_account.get_balance()
+        credit_account.get_balance()
         # Expected: Decimal('50') (100 - 50), but consumption fails
         # self.assertEqual(updated_balance, Decimal('50'))  # 100 - 50

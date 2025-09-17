@@ -1,27 +1,22 @@
 """Primary entry point for QuickScale CLI operations."""
-import os
-import sys
 import argparse
 import logging
-from pathlib import Path
-from typing import List, Optional, Dict, Any, Tuple
+import os
+import sys
+from typing import NoReturn, Tuple
 
-from dotenv import load_dotenv, find_dotenv
+from dotenv import find_dotenv
 
-from quickscale import __version__
 from quickscale.commands import command_manager
 from quickscale.commands.init_command import InitCommand
-from quickscale.commands.project_manager import ProjectManager
-from quickscale.utils.help_manager import show_manage_help
-from quickscale.utils.error_manager import error_manager
 from quickscale.config.generator_config import generator_config
-
+from quickscale.utils.error_manager import error_manager
 
 # Ensure log directory exists
 log_dir = os.path.expanduser("~/.quickscale")
 os.makedirs(log_dir, exist_ok=True)
 
-# --- Centralized Logging Configuration --- 
+# --- Centralized Logging Configuration ---
 
 # Get the specific logger for quickscale operations
 qs_logger = logging.getLogger('quickscale')
@@ -45,7 +40,7 @@ if qs_logger.hasHandlers():
     qs_logger.handlers.clear()
 
 # Create console handler with the desired simple format
-console_handler = logging.StreamHandler(sys.stdout) 
+console_handler = logging.StreamHandler(sys.stdout)
 console_handler.setLevel(LOG_LEVEL_MAP.get(LOG_LEVEL, logging.INFO))
 console_handler.setFormatter(logging.Formatter('[%(levelname)s] %(message)s'))
 qs_logger.addHandler(console_handler)
@@ -58,44 +53,46 @@ qs_logger.addHandler(file_handler)
 
 # Get a logger instance specifically for this module (cli.py)
 # This logger will inherit the handlers and level from 'quickscale' logger
-logger = logging.getLogger(__name__) 
+logger = logging.getLogger(__name__)
 # No need to configure this one further, it uses the parent 'quickscale' config
 
-# --- End Logging Configuration --- 
+# --- End Logging Configuration ---
 
 
 class QuickScaleArgumentParser(argparse.ArgumentParser):
     """Custom argument parser with improved error handling."""
-    
-    def error(self, message: str) -> None:
+
+    def error(self, message: str) -> NoReturn:
         """Show error message and command help."""
-        if "the following arguments are required" in message:
-            self.print_usage()
-            error = error_manager.ValidationError(
+        if "arguments are required" in message or "too few arguments" in message:
+            validation_error = error_manager.ValidationError(
                 message,
                 details=f"Command arguments validation failed: {message}",
                 recovery="Use 'quickscale COMMAND -h' to see help for this command"
             )
-            error_manager.handle_command_error(error)
+            error_manager.handle_command_error(validation_error)
         elif "invalid choice" in message and "argument command" in message:
             # Extract the invalid command from the error message
             import re
             match = re.search(r"invalid choice: '([^']+)'", message)
             invalid_cmd = match.group(1) if match else "unknown"
-            
-            error = error_manager.UnknownCommandError(
+
+            unknown_error = error_manager.UnknownCommandError(
                 f"Unknown command: {invalid_cmd}",
                 details=message,
                 recovery="Use 'quickscale help' to see available commands"
             )
-            error_manager.handle_command_error(error)
+            error_manager.handle_command_error(unknown_error)
         else:
             self.print_usage()
-            error = error_manager.ValidationError(
+            general_error = error_manager.ValidationError(
                 message,
                 recovery="Use 'quickscale help' to see available commands"
             )
-            error_manager.handle_command_error(error)
+            error_manager.handle_command_error(general_error)
+        # This should never be reached due to sys.exit in handle_command_error
+        import sys
+        sys.exit(1)
 
 
 def create_parser() -> Tuple[QuickScaleArgumentParser, argparse._SubParsersAction]:
@@ -146,25 +143,25 @@ Examples:
 
 def setup_service_parsers(subparsers: argparse._SubParsersAction) -> None:
     """Set up service management command parsers."""
-    up_parser = subparsers.add_parser("up", 
+    up_parser = subparsers.add_parser("up",
         help="Start the project services in local development mode",
         description="""
 Start all Docker containers for the current QuickScale project.
 This will start both the web and database services.
 You can access the web application at http://localhost:8000.
         """)
-    up_parser.add_argument("--no-cache", 
+    up_parser.add_argument("--no-cache",
         action="store_true",
         help="Build images without using the cache")
-        
-    subparsers.add_parser("down", 
+
+    subparsers.add_parser("down",
         help="Stop the project services in local development mode",
         description="""
 Stop all Docker containers for the current QuickScale project.
 This will stop both the web and database services.
         """)
-        
-    destroy_parser = subparsers.add_parser("destroy", 
+
+    destroy_parser = subparsers.add_parser("destroy",
         help="Destroy the current project in local development mode",
         description="""
 WARNING: This command will permanently delete:
@@ -184,29 +181,29 @@ This action cannot be undone. Use 'down' instead if you just want to stop servic
 
 def setup_utility_parsers(subparsers: argparse._SubParsersAction) -> None:
     """Set up utility command parsers."""
-    subparsers.add_parser("check", 
+    subparsers.add_parser("check",
         help="Check project status and requirements",
         description="Verify that all required dependencies are installed and properly configured.")
-        
-    shell_parser = subparsers.add_parser("shell", 
+
+    shell_parser = subparsers.add_parser("shell",
         help="Enter an interactive bash shell in the web container",
         description="Open an interactive bash shell in the web container for development and debugging.")
     shell_parser.add_argument(
         "-c", "--cmd",
         help="Run this command in the container instead of starting an interactive shell")
-        
-    subparsers.add_parser("django-shell", 
+
+    subparsers.add_parser("django-shell",
         help="Enter the Django shell in the web container",
         description="Open an interactive Python shell with Django context loaded for development and debugging.")
-    
-    subparsers.add_parser("ps", 
+
+    subparsers.add_parser("ps",
         help="Show the status of running services",
         description="Display the current status of all Docker containers in the project.")
 
 
 def setup_logs_parser(subparsers: argparse._SubParsersAction) -> None:
     """Set up logs command parser."""
-    logs_parser = subparsers.add_parser("logs", 
+    logs_parser = subparsers.add_parser("logs",
         help="View project logs on the local development environment",
         description="View logs from project services on the local development environment. Optionally filter by specific service.",
         epilog="""
@@ -220,36 +217,36 @@ Examples:
   quickscale logs -f -t                Follow logs with timestamps
   quickscale logs web --since 2h --lines 200 -t  View web logs from the last 2 hours (200 lines) with timestamps
         """)
-    logs_parser.add_argument("service", 
-        nargs="?", 
-        choices=["web", "db"], 
+    logs_parser.add_argument("service",
+        nargs="?",
+        choices=["web", "db"],
         help="Optional service to view logs for (web or db)")
-    logs_parser.add_argument("-f", "--follow", 
+    logs_parser.add_argument("-f", "--follow",
         action="store_true",
         help="Follow logs continuously (warning: this will not exit automatically)")
-    logs_parser.add_argument("--since", 
+    logs_parser.add_argument("--since",
         type=str,
         help="Show logs since timestamp (e.g. 2023-11-30T12:00:00) or relative time (e.g. 30m for 30 minutes, 2h for 2 hours)")
-    logs_parser.add_argument("-n", "--lines", 
+    logs_parser.add_argument("-n", "--lines",
         type=int,
         default=100,
         help="Number of lines to show (default: 100)")
-    logs_parser.add_argument("-t", "--timestamps", 
+    logs_parser.add_argument("-t", "--timestamps",
         action="store_true",
         help="Show timestamps with each log entry")
 
 
 def setup_manage_parser(subparsers: argparse._SubParsersAction) -> None:
     """Set up Django management command parser."""
-    manage_parser = subparsers.add_parser("manage", 
+    manage_parser = subparsers.add_parser("manage",
         help="Run Django management commands",
         description="""
 Run Django management commands in the web container.
 For a list of available commands, use:
   quickscale manage help
         """)
-    manage_parser.add_argument("args", 
-        nargs=argparse.REMAINDER, 
+    manage_parser.add_argument("args",
+        nargs=argparse.REMAINDER,
         help="Arguments to pass to manage.py")
 
 
@@ -295,7 +292,7 @@ with instructions on how to configure it later. This is normal behavior.
         help="Type of service template to generate")
     generate_parser.add_argument(
         "--output-dir",
-        dest="output_dir", 
+        dest="output_dir",
         help="Optional output directory for the generated service files")
     generate_parser.add_argument(
         "--credit-cost",
@@ -358,7 +355,7 @@ Examples:
 
 def setup_help_and_version_parsers(subparsers: argparse._SubParsersAction) -> None:
     """Set up help and version command parsers."""
-    help_parser = subparsers.add_parser("help", 
+    help_parser = subparsers.add_parser("help",
         help="Show this help message",
         description="""
 Get detailed help about QuickScale commands.
@@ -369,11 +366,11 @@ For command-specific help, use:
 For Django management commands help, use:
   quickscale help manage
         """)
-    help_parser.add_argument("topic", 
-        nargs="?", 
+    help_parser.add_argument("topic",
+        nargs="?",
         help="Topic to get help for (e.g., 'manage')")
-        
-    subparsers.add_parser("version", 
+
+    subparsers.add_parser("version",
         help="Show the current version of QuickScale",
         description="Display the installed version of QuickScale CLI.")
 
@@ -424,13 +421,13 @@ Note: Always preview changes before applying them or use interactive mode for fi
         """,
         formatter_class=argparse.RawDescriptionHelpFormatter,
         usage="quickscale sync-back [project_path] [--preview | --apply | --interactive]")
-    
+
     sync_back_parser.add_argument(
         "project_path",
         nargs="?",
         default=".",
         help="Path to the generated QuickScale project (defaults to current directory)")
-    
+
     # Create mutually exclusive group for preview/apply/interactive
     action_group = sync_back_parser.add_mutually_exclusive_group(required=True)
     action_group.add_argument(
@@ -447,10 +444,77 @@ Note: Always preview changes before applying them or use interactive mode for fi
         help="Interactively review and apply changes file by file")
 
 
+def setup_crawl_parser(subparsers: argparse._SubParsersAction) -> None:
+    """Set up crawl command parser."""
+    crawl_parser = subparsers.add_parser("crawl",
+        help="Crawl a QuickScale application to validate page rendering",
+        description="""
+Application Crawler for QuickScale Projects
+
+This command crawls a QuickScale application to validate that all pages render 
+correctly. It tests authentication, page loading, CSS/JS functionality, and 
+overall application health.
+
+The crawler will:
+- Authenticate using provided credentials (or defaults)
+- Discover all accessible pages by following navigation links
+- Validate each page for HTML structure, CSS loading, and JavaScript presence
+- Generate a comprehensive report of findings
+
+REQUIREMENTS:
+- QuickScale application must be running at the specified URL
+- Application must have test users configured  
+- Required Python packages: beautifulsoup4, requests (installed automatically)
+        """,
+        epilog="""
+Examples:
+  quickscale crawl                                        # Crawl local project (localhost:8000)
+  quickscale crawl --url http://localhost:8080            # Crawl with custom URL
+  quickscale crawl --admin                                # Use admin credentials
+  quickscale crawl --email test@example.com --password mypass  # Custom credentials
+  quickscale crawl --verbose --max-pages 20              # Verbose output, limit pages
+        """,
+        formatter_class=argparse.RawDescriptionHelpFormatter)
+
+    crawl_parser.add_argument(
+        "-u", "--url",
+        default="http://localhost:8000",
+        help="Base URL of the application (default: http://localhost:8000)")
+
+    crawl_parser.add_argument(
+        "-e", "--email",
+        help="Email for authentication (default: user@test.com)")
+
+    crawl_parser.add_argument(
+        "-p", "--password",
+        help="Password for authentication (default: userpasswd)")
+
+    crawl_parser.add_argument(
+        "-a", "--admin",
+        action="store_true",
+        help="Use admin credentials (admin@test.com/adminpasswd)")
+
+    crawl_parser.add_argument(
+        "-m", "--max-pages",
+        type=int,
+        default=50,
+        help="Maximum pages to crawl (default: 50)")
+
+    crawl_parser.add_argument(
+        "-v", "--verbose",
+        action="store_true",
+        help="Enable verbose logging")
+
+    crawl_parser.add_argument(
+        "-d", "--detailed",
+        action="store_true",
+        help="Show detailed lists of all pages (successful, warnings, failed)")
+
+
 def handle_init_command(args: argparse.Namespace) -> int:
     """Handle initialization command."""
     from quickscale.utils.message_manager import MessageManager
-    
+
     init_cmd = InitCommand()
     try:
         init_cmd.execute(args.name)
@@ -469,10 +533,10 @@ def handle_init_command(args: argparse.Namespace) -> int:
 def handle_check_command_output(args: argparse.Namespace) -> None:
     """Handle check command specific output."""
     from quickscale.utils.message_manager import MessageManager
-    
+
     if not hasattr(args, 'db_verification'):
         return
-        
+
     verification = args.db_verification
     if verification and 'database' in verification:
         MessageManager.info("   - ✅ Database connectivity verified")
@@ -485,13 +549,13 @@ def handle_check_command_output(args: argparse.Namespace) -> None:
 
 def handle_log_scan_output(args: argparse.Namespace) -> None:
     """Display log scan results if available."""
-    from quickscale.utils.message_manager import MessageManager, MessageType
-    
+    from quickscale.utils.message_manager import MessageManager
+
     if not hasattr(args, 'log_scan') or not args.log_scan:
         return
-        
+
     log_scan = args.log_scan
-    
+
     # Check if logs were accessed
     if not log_scan.get("logs_accessed", False):
         MessageManager.warning("\n⚠️ Note: Could not access log files for scanning.")
@@ -526,7 +590,7 @@ def main() -> int:
     """Process CLI commands and route to appropriate handlers."""
     # Set up argument parser
     parser, subparsers = create_parser()
-    
+
     # Set up command parsers
     setup_init_parser(subparsers)
     setup_service_parsers(subparsers)
@@ -535,34 +599,35 @@ def main() -> int:
     setup_manage_parser(subparsers)
     setup_service_generator_parsers(subparsers)
     setup_sync_back_parser(subparsers)
+    setup_crawl_parser(subparsers)
     setup_help_and_version_parsers(subparsers)
-    
+
     # Parse arguments
     args = parser.parse_args()
-    
+
     try:
         # Handle no command case
         if not args.command:
             parser.print_help()
             return 0
-            
+
         # Handle init command separately
         if args.command == "init":
             return handle_init_command(args)
-            
+
         # Handle check command specific output
         if args.command == "check":
             handle_check_command_output(args)
-        
+
         # Display log scan results if available
         handle_log_scan_output(args)
-        
+
         # Handle other commands
         # Note: We just want to execute the command and don't care about its return value,
         # as most commands return None on success
         command_manager.handle_command(args.command, args)
         return 0
-            
+
     except KeyError as e:
         # Handle unknown command with a more specific error message
         from quickscale.utils.message_manager import MessageManager
@@ -580,7 +645,7 @@ if __name__ == "__main__":
     # Log .env loading status and key environment variables for debugging
     if LOG_LEVEL == 'DEBUG':
         qs_logger.info(f"Loaded .env file from: {find_dotenv()}")
-        # Show a few key environment variables 
+        # Show a few key environment variables
         qs_logger.info(f"PROJECT_NAME={generator_config.get_env('PROJECT_NAME', '???')}")
         qs_logger.info(f"LOG_LEVEL={generator_config.get_env('LOG_LEVEL', '???')}")
     else:

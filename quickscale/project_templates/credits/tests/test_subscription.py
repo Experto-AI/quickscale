@@ -2,9 +2,12 @@
 Unit tests for the UserSubscription model and subscription-related logic in the credits app.
 """
 import unittest
-from django.utils import timezone
+
 from django.contrib.auth import get_user_model
+from django.utils import timezone
+
 from credits.models import UserSubscription
+
 
 class UserSubscriptionModelTest(unittest.TestCase):
     def setUp(self):

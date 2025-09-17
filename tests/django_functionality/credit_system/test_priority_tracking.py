@@ -7,12 +7,15 @@ to see exactly which credits were used.
 """
 import unittest
 from decimal import Decimal
-from datetime import timedelta
-from django.test import TestCase, override_settings
+
+from credits.models import (
+    CreditAccount,
+    CreditTransaction,
+    InsufficientCreditsError,
+    Service,
+)
 from django.contrib.auth import get_user_model
-from django.utils import timezone
-from django.db import transaction
-from credits.models import CreditAccount, CreditTransaction, Service, ServiceUsage, InsufficientCreditsError
+from django.test import TestCase, override_settings
 
 User = get_user_model()
 
@@ -393,7 +396,7 @@ class CreditConsumptionPriorityTrackingTests(TestCase):
         
         # Debug: Let's check what the actual balance is
         print(f"Debug - Actual balance: {balance}")
-        print(f"Debug - All transactions:")
+        print("Debug - All transactions:")
         for tx in CreditTransaction.objects.filter(user=self.user).order_by('created_at'):
             print(f"  {tx.credit_type}: {tx.amount} - {tx.description}")
         

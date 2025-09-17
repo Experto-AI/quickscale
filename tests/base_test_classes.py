@@ -4,8 +4,9 @@ This module provides reusable base classes to reduce code duplication in tests,
 following DRY principles.
 """
 import unittest
-import pytest
 from unittest.mock import Mock
+
+import pytest
 
 
 class CommandTestMixin:
@@ -83,7 +84,6 @@ class CommandErrorHandlingTestMixin:
     
     def assert_execute_not_in_project(self, mock_project_manager, command):
         """Assert that command exits when not in project directory."""
-        import pytest
         mock_project_manager.return_value.is_project_directory.return_value = False
         
         with pytest.raises(SystemExit, match="5"):
@@ -91,7 +91,6 @@ class CommandErrorHandlingTestMixin:
     
     def assert_execute_subprocess_error(self, mock_run, mock_project_manager, command):
         """Assert that command handles subprocess errors properly by exiting."""
-        import pytest
         import subprocess
         
         mock_project_manager.return_value.is_project_directory.return_value = True
@@ -102,7 +101,6 @@ class CommandErrorHandlingTestMixin:
     
     def assert_execute_file_not_found(self, mock_run, mock_project_manager, command):
         """Assert that command handles file not found errors properly by exiting."""
-        import pytest
         
         mock_project_manager.return_value.is_project_directory.return_value = True
         mock_run.side_effect = FileNotFoundError("docker-compose not found")
@@ -123,7 +121,7 @@ class CommandErrorHandlingTestMixin:
 class BaseCommandTest(unittest.TestCase, CommandTestMixin):
     """Base class for unittest-based command tests."""
     
-    def test_initialization(self):
+    def test_base_command_initialization(self):
         """Test command initialization."""
         if hasattr(self, 'command'):
             self.assert_command_initialized(self.command)

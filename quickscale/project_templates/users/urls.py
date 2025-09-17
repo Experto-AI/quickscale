@@ -3,11 +3,10 @@ from django.urls import path
 
 from . import views
 from .views_2fa import (
-    two_factor_settings, 
-    two_factor_setup_prepare, 
-    two_factor_generate_backup_codes,
     two_factor_disable,
-    two_factor_status
+    two_factor_generate_backup_codes,
+    two_factor_setup_prepare,
+    two_factor_status,
 )
 
 app_name = 'users'

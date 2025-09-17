@@ -7,10 +7,9 @@ implemented in the QuickScale project generator templates.
 """
 
 import os
-import unittest
 import re
+import unittest
 from pathlib import Path
-from typing import Dict, Any, Union
 
 
 class ServicesAppStructureTests(unittest.TestCase):
@@ -153,7 +152,7 @@ class BaseServiceClassTests(unittest.TestCase):
             base_content = f.read()
         
         # Check for consume_credits method
-        self.assertIn("def consume_credits(self, user: User) -> ServiceUsage:", base_content,
+        self.assertIn("def consume_credits(self, user: 'AbstractUser') -> ServiceUsage:", base_content,
                      "consume_credits method not found")
         
         # Check for user validation
@@ -174,7 +173,7 @@ class BaseServiceClassTests(unittest.TestCase):
             base_content = f.read()
         
         # Check for check_user_credits method
-        self.assertIn("def check_user_credits(self, user: User) -> dict:", base_content,
+        self.assertIn("def check_user_credits(self, user: 'AbstractUser') -> dict:", base_content,
                      "check_user_credits method not found")
         
         # Check for return dictionary structure
@@ -195,7 +194,7 @@ class BaseServiceClassTests(unittest.TestCase):
         # Check for abstract method
         self.assertIn("@abstractmethod", base_content,
                      "abstractmethod decorator not found")
-        self.assertIn("def execute_service(self, user: User, **kwargs):", base_content,
+        self.assertIn("def execute_service(self, user: 'AbstractUser', **kwargs):", base_content,
                      "abstract execute_service method not found")
         self.assertIn("pass", base_content,
                      "Abstract method implementation not found")
@@ -206,7 +205,7 @@ class BaseServiceClassTests(unittest.TestCase):
             base_content = f.read()
         
         # Check for run method
-        self.assertIn("def run(self, user: User, **kwargs):", base_content,
+        self.assertIn("def run(self, user: 'AbstractUser', **kwargs):", base_content,
                      "run method not found")
         
         # Check for proper flow
@@ -229,8 +228,13 @@ class BaseServiceClassTests(unittest.TestCase):
                      "Decimal import not found")
         self.assertIn("from django.contrib.auth import get_user_model", base_content,
                      "get_user_model import not found")
-        self.assertIn("from credits.models import CreditAccount, Service, ServiceUsage, InsufficientCreditsError", base_content,
+        # Credits models are now imported in multiline format
+        self.assertIn("from credits.models import", base_content,
                      "Credits models import not found")
+        self.assertIn("CreditAccount", base_content,
+                     "CreditAccount import not found") 
+        self.assertIn("InsufficientCreditsError", base_content,
+                     "InsufficientCreditsError import not found")
 
 
 class ServiceRegistryTests(unittest.TestCase):
@@ -333,8 +337,8 @@ class ServiceRegistryTests(unittest.TestCase):
         with open(self.decorators_py, 'r') as f:
             decorators_content = f.read()
         
-        # Check for type imports
-        self.assertIn("from typing import Dict, Type, Optional", decorators_content,
+        # Check for type imports (now sorted alphabetically)
+        self.assertIn("from typing import Dict, Optional, Type", decorators_content,
                      "Type imports not found")
         self.assertIn("from .base import BaseService", decorators_content,
                      "BaseService import not found")
@@ -377,13 +381,13 @@ class ServiceExamplesTests(unittest.TestCase):
     def test_example_service_implementation(self):
         """Test that example services have the execute_service method implemented."""
         # Updated to check for specific execute_service methods in new services
-        self.assertIn('def execute_service(self, user: User, text: str = "", **kwargs) -> Dict[str, Any]:', self.examples_content,
+        self.assertIn('def execute_service(self, user: \'AbstractUser\', text: str = "", **kwargs) -> Dict[str, Any]:', self.examples_content,
                       "TextSentimentAnalysisService execute_service method not found")
-        self.assertIn('def execute_service(self, user: User, text: str = "", max_keywords: int = 10, **kwargs) -> Dict[str, Any]:', self.examples_content,
+        self.assertIn('def execute_service(self, user: \'AbstractUser\', text: str = "", max_keywords: int = 10, **kwargs) -> Dict[str, Any]:', self.examples_content,
                       "TextKeywordExtractorService execute_service method not found")
-        self.assertIn('def execute_service(self, user: User, image_data: Union[str, bytes] = None, **kwargs) -> Dict[str, Any]:', self.examples_content,
+        self.assertIn('def execute_service(self, user: \'AbstractUser\', image_data: Optional[Union[str, bytes]] = None, **kwargs) -> Dict[str, Any]:', self.examples_content,
                       "ImageMetadataExtractorService execute_service method not found")
-        self.assertIn('def execute_service(self, user: User, data: Any = None, data_type: str = "text", **kwargs) -> Dict[str, Any]:', self.examples_content,
+        self.assertIn('def execute_service(self, user: \'AbstractUser\', data: Any = None, data_type: str = "text", **kwargs) -> Dict[str, Any]:', self.examples_content,
                       "DataValidatorService execute_service method not found")
 
     def test_usage_documentation(self):

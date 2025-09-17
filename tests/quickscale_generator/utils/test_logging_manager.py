@@ -1,10 +1,11 @@
 """Unit tests for the logging_manager module."""
+import logging
 import os
 import tempfile
 import unittest
-import logging
-from unittest.mock import patch, MagicMock, call
 from pathlib import Path
+from unittest.mock import MagicMock, call, patch
+
 from quickscale.utils.logging_manager import LoggingManager
 
 
@@ -62,7 +63,7 @@ class TestLoggingManager(unittest.TestCase):
         mock_logger.setLevel.assert_called_with('DEBUG')
         
         # Check that a file handler was created - don't check specific parameters since they may vary
-        expected_log_file = self.project_dir / 'logs' / 'quickscale.log'
+        self.project_dir / 'logs' / 'quickscale.log'
         mock_FileHandler.assert_called()
         
         # Check that the formatter was set

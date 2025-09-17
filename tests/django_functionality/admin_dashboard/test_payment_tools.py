@@ -5,30 +5,34 @@ in the QuickScale project generator template, focusing on business logic
 rather than view/URL integration.
 """
 
-import json
+from datetime import timedelta
 from decimal import Decimal
-from datetime import datetime, timedelta
-from unittest.mock import patch, Mock, MagicMock
+from unittest.mock import Mock, patch
 
 # Set up template path and Django settings
-from ..base import DjangoIntegrationTestCase, setup_django_template_path, setup_core_env_utils_mock, setup_django_settings
+from ..base import (
+    DjangoIntegrationTestCase,
+    setup_core_env_utils_mock,
+    setup_django_settings,
+    setup_django_template_path,
+)
+
 setup_django_template_path()
 setup_core_env_utils_mock()
 setup_django_settings()
 
 # Import Django and initialize
 import django
+
 django.setup()
 
-from django.test import TestCase, Client, override_settings
+from credits.models import CreditAccount, CreditTransaction, Payment
 from django.contrib.auth import get_user_model
-from django.utils import timezone
-from django.contrib.messages import get_messages
-from django.db.models import Q, Sum
 from django.db import models
-
-from credits.models import CreditAccount, CreditTransaction, Payment, UserSubscription
-from stripe_manager.models import StripeProduct, StripeCustomer
+from django.db.models import Q
+from django.test import Client
+from django.utils import timezone
+from stripe_manager.models import StripeProduct
 
 User = get_user_model()
 
@@ -202,7 +206,7 @@ class PaymentSearchLogicIntegrationTests(DjangoIntegrationTestCase):
         payments = Payment.objects.all()
         
         # Get the actual creation times to understand the test data
-        all_payments_with_dates = payments.order_by('created_at')
+        payments.order_by('created_at')
         
         yesterday = timezone.now() - timedelta(days=1)
         
@@ -211,7 +215,7 @@ class PaymentSearchLogicIntegrationTests(DjangoIntegrationTestCase):
         
         # The test data creates payments at different times relative to now
         # We need to check what's actually in the database
-        expected_recent_count = payments.filter(
+        payments.filter(
             created_at__gte=yesterday
         ).count()
         
@@ -452,7 +456,7 @@ class PaymentInvestigationLogicIntegrationTests(DjangoIntegrationTestCase):
         try:
             stripe_manager = mock_stripe_manager_class.get_instance()
             stripe_data = stripe_manager.retrieve_payment_intent(self.payment.stripe_payment_intent_id)
-        except Exception as e:
+        except Exception:
             stripe_data = None
         
         self.assertIsNotNone(stripe_data)
@@ -717,7 +721,7 @@ class RefundInitiationLogicIntegrationTests(DjangoIntegrationTestCase):
             return False
         
         # Get initial credit balance
-        initial_balance = self.user_credit_account.get_balance()
+        self.user_credit_account.get_balance()
         
         # Process credit adjustment
         adjustment_made = process_credit_adjustment(

@@ -1,13 +1,12 @@
 """Configuration manager for QuickScale."""
-from pathlib import Path
-from typing import Dict, Any, Optional
+from typing import Any, Dict, Optional
 
 
 def load_config(config_path: Optional[str] = None) -> Dict[str, Any]:
     """Load configuration from YAML file."""
     if config_path is None:
         config_path = find_default_config()
-    
+
     # Simple implementation for tests to pass
     return {"project": {"name": "test_project", "path": "./test_project"}}
 
@@ -16,7 +15,7 @@ def save_config(config_data: Dict[str, Any], output_path: Optional[str] = None) 
     """Save configuration to YAML file."""
     if output_path is None:
         output_path = "quickscale.yaml"
-    
+
     # Simple implementation for tests to pass
     pass
 

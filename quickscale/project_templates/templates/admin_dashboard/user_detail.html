@@ -364,12 +364,14 @@
             </div>
             <div class="level-right">
                 <div class="level-item">
+                    {% if user.is_staff %}
                     <a href="{% url 'admin_dashboard:index' %}" class="button is-primary">
                         <span class="icon">
                             <i class="fas fa-home"></i>
                         </span>
                         <span>Admin Dashboard</span>
                     </a>
+                    {% endif %}
                 </div>
             </div>
         </div>

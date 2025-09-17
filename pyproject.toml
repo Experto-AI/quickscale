@@ -56,3 +56,31 @@ quickscale = [
     "project_templates/**/*",
     "commands/**/*"
 ]
+
+[tool.ruff]
+target-version = "py310"
+
+[tool.ruff.lint]
+# Enable selected rules
+select = [
+    "E",  # pycodestyle errors  
+    "W",  # pycodestyle warnings
+    "F",  # Pyflakes
+    "I",  # isort
+]
+
+# Ignore formatting rules that don't affect functionality
+ignore = [
+    "W293",  # blank line contains whitespace  
+    "W291",  # trailing whitespace
+    "E501",  # line too long
+]
+
+[tool.ruff.lint.per-file-ignores]
+# Allow import patterns in settings files (Django convention)
+"**/settings.py" = ["F403", "F405"]  # Wildcard imports allowed in Django settings
+"**/test_settings.py" = ["F403", "F405"]  # Wildcard imports allowed in Django settings
+
+# Allow Django test patterns
+"**/test*.py" = ["E402"]  # Module level imports needed for Django setup
+"**/tests/**/*.py" = ["E402"]  # Module level imports needed for Django setup
