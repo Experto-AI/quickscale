@@ -1,10 +1,10 @@
 """Tests for validating the .env.example template file."""
 import os
 import re
-from pathlib import Path
-import unittest
-from unittest.mock import patch
 import sys
+import unittest
+from pathlib import Path
+from unittest.mock import patch
 
 # Add the project root to sys.path to access tests module  
 project_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
@@ -64,7 +64,7 @@ def load_env_file_to_environ(env_file_path):
     # If there were any parsing errors, raise an exception
     if parsing_errors:
         error_messages = [f"Line {line_num}: {msg}" for line_num, msg in parsing_errors.items()]
-        raise ValueError(f"Errors parsing environment file:\n" + "\n".join(error_messages))
+        raise ValueError("Errors parsing environment file:\n" + "\n".join(error_messages))
     
     return True
 

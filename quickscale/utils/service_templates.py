@@ -5,8 +5,8 @@ These templates provide the foundation for creating AI services that integrate
 with the QuickScale credit system.
 """
 
-from typing import Dict, Any
 import string
+from typing import Dict
 
 
 class ServiceTemplateGenerator:
@@ -15,11 +15,11 @@ class ServiceTemplateGenerator:
     This class consolidates all service template functions into a single,
     maintainable interface following DRY principles.
     """
-    
+
     def __init__(self):
         """Initialize the ServiceTemplateGenerator."""
         self._template_cache = {}
-    
+
     def get_basic_service_template(self) -> str:
         """Get the basic service template."""
         return """\"\"\"
@@ -444,26 +444,26 @@ def batch_process_images(user, image_files):
 \"\"\"
 """
 
-    def generate_service_file(self, service_name: str, service_type: str = "basic", 
-                             service_description: str = None) -> str:
+    def generate_service_file(self, service_name: str, service_type: str = "basic",
+                             service_description: str = "") -> str:
         """Generate a service file from templates."""
-        
+
         # Convert service name to class name (PascalCase)
         service_class_name = ''.join(word.capitalize() for word in service_name.split('_'))
         if not service_class_name.endswith('Service'):
             service_class_name += 'Service'
-        
+
         # Default description if not provided
         if not service_description:
             service_description = f"AI service: {service_name.replace('_', ' ').title()}"
-        
+
         # Template variables
         template_vars = {
             'service_name': service_name,
             'service_class_name': service_class_name,
             'service_description': service_description
         }
-        
+
         # Get appropriate template
         if service_type == "text_processing":
             template = self.get_text_processing_template()
@@ -471,7 +471,7 @@ def batch_process_images(user, image_files):
             template = self.get_image_processing_template()
         else:
             template = self.get_basic_service_template()
-        
+
         # Substitute variables in template
         return string.Template(template).substitute(template_vars)
 
@@ -619,19 +619,19 @@ quickscale validate-service services/${service_name}.py --tips
         """Validate that a service name is valid for Python and QuickScale."""
         if not service_name:
             return False
-        
+
         # Must be valid Python identifier
         if not service_name.replace('_', '').isalnum():
             return False
-        
+
         # Should use snake_case
         if service_name != service_name.lower():
             return False
-        
+
         # Cannot start with number
         if service_name[0].isdigit():
             return False
-        
+
         return True
 
     def get_template_variables(self) -> Dict[str, str]:

@@ -7,8 +7,8 @@ and that the sync button functionality for Stripe products is properly set up.
 
 import os
 import unittest
-import re
 from pathlib import Path
+
 
 class AdminDashboardTemplateTests(unittest.TestCase):
     """Test cases for admin dashboard templates."""
@@ -125,9 +125,9 @@ class AdminDashboardTemplateTests(unittest.TestCase):
         """Test that the JavaScript fetch call includes the CSRF token."""
         # Get path to the new quickscale template if it exists, otherwise use the old one
         if (self.quickscale_templates_path / 'product_admin.html').exists():
-            template_path = self.quickscale_templates_path / 'product_admin.html'
+            self.quickscale_templates_path / 'product_admin.html'
         else:
-            template_path = self.product_admin_template
+            pass
         
         # This test would check for CSRF token in fetch headers, but 
         # the template doesn't use a fetch call with CSRF token yet.

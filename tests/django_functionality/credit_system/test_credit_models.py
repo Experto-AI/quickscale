@@ -1,16 +1,19 @@
 """Tests for Django credit system models."""
 
-import pytest
-from decimal import Decimal
 from datetime import timedelta
-from django.utils import timezone
+from decimal import Decimal
+
+import pytest
 from django.contrib.auth import get_user_model
+from django.utils import timezone
 
 # Set up Django for testing
-import os
-import sys
-from unittest.mock import patch
-from ..base import DjangoModelTestCase, setup_django_template_path, setup_core_env_utils_mock, setup_django_settings
+from ..base import (
+    DjangoModelTestCase,
+    setup_core_env_utils_mock,
+    setup_django_settings,
+    setup_django_template_path,
+)
 
 # Set up template path and environment
 setup_django_template_path()
@@ -19,11 +22,12 @@ setup_django_settings()
 
 # Import Django and initialize
 import django
+
 django.setup()
 
 # Import the models we're testing
-from credits.models import UserSubscription, CreditAccount, CreditTransaction
-from stripe_manager.models import StripeProduct, StripeCustomer
+from credits.models import CreditAccount, CreditTransaction, UserSubscription
+from stripe_manager.models import StripeCustomer, StripeProduct
 
 User = get_user_model()
 
@@ -68,8 +72,8 @@ class CreditModelTests(DjangoModelTestCase):
         self.assertEqual(subscription.status, 'active')
         self.assertTrue(subscription.is_active)
     
-    def test_subscription_str_representation(self):
-        """Test string representation of subscription."""
+    def test_user_subscription_str_representation(self):
+        """Test string representation of UserSubscription model."""
         subscription = UserSubscription.objects.create(
             user=self.user,
             stripe_subscription_id='sub_test123',

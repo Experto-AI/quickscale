@@ -1,4 +1,6 @@
 """Initial migration for common app."""
+from typing import List
+
 from django.db import migrations
 
 
@@ -7,8 +9,8 @@ class Migration(migrations.Migration):
 
     initial = True
 
-    dependencies = [
+    dependencies: List[str] = [
     ]
 
-    operations = [
-    ] 
+    operations: List = [
+    ]

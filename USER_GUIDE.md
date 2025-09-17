@@ -103,6 +103,24 @@ quickscale show-service-examples
 quickscale manage configure_service my_service --credit-cost 2.0 --description "My AI service"
 ```
 
+### **Application Validation**
+```bash
+# Test application health and page rendering
+quickscale crawl
+
+# Test with admin credentials
+quickscale crawl --admin
+
+# Test custom application URL
+quickscale crawl --url http://localhost:8080
+
+# Detailed validation with all page lists
+quickscale crawl --detailed
+
+# Custom authentication credentials
+quickscale crawl --email test@example.com --password mypassword
+```
+
 ## **3. Default Accounts & Access**
 
 QuickScale creates test accounts automatically for immediate development:

@@ -1,12 +1,13 @@
+from decimal import Decimal
+
 from django import forms
 from django.core.validators import MinValueValidator
 from django.utils.translation import gettext_lazy as _
-from decimal import Decimal
 
 
 class AdminCreditAdjustmentForm(forms.Form):
     """Form for admin credit adjustment operations."""
-    
+
     amount = forms.DecimalField(
         label=_('Amount'),
         max_digits=10,
@@ -20,7 +21,7 @@ class AdminCreditAdjustmentForm(forms.Form):
             'min': '0.01'
         })
     )
-    
+
     reason = forms.CharField(
         label=_('Reason'),
         max_length=255,
@@ -45,4 +46,4 @@ class AdminCreditAdjustmentForm(forms.Form):
         reason = self.cleaned_data.get('reason', '').strip()
         if not reason:
             raise forms.ValidationError(_('Reason is required for credit adjustments.'))
-        return reason 
+        return reason

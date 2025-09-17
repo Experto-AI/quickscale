@@ -1,10 +1,8 @@
 """Tests for the Configuration Singleton."""
 
 import os
-import tempfile
 import unittest
-from unittest.mock import patch, mock_open
-from pathlib import Path
+from unittest.mock import patch
 
 from quickscale.project_templates.core.configuration import ConfigurationManager, config
 
@@ -18,7 +16,7 @@ class TestConfigurationManager(unittest.TestCase):
         ConfigurationManager._instance = None
         ConfigurationManager._initialized = False
     
-    def test_singleton_pattern(self):
+    def test_configuration_singleton_pattern(self):
         """Test that ConfigurationManager is a singleton."""
         config1 = ConfigurationManager()
         config2 = ConfigurationManager()
@@ -242,7 +240,6 @@ class TestConfigurationManager(unittest.TestCase):
     
     def test_global_config_instance(self):
         """Test that global config instance works."""
-        from quickscale.project_templates.core.configuration import config
         
         self.assertIsInstance(config, ConfigurationManager)
         # Test that it's a singleton by getting another reference

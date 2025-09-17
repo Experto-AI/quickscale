@@ -1,11 +1,11 @@
 """Base classes for Django component unit tests."""
 
-import os
 import sys
 from pathlib import Path
 from unittest.mock import MagicMock
-from django.test import TestCase
+
 from django.conf import settings
+from django.test import TestCase
 
 
 def setup_django_template_path():
@@ -81,146 +81,6 @@ def cleanup_core_configuration_mock(original_module):
 
 
 def setup_django_settings():
-    """Set up Django settings for Django functionality tests."""
-    if not settings.configured:
-        # Use PostgreSQL test database configuration
-        db_config = {
-            'ENGINE': 'django.db.backends.postgresql',
-            'NAME': 'quickscale_test',
-            'USER': 'test_user',
-            'PASSWORD': 'test_pass',
-            'HOST': 'localhost',
-            'PORT': '5433',
-            'TEST': {
-                'NAME': 'test_django_functionality',
-            },
-        }
-        
-        # Get paths for templates
-        quickscale_root = Path(__file__).parent.parent.parent
-        project_templates_path = quickscale_root / "quickscale" / "project_templates" / "templates"
-        
-        settings.configure(
-            DEBUG=True,
-            USE_TZ=True,
-            SECRET_KEY="test-key-for-django-functionality-tests",
-            PROJECT_NAME="Test QuickScale Project",
-            STRIPE_SECRET_KEY="sk_test_123",
-            STRIPE_PUBLIC_KEY="pk_test_123",
-            STRIPE_WEBHOOK_SECRET="whsec_test_123",
-            ENABLE_STRIPE=True,
-            DATABASES={"default": db_config},
-            INSTALLED_APPS=[
-                "django.contrib.auth",
-                "django.contrib.contenttypes",
-                "django.contrib.sites",
-                "django.contrib.sessions",
-                "django.contrib.messages",
-                "django.contrib.admin",
-                "allauth",
-                "allauth.account",
-                "allauth.socialaccount",
-                "users",
-                "credits", 
-                "stripe_manager",
-                "admin_dashboard",
-                "common",
-                "public",
-                "services",
-                "api",
-            ],
-            SITE_ID=1,
-            MIDDLEWARE=[
-                'django.middleware.security.SecurityMiddleware',
-                'django.contrib.sessions.middleware.SessionMiddleware',
-                'django.middleware.common.CommonMiddleware',
-                'django.middleware.csrf.CsrfViewMiddleware',
-                'django.contrib.auth.middleware.AuthenticationMiddleware',
-                'django.contrib.messages.middleware.MessageMiddleware',
-            ],
-            AUTH_USER_MODEL='users.CustomUser',
-            ROOT_URLCONF='core.urls',
-            TEMPLATES=[{
-                'BACKEND': 'django.template.backends.django.DjangoTemplates',
-                'DIRS': [str(project_templates_path)],
-                'APP_DIRS': True,
-                'OPTIONS': {
-                    'context_processors': [
-                        'core.context_processors.project_settings',
-                        'django.template.context_processors.debug',
-                        'django.template.context_processors.request',
-                        'django.contrib.auth.context_processors.auth',
-                        'django.contrib.messages.context_processors.messages',
-                    ],
-                },
-            }],
-        )
-
-
-# Import Django test classes
-from django.test import TestCase, Client
-
-
-class DjangoIntegrationTestCase(TestCase):
-    """Base class for Django integration tests."""
-    
-    @classmethod 
-    def setUpClass(cls):
-        """Set up Django environment for integration tests."""
-        super().setUpClass()
-        setup_django_template_path()
-        cls._env_utils_mock, cls._original_env_utils = setup_core_env_utils_mock()
-        setup_django_settings()
-    
-    @classmethod
-    def tearDownClass(cls):
-        """Clean up after integration tests."""
-        cleanup_core_env_utils_mock(cls._original_env_utils)
-        super().tearDownClass()
-    
-    def setUp(self):
-        """Set up test fixtures."""
-        self.client = Client()
-        super().setUp()
-
-
-class PaymentWorkflowTestCase(DjangoIntegrationTestCase):
-    """Base class for payment workflow tests."""
-    
-    def setUp(self):
-        """Set up environment for payment workflow tests."""
-        super().setUp()
-        # Additional payment workflow setup can go here
-
-
-class StripeIntegrationTestCase(DjangoIntegrationTestCase):
-    """Base class for Stripe integration tests."""
-    
-    def setUp(self):
-        """Set up environment with Stripe configuration."""
-        super().setUp()
-        # Additional Stripe-specific setup can go here
-
-
-class CreditSystemIntegrationTestCase(DjangoIntegrationTestCase):
-    """Base class for credit system integration tests."""
-    
-    def setUp(self):
-        """Set up environment with credit system configuration."""
-        super().setUp()
-        # Additional credit system setup can go here
-
-
-def setup_core_env_utils_mock():
-    """Clean up core.env_utils module if it exists."""
-    original_env_utils = None
-    if 'core.env_utils' in sys.modules:
-        original_env_utils = sys.modules['core.env_utils']
-        del sys.modules['core.env_utils']
-    return None, original_env_utils
-
-
-def setup_django_settings():
     """Set up Django settings for template component tests."""
     if not settings.configured:
         # Import PostgreSQL test configuration
@@ -274,6 +134,60 @@ def setup_django_settings():
                 },
             }],
         )
+
+
+# Import Django test classes
+from django.test import Client
+
+
+class DjangoIntegrationTestCase(TestCase):
+    """Base class for Django integration tests."""
+    
+    @classmethod 
+    def setUpClass(cls):
+        """Set up Django environment for integration tests."""
+        super().setUpClass()
+        setup_django_template_path()
+        cls._env_utils_mock, cls._original_env_utils = setup_core_env_utils_mock()
+        setup_django_settings()
+    
+    @classmethod
+    def tearDownClass(cls):
+        """Clean up after integration tests."""
+        cleanup_core_env_utils_mock(cls._original_env_utils)
+        super().tearDownClass()
+    
+    def setUp(self):
+        """Set up test fixtures."""
+        self.client = Client()
+        super().setUp()
+
+
+class PaymentWorkflowTestCase(DjangoIntegrationTestCase):
+    """Base class for payment workflow tests."""
+    
+    def setUp(self):
+        """Set up environment for payment workflow tests."""
+        super().setUp()
+        # Additional payment workflow setup can go here
+
+
+class StripeIntegrationTestCase(DjangoIntegrationTestCase):
+    """Base class for Stripe integration tests."""
+    
+    def setUp(self):
+        """Set up environment with Stripe configuration."""
+        super().setUp()
+        # Additional Stripe-specific setup can go here
+
+
+class CreditSystemIntegrationTestCase(DjangoIntegrationTestCase):
+    """Base class for credit system integration tests."""
+    
+    def setUp(self):
+        """Set up environment with credit system configuration."""
+        super().setUp()
+        # Additional credit system setup can go here
 
 
 class DjangoModelTestCase(TestCase):

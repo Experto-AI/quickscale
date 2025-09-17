@@ -4,12 +4,9 @@ This test validates that QuickScale generates working Stripe integration templat
 including models, admin interface, and views.
 """
 
-import os
-import tempfile
-import shutil
 from pathlib import Path
+
 from django.test import TestCase
-from unittest.mock import patch, MagicMock
 
 from tests.utils import DynamicProjectTestCase
 

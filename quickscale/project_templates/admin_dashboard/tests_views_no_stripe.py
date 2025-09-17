@@ -5,15 +5,14 @@ These tests verify that the dashboard works correctly
 even when STRIPE_ENABLED is set to False.
 """
 
-from unittest.mock import patch
+from django.contrib.auth import get_user_model
 from django.test import TestCase, override_settings
 from django.urls import reverse
-from django.contrib.auth import get_user_model
 
 
 class DashboardWithoutStripeTestCase(TestCase):
     """Test dashboard functionality when Stripe is disabled."""
-    
+
     @classmethod
     def setUpTestData(cls):
         """Set up test data for the test case."""
@@ -23,11 +22,11 @@ class DashboardWithoutStripeTestCase(TestCase):
             password='password123',
             is_active=True
         )
-    
+
     def setUp(self):
         """Set up before each test."""
         self.client.force_login(self.user)
-    
+
     @override_settings(STRIPE_ENABLED=False)
     def test_dashboard_loads_without_stripe(self):
         """Test that the dashboard loads properly without Stripe."""
@@ -36,7 +35,7 @@ class DashboardWithoutStripeTestCase(TestCase):
         self.assertTemplateUsed(response, 'admin_dashboard/index.html')
         # Check that Stripe elements are not in the response
         self.assertNotContains(response, 'stripe-')
-    
+
     @override_settings(STRIPE_ENABLED=False)
     def test_subscription_page_without_stripe(self):
         """Test that the subscription page works properly without Stripe."""

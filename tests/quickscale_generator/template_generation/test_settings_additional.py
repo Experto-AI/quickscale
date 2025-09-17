@@ -1,10 +1,10 @@
+import os
 import unittest
 from unittest.mock import patch
-import os
 
-from quickscale.utils.env_utils import env_manager
-from quickscale.config.settings import validate_production_settings, REQUIRED_VARS
 from quickscale.config.generator_config import generator_config
+from quickscale.config.settings import validate_production_settings
+from quickscale.utils.env_utils import env_manager
 
 
 class TestSettingsAdditional(unittest.TestCase):

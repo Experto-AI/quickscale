@@ -1,11 +1,10 @@
 """Security event logging for authentication events."""
-import logging
 import json
-from django.utils import timezone
+import logging
+from typing import Any, Dict, Optional
+
 from django.http import HttpRequest
-from django.core.exceptions import ValidationError
-from django.db import DatabaseError
-from typing import Optional, Dict, Any
+from django.utils import timezone
 
 
 class SecurityLoggingError(Exception):
@@ -23,22 +22,22 @@ security_logger = logging.getLogger('django.security')
 
 class AuthenticationEventLogger:
     """Class to handle authentication event logging."""
-    
+
     @staticmethod
     def log_security_event(
-        event_type: str, 
-        user_email: str, 
-        request: Optional[HttpRequest] = None, 
+        event_type: str,
+        user_email: str,
+        request: Optional[HttpRequest] = None,
         details: Optional[Dict[str, Any]] = None
     ) -> None:
         """Log security events in JSON format."""
         # Validate required parameters to prevent incomplete security logs
         if not event_type or not isinstance(event_type, str):
             raise SecurityValidationError("event_type must be a non-empty string")
-        
+
         if not user_email or not isinstance(user_email, str):
             raise SecurityValidationError("user_email must be a non-empty string")
-        
+
         try:
             event_data = {
                 'event_type': event_type,
@@ -48,7 +47,7 @@ class AuthenticationEventLogger:
             }
         except (TypeError, ValueError) as e:
             raise SecurityValidationError(f"Invalid security event data: {e}")
-        
+
         if request:
             # Session key tracking enables correlation of security events across user sessions
             # Defensive programming prevents errors when session middleware is not loaded
@@ -58,7 +57,7 @@ class AuthenticationEventLogger:
                     session_key = request.session.session_key
                 elif hasattr(request.session, 'get'):
                     session_key = request.session.get('session_key')
-            
+
             event_data.update({
                 'ip_address': get_client_ip(request),
                 'user_agent': request.META.get('HTTP_USER_AGENT', ''),
@@ -66,7 +65,7 @@ class AuthenticationEventLogger:
                 'method': request.method,
                 'session_key': session_key,
             })
-        
+
         # JSON format enables structured log analysis and SIEM integration for security monitoring
         try:
             json_data = json.dumps(event_data)
@@ -87,12 +86,12 @@ def get_client_ip(request: HttpRequest) -> str:
     if x_forwarded_for:
         # Take the first IP in the chain to get original client IP, not proxy IPs
         return x_forwarded_for.split(',')[0].strip()
-    
+
     # X-Real-IP is an alternative header used by some reverse proxies (like nginx)
     x_real_ip = request.META.get('HTTP_X_REAL_IP')
     if x_real_ip:
         return x_real_ip.strip()
-    
+
     # REMOTE_ADDR is used for direct connections without proxies
     return request.META.get('REMOTE_ADDR', 'unknown')
 
@@ -111,7 +110,7 @@ def log_login_success(user_email: str, request: HttpRequest, user_id: int, is_st
                 'login_method': 'email_password'
             }
         )
-    except (SecurityLoggingError, SecurityValidationError) as e:
+    except (SecurityLoggingError, SecurityValidationError):
         # Re-raise security-specific errors to maintain explicit error handling
         raise
     except Exception as e:
@@ -150,10 +149,10 @@ def log_account_lockout(user_email: str, request: HttpRequest, lockout_duration:
     # Validate critical security parameters to ensure accurate audit trails
     if lockout_duration <= 0:
         raise SecurityValidationError("lockout_duration must be positive")
-    
+
     if failed_attempts <= 0:
         raise SecurityValidationError("failed_attempts must be positive")
-    
+
     try:
         AuthenticationEventLogger.log_security_event(
             event_type='ACCOUNT_LOCKED',
@@ -165,7 +164,7 @@ def log_account_lockout(user_email: str, request: HttpRequest, lockout_duration:
                 'security_action': 'automatic_lockout'
             }
         )
-    except (SecurityLoggingError, SecurityValidationError) as e:
+    except (SecurityLoggingError, SecurityValidationError):
         # Account lockout logging is critical for security audits
         raise
     except Exception as e:
@@ -211,4 +210,4 @@ def log_email_verification(user_email: str, request: HttpRequest, user_id: int, 
             'verification_status': verification_status,
             'security_action': 'email_confirmed'
         }
-    ) 
+    )

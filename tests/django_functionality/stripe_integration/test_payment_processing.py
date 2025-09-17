@@ -7,7 +7,6 @@ including the Payment model, payment views, templates, and related functionality
 
 import os
 import unittest
-import re
 from pathlib import Path
 
 
@@ -175,7 +174,7 @@ class Sprint8PaymentModelTests(unittest.TestCase):
             'from credits.models import Payment',
             'from django.contrib.auth.decorators import login_required',
             'from django.core.paginator import Paginator',
-            'from django.shortcuts import render, get_object_or_404'
+            'from django.shortcuts import get_object_or_404, redirect, render'
         ]
         
         for import_stmt in required_imports:

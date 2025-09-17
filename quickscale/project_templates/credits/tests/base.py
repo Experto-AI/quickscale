@@ -1,5 +1,6 @@
 from django.test import TestCase
 
+
 class DjangoIntegrationTestCase(TestCase):
     """Base class for integration tests in credits app."""
     pass

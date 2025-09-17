@@ -4,18 +4,17 @@ This file consolidates all service command tests following DRY principles.
 Replaces: test_service_commands_comprehensive.py, test_service_commands_complete.py,
 test_service_up_command.py and related duplicates.
 """
-import os
-import pytest
 import subprocess
-import socket
-from unittest.mock import Mock, patch, mock_open
-from pathlib import Path
+from unittest.mock import Mock, mock_open, patch
+
+import pytest
 
 from quickscale.commands.service_commands import (
-    ServiceUpCommand, ServiceDownCommand, ServiceLogsCommand,
-    handle_service_error
+    ServiceDownCommand,
+    ServiceLogsCommand,
+    ServiceUpCommand,
+    handle_service_error,
 )
-from quickscale.utils.error_manager import error_manager
 from tests.base_test_classes import ServiceCommandTestMixin
 
 
@@ -115,7 +114,7 @@ class TestServiceDownCommand(ServiceCommandTestMixin):
 
     @patch('quickscale.commands.service_commands.ProjectManager')
     @patch('subprocess.run')
-    def test_execute_success(self, mock_run, mock_project_manager):
+    def test_execute_service_down_success(self, mock_run, mock_project_manager):
         """Test successful service shutdown."""
         self.assert_service_command_execution(mock_run, mock_project_manager, self.command)
 
@@ -129,7 +128,7 @@ class TestServiceLogsCommand(ServiceCommandTestMixin):
 
     @patch('quickscale.commands.service_commands.ProjectManager')
     @patch('subprocess.run')
-    def test_execute_success(self, mock_run, mock_project_manager):
+    def test_execute_service_logs_success(self, mock_run, mock_project_manager):
         """Test successful logs display."""
         self.assert_service_command_execution(mock_run, mock_project_manager, self.command)
 

@@ -1,13 +1,19 @@
 """Tests for Sprint 14 API documentation features."""
 import unittest
-from unittest.mock import patch, MagicMock
-from django.test import TestCase, RequestFactory
+from unittest.mock import MagicMock, patch
+
 from django.contrib.auth import get_user_model
 from django.http import JsonResponse
+from django.test import RequestFactory, TestCase
+
+from quickscale.project_templates.api.utils import (
+    APIResponse,
+    validate_json_request,
+    validate_required_fields,
+)
 
 # Import the actual API views and utilities
 from quickscale.project_templates.api.views import TextProcessingView
-from quickscale.project_templates.api.utils import APIResponse, validate_json_request, validate_required_fields
 
 User = get_user_model()
 

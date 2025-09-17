@@ -4,6 +4,7 @@ from django.http import HttpRequest, HttpResponse
 from django.shortcuts import render
 from django.views.decorators.http import require_http_methods
 
+
 def index(request: HttpRequest) -> HttpResponse:
     """Display the landing page."""
     return render(request, 'public/index.html')
@@ -19,5 +20,5 @@ def contact(request: HttpRequest) -> HttpResponse:
     if request.method == "POST":
         messages.success(request, 'Thank you for your message! We will get back to you soon.')
         return render(request, 'public/contact.html')
-    
+
     return render(request, 'public/contact.html')

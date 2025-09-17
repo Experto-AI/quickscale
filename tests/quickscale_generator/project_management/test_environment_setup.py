@@ -1,9 +1,7 @@
 """Integration tests for QuickScale init command."""
 import os
-import shutil
-from pathlib import Path
-from unittest.mock import patch, MagicMock
-import pytest
+from unittest.mock import patch
+
 
 class TestInitIntegration:
     """Integration tests for init command."""

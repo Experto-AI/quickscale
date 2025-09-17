@@ -1,7 +1,8 @@
 """Unit tests for env_utils.py module."""
 import os
+from unittest.mock import patch
+
 import pytest
-from unittest.mock import patch, MagicMock
 
 from quickscale.utils.env_utils import EnvironmentManager, env_manager
 

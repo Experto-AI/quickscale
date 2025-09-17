@@ -9,7 +9,6 @@ Alpine.js integration, and service analytics.
 
 import os
 import unittest
-import re
 from pathlib import Path
 
 

@@ -8,10 +8,8 @@ This test validates the template files in quickscale/project_templates/admin_das
 to ensure Sprint 18 features are properly implemented.
 """
 
-import os
 import unittest
 from pathlib import Path
-from unittest.mock import patch, Mock, MagicMock
 
 
 class Sprint18TemplateValidationTests(unittest.TestCase):

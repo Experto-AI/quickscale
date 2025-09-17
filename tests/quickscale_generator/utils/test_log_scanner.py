@@ -1,11 +1,11 @@
 """Unit tests for the log_scanner module."""
-import os
 import tempfile
 from pathlib import Path
-import pytest
-from unittest.mock import patch, MagicMock
+from unittest.mock import MagicMock, patch
 
-from quickscale.utils.log_scanner import LogScanner, LogPattern, LogIssue
+import pytest
+
+from quickscale.utils.log_scanner import LogIssue, LogPattern, LogScanner
 
 
 class TestLogPattern:

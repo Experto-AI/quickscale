@@ -1,11 +1,9 @@
 """Service verification utilities for QuickScale."""
-import subprocess
 import socket
+import subprocess
 import time
 import urllib.request
-import os
 from pathlib import Path
-import json
 
 from quickscale.config.generator_config import generator_config
 
@@ -17,7 +15,7 @@ def _verify_container_status(self=None):
         'db': {'running': False, 'healthy': False},
         'success': False
     }
-    
+
     try:
         # Check if web container is running
         web_check = subprocess.run(
@@ -25,14 +23,14 @@ def _verify_container_status(self=None):
             capture_output=True, text=True, check=False
         )
         result['web']['running'] = web_check.returncode == 0 and bool(web_check.stdout.strip())
-        
+
         # Check if db container is running
         db_check = subprocess.run(
             ['docker-compose', 'ps', '-q', 'db'],
             capture_output=True, text=True, check=False
         )
         result['db']['running'] = db_check.returncode == 0 and bool(db_check.stdout.strip())
-        
+
         # Only check health if containers are running
         if result['web']['running']:
             # Check web container health
@@ -41,7 +39,7 @@ def _verify_container_status(self=None):
                 capture_output=True, text=True, check=False
             )
             result['web']['healthy'] = web_health.returncode == 0 and 'healthy' in web_health.stdout
-        
+
         if result['db']['running']:
             # Check db container health through pg_isready
             db_health = subprocess.run(
@@ -49,14 +47,14 @@ def _verify_container_status(self=None):
                 capture_output=True, text=True, check=False
             )
             result['db']['healthy'] = db_health.returncode == 0 and 'server is running' in db_health.stdout
-        
+
         result['success'] = result['web']['running'] and result['web']['healthy'] and \
                            result['db']['running'] and result['db']['healthy']
-    
+
     except Exception as e:
         # Log error but continue
         print(f"Error checking container status: {str(e)}")
-    
+
     return result
 
 
@@ -69,7 +67,7 @@ def _verify_database_connectivity(project_name, self=None):
         db_user = 'admin'
         db_password = 'adminpasswd'
         db_host = 'db'
-        
+
         if env_file.exists():
             try:
                 with open(env_file, 'r') as f:
@@ -86,7 +84,7 @@ def _verify_database_connectivity(project_name, self=None):
                                 db_host = value.strip('"\'')
             except Exception as e:
                 print(f"Warning: Could not parse .env file: {e}")
-        
+
         # Check database connection using a simple Python script with environment variables
         script = f"""
 import psycopg2
@@ -114,21 +112,21 @@ except Exception as e:
     print(f"Connection error: {{str(e)}}")
     raise SystemExit(1)
 """
-        
+
         # Execute the script with docker-compose
         db_check_cmd = [
             'docker-compose', 'exec', '-T', 'web', 'python', '-c', script
         ]
-        
-        db_check = subprocess.run(db_check_cmd, capture_output=True, text=True, check=True)
-        
+
+        subprocess.run(db_check_cmd, capture_output=True, text=True, check=True)
+
         # Check that migrations have been applied
         migrations_cmd = [
             'docker-compose', 'exec', '-T', 'web', 'python', 'manage.py', 'showmigrations'
         ]
-        
-        migrations_check = subprocess.run(migrations_cmd, capture_output=True, text=True, check=True)
-        
+
+        subprocess.run(migrations_cmd, capture_output=True, text=True, check=True)
+
         # Check that test users have been created
         users_cmd = [
             'docker-compose', 'exec', '-T', 'web', 'python', 'manage.py', 'shell', '-c',
@@ -143,12 +141,12 @@ except Exception as e:
     print(f"Error checking users: {str(e)}")
     """
         ]
-        
-        users_check = subprocess.run(users_cmd, capture_output=True, text=True, check=True)
-        
+
+        subprocess.run(users_cmd, capture_output=True, text=True, check=True)
+
         # Database is connected if all checks pass
         return True
-    
+
     except subprocess.CalledProcessError as e:
         # Database connection failed
         print(f"Database connectivity check failed: {str(e)}")
@@ -166,11 +164,11 @@ def _verify_web_service(self=None):
         'static_files': False,
         'success': False
     }
-    
+
     # Check if web service responds to a socket connection
     sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     sock.settimeout(5)
-    
+
     # Try a few times with small delays
     for _ in range(3):
         try:
@@ -179,9 +177,9 @@ def _verify_web_service(self=None):
             break
         except (ConnectionRefusedError, socket.timeout):
             time.sleep(1)
-    
+
     sock.close()
-    
+
     # Check if static files are served
     if result['responds']:
         try:
@@ -192,8 +190,8 @@ def _verify_web_service(self=None):
         except Exception:
             # Static files might not be ready yet, but that's not critical
             result['static_files'] = False
-    
+
     # Service is considered successful if it responds, regardless of static files
     result['success'] = result['responds']
-    
-    return result 
+
+    return result

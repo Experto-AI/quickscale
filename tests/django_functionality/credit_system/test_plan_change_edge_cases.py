@@ -3,9 +3,8 @@ Template validation tests for plan change edge cases in Sprint 24.
 Tests that plan change functionality and credit transfer logic exist in templates.
 """
 
-import os
-import re
 from pathlib import Path
+
 from django.test import TestCase
 
 

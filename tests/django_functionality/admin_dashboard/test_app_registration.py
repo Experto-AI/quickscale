@@ -2,12 +2,10 @@
 
 """Tests for stripe_manager app registration and template tag discovery."""
 
-import os
-import pytest
-from unittest import mock
 from unittest.mock import patch
+
+from django.template import Context, Template
 from django.test import TestCase, override_settings
-from django.template import Template, Context, TemplateSyntaxError
 
 
 class TestStripeAppRegistration(TestCase):

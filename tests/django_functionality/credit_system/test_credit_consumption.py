@@ -8,7 +8,6 @@ are properly implemented in the QuickScale project generator templates.
 
 import os
 import unittest
-import re
 from pathlib import Path
 
 

@@ -1,14 +1,13 @@
 """Unit tests for service operations in service commands."""
-import os
 import subprocess
-from unittest.mock import patch, MagicMock
-import pytest
+from unittest.mock import patch
 
-from quickscale.commands.service_commands import (
-    ServiceDownCommand, ServiceLogsCommand, ServiceStatusCommand
-)
 from quickscale.commands.project_manager import ProjectManager
-from quickscale.utils.error_manager import error_manager
+from quickscale.commands.service_commands import (
+    ServiceDownCommand,
+    ServiceLogsCommand,
+    ServiceStatusCommand,
+)
 
 
 class TestServiceOperations:

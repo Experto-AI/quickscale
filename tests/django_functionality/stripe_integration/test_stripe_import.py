@@ -1,12 +1,11 @@
 """Test Stripe API package import."""
+from unittest.mock import MagicMock, patch
+
 import pytest
-import sys
-import os
-from unittest.mock import patch, MagicMock
+
 import quickscale.project_templates as templates
 
 # Import centralized test utilities (DRY principle)
-from tests.test_utilities import TestUtilities
 
 if not hasattr(templates, 'stripe_manager'):
     pytest.skip('Skipping stripe tests as quickscale.project_templates.stripe_manager not available', allow_module_level=True)
@@ -26,7 +25,9 @@ def test_custom_stripe_app_import(mock_is_feature_enabled, mock_get_env):
     """Verify that our custom stripe app can be imported."""
     try:
         # Import from the specific template path rather than relying on Python package importing
-        from quickscale.project_templates.stripe_manager.stripe_manager import StripeManager
+        from quickscale.project_templates.stripe_manager.stripe_manager import (
+            StripeManager,
+        )
         assert StripeManager is not None
     except ImportError as e:
         pytest.fail(f"Failed to import StripeManager: {str(e)}")
@@ -60,7 +61,9 @@ def test_stripe_manager_init(mock_is_feature_enabled, mock_get_env):
 
             try:
                 # Import from the specific template path rather than relying on Python package importing
-                from quickscale.project_templates.stripe_manager.stripe_manager import StripeManager
+                from quickscale.project_templates.stripe_manager.stripe_manager import (
+                    StripeManager,
+                )
                 manager = StripeManager.get_instance()
                 assert manager is not None
             except Exception as e:

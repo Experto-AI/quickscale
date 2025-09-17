@@ -2,9 +2,8 @@
 Unit tests for navigation bar rendering and link visibility.
 Covers public, authenticated, and admin user navigation.
 """
-from django.test import TestCase, Client
-from django.urls import reverse
 from django.contrib.auth import get_user_model
+from django.test import Client, TestCase
 
 User = get_user_model()
 

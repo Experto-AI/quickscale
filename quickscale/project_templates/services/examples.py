@@ -12,14 +12,19 @@ These examples show common patterns for AI services including:
 - Performance optimization techniques
 """
 
-import time
 import json
-from typing import Dict, Any, List, Optional, Union
-from decimal import Decimal
+import time
+from typing import TYPE_CHECKING, Any, Dict, Optional, Union
+
+from django.contrib.auth import get_user_model
 
 from .base import BaseService
 from .decorators import register_service
-from django.contrib.auth import get_user_model
+
+if TYPE_CHECKING:
+    from django.contrib.auth.models import AbstractUser
+else:
+    AbstractUser = object
 
 User = get_user_model()
 
@@ -27,36 +32,36 @@ User = get_user_model()
 @register_service("text_sentiment_analysis")
 class TextSentimentAnalysisService(BaseService):
     """Advanced text sentiment analysis service with keyword-based scoring."""
-    
-    def execute_service(self, user: User, text: str = "", **kwargs) -> Dict[str, Any]:
+
+    def execute_service(self, user: 'AbstractUser', text: str = "", **kwargs) -> Dict[str, Any]:
         """Analyze sentiment of text using keyword matching and scoring."""
         if not text or not text.strip():
             raise ValueError("Text input is required and cannot be empty")
-        
+
         # Simple sentiment analysis using keyword matching
         positive_words = {
-            'excellent', 'amazing', 'wonderful', 'fantastic', 'great', 'good', 'love', 
+            'excellent', 'amazing', 'wonderful', 'fantastic', 'great', 'good', 'love',
             'awesome', 'brilliant', 'perfect', 'outstanding', 'superb', 'happy', 'pleased'
         }
         negative_words = {
             'terrible', 'awful', 'horrible', 'bad', 'hate', 'disappointing', 'worst',
             'useless', 'frustrating', 'annoying', 'poor', 'sad', 'angry', 'disappointed'
         }
-        
+
         # Preprocessing
         words = text.lower().split()
         total_words = len(words)
-        
+
         # Count sentiment words
         positive_count = sum(1 for word in words if word in positive_words)
         negative_count = sum(1 for word in words if word in negative_words)
-        
+
         # Calculate sentiment score (-1 to 1)
         if total_words > 0:
             sentiment_score = (positive_count - negative_count) / total_words
         else:
             sentiment_score = 0.0
-        
+
         # Determine sentiment label
         if sentiment_score > 0.1:
             sentiment_label = "positive"
@@ -64,11 +69,11 @@ class TextSentimentAnalysisService(BaseService):
             sentiment_label = "negative"
         else:
             sentiment_label = "neutral"
-        
+
         # Calculate confidence based on sentiment word density
         sentiment_word_density = (positive_count + negative_count) / max(total_words, 1)
         confidence = min(0.9, max(0.3, sentiment_word_density * 2))
-        
+
         return {
             'sentiment': {
                 'label': sentiment_label,
@@ -93,39 +98,39 @@ class TextSentimentAnalysisService(BaseService):
 @register_service("text_keyword_extractor")
 class TextKeywordExtractorService(BaseService):
     """Service to extract important keywords from text."""
-    
-    def execute_service(self, user: User, text: str = "", max_keywords: int = 10, **kwargs) -> Dict[str, Any]:
+
+    def execute_service(self, user: 'AbstractUser', text: str = "", max_keywords: int = 10, **kwargs) -> Dict[str, Any]:
         """Extract keywords from text using frequency analysis."""
         if not text or not text.strip():
             raise ValueError("Text input is required and cannot be empty")
-        
+
         # Common stop words to filter out
         stop_words = {
-            'the', 'a', 'an', 'and', 'or', 'but', 'in', 'on', 'at', 'to', 'for', 'of', 
-            'with', 'by', 'from', 'up', 'about', 'into', 'through', 'during', 'before', 
-            'after', 'above', 'below', 'between', 'among', 'throughout', 'despite', 
-            'towards', 'upon', 'concerning', 'is', 'are', 'was', 'were', 'be', 'been', 
-            'being', 'have', 'has', 'had', 'do', 'does', 'did', 'will', 'would', 'could', 
-            'should', 'may', 'might', 'must', 'shall', 'can', 'this', 'that', 'these', 
-            'those', 'i', 'you', 'he', 'she', 'it', 'we', 'they', 'me', 'him', 'her', 
+            'the', 'a', 'an', 'and', 'or', 'but', 'in', 'on', 'at', 'to', 'for', 'of',
+            'with', 'by', 'from', 'up', 'about', 'into', 'through', 'during', 'before',
+            'after', 'above', 'below', 'between', 'among', 'throughout', 'despite',
+            'towards', 'upon', 'concerning', 'is', 'are', 'was', 'were', 'be', 'been',
+            'being', 'have', 'has', 'had', 'do', 'does', 'did', 'will', 'would', 'could',
+            'should', 'may', 'might', 'must', 'shall', 'can', 'this', 'that', 'these',
+            'those', 'i', 'you', 'he', 'she', 'it', 'we', 'they', 'me', 'him', 'her',
             'us', 'them', 'my', 'your', 'his', 'its', 'our', 'their'
         }
-        
+
         # Process text
         words = text.lower().replace('.', '').replace(',', '').replace('!', '').replace('?', '').split()
-        
+
         # Filter words
         filtered_words = [word for word in words if word not in stop_words and len(word) > 2]
-        
+
         # Count word frequencies
-        word_freq = {}
+        word_freq: Dict[str, int] = {}
         for word in filtered_words:
             word_freq[word] = word_freq.get(word, 0) + 1
-        
+
         # Sort by frequency and get top keywords
         sorted_keywords = sorted(word_freq.items(), key=lambda x: x[1], reverse=True)
         top_keywords = sorted_keywords[:max_keywords]
-        
+
         return {
             'keywords': [
                 {
@@ -154,15 +159,15 @@ class TextKeywordExtractorService(BaseService):
 @register_service("image_metadata_extractor")
 class ImageMetadataExtractorService(BaseService):
     """Service to extract metadata from image data."""
-    
-    def execute_service(self, user: User, image_data: Union[str, bytes] = None, **kwargs) -> Dict[str, Any]:
+
+    def execute_service(self, user: 'AbstractUser', image_data: Optional[Union[str, bytes]] = None, **kwargs) -> Dict[str, Any]:
         """Extract basic metadata from image data."""
         if not image_data:
             raise ValueError("Image data is required for processing")
-        
+
         # Simulate image processing
         start_time = time.time()
-        
+
         # Basic analysis based on data size and format hints
         if isinstance(image_data, str):
             # Assume base64 encoded or file path
@@ -183,7 +188,7 @@ class ImageMetadataExtractorService(BaseService):
                 format_hint = 'gif'
             else:
                 format_hint = 'unknown'
-        
+
         # Estimate dimensions based on file size (very rough estimation)
         if data_size < 50000:  # < 50KB
             estimated_size = 'small'
@@ -194,9 +199,9 @@ class ImageMetadataExtractorService(BaseService):
         else:
             estimated_size = 'large'
             estimated_dimensions = '1920x1080'
-        
+
         processing_time = round((time.time() - start_time) * 1000, 2)
-        
+
         return {
             'metadata': {
                 'format': format_hint,
@@ -204,18 +209,16 @@ class ImageMetadataExtractorService(BaseService):
                 'estimated_size_category': estimated_size,
                 'estimated_dimensions': estimated_dimensions,
                 'color_space': 'RGB',  # Default assumption
+                'service_name': 'image_metadata_extractor',
+                'processing_time_ms': processing_time,
+                'algorithm': 'header_analysis',
+                'version': '1.0'
             },
             'analysis': {
                 'compression_ratio': 'unknown',
                 'quality_estimate': 'medium',
                 'has_transparency': format_hint in ['png', 'gif'],
                 'is_animated': format_hint == 'gif'
-            },
-            'metadata': {
-                'service_name': 'image_metadata_extractor',
-                'processing_time_ms': processing_time,
-                'algorithm': 'header_analysis',
-                'version': '1.0'
             }
         }
 
@@ -223,19 +226,19 @@ class ImageMetadataExtractorService(BaseService):
 @register_service("data_validator")
 class DataValidatorService(BaseService):
     """Service to validate and clean various types of data."""
-    
-    def execute_service(self, user: User, data: Any = None, data_type: str = "text", **kwargs) -> Dict[str, Any]:
+
+    def execute_service(self, user: 'AbstractUser', data: Any = None, data_type: str = "text", **kwargs) -> Dict[str, Any]:
         """Validate and analyze data quality."""
         if data is None:
             raise ValueError("Data input is required")
-        
+
         validation_result = {
             'is_valid': True,
             'issues': [],
             'suggestions': [],
             'data_quality_score': 1.0
         }
-        
+
         if data_type == "text":
             validation_result.update(self._validate_text_data(data))
         elif data_type == "email":
@@ -244,7 +247,7 @@ class DataValidatorService(BaseService):
             validation_result.update(self._validate_json_data(data))
         else:
             validation_result.update(self._validate_generic_data(data))
-        
+
         return {
             'validation': validation_result,
             'data_info': {
@@ -259,13 +262,13 @@ class DataValidatorService(BaseService):
                 'version': '1.0'
             }
         }
-    
+
     def _validate_text_data(self, text: str) -> Dict[str, Any]:
         """Validate text data."""
         issues = []
-        suggestions = []
+        suggestions: list[str] = []
         quality_score = 1.0
-        
+
         if not isinstance(text, str):
             issues.append("Data is not a string")
             quality_score -= 0.5
@@ -273,30 +276,30 @@ class DataValidatorService(BaseService):
             if len(text.strip()) == 0:
                 issues.append("Text is empty or contains only whitespace")
                 quality_score -= 0.3
-            
+
             if len(text) > 10000:
                 suggestions.append("Text is very long, consider chunking for better processing")
-            
+
             # Check for common encoding issues
             try:
                 text.encode('utf-8')
             except UnicodeEncodeError:
                 issues.append("Text contains invalid Unicode characters")
                 quality_score -= 0.2
-        
+
         return {
             'is_valid': len(issues) == 0,
             'issues': issues,
             'suggestions': suggestions,
             'data_quality_score': max(0.0, quality_score)
         }
-    
+
     def _validate_email_data(self, email: str) -> Dict[str, Any]:
         """Validate email format."""
         issues = []
-        suggestions = []
+        suggestions: list[str] = []
         quality_score = 1.0
-        
+
         if not isinstance(email, str):
             issues.append("Email must be a string")
             quality_score -= 0.5
@@ -308,24 +311,24 @@ class DataValidatorService(BaseService):
             elif email.count('@') > 1:
                 issues.append("Email contains multiple @ symbols")
                 quality_score -= 0.3
-            
+
             if '.' not in email.split('@')[-1] if '@' in email else False:
                 issues.append("Email domain must contain a dot")
                 quality_score -= 0.3
-        
+
         return {
             'is_valid': len(issues) == 0,
             'issues': issues,
             'suggestions': suggestions,
             'data_quality_score': max(0.0, quality_score)
         }
-    
+
     def _validate_json_data(self, data: str) -> Dict[str, Any]:
         """Validate JSON format."""
         issues = []
-        suggestions = []
+        suggestions: list[str] = []
         quality_score = 1.0
-        
+
         try:
             parsed = json.loads(data)
             if len(str(parsed)) > 100000:
@@ -336,14 +339,14 @@ class DataValidatorService(BaseService):
         except TypeError:
             issues.append("Data is not JSON serializable")
             quality_score -= 0.5
-        
+
         return {
             'is_valid': len(issues) == 0,
             'issues': issues,
             'suggestions': suggestions,
             'data_quality_score': max(0.0, quality_score)
         }
-    
+
     def _validate_generic_data(self, data: Any) -> Dict[str, Any]:
         """Generic data validation."""
         return {
@@ -519,21 +522,21 @@ def monitored_service_call(user, service_name: str, **kwargs):
 @register_service("demo_free_service")
 class DemoFreeService(BaseService):
     """Free demonstration service showing zero-cost AI operations."""
-    
-    def execute_service(self, user: User, message: str = "Hello, World!", **kwargs) -> Dict[str, Any]:
+
+    def execute_service(self, user: 'AbstractUser', message: str = "Hello, World!", **kwargs) -> Dict[str, Any]:
         """Demonstrate a free service that doesn't consume credits."""
         if not message or not message.strip():
             message = "Hello, World!"
-        
+
         # Simple demonstration processing
         processed_message = message.strip().title()
         word_count = len(message.split())
         char_count = len(message)
-        
+
         # Simulate some processing time
         import time
         time.sleep(0.1)  # Brief delay to simulate processing
-        
+
         return {
             'result': {
                 'original_message': message,

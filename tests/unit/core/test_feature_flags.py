@@ -6,12 +6,13 @@ gating of complex features in beta mode.
 """
 
 import os
-import pytest
 from unittest.mock import patch
+
+import pytest
 
 from quickscale.project_templates.core.feature_flags import (
     FeatureFlags,
-    feature_flags, # singleton of FeatureFlags
+    feature_flags,  # singleton of FeatureFlags
 )
 
 
@@ -148,23 +149,23 @@ class TestRequiresFeatureFlagDecorator:
     def test_decorator_with_enabled_flag(self):
         """Test decorator with an enabled feature flag."""
         @feature_flags.requires_feature_flag('ENABLE_BASIC_AUTH')
-        def test_view(request):
+        def enabled_flag_view(request):
             return "Success"
         
         # Should execute without error
-        result = test_view(None)
+        result = enabled_flag_view(None)
         assert result == "Success"
 
     def test_decorator_with_disabled_flag(self):
         """Test decorator with a disabled feature flag."""
         @feature_flags.requires_feature_flag('ENABLE_STRIPE')
-        def test_view(request):
+        def disabled_flag_view(request):
             return "Success"
         
         # Should raise Http404
         from django.http import Http404
         with pytest.raises(Http404, match="Feature 'ENABLE_STRIPE' is not available"):
-            test_view(None)
+            disabled_flag_view(None)
 
 
 class TestBetaModeValidation:

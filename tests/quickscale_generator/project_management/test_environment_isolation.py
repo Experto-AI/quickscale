@@ -1,8 +1,7 @@
 import os
-import unittest
-from unittest.mock import patch, MagicMock
-import re
 import sys
+import unittest
+from unittest.mock import patch
 
 # Add the project root to sys.path to access tests module
 project_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
@@ -69,7 +68,7 @@ DB_PASSWORD=replace-with-secure-password
         ]
         
         # Parse both files
-        env_vars = load_env_file('.env')
+        load_env_file('.env')
         example_vars = load_env_file('.env.example')
         
         # Test that example file marks variables that need replacement
@@ -149,7 +148,7 @@ DB_PASSWORD=replace-with-secure-password
         
         # In development mode, validation should not raise any errors
         try:
-            result = validate_test_settings()
+            validate_test_settings()
             # If we get here, no error was raised - which is good for development mode
             validation_passed = True
         except ValueError:

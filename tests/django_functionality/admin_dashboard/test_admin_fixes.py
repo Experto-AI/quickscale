@@ -8,12 +8,9 @@ are properly resolved:
 """
 
 import os
-import unittest
 import re
+import unittest
 from pathlib import Path
-from unittest.mock import Mock, patch, MagicMock
-import tempfile
-import shutil
 
 
 class ServiceUsageAnalyticsTemplateFixTests(unittest.TestCase):
@@ -92,7 +89,7 @@ class ServiceUsageAnalyticsTemplateFixTests(unittest.TestCase):
             template_content = f.read()
         
         # Look for all URL tags
-        url_patterns = re.findall(r"{% url '[^']+' [^%]+ %}", template_content)
+        re.findall(r"{% url '[^']+' [^%]+ %}", template_content)
         
         # Verify known working patterns
         expected_patterns = [
@@ -292,39 +289,6 @@ class ServiceManagementIntegrationTests(unittest.TestCase):
         self.assertIn("'user', 'credit_transaction'", views_content,
                      "View should include user and credit_transaction relations")
 
-
-class TextProcessingServiceMigrationTests(unittest.TestCase):
-    """Test cases for Text Processing service creation and management."""
-    
-    def setUp(self):
-        """Set up test environment."""
-        self.base_path = Path(os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(__file__)))))
-        self.migration_file = (self.base_path / 'quickscale' / 'project_templates' / 'credits' / 
-                             'migrations' / '0007_add_text_processing_service.py')
-    
-    @unittest.skip("Text Processing service migration does not exist - feature was not implemented")
-    def test_text_processing_service_migration_exists(self):
-        """Test that the Text Processing service migration exists."""
-        self.assertTrue(self.migration_file.exists(),
-                       "Text Processing service migration should exist")
-    
-    @unittest.skip("Text Processing service migration does not exist - feature was not implemented")
-    def test_text_processing_service_migration_content(self):
-        """Test that migration properly creates Text Processing service."""
-        with open(self.migration_file, 'r') as f:
-            migration_content = f.read()
-        
-        # Check for service creation
-        self.assertIn("name='Text Processing'", migration_content,
-                     "Migration should create Text Processing service")
-        self.assertIn("credit_cost': Decimal('1.00')", migration_content,
-                     "Migration should set correct credit cost")
-        self.assertIn("'is_active': True", migration_content,
-                     "Migration should set service as active")
-        
-        # Check for proper description
-        self.assertIn("AI-powered text processing service", migration_content,
-                     "Migration should set proper service description")
 
 
 class RegressionTests(unittest.TestCase):

@@ -1,14 +1,10 @@
 """End-to-end test for QuickScale init and up commands with .env file loading verification."""
-import os
-import subprocess
-import time
-import pytest
-import re
 import logging
-from pathlib import Path
+import os
 
-from quickscale.utils.env_utils import env_manager
-import tests.utils.utils as test_utils
+import pytest
+
+from tests import utils as test_utils
 
 # Configure logger
 logger = logging.getLogger(__name__)

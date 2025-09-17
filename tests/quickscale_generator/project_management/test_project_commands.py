@@ -1,18 +1,13 @@
 """Unit tests for project commands."""
-import os
-import sys
-import shutil
-import socket
-import secrets
-from pathlib import Path
-from unittest.mock import patch, MagicMock, mock_open
-import pytest
 import subprocess
+from pathlib import Path
+from unittest.mock import MagicMock, patch
 
-from quickscale.commands.project_commands import DestroyProjectCommand
-from quickscale.commands.init_command import InitCommand
+import pytest
+
 from quickscale.commands.command_utils import copy_with_vars, find_available_port
-from quickscale.commands.system_commands import CheckCommand
+from quickscale.commands.init_command import InitCommand
+from quickscale.commands.project_commands import DestroyProjectCommand
 
 
 @pytest.fixture
@@ -79,7 +74,7 @@ def test_init_command_project_creation(mock_init_command, tmp_path, monkeypatch)
     # Change to temp directory and test
     with monkeypatch.context() as m:
         m.chdir(tmp_path)
-        result = mock_init_command.execute("test_project")
+        mock_init_command.execute("test_project")
         
         # Verify validation was called
         mock_init_command.validate_project_name.assert_called_once_with("test_project")
@@ -135,7 +130,6 @@ def test_copy_with_vars_function(tmp_path):
 def test_find_available_port_function(mock_socket):
     """Test the find_available_port function use within project commands module."""
     # Import the function that's actually used in project commands
-    from quickscale.commands.command_utils import find_available_port
     
     # Setup minimal test to verify it's properly imported and functioning
     socket_instance = MagicMock()
@@ -176,7 +170,7 @@ def test_destroy_project_command(mock_destroy_command, tmp_path, monkeypatch):
         with patch('quickscale.commands.project_commands.ProjectManager') as mock_pm:
             # Setup project state
             mock_pm.get_project_state.return_value = project_state
-            with patch('shutil.rmtree') as mock_rmtree:
+            with patch('shutil.rmtree'):
                 # Default: should NOT delete images
                 result = mock_destroy_command.execute()
                 mock_pm.get_project_state.assert_called()

@@ -1,10 +1,10 @@
 """Tests for CLI configuration handling."""
-import os
-import pytest
 from pathlib import Path
-from unittest.mock import patch, mock_open
+from unittest.mock import mock_open, patch
+
 from quickscale.cli import main
 from quickscale.config import config_manager
+
 
 class TestCLIConfig:
     """Test cases for CLI configuration handling."""

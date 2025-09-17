@@ -46,7 +46,7 @@ class DefaultServicesTests(unittest.TestCase):
                      "demo_free_service should be registered")
         self.assertIn("class DemoFreeService(BaseService)", examples_content,
                      "DemoFreeService class should exist")
-        self.assertIn("def execute_service(self, user: User, message:", examples_content,
+        self.assertIn("def execute_service(self, user: 'AbstractUser', message:", examples_content,
                      "DemoFreeService should have execute_service method")
     
     def test_demo_free_service_returns_proper_structure(self):

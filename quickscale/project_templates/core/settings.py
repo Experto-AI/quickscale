@@ -1,28 +1,27 @@
 """ Django settings for core project. """
 
-print("DEBUG: Starting settings.py import...")
-
-import os
 import logging
+import os
 from pathlib import Path
 
-print("DEBUG: Basic imports successful...")
-
-import dj_database_url
 from django.core.exceptions import ImproperlyConfigured
-
-print("DEBUG: Django imports successful...")
 
 # Configuration Singleton - single .env read and processing
 from .configuration import config
-
-print("DEBUG: Configuration import successful...")
 
 # Include email settings
 from .email_settings import *
 
 # Import centralized logging configuration
-from .logging_settings import LOGGING
+from .logging_settings import get_logging_config
+
+# Import security settings
+from .security_settings import *
+
+# Set up basic logging for settings initialization
+logger = logging.getLogger('django.settings')
+logger.info("Starting Django settings configuration")
+logger.info("Configuration singleton loaded successfully")
 
 # Core Django Settings
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -35,9 +34,6 @@ SECRET_KEY: str = config.get_env('SECRET_KEY', 'dev-only-dummy-key-replace-in-pr
 IS_PRODUCTION: bool = config.get_env_bool('IS_PRODUCTION', False)
 DEBUG: bool = not IS_PRODUCTION
 ALLOWED_HOSTS: list[str] = config.get_env('ALLOWED_HOSTS', '*').split(',')
-
-# Import security settings
-from .security_settings import *
 
 # Two-Factor Authentication Settings (preparation)
 TWO_FACTOR_AUTH_ENABLED = config.feature_flags.enable_two_factor_auth
@@ -55,13 +51,13 @@ if IS_PRODUCTION:
             raise ValueError(f"Stripe configuration invalid: {config.stripe.error_message}")
         if not config.is_email_configured():
             raise ValueError(f"Email configuration invalid: {config.email.error_message}")
-        
+
         # Additional production validations
         if SECRET_KEY == 'dev-only-dummy-key-replace-in-production':
             raise ValueError("Production requires a secure SECRET_KEY")
         if '*' in ALLOWED_HOSTS:
             raise ValueError("Production requires specific ALLOWED_HOSTS")
-        
+
     except Exception as e:
         # In production, fail hard on validation errors
         raise ValueError(f"Production settings validation failed: {e}")
@@ -73,6 +69,7 @@ else:
             logging.warning(f"Configuration warning for {service}: {error}")
 
 # Logging configuration is now handled in logging_settings.py
+LOGGING = get_logging_config(debug=DEBUG, log_level=config.get_env('LOG_LEVEL', 'INFO'))
 
 # Application Configuration
 INSTALLED_APPS = [
@@ -83,12 +80,12 @@ INSTALLED_APPS = [
     'django.contrib.messages',
     'django.contrib.staticfiles',
     'django.contrib.sites',
-    
+
     # Third-party apps
     'whitenoise.runserver_nostatic',
     'allauth',
     'allauth.account',  # Email authentication
-    
+
     # Core apps (always included)
     'public.apps.PublicConfig',
     'users.apps.UsersConfig',
@@ -193,28 +190,28 @@ TEMPLATES = [
 ]
 
 # Database Configuration using configuration singleton
-# Debug: print configuration state
-print(f"DEBUG: Database configured: {config.is_database_configured()}")
-print(f"DEBUG: Database name: '{config.database.name}'")
-print(f"DEBUG: Database user: '{config.database.user}'")
-print(f"DEBUG: Database host: '{config.database.host}'")
-print(f"DEBUG: Database port: {config.database.port}")
+logger.info("Configuring database settings")
+logger.debug(f"Database configured: {config.is_database_configured()}")
+logger.debug(f"Database name: '{config.database.name}'")
+logger.debug(f"Database user: '{config.database.user}'")
+logger.debug(f"Database host: '{config.database.host}'")
+logger.debug(f"Database port: {config.database.port}")
 
-# Temporarily disable validation to test if it's causing the issue
-# if not config.is_database_configured():
-#     error_msg = f"Database configuration error: {config.database.error_message}"
-#     print(f"CRITICAL DATABASE ERROR: {error_msg}")
-#     if config.get_env('LOG_LEVEL', 'INFO').upper() == 'DEBUG':
-#         print("Available environment variables:")
-#         db_vars = {k: v for k, v in os.environ.items() if k.startswith('DB_')}
-#         for k, v in db_vars.items():
-#             if 'PASSWORD' in k:
-#                 print(f"  {k}: {'***' if v else 'NOT SET'}")
-#             else:
-#                 print(f"  {k}: {v}")
-#     raise ImproperlyConfigured(error_msg)
+# Validate database configuration
+if not config.is_database_configured():
+    error_msg = f"Database configuration error: {config.database.error_message}"
+    logger.critical(f"Database configuration failed: {error_msg}")
+    if config.get_env('LOG_LEVEL', 'INFO').upper() == 'DEBUG':
+        logger.debug("Available database environment variables:")
+        db_vars = {k: v for k, v in os.environ.items() if k.startswith('DB_')}
+        for k, v in db_vars.items():
+            if 'PASSWORD' in k:
+                logger.debug(f"  {k}: {'***' if v else 'NOT SET'}")
+            else:
+                logger.debug(f"  {k}: {v}")
+    raise ImproperlyConfigured(error_msg)
 
-print("DEBUG: Creating DATABASES dictionary...")
+logger.debug("Creating Django DATABASES configuration")
 DATABASES = {
     'default': {
         'ENGINE': 'django.db.backends.postgresql',
@@ -225,16 +222,16 @@ DATABASES = {
         'PORT': config.database.port,
     }
 }
-print(f"DEBUG: DATABASES created: {DATABASES}")
+logger.debug("DATABASES configuration created successfully")
 
 # Log database connection information for debugging
 if config.get_env('LOG_LEVEL', 'INFO').upper() == 'DEBUG':
-    print("Database connection settings:")
-    print(f"NAME: {DATABASES['default']['NAME']}")
-    print(f"USER: {DATABASES['default']['USER']}")
-    print(f"HOST: {DATABASES['default']['HOST']}")
-    print(f"PORT: {DATABASES['default']['PORT']}")
-    print(f"DATABASE_URL: {config.get_env('DATABASE_URL', 'Not set')}")
+    logger.debug("Database connection settings configured:")
+    logger.debug(f"NAME: {DATABASES['default']['NAME']}")
+    logger.debug(f"USER: {DATABASES['default']['USER']}")
+    logger.debug(f"HOST: {DATABASES['default']['HOST']}")
+    logger.debug(f"PORT: {DATABASES['default']['PORT']}")
+    logger.debug(f"DATABASE_URL: {config.get_env('DATABASE_URL', 'Not set')}")
 
 # Custom User Model
 AUTH_USER_MODEL = 'users.CustomUser'
@@ -257,9 +254,10 @@ LOGOUT_REDIRECT_URL = '/'
 # Django Debug Toolbar - feature flagged using configuration singleton
 if DEBUG and config.feature_flags.enable_debug_toolbar:
     try:
-        import debug_toolbar
-        INSTALLED_APPS.append('debug_toolbar')
-        MIDDLEWARE.insert(0, 'debug_toolbar.middleware.DebugToolbarMiddleware')
-        INTERNAL_IPS = ['127.0.0.1']
+        import importlib.util
+        if importlib.util.find_spec('debug_toolbar'):
+            INSTALLED_APPS.append('debug_toolbar')
+            MIDDLEWARE.insert(0, 'debug_toolbar.middleware.DebugToolbarMiddleware')
+            INTERNAL_IPS = ['127.0.0.1']
     except ImportError:
         pass

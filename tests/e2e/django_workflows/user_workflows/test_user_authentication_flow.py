@@ -1,12 +1,17 @@
 """End-to-end tests for user authentication workflows."""
 
 import pytest
+from django.contrib.auth import get_user_model
 from django.test import Client, override_settings
 from django.urls import reverse
-from django.contrib.auth import get_user_model
 
 # Set up Django for testing
-from ..base import UserWorkflowTestCase, setup_django_template_path, setup_core_env_utils_mock, setup_django_settings
+from ..base import (
+    UserWorkflowTestCase,
+    setup_core_env_utils_mock,
+    setup_django_settings,
+    setup_django_template_path,
+)
 
 # Set up template path and environment
 setup_django_template_path()
@@ -15,6 +20,7 @@ setup_django_settings()
 
 # Import Django and initialize
 import django
+
 django.setup()
 
 # Import the modules we're testing
@@ -129,7 +135,6 @@ class UserAuthenticationWorkflowTests(UserWorkflowTestCase):
     @override_settings(ACCOUNT_LOCKOUT_MAX_ATTEMPTS=5, ACCOUNT_LOCKOUT_DURATION=300)
     def test_failed_login_account_lockout_workflow(self):
         """Test complete account lockout workflow after multiple failed login attempts."""
-        from users.models import AccountLockout
         
         client = Client()
         
@@ -262,9 +267,3 @@ class UserProfileWorkflowTests(UserWorkflowTestCase):
         # This needs further investigation to resolve the form/view interaction
         import pytest
         pytest.skip("Profile update test skipped due to form validation issues")
-        
-        # Step 5: View updated profile
-        profile_response = client.get(reverse('users:profile'))
-        self.assertEqual(profile_response.status_code, 200)
-        self.assertContains(profile_response, 'John')
-        self.assertContains(profile_response, 'Doe')

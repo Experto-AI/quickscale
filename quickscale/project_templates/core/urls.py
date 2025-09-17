@@ -1,22 +1,22 @@
 """Core URL Configuration for QuickScale."""
-from django.contrib import admin
-from django.urls import path, include
 from django.conf import settings
 from django.conf.urls.static import static
+from django.contrib import admin
 from django.http import HttpResponse
 from django.shortcuts import render
+from django.urls import include, path
 from django.views.decorators.csrf import ensure_csrf_cookie
-import os
+
 from .configuration import config
-from django.views.generic import RedirectView
+
 
 # Simple health check view for Docker healthcheck
-def health_check(request):
+def health_check(request) -> HttpResponse:
     """A simple health check endpoint for container monitoring."""
     return HttpResponse("OK", content_type="text/plain")
 
 @ensure_csrf_cookie
-def admin_test(request):
+def admin_test(request) -> HttpResponse:
     """A test page for checking admin CSRF functionality."""
     return render(request, 'admin_test.html', {
         'settings': settings,

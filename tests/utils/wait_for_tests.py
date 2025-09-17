@@ -4,11 +4,12 @@ Utility script to help with testing Docker container readiness.
 This script makes several attempts to connect to the web service and provides detailed debugging
 information if the connection fails.
 """
-import socket
-import time
-import sys
-import subprocess
 import argparse
+import socket
+import subprocess
+import sys
+import time
+
 
 def is_port_open(host, port, timeout=5):
     """Check if a port is open on the given host."""

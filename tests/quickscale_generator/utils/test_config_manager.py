@@ -2,10 +2,14 @@
 import os
 import tempfile
 import unittest
-from unittest.mock import patch, mock_open
 from pathlib import Path
+from unittest.mock import patch
+
 from quickscale.config.config_manager import (
-    load_config, save_config, validate_config, find_default_config
+    find_default_config,
+    load_config,
+    save_config,
+    validate_config,
 )
 
 

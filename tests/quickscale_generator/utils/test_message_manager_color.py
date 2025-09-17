@@ -1,8 +1,8 @@
 """Unit tests for the color and icon functionality of MessageManager."""
 import os
-import sys
+from unittest.mock import patch
+
 import pytest
-from unittest.mock import patch, MagicMock
 
 from quickscale.utils.message_manager import MessageManager, MessageType
 

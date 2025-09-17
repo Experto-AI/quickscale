@@ -7,30 +7,29 @@ Additional testing scenarios covering:
 - Concurrent access and race condition testing
 """
 
-import unittest
-from unittest.mock import patch, Mock
-from decimal import Decimal, InvalidOperation
-from datetime import timedelta
-from django.test import TestCase, override_settings, TransactionTestCase
-from django.utils import timezone
-from django.core.exceptions import ValidationError
-from django.db import transaction, IntegrityError, connections
-from django.contrib.auth import get_user_model
-from django.test.utils import override_settings
-import threading
-import time
-import sys
 import os
+import sys
+from datetime import timedelta
+from decimal import Decimal
+from unittest.mock import patch
+
+from django.contrib.auth import get_user_model
+from django.core.exceptions import ValidationError
+from django.db import transaction
+from django.test import TestCase, override_settings
+from django.utils import timezone
 
 # Import models from the template location (what gets deployed)
 template_path = os.path.join(os.path.dirname(__file__), '../../quickscale/project_templates')
 sys.path.insert(0, template_path)
 
 from credits.models import (
-    CreditAccount, CreditTransaction, UserSubscription, Service, 
-    ServiceUsage, InsufficientCreditsError
+    CreditAccount,
+    CreditTransaction,
+    InsufficientCreditsError,
+    Service,
+    ServiceUsage,
 )
-from stripe_manager.models import StripeProduct
 from services.base import BaseService
 
 User = get_user_model()
@@ -88,7 +87,7 @@ class CreditConsumptionEdgeCaseTests(TestCase):
         
         # Verify remaining balance with precision (allow for rounding differences)
         final_balance = self.credit_account.get_balance()
-        expected_balance = Decimal('100.999999') - Decimal('50.555555')
+        Decimal('100.999999') - Decimal('50.555555')
         # Use approximate comparison for decimal precision - the actual result is 50.44
         self.assertAlmostEqual(float(final_balance), 50.44, places=2)
     
@@ -761,7 +760,7 @@ class ServiceIntegrationEdgeCaseTests(TestCase):
                         return {"result": f"attempt_{i}"}
                 
                 service_instance = LimitedTestService(limited_service.name)
-                service_usage = service_instance.consume_credits(self.user)
+                service_instance.consume_credits(self.user)
                 successful_uses += 1
             except InsufficientCreditsError as e:
                 errors.append(e)
@@ -831,7 +830,7 @@ class ServiceIntegrationEdgeCaseTests(TestCase):
         self.assertEqual(balance_by_type['total'], Decimal('150'))
     
     def test_service_usage_with_expired_subscription_credits(self):
-        """Test service usage when user has expired subscription credits."""
+        """Test service usage when user has expired subscription credits in edge case scenarios."""
         # Add expired subscription credits (bypass validation)
         past_date = timezone.now() - timedelta(days=1)
         with transaction.atomic():
@@ -925,7 +924,7 @@ class ServiceIntegrationEdgeCaseTests(TestCase):
                     return {"result": f"audit_test_{service.name}"}
             
             service_instance = AuditTestService(service.name)
-            service_usage = service_instance.consume_credits(self.user)
+            service_instance.consume_credits(self.user)
             
             # Service usage is already created by BaseService.consume_credits()
             # No need to create it manually

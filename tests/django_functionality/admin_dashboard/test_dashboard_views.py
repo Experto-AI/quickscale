@@ -6,9 +6,10 @@ where Stripe is disabled or the Stripe module cannot be imported.
 """
 
 import json
-from unittest.mock import patch, MagicMock, Mock
+from unittest.mock import Mock, patch
+
 from django.test import SimpleTestCase
-from django.urls import reverse
+
 
 class DashboardViewsWithStripeDisabledTests(SimpleTestCase):
     """
