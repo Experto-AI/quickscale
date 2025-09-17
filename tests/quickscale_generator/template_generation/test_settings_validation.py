@@ -1,18 +1,18 @@
 import os
-import unittest
-from unittest.mock import patch, MagicMock
-
 import sys
-import os
+import unittest
+from unittest.mock import patch
+
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '../../..'))
 
 # Use centralized test utilities (DRY principle)
-from tests.test_utilities import TestUtilities
-from quickscale.utils.env_utils import env_manager
+from quickscale.config.settings import REQUIRED_VARS as actual_REQUIRED_VARS
 
 # Import directly from the module we're testing to improve test coverage
-from quickscale.config.settings import validate_production_settings as actual_validate_production_settings
-from quickscale.config.settings import REQUIRED_VARS as actual_REQUIRED_VARS
+from quickscale.config.settings import (
+    validate_production_settings as actual_validate_production_settings,
+)
+from tests.test_utilities import TestUtilities
 
 
 class TestSettingsValidation(unittest.TestCase):

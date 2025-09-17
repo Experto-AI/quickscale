@@ -1,9 +1,10 @@
 """Unit tests for Sprint 14 Example Service Implementations."""
 
-import unittest
 import json
-from django.test import TestCase
+import unittest
+
 from django.contrib.auth import get_user_model
+from django.test import TestCase
 
 User = get_user_model()
 

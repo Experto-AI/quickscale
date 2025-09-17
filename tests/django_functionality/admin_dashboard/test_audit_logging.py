@@ -11,12 +11,10 @@ These tests verify the functionality added in Sprint 16:
 Tests the QuickScale project generator template functionality, not Django-generated project.
 """
 
-import unittest
-import tempfile
 import shutil
+import tempfile
+import unittest
 from pathlib import Path
-from unittest.mock import patch, MagicMock, mock_open
-import os
 
 
 class TestSprint16AuditLogModelTemplate(unittest.TestCase):
@@ -531,7 +529,7 @@ class TestSprint16CodeQualityTemplate(unittest.TestCase):
         self.assertIn("from .models import AuditLog", content, "Should import AuditLog")
     
     def test_proper_docstrings_in_functions(self):
-        """Test that functions have proper docstrings."""
+        """Test that admin dashboard utility functions have proper docstrings."""
         # Get the path to the admin_dashboard utils template
         utils_template_path = Path(__file__).parent.parent.parent.parent / "quickscale" / "project_templates" / "admin_dashboard" / "utils.py"
         

@@ -1,20 +1,29 @@
 """Admin dashboard views."""
+import json
 import logging
 from datetime import datetime, timedelta
 from decimal import Decimal
 
-from django.utils import timezone
-from django.db import transaction
-
+from core.configuration import config
+from credits.models import (
+    CreditAccount,
+    Payment,
+    Service,
+    ServiceUsage,
+    UserSubscription,
+    handle_plan_change_credit_transfer,
+)
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required, user_passes_test
 from django.core.paginator import Paginator
+from django.db import transaction
 from django.db.models import Q, Sum
 from django.http import HttpRequest, HttpResponse, JsonResponse
-from django.shortcuts import render, get_object_or_404, redirect
+from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
-import json
-from core.configuration import config
+from django.utils import timezone
+from stripe_manager.models import StripeProduct
+from users.models import CustomUser
 
 from .models import AuditLog
 from .utils import log_admin_action
@@ -22,15 +31,12 @@ from .utils import log_admin_action
 # Create logger instance
 logger = logging.getLogger(__name__)
 
-# Import the local StripeProduct model
-from stripe_manager.models import StripeProduct
-
 # Check if Stripe is enabled using the configuration singleton
 stripe_enabled = config.is_stripe_enabled_and_configured()
 
 # Only attempt to import if Stripe is enabled and properly configured
 if stripe_enabled:
-    from stripe_manager.stripe_manager import StripeManager, StripeConfigurationError
+    from stripe_manager.stripe_manager import StripeConfigurationError, StripeManager
 
 STRIPE_AVAILABLE = False
 stripe_manager = None
@@ -51,31 +57,24 @@ if stripe_enabled:
             stripe_manager = None
             STRIPE_AVAILABLE = False
 
-# Import models for analytics calculations
-from users.models import CustomUser
-from credits.models import Payment, UserSubscription, Service, ServiceUsage
-
 @login_required
 def user_dashboard(request: HttpRequest) -> HttpResponse:
     """Display the user dashboard with credits info and quick actions."""
-    # Import here to avoid circular imports
-    from credits.models import CreditAccount, UserSubscription
-    
     # Get or create credit account for the user
     credit_account = CreditAccount.get_or_create_for_user(request.user)
     current_balance = credit_account.get_balance()
     balance_breakdown = credit_account.get_balance_by_type_available()
-    
+
     # Get recent transactions (limited to 3 for dashboard overview)
     recent_transactions = request.user.credit_transactions.all()[:3]
-    
+
     # Get user's subscription status
     subscription = None
     try:
         subscription = request.user.subscription
     except UserSubscription.DoesNotExist:
         pass
-    
+
     context = {
         'credit_account': credit_account,
         'current_balance': current_balance,
@@ -84,7 +83,7 @@ def user_dashboard(request: HttpRequest) -> HttpResponse:
         'subscription': subscription,
         'stripe_enabled': stripe_enabled,
     }
-    
+
     return render(request, 'admin_dashboard/user_dashboard.html', context)
 
 @login_required
@@ -93,17 +92,17 @@ def analytics_dashboard(request: HttpRequest) -> HttpResponse:
     """Display the analytics dashboard with key business metrics."""
     # Calculate basic metrics (total users, revenue, active subscriptions)
     total_users = CustomUser.objects.count()
-    
+
     # Total revenue from successful payments
     total_revenue = Payment.objects.filter(status='succeeded').aggregate(Sum('amount'))['amount__sum'] or Decimal(0)
-    
+
     # Active subscriptions count
     active_subscriptions = UserSubscription.objects.filter(status='active').count()
 
     # Calculate monthly revenue for the last 12 months
     monthly_revenue = []
     current_date = timezone.now().replace(day=1, hour=0, minute=0, second=0, microsecond=0)
-    
+
     for i in range(12):
         # Calculate proper calendar months
         if i == 0:
@@ -116,7 +115,7 @@ def analytics_dashboard(request: HttpRequest) -> HttpResponse:
                 month += 12
                 year -= 1
             start_of_month = current_date.replace(year=year, month=month)
-        
+
         # Calculate end of month
         if start_of_month.month == 12:
             end_of_month = start_of_month.replace(year=start_of_month.year + 1, month=1) - timedelta(microseconds=1)
@@ -133,7 +132,7 @@ def analytics_dashboard(request: HttpRequest) -> HttpResponse:
             'month': start_of_month.strftime('%b %Y'),
             'revenue': float(month_total)  # Convert Decimal to float for JSON serialization
         })
-    
+
     monthly_revenue.reverse()  # Show oldest first
 
     # Service usage statistics
@@ -150,7 +149,7 @@ def analytics_dashboard(request: HttpRequest) -> HttpResponse:
             'unique_users_count': unique_users_count,
             'is_active': service.is_active,
         })
-    
+
     context = {
         'total_users': total_users,
         'total_revenue': float(total_revenue),  # Convert Decimal to float for template compatibility
@@ -166,7 +165,7 @@ def analytics_dashboard(request: HttpRequest) -> HttpResponse:
 def subscription_page(request: HttpRequest) -> HttpResponse:
     """Display the subscription management page."""
     from credits.models import UserSubscription
-    
+
     # Get user's current subscription
     subscription = None
     try:
@@ -179,13 +178,13 @@ def subscription_page(request: HttpRequest) -> HttpResponse:
             subscription = UserSubscription.objects.filter(user=request.user).first()
         except Exception:
             pass
-    
+
     # Get available subscription plans (monthly products)
     subscription_products = StripeProduct.objects.filter(
         active=True,
         interval='month'
     ).order_by('display_order', 'price')
-    
+
     context = {
         'subscription': subscription,
         'subscription_products': subscription_products,
@@ -193,21 +192,21 @@ def subscription_page(request: HttpRequest) -> HttpResponse:
         'stripe_available': STRIPE_AVAILABLE,
         'missing_api_keys': missing_api_keys,
     }
-    
+
     return render(request, 'admin_dashboard/subscription.html', context)
 
 @login_required
 def create_subscription_checkout(request: HttpRequest) -> HttpResponse:
     """Create a Stripe checkout session for subscription."""
     is_ajax = request.headers.get('X-Requested-With') == 'XMLHttpRequest'
-    
+
     if request.method != 'POST':
         error_msg = 'Invalid request method'
         if is_ajax:
             return JsonResponse({'error': error_msg}, status=405)
         messages.error(request, error_msg)
         return redirect('admin_dashboard:subscription')
-    
+
     product_id = request.POST.get('product_id')
     if not product_id:
         error_msg = 'Product ID is required'
@@ -215,14 +214,14 @@ def create_subscription_checkout(request: HttpRequest) -> HttpResponse:
             return JsonResponse({'error': error_msg}, status=400)
         messages.error(request, error_msg)
         return redirect('admin_dashboard:subscription')
-    
-    if not stripe_enabled or not STRIPE_AVAILABLE:
+
+    if not stripe_enabled or not STRIPE_AVAILABLE or stripe_manager is None:
         error_msg = 'Stripe integration is not enabled'
         if is_ajax:
             return JsonResponse({'error': error_msg}, status=400)
         messages.error(request, error_msg)
         return redirect('admin_dashboard:subscription')
-    
+
     try:
         product = StripeProduct.objects.get(id=product_id, active=True, interval='month')
     except StripeProduct.DoesNotExist:
@@ -231,7 +230,7 @@ def create_subscription_checkout(request: HttpRequest) -> HttpResponse:
             return JsonResponse({'error': error_msg}, status=404)
         messages.error(request, error_msg)
         return redirect('admin_dashboard:subscription')
-    
+
     try:
         # Create or get customer
         from stripe_manager.models import StripeCustomer
@@ -242,7 +241,7 @@ def create_subscription_checkout(request: HttpRequest) -> HttpResponse:
                 'name': f"{getattr(request.user, 'first_name', '')} {getattr(request.user, 'last_name', '')}".strip(),
             }
         )
-        
+
         # If customer doesn't have a Stripe ID, create one
         if not stripe_customer.stripe_id:
             stripe_customer_data = stripe_manager.create_customer(
@@ -252,11 +251,11 @@ def create_subscription_checkout(request: HttpRequest) -> HttpResponse:
             )
             stripe_customer.stripe_id = stripe_customer_data['id']
             stripe_customer.save()
-        
+
         # Create checkout session for subscription
         success_url = request.build_absolute_uri(reverse('admin_dashboard:subscription_success'))
         cancel_url = request.build_absolute_uri(reverse('admin_dashboard:subscription_cancel'))
-        
+
         if product.stripe_price_id:
             # Use existing Stripe price
             session = stripe_manager.create_checkout_session(
@@ -300,13 +299,13 @@ def create_subscription_checkout(request: HttpRequest) -> HttpResponse:
                 },
             }
             session = stripe_manager.client.checkout.sessions.create(**session_data)
-        
+
         # Return response based on request type
         if is_ajax:
             return JsonResponse({'url': session.url})
         else:
             return redirect(session.url)
-        
+
     except Exception as e:
         logger.error(f"Failed to create subscription checkout: {str(e)}")
         error_msg = f'Failed to create subscription checkout: {str(e)}'
@@ -320,18 +319,18 @@ def create_subscription_checkout(request: HttpRequest) -> HttpResponse:
 def subscription_success(request: HttpRequest) -> HttpResponse:
     """Handle successful subscription creation."""
     session_id = request.GET.get('session_id')
-    
+
     context = {
         'session_id': session_id,
         'stripe_enabled': stripe_enabled,
     }
-    
-    if session_id and stripe_enabled and STRIPE_AVAILABLE:
+
+    if session_id and stripe_enabled and STRIPE_AVAILABLE and stripe_manager is not None:
         try:
             # Retrieve the session details
             session_data = stripe_manager.retrieve_checkout_session(session_id)
             context['session_data'] = session_data
-            
+
             # Add debugging information
             context['debug_info'] = {
                 'session_mode': session_data.get('mode'),
@@ -339,29 +338,29 @@ def subscription_success(request: HttpRequest) -> HttpResponse:
                 'subscription_id': session_data.get('subscription'),
                 'metadata': session_data.get('metadata', {}),
             }
-            
+
             # Process subscription creation as fallback if webhook hasn't processed it yet
             if session_data.get('mode') == 'subscription' and session_data.get('payment_status') == 'paid':
                 metadata = session_data.get('metadata', {})
                 subscription_id = session_data.get('subscription')
-                
+
                 if metadata.get('purchase_type') == 'subscription' and subscription_id:
                     try:
-                        from credits.models import UserSubscription, CreditAccount
-                        
+                        from credits.models import CreditAccount, UserSubscription
+
                         # Check if subscription already exists
                         existing_subscription = UserSubscription.objects.filter(
                             user=request.user,
                             stripe_subscription_id=subscription_id
                         ).first()
-                        
+
                         if not existing_subscription:
                             # Get product information
                             product_id = metadata.get('product_id')
                             if product_id:
                                 try:
                                     product = StripeProduct.objects.get(id=product_id)
-                                    
+
                                     # Create subscription record
                                     subscription = UserSubscription.objects.create(
                                         user=request.user,
@@ -369,29 +368,29 @@ def subscription_success(request: HttpRequest) -> HttpResponse:
                                         stripe_product_id=product.stripe_id,
                                         status='active'
                                     )
-                                    
+
                                     # Allocate initial subscription credits
                                     credit_account = CreditAccount.get_or_create_for_user(request.user)
                                     description = f"Initial subscription credits - {product.name} (Subscription: {subscription_id})"
-                                    
+
                                     credit_transaction = credit_account.add_credits(
                                         amount=product.credit_amount,
                                         description=description,
                                         credit_type='SUBSCRIPTION'
                                     )
-                                    
+
                                     # Create Payment record as fallback if webhook hasn't processed yet
                                     from credits.models import Payment
                                     existing_payment = Payment.objects.filter(
                                         user=request.user,
                                         stripe_subscription_id=subscription_id
                                     ).first()
-                                    
+
                                     if not existing_payment:
                                         # Get payment amount from session
                                         amount_total = session_data.get('amount_total', 0) / 100 if session_data.get('amount_total') else 0
                                         currency = session_data.get('currency', 'usd').upper()
-                                        
+
                                         payment = Payment.objects.create(
                                             user=request.user,
                                             stripe_subscription_id=subscription_id,
@@ -403,26 +402,26 @@ def subscription_success(request: HttpRequest) -> HttpResponse:
                                             credit_transaction=credit_transaction,
                                             subscription=subscription
                                         )
-                                        
+
                                         # Generate and save receipt data
                                         payment.receipt_data = payment.generate_receipt_data()
                                         payment.save()
-                                    
+
                                     context['subscription_created'] = True
                                     context['subscription'] = subscription
-                                    
+
                                 except StripeProduct.DoesNotExist:
                                     context['error'] = 'Product not found in database'
                         else:
                             context['subscription'] = existing_subscription
                             context['subscription_found'] = True
-                            
+
                     except Exception as e:
                         context['subscription_error'] = str(e)
-                        
+
         except Exception as e:
             context['error'] = str(e)
-    
+
     return render(request, 'admin_dashboard/subscription_success.html', context)
 
 @login_required
@@ -436,49 +435,49 @@ def create_plan_change_checkout(request: HttpRequest) -> HttpResponse:
     if request.method != 'POST':
         messages.error(request, 'Invalid request method')
         return redirect('admin_dashboard:subscription')
-    
+
     new_product_id = request.POST.get('product_id')
     if not new_product_id:
         messages.error(request, 'Product ID is required')
         return redirect('admin_dashboard:subscription')
-    
-    if not stripe_enabled or not STRIPE_AVAILABLE:
+
+    if not stripe_enabled or not STRIPE_AVAILABLE or stripe_manager is None:
         messages.error(request, 'Stripe integration is not enabled')
         return redirect('admin_dashboard:subscription')
-    
+
     try:
         # Import models
-        from credits.models import UserSubscription, CreditAccount
-        
+        from credits.models import UserSubscription
+
         # Get user's current subscription
         try:
             subscription = request.user.subscription
         except UserSubscription.DoesNotExist:
             messages.error(request, 'No active subscription found')
             return redirect('admin_dashboard:subscription')
-        
+
         if not subscription.is_active:
             messages.error(request, 'Current subscription is not active')
             return redirect('admin_dashboard:subscription')
-        
+
         # Get new product
         try:
             new_product = StripeProduct.objects.get(id=new_product_id, active=True, interval='month')
         except StripeProduct.DoesNotExist:
             messages.error(request, 'Subscription product not found or inactive')
             return redirect('admin_dashboard:subscription')
-        
+
         # Get current product for comparison
         current_product = subscription.get_stripe_product()
         if not current_product:
             messages.error(request, 'Cannot determine current subscription plan')
             return redirect('admin_dashboard:subscription')
-        
+
         # Check if it's actually a different plan
         if current_product.id == new_product.id:
             messages.info(request, 'You are already subscribed to this plan')
             return redirect('admin_dashboard:subscription')
-        
+
         # Get or create Stripe customer
         from stripe_manager.models import StripeCustomer
         stripe_customer, created = StripeCustomer.objects.get_or_create(
@@ -488,7 +487,7 @@ def create_plan_change_checkout(request: HttpRequest) -> HttpResponse:
                 'name': f"{getattr(request.user, 'first_name', '')} {getattr(request.user, 'last_name', '')}".strip(),
             }
         )
-        
+
         if not stripe_customer.stripe_id:
             stripe_customer_data = stripe_manager.create_customer(
                 email=request.user.email,
@@ -497,11 +496,11 @@ def create_plan_change_checkout(request: HttpRequest) -> HttpResponse:
             )
             stripe_customer.stripe_id = stripe_customer_data['id']
             stripe_customer.save()
-        
+
         # Create checkout session for plan change
         success_url = request.build_absolute_uri(reverse('admin_dashboard:plan_change_success'))
         cancel_url = request.build_absolute_uri(reverse('admin_dashboard:subscription'))
-        
+
         if new_product.stripe_price_id:
             # Use existing Stripe price
             session = stripe_manager.create_checkout_session(
@@ -551,12 +550,12 @@ def create_plan_change_checkout(request: HttpRequest) -> HttpResponse:
                 },
             }
             session = stripe_manager.client.checkout.sessions.create(**session_data)
-        
+
         return redirect(session.url)
-        
+
     except Exception as e:
         logger.error(f"Failed to create plan change checkout: {str(e)}")
-        # For form submission, redirect back with error message  
+        # For form submission, redirect back with error message
         messages.error(request, f'Failed to create plan change checkout: {str(e)}')
         return redirect('admin_dashboard:subscription')
 
@@ -564,18 +563,18 @@ def create_plan_change_checkout(request: HttpRequest) -> HttpResponse:
 def plan_change_success(request: HttpRequest) -> HttpResponse:
     """Handle successful plan change."""
     session_id = request.GET.get('session_id')
-    
+
     context = {
         'session_id': session_id,
         'stripe_enabled': stripe_enabled,
     }
-    
-    if session_id and stripe_enabled and STRIPE_AVAILABLE:
+
+    if session_id and stripe_enabled and STRIPE_AVAILABLE and stripe_manager is not None:
         try:
             # Retrieve the session details
             session_data = stripe_manager.retrieve_checkout_session(session_id)
             context['session_data'] = session_data
-            
+
             # Add debugging information
             context['debug_info'] = {
                 'session_mode': session_data.get('mode'),
@@ -583,34 +582,32 @@ def plan_change_success(request: HttpRequest) -> HttpResponse:
                 'subscription_id': session_data.get('subscription'),
                 'metadata': session_data.get('metadata', {}),
             }
-            
+
             # Process plan change as fallback if webhook hasn't processed it yet
-            if (session_data.get('mode') == 'subscription' and 
+            if (session_data.get('mode') == 'subscription' and
                 session_data.get('payment_status') == 'paid'):
                 metadata = session_data.get('metadata', {})
                 new_subscription_id = session_data.get('subscription')
-                
+
                 if metadata.get('purchase_type') == 'plan_change' and new_subscription_id:
                     try:
-                        from credits.models import UserSubscription, CreditAccount, Payment, handle_plan_change_credit_transfer
-                        from decimal import Decimal
                         from django.contrib.auth import get_user_model
-                        User = get_user_model()
-                        
+                        get_user_model()
+
                         # Get user and products
                         user = request.user
                         new_product_id = metadata.get('product_id')
-                        current_subscription_id = metadata.get('current_subscription_id')
+                        metadata.get('current_subscription_id')
                         change_type = metadata.get('change_type', 'unknown')
-                        
+
                         if new_product_id:
                             new_product = StripeProduct.objects.get(id=new_product_id)
-                            
+
                             # Get user's current subscription to find current product
                             try:
                                 subscription = user.subscription
                                 current_product = subscription.get_stripe_product()
-                                
+
                                 if not current_product:
                                     context['error'] = 'Cannot determine current subscription plan'
                                 else:
@@ -623,7 +620,7 @@ def plan_change_success(request: HttpRequest) -> HttpResponse:
                                         change_type=change_type,
                                         session_data=session_data
                                     )
-                                    
+
                                     # Update context with success information
                                     context.update({
                                         'plan_change_success': True,
@@ -635,20 +632,20 @@ def plan_change_success(request: HttpRequest) -> HttpResponse:
                                         'amount_charged': transfer_result['amount_charged'],
                                         'currency': transfer_result['currency'],
                                     })
-                                
+
                             except UserSubscription.DoesNotExist:
                                 context['error'] = 'Subscription not found after plan change'
                         else:
                             context['error'] = 'Missing product information in session'
-                    
+
                     except Exception as e:
                         logger.error(f"Error processing plan change success: {e}")
                         context['error'] = f"Error processing plan change: {str(e)}"
-        
+
         except Exception as e:
             logger.error(f"Error retrieving plan change session: {e}")
             context['error'] = f"Error retrieving session details: {str(e)}"
-    
+
     return render(request, 'admin_dashboard/plan_change_success.html', context)
 
 @login_required
@@ -657,66 +654,72 @@ def cancel_subscription(request: HttpRequest) -> HttpResponse:
     if request.method != 'POST':
         messages.error(request, 'Invalid request method')
         return redirect('admin_dashboard:subscription')
-    
+
     if not stripe_enabled or not STRIPE_AVAILABLE:
         messages.error(request, 'Stripe integration is not enabled')
         return redirect('admin_dashboard:subscription')
-    
+
     action = request.POST.get('action')  # 'cancel' or 'reactivate'
-    
+
     try:
         from credits.models import UserSubscription
-        
+
         # Get user's current subscription
         try:
             subscription = request.user.subscription
         except UserSubscription.DoesNotExist:
             messages.error(request, 'No subscription found')
             return redirect('admin_dashboard:subscription')
-        
+
         if not subscription.is_active:
             messages.error(request, 'Subscription is not active')
             return redirect('admin_dashboard:subscription')
-        
+
         if action == 'cancel':
             # Cancel subscription in Stripe (at period end)
+            if stripe_manager is None:
+                messages.error(request, 'Stripe manager is not available')
+                return redirect('admin_dashboard:subscription')
             try:
-                updated_subscription = stripe_manager.cancel_subscription(
+                stripe_manager.cancel_subscription(
                     subscription_id=subscription.stripe_subscription_id,
                     at_period_end=True
                 )
-                
+
                 # Update local subscription record
                 subscription.cancel_at_period_end = True
                 subscription.save()
-                
+
                 messages.success(request, f'Subscription will be canceled at the end of your current billing period ({subscription.current_period_end.strftime("%B %d, %Y") if subscription.current_period_end else "current period"})')
-                
+
             except Exception as stripe_error:
                 logger.error(f"Failed to cancel subscription in Stripe: {str(stripe_error)}")
                 messages.error(request, f'Failed to cancel subscription in Stripe: {str(stripe_error)}')
-                
+
         elif action == 'reactivate':
-            # Reactivate subscription in Stripe 
+            # Reactivate subscription in Stripe
+            if stripe_manager is None:
+                messages.error(request, 'Stripe manager is not available')
+                return redirect('admin_dashboard:subscription')
             try:
-                updated_subscription = stripe_manager.reactivate_subscription(
+                stripe_manager.reactivate_subscription(
                     subscription_id=subscription.stripe_subscription_id
                 )
-                
+
                 # Update local subscription record
                 subscription.cancel_at_period_end = False
                 subscription.save()
-                
+
                 messages.success(request, 'Subscription has been reactivated and will continue automatically')
-                
+
             except Exception as stripe_error:
                 logger.error(f"Failed to reactivate subscription in Stripe: {str(stripe_error)}")
                 messages.error(request, f'Failed to reactivate subscription in Stripe: {str(stripe_error)}')
         else:
             messages.error(request, 'Invalid action specified')
-            
+
         return redirect('admin_dashboard:subscription')
-        
+
     except Exception as e:
         logger.error(f"Failed to process subscription action: {str(e)}")
         messages.error(request, f'Failed to process subscription action: {str(e)}')
@@ -728,14 +731,14 @@ def index(request: HttpRequest) -> HttpResponse:
     """Display the admin dashboard with overview information and analytics."""
     # Analytics calculations
     total_users = CustomUser.objects.count()
-    
+
     # Define time ranges
     today = timezone.now()
     last_24_hours = today - timedelta(hours=24)
     last_7_days = today - timedelta(days=7)
     last_30_days = today - timedelta(days=30)
     last_90_days = today - timedelta(days=90)
-    
+
     # Function to calculate revenue for a given period
     def calculate_revenue(start_date):
         succeeded_payments = Payment.objects.filter(
@@ -752,10 +755,10 @@ def index(request: HttpRequest) -> HttpResponse:
     total_revenue_7_days = calculate_revenue(last_7_days)
     total_revenue_30_days = calculate_revenue(last_30_days)
     total_revenue_90_days = calculate_revenue(last_90_days)
-    
+
     # Calculate active subscriptions
     active_subscriptions = UserSubscription.objects.filter(status='active').count()
-    
+
     # Function to calculate service usage for a given period
     def get_service_usage_stats(start_date):
         stats = []
@@ -765,7 +768,7 @@ def index(request: HttpRequest) -> HttpResponse:
                 created_at__gte=start_date,
                 created_at__lte=today
             ).aggregate(total_credits_consumed=Sum('credit_transaction__amount'))['total_credits_consumed'] or Decimal('0.00')
-            
+
             # Ensure total_credits_consumed is positive for display
             usage = abs(usage)
             stats.append({
@@ -813,7 +816,7 @@ def index(request: HttpRequest) -> HttpResponse:
 def product_admin(request: HttpRequest) -> HttpResponse:
     """Display the Stripe product administration page."""
     products = StripeProduct.objects.all().order_by('display_order', 'name')
-    
+
     context = {
         'products': products,
         'stripe_enabled': stripe_enabled,
@@ -837,7 +840,7 @@ def product_detail(request: HttpRequest, product_id: str) -> HttpResponse:
     """
     # Check if Stripe is enabled using configuration singleton
     stripe_enabled = config.is_stripe_enabled_and_configured()
-    
+
     context = {
         'stripe_enabled': stripe_enabled,
         'stripe_available': STRIPE_AVAILABLE,
@@ -846,28 +849,28 @@ def product_detail(request: HttpRequest, product_id: str) -> HttpResponse:
         'product': None,
         'prices': []
     }
-    
+
     # First try to get the product from our database
     try:
         db_product = StripeProduct.objects.get(stripe_id=product_id)
         context['product'] = db_product
     except StripeProduct.DoesNotExist:
         context['error'] = f"Product with Stripe ID {product_id} not found in database"
-    
+
     # Only proceed with price fetching if Stripe is enabled and available
     if stripe_enabled and STRIPE_AVAILABLE and stripe_manager is not None and not context.get('error'):
         try:
             # Get product prices directly from Stripe
             prices = stripe_manager.get_product_prices(product_id)
             context['prices'] = prices
-            
+
             # Optionally get fresh product data from Stripe for comparison
             stripe_product = stripe_manager.retrieve_product(product_id)
             context['stripe_product'] = stripe_product
-            
+
         except Exception as e:
             context['error'] = str(e)
-    
+
     return render(request, 'admin_dashboard/product_detail.html', context)
 
 @login_required
@@ -903,40 +906,39 @@ def product_sync(request: HttpRequest, product_id: str) -> HttpResponse:
     """
     if request.method != 'POST':
         return redirect('admin_dashboard:product_detail', product_id=product_id)
-    
+
     # Check if Stripe is enabled using configuration singleton
     stripe_enabled = config.is_stripe_enabled_and_configured()
-    
+
     if not stripe_enabled or not STRIPE_AVAILABLE or stripe_manager is None:
         messages.error(request, 'Stripe integration is not enabled or available')
         return redirect('admin_dashboard:product_detail', product_id=product_id)
-    
+
     try:
         # Get the product from Stripe
         stripe_product = stripe_manager.retrieve_product(product_id)
-        
+
         if not stripe_product:
             messages.error(request, f'Product {product_id} not found in Stripe')
             return redirect('admin_dashboard:product_detail', product_id=product_id)
-        
+
         # Try to get existing product to preserve display_order
-        existing_product = None
         try:
-            existing_product = StripeProduct.objects.get(stripe_id=product_id)
+            StripeProduct.objects.get(stripe_id=product_id)
         except StripeProduct.DoesNotExist:
             pass
-        
+
         # Sync the product from Stripe
         synced_product = stripe_manager.sync_product_from_stripe(product_id, StripeProduct)
-        
+
         if synced_product:
             messages.success(request, f'Successfully synced product: {synced_product.name}')
         else:
             messages.warning(request, f'Product {product_id} sync completed but no changes were made')
-            
+
     except Exception as e:
         messages.error(request, f'Error syncing product {product_id}: {str(e)}')
-    
+
     return redirect('admin_dashboard:product_detail', product_id=product_id)
 
 @login_required
@@ -946,10 +948,13 @@ def sync_products(request: HttpRequest) -> HttpResponse:
     if not stripe_enabled or not STRIPE_AVAILABLE:
         messages.error(request, 'Stripe integration is not enabled or configured.')
         return redirect('admin_dashboard:product_admin')
-    
+
     try:
+        if stripe_manager is None:
+            messages.error(request, 'Stripe manager is not available')
+            return redirect('admin_dashboard:product_admin')
         synced_count = stripe_manager.sync_all_products()
-        
+
         # Log the product sync action
         log_admin_action(
             user=request.user,
@@ -957,40 +962,40 @@ def sync_products(request: HttpRequest) -> HttpResponse:
             description=f'Synchronized {synced_count} products from Stripe',
             request=request
         )
-        
+
         messages.success(request, f'Successfully synced {synced_count} products from Stripe.')
     except Exception as e:
         messages.error(request, f'Failed to sync products: {str(e)}')
-    
+
     return redirect('admin_dashboard:product_admin')
 
 @login_required
 def payment_history(request: HttpRequest) -> HttpResponse:
     """Display user's payment history with filtering options."""
     from credits.models import Payment
-    
+
     # Get user's payments
     payments = Payment.objects.filter(user=request.user).order_by('-created_at')
-    
+
     # Filter by payment type if specified
     payment_type = request.GET.get('type')
     if payment_type in ['CREDIT_PURCHASE', 'SUBSCRIPTION', 'REFUND']:
         payments = payments.filter(payment_type=payment_type)
-    
+
     # Filter by status if specified
     status = request.GET.get('status')
     if status in ['pending', 'succeeded', 'failed', 'refunded', 'cancelled']:
         payments = payments.filter(status=status)
-    
+
     # Pagination
     paginator = Paginator(payments, 20)  # Show 20 payments per page
     page_number = request.GET.get('page')
     page_obj = paginator.get_page(page_number)
-    
+
     # Separate subscription and credit purchase payments for display
     subscription_payments = payments.filter(payment_type='SUBSCRIPTION')[:5]
     credit_purchase_payments = payments.filter(payment_type='CREDIT_PURCHASE')[:5]
-    
+
     context = {
         'payments': page_obj,
         'subscription_payments': subscription_payments,
@@ -999,26 +1004,26 @@ def payment_history(request: HttpRequest) -> HttpResponse:
         'current_status_filter': status,
         'stripe_enabled': stripe_enabled,
     }
-    
+
     return render(request, 'admin_dashboard/payments.html', context)
 
 @login_required
 def payment_detail(request: HttpRequest, payment_id: int) -> HttpResponse:
     """Display detailed information about a specific payment."""
     from credits.models import Payment
-    
+
     payment = get_object_or_404(Payment, id=payment_id, user=request.user)
-    
+
     # Generate receipt data if not already present
     if not payment.receipt_data:
         payment.receipt_data = payment.generate_receipt_data()
         payment.save()
-    
+
     context = {
         'payment': payment,
         'stripe_enabled': stripe_enabled,
     }
-    
+
     return render(request, 'admin_dashboard/payment_detail.html', context)
 
 @login_required
@@ -1026,22 +1031,21 @@ def download_receipt(request: HttpRequest, payment_id: int) -> HttpResponse:
     """Download receipt for a specific payment."""
     from credits.models import Payment
     from django.http import JsonResponse
-    import json
-    
+
     payment = get_object_or_404(Payment, id=payment_id, user=request.user)
-    
+
     # Generate receipt data if not already present
     if not payment.receipt_data:
         payment.receipt_data = payment.generate_receipt_data()
         payment.save()
-    
+
     # For now, return JSON receipt data
     # In a production system, you might generate a PDF
     receipt_data = payment.receipt_data or {}
-    
+
     response = JsonResponse(receipt_data, json_dumps_params={'indent': 2})
     response['Content-Disposition'] = f'attachment; filename="receipt_{payment.id}.json"'
-    
+
     return response
 
 
@@ -1050,42 +1054,42 @@ def download_receipt(request: HttpRequest, payment_id: int) -> HttpResponse:
 @user_passes_test(lambda u: u.is_staff)
 def service_admin(request: HttpRequest) -> HttpResponse:
     """Display service management page with list of all services."""
-    from credits.models import Service, ServiceUsage
+    from credits.models import Service
     from django.utils import timezone
-    
+
     # Get all services with usage statistics
     services = Service.objects.all().order_by('name')
-    
+
     # Calculate analytics for each service
     now = timezone.now()
     last_30_days = now - timedelta(days=30)
     last_7_days = now - timedelta(days=7)
-    
+
     services_with_stats = []
     for service in services:
         # Calculate usage statistics
         total_usage = service.usages.count()
         usage_30_days = service.usages.filter(created_at__gte=last_30_days).count()
         usage_7_days = service.usages.filter(created_at__gte=last_7_days).count()
-        
+
         # Calculate credit consumption
         total_credits = service.usages.aggregate(
             total=Sum('credit_transaction__amount')
         )['total'] or 0
         total_credits = abs(total_credits)  # Make positive for display
-        
+
         credits_30_days = abs(service.usages.filter(
             created_at__gte=last_30_days
         ).aggregate(
             total=Sum('credit_transaction__amount')
         )['total'] or 0)
-        
+
         # Calculate unique users
         unique_users = service.usages.values('user').distinct().count()
         unique_users_30_days = service.usages.filter(
             created_at__gte=last_30_days
         ).values('user').distinct().count()
-        
+
         services_with_stats.append({
             'service': service,
             'total_usage': total_usage,
@@ -1096,66 +1100,66 @@ def service_admin(request: HttpRequest) -> HttpResponse:
             'unique_users': unique_users,
             'unique_users_30_days': unique_users_30_days,
         })
-    
+
     context = {
         'services_with_stats': services_with_stats,
         'total_services': services.count(),
         'active_services': services.filter(is_active=True).count(),
         'inactive_services': services.filter(is_active=False).count(),
     }
-    
+
     return render(request, 'admin_dashboard/service_admin.html', context)
 
 @login_required
 @user_passes_test(lambda u: u.is_staff)
 def service_detail(request: HttpRequest, service_id: int) -> HttpResponse:
     """Display detailed information for a specific service."""
-    from credits.models import Service, ServiceUsage
+    from credits.models import Service
     from django.utils import timezone
-    
+
     service = get_object_or_404(Service, id=service_id)
-    
+
     # Calculate detailed analytics
     now = timezone.now()
     last_30_days = now - timedelta(days=30)
     last_7_days = now - timedelta(days=7)
-    
+
     # Usage statistics
     total_usage = service.usages.count()
     usage_30_days = service.usages.filter(created_at__gte=last_30_days).count()
     usage_7_days = service.usages.filter(created_at__gte=last_7_days).count()
-    
+
     # Credit consumption
     total_credits = abs(service.usages.aggregate(
         total=Sum('credit_transaction__amount')
     )['total'] or 0)
-    
+
     credits_30_days = abs(service.usages.filter(
         created_at__gte=last_30_days
     ).aggregate(
         total=Sum('credit_transaction__amount')
     )['total'] or 0)
-    
+
     credits_7_days = abs(service.usages.filter(
         created_at__gte=last_7_days
     ).aggregate(
         total=Sum('credit_transaction__amount')
     )['total'] or 0)
-    
+
     # User engagement
     unique_users = service.usages.values('user').distinct().count()
     unique_users_30_days = service.usages.filter(
         created_at__gte=last_30_days
     ).values('user').distinct().count()
-    
+
     # Recent usage
     recent_usages = service.usages.select_related(
         'user', 'credit_transaction'
     ).order_by('-created_at')[:20]
-    
+
     # Calculate average credits per use
     avg_credits_per_use = total_credits / total_usage if total_usage > 0 else 0
-    
+
     context = {
         'service': service,
         'analytics': {
@@ -1171,7 +1175,7 @@ def service_detail(request: HttpRequest, service_id: int) -> HttpResponse:
         },
         'recent_usages': recent_usages,
     }
-    
+
     return render(request, 'admin_dashboard/service_detail.html', context)
 
 @login_required
@@ -1180,17 +1184,17 @@ def service_toggle_status(request: HttpRequest, service_id: int) -> JsonResponse
     """Toggle service active status via HTMX."""
     if request.method != 'POST':
         return JsonResponse({'error': 'Method not allowed'}, status=405)
-    
+
     from credits.models import Service
-    
+
     try:
         service = get_object_or_404(Service, id=service_id)
         old_status = service.is_active
         service.is_active = not service.is_active
         service.save()
-        
+
         action = 'enabled' if service.is_active else 'disabled'
-        
+
         # Log the service toggle action
         log_admin_action(
             user=request.user,
@@ -1198,7 +1202,7 @@ def service_toggle_status(request: HttpRequest, service_id: int) -> JsonResponse
             description=f'Changed service "{service.name}" from {old_status} to {service.is_active}',
             request=request
         )
-        
+
         return JsonResponse({
             'success': True,
             'is_active': service.is_active,
@@ -1206,12 +1210,12 @@ def service_toggle_status(request: HttpRequest, service_id: int) -> JsonResponse
             'status_text': 'Active' if service.is_active else 'Inactive',
             'status_class': 'is-success' if service.is_active else 'is-warning'
         })
-    
+
     except Service.DoesNotExist:
         return JsonResponse({
             'error': 'Service not found'
         }, status=404)
-    except Exception as e:
+    except Exception:
         logger.exception(f"Unexpected error toggling service {service_id}")
         return JsonResponse({
             'error': 'Internal server error'
@@ -1222,12 +1226,12 @@ def service_toggle_status(request: HttpRequest, service_id: int) -> JsonResponse
 def user_search(request: HttpRequest) -> HttpResponse:
     """Search for users by email or name."""
     from users.models import CustomUser
-    
+
     query = request.GET.get('q', '').strip()
     page = request.GET.get('page', 1)
-    
+
     users = CustomUser.objects.none()
-    
+
     if query:
         # Log the search action
         log_admin_action(
@@ -1236,15 +1240,15 @@ def user_search(request: HttpRequest) -> HttpResponse:
             description=f'Searched for users with query: "{query}"',
             request=request
         )
-        
+
         # Create search filter for email, first name, last name, or full name
         search_filter = Q()
-        
+
         # Basic searches
         search_filter |= Q(email__icontains=query)
         search_filter |= Q(first_name__icontains=query)
         search_filter |= Q(last_name__icontains=query)
-        
+
         # Split query for full name search
         if ' ' in query:
             query_parts = query.split()
@@ -1253,32 +1257,31 @@ def user_search(request: HttpRequest) -> HttpResponse:
                 last_part = query_parts[-1]
                 search_filter |= Q(first_name__icontains=first_part, last_name__icontains=last_part)
                 search_filter |= Q(first_name__icontains=last_part, last_name__icontains=first_part)
-        
+
         users = CustomUser.objects.filter(search_filter).distinct().order_by('email')
-    
+
     # Pagination
     paginator = Paginator(users, 20)  # Show 20 users per page
     page_obj = paginator.get_page(page)
-    
+
     context = {
         'query': query,
         'users': page_obj,
         'total_count': users.count() if query else 0,
     }
-    
+
     return render(request, 'admin_dashboard/user_search.html', context)
 
 @login_required
 @user_passes_test(lambda u: u.is_staff)
 def user_detail(request: HttpRequest, user_id: int) -> HttpResponse:
     """Display detailed information for a specific user."""
+    from credits.models import Payment, ServiceUsage, UserSubscription
     from django.db import models
-    
     from users.models import CustomUser
-    from credits.models import CreditAccount, UserSubscription, Payment, ServiceUsage
-    
+
     user = get_object_or_404(CustomUser, id=user_id)
-    
+
     # Log the user view action
     log_admin_action(
         user=request.user,
@@ -1286,7 +1289,7 @@ def user_detail(request: HttpRequest, user_id: int) -> HttpResponse:
         description=f'Viewed details for user: {user.email}',
         request=request
     )
-    
+
     # Get credit account information with error handling
     credit_account = None
     current_balance = 0
@@ -1298,7 +1301,7 @@ def user_detail(request: HttpRequest, user_id: int) -> HttpResponse:
     except Exception as e:
         logger.error(f"Error getting credit account for user {user_id}: {str(e)}")
         messages.error(request, "Unable to load credit account information")
-    
+
     # Get subscription information with improved error handling
     subscription = None
     try:
@@ -1308,18 +1311,18 @@ def user_detail(request: HttpRequest, user_id: int) -> HttpResponse:
             subscription = UserSubscription.objects.filter(user=user).first()
         except Exception as e:
             logger.error(f"Error getting subscription for user {user_id}: {str(e)}")
-    
+
     # Get recent data with error handling
     try:
         # Credit transactions: only show credit additions (exclude consumption)
         recent_transactions = user.credit_transactions.select_related().exclude(credit_type='CONSUMPTION').order_by('-created_at')[:10]
-        
+
         # Payments: only actual payment records
         recent_payments = Payment.objects.filter(user=user).order_by('-created_at')[:5]
-        
+
         # Service usage: only service usage records
         recent_service_usage = ServiceUsage.objects.filter(user=user).select_related('service', 'credit_transaction').order_by('-created_at')[:10]
-        
+
         # Add credits_consumed attribute to each usage for template display
         for usage in recent_service_usage:
             if usage.credit_transaction and usage.credit_transaction.amount:
@@ -1331,7 +1334,7 @@ def user_detail(request: HttpRequest, user_id: int) -> HttpResponse:
         recent_transactions = []
         recent_payments = []
         recent_service_usage = []
-    
+
     # Calculate user statistics with error handling
     try:
         total_payments = Payment.objects.filter(user=user).count()
@@ -1348,7 +1351,7 @@ def user_detail(request: HttpRequest, user_id: int) -> HttpResponse:
         total_service_usage = 0
         total_credits_purchased = 0
         total_credits_consumed = 0
-    
+
     context = {
         'selected_user': user,
         'credit_account': credit_account,
@@ -1363,7 +1366,7 @@ def user_detail(request: HttpRequest, user_id: int) -> HttpResponse:
         'total_credits_purchased': total_credits_purchased,
         'total_credits_consumed': abs(total_credits_consumed),
     }
-    
+
     return render(request, 'admin_dashboard/user_detail.html', context)
 
 
@@ -1372,16 +1375,16 @@ def user_detail(request: HttpRequest, user_id: int) -> HttpResponse:
 def audit_log(request: HttpRequest) -> HttpResponse:
     """Display audit log with filtering options."""
     from users.models import CustomUser
-    
+
     # Get filter parameters
     user_filter = request.GET.get('user')
     action_filter = request.GET.get('action')
     date_from = request.GET.get('date_from')
     date_to = request.GET.get('date_to')
-    
+
     # Start with all audit logs
     logs = AuditLog.objects.select_related('user').all()
-    
+
     # Apply filters
     if user_filter:
         try:
@@ -1389,34 +1392,34 @@ def audit_log(request: HttpRequest) -> HttpResponse:
             logs = logs.filter(user_id=user_id)
         except (ValueError, TypeError):
             pass
-    
+
     if action_filter and action_filter != 'all':
         logs = logs.filter(action=action_filter)
-    
+
     if date_from:
         try:
             date_from_obj = datetime.strptime(date_from, '%Y-%m-%d').date()
             logs = logs.filter(timestamp__date__gte=date_from_obj)
         except ValueError:
             pass
-    
+
     if date_to:
         try:
             date_to_obj = datetime.strptime(date_to, '%Y-%m-%d').date()
             logs = logs.filter(timestamp__date__lte=date_to_obj)
         except ValueError:
             pass
-    
+
     # Pagination
     paginator = Paginator(logs, 50)  # Show 50 logs per page
     page_number = request.GET.get('page')
     page_obj = paginator.get_page(page_number)
-    
+
     # Get unique users for filter dropdown
     audit_users = CustomUser.objects.filter(
         id__in=AuditLog.objects.values_list('user_id', flat=True).distinct()
     ).order_by('email')
-    
+
     context = {
         'logs': page_obj,
         'audit_users': audit_users,
@@ -1427,7 +1430,7 @@ def audit_log(request: HttpRequest) -> HttpResponse:
         'current_date_to': date_to,
         'total_count': logs.count(),
     }
-    
+
     return render(request, 'admin_dashboard/audit_log.html', context)
 
 
@@ -1435,44 +1438,41 @@ def audit_log(request: HttpRequest) -> HttpResponse:
 @user_passes_test(lambda u: u.is_staff)
 def user_credit_adjustment(request: HttpRequest, user_id: int) -> HttpResponse:
     """Handle HTMX credit adjustment requests for a specific user."""
-    from django.views.decorators.http import require_http_methods
-    from django.utils.decorators import method_decorator
-    from django.contrib.auth import get_user_model
-    from credits.models import CreditAccount
     from credits.forms import AdminCreditAdjustmentForm
-    
+    from django.contrib.auth import get_user_model
+
     User = get_user_model()
     user = get_object_or_404(User, id=user_id)
     credit_account = CreditAccount.get_or_create_for_user(user)
-    
+
     if request.method == 'POST':
         # Handle credit adjustment form submission
         action = request.POST.get('action')  # 'add' or 'remove'
         form = AdminCreditAdjustmentForm(request.POST)
-        
+
         if form.is_valid():
             amount = form.cleaned_data['amount']
             reason = form.cleaned_data['reason']
             current_balance = credit_account.get_balance()
-            
+
             # Validate for credit removal
             if action == 'remove' and amount > current_balance:
                 return JsonResponse({
                     'success': False,
                     'error': f'Cannot remove {amount} credits. Current balance is only {current_balance} credits.'
                 }, status=400)
-            
+
             try:
                 # Adjust the amount for removal
                 adjustment_amount = amount if action == 'add' else -amount
                 action_text = 'Addition' if action == 'add' else 'Removal'
-                
-                transaction = credit_account.add_credits(
+
+                credit_account.add_credits(
                     amount=adjustment_amount,
                     description=f"Admin Credit {action_text}: {reason} (by {request.user.email})",
                     credit_type='ADMIN'
                 )
-                
+
                 # Log the credit adjustment action
                 log_admin_action(
                     user=request.user,
@@ -1480,11 +1480,11 @@ def user_credit_adjustment(request: HttpRequest, user_id: int) -> HttpResponse:
                     description=f'{action_text.replace("A", "a").replace("R", "r")} {amount} credits {"to" if action == "add" else "from"} {user.email}. Reason: {reason}',
                     request=request
                 )
-                
+
                 # Return updated balance information
                 new_balance = credit_account.get_balance()
                 balance_breakdown = credit_account.get_balance_by_type_available()
-                
+
                 return JsonResponse({
                     'success': True,
                     'message': f'Successfully {action}ed {amount} credits. New balance: {new_balance} credits.',
@@ -1495,7 +1495,7 @@ def user_credit_adjustment(request: HttpRequest, user_id: int) -> HttpResponse:
                         'total': float(balance_breakdown.get('total', 0))
                     }
                 })
-                
+
             except ValueError as e:
                 return JsonResponse({
                     'success': False,
@@ -1511,12 +1511,12 @@ def user_credit_adjustment(request: HttpRequest, user_id: int) -> HttpResponse:
                 'success': False,
                 'error': 'Form validation failed: ' + '; '.join(errors)
             }, status=400)
-    
+
     # GET request - return the form HTML directly for HTMX
     form = AdminCreditAdjustmentForm()
     current_balance = credit_account.get_balance()
     balance_breakdown = credit_account.get_balance_by_type_available()
-    
+
     context = {
         'form': form,
         'selected_user': user,
@@ -1524,7 +1524,7 @@ def user_credit_adjustment(request: HttpRequest, user_id: int) -> HttpResponse:
         'current_balance': current_balance,
         'balance_breakdown': balance_breakdown,
     }
-    
+
     return render(request, 'admin_dashboard/partials/credit_adjustment_form.html', context)
 
 
@@ -1532,12 +1532,12 @@ def user_credit_adjustment(request: HttpRequest, user_id: int) -> HttpResponse:
 @user_passes_test(lambda u: u.is_staff)
 def user_credit_history(request: HttpRequest, user_id: int) -> HttpResponse:
     """Return credit adjustment history for a specific user via HTMX."""
-    from django.contrib.auth import get_user_model
     from credits.models import CreditTransaction
-    
+    from django.contrib.auth import get_user_model
+
     User = get_user_model()
     user = get_object_or_404(User, id=user_id)
-    
+
     # Log the history view action
     log_admin_action(
         user=request.user,
@@ -1545,18 +1545,18 @@ def user_credit_history(request: HttpRequest, user_id: int) -> HttpResponse:
         description=f'Viewed credit history for user: {user.email}',
         request=request
     )
-    
+
     # Get credit adjustment transactions (admin adjustments only)
     credit_adjustments = CreditTransaction.objects.filter(
         user=user,
         credit_type='ADMIN'
     ).order_by('-created_at')[:20]  # Last 20 adjustments
-    
+
     context = {
         'selected_user': user,
         'credit_adjustments': credit_adjustments,
     }
-    
+
     return render(request, 'admin_dashboard/partials/credit_history.html', context)
 
 
@@ -1566,12 +1566,13 @@ def user_credit_history(request: HttpRequest, user_id: int) -> HttpResponse:
 @user_passes_test(lambda u: u.is_staff)
 def payment_search(request: HttpRequest) -> HttpResponse:
     """Search and filter payments for admin investigation."""
+    import datetime
+
     from credits.models import Payment
     from django.db.models import Q
-    import datetime
-    
+
     payments = Payment.objects.select_related('user', 'subscription', 'credit_transaction').order_by('-created_at')
-    
+
     # Search filters
     search_query = request.GET.get('q', '').strip()
     payment_type = request.GET.get('type', '')
@@ -1582,7 +1583,7 @@ def payment_search(request: HttpRequest) -> HttpResponse:
     amount_max = request.GET.get('amount_max', '').strip()
     date_from = request.GET.get('date_from', '').strip()
     date_to = request.GET.get('date_to', '').strip()
-    
+
     # Apply search filters
     if search_query:
         payments = payments.filter(
@@ -1592,50 +1593,50 @@ def payment_search(request: HttpRequest) -> HttpResponse:
             Q(stripe_invoice_id__icontains=search_query) |
             Q(description__icontains=search_query)
         )
-    
+
     if payment_type:
         payments = payments.filter(payment_type=payment_type)
-    
+
     if status:
         payments = payments.filter(status=status)
-    
+
     if user_email:
         payments = payments.filter(user__email__icontains=user_email)
-    
+
     if stripe_payment_intent_id:
         payments = payments.filter(stripe_payment_intent_id__icontains=stripe_payment_intent_id)
-    
+
     if amount_min:
         try:
             payments = payments.filter(amount__gte=float(amount_min))
         except ValueError:
             pass
-    
+
     if amount_max:
         try:
             payments = payments.filter(amount__lte=float(amount_max))
         except ValueError:
             pass
-    
+
     if date_from:
         try:
             date_from_parsed = datetime.datetime.strptime(date_from, '%Y-%m-%d').date()
             payments = payments.filter(created_at__date__gte=date_from_parsed)
         except ValueError:
             pass
-    
+
     if date_to:
         try:
             date_to_parsed = datetime.datetime.strptime(date_to, '%Y-%m-%d').date()
             payments = payments.filter(created_at__date__lte=date_to_parsed)
         except ValueError:
             pass
-    
+
     # Pagination
     paginator = Paginator(payments, 25)
     page_number = request.GET.get('page')
     page_obj = paginator.get_page(page_number)
-    
+
     context = {
         'payments': page_obj,
         'search_query': search_query,
@@ -1652,7 +1653,7 @@ def payment_search(request: HttpRequest) -> HttpResponse:
         'total_results': min(payments.count(), 10000),
         'stripe_enabled': stripe_enabled,
     }
-    
+
     return render(request, 'admin_dashboard/payment_search.html', context)
 
 @login_required
@@ -1661,9 +1662,9 @@ def payment_investigation(request: HttpRequest, payment_id: int) -> HttpResponse
     """Display detailed payment investigation view for admins."""
     from credits.models import Payment
     from stripe_manager.stripe_manager import StripeManager
-    
+
     payment = get_object_or_404(Payment, id=payment_id)
-    
+
     # Log the investigation action
     log_admin_action(
         user=request.user,
@@ -1671,7 +1672,7 @@ def payment_investigation(request: HttpRequest, payment_id: int) -> HttpResponse
         description=f'Investigated payment #{payment.id} for user {payment.user.email}',
         request=request
     )
-    
+
     # Gather investigation data
     investigation_data = {
         'payment': payment,
@@ -1681,11 +1682,11 @@ def payment_investigation(request: HttpRequest, payment_id: int) -> HttpResponse
         'refund_history': [],
         'warnings': [],
     }
-    
+
     # Get related credit transactions
     if payment.credit_transaction:
         investigation_data['related_transactions'] = [payment.credit_transaction]
-    
+
     # Get Stripe data if available
     if payment.stripe_payment_intent_id and stripe_enabled:
         try:
@@ -1695,7 +1696,7 @@ def payment_investigation(request: HttpRequest, payment_id: int) -> HttpResponse
             )
         except Exception as e:
             investigation_data['warnings'].append(f"Could not retrieve Stripe data: {str(e)}")
-    
+
     # Check for refunds
     if payment.status == 'refunded':
         refund_payments = Payment.objects.filter(
@@ -1703,70 +1704,71 @@ def payment_investigation(request: HttpRequest, payment_id: int) -> HttpResponse
             stripe_payment_intent_id=payment.stripe_payment_intent_id
         ).order_by('-created_at')
         investigation_data['refund_history'] = refund_payments
-    
+
     # Add investigation warnings
     if payment.amount <= 0 and payment.payment_type != 'REFUND':
         investigation_data['warnings'].append("Payment has zero or negative amount")
-    
+
     if payment.status == 'failed' and payment.created_at > timezone.now() - timedelta(hours=24):
         investigation_data['warnings'].append("Recent failed payment - may need customer support follow-up")
-    
+
     if not payment.stripe_payment_intent_id and payment.payment_type != 'REFUND':
         investigation_data['warnings'].append("Missing Stripe Payment Intent ID")
-    
+
     context = {
         **investigation_data,
         'stripe_enabled': stripe_enabled,
     }
-    
+
     return render(request, 'admin_dashboard/payment_investigation.html', context)
 
 @login_required
 @user_passes_test(lambda u: u.is_staff)
 def initiate_refund(request: HttpRequest, payment_id: int) -> HttpResponse:
     """Initiate a refund for a payment through Stripe."""
-    from credits.models import Payment, CreditAccount
-    from stripe_manager.stripe_manager import StripeManager, StripeConfigurationError
     from decimal import Decimal
-    
+
+    from credits.models import Payment
+    from stripe_manager.stripe_manager import StripeConfigurationError, StripeManager
+
     if request.method != 'POST':
         error_context = {'success': False, 'error': 'Only POST method allowed'}
         if request.headers.get('HX-Request'):
             return render(request, 'admin_dashboard/partials/refund_response.html', error_context)
         return JsonResponse({'error': 'Only POST method allowed'}, status=405)
-    
+
     payment = get_object_or_404(Payment, id=payment_id)
-    
+
     # Validation checks
     if payment.status == 'refunded':
         error_context = {'success': False, 'error': 'Payment has already been refunded'}
         if request.headers.get('HX-Request'):
             return render(request, 'admin_dashboard/partials/refund_response.html', error_context)
         return JsonResponse({'error': 'Payment has already been refunded'}, status=400)
-    
+
     if payment.status != 'succeeded':
         error_context = {'success': False, 'error': 'Can only refund succeeded payments'}
         if request.headers.get('HX-Request'):
             return render(request, 'admin_dashboard/partials/refund_response.html', error_context)
         return JsonResponse({'error': 'Can only refund succeeded payments'}, status=400)
-    
+
     if not payment.stripe_payment_intent_id:
         error_context = {'success': False, 'error': 'No Stripe Payment Intent ID found'}
         if request.headers.get('HX-Request'):
             return render(request, 'admin_dashboard/partials/refund_response.html', error_context)
         return JsonResponse({'error': 'No Stripe Payment Intent ID found'}, status=400)
-    
+
     if not stripe_enabled:
         error_context = {'success': False, 'error': 'Stripe integration is not enabled'}
         if request.headers.get('HX-Request'):
             return render(request, 'admin_dashboard/partials/refund_response.html', error_context)
         return JsonResponse({'error': 'Stripe integration is not enabled'}, status=400)
-    
+
     # Get refund details from request
     refund_amount = request.POST.get('amount', '').strip()
     refund_reason = request.POST.get('reason', '').strip()
     admin_notes = request.POST.get('admin_notes', '').strip()
-    
+
     # Validate refund amount
     if refund_amount:
         try:
@@ -1792,26 +1794,26 @@ def initiate_refund(request: HttpRequest, payment_id: int) -> HttpResponse:
         # Full refund
         refund_amount_decimal = payment.amount
         refund_amount_cents = int(payment.amount * 100)
-    
+
     try:
         # Use atomic transaction to ensure data integrity during refund processing
         with transaction.atomic():
             # Process refund through Stripe
             stripe_manager = StripeManager.get_instance()
-            
+
             refund_metadata = {
                 'original_payment_id': str(payment.id),
                 'refund_initiated_by': request.user.email,
                 'admin_notes': admin_notes or 'Admin-initiated refund',
             }
-            
+
             stripe_refund = stripe_manager.create_refund(
                 payment_intent_id=payment.stripe_payment_intent_id,
                 amount=refund_amount_cents,
                 reason=refund_reason or 'requested_by_customer',
                 metadata=refund_metadata
             )
-            
+
             # Create refund payment record
             refund_payment = Payment.objects.create(
                 user=payment.user,
@@ -1822,16 +1824,16 @@ def initiate_refund(request: HttpRequest, payment_id: int) -> HttpResponse:
                 status='succeeded',
                 description=f"Refund for payment #{payment.id}" + (f" - {admin_notes}" if admin_notes else ""),
             )
-            
+
             # Update original payment status if full refund
             if refund_amount_decimal >= payment.amount:
                 payment.status = 'refunded'
                 payment.save()
-            
+
             # Adjust credits if this was a credit purchase
             if payment.payment_type == 'CREDIT_PURCHASE' and payment.credit_transaction:
                 from credits.models import CreditTransaction
-                
+
                 # Create a negative admin transaction to remove the refunded credits
                 CreditTransaction.objects.create(
                     user=payment.user,
@@ -1839,7 +1841,7 @@ def initiate_refund(request: HttpRequest, payment_id: int) -> HttpResponse:
                     description=f"Credit adjustment for refund #{refund_payment.id}",
                     credit_type='ADMIN'
                 )
-            
+
             # Log the refund action
             log_admin_action(
                 user=request.user,
@@ -1847,19 +1849,19 @@ def initiate_refund(request: HttpRequest, payment_id: int) -> HttpResponse:
                 description=f'Processed refund of {refund_amount_decimal} {payment.currency} for payment #{payment.id} (user: {payment.user.email})',
                 request=request
             )
-            
+
             success_context = {
                 'success': True,
                 'message': f'Refund of ${refund_amount_decimal} {payment.currency} processed successfully',
                 'refund_id': refund_payment.id,
                 'stripe_refund_id': stripe_refund.get('id'),
             }
-            
+
             if request.headers.get('HX-Request'):
                 return render(request, 'admin_dashboard/partials/refund_response.html', success_context)
-            
+
             return JsonResponse(success_context)
-        
+
     except StripeConfigurationError as e:
         error_context = {'success': False, 'error': f'Stripe configuration error: {str(e)}'}
         if request.headers.get('HX-Request'):

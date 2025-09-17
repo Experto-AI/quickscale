@@ -1,14 +1,14 @@
 """End-to-end tests for Django management commands in a QuickScale project."""
 import os
-import subprocess
-import pytest
-from pathlib import Path
-from contextlib import contextmanager
-import time
 import re
+import time
+from contextlib import contextmanager
 
-import tests.utils.utils as test_utils
+import pytest
+
+from tests import utils as test_utils
 from tests.utils import DynamicProjectGenerator
+
 
 @pytest.mark.e2e
 class TestDjangoCommands:
@@ -101,9 +101,9 @@ class TestDjangoCommands:
             
             # Attempt to start services once and assert success
             try:
-                print(f"Starting services...")
+                print("Starting services...")
                 # Use check=True to fail immediately if 'up' command fails
-                result = test_utils.run_quickscale_command('up', ['-d'], timeout=180, check=True)
+                test_utils.run_quickscale_command('up', ['-d'], timeout=180, check=True)
                 print("Services started successfully via 'quickscale up'.")
             except Exception as e:
                 # If 'up' fails, fail the fixture setup

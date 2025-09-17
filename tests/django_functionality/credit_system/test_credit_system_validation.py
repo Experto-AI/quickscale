@@ -6,30 +6,26 @@ Testing subsection implementation covering:
 - Service integration (BaseService framework, credit integration, usage tracking)
 """
 
-import unittest
-from unittest.mock import patch, Mock
-from decimal import Decimal
-from datetime import timedelta
-from django.test import TestCase, override_settings, TransactionTestCase
-from django.utils import timezone
-from django.core.exceptions import ValidationError
-from django.db import transaction, IntegrityError, connections
-from django.contrib.auth import get_user_model
-from django.test.utils import override_settings
-import threading
-import time
-import sys
 import os
+import sys
+from datetime import timedelta
+from decimal import Decimal
+
+from django.contrib.auth import get_user_model
+from django.test import TestCase, override_settings
+from django.utils import timezone
 
 # Import models from the template location (what gets deployed)
 template_path = os.path.join(os.path.dirname(__file__), '../../quickscale/project_templates')
 sys.path.insert(0, template_path)
 
 from credits.models import (
-    CreditAccount, CreditTransaction, UserSubscription, Service, 
-    ServiceUsage, InsufficientCreditsError
+    CreditAccount,
+    CreditTransaction,
+    InsufficientCreditsError,
+    Service,
+    ServiceUsage,
 )
-from stripe_manager.models import StripeProduct
 from services.base import BaseService
 
 User = get_user_model()
@@ -281,7 +277,7 @@ class CreditConsumptionLogicTests(TestCase):
         )
         
         # Consume exact amount
-        transaction = self.credit_account.consume_credits_with_priority(
+        self.credit_account.consume_credits_with_priority(
             amount=exact_amount,
             description='Exact consumption'
         )
@@ -317,7 +313,7 @@ class CreditConsumptionLogicTests(TestCase):
                     description=f'Consumption {i}'
                 )
                 results.append(transaction_obj)
-            except Exception as e:
+            except Exception:
                 results.append(None)
         
         # Verify successful consumptions
@@ -686,7 +682,7 @@ class ServiceIntegrationTests(TestCase):
         )
         
         # Record initial balance breakdown
-        initial_balance = self.credit_account.get_balance_by_type_available()
+        self.credit_account.get_balance_by_type_available()
         
         # Use small service (50 credits)
         credit_transaction = self.credit_account.consume_credits_with_priority(
@@ -982,7 +978,7 @@ class ServiceIntegrationTests(TestCase):
                 service_instance = SequentialTestService(self.small_service.name)
                 service_usage = service_instance.consume_credits(self.user)
                 results.append(service_usage)
-            except Exception as e:
+            except Exception:
                 results.append(None)
         
         # Verify successful service usages
@@ -994,7 +990,7 @@ class ServiceIntegrationTests(TestCase):
         self.assertEqual(final_balance, Decimal('750'))  # 1000 - 5*50
     
     def test_service_usage_with_expired_credits(self):
-        """Test service usage when user has expired subscription credits."""
+        """Test service usage when user has expired subscription credits in validation context."""
         # Add expired subscription credits (bypass validation for testing)
         past_date = timezone.now() - timedelta(days=1)
         

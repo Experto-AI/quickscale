@@ -7,7 +7,8 @@ and helpers to expose flags to templates. Backed by the configuration singleton.
 from __future__ import annotations
 
 import functools
-from typing import Dict, Any
+from typing import Any, Dict
+
 from django.http import Http404
 
 from .configuration import config

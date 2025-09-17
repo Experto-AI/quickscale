@@ -1,12 +1,19 @@
 """Tests for Stripe manager utility classes."""
 
-import pytest
 import os
-from unittest.mock import patch, MagicMock
-from decimal import Decimal
+import unittest
+from unittest.mock import MagicMock, patch
+
+import pytest
 
 # Set up Django for testing
-from ..base import DjangoModelTestCase, setup_django_template_path, setup_core_env_utils_mock, setup_core_configuration_mock, setup_django_settings
+from ..base import (
+    DjangoModelTestCase,
+    setup_core_configuration_mock,
+    setup_core_env_utils_mock,
+    setup_django_settings,
+    setup_django_template_path,
+)
 
 # Set up template path and environment
 setup_django_template_path()
@@ -16,10 +23,11 @@ setup_django_settings()
 
 # Import Django and initialize
 import django
+
 django.setup()
 
 # Import the modules we're testing
-from stripe_manager.stripe_manager import StripeManager, StripeConfigurationError
+from stripe_manager.stripe_manager import StripeConfigurationError, StripeManager
 
 
 @pytest.mark.django_component
@@ -71,7 +79,7 @@ class StripeManagerTests(DjangoModelTestCase):
     @patch('stripe.StripeClient')
     @patch('stripe_manager.stripe_manager.config')
     def test_stripe_manager_singleton_behavior(self, mock_config, mock_stripe_client):
-        """Test that StripeManager follows singleton pattern."""
+        """Test that StripeManager follows singleton pattern with mocked dependencies."""
         # Mock the configuration
         mock_config.is_stripe_enabled_and_configured.return_value = True
         mock_config.get_env_bool.return_value = True

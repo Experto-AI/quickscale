@@ -1,22 +1,18 @@
 """Tests for command utility functions."""
-import os
 import socket
 import subprocess
 from pathlib import Path
-from unittest.mock import patch, MagicMock
+from unittest.mock import MagicMock, patch
+
 import pytest
-import random
 
 from quickscale.commands.command_utils import (
-    get_current_uid_gid,
-    copy_with_vars,
+    DOCKER_COMPOSE_COMMAND,
     copy_files_recursive,
-    wait_for_postgres,
+    copy_with_vars,
     find_available_port,
-    is_binary_file,
     fix_permissions,
-    generate_secret_key,
-    DOCKER_COMPOSE_COMMAND
+    is_binary_file,
 )
 
 
@@ -447,7 +443,6 @@ def test_find_available_ports_fallback_strategies(
     """Test find_available_ports with different fallback strategies."""
     # Import the function
     from quickscale.commands.command_utils import find_available_ports
-    import logging
     
     # Configure mocks for different test scenarios
     

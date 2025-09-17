@@ -2,12 +2,12 @@
 import os
 import sys
 
+# Import centralized test utilities using DRY principles
+from tests.test_utilities import TestUtilities
+
 # Add the parent directory to sys.path to access tests module
 parent_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, parent_dir)
-
-# Import centralized test utilities using DRY principles
-from tests.test_utilities import TestUtilities
 
 def validate_production_settings():
     """The validate_production_settings function to debug."""

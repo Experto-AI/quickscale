@@ -1,10 +1,11 @@
 """URL configuration for shared functionality."""
-from django.urls import path
 
-from . import views
+from typing import List
+
+from django.urls import URLPattern
 
 app_name = 'common'
 
-urlpatterns = [
+urlpatterns: List[URLPattern] = [
     # Add URLs for functionality shared across apps
 ]

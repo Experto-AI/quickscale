@@ -1,11 +1,11 @@
 """Additional unit tests for the ProjectManager class to increase coverage."""
 import json
 import os
-import sys
 import subprocess
-from pathlib import Path
 import tempfile
-from unittest.mock import patch, MagicMock, mock_open
+from pathlib import Path
+from unittest.mock import MagicMock, mock_open, patch
+
 import pytest
 
 from quickscale.commands.project_manager import ProjectManager

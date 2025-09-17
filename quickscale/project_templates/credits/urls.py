@@ -1,4 +1,5 @@
 from django.urls import path
+
 from . import views
 
 app_name = 'credits'
@@ -14,4 +15,4 @@ urlpatterns = [
     path('services/<int:service_id>/use/', views.use_service, name='use_service'),
     path('services/<int:service_id>/use-priority/', views.use_service_with_priority, name='use_service_with_priority'),
     path('services/<int:service_id>/api/', views.service_usage_api, name='service_usage_api'),
-] 
+]

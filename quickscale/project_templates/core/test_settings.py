@@ -1,7 +1,7 @@
 """Test settings for QuickScale template - PostgreSQL only."""
 
-from .settings import *
 from .configuration import config
+from .settings import *
 
 # Use PostgreSQL for testing - NO SQLite fallback
 DATABASES = {
@@ -23,7 +23,12 @@ DATABASES = {
 
 # Fail hard if PostgreSQL is not available
 try:
-    import psycopg2
+    import importlib.util
+    if not importlib.util.find_spec('psycopg2'):
+        raise ImportError(
+            "PostgreSQL adapter (psycopg2) is required for testing. "
+            "Install it with: pip install psycopg2-binary"
+        )
 except ImportError:
     raise ImportError(
         "PostgreSQL adapter (psycopg2) is required for testing. "
@@ -64,7 +69,7 @@ ACCOUNT_EMAIL_CONFIRMATION_HMAC = False  # Simplify for testing
 class DisableMigrations:
     def __contains__(self, item):
         return True
-    
+
     def __getitem__(self, item):
         return None
 

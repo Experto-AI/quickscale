@@ -2,9 +2,8 @@
 Utility functions for Stripe integration.
 """
 
-import os
 import uuid
-from typing import Dict, Any, Optional
+from typing import Any, Dict, Optional
 
 
 class MockStripeCustomer:
@@ -14,12 +13,12 @@ class MockStripeCustomer:
     This class provides a simple way to create mock Stripe Customer objects
     when the Stripe API is not available or when running in test mode.
     """
-    
+
     @classmethod
-    def create(cls, 
+    def create(cls,
               id: Optional[str] = None,
-              email: Optional[str] = None, 
-              name: Optional[str] = None, 
+              email: Optional[str] = None,
+              name: Optional[str] = None,
               metadata: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
         """
         Create a mock Stripe Customer object.
@@ -48,4 +47,4 @@ class MockStripeCustomer:
                 'footer': None,
             },
             'livemode': False,
-        } 
+        }

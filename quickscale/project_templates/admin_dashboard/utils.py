@@ -1,6 +1,8 @@
 """Utility functions for admin dashboard."""
-from django.http import HttpRequest
 from typing import Optional
+
+from django.http import HttpRequest
+
 from .models import AuditLog
 
 
@@ -13,7 +15,7 @@ def log_admin_action(
     """Log an admin action for audit purposes."""
     ip_address = None
     user_agent = None
-    
+
     if request:
         # Get IP address from request
         x_forwarded_for = request.META.get('HTTP_X_FORWARDED_FOR')
@@ -21,10 +23,10 @@ def log_admin_action(
             ip_address = x_forwarded_for.split(',')[0].strip()
         else:
             ip_address = request.META.get('REMOTE_ADDR')
-        
+
         # Get user agent
         user_agent = request.META.get('HTTP_USER_AGENT')
-    
+
     audit_log = AuditLog.objects.create(
         user=user,
         action=action,
@@ -32,7 +34,7 @@ def log_admin_action(
         ip_address=ip_address,
         user_agent=user_agent
     )
-    
+
     return audit_log
 
 
@@ -41,4 +43,4 @@ def get_client_ip(request: HttpRequest) -> Optional[str]:
     x_forwarded_for = request.META.get('HTTP_X_FORWARDED_FOR')
     if x_forwarded_for:
         return x_forwarded_for.split(',')[0].strip()
-    return request.META.get('REMOTE_ADDR') 
+    return request.META.get('REMOTE_ADDR')

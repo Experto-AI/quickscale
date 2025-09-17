@@ -16,11 +16,11 @@ This test suite validates:
 import os
 import sys
 import unittest
-from unittest.mock import patch, MagicMock, PropertyMock
-from pathlib import Path
+from unittest.mock import MagicMock, patch
 
 # Configure Django settings first
 from django.conf import settings
+
 if not settings.configured:
     # Import PostgreSQL test configuration
     from core.test_db_config import get_test_db_config
@@ -51,6 +51,7 @@ if not settings.configured:
 
 # Initialize Django
 import django
+
 django.setup()
 
 # Import centralized test utilities (DRY principle)  
@@ -79,31 +80,24 @@ class MockConfig:
 
 # Create module mock and set config as an attribute
 import types
+
 mock_config_module = types.ModuleType('core.configuration')
 
-class MockStripeConfig:
-    secret_key = 'sk_test_mock'
-    api_version = '2023-10-16'
-
-class MockConfig:
-    stripe = MockStripeConfig()
-    
-    def is_stripe_enabled_and_configured(self):
-        return True
-    
-    def get_env_bool(self, key, default):
-        return default
-
-mock_config_module.config = MockConfig()
+# Use the existing MockStripeConfig and MockConfig classes defined above
+# Create a config instance and assign it to the module
+setattr(mock_config_module, 'config', MockConfig())
 sys.modules['core.configuration'] = mock_config_module
 
 # Global patch for all tests in this module
-from unittest.mock import patch
 config_patch = patch('quickscale.project_templates.stripe_manager.stripe_manager.config', MockConfig())
 config_patch.start()
 
 from django.test import TestCase, override_settings
-from quickscale.project_templates.stripe_manager.stripe_manager import StripeManager, StripeConfigurationError
+
+from quickscale.project_templates.stripe_manager.stripe_manager import (
+    StripeConfigurationError,
+    StripeManager,
+)
 
 
 class MockStripeProduct:
@@ -167,9 +161,9 @@ class TestStripeManagerSingletonPattern(TestCase):
         
     @patch.dict(os.environ, {'ENABLE_STRIPE': 'true'})
     @override_settings(STRIPE_ENABLED=True, STRIPE_SECRET_KEY="sk_test_123")
-    def test_singleton_pattern(self):
-        """Test that StripeManager follows singleton pattern."""
-        with patch('stripe.StripeClient') as mock_client:
+    def test_stripe_manager_singleton_pattern(self):
+        """Test that StripeManager follows singleton pattern in integration context."""
+        with patch('stripe.StripeClient'):
             # Get first instance
             manager1 = StripeManager.get_instance()
             
@@ -185,14 +179,14 @@ class TestStripeManagerSingletonPattern(TestCase):
         """Test that initialization only happens once."""
         with patch('stripe.StripeClient') as mock_client:
             # First call should initialize
-            manager1 = StripeManager.get_instance()
+            StripeManager.get_instance()
             mock_client.assert_called_once()
             
             # Reset mock
             mock_client.reset_mock()
             
             # Second call should not initialize again
-            manager2 = StripeManager.get_instance()
+            StripeManager.get_instance()
             mock_client.assert_not_called()
                 
     def test_configuration_error_handling(self):
@@ -308,7 +302,9 @@ class TestCustomerManagement(TestCase):
         
         self.assertEqual(result, customer_data)
         mock_client.customers.create.assert_called_once_with(
-            params={'email': 'test@example.com', 'name': 'Test Customer'}
+            email='test@example.com',
+            name='Test Customer',
+            metadata={}
         )
         
     @patch.dict(os.environ, {
@@ -344,7 +340,9 @@ class TestCustomerManagement(TestCase):
         
         self.assertEqual(result, customer_data)
         mock_client.customers.create.assert_called_once_with(
-            params={'email': 'test@example.com', 'metadata': metadata}
+            email='test@example.com',
+            name=None,
+            metadata=metadata
         )
         
     @patch.dict(os.environ, {
@@ -513,7 +511,9 @@ class TestProductManagement(TestCase):
         
         self.assertEqual(result, product_data)
         self.mock_client.products.create.assert_called_once_with(
-            params={'name': 'Test Product', 'description': 'Test Description'}
+            name='Test Product',
+            description='Test Description',
+            metadata={}
         )
         
     def test_create_product_with_metadata(self):
@@ -530,7 +530,9 @@ class TestProductManagement(TestCase):
         
         self.assertEqual(result, product_data)
         self.mock_client.products.create.assert_called_once_with(
-            params={'name': 'Test Product', 'metadata': metadata}
+            name='Test Product',
+            description=None,
+            metadata=metadata
         )
         
     def test_create_product_with_price_success(self):
@@ -589,10 +591,18 @@ class TestProductManagement(TestCase):
         mock_response.data = products_data
         self.mock_client.products.list.return_value = mock_response
         
+        # Mock the get_product_prices method to return empty prices
+        self.manager.get_product_prices = MagicMock(return_value=[])
+        
         result = self.manager.list_products(active=True)
         
-        self.assertEqual(result, products_data)
-        self.mock_client.products.list.assert_called_once_with(params={'active': True, 'expand': ['data.default_price']})
+        # Expected result now includes prices data due to enhanced functionality
+        expected_result = [
+            {'id': 'prod_1', 'name': 'Product 1', 'active': True, 'prices': {'data': []}},
+            {'id': 'prod_2', 'name': 'Product 2', 'active': True, 'prices': {'data': []}}
+        ]
+        self.assertEqual(result, expected_result)
+        self.mock_client.products.list.assert_called_once_with(active=True, expand=['data.default_price'])
         
     def test_list_products_all_products(self):
         """Test listing all products."""
@@ -605,10 +615,18 @@ class TestProductManagement(TestCase):
         mock_response.data = products_data
         self.mock_client.products.list.return_value = mock_response
         
+        # Mock the get_product_prices method to return empty prices
+        self.manager.get_product_prices = MagicMock(return_value=[])
+        
         result = self.manager.list_products(active=None)
         
-        self.assertEqual(result, products_data)
-        self.mock_client.products.list.assert_called_once_with(params={'expand': ['data.default_price']})
+        # Expected result now includes prices data due to enhanced functionality
+        expected_result = [
+            {'id': 'prod_1', 'name': 'Product 1', 'active': True, 'prices': {'data': []}},
+            {'id': 'prod_2', 'name': 'Product 2', 'active': False, 'prices': {'data': []}}
+        ]
+        self.assertEqual(result, expected_result)
+        self.mock_client.products.list.assert_called_once_with(expand=['data.default_price'])
 
 
 class TestSubscriptionManagement(TestCase):
@@ -638,7 +656,8 @@ class TestSubscriptionManagement(TestCase):
         
         self.assertEqual(result, subscription_data)
         self.mock_client.subscriptions.create.assert_called_once_with(
-            params={'customer': 'cus_test_123', 'items': [{'price': 'price_test_123', 'quantity': 1}]}
+            customer='cus_test_123',
+            items=[{'price': 'price_test_123', 'quantity': 1}]
         )
         
     def test_create_subscription_with_metadata(self):
@@ -654,7 +673,9 @@ class TestSubscriptionManagement(TestCase):
         
         self.assertEqual(result, subscription_data)
         self.mock_client.subscriptions.create.assert_called_once_with(
-            params={'customer': 'cus_test_123', 'items': [{'price': 'price_test_123', 'quantity': 1}], 'metadata': metadata}
+            customer='cus_test_123',
+            items=[{'price': 'price_test_123', 'quantity': 1}],
+            metadata=metadata
         )
         
     def test_retrieve_subscription_success(self):
@@ -690,7 +711,7 @@ class TestSubscriptionManagement(TestCase):
         self.assertEqual(result, subscription_data)
         self.mock_client.subscriptions.update.assert_called_once_with(
             'sub_test_123',
-            params={'items': [{'id': 'si_test', 'price': 'price_test_456'}]}
+            items=[{'id': 'si_test', 'price': 'price_test_456'}]
         )
         
     def test_cancel_subscription_at_period_end(self):
@@ -706,7 +727,7 @@ class TestSubscriptionManagement(TestCase):
         self.assertEqual(result, subscription_data)
         self.mock_client.subscriptions.update.assert_called_once_with(
             'sub_test_123',
-            params={'cancel_at_period_end': True}
+            cancel_at_period_end=True
         )
         
     def test_cancel_subscription_immediately(self):
@@ -751,7 +772,7 @@ class TestPaymentOperations(TestCase):
         
         self.assertEqual(result, payment_intent_data)
         self.mock_client.payment_intents.create.assert_called_once_with(
-            params={'amount': 1000, 'currency': 'usd'}
+            amount=1000, currency='usd'
         )
         
     def test_create_payment_intent_with_customer(self):
@@ -766,7 +787,7 @@ class TestPaymentOperations(TestCase):
         
         self.assertEqual(result, payment_intent_data)
         self.mock_client.payment_intents.create.assert_called_once_with(
-            params={'amount': 1000, 'currency': 'usd', 'customer': 'cus_test_123'}
+            amount=1000, currency='usd', customer='cus_test_123'
         )
         
     def test_retrieve_payment_intent_success(self):
@@ -793,7 +814,7 @@ class TestPaymentOperations(TestCase):
         result = self.manager.confirm_payment_intent('pi_test_123')
         
         self.assertEqual(result, payment_intent_data)
-        self.mock_client.payment_intents.confirm.assert_called_once_with('pi_test_123', params={})
+        self.mock_client.payment_intents.confirm.assert_called_once_with('pi_test_123')
         
     def test_cancel_payment_intent_success(self):
         """Test successful payment intent cancellation."""
@@ -880,7 +901,7 @@ class TestPaymentOperations(TestCase):
         
         self.assertEqual(result, refund_data)
         self.mock_client.refunds.create.assert_called_once_with(
-            params={'payment_intent': 'pi_test_123', 'amount': 1000}
+            payment_intent='pi_test_123', amount=1000
         )
 
 
@@ -1246,7 +1267,7 @@ class TestErrorHandlingAndFallbacks(TestCase):
             except ImportError:
                 pass  # No core configuration in test environment
             
-            with patch('stripe.StripeClient') as mock_client:
+            with patch('stripe.StripeClient'):
                 # Should not fail even if connectivity test is disabled
                 manager = StripeManager.get_instance()
                 self.assertIsNotNone(manager)

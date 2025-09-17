@@ -1,13 +1,9 @@
 """Integration tests for authentication workflows (Sprint 21)."""
-import json
-from django.test import TestCase, Client, override_settings
-from django.urls import reverse
+from allauth.account.models import EmailAddress
 from django.contrib.auth import get_user_model
-from django.contrib.messages import get_messages
 from django.contrib.sessions.models import Session
-from allauth.account.models import EmailAddress, EmailConfirmation
-from unittest.mock import patch
-from django.core import mail
+from django.test import Client, TestCase, override_settings
+from django.urls import reverse
 
 User = get_user_model()
 

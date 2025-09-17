@@ -5,12 +5,11 @@ This test file prevents regressions where templates reference URLs
 that may not be available based on feature flag configuration.
 """
 
-import pytest
-from django.test import TestCase, RequestFactory
+from unittest.mock import MagicMock, patch
+
 from django.contrib.auth import get_user_model
 from django.template import Context, Template
-from unittest.mock import patch, MagicMock
-
+from django.test import RequestFactory, TestCase
 
 User = get_user_model()
 

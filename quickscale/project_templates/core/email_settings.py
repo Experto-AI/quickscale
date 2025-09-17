@@ -1,6 +1,4 @@
 """Email configuration settings for Django and django-allauth."""
-import os
-from pathlib import Path
 
 from .configuration import config
 
@@ -14,15 +12,14 @@ EMAIL_USE_SSL = config.email.use_ssl
 DEFAULT_FROM_EMAIL = config.get_env('DEFAULT_FROM_EMAIL', 'noreply@example.com')
 SERVER_EMAIL = config.get_env('SERVER_EMAIL', 'server@example.com')
 
-IS_PRODUCTION = config.get_env_bool('IS_PRODUCTION', False)
-DEBUG = not IS_PRODUCTION
-EMAIL_BACKEND = 'django.core.mail.backends.console.EmailBackend' if DEBUG else 'django.core.mail.backends.smtp.EmailBackend'
+# Use config directly instead of redefining IS_PRODUCTION and DEBUG
+EMAIL_BACKEND = 'django.core.mail.backends.console.EmailBackend' if not config.get_env_bool('IS_PRODUCTION', False) else 'django.core.mail.backends.smtp.EmailBackend'
 
-def validate_email_settings():
+def validate_email_settings() -> None:
     """Validate email settings for production environment."""
-    if not IS_PRODUCTION:
+    if not config.get_env_bool('IS_PRODUCTION', False):
         return  # Skip validation in development
-    
+
     if not config.email.configured:
         missing = []
         if not config.email.host:
@@ -65,7 +62,7 @@ ACCOUNT_EMAIL_CONFIRMATION_ANONYMOUS_REDIRECT_URL = 'account_login'
 
 # Email adapter configuration
 ACCOUNT_ADAPTER = 'users.adapters.AccountAdapter'
-ACCOUNT_DEFAULT_HTTP_PROTOCOL = 'https' if not DEBUG else 'http'
+ACCOUNT_DEFAULT_HTTP_PROTOCOL = 'https' if not config.get_env_bool('IS_PRODUCTION', False) else 'http'
 
 # Custom forms configuration
 ACCOUNT_FORMS = {

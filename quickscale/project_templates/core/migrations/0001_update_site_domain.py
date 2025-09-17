@@ -33,11 +33,11 @@ def create_site_permissions(apps, schema_editor):
     """
     ContentType = apps.get_model('contenttypes', 'ContentType')
     Permission = apps.get_model('auth', 'Permission')
-    
+
     # Get content type for the Site model
     try:
         site_content_type = ContentType.objects.get(app_label='sites', model='site')
-        
+
         # Define the permissions we need to ensure exist
         permissions = [
             ('add_site', 'Can add site'),
@@ -45,7 +45,7 @@ def create_site_permissions(apps, schema_editor):
             ('delete_site', 'Can delete site'),
             ('view_site', 'Can view site'),
         ]
-        
+
         # Create permissions one by one, skipping if they already exist
         for codename, name in permissions:
             Permission.objects.get_or_create(
@@ -70,4 +70,4 @@ class Migration(migrations.Migration):
     operations = [
         migrations.RunPython(update_site_forward, update_site_backward),
         migrations.RunPython(create_site_permissions, update_site_backward),
-    ] 
+    ]

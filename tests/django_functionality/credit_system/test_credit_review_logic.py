@@ -1,23 +1,26 @@
 """Unit tests for Sprint 22 Credit System Architecture Review improvements."""
-import unittest
-from unittest.mock import patch
-from decimal import Decimal
-from datetime import timedelta
-from django.test import TestCase, override_settings
-from django.utils import timezone
-from django.core.exceptions import ValidationError
-from django.db import transaction, IntegrityError
-from django.contrib.auth import get_user_model
+import os
 
 # Import models from the template location (what gets deployed)
 import sys
-import os
+import unittest
+from datetime import timedelta
+from decimal import Decimal
+
+from django.contrib.auth import get_user_model
+from django.core.exceptions import ValidationError
+from django.db import transaction
+from django.test import TestCase, override_settings
+from django.utils import timezone
+
 template_path = os.path.join(os.path.dirname(__file__), '../../quickscale/project_templates')
 sys.path.insert(0, template_path)
 
 from credits.models import (
-    CreditAccount, CreditTransaction, UserSubscription, Service, 
-    ServiceUsage, InsufficientCreditsError
+    CreditAccount,
+    CreditTransaction,
+    InsufficientCreditsError,
+    UserSubscription,
 )
 from stripe_manager.models import StripeProduct
 

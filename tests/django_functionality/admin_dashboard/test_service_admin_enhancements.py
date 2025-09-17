@@ -6,8 +6,8 @@ Admin Interface that extend beyond the basic implementation tests.
 """
 
 import os
-import unittest
 import re
+import unittest
 from pathlib import Path
 
 
@@ -23,7 +23,7 @@ class ServiceAdminSecurityTests(unittest.TestCase):
     def test_service_toggle_csrf_protection(self):
         """Test that service toggle view has proper CSRF protection."""
         with open(self.admin_dashboard_views, 'r') as f:
-            views_content = f.read()
+            f.read()
         
         # Check for CSRF token validation in HTMX integration
         templates_path = self.base_path / 'quickscale' / 'project_templates' / 'templates' / 'admin_dashboard'

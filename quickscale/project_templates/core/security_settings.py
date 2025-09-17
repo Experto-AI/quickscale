@@ -1,6 +1,4 @@
 """Security-related settings for the QuickScale application."""
-import os
-from pathlib import Path
 
 from .configuration import config
 
@@ -14,22 +12,22 @@ def validate_account_lockout_settings():
     """Validate account lockout configuration parameters."""
     threshold = config.get_env_int('ACCOUNT_LOCKOUT_MAX_ATTEMPTS', 5)
     duration = config.get_env_int('ACCOUNT_LOCKOUT_DURATION', 300)
-    
+
     if threshold < 3:
         raise SecurityConfigurationError(
             f"ACCOUNT_LOCKOUT_MAX_ATTEMPTS must be at least 3 for security, got {threshold}"
         )
-    
+
     if threshold > 20:
         raise SecurityConfigurationError(
             f"ACCOUNT_LOCKOUT_MAX_ATTEMPTS must not exceed 20 to prevent DoS, got {threshold}"
         )
-    
+
     if duration < 60:
         raise SecurityConfigurationError(
             f"ACCOUNT_LOCKOUT_DURATION must be at least 60 seconds, got {duration}"
         )
-    
+
     if duration > 86400:  # 24 hours
         raise SecurityConfigurationError(
             f"ACCOUNT_LOCKOUT_DURATION must not exceed 86400 seconds (24h), got {duration}"
@@ -39,12 +37,12 @@ def validate_account_lockout_settings():
 def validate_session_security_settings():
     """Validate session timeout configuration."""
     session_age = config.get_env_int('SESSION_COOKIE_AGE', 3600)
-    
+
     if session_age < 300:  # 5 minutes
         raise SecurityConfigurationError(
             f"SESSION_COOKIE_AGE must be at least 300 seconds for usability, got {session_age}"
         )
-    
+
     if session_age > 86400:  # 24 hours
         raise SecurityConfigurationError(
             f"SESSION_COOKIE_AGE should not exceed 86400 seconds for security, got {session_age}"
@@ -53,24 +51,24 @@ def validate_session_security_settings():
 
 def validate_production_security_settings():
     """Validate security settings for production environment."""
-    if IS_PRODUCTION:
+    if config.get_env_bool('IS_PRODUCTION', False):
         secret_key = config.get_env('SECRET_KEY', '')
         if not secret_key or secret_key == 'dev-only-dummy-key-replace-in-production':
             raise SecurityConfigurationError(
                 "Production requires a secure SECRET_KEY different from default"
             )
-        
+
         if len(secret_key) < 32:
             raise SecurityConfigurationError(
                 f"SECRET_KEY must be at least 32 characters for security, got {len(secret_key)}"
             )
-        
+
         allowed_hosts = config.get_env('ALLOWED_HOSTS', '')
         if '*' in allowed_hosts:
             raise SecurityConfigurationError(
                 "Production requires specific ALLOWED_HOSTS, wildcard '*' is not secure"
             )
-        
+
         if not allowed_hosts or allowed_hosts.strip() == '':
             raise SecurityConfigurationError(
                 "Production requires explicit ALLOWED_HOSTS configuration"
@@ -82,10 +80,6 @@ def validate_all_security_settings():
     validate_account_lockout_settings()
     validate_session_security_settings()
     validate_production_security_settings()
-
-# Determine environment
-IS_PRODUCTION = config.get_env_bool('IS_PRODUCTION', False)
-DEBUG = not IS_PRODUCTION
 
 # Security settings
 SECURE_BROWSER_XSS_FILTER = True
@@ -107,7 +101,7 @@ SESSION_COOKIE_SAMESITE = 'Lax'
 CSRF_COOKIE_NAME = 'quickscale_csrftoken'  # Custom CSRF cookie name
 
 # In production, enforce HTTPS for cookies
-if IS_PRODUCTION:
+if config.get_env_bool('IS_PRODUCTION', False):
     CSRF_COOKIE_SECURE = True
     SESSION_COOKIE_SECURE = True
     SECURE_SSL_REDIRECT = True
@@ -115,8 +109,8 @@ if IS_PRODUCTION:
     SECURE_HSTS_INCLUDE_SUBDOMAINS = True
     SECURE_HSTS_PRELOAD = True
     # Additional production security headers
-    SECURE_REDIRECT_EXEMPT = []  # No exempt URLs for SSL redirect
-    
+    SECURE_REDIRECT_EXEMPT: list[str] = []  # No exempt URLs for SSL redirect
+
     # Add referrer policy header for enhanced privacy
     SECURE_REFERRER_POLICY = 'strict-origin-when-cross-origin'
 else:
@@ -188,21 +182,13 @@ AUTH_PASSWORD_VALIDATORS = [
 # Login attempt limiting and security (configured in email_settings.py)
 # Note: ACCOUNT_RATE_LIMITS and ACCOUNT_SIGNUP_FIELDS are configured in email_settings.py
 
-# Additional security headers
-if IS_PRODUCTION:
-    # Content Security Policy for enhanced XSS protection
-    SECURE_CONTENT_SECURITY_POLICY = {
-        'default-src': ["'self'"],
-        'script-src': ["'self'", "'unsafe-inline'", "https://unpkg.com", "https://cdn.jsdelivr.net"],
-        'style-src': ["'self'", "'unsafe-inline'", "https://cdn.jsdelivr.net"],
-        'img-src': ["'self'", "data:", "https:"],
-        'font-src': ["'self'", "https://cdn.jsdelivr.net"],
-        'connect-src': ["'self'"],
-        'frame-ancestors': ["'none'"],
-    }
-    
+# Content Security Policy - progressively more restrictive as application grows
+CSP_ENABLED = config.get_env_bool('ENABLE_ADVANCED_ERRORS', False)
+
+# Additional security headers for production
+if config.get_env_bool('IS_PRODUCTION', False):
     # Permissions policy to restrict access to browser features
-    SECURE_PERMISSIONS_POLICY = {
+    SECURE_PERMISSIONS_POLICY: dict[str, list[str]] = {
         'geolocation': [],
         'microphone': [],
         'camera': [],
@@ -218,9 +204,13 @@ try:
     validate_all_security_settings()
 except SecurityConfigurationError as e:
     # Import-time validation: in production, fail-fast; in dev, warn to avoid container crash
-    import sys, warnings
-    print(f"Security Configuration Warning: {e}", file=sys.stderr)
-    if IS_PRODUCTION:
+    import logging
+    import warnings
+
+    logger = logging.getLogger('django.security')
+    logger.warning(f"Security Configuration Warning: {e}")
+
+    if config.get_env_bool('IS_PRODUCTION', False):
         raise
     else:
         warnings.warn(f"Security configuration issue (development mode): {e}", UserWarning)

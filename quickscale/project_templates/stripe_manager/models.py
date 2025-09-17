@@ -1,14 +1,14 @@
-from django.db import models
-from django.core.validators import MinValueValidator
-from django.utils.translation import gettext_lazy as _
 from django.contrib.auth import get_user_model
+from django.core.validators import MinValueValidator
+from django.db import models
+from django.utils.translation import gettext_lazy as _
 
 User = get_user_model()
 
 
 class StripeCustomer(models.Model):
     """Model for linking Django users with Stripe customers."""
-    
+
     user = models.OneToOneField(
         User,
         on_delete=models.CASCADE,
@@ -55,7 +55,7 @@ class StripeCustomer(models.Model):
 
 class StripeProduct(models.Model):
     """Model for storing Stripe products with display configuration."""
-    
+
     # Basic Info
     name = models.CharField(
         _('Name'),
@@ -171,4 +171,4 @@ class StripeProduct(models.Model):
         """Validate model data."""
         super().clean()
         # TODO: Add validation logic
-        pass 
+        pass

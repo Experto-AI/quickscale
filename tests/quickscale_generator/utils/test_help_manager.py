@@ -1,6 +1,7 @@
 """Unit tests for the help_manager module."""
 import unittest
-from unittest.mock import patch, call
+from unittest.mock import call, patch
+
 from quickscale.utils.help_manager import show_manage_help
 
 

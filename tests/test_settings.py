@@ -5,7 +5,6 @@ This file provides PostgreSQL-based settings for unit tests, using the test data
 container defined in tests/docker-compose.test.yml.
 """
 
-import os
 import sys
 from pathlib import Path
 

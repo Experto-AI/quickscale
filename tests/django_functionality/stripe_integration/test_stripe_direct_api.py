@@ -1,12 +1,11 @@
 """Tests for direct Stripe API implementation."""
 
-import unittest
-from unittest.mock import patch, MagicMock
+import importlib.util
+import json
 import os
 import sys
-import json
-import importlib.util
-from io import StringIO
+import unittest
+from unittest.mock import MagicMock
 
 # Add parent directory to sys.path for imports
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '../..')))

@@ -1,7 +1,7 @@
 """Unit tests for CLI error handling."""
 import sys
-from unittest.mock import patch, MagicMock
-import pytest
+from unittest.mock import MagicMock, patch
+
 from quickscale.cli import main
 from quickscale.commands import command_manager
 
@@ -19,7 +19,7 @@ class TestCLIErrorHandling:
                 args.command = "some_command"
                 # Directly raise the KeyError that would happen in command_manager
                 raise KeyError(f"Command '{args.command}' not found")
-            except KeyError as e:
+            except KeyError:
                 # Copy the exception handling from main()
                 print(f"Command error: Command '{args.command}' not found")
                 return 1

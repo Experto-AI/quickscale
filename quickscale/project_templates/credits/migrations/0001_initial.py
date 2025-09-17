@@ -15,9 +15,10 @@ Models created:
 
 Depends on users app for the CustomUser model.
 """
+from decimal import Decimal
+
 import django.core.validators
 import django.db.models.deletion
-from decimal import Decimal
 from django.conf import settings
 from django.db import migrations, models
 
@@ -49,7 +50,7 @@ class Migration(migrations.Migration):
                 'ordering': ['name'],
             },
         ),
-        
+
         # UserSubscription model
         migrations.CreateModel(
             name='UserSubscription',
@@ -71,7 +72,7 @@ class Migration(migrations.Migration):
                 'verbose_name_plural': 'user subscriptions',
             },
         ),
-        
+
         # CreditAccount model
         migrations.CreateModel(
             name='CreditAccount',
@@ -88,7 +89,7 @@ class Migration(migrations.Migration):
                 'verbose_name_plural': 'credit accounts',
             },
         ),
-        
+
         # CreditTransaction model (most complex)
         migrations.CreateModel(
             name='CreditTransaction',
@@ -110,8 +111,8 @@ class Migration(migrations.Migration):
                 'ordering': ['-created_at'],
             },
         ),
-        
-        # ServiceUsage model  
+
+        # ServiceUsage model
         migrations.CreateModel(
             name='ServiceUsage',
             fields=[
@@ -127,7 +128,7 @@ class Migration(migrations.Migration):
                 'ordering': ['-created_at'],
             },
         ),
-        
+
         # Payment model
         migrations.CreateModel(
             name='Payment',
@@ -154,7 +155,7 @@ class Migration(migrations.Migration):
                 'ordering': ['-created_at'],
             },
         ),
-        
+
         # APIKey model
         migrations.CreateModel(
             name='APIKey',
@@ -175,7 +176,7 @@ class Migration(migrations.Migration):
                 'ordering': ['-created_at'],
             },
         ),
-        
+
         # Add all indexes
         migrations.AddIndex(
             model_name='usersubscription',
@@ -253,7 +254,7 @@ class Migration(migrations.Migration):
             model_name='apikey',
             index=models.Index(fields=['is_active', 'expiry_date'], name='credits_api_is_acti_1c9f47_idx'),
         ),
-        
+
         # Add constraints
         migrations.AddConstraint(
             model_name='credittransaction',

@@ -5,10 +5,10 @@ This migration creates the admin dashboard models:
 
 Depends on users app for the CustomUser model.
 """
-from django.db import migrations, models
 import django.db.models.deletion
 import django.utils.timezone
 from django.conf import settings
+from django.db import migrations, models
 
 
 class Migration(migrations.Migration):
@@ -38,4 +38,4 @@ class Migration(migrations.Migration):
                 'ordering': ['-timestamp'],
             },
         ),
-    ] 
+    ]

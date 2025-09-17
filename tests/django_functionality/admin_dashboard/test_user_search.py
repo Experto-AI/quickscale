@@ -10,12 +10,10 @@ These tests verify the functionality added in Sprint 15:
 Tests the QuickScale project generator template functionality, not Django-generated project.
 """
 
-import unittest
-import tempfile
 import shutil
+import tempfile
+import unittest
 from pathlib import Path
-from unittest.mock import patch, MagicMock, mock_open
-import os
 
 from tests.utils import DynamicProjectTestCase
 
@@ -440,7 +438,7 @@ class TestSprint15CodeQuality(unittest.TestCase):
         self.assertTrue(len(local_imports) > 0, "Should have local imports")
     
     def test_proper_docstrings(self):
-        """Test that functions have proper docstrings."""
+        """Test that admin dashboard views have proper docstrings."""
         # Get the path to the admin_dashboard views template
         views_template_path = Path(__file__).parent.parent.parent.parent / "quickscale" / "project_templates" / "admin_dashboard" / "views.py"
         

@@ -1,12 +1,12 @@
 """Tests for APIKey model functionality including secure key generation and validation."""
 import string
-from decimal import Decimal
-from django.test import TestCase
+from datetime import timedelta
+
+from credits.models import APIKey
 from django.contrib.auth import get_user_model
 from django.contrib.auth.hashers import check_password
+from django.test import TestCase
 from django.utils import timezone
-from datetime import timedelta
-from credits.models import APIKey
 
 User = get_user_model()
 

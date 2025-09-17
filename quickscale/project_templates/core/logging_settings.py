@@ -5,7 +5,6 @@ This module contains the logging configuration that can be imported into
 the main settings.py file to maintain clean separation of concerns.
 """
 
-import os
 from pathlib import Path
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
@@ -23,11 +22,11 @@ def get_logging_config(debug=False, log_level='INFO'):
     Returns:
         dict: Django logging configuration
     """
-    
+
     # Ensure logs directory exists
     log_dir = BASE_DIR / 'logs'
     log_dir.mkdir(exist_ok=True)
-    
+
     logging_config = {
         'version': 1,
         'disable_existing_loggers': False,
@@ -143,7 +142,7 @@ def get_logging_config(debug=False, log_level='INFO'):
             'level': log_level,
         },
     }
-    
+
     return logging_config
 
 
@@ -183,4 +182,4 @@ TEST_LOGGING = {
         'handlers': ['console'],
         'level': 'WARNING',
     },
-} 
+}

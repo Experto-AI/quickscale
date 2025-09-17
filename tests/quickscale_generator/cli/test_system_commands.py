@@ -5,10 +5,9 @@ Replaces: test_system_commands.py, test_system_commands_comprehensive.py,
 test_system_commands_complete.py and related duplicates.
 """
 import subprocess
-import shutil
-import os
+from unittest.mock import Mock, patch
+
 import pytest
-from unittest.mock import patch, Mock, MagicMock, call
 
 from quickscale.commands.system_commands import CheckCommand
 from tests.base_test_classes import CommandTestMixin
@@ -21,8 +20,8 @@ class TestCheckCommand(CommandTestMixin):
         """Set up test environment."""
         self.command = CheckCommand()
 
-    def test_initialization(self):
-        """Test command initialization."""
+    def test_check_command_initialization(self):
+        """Test CheckCommand initialization and basic functionality."""
         self.assert_command_initialized(self.command)
 
     @patch('shutil.which')

@@ -1,11 +1,11 @@
-import pytest
 import logging
-from unittest.mock import patch, MagicMock
-from pathlib import Path
-import os
+from unittest.mock import patch
+
+import pytest
 
 from quickscale.commands.init_command import InitCommand
 from quickscale.utils.error_manager import error_manager
+
 
 class TestEnvironmentValidation:
     """Tests for the environment validation functionality"""

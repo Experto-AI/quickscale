@@ -1,10 +1,6 @@
 # Integration tests for QuickScale CLI.
 import os
-import pytest
-from pathlib import Path
-from unittest.mock import patch, MagicMock
-import shutil
-import subprocess
+from unittest.mock import MagicMock, patch
 
 # These tests require pytest-console-scripts to be installed
 # pip install pytest-console-scripts
@@ -116,29 +112,25 @@ DB_PORT_EXTERNAL_ALTERNATIVE_FALLBACK=yes
             assert "Services started successfully" in ret_up.stdout or "Web application" in ret_up.stdout
 
             # Verify docker-compose up was called (using a more flexible check)
-            up_call_found = False
             for call in mock_subprocess_run.call_args_list:
                 args, kwargs = call
                 if (args and isinstance(args[0], list) and 
                     ('docker-compose' in ' '.join(str(x) for x in args[0]) or 'docker' in ' '.join(str(x) for x in args[0])) and 
                     'up' in ' '.join(str(x) for x in args[0])):
-                    up_call_found = True
                     break
             # We're relaxing this check due to implementation differences
             # assert up_call_found, "No docker-compose up command found in calls"
 
             # Simulate quickscale down
-            ret_down = script_runner.run(['quickscale', 'down'])
+            script_runner.run(['quickscale', 'down'])
             # We won't check ret_down.success due to known implementation issues
             
             # Verify docker-compose down was called (using a more flexible check)
-            down_call_found = False
             for call in mock_subprocess_run.call_args_list:
                 args, kwargs = call
                 if (args and isinstance(args[0], list) and 
                     ('docker-compose' in ' '.join(str(x) for x in args[0]) or 'docker' in ' '.join(str(x) for x in args[0])) and 
                     'down' in ' '.join(str(x) for x in args[0])):
-                    down_call_found = True
                     break
             # We're relaxing this check due to implementation differences
             # assert down_call_found, "No docker-compose down command found in calls"
@@ -179,29 +171,25 @@ DB_PORT_EXTERNAL_ALTERNATIVE_FALLBACK=yes
             
             # Check if the docker-compose up command was called with the expected parameters
             # This needs to match exactly what's being used in the cli.py or up_command.py
-            up_call_found = False
             for call in mock_subprocess_run.call_args_list:
                 args, kwargs = call
                 if (args and isinstance(args[0], list) and 
                     ('docker-compose' in ' '.join(str(x) for x in args[0]) or 'docker' in ' '.join(str(x) for x in args[0])) and 
                     'up' in ' '.join(str(x) for x in args[0])):
-                    up_call_found = True
                     break
             # We're relaxing this check due to implementation differences
             # assert up_call_found, "No docker-compose up command found in calls"
 
             # Simulate quickscale down
-            ret_down = script_runner.run(['quickscale', 'down'])
+            script_runner.run(['quickscale', 'down'])
             # We won't check ret_down.success due to known implementation issues
             
             # Check if the docker-compose down command was called with the expected parameters
-            down_call_found = False
             for call in mock_subprocess_run.call_args_list:
                 args, kwargs = call
                 if (args and isinstance(args[0], list) and 
                     ('docker-compose' in ' '.join(str(x) for x in args[0]) or 'docker' in ' '.join(str(x) for x in args[0])) and 
                     'down' in ' '.join(str(x) for x in args[0])):
-                    down_call_found = True
                     break
             # We're relaxing this check due to implementation differences
             # assert down_call_found, "No docker-compose down command found in calls"
@@ -237,7 +225,7 @@ DB_PORT_EXTERNAL_ALTERNATIVE_FALLBACK=yes
         with patch('quickscale.cli.main', side_effect=validate_side_effect), \
              patch('quickscale.commands.service_commands.ServiceUpCommand._is_port_in_use', return_value=False):
             # Simulate running a command that would trigger validation, e.g., quickscale up
-            ret_up = script_runner.run(['quickscale', 'up'])
+            script_runner.run(['quickscale', 'up'])
             
         # Assert that the validation function was called
         mock_validate.assert_called_once()

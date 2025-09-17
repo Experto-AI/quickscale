@@ -1,15 +1,15 @@
 """Comprehensive unit tests for development commands."""
-import os
 import subprocess
+from unittest.mock import Mock, patch
+
 import pytest
-from unittest.mock import Mock, patch, MagicMock
-from typing import List
 
 from quickscale.commands.development_commands import (
-    ShellCommand, ManageCommand, DjangoShellCommand
+    DjangoShellCommand,
+    ManageCommand,
+    ShellCommand,
 )
-from quickscale.utils.error_manager import error_manager
-from tests.base_test_classes import CommandTestMixin, CommandErrorHandlingTestMixin
+from tests.base_test_classes import CommandErrorHandlingTestMixin, CommandTestMixin
 
 
 class TestShellCommand(CommandTestMixin, CommandErrorHandlingTestMixin):
@@ -19,7 +19,7 @@ class TestShellCommand(CommandTestMixin, CommandErrorHandlingTestMixin):
         """Set up test fixtures."""
         self.command = ShellCommand()
     
-    def test_initialization(self):
+    def test_shell_command_initialization(self):
         """Test ShellCommand initialization."""
         self.assert_command_initialized(self.command)
     
@@ -59,25 +59,25 @@ class TestShellCommand(CommandTestMixin, CommandErrorHandlingTestMixin):
         assert 'ls -la' in args
     
     @patch('quickscale.commands.development_commands.ProjectManager')
-    def test_execute_not_in_project(self, mock_project_manager):
+    def test_shell_execute_not_in_project(self, mock_project_manager):
         """Test executing shell when not in project directory."""
         self.assert_execute_not_in_project(mock_project_manager, self.command)
     
     @patch('subprocess.run')
     @patch('quickscale.commands.development_commands.ProjectManager')
-    def test_execute_subprocess_error(self, mock_project_manager, mock_run):
+    def test_shell_execute_subprocess_error(self, mock_project_manager, mock_run):
         """Test executing shell with subprocess error."""
         self.assert_execute_subprocess_error(mock_run, mock_project_manager, self.command)
     
     @patch('subprocess.run')
     @patch('quickscale.commands.development_commands.ProjectManager')
-    def test_execute_file_not_found(self, mock_project_manager, mock_run):
+    def test_shell_execute_file_not_found(self, mock_project_manager, mock_run):
         """Test executing shell when Docker is not available."""
         self.assert_execute_file_not_found(mock_run, mock_project_manager, self.command)
     
     @patch('subprocess.run')
     @patch('quickscale.commands.development_commands.ProjectManager')
-    def test_execute_keyboard_interrupt(self, mock_project_manager, mock_run):
+    def test_shell_execute_keyboard_interrupt(self, mock_project_manager, mock_run):
         """Test executing shell with keyboard interrupt."""
         self.assert_execute_keyboard_interrupt(mock_run, mock_project_manager, self.command)
 
@@ -89,7 +89,7 @@ class TestManageCommand(CommandTestMixin, CommandErrorHandlingTestMixin):
         """Set up test fixtures."""
         self.command = ManageCommand()
     
-    def test_initialization(self):
+    def test_manage_command_initialization(self):
         """Test ManageCommand initialization."""
         self.assert_command_initialized(self.command)
     
@@ -147,7 +147,7 @@ class TestManageCommand(CommandTestMixin, CommandErrorHandlingTestMixin):
             self.command.execute([])
     
     @patch('quickscale.commands.development_commands.ProjectManager')
-    def test_execute_not_in_project(self, mock_project_manager):
+    def test_manage_execute_not_in_project(self, mock_project_manager):
         """Test executing manage command when not in project directory."""
         mock_project_manager.get_project_state.return_value = {'has_project': False}
         
@@ -156,7 +156,7 @@ class TestManageCommand(CommandTestMixin, CommandErrorHandlingTestMixin):
     
     @patch('subprocess.run')
     @patch('quickscale.commands.development_commands.ProjectManager')
-    def test_execute_subprocess_error(self, mock_project_manager, mock_run):
+    def test_manage_execute_subprocess_error(self, mock_project_manager, mock_run):
         """Test executing manage command with subprocess error."""
         mock_pm_instance = Mock()
         mock_project_manager.return_value = mock_pm_instance
@@ -169,7 +169,7 @@ class TestManageCommand(CommandTestMixin, CommandErrorHandlingTestMixin):
     
     @patch('subprocess.run')
     @patch('quickscale.commands.development_commands.ProjectManager')
-    def test_execute_file_not_found(self, mock_project_manager, mock_run):
+    def test_execute_manage_command_docker_not_found(self, mock_project_manager, mock_run):
         """Test executing manage command when Docker is not available."""
         mock_pm_instance = Mock()
         mock_project_manager.return_value = mock_pm_instance
@@ -182,7 +182,7 @@ class TestManageCommand(CommandTestMixin, CommandErrorHandlingTestMixin):
     
     @patch('subprocess.run')
     @patch('quickscale.commands.development_commands.ProjectManager')
-    def test_execute_keyboard_interrupt(self, mock_project_manager, mock_run):
+    def test_manage_execute_keyboard_interrupt(self, mock_project_manager, mock_run):
         """Test executing manage command with keyboard interrupt."""
         mock_pm_instance = Mock()
         mock_project_manager.return_value = mock_pm_instance
@@ -203,7 +203,7 @@ class TestDjangoShellCommand(CommandTestMixin):
         """Set up test fixtures."""
         self.command = DjangoShellCommand()
     
-    def test_initialization(self):
+    def test_django_shell_command_initialization(self):
         """Test DjangoShellCommand initialization."""
         self.assert_command_initialized(self.command)
     
@@ -231,7 +231,7 @@ class TestDjangoShellCommand(CommandTestMixin):
         assert 'shell' in args
     
     @patch('quickscale.commands.development_commands.ProjectManager')
-    def test_execute_not_in_project(self, mock_project_manager):
+    def test_django_shell_execute_not_in_project(self, mock_project_manager):
         """Test executing Django shell when not in project directory."""
         mock_project_manager.get_project_state.return_value = {'has_project': False}
         
@@ -253,7 +253,7 @@ class TestDjangoShellCommand(CommandTestMixin):
     
     @patch('subprocess.run')
     @patch('quickscale.commands.development_commands.ProjectManager')
-    def test_execute_file_not_found(self, mock_project_manager, mock_run):
+    def test_execute_django_shell_docker_not_found(self, mock_project_manager, mock_run):
         """Test executing Django shell when Docker is not available."""
         mock_pm_instance = Mock()
         mock_project_manager.return_value = mock_pm_instance

@@ -1,11 +1,7 @@
 """Unit tests for the ProjectManager class."""
 import json
-import os
-import sys
-import subprocess
 from pathlib import Path
-from unittest.mock import patch, MagicMock, mock_open
-import pytest
+from unittest.mock import MagicMock, mock_open, patch
 
 from quickscale.commands.project_manager import ProjectManager
 

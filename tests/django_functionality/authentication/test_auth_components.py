@@ -1,12 +1,8 @@
 """Unit tests for authentication components in django-allauth integration."""
-import unittest
-import pytest
-from unittest.mock import Mock, patch, MagicMock
+from unittest.mock import Mock
 
-from users.validators import PasswordStrengthValidator, BreachedPasswordValidator
-from users.models import CustomUserManager
-from users.adapters import AccountAdapter, SocialAccountAdapter
-from django.core.exceptions import ValidationError, PermissionDenied
+import pytest
+from django.core.exceptions import PermissionDenied
 
 
 class _PasswordStrengthValidator:
@@ -145,12 +141,6 @@ def MockSocialAccountAdapter():
             raise PermissionDenied("Social authentication is not supported.")
     
     return MockAdapter
-
-
-# Create a mock for Django's PermissionDenied exception
-class PermissionDenied(Exception):
-    """Mock for Django's PermissionDenied exception."""
-    pass
 
 
 class TestPasswordValidators:

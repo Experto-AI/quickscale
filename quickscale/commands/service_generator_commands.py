@@ -1,24 +1,24 @@
 """Commands for generating AI service templates and examples."""
 import os
-import string
 from pathlib import Path
-from typing import Dict, Optional, Any
-from .command_base import Command
+from typing import Any, Dict, Optional
+
 from quickscale.utils.message_manager import MessageManager
 from quickscale.utils.template_generator import render_template
-from quickscale.utils.service_templates import service_template_generator
 from quickscale.utils.timeout_constants import DOCKER_OPERATIONS_TIMEOUT
+
+from .command_base import Command
 
 
 class ServiceGeneratorCommand(Command):
     """Command to generate service templates for AI engineers."""
-    
-    def execute(self, service_name: str, service_type: str = "basic", output_dir: Optional[str] = None, 
-                credit_cost: float = 1.0, description: Optional[str] = None, skip_db_config: bool = False, 
+
+    def execute(self, service_name: str, service_type: str = "basic", output_dir: Optional[str] = None,
+                credit_cost: float = 1.0, description: Optional[str] = None, skip_db_config: bool = False,
                 free: bool = False) -> Dict[str, Any]:
         """Generate a new service template."""
         self.logger.info(f"Generating service template: {service_name}")
-        
+
         # Validate service name
         if not self._validate_service_name(service_name):
             return {
@@ -26,67 +26,67 @@ class ServiceGeneratorCommand(Command):
                 "error": f"Invalid service name: {service_name}",
                 "message": "Service name must be a valid Python identifier using snake_case (e.g., text_analyzer, sentiment_processor)"
             }
-        
+
         # Generate description if not provided
         if not description:
             description = f"AI service: {service_name.replace('_', ' ').title()}"
-        
+
         # Handle free flag (overrides credit_cost)
         if free:
             credit_cost = 0.0
-        
+
         # Determine output directory
         if output_dir:
             target_dir = Path(output_dir)
         else:
             target_dir = Path.cwd() / "services"
-        
+
         # Ensure target directory exists
         target_dir.mkdir(parents=True, exist_ok=True)
-        
+
         # Generate service file
         service_file_path = target_dir / f"{service_name}_service.py"
-        
+
         if service_file_path.exists():
             MessageManager.warning(f"Service file already exists: {service_file_path}")
             overwrite = input("Overwrite existing file? [y/N]: ").lower().strip()
             if overwrite != 'y':
                 MessageManager.info("Service generation cancelled")
                 return {"success": False, "reason": "File already exists"}
-        
+
         # Generate service template content
         template_content = self._get_service_template(service_type)
-        
+
         # Template variables
         variables = {
             "SERVICE_NAME": service_name,
             "SERVICE_CLASS": self._to_class_name(service_name),
             "SERVICE_DESCRIPTION": description,
         }
-        
+
         # Render template
         rendered_content = render_template(template_content, variables)
-        
+
         try:
             # Write service file
             with open(service_file_path, 'w', encoding='utf-8') as f:
                 f.write(rendered_content)
-            
+
             MessageManager.success(f"Service template generated: {service_file_path}")
-            
+
             # Generate usage example
             example_file_path = target_dir / f"{service_name}_example.py"
             example_content = self._get_usage_example_template()
             rendered_example = render_template(example_content, variables)
-            
+
             with open(example_file_path, 'w', encoding='utf-8') as f:
                 f.write(rendered_example)
-            
+
             MessageManager.success(f"Usage example generated: {example_file_path}")
-            
+
         except (PermissionError, OSError) as e:
             return {"success": False, "error": str(e)}
-        
+
         result = {
             "success": True,
             "service_file": str(service_file_path),
@@ -95,7 +95,7 @@ class ServiceGeneratorCommand(Command):
             "description": description,
             "credit_cost": credit_cost
         }
-        
+
         # Configure service in database unless skip_db_config is True
         if not skip_db_config:
             try:
@@ -109,125 +109,123 @@ class ServiceGeneratorCommand(Command):
                 else:
                     reason = db_config_result.get('reason', 'Unknown reason')
                     MessageManager.warning(f"Database configuration skipped: {reason}")
-                    
+
                     # Provide helpful guidance based on the specific failure reason
                     cost_flag = "--free" if credit_cost == 0.0 else f"--credit-cost {credit_cost}"
                     if "Docker services are not running" in reason:
                         MessageManager.info("To configure the service in the database:")
-                        MessageManager.info(f"  1. Start your project: quickscale up")
+                        MessageManager.info("  1. Start your project: quickscale up")
                         MessageManager.info(f"  2. Configure service: quickscale manage configure_service {service_name} --description \"{description}\" {cost_flag}")
                     elif "Cannot check Docker services" in reason:
                         MessageManager.info("To configure the service in the database:")
-                        MessageManager.info(f"  1. Ensure Docker is running and project is started: quickscale up")
+                        MessageManager.info("  1. Ensure Docker is running and project is started: quickscale up")
                         MessageManager.info(f"  2. Configure service: quickscale manage configure_service {service_name} --description \"{description}\" {cost_flag}")
                     else:
                         MessageManager.info(f"You can configure it manually with: quickscale manage configure_service {service_name} --description \"{description}\" {cost_flag}")
-                    
+
                     result["database_config_warning"] = reason
             except Exception as e:
                 MessageManager.warning(f"Could not configure service in database: {str(e)}")
                 cost_flag = "--free" if credit_cost == 0.0 else f"--credit-cost {credit_cost}"
                 MessageManager.info("To configure the service in the database:")
-                MessageManager.info(f"  1. Start your project: quickscale up")
+                MessageManager.info("  1. Start your project: quickscale up")
                 MessageManager.info(f"  2. Configure service: quickscale manage configure_service {service_name} --description \"{description}\" {cost_flag}")
                 result["database_configured"] = False
                 result["database_config_error"] = str(e)
         else:
             cost_flag = "--free" if credit_cost == 0.0 else f"--credit-cost {credit_cost}"
-            MessageManager.info(f"Database configuration skipped. Configure manually with:")
+            MessageManager.info("Database configuration skipped. Configure manually with:")
             MessageManager.info(f"  quickscale manage configure_service {service_name} --description \"{description}\" {cost_flag}")
             result["database_configured"] = False
             result["database_config_skipped"] = True
-        
+
         return result
-    
+
     def _validate_service_name(self, service_name: str) -> bool:
         """Validate service name follows Python naming conventions."""
         import keyword
-        
+
         if not service_name:
             return False
-        
+
         # Must be valid Python identifier
         if not service_name.isidentifier():
             return False
-        
+
         # Should not be a Python keyword
         if keyword.iskeyword(service_name):
             return False
-        
+
         # Should not start with underscore (reserved for special methods/private)
         if service_name.startswith('_'):
             return False
-        
+
         # Should not start with uppercase (by convention)
         if service_name[0].isupper():
             return False
-        
+
         # Should use snake_case
         if ' ' in service_name or '-' in service_name:
             return False
-        
+
         return True
-    
+
     def _configure_service_in_database(self, service_name: str, description: str, credit_cost: float) -> Dict[str, Any]:
         """Configure the service in the database by running Django management command."""
-        import os
         import subprocess
-        from decimal import Decimal
-        
+
         # Check if we're in a Django project directory
         if not os.path.exists('manage.py'):
             return {"success": False, "reason": "Not in a Django project directory (manage.py not found)"}
-        
+
         # Check if Docker services are running before attempting database operations
         try:
             # Use docker compose ps to check if services are up
-            result = subprocess.run(['docker', 'compose', 'ps', '--quiet'], 
+            result = subprocess.run(['docker', 'compose', 'ps', '--quiet'],
                                    capture_output=True, text=True, timeout=10)
-            
+
             if result.returncode != 0 or not result.stdout.strip():
                 return {
-                    "success": False, 
+                    "success": False,
                     "reason": "Docker services are not running. Start services with 'quickscale up' first."
                 }
-                
+
         except (subprocess.TimeoutExpired, FileNotFoundError):
             return {
-                "success": False, 
+                "success": False,
                 "reason": "Cannot check Docker services. Ensure Docker is installed and 'quickscale up' has been run."
             }
-        
+
         try:
             # Use quickscale manage to run the Django management command inside Docker container
             cmd = [
                 'quickscale', 'manage', 'configure_service', service_name,
                 '--description', description,
             ]
-            
+
             # Add appropriate cost argument
             if credit_cost == 0.0:
                 cmd.append('--free')
             else:
                 cmd.extend(['--credit-cost', str(credit_cost)])
-            
+
             result = subprocess.run(cmd, capture_output=True, text=True, timeout=DOCKER_OPERATIONS_TIMEOUT)
-            
+
             if result.returncode == 0:
                 return {"success": True, "output": result.stdout}
             else:
                 return {"success": False, "reason": f"Management command failed: {result.stderr}"}
-                
+
         except subprocess.TimeoutExpired:
             return {"success": False, "reason": "Database configuration timed out"}
         except Exception as e:
             return {"success": False, "reason": f"Error running management command: {str(e)}"}
-    
+
     def _to_class_name(self, service_name: str) -> str:
         """Convert snake_case service name to PascalCase class name."""
         words = service_name.split('_')
         return ''.join(word.capitalize() for word in words) + 'Service'
-    
+
     def _get_service_template(self, service_type: str) -> str:
         """Get the appropriate service template based on type."""
         if service_type == "text_processing":
@@ -236,7 +234,7 @@ class ServiceGeneratorCommand(Command):
             return self._get_image_processing_template()
         else:
             return self._get_basic_template()
-    
+
     def _get_basic_template(self) -> str:
         """Basic service template for general use."""
         return '''"""
@@ -284,7 +282,7 @@ class $SERVICE_CLASS(BaseService):
         
         return result
 '''
-    
+
     def _get_text_processing_template(self) -> str:
         """Text processing service template."""
         return '''"""
@@ -344,7 +342,7 @@ class $SERVICE_CLASS(BaseService):
         
         return result
 '''
-    
+
     def _get_image_processing_template(self) -> str:
         """Image processing service template."""
         return '''"""
@@ -406,7 +404,7 @@ class $SERVICE_CLASS(BaseService):
         
         return result
 '''
-    
+
     def _get_usage_example_template(self) -> str:
         """Generate usage example template."""
         return '''"""
@@ -483,12 +481,15 @@ if __name__ == "__main__":
 
 class ValidateServiceCommand(Command):
     """Command to validate service files and provide development assistance."""
-    
+
     def execute(self, name_or_path: Optional[str] = None, show_tips: bool = False) -> Dict[str, Any]:
         """Validate a service file and show development tips."""
-        from quickscale.utils.service_dev_utils import validate_service_file, ServiceDevelopmentHelper
         from quickscale.utils.error_manager import error_manager
-        
+        from quickscale.utils.service_dev_utils import (
+            ServiceDevelopmentHelper,
+            validate_service_file,
+        )
+
         if show_tips:
             ServiceDevelopmentHelper.display_development_tips()
             MessageManager.info("")
@@ -530,30 +531,33 @@ class ValidateServiceCommand(Command):
             }
 class ServiceExamplesCommand(Command):
     """Command to show available service examples."""
-    
+
     def execute(self, example_type: Optional[str] = None) -> Dict[str, Any]:
         """Show available service examples."""
-        from quickscale.utils.service_dev_utils import show_service_examples, ServiceDevelopmentHelper
-        
+        from quickscale.utils.service_dev_utils import (
+            ServiceDevelopmentHelper,
+            show_service_examples,
+        )
+
         if example_type:
             examples = ServiceDevelopmentHelper.get_service_examples()
             filtered_examples = [ex for ex in examples if ex['type'] == example_type]
-            
+
             if not filtered_examples:
                 MessageManager.warning(f"No examples found for type: {example_type}")
                 MessageManager.info("Available types: basic, text_processing, image_processing")
                 return {"examples": [], "count": 0}
-            
+
             MessageManager.info(f"📚 {example_type.title()} Service Examples:")
             MessageManager.info("")
-            
+
             for example in filtered_examples:
                 MessageManager.info(f"🔧 {example['name']}")
                 MessageManager.info(f"   Description: {example['description']}")
                 MessageManager.info(f"   Use case: {example['use_case']}")
                 MessageManager.info(f"   Generate: quickscale generate-service {example['name']} --type {example['type']}")
                 MessageManager.info("")
-            
+
             return {"examples": filtered_examples, "count": len(filtered_examples)}
         else:
             show_service_examples()
@@ -562,4 +566,4 @@ class ServiceExamplesCommand(Command):
                 "examples_displayed": True,
                 "examples": examples,
                 "count": len(examples)
-            } 
+            }

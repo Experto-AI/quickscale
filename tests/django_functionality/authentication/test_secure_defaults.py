@@ -1,7 +1,7 @@
 import os
-import unittest
-from unittest.mock import patch, mock_open
 import re
+import unittest
+from unittest.mock import mock_open, patch
 
 # This test suite verifies that the default values for environment variables
 # are secure and don't expose sensitive information.
@@ -133,7 +133,8 @@ ENABLE_STRIPE=False
             db_password = os.environ.get("DB_PASSWORD", "adminpasswd")
             
             # For development, we're a bit more lenient
-            dev_validate = lambda p: len(p) >= 6
+            def dev_validate(p):
+                return len(p) >= 6
             self.assertTrue(
                 dev_validate(db_password),
                 f"Even for development, DB_PASSWORD '{db_password}' should meet minimum length requirements"

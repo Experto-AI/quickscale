@@ -1,1 +1,1 @@
-"""Template tags for dashboard app.""" 
+"""Template tags for dashboard app."""

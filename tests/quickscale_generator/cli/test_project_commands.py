@@ -1,12 +1,11 @@
-import os
-import pytest
 import logging
-import shutil
-from unittest.mock import patch, MagicMock, mock_open
 from pathlib import Path
+from unittest.mock import MagicMock, patch
+
+import pytest
 
 from quickscale.commands.init_command import InitCommand
-from quickscale.utils.error_manager import error_manager
+
 
 class TestInitCommand:
     
