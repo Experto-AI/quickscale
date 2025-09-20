@@ -1,1 +1,0 @@
-"""Users management commands package."""
