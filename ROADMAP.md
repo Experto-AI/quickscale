@@ -1,120 +1,278 @@
-# QuickScale Development Roadmap
-
-## Components Already Implemented
-
-1. **Authentication & User Management**:
-   - ✅ User registration, login, session management
-   - ✅ Basic user profiles
-   - ✅ Admin/user role separation
-   - ✅ Email-only authentication with django-allauth
-   - ✅ HTMX integration for auth forms
-   - ✅ Email verification system with mandatory verification
-   - ✅ Transactional email templates
-
-2. **Core Infrastructure**:
-   - ✅ Database connections (PostgreSQL)
-   - ✅ Production-test parity with PostgreSQL across all testing infrastructure
-   - ✅ API routing framework (Django)
-   - ✅ Project structure with proper separation of concerns
-   - ✅ Docker containerization
-   - ✅ Development tools and CLI commands
-   - ✅ Basic security setup
-   - ✅ HTMX integration for dynamic content loading
-   - ✅ Alpine.js for client-side interactivity
-   - ✅ CLI improvements and error handling
-   - ✅ Dynamic project generation for testing infrastructure
-
-3. **UI Components**:
-   - ✅ Public pages (home, about, contact)
-   - ✅ User dashboard
-   - ✅ Admin dashboard
-   - ✅ User settings
-   - ✅ Bulma CSS for styling
-
-4. **Payment Foundation**:
-   - ✅ Basic Stripe integration
-   - ✅ Basic customer management (create, link to user)
-   - ✅ Product listing and viewing
-   - ✅ Basic product management in admin
-   - ✅ Basic checkout flow
-   - ✅ Payment confirmation
-   - ✅ Stripe webhook handling (basic structure)
-   - ✅ Checkout success/error pages
-   - ✅ Payment history and receipts
-   - ✅ Payment search and investigation tools
-   - ✅ Basic refund processing
-   - ✅ Subscription management system
-   - ✅ Advanced webhook event processing
-   - ❌ Payment method management
-   - ✅ Customer billing history
-
-5. **Credit System Foundation**:
-   - ✅ Basic credit account system
-   - ✅ Manual credit management for admins
-   - ✅ Basic service credit consumption
-   - ✅ Pay-as-you-go credit purchase
-   - ✅ Basic monthly subscription system
-   - ✅ Credit type priority system
-   - ✅ Enhanced transaction handling for account lockout validation
-   - ✅ Payment history & receipts
-   - ✅ Service management admin interface
-   - ✅ AI service framework foundation
-   - ✅ Admin credit management
-   - ✅ Payment admin tools
-
-6. **AI Service Framework**:
-   - ✅ Service template generator (`quickscale generate-service`)
-   - ✅ BaseService class with credit integration
-   - ✅ Service registration and discovery system
-   - ✅ Example service implementations (text processing, image processing, data validation)
-   - ✅ Default service initialization with automatic creation upon project startup
-   - ✅ Management commands for default services (text_sentiment_analysis, image_metadata_extractor, demo_free_service)
-   - ✅ Comprehensive service development documentation
-   - ✅ API authentication framework
-   - ✅ Service development utilities and validation tools
-
-7. **Testing Infrastructure**:
-   - ✅ Comprehensive unit and integration test coverage
-   - ✅ PostgreSQL-based testing for production parity
-   - ✅ Dynamic project generation for test reliability
-   - ✅ Test structure reorganization and logical grouping
-   - ✅ Database readiness checks and test runner optimization
-   - ✅ Credit consumption priority regression tests
-   - ✅ Logging and message management module tests
-
-For more details refer to the [CHANGELOG](CHANGELOG.md).
+# QuickScale Evolution Roadmap
+*From Static Generator to WordPress-like Django SaaS Platform*
 
 ---
 
-## Implementation Notes
+## 🚀 **FRESH START IMPLEMENTATION PLAN**
 
-**Feature Flag Strategy**: All complex features should be developed behind feature flags to enable progressive rollout and safe rollback.
-**Quality Gates**: Each sprint must include comprehensive testing and documentation updates.
+This roadmap outlines the complete transformation from the current static project generator to the new layered architecture described in [QUICKSCALE.md](./QUICKSCALE.md).
 
-## Development Sprints
+### **📋 Current State Assessment**
+- ✅ **Legacy Backup Created**: Complete v0.41.0 preserved in `quickscale-legacy/`
+- ✅ **Git History Preserved**: Full development history available for reference
+- ✅ **Architecture Validated**: Evolution document provides detailed technical specification
+- 🔄 **Fresh Start Ready**: Ready to implement clean new architecture
 
 ---
 
-### Sprint 30: Core Generator Polish (v0.41.0) 
+## **Phase 1: Clean Slate Preparation** 🧹
 
-**Goal**: Ensure the core `quickscale init` generator works flawlessly across different environments
+### **Step 1.1: Minimal Essential Files (Keep Only)**
+**Goal**: Strip down to absolute minimum needed for first evolution commit
 
-**Implementation Tasks**:
-- [x] Create a webscraper with login capabilities to crawl the whole application to see if it renders ok.
-      Must work in e2e tests and manual testing of a deployed generated project.
+**KEEP (Essential for Git & Package Identity):**
+```
+├── .git/                          # Git history and configuration
+├── .github/                       # GitHub workflows and templates
+├── .gitignore                     # Git ignore patterns
+├── LICENSE                        # Legal requirements
+├── QUICKSCALE.md                  # Evolution specification document
+├── ROADMAP.md                     # This implementation plan
+└── README.md                      # Project identity (will be rewritten)
+```
 
-- [x] Generator Environment Testing: Set up clean testing environments, test `quickscale init myproject` from scratch, test with different project names and directories
-- [x] Docker Compose Validation: Test Docker Compose startup, verify PostgreSQL container starts without errors, check network connectivity between containers
-- [x] Database Migration Testing: Test initial migration on fresh PostgreSQL, verify all tables created correctly, test migration rollback scenarios
-- [x] Default Data Setup: Verify default services are created on startup, test default admin user creation, validate initial credit allocation
-- [x] Template Rendering Validation: Test all core templates render without errors, verify CSS/JS assets load correctly, test responsive design
-- [x] Authentication Flow Testing: Test user registration with feature flags, verify login/logout functionality, test session management
-- [x] Integration Testing: Test complete user onboarding flow, verify demo service execution, test credit deduction mechanism
-- [x] Edge Case Handling: Test generator with special characters, existing files/directories, fix compatibility issues, resolve file permission issues
-- [x] Using webscaraper, pages under /admin must not be checked for Bulma CSS, HTMX nor Alpine.js because they are original Django admin pages
-- [x] Using webscaraper, for admin user, the existence of admin panel (/dashboard) must be validated as required (the link there must exist and the webpage must render OK)
-- [x] code_quality.sh fix & ./run_tests.sh --failures-only
-- [x] code_quality.sh critical & ./run_tests.sh --failures-only
-- [x] code_quality.sh full & ./run_tests.sh --failures-only
-- [x] python3 ./scripts/spot_duplicate_code.py
+**DELETE (Everything Else - Backed Up in Legacy):**
+```
+# Legacy Architecture Files
+├── quickscale/                    # Entire current implementation
+├── tests/                         # Old test structure
+├── docs/                          # Legacy documentation
+├── scripts/                       # Old build scripts
+├── __pycache__/                   # Python cache
+├── .pytest_cache/                 # Test cache
+├── .ruff_cache/                   # Linting cache
+├── .mypy_cache/                   # Type checking cache
+├── quickscale.egg-info/           # Old package info
+├── dist/                          # Distribution files
 
+# Legacy Configuration Files
+├── pyproject.toml                 # Will be rewritten for new architecture
+├── setup.cfg                      # Legacy setup
+├── MANIFEST.in                    # Legacy manifest
+├── requirements-*.txt             # Legacy requirements
+├── pytest.ini                     # Legacy test config
+├── run_tests.sh                   # Legacy test runner
+├── compile_docs.sh                # Legacy docs
+
+# Legacy Documentation
+├── CHANGELOG.md                   # Legacy changes
+├── CONTRIBUTING.md                # Will be rewritten
+├── TECHNICAL_DOCS.md              # Legacy technical docs
+├── USER_GUIDE.md                  # Legacy user guide
+├── CLAUDE.md                      # Legacy AI assistant docs
+```
+
+### **Step 1.2: Fresh Start Execution Commands**
+```bash
+# Navigate to main quickscale directory
+cd /home/victor/Code/quickscale
+
+# Create evolution branch
+git checkout -b evolution-fresh-start
+
+# Remove all legacy files (keeping git, github, essential docs)
+rm -rf quickscale/ tests/ docs/ scripts/ __pycache__/
+rm -rf .pytest_cache/ .ruff_cache/ .mypy_cache/ quickscale.egg-info/ dist/
+rm pyproject.toml setup.cfg MANIFEST.in requirements-*.txt pytest.ini
+rm run_tests.sh compile_docs.sh
+rm CHANGELOG.md CONTRIBUTING.md TECHNICAL_DOCS.md USER_GUIDE.md CLAUDE.md
+
+# Commit clean slate
+git add -A
+git commit -m "feat: clean slate for QuickScale Evolution architecture
+
+- Remove all legacy static generator components
+- Preserve essential identity files (.git, LICENSE, README.md)
+- Keep QUICKSCALE.md specification
+- Keep ROADMAP.md implementation plan
+- Full legacy backup available in quickscale-legacy/
+
+Breaking Change: Complete architectural redesign
+- From: Static project generator
+- To: WordPress-like layered platform (Core + Themes + Skins + Plugins)"
+```
+
+---
+
+## **Phase 2: New Architecture Foundation** 🏗️
+
+### **Step 2.1: Create New Directory Structure**
+**Goal**: Establish clean layered architecture foundation
+
+**New Directory Structure:**
+```
+quickscale/
+├── quickscale_core/                    # Django Core Application
+│   ├── __init__.py
+│   ├── settings/                       # Environment-specific settings
+│   │   ├── __init__.py
+│   │   ├── base.py                     # Common settings
+│   │   ├── development.py              # Development settings
+│   │   ├── production.py               # Production settings
+│   │   └── testing.py                  # Test settings
+│   ├── apps/                           # Core Django apps
+│   │   ├── authentication/             # User management
+│   │   ├── billing/                    # Credit system & Stripe
+│   │   ├── admin_dashboard/            # Admin interface
+│   │   └── api/                        # Core API framework
+│   ├── hooks/                          # Extension system
+│   │   ├── __init__.py
+│   │   └── registry.py                 # Hook registration
+│   └── management/                     # Django management commands
+│       └── commands/
+├── quickscale_business_themes/         # Business Theme Packages
+│   ├── __init__.py
+│   ├── ecommerce/                      # E-commerce business logic
+│   ├── real_estate/                    # Real estate business logic
+│   └── crm/                            # CRM business logic
+├── quickscale_presentation_skins/      # Presentation Skin Packages
+│   ├── __init__.py
+│   ├── modern_htmx/                    # HTMX + Alpine + Tailwind
+│   ├── react_modern/                   # React + ShadCN/UI
+│   └── classic_traditional/            # Traditional Django templates
+├── quickscale_feature_plugins/         # Feature Plugin Packages
+│   ├── __init__.py
+│   ├── analytics/                      # Analytics service
+│   ├── seo/                            # SEO optimization
+│   └── email_marketing/                # Email campaigns
+├── cli/                                # Command Line Interface
+│   ├── __init__.py
+│   ├── commands/                       # CLI command implementations
+│   └── utils/                          # CLI utilities
+└── tests/                              # Comprehensive test suite
+    ├── unit/                           # Unit tests
+    ├── integration/                    # Integration tests
+    └── e2e/                            # End-to-end tests
+```
+
+### **Step 2.2: Minimal Core Implementation**
+**Goal**: Create working QuickScale Core with one example theme and skin
+
+**First Implementation Priority:**
+1. **QuickScale Core**: Basic Django application with authentication, billing, admin
+2. **E-commerce Theme**: Simple product/order business logic
+3. **Modern HTMX Skin**: Clean presentation layer
+4. **CLI Framework**: Basic project creation commands
+
+---
+
+## **Phase 3: Essential Package Configuration** 📦
+
+### **Step 3.1: New Package Configuration**
+**Goal**: Modern Python package setup for layered architecture
+
+**New pyproject.toml Structure:**
+```toml
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "quickscale"
+version = "1.0.0"  # Evolution version
+description = "WordPress-like simplicity for Django SaaS with industry specialization"
+authors = [{name = "Experto AI", email = "contact@expertoai.com"}]
+license = {text = "MIT"}
+readme = "README.md"
+requires-python = ">=3.9"
+
+dependencies = [
+    "django>=5.0",
+    "djangorestframework>=3.14",
+    "stripe>=7.0.0",
+    "click>=8.1.0",
+    "python-dotenv>=1.0.0",
+]
+
+[project.optional-dependencies]
+dev = ["pytest", "black", "ruff", "mypy"]
+themes-ecommerce = ["quickscale-business-theme-ecommerce"]
+skins-modern = ["quickscale-presentation-skin-modern-htmx"]
+
+[project.scripts]
+quickscale = "quickscale.cli.main:cli"
+
+[project.urls]
+Homepage = "https://github.com/Experto-AI/quickscale"
+Documentation = "https://quickscale.readthedocs.io"
+```
+
+### **Step 3.2: New Documentation Structure**
+**Goal**: Clear documentation for new architecture
+
+**Documentation Plan:**
+1. **README.md**: New architecture overview, quick start
+2. **ARCHITECTURE.md**: Technical architecture specification  
+3. **THEMES_GUIDE.md**: Business theme development guide
+4. **SKINS_GUIDE.md**: Presentation skin development guide
+5. **PLUGINS_GUIDE.md**: Feature plugin development guide
+6. **MIGRATION_GUIDE.md**: Migration from legacy QuickScale
+
+---
+
+## **Phase 4: Layered Implementation Strategy** 🎯
+
+### **Step 4.1: Core First Approach**
+**Implementation Order:**
+1. **QuickScale Core** (Week 1-2)
+   - Django project setup with layered architecture
+   - Authentication system (preserve from legacy)
+   - Billing system (preserve from legacy) 
+   - Admin dashboard foundation
+   - Hook system for extensibility
+
+2. **CLI Framework** (Week 1-2 Parallel)
+   - Project creation commands
+   - Theme/skin selection interface
+   - Package management integration
+
+3. **First Business Theme: E-commerce** (Week 3)
+   - Product/Order models
+   - Business logic services
+   - Admin interfaces
+   - API endpoints
+
+4. **First Presentation Skin: Modern HTMX** (Week 4)
+   - Template structure
+   - HTMX + Alpine.js integration
+   - Tailwind CSS styling
+   - API consumption
+
+5. **Integration & Testing** (Week 5)
+   - End-to-end functionality
+   - Package distribution setup
+   - Documentation completion
+
+### **Step 4.2: Validation Strategy**
+**Success Criteria for Each Phase:**
+- ✅ Core: Authentication, billing, admin working
+- ✅ Theme: E-commerce functionality complete
+- ✅ Skin: Modern UI consuming theme APIs
+- ✅ CLI: Project creation working end-to-end
+- ✅ Testing: Comprehensive test coverage
+- ✅ Docs: Complete developer documentation
+
+---
+
+## **Phase 5: Community & Marketplace Preparation** 🌟
+
+### **Step 5.1: Package Distribution**
+**Goal**: Enable community theme/skin development
+
+**PyPI Package Structure:**
+- `quickscale` - Core platform
+- `quickscale-business-theme-{name}` - Business themes
+- `quickscale-presentation-skin-{name}` - Presentation skins
+- `quickscale-feature-plugin-{name}` - Feature plugins
+
+### **Step 5.2: Developer Experience**
+**Goal**: WordPress-like ease of theme/skin development
+
+**Developer Tools:**
+- Theme scaffold generator
+- Skin scaffold generator
+- Plugin scaffold generator
+- Local development environment
+- Package validation tools
+
+---
