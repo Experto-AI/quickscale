@@ -1,11 +1,11 @@
-# QuickScale Evolution: WordPress-like simplicity for Django SaaS with industry specialization
+# QuickScale Evolution: Compose your Django SaaS
 
 ## Table of Contents
 
 1. [Executive Summary](#executive-summary)
 2. [Architectural Evolution](#architectural-evolution)
 3. [Competitive Landscape Analysis](#competitive-landscape-analysis)
-4. [Layer Architecture Specification](#layer-architecture-specification)
+4. [Library-Style Backend Modules Architecture](#library-style-backend-modules-architecture)
 5. [Technical Implementation](#technical-implementation)
 6. [Development Strategy](#development-strategy)
 7. [Appendices: Code Examples](#appendices-code-examples)
@@ -19,37 +19,54 @@
 QuickScale's current static project generator faces fundamental limitations that prevent it from reaching its full potential:
 
 - **No Shared Updates**: Each generated project is independent, missing security fixes and feature updates
-- **Generic Approach**: One-size-fits-all templates don't address specific industry needs (e-commerce vs. CRM vs. real estate)
+- **Generic Approach**: One-size-fits-all templates don't address specific business needs (task management vs. inventory vs. customer management)
 - **Mixed Concerns**: Business logic and presentation are intertwined in templates, making customization difficult
-- **Limited Ecosystem**: No marketplace or community contribution model for specialized functionality
+- **Limited Ecosystem**: No reusable components or development acceleration model
 
 ### **The Evolution Solution**
 
-This proposal outlines the **evolutionary transformation** of QuickScale from a Django SaaS project generator into a comprehensive platform delivering **"WordPress-like simplicity for Django SaaS with industry specialization"**. QuickScale evolves into a **stable Django core application** with a layered architecture: core foundation + themes + skins + plugins, maintaining simplicity while enabling specialization.
+This proposal outlines the **evolutionary transformation** of QuickScale from a Django SaaS project generator into a comprehensive development foundation delivering **"Python-native simplicity for Django SaaS with business application acceleration"**. QuickScale evolves into a **stable Django core application** with a composable architecture: a core foundation + backend modules built on proven Django foundations + starting point themes, maintaining simplicity while enabling specialization.
+
+**QuickScale Philosophy: Development Foundation, Not Complete Solutions**
+
+QuickScale provides the building blocks and acceleration tools, not complete business applications:
+
+❌ **What QuickScale is NOT:**
+- Complete business platforms (like Shopify, Salesforce)
+- Ready-to-deploy SaaS applications  
+- Industry-specific complete solutions
+- One-size-fits-all templates
+
+✅ **What QuickScale IS:**
+- **Foundation**: Stable core with project scaffolding, configuration system, and utilities (auth and admin moved to modules; hook system deferred)
+- **Accelerator**: Reusable modules (auth, admin, payments, billing, etc.) and starting point themes
+- **Enabler**: Tools and patterns for building custom SaaS applications
+- **Starting Point**: Themes require customization for specific business needs
 
 **Key Architectural Evolution:**
 - **From**: Static project generator → Independent Django projects
-- **To**: QuickScale core application + theme/skin/plugin layer system → Deployed applications
+- **To**: QuickScale Core + Modules + Themes (with multiple Frontends) → Customized applications
 
-**WordPress-like Layer Structure:**
-- **QuickScale Core** = WordPress Core (stable Django application foundation)
-- **Business Themes** = Industry-specific backend logic packages (e-commerce, real estate, CRM)
-- **Presentation Skins** = Technology-agnostic frontend packages (modern, classic, minimal)
-- **Feature Plugins** = Cross-cutting Python libraries (analytics, SEO, email marketing)
+**Composable "Library-Style" Structure:**
+- **QuickScale Core** = Python's standard library (project scaffolding + configuration system + utilities)
+- **Backend Modules** = Built on proven Django foundations (django-allauth for auth, enhanced admin, dj-stripe for payments; future: notifications, backup, analytics)
+- **Starting Point Themes** = Foundation applications to customize (e.g., `starter`, `todo`)
+- **Multiple Frontends** = Bundled within each theme (e.g., `frontend_htmx/`, `frontend_react/`, `frontend_vue/`)
 
 **Key Objectives:**
 - Transform QuickScale into a stable Django core application (never breaks)
-- Enable vertical industry specialization through business theme packages
-- Separate functionality (business themes) from presentation (presentation skins)
-- Create simple pip-installable business theme and presentation skin ecosystem
+- Enable business application acceleration through starting point themes
+- Decouple backend functionality (modules) from business logic (themes) and presentation (frontends)
+- Create a simple, pip-installable ecosystem of modules and foundational themes
 - Maintain simple deployment model (creation-time selection, not runtime switching)
 - Preserve current strengths: billing integration, AI framework, Docker deployment
+- **Provide foundation, not complete solutions** - themes require customization
 
 **⚠️ Breaking Change**: This evolution represents a complete architectural redesign. The new layered system is **not backward compatible** with existing QuickScale projects. Previous projects will **not be migrated** to the new architecture - this is an entirely new system.
 
 **Why This Breaking Change is Necessary:**
 - Current static generation model prevents shared updates and vertical specialization
-- New layered architecture enables WordPress-like simplicity with Django power
+- New composable architecture enables Python-native simplicity with Django power
 - Community marketplace requires fundamental architectural changes
 - Separation of concerns (business logic vs. presentation) requires redesign
 
@@ -68,8 +85,8 @@ Based on analysis of established Django CMS platforms (Wagtail, Django CMS, Mezz
 ### **Why Creation-time Assembly Wins**
 
 **Technical Validation from Established Platforms:**
-- **Wagtail**: Themes/plugins via `INSTALLED_APPS`, JavaScript modularity for UI
-- **Django CMS**: Static plugin registration at startup, database-driven content assembly
+- **Wagtail**: Themes/modules via `INSTALLED_APPS`, JavaScript modularity for UI
+- **Django CMS**: Static module registration at startup, database-driven content assembly
 - **Mezzanine**: Template-based themes, settings-based configuration
 
 **Key Benefits:**
@@ -93,46 +110,46 @@ Based on analysis of established Django CMS platforms (Wagtail, Django CMS, Mezz
 
 **Current Architecture (Static Generation):** (see Appendix D for code example)
 
-**New Architecture (Core + Theme/Skin/Plugin Layers):** (see Appendix E for code example)
+**New Architecture (Core + Module/Theme Layers):** (see Appendix E for code example)
 
 **Clear Layer Architecture:** (see Appendix F for code example)
 
 ### **Core Evolution Benefits**
 
 **Django-Native & Simple:**
-- ✅ QuickScale as stable Django application with core apps
-- ✅ Business themes as industry-specific Django apps added to INSTALLED_APPS
-- ✅ Presentation skins as template/static file packages that override business theme presentation
-- ✅ Standard Django migrations, URL routing, and template inheritance
-- ✅ Simple deployment - business theme/presentation skin chosen at creation time
+- ✅ QuickScale as a stable Django application with core features.
+- ✅ Backend modules built on proven Django foundations (dj-stripe, django-allauth, etc.) providing specific functionality.
+- ✅ Starting point themes as the main Django apps that import and orchestrate modules.
+- ✅ Multiple frontends (e.g., HTMX, React) bundled within each theme.
+- ✅ Standard Django migrations, URL routing, and a unified database schema.
+- ✅ Simple deployment - theme and frontend chosen at creation time.
 
 **Clear Separation of Concerns:**
-- ✅ **Core**: Stable foundational features (authentication, billing, admin, API infrastructure)
-- ✅ **Business Themes**: Industry-specific backend logic (models, business rules, APIs, database schema)
-- ✅ **Presentation Skins**: Technology-agnostic frontend packages (templates, CSS, JS, user interfaces)
-- ✅ **Feature Plugins**: Cross-cutting Python libraries that only business themes can import (complete decoupling from presentation skins)
+- ✅ **Core**: Stable foundational features (project scaffolding, configuration system, utilities; hooks later).
+- ✅ **Backend Modules**: Built on proven Django foundations (auth via django-allauth, enhanced admin, payments via dj-stripe, billing; future: notifications, backup, analytics) exposing Python service layers (no HTTP APIs).
+- ✅ **Starting Point Themes**: Foundation business logic (models, workflows) that integrates modules.
+- ✅ **Frontends**: Presentation layer (templates, APIs for SPAs) that consumes the theme's logic.
 
-**Vertical Industry Specialization:**
-- ✅ Business themes designed for specific industries/domains
-- ✅ Presentation skins provide visual variety within each business theme
-- ✅ Business theme + presentation skin packages distributed via PyPI
-- ✅ Community-driven marketplace for specialized solutions
+**Vertical Specialization:**
+- ✅ Themes designed as starting points for different domains that require customization.
+- ✅ Modules provide common functionalities that can be shared across any theme.
+- ✅ Module and theme packages distributed via PyPI.
+- ✅ Community-driven marketplace for specialized solutions.
 
 **Deployment Simplicity:**
-- ✅ Business theme and presentation skin chosen at project creation time (following Django CMS patterns)
-- ✅ Simple redeployment if changes needed (standard Docker redeploy)
-- ✅ No complex container orchestration or live switching
-- ✅ Follows established Django CMS platform patterns for reliability
+- ✅ Theme and frontend chosen at project creation time.
+- ✅ Simple redeployment if changes needed (standard Docker redeploy).
+- ✅ No complex container orchestration or live switching.
+- ✅ Follows established Django patterns for reliability.
 
 ### **Competitive Landscape Analysis**
 
 **Research-Based Market Analysis**: After examining Django CMS platforms (Wagtail, Django CMS, Mezzanine) and competitor SaaS solutions:
 
 **Market Gaps Identified:**
-- **No WordPress-equivalent** exists in Django ecosystem with SaaS focus
-- **No stable Django core** with theme specialization for vertical markets  
-- **No simple theme system** for Django SaaS applications
-- **No integrated billing + AI framework** with vertical themes
+- **No simple, composable module system** for Django SaaS applications
+- **No integrated billing + AI framework** with starting point themes
+- **No development acceleration** focused on customization rather than complete solutions
 - **Validated Technical Approach**: All established Django CMS platforms use creation-time assembly, not runtime loading
 
 **Key Competitors Analysis:**
@@ -142,8 +159,8 @@ Based on analysis of established Django CMS platforms (Wagtail, Django CMS, Mezz
 - ✅ Built-in Wagtail CMS integration, Stripe billing, team management
 - ✅ Production-ready features and professional documentation
 - ❌ Static generation model limits updates and consistency across projects
-- ❌ No vertical industry specialization (generic approach only)
-- ❌ No community marketplace or extension ecosystem
+- ❌ Generic approach only - no starting point specialization
+- ❌ No composable module ecosystem for development acceleration
 - ❌ Each project independent - no shared updates or improvements
 
 **Wagtail CMS (Architectural Reference - 19.6k stars):**
@@ -151,183 +168,204 @@ Based on analysis of established Django CMS platforms (Wagtail, Django CMS, Mezz
 - ✅ Proven extension patterns: StreamField blocks, template overrides, hook system
 - ✅ Enterprise adoption (NASA, Google, Mozilla) validates architectural reliability
 - ✅ Strong community contribution model and marketplace
-- ❌ Content-centric focus doesn't address business application needs
+- ❌ Content-centric focus doesn't address business application development
 - ❌ Page hierarchy model doesn't fit SaaS application patterns
-- ❌ No integrated billing or AI service framework
+- ❌ No integrated billing or business application framework
 
 **Django CMS (Established Platform - 10.5k stars):**
 - ✅ Enterprise-grade static deployment patterns
-- ✅ Plugin architecture with clear separation of concerns
+- ✅ Module architecture with clear separation of concerns
 - ✅ Proven scalability and reliability in production
 - ❌ Complex setup and configuration for simple use cases
 - ❌ No SaaS-specific features or billing integration
-- ❌ No vertical industry specialization
+- ❌ No business application development focus
 
 **QuickScale Evolution's Unique Market Position:**
-- ✅ **vs SaaS Pegasus**: Specialized vertical markets with shared core updates, not just generic SaaS
+- ✅ **vs SaaS Pegasus**: Starting point specialization with shared core updates and composable module system
 - ✅ **vs Wagtail**: Built for business applications with billing/AI, not content management
 - ✅ **vs Django CMS**: Simple setup with SaaS-specific features out of the box
-- ✅ **Unique Value Proposition**: WordPress-like simplicity for Django SaaS with vertical industry specialization
-- ✅ **Community Ecosystem**: PyPI-based marketplace like Wagtail but focused on business domains
+- ✅ **Unique Value Proposition**: Python-native simplicity for Django SaaS with development acceleration through customizable foundations
+- ✅ **Development Focus**: Provides starting points that developers customize rather than complete solutions
 
-**Key Market Insight**: No competitor addresses the combination of vertical SaaS specialization, shared core updates, and clean business logic/presentation separation. The lack of runtime dynamic loading in established Django platforms validates our creation-time assembly architectural choice.
+**Key Market Insight**: No competitor addresses the combination of vertical SaaS specialization, shared core updates, and a clear, Python-native composable architecture. The lack of runtime dynamic loading in established Django platforms validates our creation-time assembly architectural choice.
 
 ---
 
-## Layer Architecture Specification
+## Library-Style Backend Modules Architecture (Built on Django Foundations)
 
 ### **1. QuickScale Core Application (Stable Foundation)** (see Appendix G for code example)
 
 **Core Principles:**
-- **Stability Promise**: Core API never breaks (semantic versioning)
-- **Feature Flags**: New features behind flags for safe rollout
-- **Django-Native**: Standard Django patterns, no custom magic
-- **Performance**: Optimized for startup loading, runtime efficiency
-- **Hook System**: Extensibility points for business theme/feature plugin integration following Wagtail patterns
-- **Package Registry**: Central validation and discovery system for community layers
+- **Stability Promise**: Core public API (project scaffolding, configuration, utilities) semantically versioned
+- **Django-Native**: Standard Django patterns, minimal abstraction
+- **Performance**: Optimized for startup & runtime
+- **Deferred Hooks**: Hook/event system postponed (initial explicit service calls)
+- **Future Package Registry**: Planned community package discovery
 
-### **2. Business Theme Layer (Industry-Specific Backend Logic)**
+### **2. Backend Modules (Built on Proven Django Foundations)**
 
-**Distribution**: `pip install quickscale-business-theme-{name}`
+**Distribution**: `pip install quickscale-module-{name}`
 
-**Structure**: Django apps providing only backend business logic for specific verticals
-- **E-commerce Backend**: Product/Order models, business rules, inventory logic, payment processing APIs
-- **Real Estate Backend**: Property/Agent models, listing algorithms, inquiry processing, valuation APIs
-- **CRM Backend**: Lead/Contact models, pipeline logic, automation rules, reporting APIs
-- **Custom**: Community-developed domain-specific backend logic
+**Structure**: Built on proven Django foundations providing focused backend functionality
+- **Auth Module**: Built on django-allauth - authentication, user management, social login
+- **Admin Module**: Enhanced Django admin interface with modern UI
+- **Payments Module**: Built on dj-stripe - charge execution (transactions, refunds, webhooks)
+- **Billing Module**: Built on proven billing foundations - plans, subscriptions, entitlements
+- **Notifications Module** (future): Built on django-anymail
+- **Backup Module** (future): Built on proven backup solutions
 
-**What Business Themes Include:**
-- ✅ Django models and database schema
-- ✅ Business logic classes and methods
-- ✅ REST API endpoints and serializers  
-- ✅ Django admin interfaces
-- ✅ Management commands
-- ✅ Database migrations
-- ✅ Business rule validation
-- ✅ Django signals for business events
-- ✅ ComponentField support for composable business elements (StreamField-like patterns)
+**What Backend Modules Include:**
+- ✅ Django models & migrations (from proven foundations like dj-stripe)
+- ✅ Python service classes & business logic (enhanced with QuickScale patterns)
+- ✅ Signals & event handlers (integrated with QuickScale core)
+- ✅ Admin registrations (within admin module when installed)
+- ✅ Management commands (following Django standards)
+- ✅ Python APIs for themes (simplified, consistent interfaces)
+- ✅ (Future) Hook registrations
 
-**What Business Themes DO NOT Include:**
-- ❌ Templates or HTML
-- ❌ CSS or visual styling
-- ❌ Frontend JavaScript
-- ❌ User interface components
-- ❌ Static assets (images, icons)
-
-**Integration**: Added to `INSTALLED_APPS`, provides APIs and data for presentation skins to consume
-
-### **3. Presentation Skin Layer (Technology-Agnostic Frontend)**
-
-**Distribution**: `pip install quickscale-presentation-skin-{name}`
-
-**Structure**: Pure frontend packages that consume business theme APIs and provide complete user interfaces
-
-**What Presentation Skins Include:**
-- ✅ Django templates and template tags
-- ✅ CSS stylesheets and visual styling
-- ✅ Frontend JavaScript (HTMX/Alpine, React, Vue, etc.)
-- ✅ User interface components
-- ✅ Static assets (images, icons, fonts)
-- ✅ Frontend build configuration (if needed)
-- ✅ API client code to consume business theme backends
-- ✅ Composable UI components following StreamField design patterns
-
-**What Presentation Skins DO NOT Include:**
-- ❌ Django models or database schema
-- ❌ Business logic or business rules
-- ❌ Database migrations
-- ❌ Backend API endpoints
-- ❌ Management commands
-
-**Technology Flexibility:**
-- **HTMX/Alpine Skins**: Server-side rendered templates with HTMX + Alpine.js + Bulma/Tailwind
-- **React/Next.js Skins**: Modern component-based UI with ShadCN/UI, Material-UI, Chakra UI
-- **Vue/Nuxt Skins**: Progressive components with Vuetify, PrimeVue, Element Plus
-- **Traditional Skins**: Pure Django templates with minimal JavaScript
-
-**Examples:**
-- **Modern HTMX**: Contemporary design using HTMX + Alpine.js + Tailwind
-- **React Modern**: React components with ShadCN/UI and TypeScript
-- **Classic Traditional**: Traditional business styling with minimal JavaScript  
-- **Minimal Vue**: Clean, simple presentation with Vue 3 composition API
-
-**Integration**: Template override system + API consumption, technology-agnostic backend interface
-
-### **4. Feature Plugin Layer (Cross-Cutting Python Libraries)**
-
-**Distribution**: `pip install quickscale-feature-plugin-{name}`
-
-**Structure**: Pure Python Django apps that only business themes can access directly, providing backend services
-
-**What Feature Plugins Include:**
-- ✅ Django models for plugin-specific data
-- ✅ Python service classes and business logic
-- ✅ Django signals and event handlers
-- ✅ Django admin interfaces
-- ✅ Database migrations
-- ✅ Management commands
-- ✅ Python APIs that business themes can import and use
-- ✅ Hook registration for extensible integration points
-
-**What Feature Plugins DO NOT Include:**
-- ❌ REST API endpoints (business themes handle all external APIs)
-- ❌ Templates or UI components
-- ❌ CSS or visual styling
-- ❌ JavaScript SDKs or frontend code
-- ❌ Direct communication with presentation skins
-
-**Examples:**
-- **Analytics**: Event tracking models + Python service classes that business themes import
-- **SEO**: Meta tag generation classes + Python utilities business themes can use internally
-- **Email Marketing**: Campaign models + Python services for email automation
-- **Custom**: Pure Python functionality that enhances business theme capabilities
+**What Backend Modules DO NOT Include:**
+- ❌ REST API endpoints (themes expose external APIs)
+- ❌ Templates/UI components
+- ❌ CSS/visual assets
+- ❌ Frontend build systems
+- ❌ Direct frontend communication
 
 **Integration Model:**
 ```python
-# Feature plugin provides pure Python services
-# quickscale_feature_plugins/analytics/services.py
-class AnalyticsService:
-    @staticmethod
-    def track_event(event_type, metadata):
-        # Pure Python business logic
+# Starting Point theme imports and uses backend module directly
+# quickscale_themes/starter/backend.py
+class StarterTheme:
+    def process_order(self, order_data):
+        # Business logic specific to your application
+        # Example: integrate payments module services here
         pass
-
-# Business theme imports and uses feature plugin directly
-# quickscale_business_themes/ecommerce/api.py
-from quickscale_feature_plugins.analytics.services import AnalyticsService
-
-class ProductViewSet(viewsets.ModelViewSet):
-    def retrieve(self, request, pk=None):
-        product = self.get_object()
-        # Use feature plugin internally
-        AnalyticsService.track_event('product_view', {'product_id': product.id})
-        return Response({'product': product.serialize()})
 ```
 
-**True Decoupling**: Presentation skins only communicate with business themes via APIs, never directly with feature plugins
+### **3. Starting Point Themes (Foundation Applications to Customize)**
+
+**Distribution**: `pip install quickscale-theme-{name}`
+
+**Structure**: Django applications providing foundational business logic to customize
+- **Starter Theme**: Minimal foundation for custom business applications; integrates selected modules (auth, admin, payments, billing as needed)
+- **TODO Theme**: Task management example showing patterns (models, workflows, multi-frontends)
+
+**Development Model: Themes are Starting Points, Not Complete Solutions**
+```python
+# 1. Install starting point theme
+pip install quickscale-theme-starter
+
+# 2. Customize for your business needs
+# Add your specific models
+class Product(models.Model):  # Your custom business model
+    name = models.CharField(max_length=200)
+    price = models.DecimalField(max_digits=10, decimal_places=2)
+    # Your custom business fields and logic
+    
+# 3. Extend with your business rules
+class CustomBusinessLogic:
+    def process_order(self, order):
+        # Your specific business logic
+    # Use foundation modules (payments; future: notifications, backup, analytics)
+        # Implement your unique workflow
+        pass
+
+# 4. Customize presentation layer
+# Override templates, add custom views, modify styling
+```
+
+**What Starting Point Themes Include:**
+- ✅ Foundation Django models for common patterns
+- ✅ Basic business logic classes and methods  
+- ✅ REST API endpoints and serializers for frontend communication
+- ✅ Django admin interfaces for foundation functionality
+- ✅ Management commands for common operations
+- ✅ Database migrations for foundational models
+- ✅ Example business workflows and patterns
+- ✅ Multiple bundled frontends (see next section)
+
+**What Developers Must Add:**
+- ✅ **Your Custom Business Models**: Specific to your application domain
+- ✅ **Your Business Rules**: Unique logic and validation for your use case
+- ✅ **Your Custom Workflows**: Application-specific processes and integrations
+- ✅ **Your Branding and UX**: Custom styling, user experience, and presentation
+- ✅ **Your Specific Features**: Beyond the foundational patterns provided
+
+**Theme Structure:**
+```
+quickscale_themes/starter/
+├── models.py               # Foundation models - extend with your custom models
+├── api.py                  # Basic REST API endpoints - add your custom endpoints
+├── admin.py                # Foundation Django admin - customize for your needs
+├── business/               # Example business logic - implement your custom logic
+│   ├── services.py         # Service patterns - customize for your domain
+│   └── workflows.py        # Workflow examples - implement your processes
+├── frontend_htmx/          # HTMX presentation - customize styling and UX
+│   ├── templates/          # Base templates - override for your branding
+│   ├── static/            # Base styles - customize for your design
+│   └── views.py           # Foundation views - add your custom views
+└── frontend_react/         # React presentation - customize components and UX
+    ├── components/         # Base components - extend with your custom components
+    ├── api_client.js       # API client - extend for your custom endpoints
+    └── package.json        # Dependencies - add your custom packages
+```
+
+### **4. Multiple Frontends (Bundled within Themes)**
+
+**Structure**: Each theme bundles multiple presentation technologies
+
+**Frontend Options per Theme (Current & Future Examples):**
+- **HTMX Frontend**: Server-rendered (HTMX + Alpine/Tailwind)
+- **React Frontend**: Component-based (React + TypeScript)
+- **Vue Frontend**: (future) Vue 3 + Composition API
+- **Next.js Frontend**: (future) React server components
+
+**What Frontends Include:**
+- ✅ Templates/components & tags
+- ✅ Styling assets
+- ✅ JS/TS code & build configuration
+- ✅ UI components
+- ✅ Static assets (images, icons, fonts)
+- ✅ API client code consuming theme endpoints
+
+**What Frontends DO NOT Include:**
+- ❌ Django models or database schema
+- ❌ Business logic or business rules
+- ❌ Database migrations
+- ❌ Backend functionality
+
+**Integration**: Project may enable one or more; frontends consume theme REST/API layer, never call modules directly.
+
+---
 
 ## Technical Implementation
 
-### **Creation-Time Assembly Process** (see Appendix H for code example)
+### **Creation-Time Assembly Process** (High-Level)
+1. Read `quickscale.yml` (canonical schema v1). Reject deprecated keys (`features`, `components`, singular `technology`).
+2. Validate versions & compatibility metadata for selected modules/themes.
+3. Generate assembled Django project settings: build `INSTALLED_APPS` from core + modules + theme + enabled frontends.
+4. Copy (or symlink in dev) selected frontend directories from theme (htmx, react, etc.) into project scaffold.
+5. Emit pinned `requirements.txt` (exact versions) for reproducible builds.
+6. Optional preview step produces a diff without writing.
+7. Run migrations after environment provisioning.
 
-### **Layer Loading System**
+### **Module/Theme Loading System**
 
 **Startup Validation (Django CMS Pattern):**
 - Validate all packages are installed and compatible
-- Load business theme/presentation skin/feature plugin configurations  
+- Load industry theme/backend module configurations  
 - Register URL patterns, template directories, static files
-- Initialize database tables for business theme/feature plugin data
+- Initialize database tables for theme/module data
 - Register hook system for extensibility points
-- Initialize QuickScale Package Registry for community layer validation
+- Initialize QuickScale Package Registry for community package validation
 
 **Template Resolution Order:**
-1. Presentation skin templates (highest priority)
-2. Business theme templates  
+1. Theme frontend templates (highest priority)
+2. Theme backend templates  
 3. Core templates (fallback)
 
 **Static File Collection:**
-- Presentation skin assets override business theme assets
-- Business theme assets extend core assets
+- Theme frontend assets override theme backend assets
+- Theme backend assets extend core assets
 - Standard Django `collectstatic` process
 
 ## Development Strategy
@@ -335,89 +373,86 @@ class ProductViewSet(viewsets.ModelViewSet):
 ### **New System Development Approach**
 
 **Fresh Architecture (No Legacy Constraints):**
-- Build entirely new Django application optimized for layers
-- No compatibility requirements with existing static generation
-- Clean separation of concerns from ground up
-- Community ecosystem designed from beginning
+- Build entirely new Django application optimized for Library-Style Backend Modules architecture.
+- No compatibility requirements with existing static generation.
+- Clean separation of concerns from the ground up.
+- Community ecosystem designed from the beginning.
 
 **Validated Technical Decisions:**
-- **Creation-time Assembly**: Follow Django CMS proven patterns, not WordPress runtime loading
-- **PyPI Distribution**: Leverage existing Python ecosystem for package management  
-- **Semantic Versioning**: Clear compatibility guarantees across layer versions
-- **Django Standards**: Use established Django patterns, no custom framework
+- **Creation-time Assembly**: Follow Django's proven patterns, not WordPress runtime loading.
+- **PyPI Distribution**: Leverage the existing Python ecosystem for package management.
+- **Semantic Versioning**: Clear compatibility guarantees across package versions.
+- **Django Standards**: Use established Django patterns, no custom framework.
 
 **Community-First Architecture:**
-- **Business Theme Marketplace**: Enable domain experts to maintain specialized business themes
-- **Presentation Skin Marketplace**: Empower designers to create visual variations
-- **Feature Plugin Ecosystem**: Allow feature specialists to develop cross-cutting functionality
-- **Quality Assurance**: Community review and automated validation processes
-- **Hook System**: Extensibility framework following Wagtail's proven hook patterns
-- **Component System**: StreamField-inspired composable elements for business themes and presentation skins
-- **Package Registry**: Central discovery and validation platform like wagtail-packages.org
+- **Backend Module Marketplace**: Specialists maintain reusable functionality.
+- **Industry Theme Marketplace**: Domain experts build industry foundations.
+- **Frontend Specialization**: Multiple technologies per theme (optional adoption).
+- **Quality Assurance**: Automated validation & review.
+- **Deferred Hook System**: Event system planned (not in initial release).
+- **Future Package Registry**: Central discovery & validation.
 
 ### **E-commerce Theme Implementation (Domain Functionality)** (see Appendix I for code example)
 
-### **Modern Skin Implementation (Visual Presentation)** (see Appendix J for code example)
+### **Modern Frontend Implementation (Visual Presentation)** (see Appendix J for code example)
 
-### **Plugin Implementation Example (Cross-cutting Concerns)** (see Appendix K for code example)
-## Development Strategy for Layered Architecture
+### **Module Implementation Example (Cross-cutting Concerns)** (see Appendix K for code example)
+## Development Strategy for Composable Architecture
 
-The transformation from static project generator to layered architecture involves **building an entirely new Django application** with a stable core and specialized theme/skin/plugin packages. This represents a **complete architectural redesign** rather than an evolution of existing functionality.
+The transformation from a static project generator to a composable architecture involves **building an entirely new Django application** with a stable core and specialized module/theme packages. This represents a **complete architectural redesign** rather than an evolution of existing functionality.
 
 ### **New System Development Approach**
 
 **Fresh Architecture Design (Validated by Competitive Analysis):**
-- ✅ Build new QuickScale Core Django application from the ground up
-- ✅ Design business theme packages as specialized Django apps for vertical markets
-- ✅ Create presentation skin packages as pure presentation layers
-- ✅ Develop feature plugin framework for cross-cutting concerns
-- ✅ No constraints from existing static generation patterns
-- ✅ **Competitive Advantage**: Neither SaaS Pegasus nor Wagtail addresses vertical SaaS specialization
+- ✅ Build new QuickScale Core Django application from the ground up.
+- ✅ Design backend modules as reusable Django apps providing specific services.
+- ✅ Create industry themes as the main applications that integrate modules.
+- ✅ Bundle multiple frontends (HTMX, React, etc.) within themes.
+- ✅ No constraints from existing static generation patterns.
+- ✅ **Competitive Advantage**: Neither SaaS Pegasus nor Wagtail addresses vertical SaaS specialization with a composable, Python-native module system.
 
-**Community Ecosystem Growth (Wagtail-inspired Success Model):**
-- ✅ **Business Theme Marketplace**: Vertical-specific business functionality packages
-- ✅ **Presentation Skin Marketplace**: Designer-created visual presentation packages  
-- ✅ **Feature Plugin Marketplace**: Feature packages that work across all business themes
-- ✅ **Clear Contribution Paths**: Separate paths for developers (business themes), designers (presentation skins), and feature creators (feature plugins)
-- ✅ **Quality Assurance**: Package validation system like Wagtail's proven approach
+**Community Ecosystem Growth (Python-inspired Success Model):**
+- ✅ **Module Marketplace**: Reusable backend functionality packages.
+- ✅ **Theme Marketplace**: Industry-specific application packages.
+- ✅ **Clear Contribution Paths**: Separate paths for module developers, theme developers, and frontend specialists.
+- ✅ **Quality Assurance**: Package validation system inspired by successful open-source ecosystems.
 
 **Technical Architecture Validation:**
-- ✅ **Wagtail's Block System**: Adapt StreamField patterns for business components with ComponentField for composable business theme elements
-- ✅ **Wagtail's Hook System**: Implement extensibility hooks for business theme/feature plugin integration points
+- ✅ **Wagtail's Block System**: Adapt StreamField-like patterns for composable business elements within themes if needed.
+- ✅ **Wagtail's Hook System**: Implement extensibility hooks for theme/module integration points
 - ✅ **Wagtail's Package Registry**: Create QuickScale Package Registry with quality validation and community features
 - ✅ **SaaS Pegasus' Features**: Comprehensive SaaS functionality out-of-the-box
 - ✅ **Django CMS Reliability**: Static deployment model for enterprise adoption
 - ✅ **Unique Market Position**: Vertical specialization that competitors don't address
 
-## Key Benefits of Layered Architecture
+## Key Benefits of Composable Architecture
 
 ### **1. Clear Separation of Concerns**
 *(As detailed in Core Evolution Benefits section above)*
 
-### **2. WordPress-like Simplicity with Django Power**
-- ✅ Easy layer installation via pip (like WordPress plugins/themes via marketplace)
-- ✅ Layer packages distributed via PyPI (centralized marketplace similar to Wagtail ecosystem)
-- ✅ Visual customization through presentation skin selection (similar to WordPress theme selection)
-- ✅ Business functionality through business theme selection (unique advantage - WordPress doesn't offer industry specialization)
-- ✅ Standard Django deployment patterns (enterprise-grade reliability)
+### **2. Python-Native Simplicity with Django Power**
+- ✅ Pip-installable core, modules, themes
+- ✅ Multi-frontend theme capability (enable subset per project)
+- ✅ Composition of domain (theme) + cross-cutting services (modules)
+- ✅ Standard Django deployment (creation-time assembly)
 
 ### **3. True Multi-Tenancy Support**
-- ✅ Same QuickScale core can serve different verticals with different business themes
-- ✅ Same business theme can have different visual presentations with different presentation skins
-- ✅ Same feature plugins work across all business themes (analytics, SEO, etc.)
-- ✅ Clean layer boundaries prevent conflicts between domains
+- ✅ Same QuickScale core can serve different verticals with different industry themes
+- ✅ Same industry theme can have different visual presentations with different bundled frontends
+- ✅ Same backend modules work across all starting point themes (payments now; future: notifications, backup, analytics)
+- ✅ Clean component boundaries prevent conflicts between domains
 
 ### **4. Developer Experience Excellence**
-*(See detailed code examples in Layer Implementation Examples section)*
+*(See detailed code examples in Architecture Implementation Examples section)*
 
 ### **5. Simplified Deployment and Maintenance**
 *(See technical specifications for deployment configuration)*
 
 ### **6. Ecosystem Growth Potential**
-- ✅ **Business Theme Marketplace**: Vertical-specific business functionality packages
-- ✅ **Presentation Skin Marketplace**: Designer-created visual presentation packages  
-- ✅ **Feature Plugin Marketplace**: Feature packages that work across all business themes
-- ✅ **Community Growth**: Clear contribution paths for developers, designers, and feature creators
+- ✅ **Industry Theme Marketplace**: Vertical-specific foundations
+- ✅ **Backend Module Marketplace**: Cross-theme functionality packages
+- ✅ **Frontend Variety**: Multiple technologies per theme (optional adoption)
+- ✅ **Community Growth**: Clear contribution paths (module / theme / frontend)
 
 ---
 
@@ -426,10 +461,10 @@ The transformation from static project generator to layered architecture involve
 ### **Architectural Validation**
 
 **Established Django CMS Platform Analysis:**
-Our layered architecture follows proven patterns from successful Django CMS platforms:
+Our composable architecture follows proven patterns from successful Django CMS platforms:
 
-- **Wagtail Pattern**: Themes/plugins as Django apps in `INSTALLED_APPS`, JavaScript modularity for UI customization, hook system for extensibility
-- **Django CMS Pattern**: Static plugin registration at startup, database-driven content assembly, template-based themes
+- **Wagtail Pattern**: Themes/modules as Django apps in `INSTALLED_APPS`, JavaScript modularity for UI customization, hook system for extensibility
+- **Django CMS Pattern**: Static module registration at startup, database-driven content assembly, template-based themes
 - **Mezzanine Pattern**: Template override system for themes, settings-based configuration
 
 **Key Validation Points:**
@@ -440,16 +475,24 @@ Our layered architecture follows proven patterns from successful Django CMS plat
 
 **Why This Validates Our Approach:**
 - Wagtail (19.6k stars) could implement runtime loading but chose not to
-- Django CMS (10.5k stars) explicitly uses static plugin registration 
+- Django CMS (10.5k stars) explicitly uses static module registration 
 - Both platforms are enterprise-grade and have considered these tradeoffs
 
 ### **System Requirements**
 - **Core Platform:** Django 5.0+, PostgreSQL, Redis (for caching)
-- **Frontend:** HTMX, Alpine.js, Bulma CSS (skins can extend/override)
+- **Frontend:** HTMX, Alpine.js, Bulma CSS (frontends can extend/override)
 - **Deployment:** Docker with standard Django deployment patterns
-- **Distribution:** PyPI for theme, skin, and plugin packages
+- **Distribution:** PyPI for theme and module packages
 
-### **CLI API** (see Appendix L for code example)
+### **CLI API (Initial)**
+| Command | Description | Notes |
+|---------|-------------|-------|
+| quickscale create <name> --theme=starter --frontend=htmx --modules=payments,billing | Imperative shortcut | Generates transient config then calls generate |
+| quickscale init --interactive | Interactive wizard to create config | Writes `quickscale.yml` |
+| quickscale validate | Validate config schema | Fails on deprecated keys |
+| quickscale preview | Show diff of generation | No filesystem writes |
+| quickscale generate | Assemble project from config | Deterministic output |
+| quickscale info <package> | Show theme/module metadata | Reads package manifest |
 
 ### **Layer Package Structure Standards** (see Appendix M for code example)
 
@@ -494,20 +537,20 @@ Our layered architecture follows proven patterns from successful Django CMS plat
 - Real estate experts → realestate business theme backend  
 - CRM experts → crm business theme backend
 
-**Presentation Skin Layer (Technology-Agnostic Frontend):**
+**Frontend Developers (Technology-Specific Presentation):**
 - UI/UX designers and frontend developers maintain presentation
 - Visual and interaction updates independent of business logic
-- Modern presentation skin maintainers ≠ Classic presentation skin maintainers
+- HTMX specialists ≠ React specialists ≠ Vue specialists
 - Frontend technology specialists (React devs, HTMX devs, Vue devs)
 - Faster iteration on design trends and user experience
 
-**Feature Plugin Layer (Cross-Cutting Specialists):**
-- `pip install quickscale-feature-plugin-analytics==1.2.0`
+**Backend Modules (Cross-Cutting Specialists):**
+- `pip install quickscale-module-analytics==1.2.0`
 - Feature-specific maintenance
 - Cross-cutting concerns specialists
-- Analytics experts → analytics feature plugin
-- SEO experts → seo feature plugin
-- Marketing experts → email feature plugin
+- Analytics experts → analytics backend module
+- SEO experts → seo backend module
+- Payments experts → payments backend module
 
 **Benefits of Separated Maintenance:**
 - ✅ **Specialized Expertise**: Domain experts maintain their layers
@@ -521,16 +564,21 @@ Our layered architecture follows proven patterns from successful Django CMS plat
 
 ## Appendices: Code Examples
 
-### **Appendix A: Established Django CMS Pattern (What We Follow)**
+### **Appendix A: Library-Style Backend Modules Pattern (What We Follow)**
 ```bash
-# 1. Creation-time layer selection and package installation
-quickscale create mystore --theme ecommerce --skin modern
-# This installs: pip install quickscale-business-theme-ecommerce quickscale-presentation-skin-modern
+# 1. Creation-time theme and frontend selection with module installation
+quickscale create mystore --theme starter --frontend htmx --modules backup,admin,notifications,payments
+# This installs: pip install quickscale-theme-starter quickscale-module-backup quickscale-module-admin quickscale-module-notifications quickscale-module-payments
 
 # 2. Static Django application configuration
 # settings.py (generated once, then static)
 INSTALLED_APPS = [
-    'quickscale_business_themes.ecommerce',  # Business theme as Django app
+    'quickscale_core',
+    'quickscale_modules.backup',
+    'quickscale_modules.admin', 
+    'quickscale_modules.notifications',
+    'quickscale_modules.payments',
+    'quickscale_themes.starter',  # Starting point theme as Django app
     # No runtime switching needed
 ]
 
@@ -542,7 +590,7 @@ docker-compose up  # Standard deployment, no runtime complexity
 ```bash
 # This is what we explicitly DO NOT do:
 # ❌ No WordPress-style admin theme installation
-# ❌ No runtime plugin activation/deactivation  
+# ❌ No runtime module activation/deactivation  
 # ❌ No live theme switching without redeployment
 # ❌ No dynamic INSTALLED_APPS modification
 ```
@@ -552,14 +600,14 @@ docker-compose up  # Standard deployment, no runtime complexity
 quickscale init myproject → Copy templates → Independent Django project
 ```
 
-### **Appendix D: New Architecture (Core + Theme/Skin/Plugin Layers)**
+### **Appendix D: New Architecture (Core + Module/Theme Structure)**
 ```
 pip install quickscale-core
-quickscale create mystore --business-theme ecommerce --presentation-skin modern --feature-plugins analytics,seo
-→ QuickScale core application configured with business theme + presentation skin + feature plugin layers
+quickscale create mystore --theme starter --frontend htmx --modules backup,admin,notifications,payments
+→ QuickScale core application configured with starting point theme + backend modules + bundled frontend
 ```
 
-### **Appendix E: Clear Layer Architecture**
+### **Appendix E: Library-Style Backend Modules Architecture (Built on Django Foundations)**
 ```
 QuickScale Application (replaces static generation)
 ├── QuickScale Core (Django Application) - Stable foundation
@@ -567,59 +615,62 @@ QuickScale Application (replaces static generation)
 │   ├── Credit & Billing System  
 │   ├── Admin Dashboard Framework
 │   ├── API Infrastructure
-│   ├── Theme/Skin Loading System
-│   └── Plugin Framework
-├── Business Theme Layer (Industry-Specific Backend Logic)
-│   ├── E-commerce Theme (Product/Order models, business rules, payment APIs)
-│   ├── Real Estate Theme (Property/Agent models, listing logic, valuation APIs)
-│   └── CRM Theme (Lead/Contact models, pipeline logic, reporting APIs)  
-├── Presentation Skin Layer (Technology-Agnostic Frontend)
-│   ├── Modern HTMX Skin (HTMX + Alpine.js + Tailwind templates & interactions)
-│   ├── React Modern Skin (React components + ShadCN/UI + API consumption)
-│   └── Classic Traditional Skin (Django templates + minimal JS + Bulma styling)
-└── Feature Plugin Layer (Cross-Cutting Python Libraries)
-    ├── Analytics Plugin (Python services that business themes import directly)
-    ├── SEO Plugin (Python utilities that business themes use internally)
-    └── Email Marketing Plugin (Python classes that business themes integrate with)
+│   ├── Theme/Module Loading System
+│   └── Hook Framework
+├── Backend Modules (Built on Django Foundations)
+│   ├── Payments Module (built on dj-stripe for payment processing)
+│   ├── Analytics Module (built on proven analytics foundations)
+│   ├── SEO Module (built on django-seo utilities)
+│   ├── Backup Module (built on proven backup solutions)
+│   └── Notifications Module (built on django-anymail for messaging)
+├── Industry Themes (Applications that use modules)
+│   ├── E-commerce Theme (Product/Order models, imports modules, bundled frontends)
+│   ├── Real Estate Theme (Property/Agent models, imports modules, bundled frontends)
+│   └── CRM Theme (Lead/Contact models, imports modules, bundled frontends)
+└── Multiple Frontends (Bundled within themes)
+    ├── frontend_htmx/ (HTMX + Alpine.js + Tailwind templates & interactions)
+    ├── frontend_react/ (React components + TypeScript + ShadCN/UI)
+    └── frontend_vue/ (Vue 3 components + Composition API + PrimeVue)
 
 Communication Model:
-- Feature Plugins ↔ Business Themes: Direct Python imports (server-side only)
-- Business Themes ↔ Presentation Skins: REST API communication (technology-agnostic)
-- Presentation Skins ↔ Feature Plugins: No direct communication (true decoupling)
-    └── Email Marketing Plugin (campaigns, automation, templates)
+- Backend Modules ↔ Industry Themes: Direct Python imports (library-style)
+- Industry Themes ↔ Frontends: REST API communication (technology-agnostic)
+- Frontends ↔ Backend Modules: No direct communication (true decoupling)
 ```
 
 ### **Appendix F: QuickScale Core Application (Stable Foundation)**
 ```
-quickscale-core/
+quickscale_core/
 ├── users/              # User management & authentication  
 ├── credits/            # Credit system & consumption tracking
 ├── billing/            # Stripe integration & payments
 ├── admin_dashboard/    # Admin interface framework
 ├── api/               # RESTful API infrastructure
-├── theme_system/      # Business theme loading and management
-├── skin_system/       # Presentation skin loading and template overrides
-└── plugin_framework/  # Feature plugin discovery and integration
+├── theme_system/      # Industry theme loading and management
+├── module_system/     # Backend module discovery and integration
+└── hook_framework/    # Extensibility hooks for theme/module integration
 ```
 
 ### **Appendix G: Creation-Time Assembly Process**
 ```bash
 # 1. Package Installation
-quickscale create mystore --business-theme ecommerce --presentation-skin modern --feature-plugins analytics,seo
-# Installs: quickscale-business-theme-ecommerce, quickscale-presentation-skin-modern, quickscale-feature-plugin-analytics, quickscale-feature-plugin-seo
+quickscale create mystore --theme starter --frontend htmx --modules backup,admin,notifications,payments
+# Installs: quickscale-theme-starter, quickscale-module-backup, quickscale-module-admin, quickscale-module-notifications, quickscale-module-payments
 
 # 2. Static Configuration Generation  
-# settings.py is generated once with selected layers
+# settings.py is generated once with selected modules/themes
 INSTALLED_APPS = [
-    'quickscale.core.users',
-    'quickscale.core.billing', 
-    'quickscale_business_themes.ecommerce',
-    'quickscale_feature_plugins.analytics',
-    'quickscale_feature_plugins.seo',
+    'quickscale_core.users',
+    'quickscale_core.billing', 
+    'quickscale_modules.backup',
+    'quickscale_modules.admin',
+    'quickscale_modules.notifications',
+    'quickscale_modules.payments',
+    'quickscale_themes.starter',
 ]
 
-QUICKSCALE_BUSINESS_THEME = 'ecommerce'
-QUICKSCALE_PRESENTATION_SKIN = 'modern'
+QUICKSCALE_THEME = 'starter'
+QUICKSCALE_FRONTEND = 'htmx'
 
 # 3. Standard Django Deployment
 docker-compose up  # No runtime complexity, standard Django patterns
@@ -737,12 +788,12 @@ class InventoryService:
         pass
 ```
 
-### **Appendix I: Modern HTMX Skin Implementation (Pure Frontend)**
+### **Appendix I: Modern HTMX Frontend Implementation (Bundled within Theme)**
 
 ```python
-# quickscale_skins/modern_htmx/
+# quickscale_themes/ecommerce/frontend_htmx/
 ├── __init__.py
-├── skin_config.py       # Skin configuration
+├── frontend_config.py   # Frontend configuration
 ├── templates/           # Template overrides (presentation only)
 │   ├── base.html        # Base layout with modern styling
 │   ├── ecommerce/       # E-commerce frontend templates
@@ -781,10 +832,10 @@ class InventoryService:
     ├── ecommerce_tags.py # Template tags to call theme APIs
     └── modern_ui_tags.py # Modern UI specific template helpers
 
-# Modern HTMX skin configuration
-# skin_config.py
-class ModernHTMXSkinConfig:
-    name = "modern_htmx"
+# Modern HTMX frontend configuration
+# frontend_config.py
+class ModernHTMXFrontendConfig:
+    name = "frontend_htmx"
     display_name = "Modern HTMX UI"
     version = "1.0.0"
     description = "Contemporary design with HTMX + Alpine.js interactions"
@@ -806,7 +857,7 @@ class ModernHTMXSkinConfig:
     responsive = True
     rtl_support = True
 
-# Example modern skin template consuming theme API
+# Example modern frontend template consuming theme API
 # templates/ecommerce/product_list.html
 {% extends "base.html" %}
 {% load ecommerce_api_tags %}
@@ -843,7 +894,7 @@ class ModernHTMXSkinConfig:
         function productGrid() {
             return {
                 gridStyle: 'grid-3-col',
-                // Modern skin specific behavior - consumes theme APIs
+                // Modern frontend specific behavior - consumes theme APIs
                 async addToCart(productId) {
                     const response = await apiClient.products.addToCart(productId);
                     // Handle UI update based on API response
@@ -890,23 +941,23 @@ register = template.Library()
 
 @register.inclusion_tag('components/product_card.html')
 def render_product_card(product_id, style='modern'):
-    """Template tag that calls theme API and renders with skin styling."""
+    """Template tag that calls theme API and renders with frontend styling."""
     client = ProductAPIClient()
     product = client.get_product_detail(product_id)
     
     return {
         'product': product,
         'style': style,
-        'skin_name': 'modern_htmx'
+        'frontend_name': 'frontend_htmx'
     }
 ```
 
-### **Appendix J: React Modern Skin Implementation (Pure Frontend)**
+### **Appendix J: React Modern Frontend Implementation (Bundled within Theme)**
 
 ```python
-# quickscale_skins/modern_react/
+# quickscale_themes/ecommerce/frontend_react/
 ├── __init__.py
-├── skin_config.py       # Skin configuration
+├── frontend_config.py   # Frontend configuration
 ├── package.json         # Node.js dependencies
 ├── vite.config.js       # Build configuration
 ├── src/                 # React source code
@@ -938,10 +989,10 @@ def render_product_card(product_id, style='modern'):
     ├── dist/
     └── assets/
 
-# React skin configuration  
-# skin_config.py
-class ReactModernSkinConfig:
-    name = "modern_react"
+# React frontend configuration  
+# frontend_config.py
+class ReactModernFrontendConfig:
+    name = "frontend_react"
     display_name = "Modern React UI"
     version = "1.0.0"
     description = "Modern React components with ShadCN/UI and TypeScript"
@@ -1079,12 +1130,12 @@ export function useProducts(filters = {}) {
 }
 ```
 
-### **Appendix K: Analytics Plugin Implementation (Pure Python Library)**
+### **Appendix K: Analytics Module Implementation (Pure Python Library)**
 
-```python  
-# quickscale_plugins/analytics/
+```python
+# quickscale_modules/analytics/
 ├── __init__.py
-├── apps.py              # Plugin configuration
+├── apps.py              # Module configuration
 ├── models.py            # Analytics data models  
 ├── admin.py             # Analytics admin
 ├── signals.py           # Event tracking via Django signals
@@ -1169,7 +1220,7 @@ class AnalyticsService:
             'events_by_day': list(queryset.extra({'day': 'date(timestamp)'}).values('day').annotate(count=Count('id'))),
         }
 
-# Plugin signal handlers - hook into any theme backend
+# Module signal handlers - hook into any theme backend
 # signals.py
 from django.dispatch import receiver
 from django.db.models.signals import post_save
@@ -1192,23 +1243,23 @@ def track_product_view(sender, product, user, request, **kwargs):
         }
     )
 
-# How themes use the plugin directly
+# How themes use the module directly
 # Example: quickscale_themes/ecommerce/api.py
 from rest_framework import viewsets
 from rest_framework.decorators import action
 from rest_framework.response import Response
-from quickscale_plugins.analytics.services import AnalyticsService
+from quickscale_modules.analytics.services import AnalyticsService
 from .models import Product
 
 class ProductViewSet(viewsets.ModelViewSet):
-    """E-commerce theme API that uses analytics plugin internally."""
+    """E-commerce theme API that uses analytics module internally."""
     queryset = Product.objects.all()
     
     def retrieve(self, request, pk=None):
         """Get product detail and track view."""
         product = self.get_object()
         
-        # Use plugin service directly (server-side only)
+        # Use module service directly (server-side only)
         AnalyticsService.track_event(
             event_type='product_view',
             user=request.user if request.user.is_authenticated else None,
@@ -1218,7 +1269,7 @@ class ProductViewSet(viewsets.ModelViewSet):
             metadata={'product_name': product.name}
         )
         
-        # Return product data to skin
+        # Return product data to frontend
         return Response({
             'id': product.id,
             'name': product.name,
@@ -1228,14 +1279,14 @@ class ProductViewSet(viewsets.ModelViewSet):
     
     @action(detail=False, methods=['get'])
     def analytics_dashboard(self, request):
-        """Provide analytics data for skins to display."""
-        # Use plugin service to get data
+        """Provide analytics data for frontends to display."""
+        # Use module service to get data
         stats = AnalyticsService.get_event_stats(
             theme='ecommerce',
             event_type='product_view'
         )
         
-        # Theme provides the API - skin consumes it
+        # Theme provides the API - frontend consumes it
         return Response(stats)
     EventTracking.objects.create(
         user=user if user.is_authenticated else None,
@@ -1250,23 +1301,23 @@ class ProductViewSet(viewsets.ModelViewSet):
         }
     )
 
-# Plugin configuration - pure Python library
+# Module configuration - pure Python library
 # apps.py
-class AnalyticsPluginConfig(AppConfig):
-    name = "quickscale_plugins.analytics"
-    verbose_name = "Analytics Plugin"
+class AnalyticsModuleConfig(AppConfig):
+    name = "quickscale_modules.analytics"
+    verbose_name = "Analytics Module"
     
-    plugin_type = "python_library"
-    compatible_themes = ["all"]  # All themes can import and use this plugin
+    module_type = "python_library"
+    compatible_themes = ["all"]  # All themes can import and use this module
     
-    # Python services this plugin provides
+    # Python services this module provides
     python_services = [
         'AnalyticsService.track_event',
         'AnalyticsService.track_page_view', 
         'AnalyticsService.get_event_stats'
     ]
     
-    # Signal handlers this plugin provides
+    # Signal handlers this module provides
     signal_handlers = [
         'track_product_view',
         'track_order_completion',
@@ -1275,10 +1326,10 @@ class AnalyticsPluginConfig(AppConfig):
     
     def ready(self):
         # Auto-import signal handlers
-        import quickscale_plugins.analytics.signals
+        import quickscale_modules.analytics.signals
 
-# Key Benefits of Pure Python Plugin Architecture:
-# ✅ Complete decoupling: Skins never directly access plugins
+# Key Benefits of Pure Python Module Architecture:
+# ✅ Complete decoupling: Frontends never directly access modules
 # ✅ Simple integration: Themes import Python classes directly  
 # ✅ Technology agnostic: Any frontend technology can work through theme APIs
 # ✅ Server-side only: No JavaScript dependencies or frontend coupling
@@ -1286,20 +1337,20 @@ class AnalyticsPluginConfig(AppConfig):
 ```
 ```
 
-### **Appendix K: CLI API**
+### **Appendix L: CLI API**
 
 ```bash
-# Layer Management
-quickscale layer list business-themes                    # List available business themes
-quickscale layer list presentation-skins                 # List available presentation skins  
-quickscale layer list feature-plugins                    # List available feature plugins
-quickscale layer info ecommerce                          # Show business theme/presentation skin/feature plugin details
+# Package Management
+quickscale list themes                                   # List available industry themes
+quickscale list modules                                  # List available backend modules  
+quickscale list frontends ecommerce                     # List frontends for a specific theme
+quickscale info ecommerce                                # Show theme/module details
 
 # Project Creation (no switching - creation time selection only)
-quickscale create myproject                                                      # Create with base business theme + default presentation skin
-quickscale create mystore --business-theme ecommerce                            # Create with business theme + default presentation skin
-quickscale create mystore --business-theme ecommerce --presentation-skin modern # Create with business theme + presentation skin
-quickscale create mystore --business-theme ecommerce --presentation-skin modern --feature-plugins analytics,seo  # Full specification
+quickscale create myproject                              # Create with default theme + default frontend
+quickscale create mystore --theme ecommerce             # Create with theme + default frontend
+quickscale create mystore --theme ecommerce --frontend htmx # Create with theme + specific frontend
+quickscale create mystore --theme ecommerce --frontend react --modules payments,analytics,seo  # Full specification
 
 # Development Management
 quickscale migrate                              # Run database migrations
@@ -1313,11 +1364,96 @@ quickscale deploy production                   # Deploy to production
 quickscale rollback                           # Rollback to previous version
 ```
 
-### **Appendix L: Layer Package Structure Standards**
+**Configuration-Driven Alternative (Enhanced CLI)**
+
+In addition to the command-line approach above, QuickScale supports a **Configuration-Driven Alternative** for declarative project definition:
+
+```bash
+# Interactive configuration creation
+quickscale init --interactive                    # Creates quickscale.yml through guided wizard
+quickscale validate                              # Validates configuration against schemas
+quickscale generate                              # Generates Django code from configuration
+quickscale preview                               # Shows what will be generated without creating files
+quickscale deploy --env=staging                  # Deploys based on configuration + environment
+
+# Configuration file management
+quickscale config show                           # Display current configuration
+quickscale config edit                           # Open configuration in editor
+quickscale config migrate --to=2.0              # Migrate configuration to newer schema version
+```
+
+**Sample Configuration File (`quickscale.yml`) – Canonical Schema v1 (replaces earlier legacy examples using `features:`)**:
+```yaml
+# Schema version for configuration format migration
+schema_version: "1.0"
+
+project:
+  name: mystore
+  version: 1.0.0
+  description: "Modern e-commerce platform"
+
+theme: starter
+
+modules:
+    payments:
+        provider: stripe
+    # notifications: { provider: sendgrid }        # future optional
+    # backup: { provider: aws, schedule: daily }   # future optional
+    # analytics: { provider: internal }            # future optional
+    
+frontend:
+  technology: react
+  theme: modern-dark
+  components: [admin, storefront, mobile]
+  build_system: vite
+  
+deployment:
+  platform: docker
+  database: postgresql
+  cache: redis
+  search: elasticsearch
+  
+environments:
+  development:
+    debug: true
+    database_url: "postgresql://localhost/mystore_dev"
+  staging:
+    debug: false
+    database_url: "${STAGING_DATABASE_URL}"
+  production:
+    debug: false
+    database_url: "${DATABASE_URL}"
+    
+customizations:
+  - name: "Custom product fields"
+    type: model-extension
+    target: Product
+    fields:
+      - name: sustainability_score
+        type: integer
+        min: 1
+        max: 10
+        help_text: "Environmental impact score"
+      - name: supplier_code
+        type: string
+        max_length: 50
+        unique: true
+```
+
+**Benefits of Configuration-Driven Approach**:
+- ✅ **Version Control**: Configuration changes tracked in Git
+- ✅ **Non-Developer Friendly**: Business users can modify configurations
+- ✅ **Reproducible**: Exact project recreation from configuration
+- ✅ **CI/CD Integration**: Automated deployment from configuration files
+- ✅ **Documentation**: Configuration serves as living project documentation
+- ✅ **Environment Management**: Different settings per environment
+- ✅ **Schema Validation**: Prevents invalid configurations
+
+### **Appendix M: Layer Package Structure Standards**
 
 ```python
 # Business Theme Package Standard (Industry-Specific Backend Logic)
-quickscale_business_themes/{theme_name}/
+quickscale_themes/{theme_name}/
 ├── __init__.py
 ├── apps.py                 # Required: Django AppConfig
 ├── models.py              # Business models and database schema
@@ -1331,12 +1467,12 @@ quickscale_business_themes/{theme_name}/
 ├── signals.py             # Business event signals
 └── theme_config.py        # Business theme metadata and API specifications
 
-# Presentation Skin Package Standard (Technology-Agnostic Frontend)
-quickscale_presentation_skins/{skin_name}/
+# Frontend Package Standard (Bundled within Themes)
+quickscale_themes/{theme_name}/frontend_{frontend_name}/
 ├── __init__.py
-├── skin_config.py         # Required: Presentation skin configuration and tech stack
-├── templates/             # Django templates (for HTMX/traditional presentation skins)
-├── src/                   # Frontend source code (for React/Vue presentation skins)
+├── frontend_config.py     # Required: Frontend configuration and tech stack
+├── templates/             # Django templates (for HTMX/traditional frontends)
+├── src/                   # Frontend source code (for React/Vue frontends)
 ├── static/                # CSS, JS, images, fonts
 ├── components/            # Reusable UI components
 ├── api_integration/       # API client code for consuming business theme backends
@@ -1344,29 +1480,29 @@ quickscale_presentation_skins/{skin_name}/
 ├── build.config.js        # Build configuration (if needed)
 └── templatetags/          # Custom template tags for API consumption
 
-# Feature Plugin Package Standard (Cross-Cutting Python Libraries)
-quickscale_feature_plugins/{plugin_name}/
+# Backend Module Package Standard (Reusable Python Libraries)
+quickscale_modules/{module_name}/
 ├── __init__.py
 ├── apps.py                # Required: Django AppConfig with compatibility info
-├── models.py              # Feature plugin data models
-├── admin.py               # Feature plugin admin interfaces
+├── models.py              # Backend module data models
+├── admin.py               # Feature module admin interfaces
 ├── services.py            # Pure Python services that business themes can import
 ├── signals.py             # Signal handlers for business theme integration
 ├── migrations/            # Database migrations
-└── plugin_config.py       # Feature plugin metadata and service specifications
+└── module_config.py       # Feature module metadata and service specifications
 ```
 
-### **Appendix M: Layer Security & Validation**
+### **Appendix N: Layer Security & Validation**
 
 ```python
 # Layer Security System (follows Django CMS security patterns)
 class LayerSecurity:
-    """Security validation for themes, skins, and plugins following established CMS patterns."""
+    """Security validation for themes and modules following established CMS patterns."""
     
     def validate_theme_package(self, theme_name: str) -> bool:
         """Validate theme package security and compatibility.
         
-        Similar to how Django CMS validates plugin packages:
+        Similar to how Django CMS validates module packages:
         - Static validation at installation time
         - No runtime security risks
         """
@@ -1377,18 +1513,18 @@ class LayerSecurity:
         # 5. Check for conflicting database table names (Django validation)
         return True
     
-    def validate_skin_package(self, skin_name: str, theme_name: str) -> bool:
-        """Validate skin compatibility and security (template-only packages)."""
-        # 1. Verify skin is compatible with theme (compatibility matrix)
+    def validate_frontend_package(self, frontend_name: str, theme_name: str) -> bool:
+        """Validate frontend compatibility and security (template-only packages)."""
+        # 1. Verify frontend is compatible with theme (compatibility matrix)
         # 2. Check template override safety (no Python code execution)
         # 3. Validate static file integrity (CSS/JS/image validation)
         # 4. Ensure no business logic in presentation layer (separation validation)
         return True
     
-    def validate_plugin_package(self, plugin_name: str, theme_name: str) -> bool:
-        """Validate plugin compatibility and security (like Django CMS plugins)."""
-        # 1. Check plugin is compatible with theme (compatibility declaration)
-        # 2. Verify signal handler safety (Django signal validation)
+    def validate_module_package(self, module_name: str, theme_name: str) -> bool:
+        """Validate module compatibility and security."""
+        # 1. Check module is compatible with theme (compatibility declaration)
+        # 2. Verify service interface safety (Python service validation)
         # 3. Validate database migration safety (Django migration checks)
         # 4. Check for proper permission handling (Django permission system)
         return True
@@ -1397,15 +1533,15 @@ class LayerSecurity:
 class CompatibilityValidator:
     """Validate layer compatibility combinations using established patterns."""
     
-    def check_theme_skin_compatibility(self, theme: str, skin: str) -> bool:
-        """Verify skin works with theme (like Wagtail widget compatibility)."""
-        skin_config = self._load_skin_config(skin)
-        return theme in skin_config.compatible_themes
+    def check_theme_frontend_compatibility(self, theme: str, frontend: str) -> bool:
+        """Verify frontend works with theme."""
+        frontend_config = self._load_frontend_config(frontend)
+        return theme in frontend_config.compatible_themes
     
-    def check_plugin_theme_compatibility(self, plugin: str, theme: str) -> bool:
-        """Verify plugin works with theme (like Django CMS plugin compatibility)."""  
-        plugin_config = self._load_plugin_config(plugin)
-        return theme in plugin_config.compatible_themes or "all" in plugin_config.compatible_themes
+    def check_module_theme_compatibility(self, module: str, theme: str) -> bool:
+        """Verify module works with theme."""  
+        module_config = self._load_module_config(module)
+        return theme in module_config.compatible_themes or "all" in module_config.compatible_themes
 ```
 
 

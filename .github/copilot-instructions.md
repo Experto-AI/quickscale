@@ -1,1 +1,0 @@
-/home/victor/Code/quickscale/CONTRIBUTING.md
