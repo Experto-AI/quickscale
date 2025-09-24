@@ -1,16 +1,46 @@
-DECISIONS: QuickScale architecture, technical & behaviour decisions
+# DECISIONS: QuickScale Architecture & Technical Specifications
 
-Purpose
--------
-This document records authoritative architecture, technical and behaviour decisions for the QuickScale Phase 2 redesign. It is the single source of truth for how we structure packages, name artefacts, run tests, and what patterns are explicitly forbidden.
+<!-- 
+DECISIONS.md - Authoritative Technical Specification
 
-Scope
------
-- Applies to the QuickScale repository and all first-party packages created during Phase 2 (core, CLI, themes, modules).
+PURPOSE: This document is the single source of truth for all architectural decisions, technical implementation rules, and development standards for QuickScale.
+
+CONTENT GUIDELINES:
+- Record all authoritative architectural decisions with rationale
+- Document technical implementation rules (package naming, directory structure, testing)
+- Specify behavioral decisions and operational patterns
+- List explicit prohibitions (what NOT to do)
+- Include detailed technical notes and code examples
+- Maintain consistency across all QuickScale packages and extensions
+- Update when technical standards change or new decisions are made
+
+WHAT TO ADD HERE:
+- New architectural decisions with full context and rationale
+- Changes to package naming conventions or directory structures
+- Updates to testing strategies or development patterns
+- New prohibitions or anti-patterns discovered during development
+- Technical implementation details that affect multiple packages
+- Integration patterns between core, modules, and themes
+
+WHAT NOT TO ADD HERE:
+- Strategic rationale or competitive analysis (belongs in QUICKSCALE.md)
+- User-facing documentation or getting started guides (belongs in README.md)
+- Implementation timelines or roadmap items (belongs in ROADMAP.md)
+
+TARGET AUDIENCE: Maintainers, core contributors, community package developers, CI engineers
+-->
+
+## Purpose
+
+This document records authoritative architecture, technical & behaviour decisions for QuickScale. It is the single source of truth for how we structure packages, name artifacts, run tests, and what patterns are explicitly forbidden.
+
+## Scope
+
+- Applies to the QuickScale repository and all first-party packages (core, CLI, themes, modules).
 - Intended for maintainers, core contributors, community package authors, and CI engineers.
 
-Who (decision owners)
-----------------------
+## Decision Owners
+
 - QuickScale maintainers (Experto-AI and core contributors) are the authoritative owners of these decisions.
 - Community contributors must follow these decisions when creating themes or modules. Exceptions must be approved by maintainers and documented here.
 
@@ -24,14 +54,14 @@ The **Library-Style Backend Modules** architecture for development acceleration 
 **Core Architecture Concept:**
 - **Backend Modules** = Built on proven Django foundations (dj-stripe, django-allauth, etc.) providing reusable functionality like backup, analytics, payments
 - **Starting Point Themes** = Foundation Django applications that developers customize for their specific business needs
-- **Multiple Frontends** = Each theme supports N presentation technologies (HTMX, React, Vue, etc.)
+- **Directory-Based Frontends** = Custom frontend development via directory structure
 
 **QuickScale as Development Foundation:**
 QuickScale provides building blocks and acceleration tools, not complete business solutions:
 - **Foundation (Core)**: Project scaffolding, configuration system, extension points, common utilities (hook system deferred to later phase)
 - **Backend Modules**: Built on proven Django foundations (django-allauth for auth, enhanced Django admin, dj-stripe, etc.) providing reusable functionality packages such as auth, admin, payments, billing, notifications, backup, analytics
 - **Themes**: Starting points that require customization for specific business needs
-- **Frontends**: Presentation technologies that can co-exist within a theme (themes MAY ship multiple frontends; projects decide which to use)
+- **Frontends**: Directory-based presentation layer for theme customization
 
 **Architecture Structure:**
 ```
@@ -49,14 +79,11 @@ quickscale_themes/                  # Starting point applications (customize for
   ├── starter/
   │   ├── models.py               # Foundation models - add your custom models
   │   ├── business.py             # Example patterns - implement your logic
-  │   ├── frontend_htmx/          # HTMX foundation - customize for your brand
-  │   ├── frontend_react/         # React foundation - customize for your UX
-  │   └── frontend_vue/           # Vue foundation - customize for your design
+  │   └── frontend/               # Basic frontend foundation - customize for your needs
   └── todo/
       ├── models.py               # Task management example - reference for custom development
       ├── business.py             # Complete workflows - learn from for your application
-      ├── frontend_htmx/          # Full implementation - see patterns for your app
-      └── frontend_react/         # Complete example - reference for your components
+      └── frontend/               # Full implementation - see patterns for your app
 ```
 
 **Key Advantages of Library-Style Architecture:**
@@ -137,7 +164,7 @@ Rules:
    - Theme/module distributions provide subpackages under shared namespaces:
      - `quickscale_themes.<name>`
      - `quickscale_modules.<name>`
-   - Use PEP 420 implicit namespace packages (no `__init__.py`) for these shared namespaces, unless compatibility reasons require `pkgutil` style.
+   - Use PEP 420 implicit namespace packages (no `__init__.py`) for these shared namespaces. No fallback to pkgutil-style namespace packages.
 
 3. CLI
    - The CLI is a separate package: `quickscale_cli/`.
@@ -188,6 +215,7 @@ project:
   version: 1.0.0
 
 theme: starter  # starting point theme (must be customized)
+backend_extensions: myproject.backend_extensions  # Python inheritance entrypoint
 
 modules:
   payments:
@@ -198,10 +226,8 @@ modules:
   # backup: { provider: aws, schedule: daily }
 
 frontend:
-  # A theme MAY ship multiple technologies; project selects one or more.
-  technologies: [htmx, react]  # list allows multi-frontend projects
-  primary: htmx                 # recommended default for dev tooling
-  variant: modern-dark          # optional styling variant identifier
+  source: ./custom_frontend/    # Directory-based frontend (MVP)
+  variant: default              # Basic variant support
 
 customizations:
   models:
@@ -214,7 +240,7 @@ customizations:
     - "Orders over $1000 need manager approval"
 ```
 
-Deprecated fields/structures: `features`, `components`, singular `technology` key, deep nested feature config. These MUST NOT appear in new configs (validation error).
+Deprecated fields/structures: `features`, `components`, `technologies`, `primary`, or any `frontend` keys outside `source` and `variant` (MVP scope). These MUST NOT appear in new configs (validation error).
 
 **Key Advantages of Configuration-Driven Architecture:**
 - ✅ **Non-Developer Accessibility**: Business users can modify project configurations without coding
@@ -240,6 +266,102 @@ quickscale deploy --env=staging      # Deploys based on configuration + environm
 - Environment-specific configuration overrides
 - Migration system for configuration format changes
 - Integration with existing Library-Style Backend Modules architecture
+
+**ARCHITECTURAL DECISION: MVP Backend Extension & Frontend Development**
+
+The **MVP Backend Extension & Frontend Development** decision ensures simple project customization using standard Django patterns.
+
+**Backend Extension Pattern (MVP):**
+- Themes provide inheritance-friendly base classes (models, services, forms).
+- Projects use `backend_extensions.py` for customizations via Python inheritance.
+- Call `super()` in extensions for compatibility with theme updates.
+
+**Frontend Development Pattern (MVP):**
+- Directory-based frontends (`frontend.source`) for local development and customization.
+- Basic variant support via `frontend.variant` configuration.
+- Variants map to `variants/<name>/` folders for different UX styles.
+
+**Configuration Rules (MVP):**
+- `frontend` accepts only `source` and `variant` keys in MVP scope.
+- `backend_extensions` must resolve to an importable module for customizations.
+- Schema validation provides clear errors for missing directories or configuration.
+
+**Implementation Requirements (MVP):**
+- Scaffolding generates `backend_extensions.py` with inheritance stubs.
+- When `frontend.source` is specified, generate `custom_frontend/` directory structure.
+- Django settings template supports custom frontend template and static directories.
+- Basic variant switching mechanism for different presentation styles.
+
+**MVP Implementation Details:**
+
+*Backend Extension Pattern (Python Inheritance):*
+```python
+# Generated backend_extensions.py in user project
+from quickscale_themes.starter import models as starter_models
+from quickscale_themes.starter import business as starter_business
+
+class ExtendedUser(starter_models.User):
+    """Extended user model with custom fields"""
+    department = models.CharField(max_length=100)
+    
+class ExtendedBusinessLogic(starter_business.StarterBusiness):
+    """Extended business logic with custom rules"""
+    def process_order(self, order):
+        # Custom business logic
+        result = super().process_order(order)
+        # Additional custom processing
+        return result
+```
+
+*Directory-Based Frontend Pattern:*
+```bash
+my_project/
+├── quickscale.yml              # Simple configuration
+├── backend_extensions.py       # Backend customizations (generated)
+├── custom_frontend/            # Custom frontend directory (generated)
+│   ├── templates/             # Custom Django templates
+│   ├── static/               # Custom CSS, JS, images
+│   └── variants/             # Client-specific variations
+│       ├── default/          # Default styling
+│       └── client_a/         # Client A customizations
+```
+
+*Generated Project Structure (MVP):*
+```bash
+my_project/
+├── quickscale.yml              # Simple configuration
+├── backend_extensions.py       # Backend customizations (generated with stubs)
+├── manage.py                   # Standard Django management
+├── settings.py                 # Django settings (supports custom_frontend)
+├── requirements.txt            # Pinned dependencies
+├── custom_frontend/            # Custom frontend directory (optional)
+│   ├── templates/             # Custom Django templates
+│   │   ├── base.html         # Base template override
+│   │   └── components/       # Reusable components
+│   ├── static/               # Custom CSS, JS, images
+│   │   ├── css/main.css      # Main stylesheet
+│   │   └── js/app.js         # Main JavaScript
+│   └── variants/             # Client variant support
+│       ├── default/          # Default styling
+│       │   ├── templates/
+│       │   └── static/
+│       └── client_a/         # Example client variant
+│           ├── templates/
+│           └── static/
+```
+
+**MVP Core Features:**
+1. **Backend Extension Scaffolding**: Generated `backend_extensions.py` with inheritance stubs
+2. **Directory-Based Frontend**: Optional `custom_frontend/` with template and static directories  
+3. **Basic Variant Support**: Simple variant switching via `frontend.variant` configuration
+4. **Django Settings Integration**: Automatic template and static file directory configuration
+5. **Standard Django Patterns**: No custom framework overhead, pure Django approach
+
+**MVP Limitations:**
+- ❌ **No multi-client config array** - Just single `variant` string for now
+- ❌ **No automated API contract versioning** - Manual compatibility for MVP  
+- ❌ **No registry or marketplace** - Directory-based development only
+- ❌ **No advanced CLI features** - Basic project creation only
 
 **ARCHITECTURAL DECISION: Standard Django Database Architecture**
 
@@ -284,18 +406,20 @@ class Event(models.Model):
 **INSTALLED_APPS Configuration (truly modular - only install what you need):**
 ```python
 INSTALLED_APPS = [
-  'quickscale_core',                # Core scaffolding & utilities (minimal)
-  # Optional modules - install only what your app needs:
-  # 'quickscale_modules_auth',      # Authentication & user management
-  # 'quickscale_modules_admin',     # Enhanced admin interface
-  # 'quickscale_modules_payments',  # Payments backend module
-  # 'quickscale_modules_billing',   # Billing backend module
-  # 'quickscale_modules_notifications',  # future
-  # 'quickscale_modules_backup',         # future
-  # 'quickscale_modules_analytics',      # future
+  'quickscale_core',                 # Core scaffolding & utilities (minimal)
+  # Optional modules - install only what your app needs (use dotted import paths):
+  # 'quickscale_modules.auth',       # Authentication & user management
+  # 'quickscale_modules.admin',      # Enhanced admin interface
+  # 'quickscale_modules.payments',   # Payments backend module
+  # 'quickscale_modules.billing',    # Billing backend module
+  # 'quickscale_modules.notifications',  # future
+  # 'quickscale_modules.backup',          # future
+  # 'quickscale_modules.analytics',       # future
+  # Themes are standard Django apps as well:
+  # 'quickscale_themes.starter',
 ]
 ```
-
+**Multiple Frontends** = Each theme supports N presentation technologies (HTMX, React, Vue, etc.) that may be bundled with the theme or installed as standalone frontend packages
 **Cross-Module Relationships:**
 ```python
 # Standard Django ForeignKey relationships work normally between apps
