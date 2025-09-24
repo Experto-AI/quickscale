@@ -1,13 +1,28 @@
 
 # 🚀 QuickScale
 
+<!-- 
+README.md - User-Focused Introduction
+
+PURPOSE: This file serves as the first contact point for users, developers, and evaluators visiting the QuickScale project.
+
+CONTENT GUIDELINES:
+- Keep content user-facing and accessible to newcomers
+- Focus on "what" and "how to get started" rather than "why" or technical details  
+- Include quick examples and development workflows
+- Avoid deep architectural explanations (those belong in DECISIONS.md)
+- Avoid competitive analysis or strategic context (those belong in QUICKSCALE.md)
+- Maximum length: ~200 lines to ensure quick readability
+- Link to other documents for detailed information
+
+TARGET AUDIENCE: New users, potential adopters, GitHub visitors, developers evaluating QuickScale
+-->
+
 ---
 
 ## QuickScale: Compose your Django SaaS.
 
 QuickScale is a **composable Django SaaS foundation** with a stable core, reusable backend modules, and starting point themes—delivering Python-native simplicity and development acceleration (not turnkey vertical products).
-
-**This is a complete architectural redesign.**
 
 ---
 
@@ -20,7 +35,7 @@ QuickScale is a **composable Django SaaS foundation** that helps you build custo
 - **QuickScale Core** = Python's standard library (project scaffolding + configuration system + utilities)
 - **Backend Modules** = Built on proven Django foundations (django-allauth for auth, enhanced admin, dj-stripe for `payments`; future: `notifications`, `backup`, `analytics`)
 - **Starting Point Themes** = Foundation applications to customize (e.g., `starter`, `todo`)
-- **Multiple Frontends** = Bundled within each theme (e.g., `frontend_htmx/`, `frontend_react/`, `frontend_vue/`)
+- **Directory-Based Frontends** = Custom frontend development via directory structure
 
 ### What You Build:
 - **Your Custom Business Logic**: Unique to your application
@@ -30,47 +45,27 @@ QuickScale is a **composable Django SaaS foundation** that helps you build custo
 
 ### Development Flow:
 1. `quickscale create myapp --theme=starter --frontend=htmx`
-2. Customize models and business logic for your needs
-3. Override frontend templates and styling
+2. Extend the generated `backend_extensions.py` to customise theme models, services, and workflows while inheriting future updates
+3. Wire up your presentation layer: edit the scaffolded `custom_frontend/` directory for custom frontend development
 4. Add custom features and modules
 5. Deploy your unique SaaS application
 
-### Architecture Evolution:
-- **From:** QuickScale Legacy (static project generator) → Independent Django projects
-- **To:** QuickScale Core + Modules + Themes (with multiple Frontends)
-- **Benefits:**
-	- Shared updates and security fixes
-	- Modules built on proven Django foundations (battle-tested reliability)
-	- Starting point themes requiring customization
-	- **Client presentation flexibility** (same business logic, different frontends per client)
-	- Technology-agnostic frontends per theme (HTMX, React, Vue)
-	- Development acceleration, not end products
-	- Simple, reliable deployment (creation-time assembly)
+### Custom Frontend Quick Start (MVP)
+- Open `backend_extensions.py` and subclass the theme components you need to customize—keep changes additive and call `super()` for compatibility.
+- Edit `custom_frontend/templates/` and `custom_frontend/static/` to customize your frontend presentation layer.
+- Use basic variants by creating directories under `custom_frontend/variants/<name>/` for different UX styles.
 
-**Learn more:** See [QUICKSCALE.md](./QUICKSCALE.md), [ROADMAP.md](./ROADMAP.md), and [DECISIONS.md](./DECISIONS.md) for the formal architecture decision.
+## Key Benefits
 
----
-
-## Fresh Start: Clean Slate
-
-QuickScale starts from a clean directory, with only essential files and a new composable architecture. All previous code is preserved in `quickscale-legacy/` (now called QuickScale Legacy) for reference.
-
-**Key Principles:**
-- Django-native patterns (no runtime loading)
-- Clear separation of concerns (logic vs. presentation)
-- PyPI-distributed modules and themes
-- Community-first, Python-inspired ecosystem
-- Configuration-driven project definition (YAML/JSON-based)
+- **Shared Updates**: Get security fixes and improvements automatically
+- **Proven Foundations**: Built on battle-tested Django packages (django-allauth, dj-stripe)
+- **Starting Points**: Themes provide foundations you customize for your business
+- **Flexible Frontends**: Same backend, multiple client presentations
+- **Simple Deployment**: Standard Django deployment patterns
 
 ## QuickScale Philosophy: Enabler, Not Complete Solutions
 
 QuickScale provides the foundation and building blocks, not complete vertical solutions:
-
-❌ **What QuickScale is NOT:**
-- Complete e-commerce / CRM / real estate platform
-- Ready-to-use vertical SaaS
-- One-size-fits-all template pack
-- Runtime plugin loader (no WordPress-style activation)
 
 ✅ **What QuickScale IS:**
 - Foundation for building custom SaaS applications
@@ -78,9 +73,15 @@ QuickScale provides the foundation and building blocks, not complete vertical so
 - Starting point themes you must extend (models, business logic, UX)
 - Development accelerator, not an end product
 
+❌ **What QuickScale is NOT:**
+- Complete e-commerce / CRM / real estate platform
+- Ready-to-use vertical SaaS
+- One-size-fits-all template pack
+- Runtime plugin loader (no WordPress-style activation)
+
 ## Available Theme Examples
 
-QuickScale provides two foundational themes as starting points (distributed via PyPI):
+QuickScale provides two foundational themes as starting points:
 
 ### **Starter Theme (Blank Foundation)**
 - **Purpose**: Minimal foundation for custom business applications
@@ -114,114 +115,45 @@ quickscale init --interactive  # Creates quickscale.yml
 quickscale generate           # Generates project from config
 ```
 
-**Canonical Configuration Schema v1 (`quickscale.yml`)** (authoritative – matches DECISIONS.md):
+**MVP Configuration Schema (`quickscale.yml`)**:
 ```yaml
 schema_version: 1
 project:
   name: mystore
   version: 1.0.0
 
-theme: starter  # starting point (must customize)
-
-modules:
-  auth:
-    provider: django-allauth  # built on django-allauth foundations
-  payments:
-    provider: stripe          # built on dj-stripe foundations
-  billing:
-    provider: stripe          # built on proven Django billing foundations
-  # notifications: { provider: sendgrid }  # built on django-anymail
-  # backup: { provider: aws, schedule: daily }
+theme: starter                             # Base theme
+backend_extensions: mystore.extensions     # Python inheritance for customization
 
 frontend:
-  technologies: [htmx, react]  # theme may support multiple; choose for your project
-  primary: htmx
-  variant: modern-dark
-
-customizations:
-  models:
-    - name: Product
-      fields:
-        - { name: name, type: string }
-        - { name: price, type: decimal }
-        - { name: category, type: string }
-    - name: Order
-      fields:
-        - { name: user, type: foreign_key, target: User }
-        - { name: products, type: many_to_many, target: Product }
-        - { name: total, type: decimal }
-  business_rules:
-    - "Products require approval before listing"
-    - "Orders over $1000 need manager approval"
+  source: ./custom_frontend/               # Directory-based frontend (MVP)
+  variant: default                         # Basic variant support
 ```
 
-**Client Customization Example (Different business apps from same foundation)**:
+This configuration assumes `mystore/extensions.py` exists for backend customization and `custom_frontend/` directory for frontend development.
+
+**Simple Usage Example**:
 ```yaml
-# E-commerce SaaS
-project: mystore
+# Basic SaaS Application
+project:
+  name: myapp
+  version: 1.0.0
+  
 theme: starter
-modules:
-  auth: { provider: django-allauth }
-  admin: { enabled: true }
-  payments: { provider: stripe }
-  billing: { provider: stripe }
-frontend:
-  technologies: [htmx, react]
-customizations:
-  models: [Product, Order, Cart]
+backend_extensions: myapp.extensions
 
----
-# Blog/Content Site (no auth needed)
-project: myblog  
-theme: starter
-modules:
-  # No auth/admin needed for public blog
-  # Could add: content management module
 frontend:
-  technologies: [htmx]
-customizations:
-  models: [Post, Category, Tag]
-
----
-# API-only Service
-project: myapi
-theme: starter  
-modules:
-  auth: { provider: django-allauth }  # for API authentication
-  # No admin frontend needed
-frontend:
-  technologies: []  # API-only, no frontend
-customizations:
-  models: [DataModel, APIKey]
+  source: ./custom_frontend/
+  variant: default
 ```
 
-Deprecated config keys: `features`, `components`, singular `technology` (use `technologies` + `primary`). These will be rejected by future `quickscale validate`.
-
-**Benefits**: Version control friendly, non-developer accessible, automated CI/CD integration, supports multi-frontend projects.
-
-### Module Examples: True Modularity
-| Use Case | Core | Auth | Admin | Payments | Billing | Notes |
-|----------|------|------|-------|----------|---------|--------|
-| Public Blog | ✅ | ❌ | ❌ | ❌ | ❌ | No users needed |
-| API Service | ✅ | ✅ | ❌ | ❌ | ❌ | Auth for API keys |
-| E-commerce SaaS | ✅ | ✅ | ✅ | ✅ | ✅ | Full featured app |
-| Static Tool | ✅ | ❌ | ❌ | ❌ | ❌ | Just utilities |
-
-### Module Boundary: Billing vs Payments (Built on Django Foundations)
-| Concern | Billing Module | Payments Module |
-|---------|----------------|-----------------|
-| Django Foundation | Built on proven billing apps | Built on dj-stripe |
-| Role | Plans, subscriptions, entitlements | Charge execution, refunds |
-| Models | Plan, Subscription, Entitlement | Transaction, WebhookEvent |
-| External API | Billing provider (Stripe Billing) | Payment provider (Stripe Payments) |
-| Provides | Entitlement checks, decorators | Payment service classes |
-| Excludes | Direct charge execution | Subscription lifecycle logic |
-
-### Dependency Injection Policy
-Production code uses direct imports; tests may inject alternative service objects into constructors for isolation. No service containers or runtime plugin registries.
-
-### Hook System
-Deferred until a later phase (initial releases use explicit service calls). A lightweight dispatcher will be introduced and existing integration points refactored gradually.
+**Benefits**: Version control friendly, simple configuration, supports directory-based frontend development.
 
 ---
+
+## Learn More
+
+- **[DECISIONS.md](./DECISIONS.md)** - Technical specifications and implementation rules
+- **[QUICKSCALE.md](./QUICKSCALE.md)** - Strategic vision and competitive positioning  
+- **[ROADMAP.md](./ROADMAP.md)** - Development roadmap and implementation plan
 
