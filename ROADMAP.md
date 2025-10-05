@@ -38,7 +38,7 @@ This roadmap is aligned with the MVP frontend architecture decisions (integrated
 ### **📋 Current State Assessment**
 - ✅ **MVP Architecture Decided**: Directory-based frontend with backend inheritance
 - ✅ **Legacy Backup Available**: Complete v0.41.0 preserved in `quickscale-legacy/`
-- ✅ **Scope Defined**: Core foundation only (no themes/modules in Phase 1)
+- ✅ **Scope Defined**: Core foundation with scaffolded starter files generated in projects (theme/module packages deferred to post-MVP)
 - 🔄 **Ready to Build**: Clear MVP requirements established
 
 ---
@@ -99,7 +99,7 @@ quickscale/
 - [ ] **Create `ProjectConfig` dataclass with MVP fields only**
 - [ ] **Add schema validation with clear error messages**
 
-**MVP Schema (NO themes/modules yet)**:
+**MVP Schema (minimal starter theme included; modules deferred to Post-MVP)**:
 ```yaml
 # examples/mvp-minimal.yml
 schema_version: 1
@@ -107,8 +107,8 @@ project:
   name: myapp                       # Required: project identifier
   version: 1.0.0                   # Required: semantic version
 
-# MVP: No actual theme loading, just placeholder
-theme: starter                      # Future: actual theme loading
+# MVP: Scaffolded starter files generated in project; theme package loading is Post-MVP
+theme: starter                      # Reserved for future theme package loading
 
 # MVP: Backend customization via Python inheritance  
 backend_extensions: myapp.extensions
@@ -178,22 +178,22 @@ quickscale_core/scaffold/templates/
 **Deliverable**: Working project generation that creates Django projects
 
 #### **1.2.3 Basic CLI Command**
-**Priority**: Implement `quickscale create` command for MVP
+**Priority**: Implement `quickscale init` command for MVP
 
 - [ ] **Create basic CLI entry point**
-- [ ] **Implement `quickscale create projectname` command** 
+- [ ] **Implement `quickscale init myapp --template=saas --embed-code` command** 
 - [ ] **Add `--config` option for custom config files**
 - [ ] **Generate default `quickscale.yml` if not provided**
 - [ ] **Add basic error handling and user messages**
 
 ```python
 # Basic CLI interface
-def create_project(name: str, config_path: Optional[Path] = None):
+def init_project(name: str, config_path: Optional[Path] = None):
     """Create new QuickScale project with MVP features"""
     pass
 ```
 
-**Deliverable**: Working `quickscale create myapp` command
+**Deliverable**: Working `quickscale init myapp --template=saas --embed-code` command
 
 ### **Phase 1.3: Core Utilities & Django Integration**
 
@@ -295,7 +295,7 @@ quickscale_core/tests/
 #### **1.3.1 End-to-End Testing**
 **Priority**: Validate the complete MVP workflow works
 
-- [ ] **Test: `quickscale create testproject` generates working project**
+- [ ] **Test: `quickscale init testproject --template=saas --embed-code` generates working project**
 - [ ] **Test: Generated project runs `python manage.py runserver`**
 - [ ] **Test: `backend_extensions.py` inheritance pattern works**
 - [ ] **Test: `custom_frontend/` directory structure loads properly**
@@ -329,16 +329,19 @@ quickscale_core/tests/
 - [ ] 🏗️ Project scaffolding creating working Django projects
 - [ ] 🐍 Backend extensions via Python inheritance pattern
 - [ ] 📁 Directory-based frontend with basic variant support
-- [ ] 🖥️ Basic CLI: `quickscale create projectname`
+- [ ] 🖥️ Basic CLI: `quickscale init projectname --template=saas --embed-code`
 - [ ] ✅ End-to-end testing validating complete workflow
 - [ ] 📖 Documentation and usage examples
+ - [ ] ⭐ Scaffolded starter files generated in projects (templates, backend_extensions.py stub, custom_frontend/ structure)
 
 ### **Explicit MVP Limitations**
-- ❌ **No actual themes**: `theme: starter` is placeholder only
-- ❌ **No modules**: `modules` field ignored in MVP
+- ❌ **No theme packages**: Scaffolded starter files are generated in projects (NOT packaged themes); theme packaging and marketplace are Post-MVP
+- ❌ **No module packages**: `modules` field ignored in MVP (module packaging is Post-MVP)
 - ❌ **No frontend marketplace**: Directory-based only
 - ❌ **No advanced CLI**: Basic project creation only
 - ❌ **No complex configuration**: MVP schema only
+
+**Backward compatibility stance**: The new QuickScale architecture is a breaking change and is not backward compatible. Automated migration of existing QuickScale projects is out-of-scope for the MVP. Phase 1 includes a legacy analysis and guidance to help maintainers extract useful assets manually (see `docs/legacy-analysis.md`).
 
 ### **Post-MVP (Future Phases)**
 - **Phase 2**: Actual theme system with `quickscale_themes/starter`
@@ -361,8 +364,9 @@ quickscale_core/tests/
 - Configuration system + Project scaffolding + Basic CLI
 - Directory-based frontend development only
 - Backend inheritance pattern only
-- No themes, modules, or complex features
 - Clear path to working Django projects
+ - Scaffolded starter files generated in projects (theme packages are Post-MVP)
+ - Module packages are Post-MVP
 
 This roadmap can be implemented incrementally, with each task building on the previous ones, leading to a working MVP that validates the architecture before adding complexity.
 
