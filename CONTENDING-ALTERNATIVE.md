@@ -1,8 +1,16 @@
-## **NEW CORE OBJECTIVE**
+## CONTENDING-ALTERNATIVE (Deprecated)
 
-**"QuickScale: Your Personal Django Framework for Client Projects"**
+The content formerly in this file (the "Personal Toolkit" / git-subtree approach) has been integrated into the main project documentation. See the following files for the canonical guidance and practical examples:
 
-*Stop reinventing the wheel. Build once, reuse everywhere, improve continuously.*
+- `README.md` — short user-facing overview and quickstart
+- `DECISIONS.md` — authoritative architectural decisions and git-subtree guidance
+- `ROADMAP.md` — phase plan and extraction workflow
+- `SCAFFOLDING.md` — scaffolding and extraction workflow examples
+- `COMMERCIAL.md` — commercial distribution decisions (Post-MVP)
+
+This file is left in-place as a deprecated artifact for history. You may remove this file from the repository if you prefer a cleaner tree; its content now lives in the files listed above.
+
+Status: DEPRECATED (integrated into main docs)
 
 ### **What You Actually Need**
 
@@ -57,14 +65,22 @@ NEW CLIENT PROJECT:
 │  └── manage.py                                               │
 └─────────────────────────────────────────────────────────────┘
 
-PULL UPDATES FROM YOUR QUICKSCALE (MVP default - git subtree):
-$ quickscale update client_acme --apply
+PULL UPDATES FROM YOUR QUICKSCALE (MVP guidance - manual git subtree):
 
-PUSH CLIENT IMPROVEMENTS BACK TO QUICKSCALE:
-$ quickscale sync push --project client_acme
-# Then merge in your quickscale repo
+Users of the MVP should perform manual git subtree operations to pull updates from their `quickscale` monorepo into a client repository. The project documents example commands below; convenience CLI wrappers for `update`/`sync` workflows are considered Post-MVP features and are NOT provided by the MVP CLI.
 
-**Note:** QuickScale commands like `update` and `sync push` internally use git subtree operations to manage code sharing between your QuickScale repo and client projects. Publishing modules or themes via pip (for private/subscription distribution) is a Post-MVP capability and will be introduced after Phase 1.
+Example (manual):
+
+```bash
+# Pull updates from your quickscale monorepo into a client repo
+git subtree pull --prefix=quickscale https://github.com/Experto-AI/quickscale.git main --squash
+
+# Push client changes back into the quickscale monorepo (manual pattern)
+# (Typically done by adding the changed files to quickscale and committing/pushing in the monorepo)
+git subtree push --prefix=quickscale https://github.com/Experto-AI/quickscale.git main
+```
+
+**Note:** Historical examples in this file showed helper commands like `quickscale update` and `quickscale sync push`—those are illustrative Post-MVP conveniences and are not included in the MVP CLI. Publishing modules or themes via pip (for private/subscription distribution) is also a Post-MVP capability and will be introduced after Phase 1.
 ```
 
 ---
@@ -275,15 +291,19 @@ $ git add quickscale_modules/reports/
 $ git commit -m "Add: Reusable PDF generator module"
 $ git push
 
-# Now update Client A to use the module:
-$ quickscale update client_acme --apply
+# Now update Client A to use the module (manual git subtree example):
+# Note: Convenience helpers like `quickscale update` are Post-MVP; MVP users run the manual commands below.
+cd ~/client_acme
+git subtree pull --prefix=quickscale ../quickscale main --squash
 
 # Update Client A code:
 # from acme.reports.pdf_generator import generate_pdf
 # → from quickscale_modules.reports.pdf_generator import generate_pdf
 
 # Client B automatically gets it:
-$ quickscale update client_bravo --apply
+# Update Client B (manual example)
+cd ~/client_bravo
+git subtree pull --prefix=quickscale ../quickscale main --squash
 ```
 
 ### **Workflow 3: Pull Updates (Selective)**
@@ -294,7 +314,9 @@ $ cd ~/quickscale
 $ git commit -m "Fix: Stripe webhook handling"
 
 # Client A needs this fix:
-$ quickscale update client_acme --apply
+# Pull the fix into Client A (manual example)
+cd ~/client_acme
+git subtree pull --prefix=quickscale ../quickscale main --squash
 # No changes to their custom code!
 
 # Client B doesn't use billing yet:
@@ -379,7 +401,7 @@ Before I finalize this, tell me:
 **Alternative C: 6+ projects simultaneously**
 - **Implication**: Need advanced git management, possibly git submodules or a custom tool
 - **Architecture**: Centralized update system, batch update scripts
-- **Workflow**: `quickscale update-all-clients` command
+-- **Workflow (Post-MVP example)**: `quickscale update-all-clients` command (automation like this is Post-MVP; MVP users run manual subtree commands)
 
 ### **2. Do clients see your code or just the running app?**
 
@@ -408,7 +430,7 @@ Before I finalize this, tell me:
 **Alternative B: Frequently (bug fixes, improvements)**
 - **Implication**: Need automated update system, migration tools
 - **Architecture**: Version tracking, automated migration scripts
-- **Workflow**: `quickscale update-client client_name` with automatic migrations
+-- **Workflow (Post-MVP example)**: `quickscale update-client client_name` with automatic migrations (Post-MVP automation example)
 
 **Alternative C: Very frequently (daily/weekly)**
 - **Implication**: Need continuous integration, automated testing
@@ -483,9 +505,50 @@ Your answers will determine whether we build a **simple toolkit** or a **compreh
 
 ---
 
-## **COMPARISON: CONTENDING-ALTERNATIVE vs. CURRENT ARCHITECTURE**
+## **INTEGRATION STATUS: CONTENDING-ALTERNATIVE → MVP**
 
-This section compares the simplified approach proposed in this document versus the architecture described in DECISIONS.md, README.md, QUICKSCALE.md, and ROADMAP.md.
+**✅ INTEGRATED**: This approach has been integrated into the main documentation as the MVP implementation strategy.
+
+### **What Changed in Documentation:**
+
+1. **DECISIONS.md**: Updated MVP section to reflect personal toolkit first, community platform later
+2. **README.md**: Simplified to show `quickscale init myapp` with no flags or complexity
+3. **QUICKSCALE.md**: Added two-phase evolution strategy (personal toolkit → community platform)
+4. **ROADMAP.md**: Restructured with MVP = personal toolkit, Phase 2+ = organic evolution
+5. **SCAFFOLDING.md**: Simplified MVP structure to minimal CLI + scaffolding only
+6. **COMMERCIAL.md**: Added note that PyPI distribution is Post-MVP
+
+### **Evolution Strategy Now Documented:**
+
+**Phase 1 (MVP)**: CONTENDING-ALTERNATIVE approach
+- Simple `quickscale init myapp` command
+- Generates Django "Hello World" project
+- Optional git subtree for code sharing across YOUR projects
+- No module/theme packages, no YAML config, no marketplace
+
+**Phase 2+**: Organic evolution based on real usage
+- Extract modules from client work when patterns emerge
+- Package as `quickscale_modules.*` when proven useful
+- Add PyPI distribution for commercial/community when ready
+- Marketplace only if there's real demand
+
+### **Key Decisions Documented:**
+
+| Decision | Status | Document Reference |
+|----------|--------|-------------------|
+| MVP = Personal Toolkit | ✅ Integrated | QUICKSCALE.md, ROADMAP.md |
+| Git subtree distribution | ✅ MVP default | DECISIONS.md, SCAFFOLDING.md |
+| No YAML config in MVP | ✅ Deferred to Post-MVP | DECISIONS.md, README.md |
+| PEP 420 for Post-MVP | ✅ Preferred for modules | DECISIONS.md |
+| PyPI distribution | ✅ Post-MVP only | COMMERCIAL.md |
+| Single starter template | ✅ MVP scope | README.md, ROADMAP.md |
+| Extract from real work | ✅ Phase 2 principle | ROADMAP.md Phase 2 |
+
+---
+
+## **ORIGINAL COMPARISON: CONTENDING-ALTERNATIVE vs. ORIGINAL ARCHITECTURE**
+
+This section compares the simplified approach proposed in this document versus the original architecture described in DECISIONS.md, README.md, QUICKSCALE.md, and ROADMAP.md (before integration).
 
 ### **1. Core Positioning & Philosophy**
 
