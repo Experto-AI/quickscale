@@ -33,12 +33,7 @@ TARGET AUDIENCE: Development team, project managers, stakeholders tracking progr
 
 ## 🚀 **EVOLUTION-ALIGNED ROADMAP**
 
-This roadmap follows the **"personal toolkit first, community platform later"** strategy outlined in [QUICKSCALE.md](./QUICKSCALE.md).
-
-### **Strategic Approach**
-- **Phase 1 (MVP)**: Personal toolkit for client projects (CONTENDING-ALTERNATIVE approach)
-- **Phase 2+**: Organic evolution to community platform based on proven patterns
-- **Key Principle**: Extract from real client work, don't build speculatively
+Execution details live here; the "personal toolkit first, community platform later" narrative stays in [QUICKSCALE.md](./QUICKSCALE.md#evolution-strategy-personal-toolkit-first). Treat the [MVP Feature Matrix](./DECISIONS.md#mvp-feature-matrix-authoritative) as the scope source of truth.
 
 ### **📋 Current State Assessment**
 - ✅ **Evolution Strategy Defined**: Start simple, grow organically
@@ -47,29 +42,23 @@ This roadmap follows the **"personal toolkit first, community platform later"** 
 - ✅ **Post-MVP Path Clear**: Module/theme packages when proven necessary
 - 🔄 **Ready to Build**: Clear MVP requirements established
 
-### **What Changed from Original Plan**
-- **Original**: Build complete ecosystem with modules, themes, marketplace upfront
-- **New MVP**: Simple toolkit for YOUR projects first
-- **Rationale**: Avoid "never-ending MVP" by starting minimal and extracting patterns from real client work
+### **Evolution Context Reference**
+Need the narrative backdrop? Jump to [`QUICKSCALE.md`](./QUICKSCALE.md#evolution-strategy-personal-toolkit-first) and come back here for the tasks.
 
 ---
 
 ## **Phase 1: MVP - Personal Toolkit** 
 
-**🎯 Objective**: Build a simple project generator that creates Django "Hello World" projects you can use for client work immediately.
+**🎯 Objective**: Build a simple project generator that creates minimal Django starter projects you can use for client work immediately.
 
-**MVP Scope**: Minimal CLI + Basic scaffolding + Optional git subtree
+**MVP Scope**: Minimal CLI + basic scaffolding. Git subtree remains an advanced workflow documented in `DECISIONS.md`; any CLI helpers stay deferred to the Post-MVP backlog and are not part of the initial `quickscale init` release.
 
-**Success Criteria**: 
+**Success Criteria**:
 - `quickscale init myapp` generates working Django project in < 30 seconds
 - Generated project can be customized for any client need
-- Optional: Can share code improvements via git subtree across YOUR projects
+- Code sharing via git subtree is documented; CLI wrapper helpers remain on the Post-MVP backlog per `DECISIONS.md`, so MVP relies on the manual commands captured there
 
-Integration note: The Personal Toolkit approach is adopted for Phase 1. Key practical steps:
-
-- Create client projects with `quickscale init myapp`.
-- When a feature proves reusable across 2+ clients, extract it into `quickscale_modules/<name>/` in your quickscale repo and commit.
-- Use git subtree to add or pull modules into client repos (manual commands documented in `SCAFFOLDING.md` and `DECISIONS.md`). See `README.md` for a concise overview.
+**Integration Note**: See [Personal Toolkit workflow in DECISIONS.md](./DECISIONS.md#integration-note-personal-toolkit-git-subtree) for the canonical git subtree commands, extraction patterns, and CLI wrapper roadmap.
 
 **NOT in MVP:**
 - ❌ Module packages (auth, payments, billing)
@@ -83,64 +72,39 @@ Integration note: The Personal Toolkit approach is adopted for Phase 1. Key prac
 
 #### **1.1.1 Legacy Analysis (FIRST)**
 **Priority**: Understand what to preserve before building new architecture
+**Decision Basis**: `DECISIONS.md` keeps legacy consolidation guidance authoritative; during this phase maintainers must create the `legacy/analysis/` directory and populate it with fresh findings rather than assuming prior work shipped.
 
-- [ ] **Analyze quickscale-legacy directory structure and patterns**
-- [ ] **Extract valuable Docker deployment configurations** 
-- [ ] **Document legacy CLI patterns worth preserving**
-- [ ] **Identify legacy utility functions for quickscale_core**
-- [ ] **Document legacy patterns to AVOID in new architecture**
-- [ ] **Create legacy-analysis.md with findings**
+**Action Items (concrete)**:
+- [ ] Inventory deprecated/archived QuickScale code (e.g. v0.41.0 archive) and associated scripts/docs into `legacy/analysis/`.
+- [ ] For each archived artifact, record: purpose, test coverage, current compatibility, and risks of reuse.
+- [ ] Identify reusable pieces (templates, utilities, docs) and create small follow-up tasks to either migrate, adapt, or retire them.
+- [ ] Produce a short report `legacy/analysis/README.md` with recommended items to re-use and a small migration plan (one-page).
 
-**Deliverable**: `docs/legacy-analysis.md` with clear "keep" vs "avoid" guidance
+**Goal**: Ensure we salvage useful work from prior QuickScale versions instead of reimplementing proven pieces. This is an analysis task; migration/porting work should be split into explicit follow-up tasks based on the findings.
 
 #### **1.1.2 Repository Structure Setup**
 **Priority**: Create basic package structure following DECISIONS.md
 
 - [ ] **Create `quickscale_core/` package directory with src layout**
-- [ ] **Setup `quickscale_core/pyproject.toml` with MVP dependencies only**
-- [ ] **Create `src/quickscale_core/` source directory structure**
+ - [ ] **Create `src/quickscale_core/` source directory structure**
 - [ ] **Create `quickscale_core/tests/` directory outside src/**
-- [ ] **Create `schemas/` directory for configuration schemas**
 - [ ] **Create `docs/` and `examples/` directories**
 
-**Deliverable**: Basic directory structure per DECISIONS.md standards
+**Deliverable**: Basic directory structure per DECISIONS.md standards. Use the authoritative layout in [SCAFFOLDING.md §3](./SCAFFOLDING.md#mvp-structure) rather than duplicating trees here.
 
-```
-quickscale/
-├── quickscale_core/                 # Core package root  
-│   ├── pyproject.toml              # MVP dependencies only
-│   ├── src/quickscale_core/        # Source code (src layout)
-│   │   ├── __init__.py
-│   │   ├── config/                 # Configuration system
-│   │   ├── scaffold/               # Project scaffolding  
-│   │   └── utils/                  # Common utilities
-│   └── tests/                      # Unit tests (outside src/)
-├── schemas/                        # YAML schema definitions
-├── docs/                           # Documentation
-└── examples/                       # Example configurations
-```
+**Note**: `schemas/` directory (YAML config schemas) is Post-MVP and not needed for Phase 1.
 
 #### **1.1.3 MVP Scaffolding Templates (SIMPLE)**
 **Priority**: Create minimal Jinja2 templates for Django project generation
 
 - [ ] **Create basic Django project template structure**
 - [ ] **Create `manage.py` template**
-- [ ] **Create `settings.py` template with optional quickscale_core imports**
+ - [ ] **Create `settings.py` template; default standalone settings.py (optional quickscale_core import only when user opts to embed)**
 - [ ] **Create `urls.py` template**
-- [ ] **Create simple homepage template (Hello World)**
+- [ ] **Create simple homepage template**
 - [ ] **Create `requirements.txt` template (Django + essentials)**
 
-**MVP Templates Needed**:
-```
-quickscale_core/scaffold/templates/
-├── manage.py.j2                 # Standard Django manage.py
-├── settings.py.j2               # Settings with optional imports
-├── urls.py.j2                   # Basic URL configuration
-├── wsgi.py.j2                   # WSGI config
-├── templates/
-│   └── index.html.j2           # Simple homepage
-└── requirements.txt.j2          # Django + minimal deps
-```
+**MVP Templates Needed**: See [SCAFFOLDING.md §3](./SCAFFOLDING.md#mvp-structure) for the complete template inventory and file layout.
 
 **NO YAML Configuration in MVP**: Configuration system is deferred to Post-MVP (TBD if needed).
 
@@ -154,7 +118,7 @@ quickscale_core/scaffold/templates/
 - [ ] **Create `ProjectGenerator` class for basic scaffolding**
 - [ ] **Implement template rendering with Jinja2**
 - [ ] **Generate standard Django project structure**
-- [ ] **Add simple homepage (Hello World)**
+- [ ] **Add simple homepage**
 - [ ] **Generate requirements.txt with Django**
 - [ ] **Add README with next steps**
 
@@ -172,29 +136,16 @@ class ProjectGenerator:
 
 **REMOVED from MVP**: Configuration system (YAML loading, validation) - deferred to Post-MVP
 
-#### **1.2.2 Git Subtree Integration (OPTIONAL)**
-**Priority**: Optional utility for embedding quickscale_core (evaluate if needed)
+#### **1.2.2 Git Subtree Documentation (advanced/manual workflow)**
+**Priority**: Document git subtree as an advanced/manual workflow for embedding `quickscale_core` into generated projects. Wrapper helpers stay deferred to Post-MVP, so Phase 1 focuses on clear guidance and validation of the manual path.
 
-- [ ] **Document manual git subtree workflow for users**
-- [ ] **Create optional `--embed-core` flag for CLI**
-- [ ] **Test: User can pull updates from quickscale repo**
-- [ ] **Test: User can push improvements back**
+- [ ] **Document git subtree workflow for users (manual commands also documented for transparency)**
+- [ ] **Validate the manual embed/update/sync instructions against a generated project**
+- [ ] **Capture common failure modes and recovery steps for manual subtree operations**
 
-**Git Subtree Documentation (For Users)**:
-```bash
-# If user wants to embed quickscale_core:
-cd myapp
-git subtree add --prefix=quickscale \\
-  https://github.com/Experto-AI/quickscale.git main --squash
+**Git Subtree Documentation (For Users)**: Avoid duplicating command snippets here. Link directly to the [canonical workflow in DECISIONS.md](./DECISIONS.md#integration-note-personal-toolkit-git-subtree) and ensure the roadmap tasks track implementation and documentation milestones only.
 
-# Pull updates later:
-git subtree pull --prefix=quickscale \\
-  https://github.com/Experto-AI/quickscale.git main --squash
-```
-
-**Deliverable**: Git subtree workflow documented; automation optional
-
-**Note**: Full CLI commands (`quickscale update`, `quickscale sync`) can be added in Phase 2 if users find manual git subtree commands cumbersome.
+**Deliverable**: Git subtree workflow documented in `DECISIONS.md`; any automation remains on the Post-MVP backlog until usage feedback justifies it.
 
 #### **1.2.3 Minimal CLI Command**
 **Priority**: Implement ultra-simple `quickscale init` command
@@ -222,7 +173,7 @@ def init(project_name):
     click.echo("  python manage.py runserver")
 ```
 
-**Deliverable**: Working `quickscale init myapp` command (ultra-simple, no options)
+**Deliverable**: Working `quickscale init myapp` command (ultra-simple, no options). Any additional CLI wrappers remain Post-MVP backlog items.
 
 **REMOVED from MVP**: 
 - `--template` flag (only one starter)
@@ -368,11 +319,22 @@ quickscale_cli/tests/
 **Don't build these upfront. Build them when you actually need them 2-3 times:**
 
 #### **Likely First Modules** (based on common client needs):
+#### **Phase 2.2: First Modules (Build from Real Needs)**
+
+#### **Likely First Modules** (based on common client needs):
 - **auth**: If you keep building custom user models + authentication
 - **payments**: If multiple clients need Stripe integration
 - **billing**: If you keep building subscription logic
 - **api**: If multiple clients need REST APIs
 - **notifications**: If you keep adding email/SMS features
+
+#### **Admin Module Scope Exploration (Under Evaluation)**
+
+**Note**: Admin module scope is still under evaluation and NOT confirmed for Phase 2. See tracking notes below.
+- [ ] Review auth vs admin responsibilities documented in `DECISIONS.md` and capture open questions
+- [ ] Interview current maintainers about desired admin UX improvements separate from authentication
+- [ ] Draft scope options for `quickscale_modules.admin` (e.g., dashboard UX, moderation tooling) and circulate for decision in `DECISIONS.md`
+- [ ] Record findings and recommended decision timeline
 
 #### **Module Creation Checklist**:
 - [ ] Used successfully in 2-3 client projects
@@ -464,7 +426,7 @@ If YAML config proves useful in Phase 2:
 ### **Phase 1 Deliverables (v0.1.0) - Personal Toolkit**
 - [ ] � `quickscale_core` package with minimal utilities
 - [ ] 📦 `quickscale_cli` package with simple `init` command
-- [ ] 🏗️ Project scaffolding creating Django "Hello World"
+- [ ] 🏗️ Project scaffolding creating minimal Django starter
 - [ ] 🖥️ Ultra-simple CLI: `quickscale init myapp`
 - [ ] 📁 Optional git subtree integration for code sharing
 - [ ] ✅ Basic testing validating project generation works
@@ -482,7 +444,7 @@ If YAML config proves useful in Phase 2:
 
 **The Point**: Build the absolute minimum that lets you create client projects faster. Everything else is Post-MVP.
 
-**Backward compatibility stance**: The new QuickScale architecture is a breaking change and is not backward compatible. Automated migration of existing QuickScale projects is out-of-scope for the MVP. Phase 1 includes a legacy analysis and guidance to help maintainers extract useful assets manually (see `docs/legacy-analysis.md`).
+**Backward compatibility stance**: The new QuickScale architecture is a breaking change and is not backward compatible. Automated migration of existing QuickScale projects is out-of-scope for the MVP. Phase 1 includes a legacy analysis and guidance to help maintainers extract useful assets manually; place findings under `legacy/analysis/` in-repo.
 
 ### **Post-MVP (Future Phases)**
 - **Phase 2**: Actual theme system with `quickscale_themes/starter`
@@ -513,89 +475,11 @@ This roadmap can be implemented incrementally, with each task building on the pr
 
 ---
 
-## **APPENDIX: Future Architecture Reference**
+## Appendix: Future Architecture Reference
 
-### **Post-MVP Theme Structure (Phase 2+ Reference)**
-*Preserved for future implementation - NOT part of MVP*
+Keep the future architecture diagrams and naming matrices centralized to avoid drift:
 
-```
-# Future Theme Structure - Business Logic + Multi-Frontend Support
-quickscale_themes/{theme_name}/
-├── __init__.py
-├── apps.py                 # Django AppConfig
-├── src/quickscale_themes/{theme_name}/  # Business theme package
-│   ├── __init__.py
-│   ├── models.py          # Business models and database schema
-│   ├── business.py        # Pure business logic classes
-│   ├── api.py             # REST API endpoints and serializers
-│   ├── admin.py           # Django admin interfaces
-│   ├── urls.py            # API URL patterns (no template views)
-│   ├── services/          # Business service classes
-│   ├── migrations/        # Database migrations
-│   └── theme_config.py    # Business theme metadata
-├── frontend_htmx/         # HTMX presentation layer
-│   ├── templates/         # Django templates
-│   ├── static/           # CSS, JS, images, fonts
-│   └── components/       # Reusable UI components
-└── tests/                # Theme-specific tests
-```
-
-### **Post-MVP Module Structure (Phase 3+ Reference)**
-*Preserved for future implementation - NOT part of MVP*
-
-```
-# Future Module Structure - Backend Services (Built on Django Foundations)
-quickscale_modules/{module_name}/
-├── __init__.py
-├── apps.py                # Django AppConfig with compatibility info
-├── src/quickscale_modules/{module_name}/
-│   ├── __init__.py
-│   ├── models.py          # Backend module data models (e.g., dj-stripe models)
-│   ├── admin.py           # Feature module admin interfaces
-│   ├── services.py        # Pure Python services for themes to import
-│   ├── signals.py         # Signal handlers for theme integration
-│   └── module_config.py   # Module metadata and service specifications
-└── tests/                 # Module-specific tests
-```
-
-### **Post-MVP Configuration Schema (Future Reference)**
-*Preserved for future implementation - NOT part of MVP*
-
-```yaml
-# Future: Full configuration schema (Phase 2+)
-schema_version: 1
-project:
-  name: my_saas_project
-  version: 1.0.0
-
-theme: starter                           # Actual theme loading (Phase 2)
-backend_extensions: myproject.extensions # Python inheritance
-
-modules:                                 # Module system (Phase 3)
-  auth:
-    provider: django-allauth
-  payments:
-    provider: stripe
-
-frontend:
-  source: ./custom_frontend/             # Directory-based (MVP)
-  variant: default                       # Basic variant support (MVP)
-  # Future: marketplace frontends, advanced features
-
-customizations:                          # Advanced customization (Phase 4+)
-  models:
-    - name: Product
-      fields:
-        - { name: name, type: string }
-  business_rules:
-    - "Products require approval before listing"
-```
-
-### **Package Naming Matrix (Future Reference)**
-*From DECISIONS.md - preserved for Phase 2+ implementation*
-
-| Concern | PyPI Name | Import Path | Django App Label |
-|---------|-----------|-------------|------------------|
-| Core | quickscale-core | quickscale_core | quickscale_core |
-| Auth Module | quickscale-module-auth | quickscale_modules.auth | quickscale_modules_auth |
-| Starter Theme | quickscale-theme-starter | quickscale_themes.starter | quickscale_themes_starter |
+- **Theme and module structures** → [SCAFFOLDING.md §4](./SCAFFOLDING.md#post-mvp-structure)
+- **Generated project layouts** → [SCAFFOLDING.md §5](./SCAFFOLDING.md#5-generated-project-output)
+- **Configuration schema drafts** → [DECISIONS.md](./DECISIONS.md#architectural-decision-configuration-driven-project-definition)
+- **Naming and packaging matrix** → [SCAFFOLDING.md §6](./SCAFFOLDING.md#6-naming-import-matrix-summary)

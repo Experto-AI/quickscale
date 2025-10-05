@@ -35,6 +35,37 @@ QuickScale is a **composable Django framework** designed for **solo developers a
 - **Scale your development business**: Standardize your tech stack and accelerate client project delivery
 - **Build a community ecosystem**: Share and monetize your extensions while benefiting from community contributions
 
+🧭 **Evolution Snapshot**: QuickScale intentionally ships as a personal toolkit today and only grows into a community platform when real demand emerges. Catch the full story in the [evolution overview](./QUICKSCALE.md#evolution-strategy-personal-toolkit-first).
+
+## Documentation map
+
+```
+Repository docs
+├── README.md — Quick start guidance for newcomers (this file)
+├── DECISIONS.md — Authoritative technical rules and MVP scope
+├── ROADMAP.md — Execution timeline that follows DECISIONS.md
+├── SCAFFOLDING.md — Directory and package layout standards
+├── QUICKSCALE.md — Strategic vision and market positioning
+└── COMMERCIAL.md — Post-MVP monetisation guidance
+```
+
+- Start with `README.md` for the big-picture overview, then dive into `DECISIONS.md` whenever you need the canonical rule or tie-breaker.
+- Use `ROADMAP.md` only for planning work that implements decisions already captured in `DECISIONS.md`.
+- Maintainers should cross-check the [document responsibilities section in `DECISIONS.md`](./DECISIONS.md#document-responsibilities-short) to keep this map aligned.
+
+## SSOT (Single Source of Truth) Reference
+
+This table shows which document to consult for authoritative decisions on common topics.
+
+| Topic | Single Source | Notes |
+|---|---|---|
+| MVP Scope & Feature Matrix | `DECISIONS.md` | Canonical IN/OUT matrix for MVP
+| Git Subtree Workflow | `DECISIONS.md#integration-note-personal-toolkit-git-subtree` | Full commands and guidance
+| Directory Layouts / Scaffolding | `SCAFFOLDING.md` | Full tree diagrams and templates
+| Strategic Rationale / Evolution | `QUICKSCALE.md` | Long-form narrative and market context
+| Commercial Models & Licensing | `COMMERCIAL.md` | Post-MVP monetization guidance
+
+
 ### Primary Use Cases:
 - **Solo Developer**: Build client projects faster with reusable components you maintain
 - **Development Agency**: Standardize your tech stack across multiple client engagements  
@@ -43,19 +74,19 @@ QuickScale is a **composable Django framework** designed for **solo developers a
 
 ### Development Flow (MVP)
 1. `quickscale init myapp`
-   - Generates minimal Django "Hello World" project
-1. `quickscale init myapp`
-  - Generates minimal Django "Hello World" project
-  - Optionally embeds `quickscale_core` via git subtree for shared utilities
-   - You own and customize the generated project completely
+  - Generates the minimal Django starter described in the MVP Feature Matrix
+  - Ships with standalone `settings.py` by default; there is NO automatic settings inheritance. Advanced users who manually embed `quickscale_core` via git subtree may opt-in to inherit from `quickscale_core.settings` (see [`DECISIONS.md`](./DECISIONS.md#mvp-feature-matrix-authoritative)).
+  - **Optional**: Embed `quickscale_core` via git subtree after generation; follow the [Personal Toolkit workflow](./DECISIONS.md#integration-note-personal-toolkit-git-subtree) for canonical commands and helper roadmap
 2. Add your custom Django apps and features
-3. Optionally: Inherit base settings from `quickscale_core` if embedded
+3. Adopt optional inheritance or module extraction patterns only when you embed the core; the rules and best practices stay centralized in `DECISIONS.md`
 4. Build your unique client application
 5. Deploy using standard Django deployment patterns
 
-Note: QuickScale's chosen MVP approach is the "Personal Toolkit" (a.k.a. the git-subtree workflow). The Personal Toolkit approach is integrated as the MVP implementation strategy: generate a project with `quickscale init`, optionally embed `quickscale_core` via git subtree, and extract reusable code into `quickscale_modules/` as you build real client projects. See `DECISIONS.md` and `ROADMAP.md` for practical workflows and examples.
+ℹ️ QuickScale's MVP centers on the personal toolkit workflow. Extraction patterns, module packaging, and subtree helper command plans stay documented in `DECISIONS.md` so this README can stay concise.
 
-### What MVP Generates
+🔎 **Scope note**: The [MVP Feature Matrix](./DECISIONS.md#mvp-feature-matrix-authoritative) is the single source of truth for what's in or out.
+
+ ### What MVP Generates
 ```bash
 $ quickscale init myapp
 
@@ -63,7 +94,7 @@ myapp/
 ├── manage.py                    # Standard Django
 ├── myapp/
 │   ├── __init__.py
-│   ├── settings.py             # Can import from quickscale_core
+│   ├── settings.py             # Standalone by default (no quickscale_core imports)
 │   ├── urls.py
 │   ├── wsgi.py
 │   └── asgi.py
@@ -71,15 +102,16 @@ myapp/
 │   └── index.html              # Simple homepage
 ├── static/
 │   └── css/
-├── requirements.txt            # Django + essentials
+├── requirements.txt            # Django + essentials only (pyproject.toml is user-added, not generated)
 └── README.md
 
-# Optional: quickscale/ embedded via git subtree
+# quickscale/ (embeddable via manual subtree)
+# Commands live in DECISIONS.md; CLI helpers sit in the Post-MVP backlog.
 └── quickscale/
-    └── quickscale_core/        # Basic utilities if you want them
+    └── quickscale_core/
 ```
 
-**Key Point**: The generated project is **yours to own and modify**. QuickScale just gives you a good starting point.
+ **Key Point**: The generated project is **yours to own and modify**. QuickScale just gives you a good starting point. For any tie-breakers about what belongs in the MVP vs Post-MVP, see `DECISIONS.md` (authoritative).
 
 ## Key Benefits
 
@@ -107,88 +139,20 @@ QuickScale provides the foundation and building blocks, not complete vertical so
 
 ## From Template to Client Project
 
-**MVP Philosophy**: Generate a starter Django project that you own and customize completely for each client.
-
-### **MVP: Simple Starter Generation**
-- **Purpose**: Fast "Hello World" Django project generation
-- **What You Get**: Standard Django project structure with optional `quickscale_core` utilities
-- **Ownership**: 100% yours - modify anything, no restrictions
-- **Customization**: Extend for your specific client needs (models, views, templates, etc.)
-- **Updates**: Optional - pull utility improvements via git subtree if you want them
-
-### **Post-MVP: Extracting Reusable Patterns**
-As you build multiple client projects, you'll naturally extract reusable patterns:
-- **Module Packages**: Auth, payments, billing modules (when you've built them 2-3 times)
-- **Theme Packages**: Common business logic patterns (when proven across clients)
-- **Distribution**: Git subtree initially, PyPI for commercial/community later
-
-**Evolution Pattern:**
-```
-MVP:        Generate starter → Customize for Client A → Ship
-Phase 2:    Extract pattern → Create module → Share via git subtree
-Phase 3:    Package module → Distribute via PyPI → Build community
-```
-
-**MVP Scope**: Simple project generation. Modules and themes emerge organically from real client work.
+Start with the generated Django starter, build what your client needs, and only later decide if a pattern is worth extracting into `quickscale_modules/`. Distribution upgrades (PyPI, subscriptions, etc.) stay Post-MVP—follow the [MVP Feature Matrix](./DECISIONS.md#mvp-feature-matrix-authoritative) and [`QUICKSCALE.md`](./QUICKSCALE.md#evolution-strategy-personal-toolkit-first) for the bigger story.
 
 ---
 
-## Development Approach (MVP)
+ ### Development Approach (MVP)
 
-QuickScale MVP uses a **simple imperative CLI** for fast project generation:
-
-### **MVP: Simple CLI Command**
-```bash
-quickscale init myapp
-```
-
-**What This Does:**
-1. Creates Django project structure
-2. Generates minimal "Hello World" application
-3. Optionally embeds `quickscale_core` via git subtree
-4. Sets up requirements.txt with Django + essentials
-5. Creates README with next steps
-
-**No templates, no configuration files, no complexity.** Just: `quickscale init myapp` and start coding.
+QuickScale currently ships a single CLI entry point: `quickscale init`. The [CLI command matrix](./DECISIONS.md#cli-command-matrix) tracks the **planned** additions and their phases, keeping this README focused on commands that already exist.
 
 ### **Post-MVP: Configuration-Driven (Optional)**
-If proven useful by MVP usage, we may add declarative configuration:
+Declarative configuration is a Post-MVP consideration. Prototype commands, sample schemas, and status notes now live exclusively in `DECISIONS.md`.
 
-```bash
-quickscale init --interactive  # Creates quickscale.yml
-quickscale generate           # Generates project from config
-```
+### Settings Pattern (Post-MVP)
 
-```yaml
-# Potential Post-MVP configuration (TBD)
-project:
-  name: myapp
-  modules: [auth, payments]    # When module packages exist
-```
-
-**MVP Decision**: Configuration is **optional/TBD**. Start with simple CLI, evaluate if config layer adds value based on real usage.
-
-Practical settings example
-
-If you embed `quickscale_core` into a client project (via git subtree), a minimal settings pattern looks like:
-
-```python
-# myapp/config/settings/base.py
-import sys
-from pathlib import Path
-
-BASE_DIR = Path(__file__).resolve().parent.parent.parent
-sys.path.insert(0, str(BASE_DIR / 'quickscale'))
-
-# Import QuickScale base settings if available
-try:
-  from quickscale_core.settings import *  # noqa: F401,F403
-except Exception:
-  pass
-
-# Client overrides
-DEBUG = True
-```
+Generated projects use standalone `settings.py` files by default. Optional inheritance and future settings plans are recorded in `DECISIONS.md` alongside the authoritative MVP feature matrix.
 
 ---
 
@@ -206,7 +170,7 @@ quickscale init <project_name>
 
 **What It Does:**
 1. Creates Django project structure
-2. Generates minimal "Hello World" application  
+2. Generates minimal starter application  
 3. Optionally embeds `quickscale_core` utilities via git subtree
 4. Ready to code in 30 seconds
 
@@ -215,27 +179,30 @@ quickscale init <project_name>
 quickscale init myapp
 cd myapp
 python manage.py runserver
-# Visit http://localhost:8000 - Hello World!
+# Visit http://localhost:8000 - see your minimal starter!
 ```
 
-#### **Update Commands (For Git Subtree Users)**
+#### **Update Commands (Post-MVP Backlog)**
 
-If you embedded `quickscale_core` via git subtree:
+ℹ️ Wrapper helpers are deferred to the Post-MVP backlog. Track any future work in the [CLI command matrix](./DECISIONS.md#cli-command-matrix); until they ship, rely on the manual commands documented in [`DECISIONS.md`](./DECISIONS.md#integration-note-personal-toolkit-git-subtree).
 
-```bash
-cd myapp
-git subtree pull --prefix=quickscale https://github.com/Experto-AI/quickscale.git main --squash
-```
+## Glossary
 
-**Post-MVP**: We may add convenience commands like `quickscale update` if git subtree usage proves common.
+Canonical terminology used across QuickScale documentation:
 
-**Philosophy**: Keep MVP CLI simple. Add commands only when proven necessary by real usage.
+- MVP = Phase 1 (minimal personal toolkit)
+- Post-MVP = Phase 2+ (features planned after MVP; prefer explicit phase numbers)
+- Module = Backend module (Django app under `quickscale_modules`)
+- Theme = Starting point Django app under `quickscale_themes`
+- Generated Project = Output of `quickscale init`
 
----
+Add new terms here as documentation evolves; this section consolidates terminology so other docs can link here as the canonical source.
 
 ## Learn More
 
 - **[DECISIONS.md](./DECISIONS.md)** - Technical specifications and implementation rules
 - **[QUICKSCALE.md](./QUICKSCALE.md)** - Strategic vision and competitive positioning
 - **[ROADMAP.md](./ROADMAP.md)** - Development roadmap and implementation plan
+
+For optional backend customization patterns, reference the [backend extensions policy](./DECISIONS.md#backend-extensions-policy).
 
