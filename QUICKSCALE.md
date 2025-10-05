@@ -49,18 +49,22 @@ TARGET AUDIENCE: Stakeholders, strategic decision makers, contributors, potentia
 
 QuickScale's current static project generator faces fundamental limitations that prevent it from reaching its full potential:
 
-- **No Shared Updates**: Each generated project is independent, missing security fixes and feature updates
-- **Generic Approach**: One-size-fits-all templates don't address specific business needs (task management vs. inventory vs. customer management)
-- **Mixed Concerns**: Business logic and presentation are intertwined in templates, making customization difficult
-- **Limited Ecosystem**: No reusable components or development acceleration model
+- **No Shared Updates**: Each project is independent, missing security fixes and feature updates
+- **Repetitive Setup**: Every project requires reinventing the same Django foundations
+- **Maintenance Burden**: Bug fixes and improvements must be manually applied across all projects
+- **Limited Commercialization**: No clear path to monetize reusable components or offer premium services
 
 ### **The Evolution Solution**
 
-This proposal outlines the **evolutionary transformation** of QuickScale from a Django SaaS project generator into a comprehensive development foundation delivering **"Python-native simplicity for Django SaaS with business application acceleration"**. QuickScale evolves into a **stable Django core application** with a composable architecture: a core foundation + backend modules built on proven Django foundations + starting point themes, maintaining simplicity while enabling specialization.
+This proposal outlines the **evolutionary transformation** of QuickScale from a Django SaaS project generator into a comprehensive development foundation, enabling developers to:
 
-**QuickScale Philosophy: Development Foundation, Not Complete Solutions**
+- **Build once, reuse everywhere**: Create modules and themes that work across all their projects
+- **Maintain commercial flexibility**: Keep core open source while offering premium extensions via subscriptions
+- **Scale development businesses**: Standardize tech stacks and accelerate client project delivery
+- **Build community ecosystems**: Share and monetize extensions while benefiting from community contributions
 
-QuickScale provides the building blocks and acceleration tools, not complete business applications:
+
+QuickScale provides the building blocks for professional Django development:
 
 ❌ **What QuickScale is NOT:**
 - Complete business platforms (like Shopify, Salesforce)
@@ -69,10 +73,10 @@ QuickScale provides the building blocks and acceleration tools, not complete bus
 - One-size-fits-all templates
 
 ✅ **What QuickScale IS:**
-- **Foundation**: Stable core with project scaffolding, configuration system, and utilities (auth and admin moved to modules; hook system deferred)
-- **Accelerator**: Reusable modules (auth, admin, payments, billing, etc.) and starting point themes
-- **Enabler**: Tools and patterns for building custom SaaS applications
-- **Starting Point**: Themes require customization for specific business needs
+- **Personal Framework**: A maintainable codebase you own and extend for client work
+- **Commercial Enabler**: Clear paths to monetize extensions and services
+- **Community Builder**: Foundation for sharing and collaborating on Django SaaS components
+- **Development Accelerator**: Reusable modules and themes that scale across projects
 
 **Key Architectural Evolution:**
 - **From**: Static project generator → Independent Django projects
@@ -93,7 +97,7 @@ QuickScale provides the building blocks and acceleration tools, not complete bus
 - Preserve current strengths: billing integration, AI framework, Docker deployment
 - **Provide foundation, not complete solutions** - themes require customization
 
-**⚠️ Breaking Change**: This evolution represents a complete architectural redesign. The new layered system is **not backward compatible** with existing QuickScale projects. Previous projects will **not be migrated** to the new architecture - this is an entirely new system.
+**⚠️ Breaking Change**: This evolution represents a complete architectural redesign. The new layered system is **not backward compatible** with existing QuickScale projects. Previous projects will **not be migrated** to the new architecture - this is an entirely new system. The MVP includes the `quickscale` CLI and a minimal starter theme in generated projects to make the new workflow immediately usable; full migration tooling is out-of-scope for this release.
 
 **Why This Breaking Change is Necessary:**
 - Current static generation model prevents shared updates and vertical specialization
@@ -134,6 +138,50 @@ Based on analysis of established Django CMS platforms (Wagtail, Django CMS, Mezz
 - ❌ **Enterprise Barriers**: Organizations prefer controlled, predictable deployments
 
 ---
+
+## Migration from QuickScale v0.41.0
+
+### **Backward Compatibility Status**
+
+**⚠️ BREAKING CHANGE NOTICE:** QuickScale Evolution (v1.0+) is **NOT backward compatible** with v0.41.0 by design.
+
+**Why This is a Breaking Change:**
+- Complete architectural redesign from static generator to composable foundation
+- New project structure and organization patterns
+- Different configuration approach and workflows
+- Separation of concerns (core, modules, themes) not present in v0.41.0
+
+**v0.41.0 Status:**
+- ✅ **Preserved**: Complete v0.41.0 codebase archived in `quickscale-legacy/` directory
+- ✅ **Documented**: Legacy analysis available in `legacy/analysis/legacy-analysis.md` (to be created in Phase 1)
+- ❌ **Not Migrated**: Existing v0.41.0 projects will NOT automatically migrate
+- ❌ **No Migration Tools**: Automated migration is out-of-scope for MVP
+
+**Manual Migration Approach:**
+1. **Review Legacy Analysis**: See `legacy/analysis/legacy-analysis.md` for patterns worth preserving
+2. **Extract Valuable Assets**: Manually identify useful Docker configs, utilities, patterns
+3. **Create New Project**: Use `quickscale init` to generate fresh v1.0 project
+4. **Port Custom Code**: Manually migrate your business logic and customizations
+5. **Leverage New Patterns**: Use backend_extensions.py and custom_frontend/ for customization
+
+**What Can Be Extracted from v0.41.0:**
+- Docker deployment configurations
+- Useful utility functions
+- Custom middleware patterns
+- Testing strategies
+- Deployment scripts
+
+**What Should NOT Be Migrated:**
+- Old project structure patterns
+- Deprecated configuration approaches
+- Legacy framework assumptions
+- Outdated dependency versions
+
+**For v0.41.0 Users:**
+- v0.41.0 remains functional but is now in maintenance mode
+- Security fixes may be backported if critical
+- New features will only be added to v1.0+
+- Consider v1.0 for new projects, keep v0.41.0 for existing ones
 
 ## Evolution Rationale
 

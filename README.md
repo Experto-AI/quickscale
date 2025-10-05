@@ -22,29 +22,28 @@ TARGET AUDIENCE: New users, potential adopters, GitHub visitors, developers eval
 
 ## QuickScale: Compose your Django SaaS.
 
-QuickScale is a **composable Django SaaS foundation** with a stable core, reusable backend modules, and starting point themes—delivering Python-native simplicity and development acceleration (not turnkey vertical products).
+QuickScale is a **composable Django framework** for building client SaaS applications. Start with a stable core, add reusable modules, customize themes, and deploy faster—while maintaining the flexibility to create commercial extensions and build a community ecosystem.
 
 ---
 
 ## What is QuickScale?
 
-QuickScale is a **composable Django SaaS foundation** that helps you build custom business applications faster:
+QuickScale is a **composable Django framework** designed for **solo developers and development agencies** who build multiple client SaaS applications. It provides a stable foundation with reusable components, enabling you to:
 
-### What You Get:
-- **Composable "Library-Style" Structure:**
-- **QuickScale Core** = Python's standard library (project scaffolding + configuration system + utilities)
-- **Backend Modules** = Built on proven Django foundations (django-allauth for auth, enhanced admin, dj-stripe for `payments`; future: `notifications`, `backup`, `analytics`)
-- **Starting Point Themes** = Foundation applications to customize (e.g., `starter`, `todo`)
-- **Directory-Based Frontends** = Custom frontend development via directory structure
+- **Build once, reuse everywhere**: Create modules and themes that work across all your client projects
+- **Maintain commercial flexibility**: Keep core components open source while offering premium modules/themes via subscriptions
+- **Scale your development business**: Standardize your tech stack and accelerate client project delivery
+- **Build a community ecosystem**: Share and monetize your extensions while benefiting from community contributions
 
-### What You Build:
-- **Your Custom Business Logic**: Unique to your application
-- **Your Brand & UX**: Custom styling and user experience  
-- **Your Specific Features**: Beyond the foundation components
-- **Your SaaS Application**: Powered by QuickScale components
+### Primary Use Cases:
+- **Solo Developer**: Build client projects faster with reusable components you maintain
+- **Development Agency**: Standardize your tech stack across multiple client engagements  
+- **Commercial Extension Developer**: Create and sell premium modules/themes
+- **Open Source Contributor**: Extend the ecosystem with new modules and themes
 
-### Development Flow:
-1. `quickscale create myapp --theme=starter --frontend=htmx`
+### Development Flow (MVP)
+1. `quickscale init myapp --template=saas --embed-code`
+  - NOTE: The `quickscale` CLI is part of the MVP and can be used to create the minimal/core project scaffolding. See `quickscale_cli/` for the CLI package and installation guidance.
 2. Extend the generated `backend_extensions.py` to customise theme models, services, and workflows while inheriting future updates
 3. Wire up your presentation layer: edit the scaffolded `custom_frontend/` directory for custom frontend development
 4. Add custom features and modules
@@ -79,23 +78,25 @@ QuickScale provides the foundation and building blocks, not complete vertical so
 - One-size-fits-all template pack
 - Runtime plugin loader (no WordPress-style activation)
 
-## Available Theme Examples
+## Scaffolded Starter Files
 
-QuickScale provides two foundational themes as starting points:
+**MVP Note**: QuickScale generates **scaffolded starter files** (NOT packaged themes) in your project. These generated files provide a practical starting point with templates, backend extension stubs, and frontend structure. The full theme package system and marketplace remain Post-MVP.
 
-### **Starter Theme (Blank Foundation)**
-- **Purpose**: Minimal foundation for custom business applications
-- **Includes**: Project structure, configuration examples, module integration patterns
-- **Use Case**: When building unique SaaS applications from scratch
-- **Command**: `quickscale create myapp --theme=starter --frontend=htmx --modules=auth,payments`
+### **MVP: Scaffolded Starter Files (Generated in Your Project)**
+- **Purpose**: Immediate runnable project structure demonstrating extension patterns
+- **Includes**: Base templates, `backend_extensions.py` stub, `custom_frontend/` directory structure
+- **Location**: Generated directly in your project (not installed as a package)
+- **Customization**: Full ownership - modify these files as needed for your project
 
-### **TODO Theme (Reference Implementation)**  
-- **Purpose**: Complete example showing QuickScale patterns and capabilities
-- **Includes**: Task management models, REST API, multiple frontends
-- **Use Case**: Learning QuickScale architecture, reference for custom development
-- **Command**: `quickscale create myapp --theme=todo --frontend=htmx`
+### **Post-MVP: Theme Packages (Future)**
+- **Purpose**: Installable theme packages with reusable business logic and patterns
+- **Examples**:
+  - `quickscale_themes/starter`: Minimal foundation package
+  - `quickscale_themes/todo`: Reference implementation with task management
+- **Distribution**: Pip-installable packages from QuickScale repository
+- **Use Case**: Consistent starting points across multiple projects, community sharing
 
-Both themes are **starting points requiring customization** for your specific business needs.
+**MVP Scope**: QuickScale CLI generates Django projects with scaffolded files. Packaged themes and module ecosystem are Post-MVP features.
 
 ---
 
@@ -105,9 +106,9 @@ QuickScale supports two complementary approaches for project creation (both prod
 
 ### **1. Imperative CLI Commands**
 ```bash
-quickscale create mystore --theme=starter --frontend=htmx --modules=auth,payments,billing
+quickscale init mystore --template=saas --embed-code
 ```
-(`create` is an imperative shortcut that internally generates a transient config then calls the declarative engine.)
+(`init` creates a new project with git subtree integration for code sharing.)
 
 ### **2. Configuration-Driven (Declarative)**
 ```bash
@@ -123,14 +124,14 @@ project:
   version: 1.0.0
 
 theme: starter                             # Base theme
-backend_extensions: mystore.extensions     # Python inheritance for customization
+backend_extensions: myapp.extensions     # Python inheritance for customization
 
 frontend:
   source: ./custom_frontend/               # Directory-based frontend (MVP)
   variant: default                         # Basic variant support
 ```
 
-This configuration assumes `mystore/extensions.py` exists for backend customization and `custom_frontend/` directory for frontend development.
+This configuration assumes `myapp/extensions.py` exists for backend customization and `custom_frontend/` directory for frontend development.
 
 **Simple Usage Example**:
 ```yaml
@@ -151,9 +152,53 @@ frontend:
 
 ---
 
+## CLI Reference
+
+### **QuickScale CLI Commands**
+
+The `quickscale` CLI provides commands for project creation and code sharing management.
+
+#### **Project Creation**
+
+```bash
+quickscale init <project_name> --template=<template_type> --embed-code
+```
+
+**Arguments:**
+- `<project_name>`: Name of your new project (required)
+
+**Flags:**
+- `--template=<type>`: Template type to use for project generation
+  - `saas`: SaaS application template (MVP default)
+  - Future: Additional templates may be added Post-MVP
+
+- `--embed-code`: Use git subtree to embed QuickScale code directly in your project
+  - Copies `quickscale_core` into your project via git subtree
+  - Enables pulling updates from QuickScale repository
+  - Alternative: External dependency (not implemented in MVP)
+  - **MVP Default**: This flag is required for MVP implementation
+
+**Example:**
+```bash
+quickscale init myapp --template=saas --embed-code
+```
+
+This creates a new Django project named `myapp` with QuickScale embedded via git subtree.
+
+#### **Update Commands (MVP)**
+
+```bash
+quickscale update <project_name>        # Pull latest QuickScale updates
+quickscale sync push <project_name>     # Push improvements back to QuickScale
+```
+
+See [Git Subtree Distribution](./DECISIONS.md#distribution-strategy-mvp-vs-post-mvp) for details.
+
+---
+
 ## Learn More
 
 - **[DECISIONS.md](./DECISIONS.md)** - Technical specifications and implementation rules
-- **[QUICKSCALE.md](./QUICKSCALE.md)** - Strategic vision and competitive positioning  
+- **[QUICKSCALE.md](./QUICKSCALE.md)** - Strategic vision and competitive positioning
 - **[ROADMAP.md](./ROADMAP.md)** - Development roadmap and implementation plan
 
