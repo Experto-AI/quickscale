@@ -45,11 +45,11 @@ TARGET AUDIENCE: Stakeholders, strategic decision makers, contributors, potentia
 
 ## Executive Summary
 
-### **Strategic Evolution: Start Simple, Grow Organically**
+### **Strategic Evolution: Start Simple, Grow Organically** {#evolution-strategy-personal-toolkit-first}
 
 QuickScale follows a **"personal toolkit first, community platform later"** evolution strategy.
 
-Note: The "Personal Toolkit" approach has been integrated as the official MVP implementation strategy. In short: generate a project with `quickscale init`, optionally embed `quickscale_core` via git subtree, and extract high-value reusable patterns into `quickscale_modules/` as you build client projects. See `README.md`, `DECISIONS.md`, and `ROADMAP.md` for practical guidance and examples.
+**Note**: The "Personal Toolkit" approach is the official MVP implementation strategy. See [Personal Toolkit workflow in DECISIONS.md](./DECISIONS.md#integration-note-personal-toolkit-git-subtree-) for detailed git subtree workflows, extraction patterns, and implementation guidance.
 
 ### **Why This Evolution is Needed**
 
@@ -98,7 +98,7 @@ QuickScale provides the building blocks for professional Django development:
 - **Development Accelerator**: Reusable modules and themes that scale across projects
 
 **Key Architectural Evolution:**
-- **MVP**: Simple project generator + git subtree code sharing
+- **MVP**: Simple project generator + git subtree code sharing (Git subtree is the ONLY MVP distribution mechanism; CLI remains minimal with manual subtree commands documented)
 - **Post-MVP**: Core + Modules + Themes ecosystem (when proven necessary)
 
 **MVP Structure (Phase 1):**
@@ -128,7 +128,7 @@ QuickScale provides the building blocks for professional Django development:
 
 **Key Principle**: **Start simple, grow organically based on real usage.** Don't build marketplace features until you have multiple successful client projects proving the patterns work.
 
-**⚠️ Breaking Change**: This evolution represents a complete architectural redesign. The new layered system is **not backward compatible** with existing QuickScale projects. Previous projects will **not be migrated** to the new architecture - this is an entirely new system. The MVP includes the `quickscale` CLI and a minimal starter theme in generated projects to make the new workflow immediately usable; full migration tooling is out-of-scope for this release.
+⚠️ **BREAKING CHANGE**: See [Migration from QuickScale v0.41.0](#migration-from-quickscale-v0410) for details.
 
 **Why This Breaking Change is Necessary:**
 - Current static generation model prevents shared updates and vertical specialization
@@ -184,16 +184,16 @@ Based on analysis of established Django CMS platforms (Wagtail, Django CMS, Mezz
 
 **v0.41.0 Status:**
 - ✅ **Preserved**: Complete v0.41.0 codebase archived in `quickscale-legacy/` directory
-- ✅ **Documented**: Legacy analysis available in `legacy/analysis/legacy-analysis.md` (to be created in Phase 1)
+-- ✅ **Documented**: Legacy analysis guidance consolidated under `legacy/analysis/` (to be created in Phase 1)
 - ❌ **Not Migrated**: Existing v0.41.0 projects will NOT automatically migrate
 - ❌ **No Migration Tools**: Automated migration is out-of-scope for MVP
 
 **Manual Migration Approach:**
-1. **Review Legacy Analysis**: See `legacy/analysis/legacy-analysis.md` for patterns worth preserving
+1. **Review Legacy Analysis**: See `legacy/analysis/` for patterns worth preserving
 2. **Extract Valuable Assets**: Manually identify useful Docker configs, utilities, patterns
 3. **Create New Project**: Use `quickscale init` to generate fresh v1.0 project
 4. **Port Custom Code**: Manually migrate your business logic and customizations
-5. **Leverage New Patterns**: Use backend_extensions.py and custom_frontend/ for customization
+5. **Leverage New Patterns**: Use `custom_frontend/` for customization. `backend_extensions.py` is a Post‑MVP convention and may be added manually by users in MVP; richer scaffolding for it is Post‑MVP.
 
 **What Can Be Extracted from v0.41.0:**
 - Docker deployment configurations

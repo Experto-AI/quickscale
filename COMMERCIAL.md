@@ -21,7 +21,25 @@ TARGET AUDIENCE: Solo developers, development agencies, commercial extension dev
 
 QuickScale's Apache 2.0 license enables commercial extensions and subscription models. This document shows how **solo developers and agencies** can build premium modules/themes, monetize their work, and create community ecosystems while leveraging the open source QuickScale foundation.
 
-**⚠️ MVP STATUS**: Commercial distribution via PyPI and private repositories is **POST-MVP**. The MVP intentionally uses the "Personal Toolkit" (git-subtree) approach for code sharing across YOUR projects; commercial distribution and packaging are Phase 3 (12-18+ months after MVP).
+🔎 **Scope note**: Commercial distribution via PyPI and private repositories is **Post-MVP**. The MVP sticks to the "Personal Toolkit" (git-subtree) approach for code sharing across your own projects; packaging arrives in Phase 3 (12-18+ months after MVP).
+
+## Quick Reference
+
+- **License**: Apache 2.0 allows commercial use, private distribution, and proprietary extensions.
+- **MVP status**: Everything beyond personal git-subtree workflows is Post-MVP planning.
+- **Where to start**: Embed QuickScale as a personal toolkit first; revisit this guide once you have repeatable commercial demand.
+- **Technical patterns**: See the [backend extensions policy](./DECISIONS.md#backend-extensions-policy) for canonical code hooks.
+
+## Table of Contents
+- [Commercial Licensing Rights](#commercial-licensing-rights)
+- [Post-MVP Playbook](#post-mvp-playbook)
+    - [Private Repository Architecture](#private-repository-architecture)
+    - [Benefits of Commercial Approach](#benefits-of-commercial-approach)
+    - [Subscription-Based Repository Implementation](#subscription-based-repository-implementation)
+    - [Business Logic Integration](#business-logic-integration-post-mvp)
+    - [Security Considerations](#security-considerations)
+    - [Operational Logistics](#operational-logistics)
+- [See Also](#see-also)
 
 ## Commercial Licensing Rights
 
@@ -43,9 +61,15 @@ The Apache 2.0 license explicitly allows:
 - **Support Services**: Commercial support and maintenance contracts
 - **White-label Solutions**: Branded QuickScale distributions
 
-## Private Repository Architecture
+---
 
-### Commercial Repository Structure
+## Post-MVP Playbook
+
+> Everything below describes phase 3+ capabilities. Use it for planning only; the MVP delivers none of these features yet.
+
+### Private Repository Architecture
+
+#### Commercial Repository Structure
 
 ```
 private-commercial/
@@ -72,7 +96,7 @@ private-commercial/
 └── tests/                       # Commercial test suites
 ```
 
-### Hybrid Public/Private Strategy
+#### Hybrid Public/Private Strategy
 
 ```
 # Public repository (open source parts)
@@ -98,7 +122,7 @@ private-commercial/
 └── enterprise_features/          # Enterprise features
 ```
 
-## Benefits of Commercial Approach
+### Benefits of Commercial Approach
 
 This hybrid approach allows you to:
 
@@ -132,11 +156,11 @@ This hybrid approach allows you to:
 - License validation prevents unauthorized access
 - Commercial features isolated from open source contributions
 
-## Subscription-Based Repository Implementation
+### Subscription-Based Repository Implementation
 
-### Repository Setup Options
+#### Repository Setup Options
 
-#### A. GitHub Private Repository with Access Control
+##### A. GitHub Private Repository with Access Control
 
 ```bash
 # Create private repository
@@ -147,7 +171,7 @@ gh repo create commercial-quickscale-modules --private \
 # Subscribers get repository access through GitHub's built-in access control
 ```
 
-#### B. Self-Hosted Git Server (More Control)
+##### B. Self-Hosted Git Server (More Control)
 
 ```bash
 # Using Gitea, GitLab CE, or similar
@@ -157,92 +181,45 @@ docker run -d --name gitea -p 3000:3000 gitea/gitea:latest
 # Implement custom access control logic
 ```
 
-### Subscription Management System
+#### Subscription Management System
 
-#### A. Simple License Key System
+##### A. Simple License Key System
 
 ```python
 # commercial_license.py
-import hashlib
-import datetime
-import requests
-
 class SubscriptionManager:
-    def __init__(self, license_key):
-        self.license_key = license_key
-        self.api_endpoint = "https://api.yourcompany.com/validate"
-    
-    def validate_subscription(self):
-        """Validate subscription against your server"""
-        response = requests.post(self.api_endpoint, json={
-            'license_key': self.license_key,
-            'module': 'commercial-saas-module',
-            'version': '1.0.0'
-        })
-        
-        if response.status_code == 200:
-            data = response.json()
-            return data.get('valid', False) and not data.get('expired', True)
-        return False
-    
-    def get_features(self):
-        """Return available features based on subscription tier"""
-        if not self.validate_subscription():
-            return []
-        
-        # Return features based on subscription level
-        return ['advanced_analytics', 'custom_integrations', 'priority_support']
-    
-    def get_tier(self):
-        """Get subscription tier"""
-        if not self.validate_subscription():
-            return 'none'
-        
-        response = requests.get(f"{self.api_endpoint}/tier", 
-                              params={'license_key': self.license_key})
-        return response.json().get('tier', 'basic')
+    def __init__(self, license_key):  # Store the license key for validation workflows
+        pass
+
+    def validate_subscription(self):  # Validate the license with your commercial backend
+        pass
+
+    def get_features(self):  # Return feature flags for the current subscription tier
+        pass
+
+    def get_tier(self):  # Report the subscription tier used for feature gating
+        pass
 ```
 
-#### B. Module-Level License Checking
+##### B. Module-Level License Checking
 
 ```python
 # quickscale_modules/commercial_saas/__init__.py
-"""
-Commercial SaaS Module - Subscription Required
-"""
+"""Commercial SaaS Module - Subscription Required"""
 import os
 from commercial_license import SubscriptionManager
 
-def initialize_commercial_module():
-    """Initialize commercial module with license validation"""
-    license_key = os.getenv('QUICKSCALE_COMMERCIAL_LICENSE')
-    
-    if not license_key:
-        raise LicenseError(
-            "Commercial module requires subscription. "
-            "Visit https://yourcompany.com/subscribe to get a license key."
-        )
-    
-    manager = SubscriptionManager(license_key)
-    if not manager.validate_subscription():
-        raise LicenseError(
-            "Invalid or expired subscription. "
-            "Please renew at https://yourcompany.com/renew"
-        )
-    
-    # Cache validation result
-    global _subscription_valid
-    _subscription_valid = True
-    
-    return manager.get_features()
+def initialize_commercial_module():  # Validate the license before exposing commercial features (Post-MVP placeholder)
+    pass
 
-# Initialize on import
-FEATURES = initialize_commercial_module()
+FEATURES = initialize_commercial_module()  # Placeholder for lazily-evaluated feature metadata
 ```
 
-### Distribution Methods
+#### Distribution Methods (Post-MVP)
 
-#### A. Git Subtree with Access Tokens
+ℹ️ Remember: distribution automation lives firmly in Post-MVP territory.
+
+##### A. Git Subtree with Access Tokens
 
 ```bash
 # Subscriber gets access via personal access token
@@ -253,147 +230,50 @@ git subtree pull --prefix=quickscale_modules/commercial_saas \
   https://$GITHUB_TOKEN@github.com/yourcompany/commercial-quickscale-modules.git main --squash
 ```
 
-#### B. CLI Tool for Subscription Management
+##### B. CLI Tool for Subscription Management
 
 ```python
 # commercial_cli.py
-import subprocess
-import os
 from commercial_license import SubscriptionManager
 
 class CommercialCLI:
-    def install_commercial_module(self, module_name, license_key):
-        """Install commercial module with subscription validation"""
-        
-        # Validate subscription first
-        manager = SubscriptionManager(license_key)
-        if not manager.validate_subscription():
-            print("❌ Invalid subscription. Please check your license key.")
-            return False
-        
-        # Get repository URL (could be tier-specific)
-        repo_url = self.get_repository_url(module_name, manager.get_tier())
-        
-        # Install via git subtree
-        try:
-            subprocess.run([
-                'git', 'subtree', 'add', 
-                f'--prefix=quickscale_modules/{module_name}',
-                repo_url, 'main', '--squash'
-            ], check=True)
-            
-            # Store license key in project config
-            self.store_license_key(license_key)
-            
-            print(f"✅ Successfully installed {module_name}")
-            return True
-            
-        except subprocess.CalledProcessError as e:
-            print(f"❌ Installation failed: {e}")
-            return False
-    
-    def update_commercial_module(self, module_name):
-        """Update commercial module (requires valid subscription)"""
-        license_key = self.get_stored_license_key()
-        manager = SubscriptionManager(license_key)
-        
-        if not manager.validate_subscription():
-            print("❌ Subscription expired. Please renew to update.")
-            return False
-        
-        repo_url = self.get_repository_url(module_name, manager.get_tier())
-        
-        subprocess.run([
-            'git', 'subtree', 'pull',
-            f'--prefix=quickscale_modules/{module_name}',
-            repo_url, 'main', '--squash'
-        ], check=True)
-    
-    def get_repository_url(self, module_name, tier):
-        """Get appropriate repository URL based on tier"""
-        base_urls = {
-            'basic': f'https://github.com/yourcompany/{module_name}-basic.git',
-            'professional': f'https://github.com/yourcompany/{module_name}-pro.git',
-            'enterprise': f'https://github.com/yourcompany/{module_name}-enterprise.git'
-        }
-        return base_urls.get(tier, base_urls['basic'])
-    
-    def store_license_key(self, license_key):
-        """Store license key securely"""
-        config_path = '.quickscale/config'
-        os.makedirs(os.path.dirname(config_path), exist_ok=True)
-        
-        # Encrypt license key before storing
-        encrypted_key = self._encrypt_license_key(license_key)
-        
-        with open(config_path, 'w') as f:
-            f.write(f'license_key={encrypted_key}\n')
-    
-    def get_stored_license_key(self):
-        """Retrieve stored license key"""
-        config_path = '.quickscale/config'
-        if not os.path.exists(config_path):
-            return None
-        
-        with open(config_path, 'r') as f:
-            for line in f:
-                if line.startswith('license_key='):
-                    encrypted_key = line.split('=', 1)[1].strip()
-                    return self._decrypt_license_key(encrypted_key)
-        return None
-    
-    def _encrypt_license_key(self, key):
-        """Simple encryption for license key storage"""
-        # Implement proper encryption in production
-        return key[::-1]  # Simple reverse for demo
-    
-    def _decrypt_license_key(self, encrypted_key):
-        """Decrypt stored license key"""
-        return encrypted_key[::-1]  # Simple reverse for demo
+    def install_commercial_module(self, module_name, license_key):  # Validate the license and fetch the module (Post-MVP)
+        pass
+
+    def update_commercial_module(self, module_name):  # Refresh a module after re-validating the subscriber (Post-MVP)
+        pass
+
+    def get_repository_url(self, module_name, tier):  # Map subscription tier to the correct repository URL (Post-MVP)
+        pass
+
+    def store_license_key(self, license_key):  # Persist the encrypted license key for future updates (Post-MVP)
+        pass
+
+    def get_stored_license_key(self):  # Retrieve the previously stored license key (Post-MVP)
+        pass
 ```
 
-### Subscription Tiers Implementation
+#### Subscription Tiers Implementation
 
-#### A. Tier-Based Feature Gates
+##### A. Tier-Based Feature Gates
 
 ```python
 # commercial_features.py
 class CommercialFeatures:
-    def __init__(self, subscription_tier):
-        self.tier = subscription_tier
-    
-    def has_feature(self, feature_name):
-        """Check if subscription tier includes feature"""
-        tier_features = {
-            'basic': ['core_commercial', 'email_support'],
-            'professional': ['basic', 'advanced_analytics', 'api_integrations'],
-            'enterprise': ['professional', 'custom_development', 'white_label', 'phone_support']
-        }
-        
-        return feature_name in tier_features.get(self.tier, [])
-    
-    def get_available_modules(self):
-        """Return modules available for this tier"""
-        tier_modules = {
-            'basic': ['commercial-auth', 'commercial-payments'],
-            'professional': ['basic', 'commercial-analytics', 'commercial-crm'],
-            'enterprise': ['professional', 'commercial-enterprise', 'custom-modules']
-        }
-        
-        return tier_modules.get(self.tier, [])
-    
-    def get_limits(self):
-        """Return usage limits for this tier"""
-        tier_limits = {
-            'basic': {'users': 100, 'api_calls': 10000, 'storage_gb': 10},
-            'professional': {'users': 1000, 'api_calls': 100000, 'storage_gb': 100},
-            'enterprise': {'users': -1, 'api_calls': -1, 'storage_gb': -1}  # Unlimited
-        }
-        
-        return tier_limits.get(self.tier, tier_limits['basic'])
+    def __init__(self, subscription_tier):  # Capture subscription tier metadata (Post-MVP)
+        pass
+
+    def has_feature(self, feature_name):  # Check if the current tier unlocks a feature (Post-MVP)
+        pass
+
+    def get_available_modules(self):  # Return modules available for the subscription tier (Post-MVP)
+        pass
+
+    def get_limits(self):  # Return usage limits for the subscription tier (Post-MVP)
+        pass
 ```
 
-#### B. Repository Branching Strategy
+##### B. Repository Branching Strategy
 
 ```bash
 # Different branches for different subscription tiers
@@ -406,7 +286,7 @@ git subtree add --prefix=quickscale_modules/commercial \
   https://github.com/yourcompany/commercial-modules.git professional-v1.0 --squash
 ```
 
-### Business Logic Integration
+### Business Logic Integration (Post-MVP)
 
 #### A. Subscription-Aware Business Rules
 
@@ -415,39 +295,20 @@ git subtree add --prefix=quickscale_modules/commercial \
 from commercial_features import CommercialFeatures
 
 class CommercialBusinessLogic:
-    def __init__(self):
-        self.features = CommercialFeatures(self.get_subscription_tier())
-        self.limits = self.features.get_limits()
-    
-    def process_advanced_analytics(self, data):
-        """Advanced analytics - enterprise feature"""
-        if not self.features.has_feature('advanced_analytics'):
-            raise SubscriptionError("Advanced analytics requires Professional tier")
-        
-        # Check usage limits
-        if self._check_usage_limit('api_calls'):
-            raise LimitExceededError("API call limit exceeded for your tier")
-        
-        # Implement advanced analytics logic
-        return self._run_advanced_analytics(data)
-    
-    def create_user(self, user_data):
-        """Create user with tier-based limits"""
-        current_users = self._get_current_user_count()
-        if current_users >= self.limits['users'] and self.limits['users'] != -1:
-            raise LimitExceededError(f"User limit ({self.limits['users']}) exceeded for your tier")
-        
-        return self._create_user_record(user_data)
-    
-    def get_subscription_tier(self):
-        """Get current subscription tier"""
-        # Check license and return tier
-        return 'professional'  # Example implementation
-    
-    def _check_usage_limit(self, limit_type):
-        """Check if usage limit is exceeded"""
-        # Implement usage tracking logic
-        return False  # Example: not exceeded
+    def __init__(self):  # Prepare commercial feature helpers for the active tier (Post-MVP)
+        pass
+
+    def process_advanced_analytics(self, data):  # Run advanced analytics reserved for premium tiers (Post-MVP)
+        pass
+
+    def create_user(self, user_data):  # Enforce tier-based limits when creating users (Post-MVP)
+        pass
+
+    def get_subscription_tier(self):  # Determine the active subscription tier (Post-MVP)
+        pass
+
+    def _check_usage_limit(self, limit_type):  # Check whether usage limits are exceeded (Post-MVP)
+        pass
 ```
 
 ### Security Considerations
@@ -477,70 +338,23 @@ import time
 from commercial_license import SubscriptionManager
 
 class CachedSubscriptionManager(SubscriptionManager):
-    def __init__(self, cache_file='~/.quickscale/license_cache.json', cache_duration=24*60*60):
-        super().__init__(license_key=None)  # Will be set per call
-        self.cache_file = os.path.expanduser(cache_file)
-        self.cache_duration = cache_duration  # 24 hours
-    
-    def validate_subscription(self, license_key):
-        """Validate with cache fallback for offline use"""
-        self.license_key = license_key
-        
-        # Check cache first
-        cached_result = self._get_cached_result(license_key)
-        if cached_result and self._is_cache_valid(cached_result):
-            return cached_result['valid']
-        
-        # Online validation
-        result = super().validate_subscription()
-        self._cache_result(license_key, result)
-        return result
-    
-    def _get_cached_result(self, license_key):
-        """Get cached validation result"""
-        if not os.path.exists(self.cache_file):
-            return None
-        
-        try:
-            with open(self.cache_file, 'r') as f:
-                cache = json.load(f)
-                return cache.get(license_key)
-        except (json.JSONDecodeError, IOError):
-            return None
-    
-    def _is_cache_valid(self, cached_result):
-        """Check if cached result is still valid"""
-        if not cached_result:
-            return False
-        
-        cache_time = cached_result.get('timestamp', 0)
-        return (time.time() - cache_time) < self.cache_duration
-    
-    def _cache_result(self, license_key, is_valid):
-        """Cache validation result"""
-        os.makedirs(os.path.dirname(self.cache_file), exist_ok=True)
-        
-        # Load existing cache
-        cache = {}
-        if os.path.exists(self.cache_file):
-            try:
-                with open(self.cache_file, 'r') as f:
-                    cache = json.load(f)
-            except json.JSONDecodeError:
-                pass
-        
-        # Update cache
-        cache[license_key] = {
-            'valid': is_valid,
-            'timestamp': time.time()
-        }
-        
-        # Save cache
-        with open(self.cache_file, 'w') as f:
-            json.dump(cache, f, indent=2)
+    def __init__(self, cache_file='~/.quickscale/license_cache.json', cache_duration=24*60*60):  # Configure cache location and duration (Post-MVP)
+        pass
+
+    def validate_subscription(self, license_key):  # Validate with cache fallback for offline use (Post-MVP)
+        pass
+
+    def _get_cached_result(self, license_key):  # Retrieve cached validation result (Post-MVP)
+        pass
+
+    def _is_cache_valid(self, cached_result):  # Determine whether the cached result is still valid (Post-MVP)
+        pass
+
+    def _cache_result(self, license_key, is_valid):  # Persist validation results back to the cache (Post-MVP)
+        pass
 ```
 
-### Usage Examples
+### Operational Logistics
 
 #### A. Subscriber Installation Process
 
@@ -563,10 +377,14 @@ commercial-quickscale validate-license
 # ✅ Available modules: commercial-auth, commercial-analytics
 ```
 
-#### B. Project Configuration with Commercial Modules
+#### B. Project Configuration with Commercial Modules (Post-MVP illustrative)
+
+ℹ️ This YAML-driven workflow is illustrative and sits firmly in Post-MVP plans.
+
+For canonical guidance on backend extension patterns, see the [backend extensions policy](./DECISIONS.md#backend-extensions-policy).
 
 ```yaml
-# quickscale.yml with commercial modules
+# quickscale.yml with commercial modules (Post-MVP illustrative - not part of MVP)
 schema_version: 1
 project:
   name: my-enterprise-saas
@@ -607,32 +425,20 @@ class EnterpriseUser(starter_models.User):
         app_label = 'myenterprise'
 
 class EnterpriseBusinessLogic:
-    def __init__(self):
-        self.analytics = CommercialAnalytics()
-    
-    def generate_enterprise_report(self, data):
-        """Generate advanced analytics report"""
-        try:
-            return self.analytics.generate_report(data)
-        except SubscriptionError as e:
-            # Handle subscription issues gracefully
-            self._fallback_basic_report(data)
-        except LimitExceededError as e:
-            # Handle usage limits
-            self._notify_limit_exceeded()
-    
-    def _fallback_basic_report(self, data):
-        """Fallback to basic reporting if subscription issues"""
-        # Implement basic reporting logic
+    def __init__(self):  # Prepare analytics helpers for enterprise workflows (Post-MVP)
         pass
-    
-    def _notify_limit_exceeded(self):
-        """Notify about usage limit exceeded"""
-        # Send notification to upgrade subscription
+
+    def generate_enterprise_report(self, data):  # Generate advanced analytics for enterprise tiers (Post-MVP)
+        pass
+
+    def _fallback_basic_report(self, data):  # Provide a basic report when premium features are unavailable (Post-MVP)
+        pass
+
+    def _notify_limit_exceeded(self):  # Trigger notifications when usage limits are exceeded (Post-MVP)
         pass
 ```
 
-### Business Model Implementation
+#### Business Model Implementation
 
 #### A. Revenue Tiers
 
@@ -659,16 +465,11 @@ SUBSCRIPTION_TIERS = {
     }
 }
 
-def get_tier_features(tier_name):
-    """Get features for a subscription tier"""
-    return SUBSCRIPTION_TIERS.get(tier_name, {}).get('features', [])
+def get_tier_features(tier_name):  # Return the feature list for a subscription tier (Post-MVP)
+    pass
 
-def calculate_pricing(tier_name, billing_cycle='monthly'):
-    """Calculate pricing for tier and billing cycle"""
-    tier = SUBSCRIPTION_TIERS.get(tier_name, {})
-    if billing_cycle == 'yearly':
-        return tier.get('price_yearly', 0)
-    return tier.get('price_monthly', 0)
+def calculate_pricing(tier_name, billing_cycle='monthly'):  # Calculate pricing for a tier and billing cycle (Post-MVP)
+    pass
 ```
 
 #### B. License Generation and Management
@@ -681,37 +482,17 @@ import json
 from datetime import datetime, timedelta
 
 class LicenseGenerator:
-    def generate_license(self, tier, customer_id, validity_days=365):
-        """Generate a new license key"""
-        license_data = {
-            'license_id': str(uuid.uuid4()),
-            'customer_id': customer_id,
-            'tier': tier,
-            'issued_at': datetime.utcnow().isoformat(),
-            'expires_at': (datetime.utcnow() + timedelta(days=validity_days)).isoformat(),
-            'features': get_tier_features(tier)
-        }
-        
-        # Create license key from hash
-        license_string = json.dumps(license_data, sort_keys=True)
-        license_key = hashlib.sha256(license_string.encode()).hexdigest()[:32].upper()
-        
-        # Store license data (in database)
-        self._store_license_data(license_key, license_data)
-        
-        return license_key
-    
-    def validate_license_format(self, license_key):
-        """Basic format validation"""
-        return len(license_key) == 32 and license_key.isalnum()
-    
-    def _store_license_data(self, license_key, data):
-        """Store license data in database"""
-        # Implement database storage
+    def generate_license(self, tier, customer_id, validity_days=365):  # Produce license metadata and return a key (Post-MVP)
+        pass
+
+    def validate_license_format(self, license_key):  # Validate the license key format (Post-MVP)
+        pass
+
+    def _store_license_data(self, license_key, data):  # Persist license metadata to storage (Post-MVP)
         pass
 ```
 
-### Deployment and Operations
+#### Deployment and Operations
 
 #### A. Commercial Module Updates
 
@@ -746,39 +527,30 @@ echo "✅ Commercial modules updated successfully"
 ```python
 # commercial_monitoring.py
 class CommercialUsageMonitor:
-    def __init__(self):
-        self.metrics = {}
-    
-    def track_usage(self, feature, customer_id):
-        """Track feature usage for billing/analytics"""
-        if customer_id not in self.metrics:
-            self.metrics[customer_id] = {}
-        
-        if feature not in self.metrics[customer_id]:
-            self.metrics[customer_id][feature] = 0
-        
-        self.metrics[customer_id][feature] += 1
-        
-        # Check limits
-        self._check_limits(customer_id, feature)
-    
-    def _check_limits(self, customer_id, feature):
-        """Check if usage exceeds tier limits"""
-        # Implement limit checking logic
+    def __init__(self):  # Initialize billing/analytics tracking structures (Post-MVP)
         pass
-    
-    def generate_usage_report(self, customer_id):
-        """Generate usage report for customer"""
-        return self.metrics.get(customer_id, {})
-    
-    def export_metrics(self):
-        """Export metrics for business intelligence"""
-        # Export to analytics system
+
+    def track_usage(self, feature, customer_id):  # Record feature usage for billing analytics (Post-MVP)
+        pass
+
+    def _check_limits(self, customer_id, feature):  # Verify whether usage exceeds tier limits (Post-MVP)
+        pass
+
+    def generate_usage_report(self, customer_id):  # Summarize usage metrics for a customer (Post-MVP)
+        pass
+
+    def export_metrics(self):  # Export metrics to external analytics tooling (Post-MVP)
         pass
 ```
 
 This commercial strategy enables you to build sustainable business models around QuickScale while maintaining the benefits of the open source foundation. The subscription-based approach provides recurring revenue while the Apache 2.0 license ensures legal compliance and community collaboration opportunities.
 
-MVP note: For Phase 1 the recommended and supported distribution method is git subtree (embedding the minimal starter theme and core into client repos). More advanced distribution options (publishing private/subscription packages via pip or private package indices) will be designed and implemented Post-MVP.
+ℹ️ Reminder: everything in this section remains Post-MVP vision work.
 
 Compatibility note: The new QuickScale architecture is intentionally breaking and not backward compatible; automated migrations are out-of-scope for the MVP. This document covers commercial distribution approaches for Post-MVP extensions where pip-based and registry-based options will be considered.
+
+## See Also
+
+- [DECISIONS.md](./DECISIONS.md) — authoritative technical scope and backend extension policy
+- [SCAFFOLDING.md](./SCAFFOLDING.md) — canonical directory structures and naming matrix
+- [ROADMAP.md](./ROADMAP.md) — implementation phases that unlock the commercial playbook
