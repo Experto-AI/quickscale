@@ -21,6 +21,8 @@ TARGET AUDIENCE: Solo developers, development agencies, commercial extension dev
 
 QuickScale's Apache 2.0 license enables commercial extensions and subscription models. This document shows how **solo developers and agencies** can build premium modules/themes, monetize their work, and create community ecosystems while leveraging the open source QuickScale foundation.
 
+**⚠️ MVP STATUS**: Commercial distribution via PyPI and private repositories is **POST-MVP**. The MVP intentionally uses the "Personal Toolkit" (git-subtree) approach for code sharing across YOUR projects; commercial distribution and packaging are Phase 3 (12-18+ months after MVP).
+
 ## Commercial Licensing Rights
 
 ### Apache 2.0 License Permissions
@@ -730,7 +732,10 @@ if ! commercial-quickscale validate-license --quiet; then
     exit 1
 fi
 
-# Update all commercial modules
+# Update all commercial modules (Post-MVP illustrative helper - not provided by MVP)
+# Note: This `commercial-quickscale` helper is an example of a Post-MVP convenience that
+# would wrap manual git subtree or package registry operations. MVP users should follow
+# the documented manual subtree or package workflows.
 commercial-quickscale update-all
 
 echo "✅ Commercial modules updated successfully"
