@@ -315,6 +315,488 @@ While current alternatives provide immediate production-ready features, QuickSca
 
 ---
 
+## What QuickScale Must Incorporate from Competitors
+
+This section analyzes features and patterns from successful competitors that QuickScale should adopt to remain competitive while maintaining its unique differentiation.
+
+### 🔴 CRITICAL for MVP Viability (Must Have)
+
+These are table-stakes features that every competitor has. Without them, QuickScale won't be taken seriously.
+
+#### 1. Production-Ready Django Foundations
+**Learn from**: Django Cookiecutter, SaaS Pegasus
+**Priority**: P0 - Blocking for MVP credibility
+
+**Must incorporate:**
+- ✅ **Environment-based configuration** - `.env` file support with python-decouple or django-environ
+- ✅ **Security best practices** - SECRET_KEY generation, ALLOWED_HOSTS, CSRF protection, security middleware
+- ✅ **Docker setup** - `docker-compose.yml` for local development + production-ready Dockerfile
+- ✅ **Database configuration** - PostgreSQL by default (not SQLite), connection pooling settings
+- ✅ **Static files handling** - WhiteNoise for production static file serving
+- ✅ **Logging configuration** - Structured logging with proper handlers for dev/prod
+- ✅ **Error tracking ready** - Sentry integration scaffolding
+
+**Rationale**: Every competitor provides this. Without production-ready defaults, QuickScale appears as a toy project rather than professional tool.
+
+**Implementation approach**: Generate these in `quickscale init` output as part of the minimal starter.
+
+---
+
+#### 2. Authentication Foundation
+**Learn from**: SaaS Pegasus (django-allauth integration)
+**Priority**: P0 - Core SaaS requirement
+
+**Must incorporate:**
+- ✅ **django-allauth integration** - Social auth, email verification, password reset workflows
+- ✅ **Custom User model scaffold** - Best practices from django-cookiecutter (AbstractUser extension)
+- ✅ **Email confirmation flow** - Production-ready email verification with templates
+- ✅ **Account management** - Profile editing, password change, account deletion
+
+**Rationale**: Authentication is the foundation of every SaaS. Pegasus proves django-allauth is the correct Django ecosystem choice (over django-rest-auth or custom solutions).
+
+**QuickScale advantage**: Package as `quickscale_modules.auth` in Post-MVP for cross-project reusability. Pegasus can't reuse their auth across projects; QuickScale can.
+
+---
+
+#### 3. Testing & Quality Infrastructure
+**Learn from**: Django Cookiecutter (excellent testing setup)
+**Priority**: P0 - Professional standard
+
+**Must incorporate:**
+- ✅ **pytest configuration** - Modern testing over Django's TestCase (pytest-django)
+- ✅ **Factory setup** - factory_boy for test data generation (better than fixtures)
+- ✅ **Coverage configuration** - pytest-cov with 80%+ coverage requirements
+- ✅ **Test organization** - Clear test directory structure with conftest.py patterns
+- ✅ **Fast test database** - Optimized test database configuration
+
+**Rationale**: Agencies building client projects need robust testing. This is non-negotiable for professional development workflows.
+
+**Implementation approach**: Include in generated starter with sample tests demonstrating patterns.
+
+---
+
+### 🟡 HIGH PRIORITY for Post-MVP v1 (Competitive Parity)
+
+These features are essential for competing with Pegasus and Ready SaaS in the SaaS boilerplate market.
+
+#### 4. Stripe Integration & Subscription Management
+**Learn from**: SaaS Pegasus, Ready SaaS
+**Priority**: P1 - Core SaaS monetization
+
+**Must incorporate:**
+- ✅ **dj-stripe integration** - Official Stripe Django integration (battle-tested)
+- ✅ **Subscription management** - Plans, pricing tiers, trials, upgrades/downgrades
+- ✅ **Webhook handling** - Secure webhook processing with event logging
+- ✅ **Usage-based billing** - Metered billing support for SaaS features
+- ✅ **Invoice management** - Automatic invoice generation and access
+- ❌ **NOT multiple payment providers** - Single provider (Stripe) reduces complexity
+
+**Rationale**: Every SaaS needs billing. Pegasus's success validates Stripe-only approach (don't dilute with PayPal, etc.).
+
+**QuickScale advantage**: Package as `quickscale_modules.billing` for reuse across client projects. Update billing logic once, propagate to all projects via git subtree.
+
+---
+
+#### 5. CI/CD Pipeline Templates
+**Learn from**: Django Cookiecutter (GitHub Actions excellence)
+**Priority**: P1 - Professional workflow
+
+**Must incorporate:**
+- ✅ **GitHub Actions workflow** - Run tests, linting, coverage on every PR
+- ✅ **Pre-commit hooks** - black, isort, flake8, mypy locally before commit
+- ✅ **Automated testing matrix** - Test across Python 3.10, 3.11, 3.12 + Django 4.2, 5.0
+- ✅ **Deployment workflows** - Sample deploy-to-production GitHub Action
+- ✅ **Dependency updates** - Dependabot configuration for security updates
+
+**Rationale**: Professional teams expect CI/CD. This is free marketing (shows quality) and critical for agencies.
+
+**Implementation approach**: Include `.github/workflows/` directory with comprehensive workflows in generated starter.
+
+---
+
+#### 6. Team/Multi-tenancy Pattern
+**Learn from**: SaaS Pegasus (teams feature), Apptension (multi-tenant architecture)
+**Priority**: P1 - Common B2B SaaS requirement
+
+**Must incorporate:**
+- ✅ **Team model pattern** - User → Team → Resources relationship structure
+- ✅ **Role-based permissions** - Owner, Admin, Member, Viewer roles
+- ✅ **Invitation system** - Email invitations with token-based acceptance
+- ✅ **Row-level security** - Django query filtering to ensure tenant isolation
+- ✅ **Team switching** - UI/API for users in multiple teams
+
+**Rationale**: Most B2B SaaS requires team functionality. Better implemented as reusable module than rebuilt per-project.
+
+**QuickScale advantage**: Package as `quickscale_modules.teams` in Post-MVP. One team module shared across all client SaaS projects.
+
+---
+
+### 🟢 MEDIUM PRIORITY (Differentiation Features)
+
+These features enhance competitiveness but aren't blocking for initial adoption.
+
+#### 7. Multiple Frontend Framework Options
+**Learn from**: SaaS Pegasus (HTMX, React, Vue options)
+**Priority**: P2 - Valuable flexibility
+
+**Should incorporate:**
+- ✅ **HTMX variant** - Low-JS, server-rendered (Django developers love this, trending)
+- ✅ **React variant** - For SPA requirements and modern dev teams
+- ⚠️ **NOT Vue** initially - Don't spread too thin (focus > breadth)
+- ✅ **Frontend variant switching** - Easy to change frontend tech without backend changes
+
+**Rationale**: Pegasus's multiple frontend options are popular. HTMX is particularly attractive to Django developers who prefer server-side rendering.
+
+**QuickScale advantage**: Directory-based frontends already provide this flexibility. Just need to scaffold quality starter templates.
+
+---
+
+#### 8. Email Infrastructure & Templates
+**Learn from**: Django Cookiecutter (django-anymail), SaaS Pegasus (email templates)
+**Priority**: P2 - Common operational need
+
+**Should incorporate:**
+- ✅ **django-anymail** - Multiple email backend support (SendGrid, Mailgun, Postmark, etc.)
+- ✅ **Transactional email templates** - Password reset, account verification, notifications
+- ✅ **Email preview** - Development email preview in browser
+- ✅ **Async email sending** - Celery integration for background delivery
+- ✅ **Email tracking** - Open/click tracking scaffolding
+
+**Rationale**: Every SaaS sends emails. Professional email infrastructure is expected.
+
+**QuickScale advantage**: Package as `quickscale_modules.notifications` with template library reusable across projects.
+
+---
+
+#### 9. Asynchronous Task Queue
+**Learn from**: Django Cookiecutter (Celery setup)
+**Priority**: P2 - Scalability foundation
+
+**Should incorporate:**
+- ✅ **Celery + Redis** - Standard Django async task pattern
+- ✅ **Celery Beat scheduler** - Periodic/cron-like background tasks
+- ✅ **Task monitoring** - Flower or similar for task visibility
+- ✅ **Docker services** - Redis container in docker-compose.yml
+- ✅ **Common task patterns** - Email sending, report generation, data processing examples
+
+**Rationale**: Background tasks are fundamental to SaaS scalability. Expected for "production-ready" label.
+
+---
+
+### 🔵 ARCHITECTURAL LEARNINGS (Process & Patterns)
+
+Beyond specific features, these are organizational and architectural patterns that contribute to competitor success.
+
+#### 10. Learn from Wagtail's Ecosystem Success
+**Source**: Wagtail CMS (19.6k stars, NASA/Google/Mozilla adoption)
+
+**Key learnings:**
+- ✅ **Package marketplace** - wagtail-packages.org model for community discovery
+- ✅ **Clear extension points** - Documented hooks, APIs, and integration patterns
+- ✅ **Backward compatibility** - Semantic versioning with deprecation warnings (not breaking changes)
+- ✅ **Comprehensive documentation** - Searchable, versioned, with cookbook examples
+- ✅ **Community governance** - Clear contribution guidelines and release process
+
+**Application to QuickScale**: Build `quickscale-packages.org` marketplace in Post-MVP Phase 3. Wagtail proves package ecosystems drive adoption.
+
+---
+
+#### 11. Learn from SaaS Pegasus's Commercial Success
+
+**Key learnings:**
+- ✅ **Interactive setup wizard** - Reduces configuration friction and decision paralysis
+- ✅ **Documentation quality over quantity** - Every feature fully documented with real examples
+- ✅ **Transparent changelog** - Users know exactly what changed and why
+- ✅ **Premium support model** - Discord community + priority email support drives satisfaction
+- ✅ **Regular updates** - Monthly feature releases maintain momentum
+
+**Application to QuickScale**: Documentation quality matters more than feature count. Invest heavily in docs from day one.
+
+---
+
+#### 12. Learn from Django Cookiecutter's Adoption
+
+**Key learnings:**
+- ✅ **Sane defaults** - Works perfectly out-of-box, but everything is customizable
+- ✅ **No magic** - Uses standard Django patterns; developers understand immediately
+- ✅ **Production-grade from start** - Not a tutorial or toy; real-world ready
+- ✅ **Conservative dependencies** - Only proven, maintained packages
+- ✅ **Excellent issue triage** - Quick responses to problems build trust
+
+**Application to QuickScale**: "Boring technology" wins. Don't innovate on everything simultaneously. Use Django conventions.
+
+---
+
+### ❌ What NOT to Copy
+
+Understanding what to avoid is as important as knowing what to adopt.
+
+#### DON'T Copy from SaaS Pegasus:
+- ❌ **Static generation model** - This is exactly what QuickScale disrupts; maintain shared update advantage
+- ❌ **Monolithic architecture** - QuickScale's composable modules are the key differentiator
+- ❌ **Multiple payment providers** - Stripe-only is correct; PayPal/Square add complexity without value
+- ❌ **Wagtail CMS dependency** - Too opinionated for general SaaS; Django admin sufficient for MVP
+
+**Reasoning**: Pegasus's weaknesses are QuickScale's opportunities. Don't copy their limitations.
+
+---
+
+#### DON'T Copy from Django Cookiecutter:
+- ❌ **Over-configuration during setup** - Too many upfront choices cause analysis paralysis
+- ❌ **Generic approach** - QuickScale should be SaaS-specific with opinionated patterns
+- ❌ **No SaaS features** - QuickScale must include auth/billing/teams out-of-box
+
+**Reasoning**: Cookiecutter serves different audience (general Django). QuickScale is SaaS-focused.
+
+---
+
+#### DON'T Copy from Apptension:
+- ❌ **Complex tech stack** - React+TypeScript+GraphQL+AWS is overwhelming for solo devs
+- ❌ **Fork-based distribution** - QuickScale's git subtree approach is superior
+- ❌ **AWS lock-in** - Cloud-agnostic is better for diverse agency clients
+
+**Reasoning**: Simpler tech stacks have lower barriers to adoption.
+
+---
+
+## Prioritized Implementation Roadmap
+
+### Phase 1 (MVP) - Table Stakes Features
+**Timeline**: Months 0-3
+**Goal**: Production-ready Django foundation
+
+```bash
+quickscale init myapp
+# Must generate:
+```
+
+**Critical outputs:**
+1. ✅ Django project with environment configuration (`.env` + settings/base.py, settings/local.py, settings/production.py)
+2. ✅ Docker setup (`docker-compose.yml` for local dev + production `Dockerfile`)
+3. ✅ pytest configuration with sample tests and factories
+4. ✅ Security best practices (SECRET_KEY generation, ALLOWED_HOSTS, middleware stack)
+5. ✅ PostgreSQL configuration with connection pooling
+6. ✅ Static files setup (WhiteNoise configured)
+7. ✅ Custom User model scaffold (AbstractUser extension)
+8. ✅ GitHub Actions workflow for CI/CD
+9. ✅ Pre-commit hooks configuration (black, isort, flake8)
+
+**Success criteria**: Generated project is production-deployable immediately. No "TODO: configure X" comments.
+
+---
+
+### Phase 2 (Post-MVP v1) - SaaS Essentials
+**Timeline**: Months 4-9
+**Goal**: Competitive parity with SaaS Pegasus on core features
+
+```python
+# Modules distributed via git subtree:
+
+quickscale_modules/
+├── auth/                    # P1 - First module
+│   ├── django-allauth integration
+│   ├── social auth providers (Google, GitHub)
+│   ├── email verification workflows
+│   └── account management views
+│
+├── billing/                 # P1 - Second module
+│   ├── dj-stripe integration
+│   ├── subscription management (plans, trials, upgrades)
+│   ├── webhook handling with logging
+│   └── invoice access and management
+│
+└── teams/                   # P1 - Third module
+    ├── multi-tenancy pattern (User → Team → Resources)
+    ├── role-based permissions (Owner, Admin, Member)
+    ├── invitation system with email tokens
+    └── row-level security query filters
+```
+
+**Success criteria**: Agencies can build client SaaS apps using these modules. Each module is reusable via git subtree across projects.
+
+---
+
+### Phase 3 (Post-MVP v2) - Professional Polish
+**Timeline**: Months 10-15
+**Goal**: Exceed competitors on developer experience
+
+**Deliverables:**
+1. ✅ **Advanced CI/CD** - Deployment pipelines, automated rollbacks, staging environments
+2. ✅ **Celery + Redis** - Background task infrastructure with monitoring
+3. ✅ **Email infrastructure** - django-anymail + professional template library
+4. ✅ **HTMX frontend variant** - Modern, low-JS option for Django developers
+5. ✅ **React frontend variant** - SPA option with TypeScript
+6. ✅ **Monitoring scaffolding** - Sentry, DataDog, or similar integration points
+7. ✅ **Documentation site** - Comprehensive docs with search and examples
+
+**Success criteria**: QuickScale matches or exceeds SaaS Pegasus on feature completeness while maintaining composability advantage.
+
+---
+
+### Phase 4 (Post-MVP v3+) - Ecosystem & Marketplace
+**Timeline**: Months 16+
+**Goal**: Build community-driven package ecosystem
+
+**Deliverables:**
+1. ✅ **Package marketplace** - quickscale-packages.org (inspired by Wagtail)
+2. ✅ **Community modules** - Third-party contributed modules (analytics, CRM, etc.)
+3. ✅ **Commercial extensions** - Private PyPI for subscription-based modules (see COMMERCIAL.md)
+4. ✅ **Advanced integrations** - Stripe Connect, multi-currency, advanced analytics
+5. ✅ **Theme marketplace** - Vertical-specific starting point themes
+6. ✅ **QuickScale Cloud** (optional) - Managed hosting for QuickScale projects
+
+**Success criteria**: Self-sustaining ecosystem with community contributions exceeding core team output.
+
+---
+
+## Strategic Recommendations
+
+### 1. Match Pegasus on Core, Beat Them on Architecture
+
+**Core features where QuickScale must equal Pegasus:**
+- ✅ Authentication quality (django-allauth integration)
+- ✅ Billing capability (dj-stripe with subscriptions)
+- ✅ Team management (multi-tenancy patterns)
+- ✅ Production readiness (Docker, CI/CD, security)
+
+**Architecture where QuickScale wins:**
+- ✅ **Shared updates** - Pegasus cannot propagate fixes across projects; QuickScale can via git subtree
+- ✅ **Module reusability** - Pegasus is monolithic; QuickScale modules work across all projects
+- ✅ **Agency workflow** - Pegasus targets solo developers; QuickScale optimized for agencies building multiple client apps
+
+**Key insight**: Don't compete on feature count. Compete on architecture enabling code reuse and shared updates.
+
+---
+
+### 2. Prioritize Quality Over Breadth
+
+**Learn from Cookiecutter's success:**
+- ✅ Fewer features, but each one production-grade
+- ✅ Comprehensive documentation for everything included
+- ✅ Standard Django patterns (no magic, no surprises)
+- ✅ Conservative, proven dependencies only
+
+**Avoid Pegasus's trap:**
+- ❌ Don't add 50+ features trying to be everything
+- ❌ Don't support every possible option (choice paralysis)
+- ❌ Don't innovate on tech stack (boring is better)
+
+**QuickScale strategy**: 10 excellent, reusable modules beat 50 one-off features.
+
+---
+
+### 3. Invest in Documentation from Day One
+
+**Success pattern from all competitors:**
+- ✅ Searchable documentation (Algolia DocSearch)
+- ✅ Code examples for every feature
+- ✅ Cookbook/recipes for common patterns
+- ✅ Video tutorials for onboarding
+- ✅ API reference (auto-generated from docstrings)
+
+**QuickScale advantage**: Document once, benefits all users. Pegasus users each figure things out independently.
+
+---
+
+### 4. Build Community Before Marketplace
+
+**Wagtail's lesson (19.6k stars):**
+1. First: Build excellent core product
+2. Second: Grow community of users
+3. Third: Enable community contributions
+4. Fourth: Launch package marketplace
+
+**QuickScale timeline:**
+- **Phase 1-2**: Focus on core product quality
+- **Phase 3**: Build community (Discord, documentation, examples)
+- **Phase 4**: Launch marketplace when community is ready
+
+**Don't launch marketplace too early**: Empty marketplaces look bad. Build audience first.
+
+---
+
+### 5. Commercial Model: Open Core + Premium Extensions
+
+**Learn from successful open source businesses:**
+- ✅ **Core always free** - quickscale_core, basic modules (auth, billing, teams)
+- ✅ **Premium extensions** - Advanced features, vertical-specific themes, enterprise modules
+- ✅ **Support tiers** - Community (free), Professional ($99/mo), Enterprise (custom)
+- ✅ **Marketplace revenue share** - Take 20-30% of third-party module sales
+
+**Don't copy Pegasus's one-time fee**: Recurring revenue (subscriptions) is more sustainable and aligns incentives.
+
+---
+
+## Critical Path to Competitiveness
+
+### Minimum Viable Competitive Product (MVCP)
+
+To be considered a credible alternative to SaaS Pegasus, QuickScale needs:
+
+**Phase 1 (MVP) must include:**
+```
+Priority 0 (blocking):
+1. Production-ready Django setup
+2. Docker configuration
+3. Testing infrastructure (pytest)
+4. Security best practices
+5. CI/CD templates
+```
+
+**Phase 2 (Post-MVP v1) must include:**
+```
+Priority 1 (competitive parity):
+6. Auth module (quickscale_modules.auth)
+7. Billing module (quickscale_modules.billing)
+8. Teams module (quickscale_modules.teams)
+9. Email infrastructure
+10. Comprehensive documentation
+```
+
+**Phase 3+ differentiates:**
+```
+Priority 2 (competitive advantage):
+11. Module marketplace
+12. Commercial extensions
+13. Community ecosystem
+14. Shared update workflows
+```
+
+### Timeline Reality Check
+
+**Honest assessment:**
+- **Pegasus**: 5+ years of development, mature product
+- **QuickScale MVP**: 3-6 months to production-ready foundation
+- **QuickScale competitive**: 12-18 months to feature parity
+- **QuickScale differentiated**: 24+ months to unique advantages
+
+**Key insight**: Don't try to beat Pegasus on day one. Focus on architecture advantages (composability, shared updates) that Pegasus cannot copy without complete rewrite.
+
+---
+
+## Conclusion: Learn and Differentiate
+
+**What to incorporate:**
+- ✅ Production-ready foundations (all competitors do this well)
+- ✅ Core SaaS features (auth, billing, teams are table stakes)
+- ✅ Professional workflows (CI/CD, testing, Docker)
+- ✅ Quality documentation (critical for adoption)
+
+**What to avoid:**
+- ❌ Static generation (QuickScale's key differentiator)
+- ❌ Monolithic architecture (composability is the advantage)
+- ❌ Feature bloat (quality over quantity)
+
+**QuickScale's path to success:**
+1. **Match** Pegasus on production readiness and core features
+2. **Beat** Pegasus on architecture (composability, shared updates)
+3. **Differentiate** with agency workflows and module reusability
+4. **Win** through ecosystem and community (Phase 4+)
+
+The competitors validate the market and show what features matter. QuickScale's unique architecture (git subtree distribution, composable modules, shared updates) provides sustainable competitive advantage once core features reach parity.
+
+---
+
 ## See Also
 
 - [QUICKSCALE.md](./QUICKSCALE.md) - Strategic vision and evolution rationale
