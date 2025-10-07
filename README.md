@@ -46,7 +46,8 @@ Repository docs
 ├── ROADMAP.md — Execution timeline that follows DECISIONS.md
 ├── SCAFFOLDING.md — Directory and package layout standards
 ├── QUICKSCALE.md — Strategic vision and market positioning
-└── COMMERCIAL.md — Post-MVP monetisation guidance
+├── COMMERCIAL.md — Post-MVP monetisation guidance
+└── COMPETITIVE_ANALYSIS.md — Market comparison vs SaaS Pegasus and alternatives
 ```
 
 - Start with `README.md` for the big-picture overview, then dive into `DECISIONS.md` whenever you need the canonical rule or tie-breaker.
@@ -202,6 +203,7 @@ Add new terms here as documentation evolves; this section consolidates terminolo
 
 - **[DECISIONS.md](./DECISIONS.md)** - Technical specifications and implementation rules
 - **[QUICKSCALE.md](./QUICKSCALE.md)** - Strategic vision and competitive positioning
+- **[COMPETITIVE_ANALYSIS.md](./COMPETITIVE_ANALYSIS.md)** - Comparison vs SaaS Pegasus and alternatives
 - **[ROADMAP.md](./ROADMAP.md)** - Development roadmap and implementation plan
 
 For optional backend customization patterns, reference the [backend extensions policy](./DECISIONS.md#backend-extensions-policy).
