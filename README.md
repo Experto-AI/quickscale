@@ -87,7 +87,7 @@ This table shows which document to consult for authoritative decisions on common
 
 🔎 **Scope note**: The [MVP Feature Matrix](./DECISIONS.md#mvp-feature-matrix-authoritative) is the single source of truth for what's in or out.
 
- ### What MVP Generates
+ ### What MVP Generates (Production-Ready)
 ```bash
 $ quickscale init myapp
 
@@ -95,7 +95,11 @@ myapp/
 ├── manage.py                    # Standard Django
 ├── myapp/
 │   ├── __init__.py
-│   ├── settings.py             # Standalone by default (no quickscale_core imports)
+│   ├── settings/               # Split settings for dev/prod
+│   │   ├── __init__.py
+│   │   ├── base.py            # Shared configuration
+│   │   ├── local.py           # Development settings
+│   │   └── production.py      # Production settings (PostgreSQL, security)
 │   ├── urls.py
 │   ├── wsgi.py
 │   └── asgi.py
@@ -103,8 +107,21 @@ myapp/
 │   └── index.html              # Simple homepage
 ├── static/
 │   └── css/
-├── requirements.txt            # Django + essentials only (pyproject.toml is user-added, not generated)
-└── README.md
+├── tests/                       # pytest + factory_boy setup
+│   ├── conftest.py
+│   └── test_example.py
+├── .github/workflows/           # CI/CD automation
+│   └── ci.yml                  # GitHub Actions: tests, linting, coverage
+├── docker-compose.yml           # Local dev: Django + PostgreSQL + Redis
+├── Dockerfile                   # Production-ready container
+├── .dockerignore
+├── .env.example                 # Environment variables template
+├── .gitignore
+├── .editorconfig
+├── .pre-commit-config.yaml      # Code quality hooks (black, ruff)
+├── requirements.txt             # Production deps: Django, psycopg2, whitenoise, gunicorn
+├── requirements-dev.txt         # Dev deps: pytest, factory-boy, black, ruff
+└── README.md                    # Comprehensive setup & deployment guide
 
 # quickscale/ (embeddable via manual subtree)
 # Commands live in DECISIONS.md; CLI helpers sit in the Post-MVP backlog.
@@ -112,15 +129,30 @@ myapp/
     └── quickscale_core/
 ```
 
- **Key Point**: The generated project is **yours to own and modify**. QuickScale just gives you a good starting point. For any tie-breakers about what belongs in the MVP vs Post-MVP, see `DECISIONS.md` (authoritative).
+ **Key Point**: The generated project is **production-ready** and **yours to own and modify**. QuickScale provides professional foundations (Docker, PostgreSQL, pytest, CI/CD) matching industry standards, while maintaining full customizability. For tie-breakers about MVP scope, see [DECISIONS.md MVP Feature Matrix](./DECISIONS.md#mvp-feature-matrix-authoritative).
+
+**🎯 Competitive Positioning**: QuickScale generates projects that match SaaS Pegasus and Cookiecutter on production-readiness while offering unique composability advantages. See [COMPETITIVE_ANALYSIS.md](./COMPETITIVE_ANALYSIS.md) for detailed comparison.
 
 ## Key Benefits
 
-- **Shared Updates**: Get security fixes and improvements automatically
-- **Proven Foundations**: Built on battle-tested Django packages (django-allauth, dj-stripe)
-- **Starting Points**: Themes provide foundations you customize for your business
-- **Flexible Frontends**: Same backend, multiple client presentations
-- **Simple Deployment**: Standard Django deployment patterns
+**Production-Ready Foundations** (Match competitors on quality):
+- **Docker & PostgreSQL**: Production-ready containerization and database setup from day one
+- **Security Best Practices**: Environment-based config, secure defaults, proper middleware configuration
+- **Testing Infrastructure**: pytest + factory_boy with CI/CD via GitHub Actions
+- **Professional Tooling**: Pre-commit hooks (black, ruff, isort) for code quality
+
+**Unique QuickScale Advantages** (Beat competitors on architecture):
+- **Shared Updates**: Get security fixes and improvements across all client projects via git subtree
+- **Composable Modules**: Reuse authentication, billing, teams across projects (Post-MVP)
+- **Agency-Optimized**: Build multiple client SaaS apps with consistent, reusable foundations
+- **Full Ownership**: Generated projects are yours to modify with no vendor lock-in
+
+**Django Ecosystem** (Built on proven foundations):
+- **Battle-Tested Packages**: django-allauth (auth), dj-stripe (payments), django-anymail (email)
+- **Standard Patterns**: No magic, no custom abstractions—just excellent Django
+- **Simple Deployment**: Standard Django deployment patterns, cloud-agnostic
+
+See [COMPETITIVE_ANALYSIS.md](./COMPETITIVE_ANALYSIS.md) for detailed comparison with SaaS Pegasus, Cookiecutter, and alternatives.
 
 ## QuickScale Philosophy: Enabler, Not Complete Solutions
 
