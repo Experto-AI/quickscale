@@ -131,12 +131,25 @@ This matrix is the authoritative source of truth for what is IN / OUT / PLANNED 
 
 | Feature / Area | MVP Status | Notes / Decision Reference |
 |---|---:|---|
+| **CORE CLI & SCAFFOLDING** |
 | `quickscale init <project>` (single command, no flags) | IN | Core MVP entrypoint. (See: Phase 1.2.3) |
 | Generate Django starter (manage.py, settings.py, urls.py, wsgi/asgi, templates, requirements.txt) | IN | Starter uses `requirements.txt`. Generated projects do NOT include `pyproject.toml`. |
 | `quickscale_core` package (monolithic, src layout) | IN | Treat `quickscale_core` as a regular monolithic package in MVP (explicit `__init__.py`). See Section: "Core package shape" in this file. |
 | `quickscale_core` embedding via git-subtree (manual documented workflow) | IN (manual) | Manual subtree commands are documented and supported; embedding is opt-in and advanced. |
 | CLI git-subtree wrapper commands (`embed-core`, `update-core`, `sync-push`) | PLANNED | Post-MVP backlog; implement only after manual workflows demonstrate sustained demand. |
 | Settings inheritance from `quickscale_core` into generated project | OPTIONAL | Default generated project uses standalone `settings.py`. If user explicitly embeds `quickscale_core`, optional settings inheritance is allowed and documented. |
+| **PRODUCTION-READY FOUNDATIONS (Competitive Requirement)** | | **See [COMPETITIVE_ANALYSIS.md §1-3](../COMPETITIVE_ANALYSIS.md#-critical-for-mvp-viability-must-have)** |
+| Docker setup (Dockerfile + docker-compose.yml) | IN | Production-ready multi-stage Dockerfile + local dev docker-compose with PostgreSQL & Redis services. Match Cookiecutter quality. |
+| PostgreSQL configuration (dev + production) | IN | Split settings: SQLite for local dev, PostgreSQL for production. DATABASE_URL env var support via python-decouple/django-environ. |
+| Environment-based configuration (.env + split settings) | IN | settings/base.py, settings/local.py, settings/production.py pattern. Secure SECRET_KEY loading from environment. |
+| Security best practices | IN | ALLOWED_HOSTS, security middleware, SECURE_SSL_REDIRECT, SESSION_COOKIE_SECURE in production settings. Sentry scaffolding (commented). |
+| WhiteNoise static files configuration | IN | Production static file serving without CDN complexity. |
+| Gunicorn WSGI server | IN | Production-ready WSGI server in requirements.txt. |
+| pytest + factory_boy test setup | IN | Modern testing with pytest-django, factory_boy for fixtures. Sample tests demonstrating patterns. |
+| GitHub Actions CI/CD pipeline | IN | .github/workflows/ci.yml for automated testing on push/PR. Test matrix: Python 3.10-3.12, Django 4.2-5.0. |
+| Pre-commit hooks (black, ruff, isort) | IN | .pre-commit-config.yaml for code quality enforcement before commits. |
+| Comprehensive README with setup instructions | IN | README.md.j2 with Docker setup, local dev, testing, deployment instructions. |
+| **MODULES & DISTRIBUTION** |
 | `quickscale_modules/` (extracted reusable apps in personal monorepo) | OPTIONAL / NOT REQUIRED | Allowed as a local convenience for personal monorepos, but NOT a required MVP artifact. Packaging for distribution is Post-MVP. |
 | `quickscale_themes/` packaged themes | OUT (Post-MVP) | Themes become packages in Post-MVP only. |
 | YAML declarative configuration (`quickscale.yml`) | OUT (Post-MVP) | Deferred. |
@@ -145,6 +158,9 @@ This matrix is the authoritative source of truth for what is IN / OUT / PLANNED 
 
 Notes:
 - This table is authoritative for release planning and documentation. If any document needs to show an example layout or convenience (e.g., `quickscale_modules/` appearing in a monorepo example), it must note that the item is "optional/personal-monorepo convenience" and point readers to this matrix for MVP status.
+
+**Competitive Rationale for Production-Ready Foundations**:
+The production-ready foundations (Docker, PostgreSQL, pytest, CI/CD, etc.) are classified as **P0 - Critical for MVP Viability** based on competitive analysis. Every successful Django boilerplate (SaaS Pegasus, Cookiecutter, Apptension) provides these as table stakes. Without them, QuickScale would be perceived as a toy project rather than a professional tool suitable for agency work. These requirements ensure QuickScale matches competitors on production-readiness while maintaining its unique composability advantage. See [COMPETITIVE_ANALYSIS.md "What Must Be Incorporated"](./COMPETITIVE_ANALYSIS.md#what-quickscale-must-incorporate-from-competitors) for detailed analysis.
 
 Authoritative policy (tie-breakers)
 ----------------------------------

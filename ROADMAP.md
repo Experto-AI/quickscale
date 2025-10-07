@@ -71,24 +71,31 @@ Need the narrative backdrop? Jump to [`QUICKSCALE.md`](./QUICKSCALE.md#evolution
 
 ## **MVP Roadmap: v0.51.0 → v1.0.0**
 
-**🎯 Objective**: Build a simple project generator that creates minimal Django starter projects you can use for client work immediately.
+**🎯 Objective**: Build a simple project generator that creates **production-ready** Django starter projects you can use for client work immediately.
 
-**MVP Scope**: Minimal CLI + basic scaffolding. Git subtree is the ONLY MVP distribution mechanism (documented manual workflow). CLI wrapper helpers for subtree operations are deferred to Post-MVP.
+**MVP Scope**: Minimal CLI + production-ready scaffolding. Git subtree is the ONLY MVP distribution mechanism (documented manual workflow). CLI wrapper helpers for subtree operations are deferred to Post-MVP.
 
 **Success Criteria (v1.0.0)**:
-- `quickscale init myapp` generates working Django project in < 30 seconds
+- `quickscale init myapp` generates **production-ready** Django project in < 30 seconds
+- Generated project includes Docker, PostgreSQL, pytest, CI/CD, security best practices
 - Generated project runs with `python manage.py runserver` immediately
 - Generated project is 100% owned by user (no QuickScale dependencies by default)
+- Generated project is **deployable to production** without major reconfiguration
 - Git subtree workflow is documented for advanced users who want code sharing
 - Can build a real client project using the generated starter
+
+**🎯 Competitive Positioning**: Match competitors (SaaS Pegasus, Cookiecutter) on production-ready foundations while maintaining QuickScale's unique composability advantage. See [COMPETITIVE_ANALYSIS.md "What Must Be Incorporated"](./COMPETITIVE_ANALYSIS.md#what-quickscale-must-incorporate-from-competitors) for detailed rationale.
 
 **IMPORTANT SCOPE CLARIFICATIONS** (from DECISIONS.md):
 - ✅ Generated projects use standalone `settings.py` (NO automatic inheritance from quickscale_core)
 - ✅ Git subtree is documented but MANUAL (no CLI wrapper commands in MVP)
 - ✅ `quickscale_modules/` extraction is optional/personal-monorepo pattern (NOT auto-generated)
+- ✅ **Production-ready foundations**: Docker, PostgreSQL, .env, security, pytest, CI/CD (competitive requirement)
 - ❌ NO `backend_extensions.py` auto-generation (users add manually if needed)
 - ❌ NO YAML configuration system
 - ❌ NO CLI commands beyond `quickscale init`
+
+**Competitive Insight**: Every competitor (SaaS Pegasus, Cookiecutter, Apptension) provides production-ready defaults. Without these, QuickScale won't be taken seriously by agencies and professional developers. See [COMPETITIVE_ANALYSIS.md §1-3](./COMPETITIVE_ANALYSIS.md#-critical-for-mvp-viability-must-have) for P0 requirements.
 
 **Integration Note**: See [Personal Toolkit workflow in DECISIONS.md](./DECISIONS.md#integration-note-personal-toolkit-git-subtree) for the canonical git subtree commands and CLI wrapper roadmap.
 
@@ -312,36 +319,51 @@ print(template.render(project_name='testproject'))
 
 ---
 
-### **Task 0.53.1: Core Django Project Templates**
-**Priority**: Create the essential Django project files
+### **Task 0.53.1: Core Django Project Templates (Production-Ready)**
+**Priority**: Create essential Django project files with **production-ready configurations**
+
+**🎯 Competitive Requirement**: Match Cookiecutter/Pegasus on production-ready defaults (see [COMPETITIVE_ANALYSIS.md §1](./COMPETITIVE_ANALYSIS.md#1-production-ready-django-foundations))
 
 **Tasks**:
 - [ ] **Create `manage.py.j2` template**
   - [ ] Standard Django manage.py with `{{project_name}}` variable
   - [ ] Executable permissions reminder in documentation
-- [ ] **Create `settings.py.j2` template**
-  - [ ] **IMPORTANT**: Standalone settings (NO imports from quickscale_core)
-  - [ ] Basic Django settings: SECRET_KEY, DEBUG, ALLOWED_HOSTS, INSTALLED_APPS
-  - [ ] Database config (default SQLite)
-  - [ ] Static files config, templates config
-  - [ ] Use `{{project_name}}` template variable appropriately
+- [ ] **Create split settings templates (production-grade)**
+  - [ ] **`settings/__init__.py.j2`** - Settings package marker
+  - [ ] **`settings/base.py.j2`** - Shared settings (INSTALLED_APPS, MIDDLEWARE, templates, etc.)
+    - [ ] **IMPORTANT**: Standalone settings (NO imports from quickscale_core)
+    - [ ] Use python-decouple or django-environ for environment variables
+    - [ ] Secure SECRET_KEY loading from environment
+    - [ ] Proper ALLOWED_HOSTS configuration
+    - [ ] Django security middleware configured
+    - [ ] Static files with WhiteNoise configuration
+    - [ ] Logging configuration (console + file handlers)
+  - [ ] **`settings/local.py.j2`** - Development settings
+    - [ ] DEBUG = True
+    - [ ] SQLite database for quick local dev
+    - [ ] Django Debug Toolbar enabled (optional)
+  - [ ] **`settings/production.py.j2`** - Production settings
+    - [ ] DEBUG = False via environment variable
+    - [ ] PostgreSQL database configuration
+    - [ ] Security settings (SECURE_SSL_REDIRECT, SESSION_COOKIE_SECURE, etc.)
+    - [ ] Sentry integration scaffolding (commented)
 - [ ] **Create `urls.py.j2` template**
-  - [ ] Minimal URL configuration with admin route
+  - [ ] Admin route
   - [ ] Root route pointing to index view
-- [ ] **Create `wsgi.py.j2` template**
-  - [ ] Standard Django WSGI application
-  - [ ] Use `{{project_name}}.settings` for settings module
-- [ ] **Create `asgi.py.j2` template**
-  - [ ] Standard Django ASGI application
-  - [ ] Use `{{project_name}}.settings` for settings module
+  - [ ] Debug toolbar URLs (if DEBUG=True)
+- [ ] **Create `wsgi.py.j2` and `asgi.py.j2` templates**
+  - [ ] Standard Django WSGI/ASGI applications
+  - [ ] Environment-based settings module selection
 - [ ] **Create `__init__.py.j2` template**
   - [ ] Empty or minimal package marker
 
-**Deliverable**: Core Django project templates ready for rendering
+**Deliverable**: **Production-ready** Django project templates
 
-**Validation**: Templates can be loaded by Jinja2; variables are correctly parameterized
+**Validation**: Generated settings work in both dev and production; security best practices included
 
-**Reference**: See [SCAFFOLDING.md §5.1 (MVP Generated Output)](./SCAFFOLDING.md#51-mvp-ultra-minimal-django-project) for what the output should look like.
+**Competitive Benchmark**: Should match or exceed Cookiecutter's settings quality
+
+**Reference**: See [SCAFFOLDING.md §5.1](./SCAFFOLDING.md#51-mvp-ultra-minimal-django-project) + [COMPETITIVE_ANALYSIS.md §1](./COMPETITIVE_ANALYSIS.md#1-production-ready-django-foundations)
 
 ---
 
@@ -368,32 +390,65 @@ print(template.render(project_name='testproject'))
 
 ---
 
-### **Task 0.53.3: Project Metadata Templates**
-**Priority**: Create supporting files for generated projects
+### **Task 0.53.3: Project Metadata & DevOps Templates**
+**Priority**: Create supporting files with **production-grade DevOps setup**
+
+**🎯 Competitive Requirement**: Match Cookiecutter on DevOps quality (see [COMPETITIVE_ANALYSIS.md §1 & §5](./COMPETITIVE_ANALYSIS.md#5-cicd-pipeline-templates))
 
 **Tasks**:
-- [ ] **Create `requirements.txt.j2` template**
-  - [ ] Django (specify version: e.g., `Django>=5.0,<6.0`)
-  - [ ] Essential packages only (psycopg2-binary for PostgreSQL optional)
-  - [ ] Comment noting this is MVP starter; users can extend
-- [ ] **Create `.gitignore.j2` template**
-  - [ ] Python artifacts (\_\_pycache\_\_, \*.pyc, \*.pyo, .pytest_cache)
-  - [ ] Virtual environments (venv/, env/, .venv/)
-  - [ ] Django artifacts (db.sqlite3, media/)
-  - [ ] IDE files (.vscode/, .idea/, \*.swp)
-  - [ ] Environment files (.env)
-- [ ] **Create `README.md.j2` template for generated projects**
-  - [ ] Project name ({{project_name}})
-  - [ ] Quick start instructions (create venv, install deps, migrate, runserver)
-  - [ ] Next steps guidance
-  - [ ] Optional: link to QuickScale documentation
-- [ ] **Create `.env.example.j2` template (optional)**
-  - [ ] Example environment variables (SECRET_KEY, DEBUG, DATABASE_URL)
+- [ ] **Create `requirements.txt.j2` template (production-ready)**
+  - [ ] Django>=5.0,<6.0
+  - [ ] psycopg2-binary (PostgreSQL driver)
+  - [ ] python-decouple or django-environ (environment config)
+  - [ ] whitenoise (static files in production)
+  - [ ] gunicorn (production WSGI server)
+  - [ ] Comment: "Production dependencies. See requirements-dev.txt for development"
+- [ ] **Create `requirements-dev.txt.j2` template**
+  - [ ] pytest, pytest-django, pytest-cov
+  - [ ] factory-boy (test data generation)
+  - [ ] black, ruff, isort (code quality)
+  - [ ] django-debug-toolbar (optional)
+- [ ] **Create Docker templates**
+  - [ ] **`Dockerfile.j2`** - Production-ready multi-stage build
+    - [ ] Python slim base image
+    - [ ] Non-root user
+    - [ ] Optimized layer caching
+  - [ ] **`docker-compose.yml.j2`** - Local development setup
+    - [ ] Django service with volume mounts
+    - [ ] PostgreSQL service with persistent volume
+    - [ ] Redis service (for future Celery)
+  - [ ] **`.dockerignore.j2`** - Exclude unnecessary files
+- [ ] **Create `.env.example.j2` template**
+  - [ ] SECRET_KEY=your-secret-key-here
+  - [ ] DEBUG=True
+  - [ ] DATABASE_URL=postgresql://user:password@localhost:5432/dbname
+  - [ ] ALLOWED_HOSTS=localhost,127.0.0.1
   - [ ] Comments explaining each variable
+- [ ] **Create `.gitignore.j2` template**
+  - [ ] Python artifacts (__pycache__, *.pyc, .pytest_cache)
+  - [ ] Virtual environments (venv/, env/, .venv/)
+  - [ ] Django artifacts (db.sqlite3, media/, staticfiles/)
+  - [ ] IDE files (.vscode/, .idea/, *.swp)
+  - [ ] Environment files (.env, .env.local)
+  - [ ] Docker volumes
+- [ ] **Create `README.md.j2` template (comprehensive)**
+  - [ ] Project name and description
+  - [ ] Prerequisites (Python, Docker, PostgreSQL)
+  - [ ] **Local Development Setup** (with Docker and without)
+  - [ ] Running tests instructions
+  - [ ] Deployment instructions (basic)
+  - [ ] Project structure overview
+  - [ ] Link to QuickScale documentation
+- [ ] **Create `.editorconfig.j2` template**
+  - [ ] Consistent editor settings (indent, line endings, charset)
 
-**Deliverable**: Complete set of project metadata templates
+**Deliverable**: **Production-ready** project metadata and DevOps configuration
 
-**Validation**: All templates exist and render correctly
+**Validation**: Docker setup works; .env loads correctly; README instructions are complete
+
+**Competitive Benchmark**: Should match Cookiecutter's production-readiness
+
+**Reference**: [COMPETITIVE_ANALYSIS.md §1 (Production Foundations)](./COMPETITIVE_ANALYSIS.md#1-production-ready-django-foundations)
 
 ---
 
@@ -683,14 +738,19 @@ def init(project_name: str):
 
 ---
 
-## **Release v0.56.0: Quality & Testing**
+## **Release v0.56.0: Quality, Testing & CI/CD**
 
-**Priority**: Ensure MVP is robust and production-ready
+**Priority**: Ensure MVP is robust, production-ready, and professionally packaged
 
-**Objective**: Comprehensive testing, quality checks, and validation.
+**Objective**: Comprehensive testing, quality checks, CI/CD automation, and validation.
+
+**🎯 Competitive Requirement**: Match Cookiecutter on testing setup and CI/CD (see [COMPETITIVE_ANALYSIS.md §3 & §5](./COMPETITIVE_ANALYSIS.md#3-testing--quality-infrastructure))
 
 **✅ Verifiable Improvement**:
 - Test coverage >80% for quickscale_core, >75% for quickscale_cli
+- pytest with factory_boy configured in generated projects
+- GitHub Actions CI/CD pipeline working for generated projects
+- Pre-commit hooks configured and documented
 - All code quality checks pass (ruff, black, mypy optional)
 - Integration tests pass (full workflow from CLI to working project)
 - Cross-platform testing (Linux, macOS, Windows if possible)
@@ -745,8 +805,10 @@ tox  # or manually test with py310, py311, py312
 
 ---
 
-### **Task 0.56.2: Code Quality & Coverage**
-**Priority**: Ensure code quality meets standards
+### **Task 0.56.2: Code Quality, Coverage & CI/CD Templates**
+**Priority**: Ensure code quality meets professional standards + add CI/CD to generated projects
+
+**🎯 Competitive Requirement**: Generated projects must include CI/CD like Cookiecutter (see [COMPETITIVE_ANALYSIS.md §5](./COMPETITIVE_ANALYSIS.md#5-cicd-pipeline-templates))
 
 **Tasks**:
 - [ ] **Achieve test coverage targets**
@@ -757,14 +819,39 @@ tox  # or manually test with py310, py311, py312
   - [ ] Run `ruff check .` - no errors
   - [ ] Run `black --check .` - code formatted
   - [ ] Run `mypy .` - type checking passes (optional but recommended)
+- [ ] **Create CI/CD templates for generated projects**
+  - [ ] **`.github/workflows/ci.yml.j2`** - GitHub Actions workflow
+    - [ ] Run tests on push/PR
+    - [ ] Test matrix: Python 3.10, 3.11, 3.12
+    - [ ] Test matrix: Django 4.2, 5.0
+    - [ ] Run linters (ruff, black)
+    - [ ] Upload coverage reports
+  - [ ] **`.github/workflows/deploy.yml.j2`** - Deployment workflow (basic example)
+  - [ ] **`.pre-commit-config.yaml.j2`** - Pre-commit hooks
+    - [ ] black (code formatting)
+    - [ ] ruff (linting)
+    - [ ] trailing-whitespace, end-of-file-fixer
+- [ ] **Create pytest templates for generated projects**
+  - [ ] **`pytest.ini.j2`** or **`pyproject.toml`** pytest section
+    - [ ] Configure test paths
+    - [ ] Django settings module
+    - [ ] Coverage settings (>80% requirement)
+  - [ ] **`conftest.py.j2`** - Pytest fixtures
+    - [ ] Example factory fixtures using factory_boy
+    - [ ] Database fixtures
+  - [ ] **`tests/test_example.py.j2`** - Example test demonstrating patterns
 - [ ] **Document coverage gaps**
   - [ ] Identify untested edge cases
   - [ ] Document why certain code is excluded from coverage (if any)
   - [ ] Create follow-up tasks for improving coverage
 
-**Deliverable**: High-quality, well-tested codebase
+**Deliverable**: High-quality, well-tested codebase + CI/CD templates for generated projects
 
-**Validation**: All quality checks pass; coverage targets met
+**Validation**: All quality checks pass; generated projects have working CI/CD pipeline
+
+**Competitive Benchmark**: Generated projects should have CI/CD quality matching Cookiecutter
+
+**Reference**: [COMPETITIVE_ANALYSIS.md §3 (Testing Infrastructure)](./COMPETITIVE_ANALYSIS.md#3-testing--quality-infrastructure) and [§5 (CI/CD)](./COMPETITIVE_ANALYSIS.md#5-cicd-pipeline-templates)
 
 ---
 
@@ -1023,15 +1110,26 @@ twine upload quickscale_core/dist/* quickscale_cli/dist/*
 
 ## **MVP Deliverables Summary (v1.0.0)**
 
-### **✅ v1.0.0 Deliverables - Personal Toolkit**
+### **✅ v1.0.0 Deliverables - Personal Toolkit (Production-Ready)**
 - [ ] 📦 `quickscale_core` package with minimal utilities and template engine
 - [ ] 📦 `quickscale_cli` package with `quickscale init` command
-- [ ] 🏗️ Project scaffolding creating minimal Django starter
+- [ ] 🏗️ Project scaffolding creating **production-ready** Django starter with:
+  - [ ] ✅ Docker setup (docker-compose.yml + Dockerfile)
+  - [ ] ✅ PostgreSQL configuration (development + production)
+  - [ ] ✅ Environment-based settings (.env + split settings)
+  - [ ] ✅ Security best practices (SECRET_KEY, ALLOWED_HOSTS, middleware)
+  - [ ] ✅ pytest + factory_boy test setup
+  - [ ] ✅ GitHub Actions CI/CD pipeline
+  - [ ] ✅ Pre-commit hooks (black, ruff, isort)
+  - [ ] ✅ WhiteNoise static files configuration
+  - [ ] ✅ Gunicorn WSGI server for production
 - [ ] 🖥️ Ultra-simple CLI: `quickscale init myapp`
 - [ ] 📁 Git subtree workflow documented for advanced users
 - [ ] ✅ Comprehensive testing (>75% coverage)
 - [ ] 📖 User and developer documentation
 - [ ] ✅ **VALIDATION: Build 1 real client project successfully**
+
+**🎯 Competitive Achievement**: Match SaaS Pegasus and Cookiecutter on production-ready foundations while maintaining composability advantage. See [COMPETITIVE_ANALYSIS.md Critical Path](./COMPETITIVE_ANALYSIS.md#critical-path-to-competitiveness).
 
 ### **Explicit MVP Limitations (By Design)**
 See [MVP Feature Matrix in DECISIONS.md](./DECISIONS.md#mvp-feature-matrix-authoritative) for authoritative list.
@@ -1070,12 +1168,19 @@ See [MVP Feature Matrix in DECISIONS.md](./DECISIONS.md#mvp-feature-matrix-autho
 
 Each release adds one proven module or significant improvement based on real needs.
 
-**Example Release Sequence**:
-- **v1.1.0**: First extracted module (e.g., `quickscale_modules/auth`)
-- **v1.2.0**: Second module (e.g., `quickscale_modules/payments`)
-- **v1.3.0**: CLI git subtree helpers (if proven necessary)
-- **v1.4.0**: YAML configuration (if proven useful)
-- **v1.x.0**: Additional modules as needed
+**Example Release Sequence** (aligned with competitive priorities):
+- **v1.1.0**: `quickscale_modules.auth` - django-allauth integration (P1 - Critical for SaaS)
+- **v1.2.0**: `quickscale_modules.billing` - dj-stripe subscriptions (P1 - Core monetization)
+- **v1.3.0**: `quickscale_modules.teams` - Multi-tenancy patterns (P1 - B2B requirement)
+- **v1.4.0**: `quickscale_modules.notifications` - Email infrastructure (P2 - Common need)
+- **v1.5.0**: CLI git subtree helpers (if proven necessary from usage)
+- **v1.6.0**: HTMX frontend variant template (P2 - Differentiation)
+- **v1.7.0**: React frontend variant template (P2 - SPA option)
+- **v1.x.0**: Additional modules based on real client needs
+
+**🎯 Competitive Parity Goal (v1.3.0)**: At this point, QuickScale matches SaaS Pegasus on core features (auth, billing, teams) while offering superior architecture (composability, shared updates). See [COMPETITIVE_ANALYSIS.md Timeline](./COMPETITIVE_ANALYSIS.md#timeline-reality-check).
+
+**Note**: Prioritization is based on competitive analysis. Adjust based on YOUR actual client needs.
 
 ---
 
@@ -1111,12 +1216,45 @@ Each release adds one proven module or significant improvement based on real nee
 
 **Don't build these upfront. Build them when you actually need them 2-3 times.**
 
-#### **Likely First Modules** (based on common client needs):
-- **auth**: If you keep building custom user models + authentication (wraps django-allauth)
-- **payments**: If multiple clients need Stripe integration (wraps dj-stripe)
-- **billing**: If you keep building subscription logic
-- **api**: If multiple clients need REST APIs (wraps Django REST framework)
-- **notifications**: If you keep adding email/SMS features (wraps django-anymail)
+#### **Prioritized Module Development Sequence** (based on competitive analysis):
+
+**Phase 2 Priorities** (see [COMPETITIVE_ANALYSIS.md Module Roadmap](./COMPETITIVE_ANALYSIS.md#phase-2-post-mvp-v1---saas-essentials)):
+
+1. **🔴 P1: `quickscale_modules.auth`** (First module)
+   - Wraps django-allauth with social auth providers
+   - Custom User model patterns
+   - Email verification workflows
+   - Account management views
+   - **Rationale**: Every SaaS needs auth; Pegasus proves django-allauth is correct choice
+
+2. **🔴 P1: `quickscale_modules.billing`** (Second module)
+   - Wraps dj-stripe for Stripe subscriptions
+   - Plans, pricing tiers, trials
+   - Webhook handling with logging
+   - Invoice management
+   - **Rationale**: Core SaaS monetization; Stripe-only reduces complexity
+
+3. **🔴 P1: `quickscale_modules.teams`** (Third module)
+   - Multi-tenancy patterns (User → Team → Resources)
+   - Role-based permissions (Owner, Admin, Member)
+   - Invitation system with email tokens
+   - Row-level security query filters
+   - **Rationale**: Most B2B SaaS requires team functionality
+
+4. **🟡 P2: `quickscale_modules.notifications`** (Fourth module)
+   - Wraps django-anymail for multiple email backends
+   - Transactional email templates
+   - Async email via Celery
+   - Email tracking scaffolding
+
+5. **🟡 P2: `quickscale_modules.api`** (Fifth module, if needed)
+   - Wraps Django REST framework
+   - Authentication patterns
+   - Serializer base classes
+
+**Extraction Rule**: Only build after using 2-3 times in real client projects. Don't build speculatively.
+
+**Competitive Context**: This sequence matches successful competitors' feature prioritization while maintaining QuickScale's reusability advantage. See [COMPETITIVE_ANALYSIS.md Strategic Recommendations](./COMPETITIVE_ANALYSIS.md#strategic-recommendations).
 
 #### **Admin Module Scope Exploration (Under Evaluation)**
 **Note**: Admin module scope is NOT confirmed for Phase 2. See ROADMAP admin module tracking tasks below.
