@@ -1,6 +1,6 @@
 # QuickScale Development Roadmap
 
-<!-- 
+<!--
 ROADMAP.md - Development Timeline and Implementation Plan
 
 PURPOSE: This document outlines the development timeline, implementation phases, and specific tasks for building QuickScale.
@@ -25,6 +25,13 @@ WHAT NOT TO ADD HERE:
 - Strategic rationale or competitive analysis (belongs in QUICKSCALE.md)
 - Technical specifications or architectural decisions (belongs in DECISIONS.md)
 - User documentation or getting started guides (belongs in README.md)
+- Directory structures or scaffolding details (belongs in SCAFFOLDING.md)
+
+RELATIONSHIP TO OTHER DOCUMENTS:
+- DECISIONS.md is authoritative for technical scope (MVP Feature Matrix, CLI commands, etc.)
+- SCAFFOLDING.md is authoritative for directory structures and layouts
+- This roadmap implements what DECISIONS.md defines
+- When in doubt, update DECISIONS.md first, then this roadmap
 
 TARGET AUDIENCE: Development team, project managers, stakeholders tracking progress
 -->
@@ -33,453 +40,1294 @@ TARGET AUDIENCE: Development team, project managers, stakeholders tracking progr
 
 ## 🚀 **EVOLUTION-ALIGNED ROADMAP**
 
-Execution details live here; the "personal toolkit first, community platform later" narrative stays in [QUICKSCALE.md](./QUICKSCALE.md#evolution-strategy-personal-toolkit-first). Treat the [MVP Feature Matrix](./DECISIONS.md#mvp-feature-matrix-authoritative) as the scope source of truth.
+Execution details live here; the "personal toolkit first, community platform later" narrative stays in [QUICKSCALE.md](./QUICKSCALE.md#evolution-strategy-personal-toolkit-first).
+
+**AUTHORITATIVE SCOPE REFERENCE**: The [MVP Feature Matrix in DECISIONS.md](./DECISIONS.md#mvp-feature-matrix-authoritative) is the single source of truth for what's IN/OUT/PLANNED. When this roadmap conflicts with DECISIONS.md, DECISIONS.md wins.
 
 ### **📋 Current State Assessment**
+- ✅ **Current Version**: v0.51.0
 - ✅ **Evolution Strategy Defined**: Start simple, grow organically
-- ✅ **MVP Scope Clarified**: Simple CLI + project scaffolding + git subtree
+- ✅ **MVP Scope Clarified**: Simple CLI + project scaffolding + git subtree documentation
 - ✅ **Legacy Backup Available**: Complete v0.41.0 preserved in `quickscale-legacy/`
 - ✅ **Post-MVP Path Clear**: Module/theme packages when proven necessary
-- 🔄 **Ready to Build**: Clear MVP requirements established
+- 🔄 **Next Release**: v0.52.0 - Project Foundation
+
+### **🎯 Release Strategy**
+Each minor version (0.x.0) delivers a verifiable improvement that builds toward MVP:
+- **v0.52.0**: Package infrastructure (installable packages with tests)
+- **v0.53.0**: Template system (working Jinja2 templates)
+- **v0.54.0**: Project generator (can generate Django projects)
+- **v0.55.0**: CLI implementation (`quickscale init` command works)
+- **v0.56.0**: Quality & testing (comprehensive test suite)
+- **v0.57.0**: Documentation complete (user guides ready)
+- **v0.58.0**: MVP validation (proven with real project)
+- **v1.0.0**: MVP release (production-ready personal toolkit)
+- **v1.x.0**: Post-MVP features (modules, themes, automation)
 
 ### **Evolution Context Reference**
 Need the narrative backdrop? Jump to [`QUICKSCALE.md`](./QUICKSCALE.md#evolution-strategy-personal-toolkit-first) and come back here for the tasks.
 
 ---
 
-## **Phase 1: MVP - Personal Toolkit** 
+## **MVP Roadmap: v0.51.0 → v1.0.0**
 
 **🎯 Objective**: Build a simple project generator that creates minimal Django starter projects you can use for client work immediately.
 
-**MVP Scope**: Minimal CLI + basic scaffolding. Git subtree remains an advanced workflow documented in `DECISIONS.md`; any CLI helpers stay deferred to the Post-MVP backlog and are not part of the initial `quickscale init` release.
+**MVP Scope**: Minimal CLI + basic scaffolding. Git subtree is the ONLY MVP distribution mechanism (documented manual workflow). CLI wrapper helpers for subtree operations are deferred to Post-MVP.
 
-**Success Criteria**:
+**Success Criteria (v1.0.0)**:
 - `quickscale init myapp` generates working Django project in < 30 seconds
-- Generated project can be customized for any client need
-- Code sharing via git subtree is documented; CLI wrapper helpers remain on the Post-MVP backlog per `DECISIONS.md`, so MVP relies on the manual commands captured there
+- Generated project runs with `python manage.py runserver` immediately
+- Generated project is 100% owned by user (no QuickScale dependencies by default)
+- Git subtree workflow is documented for advanced users who want code sharing
+- Can build a real client project using the generated starter
 
-**Integration Note**: See [Personal Toolkit workflow in DECISIONS.md](./DECISIONS.md#integration-note-personal-toolkit-git-subtree) for the canonical git subtree commands, extraction patterns, and CLI wrapper roadmap.
+**IMPORTANT SCOPE CLARIFICATIONS** (from DECISIONS.md):
+- ✅ Generated projects use standalone `settings.py` (NO automatic inheritance from quickscale_core)
+- ✅ Git subtree is documented but MANUAL (no CLI wrapper commands in MVP)
+- ✅ `quickscale_modules/` extraction is optional/personal-monorepo pattern (NOT auto-generated)
+- ❌ NO `backend_extensions.py` auto-generation (users add manually if needed)
+- ❌ NO YAML configuration system
+- ❌ NO CLI commands beyond `quickscale init`
 
-**NOT in MVP:**
+**Integration Note**: See [Personal Toolkit workflow in DECISIONS.md](./DECISIONS.md#integration-note-personal-toolkit-git-subtree) for the canonical git subtree commands and CLI wrapper roadmap.
+
+**NOT in MVP** (see [MVP Feature Matrix](./DECISIONS.md#mvp-feature-matrix-authoritative) for authoritative list):
 - ❌ Module packages (auth, payments, billing)
-- ❌ Theme packages  
+- ❌ Theme packages
 - ❌ YAML configuration system
 - ❌ PyPI distribution
 - ❌ Marketplace features
 - ❌ Multiple template options
+- ❌ CLI wrapper commands for git subtree
 
-### **Phase 1.1: Foundation Setup** 
+---
 
-#### **1.1.1 Legacy Analysis (FIRST)**
-**Priority**: Understand what to preserve before building new architecture
-**Decision Basis**: `DECISIONS.md` keeps legacy consolidation guidance authoritative; during this phase maintainers must create the `legacy/analysis/` directory and populate it with fresh findings rather than assuming prior work shipped.
+## **Release v0.52.0: Project Foundation**
 
-**Action Items (concrete)**:
-- [ ] Inventory deprecated/archived QuickScale code (e.g. v0.41.0 archive) and associated scripts/docs into `legacy/analysis/`.
-- [ ] For each archived artifact, record: purpose, test coverage, current compatibility, and risks of reuse.
-- [ ] Identify reusable pieces (templates, utilities, docs) and create small follow-up tasks to either migrate, adapt, or retire them.
-- [ ] Produce a short report `legacy/analysis/README.md` with recommended items to re-use and a small migration plan (one-page).
+**Priority**: Establish development infrastructure before building features
 
-**Goal**: Ensure we salvage useful work from prior QuickScale versions instead of reimplementing proven pieces. This is an analysis task; migration/porting work should be split into explicit follow-up tasks based on the findings.
+**Objective**: Set up the foundational project structure, tooling, and development environment that all subsequent phases depend on.
 
-#### **1.1.2 Repository Structure Setup**
-**Priority**: Create basic package structure following DECISIONS.md
+**✅ Verifiable Improvement**:
+- `quickscale_core` and `quickscale_cli` packages are installable via `pip install -e`
+- `pytest` runs successfully (even with 0 tests)
+- `quickscale --version` and `quickscale --help` work
+- Code quality checks pass (`ruff check .`, `black --check .`)
+- All package metadata is correct and installable
 
-- [ ] **Create `quickscale_core/` package directory with src layout**
- - [ ] **Create `src/quickscale_core/` source directory structure**
-- [ ] **Create `quickscale_core/tests/` directory outside src/**
-- [ ] **Create `docs/` and `examples/` directories**
+**Release Validation**:
+```bash
+# Test installation
+pip install -e quickscale_core/
+pip install -e quickscale_cli/
 
-**Deliverable**: Basic directory structure per DECISIONS.md standards. Use the authoritative layout in [SCAFFOLDING.md §3](./SCAFFOLDING.md#mvp-structure) rather than duplicating trees here.
+# Verify imports
+python -c "import quickscale_core; print(quickscale_core.__version__)"
 
-**Note**: `schemas/` directory (YAML config schemas) is Post-MVP and not needed for Phase 1.
+# Verify CLI
+quickscale --version
+quickscale --help
 
-#### **1.1.3 MVP Scaffolding Templates (SIMPLE)**
-**Priority**: Create minimal Jinja2 templates for Django project generation
+# Run tests
+pytest quickscale_core/tests/
+pytest quickscale_cli/tests/
 
-- [ ] **Create basic Django project template structure**
-- [ ] **Create `manage.py` template**
- - [ ] **Create `settings.py` template; default standalone settings.py (optional quickscale_core import only when user opts to embed)**
-- [ ] **Create `urls.py` template**
-- [ ] **Create simple homepage template**
-- [ ] **Create `requirements.txt` template (Django + essentials)**
-
-**MVP Templates Needed**: See [SCAFFOLDING.md §3](./SCAFFOLDING.md#mvp-structure) for the complete template inventory and file layout.
-
-**NO YAML Configuration in MVP**: Configuration system is deferred to Post-MVP (TBD if needed).
-
-**Deliverable**: Working templates that generate minimal Django project
-
-### **Phase 1.2: Core Implementation**
-
-#### **1.2.1 Project Scaffolding System (MVP - SIMPLIFIED)**
-**Priority**: Generate minimal Django projects
-
-- [ ] **Create `ProjectGenerator` class for basic scaffolding**
-- [ ] **Implement template rendering with Jinja2**
-- [ ] **Generate standard Django project structure**
-- [ ] **Add simple homepage**
-- [ ] **Generate requirements.txt with Django**
-- [ ] **Add README with next steps**
-
-```python
-# quickscale_core/scaffold/generator.py
-class ProjectGenerator:
-    def generate(self, project_name: str, output_path: Path):
-        """Generate minimal Django project"""
-        # Render templates
-        # Create directory structure
-        # Done!
+# Run linters
+ruff check .
+black --check .
 ```
 
-**Deliverable**: Working project generator that creates runnable Django projects
+---
 
-**REMOVED from MVP**: Configuration system (YAML loading, validation) - deferred to Post-MVP
+### **Task 0.52.1: Monorepo Structure Initialization**
+**Priority**: FIRST - Creates workspace for all development
 
-#### **1.2.2 Git Subtree Documentation (advanced/manual workflow)**
-**Priority**: Document git subtree as an advanced/manual workflow for embedding `quickscale_core` into generated projects. Wrapper helpers stay deferred to Post-MVP, so Phase 1 focuses on clear guidance and validation of the manual path.
+**Tasks**:
+- [ ] **Create top-level repository structure**
+  - [ ] Create `quickscale/` monorepo root with README.md, LICENSE, .gitignore
+  - [ ] Initialize git repository
+  - [ ] Create `docs/`, `scripts/`, `legacy/` directories
+  - [ ] Copy v0.41.0 archive to `quickscale-legacy/` if available
+- [ ] **Create package directories**
+  - [ ] Create `quickscale_core/` package root
+  - [ ] Create `quickscale_cli/` package root
+- [ ] **Create documentation directory structure**
+  - [ ] Verify DECISIONS.md, QUICKSCALE.md, ROADMAP.md, SCAFFOLDING.md exist
+  - [ ] Create `legacy/analysis/` for legacy analysis artifacts (see Phase 1.0.2)
 
-- [ ] **Document git subtree workflow for users (manual commands also documented for transparency)**
-- [ ] **Validate the manual embed/update/sync instructions against a generated project**
-- [ ] **Capture common failure modes and recovery steps for manual subtree operations**
+**Deliverable**: Basic monorepo structure ready for package development
 
-**Git Subtree Documentation (For Users)**: Avoid duplicating command snippets here. Link directly to the [canonical workflow in DECISIONS.md](./DECISIONS.md#integration-note-personal-toolkit-git-subtree) and ensure the roadmap tasks track implementation and documentation milestones only.
+**Validation**: `ls -la` shows all expected directories; git repo initialized
 
-**Deliverable**: Git subtree workflow documented in `DECISIONS.md`; any automation remains on the Post-MVP backlog until usage feedback justifies it.
+---
 
-#### **1.2.3 Minimal CLI Command**
-**Priority**: Implement ultra-simple `quickscale init` command
+### **Task 0.52.2: Legacy Analysis (OPTIONAL)**
+**Priority**: Understand what to preserve before building new architecture
 
-- [ ] **Create basic CLI entry point with Click or argparse**
-- [ ] **Implement `quickscale init <project_name>` command (NO FLAGS)**
-- [ ] **Call ProjectGenerator with project name**
-- [ ] **Add basic error handling (project already exists, invalid name)**
-- [ ] **Display success message with next steps**
+**Note**: This is OPTIONAL - only do this if you have previous QuickScale code to analyze. If starting fresh, skip to 0.52.3.
 
+**Decision Basis**: `DECISIONS.md` keeps legacy consolidation guidance authoritative; this phase creates the `legacy/analysis/` directory and populates it with findings.
+
+**Tasks**:
+- [ ] **Inventory legacy QuickScale artifacts**
+  - [ ] Document what exists in `quickscale-legacy/` or v0.41.0 archive
+  - [ ] List all templates, utilities, configs, and scripts
+  - [ ] Note test coverage and current compatibility status
+- [ ] **Evaluate reusability**
+  - [ ] For each artifact, assess: purpose, test coverage, compatibility, reuse risks
+  - [ ] Identify Docker configs, utilities, middleware, deployment scripts worth keeping
+  - [ ] Flag deprecated patterns to avoid
+- [ ] **Document findings**
+  - [ ] Create `legacy/analysis/README.md` with recommended extractions
+  - [ ] List specific files/patterns to migrate (with rationale)
+  - [ ] List patterns to avoid (with rationale)
+  - [ ] Create migration plan (which items to port, when, and how)
+
+**Deliverable**: `legacy/analysis/README.md` with clear migration recommendations
+
+**Validation**: Report exists; team agrees on what to extract (if anything)
+
+**Exit Criteria**: Document created OR explicit decision that no legacy code is worth migrating
+
+---
+
+### **Task 0.52.3: Core Package Setup (`quickscale_core`)**
+**Priority**: Set up the core package infrastructure
+
+**Tasks**:
+- [ ] **Create `quickscale_core/pyproject.toml`**
+  - [ ] Add package metadata (name, version, description, authors)
+  - [ ] Add build system (setuptools, build backend)
+  - [ ] Add dependencies: `Jinja2` (for templates)
+  - [ ] Add dev dependencies: `pytest`, `pytest-cov`, `black`, `ruff`
+  - [ ] Configure package as regular package with `__init__.py` (NOT namespace package)
+- [ ] **Create src layout structure**
+  - [ ] Create `quickscale_core/src/quickscale_core/` directory
+  - [ ] Create `quickscale_core/src/quickscale_core/__init__.py`
+  - [ ] Create `quickscale_core/src/quickscale_core/version.py` with `__version__`
+- [ ] **Create test infrastructure**
+  - [ ] Create `quickscale_core/tests/` directory (outside src)
+  - [ ] Create `quickscale_core/tests/conftest.py` for pytest configuration
+  - [ ] Create `quickscale_core/pytest.ini` or `pyproject.toml` pytest config
+- [ ] **Verify package installability**
+  - [ ] Create virtual environment
+  - [ ] Install package in editable mode: `pip install -e quickscale_core/`
+  - [ ] Verify import works: `python -c "import quickscale_core; print(quickscale_core.__version__)"`
+
+**Deliverable**: Installable `quickscale_core` package with test infrastructure
+
+**Validation**: Package installs successfully; imports work; pytest runs (even with no tests yet)
+
+**Directory Structure Reference**: See [SCAFFOLDING.md §3 (MVP Structure)](./SCAFFOLDING.md#mvp-structure) for authoritative layout.
+
+---
+
+### **Task 0.52.4: CLI Package Setup (`quickscale_cli`)**
+**Priority**: Set up the CLI tool infrastructure
+
+**Tasks**:
+- [ ] **Create `quickscale_cli/pyproject.toml`**
+  - [ ] Add package metadata (name, version, description, authors)
+  - [ ] Add build system (setuptools, build backend)
+  - [ ] Add dependencies: `click` (CLI framework), `quickscale_core` (local reference)
+  - [ ] Add dev dependencies: `pytest`, `pytest-cov`, `black`, `ruff`
+  - [ ] **Configure CLI entry point**: `[project.scripts]` with `quickscale = quickscale_cli.main:cli`
+- [ ] **Create src layout structure**
+  - [ ] Create `quickscale_cli/src/quickscale_cli/` directory
+  - [ ] Create `quickscale_cli/src/quickscale_cli/__init__.py`
+  - [ ] Create `quickscale_cli/src/quickscale_cli/main.py` with basic Click group
+- [ ] **Create test infrastructure**
+  - [ ] Create `quickscale_cli/tests/` directory (outside src)
+  - [ ] Create `quickscale_cli/tests/conftest.py` for pytest configuration
+  - [ ] Create `quickscale_cli/pytest.ini` or `pyproject.toml` pytest config
+- [ ] **Verify CLI installability**
+  - [ ] Install package in editable mode: `pip install -e quickscale_cli/`
+  - [ ] Verify CLI command works: `quickscale --version`
+  - [ ] Verify help works: `quickscale --help`
+
+**Deliverable**: Installable `quickscale_cli` tool with working entry point
+
+**Validation**: `quickscale --version` and `quickscale --help` work
+
+---
+
+### **Task 0.52.5: Development Environment Configuration**
+**Priority**: Set up tooling for code quality and consistency
+
+**Tasks**:
+- [ ] **Create repository-wide configuration**
+  - [ ] Create `.editorconfig` for editor consistency
+  - [ ] Create `.gitignore` for Python, IDEs, OS files
+  - [ ] Create `scripts/lint.sh` for code quality checks
+  - [ ] Create `scripts/test-all.sh` for running all tests
+- [ ] **Set up pre-commit hooks (optional but recommended)**
+  - [ ] Create `.pre-commit-config.yaml` with black, ruff, trailing whitespace
+  - [ ] Document pre-commit setup in contributing guide
+- [ ] **Create development documentation**
+  - [ ] Create `CONTRIBUTING.md` with setup instructions
+  - [ ] Document how to run tests: `pytest quickscale_core/tests/`
+  - [ ] Document how to run linters: `ruff check .`
+  - [ ] Document how to build packages: `python -m build`
+
+**Deliverable**: Consistent development environment with quality tooling
+
+**Validation**: Linters run; tests run; pre-commit works (if enabled)
+
+---
+
+## **Release v0.53.0: Template System**
+
+**Priority**: Create Jinja2 templates that will be used to generate Django projects
+
+**Objective**: Build the minimal set of templates needed to generate a working Django starter project.
+
+**✅ Verifiable Improvement**:
+- All Jinja2 templates exist and can be loaded
+- Templates render correctly with sample data
+- Generated output is valid (settings.py is valid Python, HTML is valid, etc.)
+- Template tests pass with >90% coverage
+- All required Django project files are templated
+
+**Release Validation**:
+```bash
+# Test template rendering
+pytest quickscale_core/tests/test_scaffold/test_templates.py -v
+
+# Verify all templates exist
+ls quickscale_core/src/quickscale_core/scaffold/templates/
+
+# Test manual template rendering
+python -c "
+from jinja2 import Environment, FileSystemLoader
+from pathlib import Path
+template_dir = Path('quickscale_core/src/quickscale_core/scaffold/templates')
+env = Environment(loader=FileSystemLoader(str(template_dir)))
+template = env.get_template('settings.py.j2')
+print(template.render(project_name='testproject'))
+"
+```
+
+**Template Storage**: All templates live in `quickscale_core/src/quickscale_core/scaffold/templates/` per [SCAFFOLDING.md §3](./SCAFFOLDING.md#mvp-structure).
+
+---
+
+### **Task 0.53.1: Core Django Project Templates**
+**Priority**: Create the essential Django project files
+
+**Tasks**:
+- [ ] **Create `manage.py.j2` template**
+  - [ ] Standard Django manage.py with `{{project_name}}` variable
+  - [ ] Executable permissions reminder in documentation
+- [ ] **Create `settings.py.j2` template**
+  - [ ] **IMPORTANT**: Standalone settings (NO imports from quickscale_core)
+  - [ ] Basic Django settings: SECRET_KEY, DEBUG, ALLOWED_HOSTS, INSTALLED_APPS
+  - [ ] Database config (default SQLite)
+  - [ ] Static files config, templates config
+  - [ ] Use `{{project_name}}` template variable appropriately
+- [ ] **Create `urls.py.j2` template**
+  - [ ] Minimal URL configuration with admin route
+  - [ ] Root route pointing to index view
+- [ ] **Create `wsgi.py.j2` template**
+  - [ ] Standard Django WSGI application
+  - [ ] Use `{{project_name}}.settings` for settings module
+- [ ] **Create `asgi.py.j2` template**
+  - [ ] Standard Django ASGI application
+  - [ ] Use `{{project_name}}.settings` for settings module
+- [ ] **Create `__init__.py.j2` template**
+  - [ ] Empty or minimal package marker
+
+**Deliverable**: Core Django project templates ready for rendering
+
+**Validation**: Templates can be loaded by Jinja2; variables are correctly parameterized
+
+**Reference**: See [SCAFFOLDING.md §5.1 (MVP Generated Output)](./SCAFFOLDING.md#51-mvp-ultra-minimal-django-project) for what the output should look like.
+
+---
+
+### **Task 0.53.2: Templates and Static Files**
+**Priority**: Create frontend templates and static file structure
+
+**Tasks**:
+- [ ] **Create `templates/index.html.j2`**
+  - [ ] Simple homepage with "Welcome to {{project_name}}" message
+  - [ ] Basic HTML structure (DOCTYPE, html, head, body)
+  - [ ] Link to static CSS if present
+- [ ] **Create `templates/base.html.j2` (optional but useful)**
+  - [ ] Base template with blocks for title, content, scripts
+  - [ ] Basic responsive meta tags
+- [ ] **Create static files structure templates**
+  - [ ] Template creates `static/css/` directory
+  - [ ] Template creates `static/js/` directory
+  - [ ] Template creates `static/images/` directory
+  - [ ] Optional: Basic `static/css/style.css` with minimal styling
+
+**Deliverable**: Frontend template files for generated projects
+
+**Validation**: Templates render valid HTML; directory structure is created
+
+---
+
+### **Task 0.53.3: Project Metadata Templates**
+**Priority**: Create supporting files for generated projects
+
+**Tasks**:
+- [ ] **Create `requirements.txt.j2` template**
+  - [ ] Django (specify version: e.g., `Django>=5.0,<6.0`)
+  - [ ] Essential packages only (psycopg2-binary for PostgreSQL optional)
+  - [ ] Comment noting this is MVP starter; users can extend
+- [ ] **Create `.gitignore.j2` template**
+  - [ ] Python artifacts (\_\_pycache\_\_, \*.pyc, \*.pyo, .pytest_cache)
+  - [ ] Virtual environments (venv/, env/, .venv/)
+  - [ ] Django artifacts (db.sqlite3, media/)
+  - [ ] IDE files (.vscode/, .idea/, \*.swp)
+  - [ ] Environment files (.env)
+- [ ] **Create `README.md.j2` template for generated projects**
+  - [ ] Project name ({{project_name}})
+  - [ ] Quick start instructions (create venv, install deps, migrate, runserver)
+  - [ ] Next steps guidance
+  - [ ] Optional: link to QuickScale documentation
+- [ ] **Create `.env.example.j2` template (optional)**
+  - [ ] Example environment variables (SECRET_KEY, DEBUG, DATABASE_URL)
+  - [ ] Comments explaining each variable
+
+**Deliverable**: Complete set of project metadata templates
+
+**Validation**: All templates exist and render correctly
+
+---
+
+### **Task 0.53.4: Template Testing**
+**Priority**: Verify templates render correctly before integrating with generator
+
+**Tasks**:
+- [ ] **Create template rendering tests**
+  - [ ] Test that all templates can be loaded by Jinja2
+  - [ ] Test that all templates render with sample project_name
+  - [ ] Test that rendered output is valid (e.g., settings.py is valid Python)
+  - [ ] Test that required variables are used correctly
+- [ ] **Create template validation script**
+  - [ ] Script to render all templates with test data
+  - [ ] Script to check for common issues (undefined variables, syntax errors)
+
+**Deliverable**: Tests ensuring all templates work correctly
+
+**Validation**: `pytest quickscale_core/tests/test_scaffold/test_templates.py` passes
+
+---
+
+## **Release v0.54.0: Project Generator**
+
+**Priority**: Build the scaffolding engine that uses templates to generate projects
+
+**Objective**: Implement the `ProjectGenerator` class that orchestrates template rendering and file creation.
+
+**✅ Verifiable Improvement**:
+- `ProjectGenerator` class can create complete Django project structure
+- Generated projects have all required files in correct locations
+- Generated files contain valid content (valid Python, HTML, etc.)
+- Error handling works (invalid names, existing directories, permissions)
+- Generator tests pass with >80% coverage
+
+**Release Validation**:
+```bash
+# Test generator programmatically
+python -c "
+from pathlib import Path
+from quickscale_core.scaffold import ProjectGenerator
+import tempfile
+import os
+
+with tempfile.TemporaryDirectory() as tmpdir:
+    gen = ProjectGenerator()
+    output_path = Path(tmpdir) / 'testproject'
+    gen.generate('testproject', output_path)
+
+    # Verify structure
+    assert (output_path / 'manage.py').exists()
+    assert (output_path / 'testproject' / 'settings.py').exists()
+    assert (output_path / 'requirements.txt').exists()
+    print('✅ Generator works!')
+"
+
+# Run generator tests
+pytest quickscale_core/tests/test_scaffold/test_generator.py -v
+```
+
+---
+
+### **Task 0.54.1: Core Generator Logic**
+**Priority**: Implement the main generator class
+
+**Tasks**:
+- [ ] **Create `quickscale_core/src/quickscale_core/scaffold/` package**
+  - [ ] Create `__init__.py` exposing ProjectGenerator
+  - [ ] Create `generator.py` with ProjectGenerator class
+- [ ] **Implement ProjectGenerator class**
+  - [ ] `__init__(self, template_dir: Path = None)` - Initialize with template directory
+  - [ ] `generate(self, project_name: str, output_path: Path) -> None` - Main generation method
+  - [ ] Template loading using Jinja2 Environment
+  - [ ] Variable substitution (project_name, etc.)
+  - [ ] Directory structure creation
+  - [ ] File writing with correct permissions
+- [ ] **Implement file utilities**
+  - [ ] Create `quickscale_core/src/quickscale_core/utils/file_utils.py`
+  - [ ] `ensure_directory(path: Path)` - Create directory if not exists
+  - [ ] `write_file(path: Path, content: str, executable: bool = False)` - Write with permissions
+  - [ ] `validate_project_name(name: str) -> bool` - Check valid Python package name
+
+**Code Structure**:
 ```python
-# quickscale_cli/main.py
+# quickscale_core/src/quickscale_core/scaffold/generator.py
+from pathlib import Path
+from jinja2 import Environment, FileSystemLoader
+
+class ProjectGenerator:
+    def __init__(self, template_dir: Path | None = None):
+        """Initialize generator with template directory"""
+        if template_dir is None:
+            # Use default template directory in package
+            template_dir = Path(__file__).parent / "templates"
+        self.env = Environment(loader=FileSystemLoader(str(template_dir)))
+
+    def generate(self, project_name: str, output_path: Path) -> None:
+        """Generate minimal Django project"""
+        # Validate project name
+        # Create project directory
+        # Render all templates
+        # Write files to disk
+        pass
+```
+
+**Deliverable**: Working ProjectGenerator that creates project structure
+
+**Validation**: Generator can create all files and directories; files contain correct content
+
+---
+
+### **Task 0.54.2: Generator Error Handling & Validation**
+**Priority**: Make generator robust and user-friendly
+
+**Tasks**:
+- [ ] **Add input validation**
+  - [ ] Validate project name is valid Python identifier
+  - [ ] Reject reserved names (test, django, etc.)
+  - [ ] Check output path doesn't already contain project
+  - [ ] Validate output path is writable
+- [ ] **Add error handling**
+  - [ ] Handle template loading errors gracefully
+  - [ ] Handle file system errors (permissions, disk full, etc.)
+  - [ ] Provide clear error messages for common issues
+  - [ ] Rollback on partial failure (clean up created files)
+- [ ] **Add generation logging**
+  - [ ] Log files being created (optional, for debugging)
+  - [ ] Report success/failure clearly
+
+**Deliverable**: Robust generator with good error messages
+
+**Validation**: Error cases are handled; clear messages shown to users
+
+---
+
+### **Task 0.54.3: Generator Testing**
+**Priority**: Ensure generator works correctly in all scenarios
+
+**Tasks**:
+- [ ] **Create generator unit tests**
+  - [ ] Test project creation in empty directory
+  - [ ] Test project name validation
+  - [ ] Test error handling (invalid names, existing projects, permission issues)
+  - [ ] Test template rendering with various project names
+- [ ] **Create generator integration tests**
+  - [ ] Test end-to-end: generate project → files exist → valid Python
+  - [ ] Test generated project can be imported as Python package
+  - [ ] Test generated manage.py is executable
+- [ ] **Create fixtures and test utilities**
+  - [ ] Temporary directory fixture for test projects
+  - [ ] Clean-up utilities for test artifacts
+
+**Deliverable**: Comprehensive test suite for ProjectGenerator
+
+**Validation**: `pytest quickscale_core/tests/test_scaffold/` passes with >80% coverage
+
+---
+
+## **Release v0.55.0: CLI Implementation**
+
+**Priority**: Implement the command-line interface for `quickscale init`
+
+**Objective**: Create a simple, user-friendly CLI that calls ProjectGenerator.
+
+**✅ Verifiable Improvement**:
+- `quickscale init myapp` command works end-to-end
+- Generated projects are functional Django applications
+- CLI provides helpful error messages and next-steps guidance
+- CLI tests pass with >75% coverage
+- **CRITICAL**: Can actually create a working Django project from command line!
+
+**Release Validation**:
+```bash
+# Test CLI end-to-end
+cd /tmp
+quickscale init testproject
+cd testproject
+
+# Verify generated project works
+python -m venv venv
+source venv/bin/activate  # On Windows: venv\Scripts\activate
+pip install -r requirements.txt
+python manage.py check
+python manage.py migrate
+python manage.py runserver &
+SERVER_PID=$!
+sleep 3
+curl http://localhost:8000 | grep "Welcome"
+kill $SERVER_PID
+
+# Run CLI tests
+cd -
+pytest quickscale_cli/tests/ -v
+```
+
+---
+
+### **Task 0.55.1: CLI Command Structure**
+**Priority**: Implement the main CLI command
+
+**Tasks**:
+- [ ] **Implement main CLI entry point**
+  - [ ] Create `quickscale_cli/src/quickscale_cli/main.py`
+  - [ ] Set up Click group with `@click.group()`
+  - [ ] Add `--version` flag showing quickscale_cli version
+  - [ ] Add `--help` text explaining QuickScale
+- [ ] **Implement `init` command**
+  - [ ] Create `quickscale_cli/src/quickscale_cli/commands/init.py`
+  - [ ] Add `@click.command()` decorator
+  - [ ] Add `@click.argument('project_name')` for required project name
+  - [ ] Call ProjectGenerator from quickscale_core
+  - [ ] Handle errors and show user-friendly messages
+- [ ] **Add output formatting**
+  - [ ] Success message: "✅ Created project: {project_name}"
+  - [ ] Next steps instructions (cd, runserver commands)
+  - [ ] Error messages in red (using Click.secho)
+
+**Code Structure**:
+```python
+# quickscale_cli/src/quickscale_cli/main.py
 import click
+from quickscale_cli.commands.init import init
+
+@click.group()
+@click.version_option()
+def cli():
+    """QuickScale - Compose your Django SaaS"""
+    pass
+
+cli.add_command(init)
+
+# quickscale_cli/src/quickscale_cli/commands/init.py
+import click
+from pathlib import Path
 from quickscale_core.scaffold import ProjectGenerator
 
 @click.command()
 @click.argument('project_name')
-def init(project_name):
+def init(project_name: str):
     """Generate a new Django project"""
-    generator = ProjectGenerator()
-    generator.generate(project_name, Path.cwd())
-    click.echo(f"✅ Created project: {project_name}")
-    click.echo("Next steps:")
-    click.echo(f"  cd {project_name}")
-    click.echo("  python manage.py runserver")
+    try:
+        generator = ProjectGenerator()
+        output_path = Path.cwd() / project_name
+        generator.generate(project_name, output_path)
+
+        click.secho(f"✅ Created project: {project_name}", fg='green')
+        click.echo("\nNext steps:")
+        click.echo(f"  cd {project_name}")
+        click.echo("  python -m venv venv")
+        click.echo("  source venv/bin/activate  # On Windows: venv\\Scripts\\activate")
+        click.echo("  pip install -r requirements.txt")
+        click.echo("  python manage.py migrate")
+        click.echo("  python manage.py runserver")
+    except Exception as e:
+        click.secho(f"❌ Error: {e}", fg='red', err=True)
+        raise click.Abort()
 ```
 
-**Deliverable**: Working `quickscale init myapp` command (ultra-simple, no options). Any additional CLI wrappers remain Post-MVP backlog items.
+**Deliverable**: Working `quickscale init` command
 
-**REMOVED from MVP**: 
-- `--template` flag (only one starter)
-- `--embed-code` flag (optional, can be manual)
-- `--config` flag (no YAML config in MVP)
+**Validation**: `quickscale init myapp` creates working Django project
 
-### **Phase 1.3: Core Utilities & Django Integration**
+**CLI Reference**: See [CLI Command Matrix in DECISIONS.md](./DECISIONS.md#cli-command-matrix) for authoritative command list.
 
-#### **1.3.1 Django App Configuration**
-**Priority**: Ensure proper Django app integration
+---
 
-- [ ] **Create `QuickScaleCoreConfig` Django app configuration class**
-- [ ] **Setup proper Django app metadata (name, verbose_name, etc.)**
-- [ ] **Implement `ready()` method for initialization**
-- [ ] **Test Django app loading and initialization**
+### **Task 0.55.2: CLI Testing**
+**Priority**: Test CLI commands work correctly
 
-```python
-# quickscale_core/apps.py
-from django.apps import AppConfig
+**Tasks**:
+- [ ] **Create CLI command tests**
+  - [ ] Test `quickscale --version` shows correct version
+  - [ ] Test `quickscale --help` shows help text
+  - [ ] Test `quickscale init myapp` creates project
+  - [ ] Test `quickscale init` without argument shows error
+  - [ ] Test `quickscale init` with invalid name shows error
+- [ ] **Create CLI integration tests**
+  - [ ] Test full workflow: install CLI → run init → project works
+  - [ ] Test in isolated environment (fresh virtualenv)
+- [ ] **Use Click's testing utilities**
+  - [ ] Use `CliRunner` for testing commands
+  - [ ] Capture output and verify messages
 
-class QuickScaleCoreConfig(AppConfig):
-    default_auto_field = 'django.db.models.BigAutoField'
-    name = 'quickscale_core'
-    verbose_name = 'QuickScale Core'
-    
-    def ready(self):
-        """Initialize QuickScale core when Django starts"""
-        # Future: Register signals, setup hooks
-        pass
+**Deliverable**: Comprehensive CLI test suite
+
+**Validation**: `pytest quickscale_cli/tests/` passes with >75% coverage
+
+---
+
+## **Release v0.56.0: Quality & Testing**
+
+**Priority**: Ensure MVP is robust and production-ready
+
+**Objective**: Comprehensive testing, quality checks, and validation.
+
+**✅ Verifiable Improvement**:
+- Test coverage >80% for quickscale_core, >75% for quickscale_cli
+- All code quality checks pass (ruff, black, mypy optional)
+- Integration tests pass (full workflow from CLI to working project)
+- Cross-platform testing (Linux, macOS, Windows if possible)
+- Cross-version testing (Python 3.10, 3.11, 3.12)
+
+**Release Validation**:
+```bash
+# Run full test suite with coverage
+pytest --cov=quickscale_core --cov=quickscale_cli --cov-report=term-missing
+
+# Verify coverage thresholds
+pytest --cov=quickscale_core --cov-fail-under=80
+pytest --cov=quickscale_cli --cov-fail-under=75
+
+# Run quality checks
+ruff check .
+black --check .
+mypy quickscale_core/ quickscale_cli/  # optional
+
+# Run integration tests
+pytest -m integration -v
+
+# Test on multiple Python versions (if possible)
+tox  # or manually test with py310, py311, py312
 ```
 
-**Deliverable**: Working Django app that loads properly in INSTALLED_APPS
+---
 
-#### **1.3.2 Core Utilities**
-**Priority**: Essential utilities for project generation and Django integration
+### **Task 0.56.1: Integration Testing**
+**Priority**: Test the complete workflow end-to-end
 
-- [ ] **Create `get_project_settings()` function for Django settings generation**
-- [ ] **Create file utilities (`ensure_directory`, `copy_template`)**
-- [ ] **Create version utilities (`parse_version`, `compare_versions`)**
-- [ ] **Add comprehensive utility function tests**
-- [ ] **Migrate valuable legacy utility functions** identified in analysis
+**Tasks**:
+- [ ] **Create end-to-end integration test**
+  - [ ] Test: `quickscale init testproject` → project created
+  - [ ] Test: Generated project structure matches expected layout
+  - [ ] Test: `cd testproject && python manage.py check` passes
+  - [ ] Test: `python manage.py migrate` works
+  - [ ] Test: `python manage.py runserver` starts (smoke test)
+  - [ ] Test: Generated project imports work (`import testproject`)
+- [ ] **Test with different project names**
+  - [ ] Simple names: `myapp`, `testproject`
+  - [ ] Names with underscores: `my_app`, `test_project`
+  - [ ] Edge cases: single letter (`x`), long names
+- [ ] **Test error scenarios**
+  - [ ] Project directory already exists
+  - [ ] Invalid project names (with hyphens, starting with number, etc.)
+  - [ ] Insufficient permissions
 
-```python
-# quickscale_core/utils/__init__.py
-from .django_utils import get_project_settings, setup_logging
-from .file_utils import ensure_directory, copy_template
-from .version_utils import parse_version, compare_versions
+**Deliverable**: Integration test suite covering real-world usage
 
-# quickscale_core/utils/django_utils.py
-def get_project_settings(config: ProjectConfig) -> Dict[str, Any]:
-    """Generate Django settings dict from QuickScale config"""
-    pass
+**Validation**: All integration tests pass; generated projects are usable
 
-def setup_logging(config: ProjectConfig) -> None:
-    """Setup logging configuration"""
-    pass
+---
+
+### **Task 0.56.2: Code Quality & Coverage**
+**Priority**: Ensure code quality meets standards
+
+**Tasks**:
+- [ ] **Achieve test coverage targets**
+  - [ ] `quickscale_core`: >80% coverage
+  - [ ] `quickscale_cli`: >75% coverage
+  - [ ] Focus on critical paths (generator, file I/O, validation)
+- [ ] **Run code quality checks**
+  - [ ] Run `ruff check .` - no errors
+  - [ ] Run `black --check .` - code formatted
+  - [ ] Run `mypy .` - type checking passes (optional but recommended)
+- [ ] **Document coverage gaps**
+  - [ ] Identify untested edge cases
+  - [ ] Document why certain code is excluded from coverage (if any)
+  - [ ] Create follow-up tasks for improving coverage
+
+**Deliverable**: High-quality, well-tested codebase
+
+**Validation**: All quality checks pass; coverage targets met
+
+---
+
+### **Task 0.56.3: Documentation Testing**
+**Priority**: Ensure generated projects work as documented
+
+**Tasks**:
+- [ ] **Test README instructions**
+  - [ ] Follow generated project README step-by-step
+  - [ ] Verify all commands work (venv creation, pip install, migrate, runserver)
+  - [ ] Fix any documentation errors
+- [ ] **Test with fresh Python environment**
+  - [ ] Test with Python 3.10, 3.11, 3.12 (different versions)
+  - [ ] Test on different OS: Linux, macOS, Windows (if possible)
+- [ ] **Validate generated requirements.txt**
+  - [ ] All packages install successfully
+  - [ ] No version conflicts
+  - [ ] Django version is compatible
+
+**Deliverable**: Verified documentation and cross-platform compatibility
+
+**Validation**: README instructions work on multiple platforms/Python versions
+
+---
+
+## **Release v0.57.0: Documentation Complete**
+
+**Priority**: Complete all user-facing and developer documentation
+
+**Objective**: Ensure users and contributors can understand and use QuickScale effectively.
+
+**✅ Verifiable Improvement**:
+- README.md includes installation and usage examples
+- Git subtree workflow documented in DECISIONS.md
+- Developer documentation (CONTRIBUTING.md) complete
+- All documentation links work and point to correct sections
+- Generated project README provides clear next steps
+
+**Release Validation**:
+```bash
+# Verify documentation exists
+ls README.md DECISIONS.md ROADMAP.md SCAFFOLDING.md CONTRIBUTING.md
+
+# Check for broken links (optional)
+markdown-link-check *.md
+
+# Verify user can follow docs
+# (Manual: follow README from scratch as new user)
+
+# Verify generated project docs
+quickscale init doctest
+cat doctest/README.md  # Should have clear instructions
 ```
 
-**Deliverable**: Complete utility library supporting project generation
+---
 
-### **Phase 1.4: Testing & MVP Validation**
+### **Task 0.57.1: User Documentation**
+**Priority**: Create comprehensive user-facing documentation
 
-#### **1.4.1 Essential Test Suite (MVP-Focused)**
-**Priority**: Test core functionality, keep it simple
+**Tasks**:
+- [ ] **Update README.md**
+  - [ ] Add installation instructions for quickscale CLI
+  - [ ] Add usage examples with `quickscale init`
+  - [ ] Add "What you get" section (generated project structure)
+  - [ ] Update links to other documentation
+- [ ] **Update DECISIONS.md** (if needed)
+  - [ ] Document any technical decisions made during implementation
+  - [ ] Update MVP Feature Matrix status (mark completed features)
+- [ ] **Create developer documentation**
+  - [ ] Document project structure (monorepo layout)
+  - [ ] Document how to contribute
+  - [ ] Document how to run tests and linters
+  - [ ] Document release process (when ready)
+- [ ] **Document Git Subtree workflow** (for advanced users)
+  - [ ] Verify manual git subtree commands in DECISIONS.md are accurate
+  - [ ] Create troubleshooting guide for common git subtree issues
+  - [ ] Document when/why users might want to embed quickscale_core
 
-- [ ] **Create project generation tests (does it create files?)**
-- [ ] **Create template rendering tests (do templates work?)**
-- [ ] **Create CLI tests (does `quickscale init` work?)**
-- [ ] **Create integration test (end-to-end: init → runserver)**
-- [ ] **Achieve >70% coverage (good enough for MVP)**
+**Deliverable**: Complete documentation for MVP users and contributors
 
+**Validation**: New user can follow docs and create their first project
+
+**Documentation Reference**: See [DECISIONS.md Document Responsibilities](./DECISIONS.md#document-responsibilities-short) for what goes where.
+
+---
+
+---
+
+## **Release v0.58.0: MVP Validation**
+
+**Priority**: **MOST CRITICAL** - Validate MVP with real-world usage
+
+**Objective**: Prove that QuickScale actually works for building client projects.
+
+**✅ Verifiable Improvement**:
+- **Built a complete client project** using `quickscale init`
+- Project includes real features (CRUD, auth, or other business logic)
+- Project deployed to staging environment (optional but recommended)
+- Documented pain points and improvement areas
+- Created prioritized backlog for v1.0.0 refinements
+
+**Release Validation**:
+```bash
+# This is a MANUAL validation process
+
+# 1. Create project
+quickscale init real_client_project
+cd real_client_project
+
+# 2. Set up and run
+python -m venv venv
+source venv/bin/activate
+pip install -r requirements.txt
+python manage.py migrate
+python manage.py runserver
+
+# 3. Build real features (spend 1-2 days)
+# - Add models
+# - Add views
+# - Add templates
+# - Add tests
+# - Verify everything works
+
+# 4. Document experience
+# - What worked well?
+# - What was confusing?
+# - What's missing?
+# - What needs fixing before v1.0.0?
 ```
-quickscale_core/tests/
-├── test_scaffold/
-│   ├── test_generator.py          # Project generation tests  
-│   └── test_templates.py          # Template rendering tests
-└── test_integration.py            # Full workflow: init → works
 
-quickscale_cli/tests/
-└── test_cli.py                    # CLI command tests
-```
+**SUCCESS CRITERIA**: Can build a deployable client project in < 1 day using QuickScale.
 
-**Deliverable**: Working test suite that validates MVP functionality
+---
 
-**Deferred to Post-MVP**: Extensive test coverage, config validation tests, utility tests
+### **Task 0.58.1: Real-World Project Validation**
+**Priority**: **MOST IMPORTANT** - Validate MVP with actual usage
 
-#### **1.4.2 MVP Documentation**
-**Priority**: Document what exists, not what's planned
+**Tasks**:
+- [ ] **Generate a real client project**
+  - [ ] Use `quickscale init client_test` to create project
+  - [ ] Follow all setup steps (venv, install, migrate, runserver)
+  - [ ] Build a simple feature (e.g., basic CRUD, user registration, etc.)
+  - [ ] Deploy to staging environment (optional but recommended)
+- [ ] **Document pain points**
+  - [ ] Note any missing features or unclear documentation
+  - [ ] Record any errors or confusing error messages
+  - [ ] Identify workflow improvements needed
+- [ ] **Collect feedback**
+  - [ ] What worked well?
+  - [ ] What was confusing or difficult?
+  - [ ] What would make the MVP more useful?
+- [ ] **Create improvement backlog**
+  - [ ] Log issues found during validation
+  - [ ] Prioritize fixes vs. Post-MVP enhancements
+  - [ ] Update roadmap with lessons learned
 
-- [ ] **Write README for quickscale_core package**
-- [ ] **Write README for quickscale_cli package**
-- [ ] **Document generated project structure**
-- [ ] **Write "Next Steps After MVP" guide**
-- [ ] **Document git subtree workflow (if included)**
+**Deliverable**: PROOF that MVP works for real projects + prioritized improvement list
 
-**Deliverable**: Minimal but sufficient documentation for MVP users
-
-#### **1.4.3 MVP Validation with Real Project**
-**Priority**: USE IT YOURSELF - build a real client project
-
-- [ ] **Generate project with `quickscale init client_test`**
-- [ ] **Build simple SaaS feature (auth, billing, or simple CRUD)**
-- [ ] **Document pain points and what's missing**
-- [ ] **Identify first patterns worth extracting**
-- [ ] **Validate: Can you reuse code across 2-3 projects?**
-
-**Deliverable**: **PROOF that MVP actually works for real client projects**
+**Success Criteria**: Can build a working client project from generated starter in < 1 day
 
 **This is the MOST IMPORTANT step**: If you can't build a real client project with MVP, it's not done.
 
 ---
 
-## **Phase 2: Organic Evolution (Client-Driven Growth)**
+### **Task 0.58.2: Improvement Backlog Creation**
+**Priority**: Prepare MVP for initial release
+
+**Tasks**:
+- [ ] **Version and tagging**
+  - [ ] Set version to `0.1.0` in `pyproject.toml` files
+  - [ ] Create git tag: `v0.1.0`
+  - [ ] Create CHANGELOG.md with MVP release notes
+- [ ] **Package verification**
+  - [ ] Build packages: `python -m build` in both quickscale_core and quickscale_cli
+  - [ ] Test installation from built wheels
+  - [ ] Verify package metadata is correct
+- [ ] **Create release notes**
+  - [ ] Summarize what's included in MVP
+  - [ ] Clearly state limitations (what's NOT included)
+  - [ ] Link to documentation and getting started guide
+  - [ ] Include upgrade path from v0.41.0 (manual migration required)
+- [ ] **Optional: PyPI test upload**
+  - [ ] Upload to TestPyPI for validation
+  - [ ] Test installation from TestPyPI
+  - [ ] NOTE: Public PyPI release is optional for MVP (can stay git-only)
+
+**Deliverable**: Shippable MVP release (v0.1.0)
+
+**Validation**: Clean install works; README guides users successfully
+
+---
+
+## **Release v1.0.0: MVP Launch** 🚀
+
+**Priority**: Production-ready release of personal toolkit
+
+**Objective**: Stable, documented, tested personal toolkit ready for real client work.
+
+**✅ Verifiable Improvement**:
+- All v0.58.0 feedback addressed
+- Release artifacts built and tested
+- CHANGELOG.md complete with all changes since v0.51.0
+- Git tag created (v1.0.0)
+- Optional: Published to TestPyPI or PyPI
+
+**Release Validation**:
+```bash
+# Build release packages
+cd quickscale_core && python -m build && cd ..
+cd quickscale_cli && python -m build && cd ..
+
+# Test installation from wheels
+pip install quickscale_core/dist/quickscale_core-1.0.0-*.whl
+pip install quickscale_cli/dist/quickscale_cli-1.0.0-*.whl
+
+# Verify everything works
+quickscale --version  # Should show 1.0.0
+quickscale init v1test
+cd v1test && python manage.py check
+
+# Create git tag
+git tag -a v1.0.0 -m "Release v1.0.0: MVP Personal Toolkit"
+git push origin v1.0.0
+
+# Optional: publish to PyPI
+twine upload quickscale_core/dist/* quickscale_cli/dist/*
+```
+
+**🎉 SUCCESS CRITERIA**:
+- Complete personal toolkit for generating Django projects
+- Proven with real client project
+- Ready for daily use
+- Foundation for Post-MVP evolution
+
+---
+
+### **Task 1.0.1: Address v0.58.0 Feedback**
+**Tasks**:
+- [ ] Fix all critical issues found during real project validation
+- [ ] Improve unclear documentation
+- [ ] Add missing templates or utilities if needed
+- [ ] Re-test with another project if major changes made
+
+### **Task 1.0.2: Release Preparation**
+**Tasks**:
+- [ ] Set version to `1.0.0` in all `pyproject.toml` files
+- [ ] Create CHANGELOG.md with all changes v0.51.0 → v1.0.0
+- [ ] Build packages: `python -m build`
+- [ ] Test installation from built wheels
+- [ ] Create git tag: `v1.0.0`
+- [ ] Optional: Upload to TestPyPI first, then PyPI
+
+**Deliverable**: Production-ready QuickScale v1.0.0
+
+---
+
+## **MVP Deliverables Summary (v1.0.0)**
+
+### **✅ v1.0.0 Deliverables - Personal Toolkit**
+- [ ] 📦 `quickscale_core` package with minimal utilities and template engine
+- [ ] 📦 `quickscale_cli` package with `quickscale init` command
+- [ ] 🏗️ Project scaffolding creating minimal Django starter
+- [ ] 🖥️ Ultra-simple CLI: `quickscale init myapp`
+- [ ] 📁 Git subtree workflow documented for advanced users
+- [ ] ✅ Comprehensive testing (>75% coverage)
+- [ ] 📖 User and developer documentation
+- [ ] ✅ **VALIDATION: Build 1 real client project successfully**
+
+### **Explicit MVP Limitations (By Design)**
+See [MVP Feature Matrix in DECISIONS.md](./DECISIONS.md#mvp-feature-matrix-authoritative) for authoritative list.
+
+- ❌ **No module packages**: Build from real needs in Phase 2
+- ❌ **No theme packages**: Generated projects are fully customizable
+- ❌ **No YAML configuration**: Django settings.py only
+- ❌ **No CLI git subtree helpers**: Manual commands documented (Post-MVP consideration)
+- ❌ **No PyPI distribution**: Git subtree only for MVP (PyPI optional)
+- ❌ **No marketplace**: Personal toolkit, not platform
+- ❌ **No multiple templates**: One starter template only
+- ❌ **No settings inheritance**: Standalone settings.py by default
+- ❌ **No backend_extensions.py auto-generation**: Users add manually if needed
+
+**The Point**: Build the absolute minimum that lets you create client projects faster. Everything else is Post-MVP.
+
+---
+
+## **Post-MVP: Organic Evolution (v1.1.0+)**
 
 **🎯 Objective**: Extract reusable patterns from real client work. Don't build speculatively.
 
 **Timeline**: Ongoing (happens naturally as you build more client projects)
 
+**Release Strategy**: Minor versions (v1.x.0) add incremental improvements based on real usage
+
 **Key Principle**: **Build modules from REAL client needs, not speculation**
 
-### **Phase 2.1: Pattern Extraction Workflow**
+**Prerequisites Before Starting Post-MVP Development**:
+- ✅ MVP (Phase 1) completed and validated
+- ✅ Built 2-3 client projects successfully using MVP
+- ✅ Identified repeated patterns worth extracting
+- ✅ Git subtree workflow working smoothly
+
+### **v1.1.0 - v1.x.0: Pattern Extraction & Module Development**
+
+Each release adds one proven module or significant improvement based on real needs.
+
+**Example Release Sequence**:
+- **v1.1.0**: First extracted module (e.g., `quickscale_modules/auth`)
+- **v1.2.0**: Second module (e.g., `quickscale_modules/payments`)
+- **v1.3.0**: CLI git subtree helpers (if proven necessary)
+- **v1.4.0**: YAML configuration (if proven useful)
+- **v1.x.0**: Additional modules as needed
+
+---
+
+### **Pattern Extraction Workflow**
 
 #### **When to Extract a Module**
 ✅ **Extract when**:
 - You've built the same feature 2-3 times across client projects
 - The code is stable and battle-tested
 - The pattern is genuinely reusable (not client-specific)
+- The feature would benefit from centralized updates
 
 ❌ **Don't extract when**:
 - You've only built it once
 - It's highly client-specific
 - You're just guessing it might be useful
+- The code is still experimental or changing rapidly
 
 #### **Extraction Process**
 1. **Identify Reusable Code**: Look for repeated patterns across client projects
-2. **Create Module Structure**: `quickscale_modules/<module_name>/`
+2. **Create Module Structure**: `quickscale_modules/<module_name>/` in your monorepo
 3. **Extract & Refactor**: Move code, make it generic, add tests
 4. **Update Client Projects**: Replace custom code with module via git subtree
-5. **Document**: Add module to internal documentation
+5. **Document**: Add module documentation and usage examples
 
-### **Phase 2.2: First Modules (Build from Real Needs)**
+**Git Subtree Commands**: See [DECISIONS.md Git Subtree Workflow](./DECISIONS.md#integration-note-personal-toolkit-git-subtree) for authoritative manual commands.
 
-**Don't build these upfront. Build them when you actually need them 2-3 times:**
+**Note**: CLI wrapper commands for extraction/sync remain Post-MVP. Evaluate after establishing extraction workflow.
+
+---
+
+### **Module Creation Guide (for v1.x.0 releases)**
+
+**Don't build these upfront. Build them when you actually need them 2-3 times.**
 
 #### **Likely First Modules** (based on common client needs):
-#### **Phase 2.2: First Modules (Build from Real Needs)**
-
-#### **Likely First Modules** (based on common client needs):
-- **auth**: If you keep building custom user models + authentication
-- **payments**: If multiple clients need Stripe integration
+- **auth**: If you keep building custom user models + authentication (wraps django-allauth)
+- **payments**: If multiple clients need Stripe integration (wraps dj-stripe)
 - **billing**: If you keep building subscription logic
-- **api**: If multiple clients need REST APIs
-- **notifications**: If you keep adding email/SMS features
+- **api**: If multiple clients need REST APIs (wraps Django REST framework)
+- **notifications**: If you keep adding email/SMS features (wraps django-anymail)
 
 #### **Admin Module Scope Exploration (Under Evaluation)**
+**Note**: Admin module scope is NOT confirmed for Phase 2. See ROADMAP admin module tracking tasks below.
 
-**Note**: Admin module scope is still under evaluation and NOT confirmed for Phase 2. See tracking notes below.
-- [ ] Review auth vs admin responsibilities documented in `DECISIONS.md` and capture open questions
-- [ ] Interview current maintainers about desired admin UX improvements separate from authentication
-- [ ] Draft scope options for `quickscale_modules.admin` (e.g., dashboard UX, moderation tooling) and circulate for decision in `DECISIONS.md`
-- [ ] Record findings and recommended decision timeline
+- [ ] Review auth vs admin responsibilities in `DECISIONS.md`
+- [ ] Define admin module scope (dashboard UX? moderation? something else?)
+- [ ] Draft scope options for `quickscale_modules.admin`
+- [ ] Record decision in `DECISIONS.md` with rationale
 
 #### **Module Creation Checklist**:
 - [ ] Used successfully in 2-3 client projects
 - [ ] Code is stable and well-tested
 - [ ] Genuinely reusable (not client-specific hacks)
-- [ ] Documented with examples
+- [ ] Documented with examples and integration guide
 - [ ] Distributed via git subtree to other projects
 - [ ] Consider PEP 420 namespace packages if multiple modules exist
 
-### **Phase 2.3: Git Subtree Workflow Refinement**
-
-Based on MVP usage, improve code sharing:
-
-- [ ] **Add CLI commands if manual git subtree is painful**:
-  - `quickscale update myproject` (pull changes)
-  - `quickscale sync push myproject` (push improvements back)
-- [ ] **Document versioning strategy** (git tags for stable snapshots)
-- [ ] **Create extraction scripts** to help move code from clients to modules
-
-### **Phase 2.4: Evaluate Configuration System**
-
-**After 5+ client projects**, evaluate if YAML config would be useful:
-
-Questions to answer:
-- Do you find yourself repeating the same Django settings setup?
-- Would declarative config speed up project creation?
-- Is Django settings inheritance working well enough?
-
-**Decision Point**: Add YAML config ONLY if it solves real pain points from MVP usage.
+**Module Structure Reference**: See [SCAFFOLDING.md §4 (Post-MVP Modules)](./SCAFFOLDING.md#post-mvp-structure) for canonical package layout.
 
 ---
 
-## **Phase 3: Community Platform (Optional Evolution)**
+### **Git Subtree Workflow Refinement (potential v1.x.0 release)**
+
+Based on MVP usage feedback, improve code sharing workflow:
+
+**Evaluate CLI Automation** (only if manual workflow proves painful):
+- [ ] **Assess demand for CLI helpers**
+  - [ ] Survey how often you use git subtree manually
+  - [ ] Document pain points with manual workflow
+  - [ ] Determine if automation would save significant time
+- [ ] **If justified, add CLI commands**:
+  - [ ] `quickscale embed-core <project>` - Embed quickscale_core via git subtree
+  - [ ] `quickscale update-core <project>` - Pull updates from monorepo
+  - [ ] `quickscale sync-push <project>` - Push improvements back to monorepo
+  - [ ] Update [CLI Command Matrix](./DECISIONS.md#cli-command-matrix) with implementation status
+- [ ] **Document versioning strategy**
+  - [ ] Git tags for stable snapshots (e.g., `core-v1.0.0`)
+  - [ ] Semantic versioning for modules
+  - [ ] Compatibility tracking between core and modules
+- [ ] **Create extraction helper scripts** (optional)
+  - [ ] Script to assist moving code from client project to quickscale_modules/
+  - [ ] Validation script to check module structure
+
+**Note**: Only build these if the manual workflow becomes a bottleneck. Don't automate prematurely.
+
+---
+
+### **Configuration System Evaluation (potential v1.x.0 release)**
+
+**After 5+ client projects**, evaluate if YAML config would be useful.
+
+**Questions to answer**:
+- Do you find yourself repeating the same Django settings setup?
+- Would declarative config speed up project creation?
+- Is Django settings inheritance working well enough?
+- Would non-developers benefit from YAML-based project config?
+
+**Decision Point**: Add YAML config ONLY if it solves real pain points from MVP usage.
+
+**If pursuing**:
+- [ ] Define minimal configuration schema (see [DECISIONS.md illustrative schemas](./DECISIONS.md#architectural-decision-configuration-driven-project-definition))
+- [ ] Implement config loader and validator
+- [ ] Create CLI commands: `quickscale validate`, `quickscale generate`
+- [ ] Update templates to support config-driven generation
+- [ ] Document configuration options
+
+---
+
+## **v2.0.0+: Community Platform (Optional Evolution)**
 
 **🎯 Objective**: IF proven successful personally, evolve into community platform.
 
 **Timeline**: 12-18+ months after MVP (or never, if personal toolkit is enough)
 
-**Prerequisites Before Starting Phase 3:**
+**Version Strategy**: Major version (v2.0.0) for community platform features
+
+**Example Release Sequence**:
+- **v2.0.0**: PyPI publishing + package distribution
+- **v2.1.0**: Theme package system
+- **v2.2.0**: Marketplace basics
+- **v2.x.0**: Advanced community features
+
+**Prerequisites Before Starting v2.0.0**:
 - ✅ 10+ successful client projects built with QuickScale
 - ✅ 5+ proven reusable modules extracted
 - ✅ Clear evidence that others want to use your patterns
 - ✅ Bandwidth to support community and marketplace
 
-### **Phase 3.1: Package Distribution**
+### **v2.0.0: Package Distribution**
 
 When you're ready to share with community:
 
 - [ ] **Setup PyPI publishing for modules**
-  - Convert git subtree modules to pip-installable packages
-  - Use PEP 420 implicit namespaces (`quickscale_modules.*`)
-  - Implement semantic versioning
-- [ ] **Create private PyPI for commercial modules** (see COMMERCIAL.md)
+  - [ ] Convert git subtree modules to pip-installable packages
+  - [ ] Use PEP 420 implicit namespaces (`quickscale_modules.*`)
+  - [ ] Implement semantic versioning and compatibility tracking
+  - [ ] Create GitHub Actions for automated publishing
+- [ ] **Create private PyPI for commercial modules** (see [COMMERCIAL.md](./COMMERCIAL.md))
+  - [ ] Set up private package repository
+  - [ ] Implement license validation for commercial modules
+  - [ ] Create subscription-based access system
 - [ ] **Document package creation for community contributors**
+  - [ ] Package structure guidelines
+  - [ ] Contribution process
+  - [ ] Quality standards and testing requirements
 
-### **Phase 3.2: Theme Package System**
+---
+
+### **v2.1.0: Theme Package System**
 
 If reusable business logic patterns emerge:
 
 - [ ] **Create theme package structure** (`quickscale_themes.*`)
-- [ ] **Implement theme inheritance system**
-- [ ] **Create example themes** (starter, todo, etc.)
+  - [ ] Define theme interface and base classes
+  - [ ] Implement theme inheritance system
+  - [ ] Create theme packaging guidelines
+- [ ] **Create example themes**
+  - [ ] `quickscale_themes.starter` - Basic starter theme
+  - [ ] `quickscale_themes.todo` - TODO app example
+  - [ ] Document theme customization patterns
 - [ ] **Document theme creation guide**
+  - [ ] Theme architecture overview
+  - [ ] Base model and business logic patterns
+  - [ ] Frontend integration guidelines
 
-### **Phase 3.3: Marketplace & Community**
+**Theme Structure Reference**: See [SCAFFOLDING.md §4 (Post-MVP Themes)](./SCAFFOLDING.md#post-mvp-structure).
+
+---
+
+### **v2.2.0: Marketplace & Community**
 
 Only if there's real demand:
 
 - [ ] **Build package registry/marketplace**
+  - [ ] Package discovery and search
+  - [ ] Ratings and reviews system
+  - [ ] Module/theme compatibility tracking
 - [ ] **Create community contribution guidelines**
+  - [ ] Code of conduct
+  - [ ] Contribution process and standards
+  - [ ] Issue and PR templates
 - [ ] **Setup extension approval process**
+  - [ ] Quality review checklist
+  - [ ] Security audit process
+  - [ ] Compatibility verification
 - [ ] **Build commercial module subscription system**
+  - [ ] License management
+  - [ ] Payment integration
+  - [ ] Customer access control
 
-### **Phase 3.4: Advanced Configuration**
+See [COMMERCIAL.md](./COMMERCIAL.md) for detailed commercial distribution strategies.
+
+---
+
+### **v2.3.0: Advanced Configuration**
 
 If YAML config proves useful in Phase 2:
 
 - [ ] **Implement full configuration schema**
+  - [ ] Module/theme selection via config
+  - [ ] Environment-specific overrides
+  - [ ] Customization options
 - [ ] **Add module/theme selection via config**
+  - [ ] Declarative module dependencies
+  - [ ] Theme selection and variants
 - [ ] **Create migration tools for config updates**
-- [ ] **Build configuration validation UI**
+  - [ ] Schema version migration scripts
+  - [ ] Backward compatibility checks
+- [ ] **Build configuration validation UI** (optional)
+  - [ ] Web-based config editor
+  - [ ] Real-time validation
+  - [ ] Preview generated project
 
-**IMPORTANT**: Phase 3 is OPTIONAL. Many successful solo developers and agencies never need a community platform. Evaluate carefully before investing in marketplace features.
-
----
-
-## **MVP Deliverables Summary**
-
-### **Phase 1 Deliverables (v0.1.0) - Personal Toolkit**
-- [ ] � `quickscale_core` package with minimal utilities
-- [ ] 📦 `quickscale_cli` package with simple `init` command
-- [ ] 🏗️ Project scaffolding creating minimal Django starter
-- [ ] 🖥️ Ultra-simple CLI: `quickscale init myapp`
-- [ ] 📁 Optional git subtree integration for code sharing
-- [ ] ✅ Basic testing validating project generation works
-- [ ] 📖 Minimal documentation (README + usage guide)
-- [ ] ✅ **VALIDATION: Build 1 real client project successfully**
-
-### **Explicit MVP Limitations (By Design)**
-- ❌ **No module packages**: Build from real needs in Phase 2
-- ❌ **No theme packages**: Generated projects are fully customizable
-- ❌ **No YAML configuration**: Django settings inheritance only
-- ❌ **No PyPI distribution**: Git subtree only for MVP
-- ❌ **No marketplace**: Personal toolkit, not platform
-- ❌ **No multiple templates**: One starter template only
-- ❌ **No advanced CLI features**: Just `quickscale init`
-
-**The Point**: Build the absolute minimum that lets you create client projects faster. Everything else is Post-MVP.
-
-**Backward compatibility stance**: The new QuickScale architecture is a breaking change and is not backward compatible. Automated migration of existing QuickScale projects is out-of-scope for the MVP. Phase 1 includes a legacy analysis and guidance to help maintainers extract useful assets manually; place findings under `legacy/analysis/` in-repo.
-
-### **Post-MVP (Future Phases)**
-- **Phase 2**: Actual theme system with `quickscale_themes/starter`
-- **Phase 3**: Module system with `quickscale_modules/auth`
-- **Phase 4**: Frontend marketplace and advanced features
+**IMPORTANT**: v2.0.0+ is OPTIONAL. Many successful solo developers and agencies never need a community platform. Evaluate carefully before investing in marketplace features.
 
 ---
-
-## **Key Changes from Original ROADMAP**
-
-### **✅ Fixed Issues**
-1. **Removed complex theme/module references** - MVP scope only
-2. **Reordered tasks logically** - Legacy analysis first, progressive building
-3. **Added missing CLI implementation** - Core MVP requirement
-4. **Simplified configuration schema** - Only MVP fields
-5. **Clear deliverables for each task** - Concrete success criteria  
-6. **Aligned with MVP-FRONTEND-DECISION.md** - Consistent architecture
 
 ### **🎯 MVP Focus**
-- Configuration system + Project scaffolding + Basic CLI
-- Directory-based frontend development only
-- Backend inheritance pattern only
+
+- Single command CLI: `quickscale init myapp`
+- Standalone generated projects (no forced dependencies)
+- Git subtree documented but manual (no CLI automation)
+- One starter template (no variants)
 - Clear path to working Django projects
- - Scaffolded starter files generated in projects (theme packages are Post-MVP)
- - Module packages are Post-MVP
+- Validation with real client project
 
 This roadmap can be implemented incrementally, with each task building on the previous ones, leading to a working MVP that validates the architecture before adding complexity.
 
 ---
 
-## Appendix: Future Architecture Reference
+## **Appendix: Quick Reference**
 
-Keep the future architecture diagrams and naming matrices centralized to avoid drift:
+### **Key Documents**
+- **MVP Scope**: [DECISIONS.md MVP Feature Matrix](./DECISIONS.md#mvp-feature-matrix-authoritative)
+- **Git Subtree Workflow**: [DECISIONS.md Integration Note](./DECISIONS.md#integration-note-personal-toolkit-git-subtree)
+- **Directory Structures**: [SCAFFOLDING.md](./SCAFFOLDING.md)
+- **Strategic Vision**: [QUICKSCALE.md](./QUICKSCALE.md#evolution-strategy-personal-toolkit-first)
+- **Commercial Models**: [COMMERCIAL.md](./COMMERCIAL.md)
 
-- **Theme and module structures** → [SCAFFOLDING.md §4](./SCAFFOLDING.md#post-mvp-structure)
-- **Generated project layouts** → [SCAFFOLDING.md §5](./SCAFFOLDING.md#5-generated-project-output)
-- **Configuration schema drafts** → [DECISIONS.md](./DECISIONS.md#architectural-decision-configuration-driven-project-definition)
-- **Naming and packaging matrix** → [SCAFFOLDING.md §6](./SCAFFOLDING.md#6-naming-import-matrix-summary)
+### **Release Quick Reference**
+- **v0.52.0**: Project foundation (packages, tooling, dev environment)
+- **v0.53.0**: Templates (Jinja2 templates for Django projects)
+- **v0.54.0**: Generator (scaffolding engine)
+- **v0.55.0**: CLI (`quickscale init` command)
+- **v0.56.0**: Quality & testing (comprehensive test suite)
+- **v0.57.0**: Documentation (user guides complete)
+- **v0.58.0**: MVP validation (real project built)
+- **v1.0.0**: MVP release (production-ready personal toolkit)
+- **v1.x.0**: Post-MVP (modules extracted from real needs)
+- **v2.0.0+**: Community platform (optional, if proven successful)
+
+---
+
+**Maintainers**: Update this roadmap as tasks are completed. Mark completed tasks with ✅. When technical scope changes, update DECISIONS.md first, then update this roadmap to reflect those decisions.
