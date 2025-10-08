@@ -54,6 +54,22 @@ Repository docs
 - Use `ROADMAP.md` only for planning work that implements decisions already captured in `DECISIONS.md`.
 - Maintainers should cross-check the [document responsibilities section in `DECISIONS.md`](./DECISIONS.md#document-responsibilities-short) to keep this map aligned.
 
+## Glossary
+
+Canonical terminology used across QuickScale documentation:
+
+- **MVP** = Minimum Viable Product = Phase 1 = Personal Toolkit approach
+- **Post-MVP** = Phase 2+ (prefer explicit phase numbers when possible)
+- **Phase 1** = MVP (Personal Toolkit)
+- **Phase 2** = Module extraction (v1.1-v1.x)
+- **Phase 3** = Professional polish (v1.x)
+- **Phase 4** = Community platform (v2.0+)
+- **Module** = Backend module (Django app under `quickscale_modules`)
+- **Theme** = Starting point Django app under `quickscale_themes`
+- **Generated Project** = Output of `quickscale init`
+
+**Usage**: Prefer "MVP" or "Phase 1" over "Personal Toolkit" in technical docs. Use "Personal Toolkit" in strategic/marketing contexts.
+
 ## SSOT (Single Source of Truth) Reference
 
 This table shows which document to consult for authoritative decisions on common topics.
@@ -119,14 +135,16 @@ myapp/
 ├── .gitignore
 ├── .editorconfig
 ├── .pre-commit-config.yaml      # Code quality hooks (black, ruff)
-├── requirements.txt             # Production deps: Django, psycopg2, whitenoise, gunicorn
-├── requirements-dev.txt         # Dev deps: pytest, factory-boy, black, ruff
+├── pyproject.toml               # Poetry metadata and dependencies (generated)
+├── poetry.lock                  # Deterministic lockfile
 └── README.md                    # Comprehensive setup & deployment guide
 
 # quickscale/ (embeddable via manual subtree)
 # Commands live in DECISIONS.md; CLI helpers sit in the Post-MVP backlog.
 └── quickscale/
     └── quickscale_core/
+
+⚠️ Note: The generated starter does NOT include `quickscale_modules/`. Extracting reusable apps into `quickscale_modules/` is an advanced, manual workflow for maintainers and personal monorepos — see `DECISIONS.md#module-extraction-workflow` for guidance.
 ```
 
  **Key Point**: The generated project is **production-ready** and **yours to own and modify**. QuickScale provides professional foundations (Docker, PostgreSQL, pytest, CI/CD) matching industry standards, while maintaining full customizability. For tie-breakers about MVP scope, see [DECISIONS.md MVP Feature Matrix](./DECISIONS.md#mvp-feature-matrix-authoritative).
@@ -239,4 +257,13 @@ Add new terms here as documentation evolves; this section consolidates terminolo
 - **[ROADMAP.md](./ROADMAP.md)** - Development roadmap and implementation plan
 
 For optional backend customization patterns, reference the [backend extensions policy](./DECISIONS.md#backend-extensions-policy).
+
+
+## Optional backend customization (opt-in example)
+
+The MVP does NOT auto-generate a `backend_extensions.py` file. If you'd like a single, discoverable place to wire project-specific backend customizations, copy the example in `examples/client_extensions/` into your generated project and optionally enable it by adding `client_extensions` to `INSTALLED_APPS`.
+
+The example shows a minimal `backend_extensions.register()` contract and `AppConfig.ready()` wiring so you can opt in to a single extension entry point without changing the generator's minimal output.
+
+
 

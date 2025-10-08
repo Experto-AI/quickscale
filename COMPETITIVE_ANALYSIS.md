@@ -49,13 +49,13 @@ QuickScale is positioned as the **only composable Django SaaS framework** design
 | | | | | | |
 | **FRONTEND & UI** |
 | **Frontend Options** | Directory-based, any framework | HTMX, React, Vue | Any (manual setup) | React + TypeScript | React |
-| **Admin Interface** | Django admin (enhanced Post-MVP) | Wagtail CMS + Django admin | Django admin | Django admin | Django admin |
+| **Admin Interface** | Django admin (enhanced Post-MVP via admin module) | Wagtail CMS + Django admin | Django admin | Django admin | Django admin |
 | **UI Components** | Post-MVP | ✅ Tailwind, Bootstrap | ⚠️ Basic setup | ✅ Modern UI | ✅ Included |
 | **CMS Integration** | Not planned | ✅ Wagtail CMS | ❌ Manual | ❌ No | ❌ No |
 | | | | | | |
 | **DEVELOPMENT TOOLS** |
 | **CLI Tool** | `quickscale init` (MVP) | `pegasus init` + wizard | `cookiecutter` | Git clone | Download + setup |
-| **Docker Support** | Post-MVP | ✅ Included | ✅ Production-ready | ✅ AWS deployment | ✅ Docker Compose |
+| **Docker Support** | IN (v0.53) | ✅ Included | ✅ Production-ready | ✅ AWS deployment | ✅ Docker Compose |
 | **Testing Setup** | Django standard | ✅ Pytest configured | ✅ Extensive | ✅ Included | ⚠️ Basic |
 | **CI/CD** | Post-MVP | ⚠️ Manual | ✅ GitHub Actions | ✅ Configured | ⚠️ Manual |
 | **Email Integration** | Post-MVP | ✅ Sendgrid, Mailgun, etc. | ✅ anymail | ✅ Email templates | ✅ Included |
@@ -605,11 +605,17 @@ quickscale_modules/
 │   ├── webhook handling with logging
 │   └── invoice access and management
 │
-└── teams/                   # P1 - Third module
-    ├── multi-tenancy pattern (User → Team → Resources)
-    ├── role-based permissions (Owner, Admin, Member)
-    ├── invitation system with email tokens
-    └── row-level security query filters
+├── teams/                   # P1 - Third module
+│   ├── multi-tenancy pattern (User → Team → Resources)
+│   ├── role-based permissions (Owner, Admin, Member)
+│   ├── invitation system with email tokens
+│   └── row-level security query filters
+│
+└── admin/                   # P2 - Fourth module
+    ├── Enhanced Django admin interface with custom views
+    ├── System configuration and feature flags
+    ├── Monitoring dashboards (health, performance)
+    └── Audit logging for compliance and security
 ```
 
 **Success criteria**: Agencies can build client SaaS apps using these modules. Each module is reusable via git subtree across projects.
