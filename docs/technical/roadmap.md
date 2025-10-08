@@ -40,9 +40,9 @@ TARGET AUDIENCE: Development team, project managers, stakeholders tracking progr
 
 ## 🚀 **EVOLUTION-ALIGNED ROADMAP**
 
-Execution details live here; the "personal toolkit first, community platform later" narrative stays in [QUICKSCALE.md](./QUICKSCALE.md#evolution-strategy-personal-toolkit-first).
+Execution details live here; the "personal toolkit first, community platform later" narrative stays in [QUICKSCALE.md](../overview/quickscale.md#evolution-strategy-personal-toolkit-first).
 
-**AUTHORITATIVE SCOPE REFERENCE**: The [MVP Feature Matrix in DECISIONS.md](./DECISIONS.md#mvp-feature-matrix-authoritative) is the single source of truth for what's IN/OUT/PLANNED. When this roadmap conflicts with DECISIONS.md, DECISIONS.md wins.
+**AUTHORITATIVE SCOPE REFERENCE**: The [MVP Feature Matrix in DECISIONS.md](./decisions.md#mvp-feature-matrix-authoritative) is the single source of truth for what's IN/OUT/PLANNED. When this roadmap conflicts with DECISIONS.md, DECISIONS.md wins.
 
 ### **📋 Current State Assessment**
 - ✅ **Current Version**: v0.51.0
@@ -67,7 +67,7 @@ Each minor version (0.x.0) delivers a verifiable improvement that builds toward 
 > Note: For clarity across project documentation, the releases **v0.52 through v1.0.0** are considered collectively the "MVP" that delivers a production-ready personal toolkit. The earlier 0.52-0.55 releases are the "Foundation Phase" (incremental foundations) that prepare the codebase for the cumulative MVP deliverable.
 
 ### **Evolution Context Reference**
-Need the narrative backdrop? Jump to [`QUICKSCALE.md`](./QUICKSCALE.md#evolution-strategy-personal-toolkit-first) and come back here for the tasks.
+Need the narrative backdrop? Jump to [`QUICKSCALE.md`](../overview/quickscale.md#evolution-strategy-personal-toolkit-first) and come back here for the tasks.
 
 ---
 
@@ -86,7 +86,7 @@ Need the narrative backdrop? Jump to [`QUICKSCALE.md`](./QUICKSCALE.md#evolution
 - Git subtree workflow is documented for advanced users who want code sharing
 - Can build a real client project using the generated starter
 
-**🎯 Competitive Positioning**: Match competitors (SaaS Pegasus, Cookiecutter) on production-ready foundations while maintaining QuickScale's unique composability advantage. See [COMPETITIVE_ANALYSIS.md "What Must Be Incorporated"](./COMPETITIVE_ANALYSIS.md#what-quickscale-must-incorporate-from-competitors) for detailed rationale.
+**🎯 Competitive Positioning**: Match competitors (SaaS Pegasus, Cookiecutter) on production-ready foundations while maintaining QuickScale's unique composability advantage. See [COMPETITIVE_ANALYSIS.md "What Must Be Incorporated"](../overview/competitive_analysis.md#what-quickscale-must-incorporate-from-competitors) for detailed rationale.
 
 **IMPORTANT SCOPE CLARIFICATIONS** (from DECISIONS.md):
 - ✅ Generated projects use standalone `settings.py` (NO automatic inheritance from quickscale_core)
@@ -97,11 +97,11 @@ Need the narrative backdrop? Jump to [`QUICKSCALE.md`](./QUICKSCALE.md#evolution
 - ❌ NO YAML configuration system
 - ❌ NO CLI commands beyond `quickscale init`
 
-**Competitive Insight**: Every competitor (SaaS Pegasus, Cookiecutter, Apptension) provides production-ready defaults. Without these, QuickScale won't be taken seriously by agencies and professional developers. See [COMPETITIVE_ANALYSIS.md §1-3](./COMPETITIVE_ANALYSIS.md#-critical-for-mvp-viability-must-have) for P0 requirements.
+**Competitive Insight**: Every competitor (SaaS Pegasus, Cookiecutter, Apptension) provides production-ready defaults. Without these, QuickScale won't be taken seriously by agencies and professional developers. See [COMPETITIVE_ANALYSIS.md §1-3](../overview/competitive_analysis.md#-critical-for-mvp-viability-must-have) for P0 requirements.
 
-**Integration Note**: See [Personal Toolkit workflow in DECISIONS.md](./DECISIONS.md#integration-note-personal-toolkit-git-subtree) for the canonical git subtree commands and CLI wrapper roadmap.
+**Integration Note**: See [Personal Toolkit workflow in DECISIONS.md](./decisions.md#integration-note-personal-toolkit-git-subtree) for the canonical git subtree commands and CLI wrapper roadmap.
 
-**NOT in MVP** (see [MVP Feature Matrix](./DECISIONS.md#mvp-feature-matrix-authoritative) for authoritative list):
+**NOT in MVP** (see [MVP Feature Matrix](./decisions.md#mvp-feature-matrix-authoritative) for authoritative list):
 - ❌ Module packages (auth, payments, billing)
 - ❌ Theme packages
 - ❌ YAML configuration system
@@ -228,7 +228,7 @@ black --check .
 
 **Validation**: Package installs successfully; imports work; pytest runs (even with no tests yet)
 
-**Directory Structure Reference**: See [SCAFFOLDING.md §3 (MVP Structure)](./SCAFFOLDING.md#mvp-structure) for authoritative layout.
+**Directory Structure Reference**: See [SCAFFOLDING.md §3 (MVP Structure)](./scaffolding.md#mvp-structure) for authoritative layout.
 
 ---
 
@@ -317,14 +317,14 @@ print(template.render(project_name='testproject'))
 "
 ```
 
-**Template Storage**: All templates live in `quickscale_core/src/quickscale_core/scaffold/templates/` per [SCAFFOLDING.md §3](./SCAFFOLDING.md#mvp-structure).
+**Template Storage**: All templates live in `quickscale_core/src/quickscale_core/scaffold/templates/` per [SCAFFOLDING.md §3](./scaffolding.md#mvp-structure).
 
 ---
 
 ### **Task 0.53.1: Core Django Project Templates (Production-Ready)**
 **Priority**: Create essential Django project files with **production-ready configurations**
 
-**🎯 Competitive Requirement**: Match Cookiecutter/Pegasus on production-ready defaults (see [COMPETITIVE_ANALYSIS.md §1](./COMPETITIVE_ANALYSIS.md#1-production-ready-django-foundations))
+**🎯 Competitive Requirement**: Match Cookiecutter/Pegasus on production-ready defaults (see [COMPETITIVE_ANALYSIS.md §1](../overview/competitive_analysis.md#1-production-ready-django-foundations))
 
 **Tasks**:
 - [ ] **Create `manage.py.j2` template**
@@ -365,7 +365,7 @@ print(template.render(project_name='testproject'))
 
 **Competitive Benchmark**: Should match or exceed Cookiecutter's settings quality
 
-**Reference**: See [SCAFFOLDING.md §5.1](./SCAFFOLDING.md#51-mvp-ultra-minimal-django-project) + [COMPETITIVE_ANALYSIS.md §1](./COMPETITIVE_ANALYSIS.md#1-production-ready-django-foundations)
+**Reference**: See [SCAFFOLDING.md §5.1](./scaffolding.md#51-mvp-ultra-minimal-django-project) + [COMPETITIVE_ANALYSIS.md §1](../overview/competitive_analysis.md#1-production-ready-django-foundations)
 
 ---
 
@@ -395,7 +395,7 @@ print(template.render(project_name='testproject'))
 ### **Task 0.53.3: Project Metadata & DevOps Templates**
 **Priority**: Create supporting files with **production-grade DevOps setup**
 
-**🎯 Competitive Requirement**: Match Cookiecutter on DevOps quality (see [COMPETITIVE_ANALYSIS.md §1 & §5](./COMPETITIVE_ANALYSIS.md#5-cicd-pipeline-templates))
+**🎯 Competitive Requirement**: Match Cookiecutter on DevOps quality (see [COMPETITIVE_ANALYSIS.md §1 & §5](../overview/competitive_analysis.md#5-cicd-pipeline-templates))
 
 **Tasks**:
 - [ ] **Create `pyproject.toml.j2` template (production-ready Poetry metadata)**
@@ -446,7 +446,7 @@ print(template.render(project_name='testproject'))
 
 **Competitive Benchmark**: Should match Cookiecutter's production-readiness
 
-**Reference**: [COMPETITIVE_ANALYSIS.md §1 (Production Foundations)](./COMPETITIVE_ANALYSIS.md#1-production-ready-django-foundations)
+**Reference**: [COMPETITIVE_ANALYSIS.md §1 (Production Foundations)](../overview/competitive_analysis.md#1-production-ready-django-foundations)
 
 ---
 
@@ -709,7 +709,7 @@ def init(project_name: str):
 
 **Validation**: `quickscale init myapp` creates working Django project
 
-**CLI Reference**: See [CLI Command Matrix in DECISIONS.md](./DECISIONS.md#cli-command-matrix) for authoritative command list.
+**CLI Reference**: See [CLI Command Matrix in DECISIONS.md](./decisions.md#cli-command-matrix) for authoritative command list.
 
 ---
 
@@ -742,7 +742,7 @@ def init(project_name: str):
 
 **Objective**: Comprehensive testing, quality checks, CI/CD automation, and validation.
 
-**🎯 Competitive Requirement**: Match Cookiecutter on testing setup and CI/CD (see [COMPETITIVE_ANALYSIS.md §3 & §5](./COMPETITIVE_ANALYSIS.md#3-testing--quality-infrastructure))
+**🎯 Competitive Requirement**: Match Cookiecutter on testing setup and CI/CD (see [COMPETITIVE_ANALYSIS.md §3 & §5](../overview/competitive_analysis.md#3-testing--quality-infrastructure))
 
 **✅ Verifiable Improvement**:
 - Test coverage >80% for quickscale_core, >75% for quickscale_cli
@@ -806,7 +806,7 @@ tox  # or manually test with py310, py311, py312
 ### **Task 0.56.2: Code Quality, Coverage & CI/CD Templates**
 **Priority**: Ensure code quality meets professional standards + add CI/CD to generated projects
 
-**🎯 Competitive Requirement**: Generated projects must include CI/CD like Cookiecutter (see [COMPETITIVE_ANALYSIS.md §5](./COMPETITIVE_ANALYSIS.md#5-cicd-pipeline-templates))
+**🎯 Competitive Requirement**: Generated projects must include CI/CD like Cookiecutter (see [COMPETITIVE_ANALYSIS.md §5](../overview/competitive_analysis.md#5-cicd-pipeline-templates))
 
 **Tasks**:
 - [ ] **Achieve test coverage targets**
@@ -849,7 +849,7 @@ tox  # or manually test with py310, py311, py312
 
 **Competitive Benchmark**: Generated projects should have CI/CD quality matching Cookiecutter
 
-**Reference**: [COMPETITIVE_ANALYSIS.md §3 (Testing Infrastructure)](./COMPETITIVE_ANALYSIS.md#3-testing--quality-infrastructure) and [§5 (CI/CD)](./COMPETITIVE_ANALYSIS.md#5-cicd-pipeline-templates)
+**Reference**: [COMPETITIVE_ANALYSIS.md §3 (Testing Infrastructure)](../overview/competitive_analysis.md#3-testing--quality-infrastructure) and [§5 (CI/CD)](../overview/competitive_analysis.md#5-cicd-pipeline-templates)
 
 ---
 
@@ -932,7 +932,7 @@ cat doctest/README.md  # Should have clear instructions
 
 **Validation**: New user can follow docs and create their first project
 
-**Documentation Reference**: See [DECISIONS.md Document Responsibilities](./DECISIONS.md#document-responsibilities-short) for what goes where.
+**Documentation Reference**: See [DECISIONS.md Document Responsibilities](./decisions.md#document-responsibilities-short) for what goes where.
 
 ---
 
@@ -1128,10 +1128,10 @@ twine upload quickscale_core/dist/* quickscale_cli/dist/*
 - [ ] 📖 User and developer documentation
 - [ ] ✅ **VALIDATION: Build 1 real client project successfully**
 
-**🎯 Competitive Achievement**: Match SaaS Pegasus and Cookiecutter on production-ready foundations while maintaining composability advantage. See [COMPETITIVE_ANALYSIS.md Critical Path](./COMPETITIVE_ANALYSIS.md#critical-path-to-competitiveness).
+**🎯 Competitive Achievement**: Match SaaS Pegasus and Cookiecutter on production-ready foundations while maintaining composability advantage. See [COMPETITIVE_ANALYSIS.md Critical Path](../overview/competitive_analysis.md#critical-path-to-competitiveness).
 
 ### **Explicit MVP Limitations (By Design)**
-See [MVP Feature Matrix in DECISIONS.md](./DECISIONS.md#mvp-feature-matrix-authoritative) for authoritative list.
+See [MVP Feature Matrix in DECISIONS.md](./decisions.md#mvp-feature-matrix-authoritative) for authoritative list.
 
 - ❌ **No module packages**: Build from real needs in Phase 2
 - ❌ **No theme packages**: Generated projects are fully customizable
@@ -1185,15 +1185,7 @@ Each release adds one proven module or significant improvement based on real nee
 - **v1.7.0**: React frontend variant template (P2 - SPA option)
 - **v1.x.0**: Additional modules based on real client needs
 
-**🎯 SaaS Feature Parity Achieved at v1.3.0**: At this release, QuickScale matches SaaS Pegasus on core SaaS features (auth, billing, teams) while offering superior architecture (composability, shared updates). This milestone represents feature parity with established Django SaaS boilerplates. See [COMPETITIVE_ANALYSIS.md Timeline](./COMPETITIVE_ANALYSIS.md#timeline-reality-check).
-
-### Milestone Summary
-
-| Milestone | Version | Competitive Aspect |
-|---|---:|---|
-| Production Parity | v1.0 | Production-ready foundations (Docker, CI/CD, testing, security) |
-| SaaS Feature Parity | v1.3 | Core SaaS features: auth, billing, teams |
-| Ecosystem Leadership | v2.0+ | Marketplace, PyPI/private repo distribution, commercial extensions |
+**🎯 Competitive Parity Goal (v1.3.0)**: At this point, QuickScale matches SaaS Pegasus on core features (auth, billing, teams) while offering superior architecture (composability, shared updates). See [COMPETITIVE_ANALYSIS.md Timeline](../overview/competitive_analysis.md#timeline-reality-check).
 
 **Note**: Prioritization is based on competitive analysis. Adjust based on YOUR actual client needs.
 
@@ -1221,7 +1213,7 @@ Each release adds one proven module or significant improvement based on real nee
 4. **Update Client Projects**: Replace custom code with module via git subtree
 5. **Document**: Add module documentation and usage examples
 
-**Git Subtree Commands**: See [DECISIONS.md Git Subtree Workflow](./DECISIONS.md#integration-note-personal-toolkit-git-subtree) for authoritative manual commands.
+**Git Subtree Commands**: See [DECISIONS.md Git Subtree Workflow](./decisions.md#integration-note-personal-toolkit-git-subtree) for authoritative manual commands.
 
 **Note**: CLI wrapper commands for extraction/sync remain Post-MVP. Evaluate after establishing extraction workflow.
 
@@ -1233,7 +1225,7 @@ Each release adds one proven module or significant improvement based on real nee
 
 #### **Prioritized Module Development Sequence** (based on competitive analysis):
 
-**Phase 2 Priorities** (see [COMPETITIVE_ANALYSIS.md Module Roadmap](./COMPETITIVE_ANALYSIS.md#phase-2-post-mvp-v1---saas-essentials)):
+**Phase 2 Priorities** (see [COMPETITIVE_ANALYSIS.md Module Roadmap](../overview/competitive_analysis.md#phase-2-post-mvp-v1---saas-essentials)):
 
 1. **🔴 P1: `quickscale_modules.auth`** (First module)
    - Wraps django-allauth with social auth providers
@@ -1269,7 +1261,7 @@ Each release adds one proven module or significant improvement based on real nee
 
 **Extraction Rule**: Only build after using 2-3 times in real client projects. Don't build speculatively.
 
-**Competitive Context**: This sequence matches successful competitors' feature prioritization while maintaining QuickScale's reusability advantage. See [COMPETITIVE_ANALYSIS.md Strategic Recommendations](./COMPETITIVE_ANALYSIS.md#strategic-recommendations).
+**Competitive Context**: This sequence matches successful competitors' feature prioritization while maintaining QuickScale's reusability advantage. See [COMPETITIVE_ANALYSIS.md Strategic Recommendations](../overview/competitive_analysis.md#strategic-recommendations).
 
 #### **Admin Module Scope**
 
@@ -1285,7 +1277,7 @@ The admin module scope has been defined in [DECISIONS.md Admin Module Scope Defi
 - [ ] Distributed via git subtree to other projects
 - [ ] Consider PEP 420 namespace packages if multiple modules exist
 
-**Module Structure Reference**: See [SCAFFOLDING.md §4 (Post-MVP Modules)](./SCAFFOLDING.md#post-mvp-structure) for canonical package layout.
+**Module Structure Reference**: See [SCAFFOLDING.md §4 (Post-MVP Modules)](./scaffolding.md#post-mvp-structure) for canonical package layout.
 
 ---
 
@@ -1302,7 +1294,7 @@ Based on MVP usage feedback, improve code sharing workflow:
   - [ ] `quickscale embed-core <project>` - Embed quickscale_core via git subtree
   - [ ] `quickscale update-core <project>` - Pull updates from monorepo
   - [ ] `quickscale sync-push <project>` - Push improvements back to monorepo
-  - [ ] Update [CLI Command Matrix](./DECISIONS.md#cli-command-matrix) with implementation status
+  - [ ] Update [CLI Command Matrix](./decisions.md#cli-command-matrix) with implementation status
 - [ ] **Document versioning strategy**
   - [ ] Git tags for stable snapshots (e.g., `core-v1.0.0`)
   - [ ] Semantic versioning for modules
@@ -1334,7 +1326,7 @@ Based on MVP usage feedback, improve code sharing workflow:
 **Decision Point**: Add YAML config ONLY if it solves real pain points from MVP usage.
 
 **If pursuing**:
-- [ ] Define minimal configuration schema (see [DECISIONS.md illustrative schemas](./DECISIONS.md#architectural-decision-configuration-driven-project-definition))
+- [ ] Define minimal configuration schema (see [DECISIONS.md illustrative schemas](./decisions.md#architectural-decision-configuration-driven-project-definition))
 - [ ] Implement config loader and validator
 - [ ] Create CLI commands: `quickscale validate`, `quickscale generate`
 - [ ] Update templates to support config-driven generation
@@ -1371,7 +1363,7 @@ When you're ready to share with community:
   - [ ] Use PEP 420 implicit namespaces (`quickscale_modules.*`)
   - [ ] Implement semantic versioning and compatibility tracking
   - [ ] Create GitHub Actions for automated publishing
-- [ ] **Create private PyPI for commercial modules** (see [COMMERCIAL.md](./COMMERCIAL.md))
+- [ ] **Create private PyPI for commercial modules** (see [COMMERCIAL.md](../overview/commercial.md))
   - [ ] Set up private package repository
   - [ ] Implement license validation for commercial modules
   - [ ] Create subscription-based access system
@@ -1399,7 +1391,7 @@ If reusable business logic patterns emerge:
   - [ ] Base model and business logic patterns
   - [ ] Frontend integration guidelines
 
-**Theme Structure Reference**: See [SCAFFOLDING.md §4 (Post-MVP Themes)](./SCAFFOLDING.md#post-mvp-structure).
+**Theme Structure Reference**: See [SCAFFOLDING.md §4 (Post-MVP Themes)](./scaffolding.md#post-mvp-structure).
 
 ---
 
@@ -1424,7 +1416,7 @@ Only if there's real demand:
   - [ ] Payment integration
   - [ ] Customer access control
 
-See [COMMERCIAL.md](./COMMERCIAL.md) for detailed commercial distribution strategies.
+See [COMMERCIAL.md](../overview/commercial.md) for detailed commercial distribution strategies.
 
 ---
 
@@ -1464,14 +1456,14 @@ This roadmap can be implemented incrementally, with each task building on the pr
 
 ---
 
-## **Appendix: Quick Reference**
+### **Appendix: Quick Reference**
 
 ### **Key Documents**
-- **MVP Scope**: [DECISIONS.md MVP Feature Matrix](./DECISIONS.md#mvp-feature-matrix-authoritative)
-- **Git Subtree Workflow**: [DECISIONS.md Integration Note](./DECISIONS.md#integration-note-personal-toolkit-git-subtree)
-- **Directory Structures**: [SCAFFOLDING.md](./SCAFFOLDING.md)
-- **Strategic Vision**: [QUICKSCALE.md](./QUICKSCALE.md#evolution-strategy-personal-toolkit-first)
-- **Commercial Models**: [COMMERCIAL.md](./COMMERCIAL.md)
+- **MVP Scope**: [DECISIONS.md MVP Feature Matrix](./decisions.md#mvp-feature-matrix-authoritative)
+- **Git Subtree Workflow**: [DECISIONS.md Integration Note](./decisions.md#integration-note-personal-toolkit-git-subtree)
+- **Directory Structures**: [SCAFFOLDING.md](./scaffolding.md)
+- **Strategic Vision**: [QUICKSCALE.md](../overview/quickscale.md#evolution-strategy-personal-toolkit-first)
+- **Commercial Models**: [COMMERCIAL.md](../overview/commercial.md)
 
 ### **Release Quick Reference**
 - **v0.52.0**: Project foundation (packages, tooling, dev environment)
