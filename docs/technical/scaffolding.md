@@ -132,7 +132,7 @@ quickscale/
 
 ### Example: personal monorepo (MVP-friendly layout)
 
-ℹ️ **Note**: `quickscale_modules/` shown below is optional for personal monorepos only, NOT part of generated projects. See [Module Extraction Clarification](./DECISIONS.md#integration-note-personal-toolkit-git-subtree-) for authoritative guidance.
+ℹ️ **Note**: `quickscale_modules/` shown below is optional for personal monorepos only, NOT part of generated projects. See [Module Extraction Clarification](./decisions.md#integration-note-personal-toolkit-git-subtree-) for authoritative guidance.
 
 The following example is the practical, MVP-friendly monorepo layout recommended for solo developers using the "Personal Toolkit" approach (git subtree). It's more verbose than the high-level Post-MVP tree above and is intended as a copyable reference for setting up your own quickscale monorepo.
 
@@ -207,14 +207,14 @@ quickscale_modules/           # No __init__.py at namespace root
 - When a feature proves reusable, extract it into `quickscale_modules/<feature>/` and commit to the monorepo.
 - For archival history, keep long-form rationale and comparisons in `docs/legacy/` or `legacy/` rather than the repo root.
 
-Requirements vs Packaging note: See [Package Structure and Naming Conventions in DECISIONS.md](./DECISIONS.md#package-structure-and-naming-conventions) for canonical guidance on generated project dependencies versus package metadata.
+Requirements vs Packaging note: See [Package Structure and Naming Conventions in DECISIONS.md](./decisions.md#package-structure-and-naming-conventions) for canonical guidance on generated project dependencies versus package metadata.
 
 
 ---
 ## 3. Phase 1 (MVP) Required Structure {#mvp-structure}
 Only `quickscale_core` + `quickscale_cli` needed. NO schemas, NO examples, NO packaged themes. Just project scaffolding templates.
 
-🔎 **Scope note**: For in/out status defer to the [MVP Feature Matrix](./DECISIONS.md#mvp-feature-matrix-authoritative). This section focuses on the file tree details only.
+🔎 **Scope note**: For in/out status defer to the [MVP Feature Matrix](./decisions.md#mvp-feature-matrix-authoritative). This section focuses on the file tree details only.
 
 ```
 quickscale_core/
@@ -247,7 +247,7 @@ quickscale_core/
 - ❌ NO config/ directory (no YAML/JSON configuration loading in MVP)
 - ❌ NO apps.py (not a Django app in MVP)
 - ❌ NO complex utils (just basics)
-- ❌ NO `backend_extensions.py` generation in MVP — see [backend_extensions.py policy](./DECISIONS.md#backend-extensions-policy). Post‑MVP: optional scaffolding/templates may be provided for maintainers and generated projects.
+- ❌ NO `backend_extensions.py` generation in MVP — see [backend_extensions.py policy](./decisions.md#backend-extensions-policy)
 - ❌ NO variants system (just one simple template)
 - ❌ NO automatic settings inheritance (standard Django `settings.py` only). Generated starters are standalone by default; optional inheritance patterns are documented for advanced users in `DECISIONS.md`.
 
@@ -264,14 +264,14 @@ quickscale_cli/
     └── test_cli.py
 
 **MVP Simplifications:**
-- ❌ NO automated CLI wrappers: manual `git subtree` commands remain the supported workflow in MVP (see the [canonical workflow in DECISIONS.md](./DECISIONS.md#integration-note-personal-toolkit-git-subtree)).
+- ❌ NO automated CLI wrappers: manual `git subtree` commands remain the supported workflow in MVP (see the [canonical workflow in DECISIONS.md](./decisions.md#integration-note-personal-toolkit-git-subtree)).
 - ❌ NO git/ directory (no automation in MVP)
 - ❌ NO validate/generate commands (Post-MVP)
 - ❌ NO complex IO (just basic print)
 
 **Philosophy**: One command. That's it. `quickscale init myapp`
 
-Note: Git subtree documentation is provided for users who want code sharing. Manual subtree commands are documented for transparency and advanced users. For the status of potential Post-MVP CLI wrapper helpers, defer to the [CLI command matrix in DECISIONS.md](./DECISIONS.md#cli-command-matrix).
+Note: Git subtree documentation is provided for users who want code sharing. Manual subtree commands are documented for transparency and advanced users. For the status of potential Post-MVP CLI wrapper helpers, defer to the [CLI command matrix in DECISIONS.md](./decisions.md#cli-command-matrix).
 ```
 
 ---
@@ -372,7 +372,7 @@ SECRET_KEY = 'django-insecure-change-this-in-production'
 
 ### Post-MVP Settings (Inheritance - Illustrative Only)
 
-ℹ️ **Post-MVP reference**: See [`DECISIONS.md`](./DECISIONS.md#integration-note-personal-toolkit-git-subtree-) for the illustrative inheritance patterns. Phase 1 projects stay standalone.
+ℹ️ **Post-MVP reference**: See [`DECISIONS.md`](./decisions.md#integration-note-personal-toolkit-git-subtree-) for the illustrative inheritance patterns. Phase 1 projects stay standalone.
 
 Note: Settings inheritance shown above is illustrative and assumes you have manually embedded `quickscale_core` into your project using the documented git subtree workflow. See [DECISIONS.md Settings Inheritance Policy](./DECISIONS.md#mvp-feature-matrix-authoritative) for the authoritative policy and guidance on when to adopt inheritance vs standalone settings.
 
@@ -454,7 +454,7 @@ Rules: Dotted namespaces for imports, underscore-qualified app labels to avoid c
 | Configuration-Driven | Central `schemas/` + `config/` loader & validator |
 | Backend Extension Pattern | Post‑MVP / illustrative: `backend_extensions.py` + theme `base_models.py` (MVP does NOT auto-generate this file) |
 | Directory-Based Frontend | `custom_frontend/` with `templates/`, `static/`, `variants/` |
-| Git Subtree Distribution | Manual `git subtree` commands are documented for transparency; track planned wrapper helpers in the [CLI command matrix](./DECISIONS.md#cli-command-matrix). |
+| Git Subtree Distribution | Manual `git subtree` commands are documented for transparency; track planned wrapper helpers in the [CLI command matrix](./decisions.md#cli-command-matrix). |
 | PEP 420 Namespaces | No `__init__.py` at `quickscale_modules/` root |
 | Tests Outside src | `package/tests/` placement enforced |
 | Creation-Time Assembly | Generator emits static Django project (no runtime plugin loading) |
@@ -498,7 +498,7 @@ Backward compatibility stance: Config migrations tracked under `schemas/migratio
 ---
 ## 11. Authoring & Maintenance Notes
 - When adding a new package: follow naming matrix, create `pyproject.toml`, add to CI publish workflow.
-- CLI commands (MVP): keep the surface limited to `quickscale init`. If Post-MVP wrapper commands ship, implement them in `quickscale_cli/commands/` with corresponding tests, ensure git operations delegate to a tested helper (for example `git/subtree_manager.py`), and update the [CLI command matrix](./DECISIONS.md#cli-command-matrix). Manual `git subtree` commands remain documented for advanced users and recovery scenarios.
+- CLI commands (MVP): keep the surface limited to `quickscale init`. If Post-MVP wrapper commands ship, implement them in `quickscale_cli/commands/` with corresponding tests, ensure git operations delegate to a tested helper (for example `git/subtree_manager.py`), and update the [CLI command matrix](./decisions.md#cli-command-matrix). Manual `git subtree` commands remain documented for advanced users and recovery scenarios.
 - Never place tests under `src/`; enforce via CI linter.
 - Template additions require test coverage in `test_scaffold/test_templates.py`.
 - CLI command additions require integration tests in `test_integration/`.

@@ -37,9 +37,8 @@ TARGET AUDIENCE: Stakeholders, strategic decision makers, contributors, potentia
 1. [Executive Summary](#executive-summary)
 2. [Evolution Rationale](#evolution-rationale)
 3. [Competitive Landscape Analysis](#competitive-landscape-analysis)
-4. [Market Positioning](#market-positioning)
-5. [Strategic Architecture Vision](#strategic-architecture-vision)
-6. [Future Strategy](#future-strategy)
+4. [Strategic Architecture Vision](#strategic-architecture-vision)
+5. [Future Strategy](#future-strategy)
 
 ---
 
@@ -49,7 +48,7 @@ TARGET AUDIENCE: Stakeholders, strategic decision makers, contributors, potentia
 
 QuickScale follows a **"personal toolkit first, community platform later"** evolution strategy.
 
-**Note**: The "Personal Toolkit" approach is the official MVP implementation strategy. See [Personal Toolkit workflow in DECISIONS.md](./DECISIONS.md#integration-note-personal-toolkit-git-subtree-) for detailed git subtree workflows, extraction patterns, and implementation guidance.
+**Note**: The "Personal Toolkit" approach is the official MVP implementation strategy. See [Personal Toolkit workflow in DECISIONS.md](../technical/decisions.md#integration-note-personal-toolkit-git-subtree) for detailed git subtree workflows, extraction patterns, and implementation guidance.
 
 ### **Why This Evolution is Needed**
 
@@ -337,4 +336,4 @@ This approach enables:
 - Payment processor integrations beyond Stripe
 - Analytics and monitoring platform integrations
 
-For detailed technical specifications and implementation rules, see [DECISIONS.md](./DECISIONS.md).
+For detailed technical specifications and implementation rules, see [DECISIONS.md](../technical/decisions.md).
