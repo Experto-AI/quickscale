@@ -640,7 +640,7 @@ quickscale_modules/
 **Deliverables:**
 1. ✅ **Package marketplace** - quickscale-packages.org (inspired by Wagtail)
 2. ✅ **Community modules** - Third-party contributed modules (analytics, CRM, etc.)
-3. ✅ **Commercial extensions** - Private PyPI for subscription-based modules (see COMMERCIAL.md)
+3. ✅ **Commercial extensions** - Private PyPI for subscription-based modules (see ../overview/commercial.md)
 4. ✅ **Advanced integrations** - Stripe Connect, multi-currency, advanced analytics
 5. ✅ **Theme marketplace** - Vertical-specific starting point themes
 6. ✅ **QuickScale Cloud** (optional) - Managed hosting for QuickScale projects
@@ -799,12 +799,9 @@ The competitors validate the market and show what features matter. QuickScale's 
 
 ## See Also
 
-- [QUICKSCALE.md](./QUICKSCALE.md) - Strategic vision and evolution rationale
-- [DECISIONS.md](./DECISIONS.md) - Technical architecture decisions
-- [ROADMAP.md](./ROADMAP.md) - Development timeline
-- [COMMERCIAL.md](./COMMERCIAL.md) - Commercial extension strategy
+- [QUICKSCALE.md](../overview/quickscale.md) - Strategic vision and evolution rationale
+- [DECISIONS.md](../technical/decisions.md) - Technical architecture decisions
+- [ROADMAP.md](../technical/roadmap.md) - Development timeline
+- [COMMERCIAL.md](../overview/commercial.md) - Commercial extension strategy
 
----
 
-**Last Updated**: 2025-10-07
-**Next Review**: After MVP release

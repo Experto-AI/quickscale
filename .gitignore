@@ -177,6 +177,13 @@ cython_debug/
 # Coverage
 htmlcov/
 
+# CODE
+
+.vscode/
+.claude/
+
+
+
 
 
 
