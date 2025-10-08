@@ -28,7 +28,7 @@ QuickScale's Apache 2.0 license enables commercial extensions and subscription m
 - **License**: Apache 2.0 allows commercial use, private distribution, and proprietary extensions.
 - **MVP status**: Everything beyond personal git-subtree workflows is Post-MVP planning.
 - **Where to start**: Embed QuickScale as a personal toolkit first; revisit this guide once you have repeatable commercial demand.
-- **Technical patterns**: See the [backend extensions policy](./DECISIONS.md#backend-extensions-policy) for canonical code hooks.
+-- **Technical patterns**: See the [backend extensions policy](../technical/decisions.md#backend-extensions-policy) for canonical code hooks.
 
 ## Table of Contents
 - [Commercial Licensing Rights](#commercial-licensing-rights)
@@ -381,7 +381,7 @@ commercial-quickscale validate-license
 
 ℹ️ This YAML-driven workflow is illustrative and sits firmly in Post-MVP plans.
 
-For canonical guidance on backend extension patterns, see the [backend extensions policy](./DECISIONS.md#backend-extensions-policy).
+For canonical guidance on backend extension patterns, see the [backend extensions policy](../technical/decisions.md#backend-extensions-policy).
 
 ```yaml
 # quickscale.yml with commercial modules (Post-MVP illustrative - not part of MVP)
@@ -551,6 +551,6 @@ Compatibility note: The new QuickScale architecture is intentionally breaking an
 
 ## See Also
 
-- [DECISIONS.md](./DECISIONS.md) — authoritative technical scope and backend extension policy
-- [SCAFFOLDING.md](./SCAFFOLDING.md) — canonical directory structures and naming matrix
-- [ROADMAP.md](./ROADMAP.md) — implementation phases that unlock the commercial playbook
+- [DECISIONS.md](../technical/decisions.md) — authoritative technical scope and backend extension policy
+- [SCAFFOLDING.md](../technical/scaffolding.md) — canonical directory structures and naming matrix
+- [ROADMAP.md](../technical/roadmap.md) — implementation phases that unlock the commercial playbook

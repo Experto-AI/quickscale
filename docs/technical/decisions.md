@@ -46,24 +46,21 @@ This document records authoritative architecture, technical & behaviour decision
 
 ## MVP vs. Post-MVP Scope
 
-**CRITICAL CLARIFICATION**: This document describes both the **MVP implementation** (Phase 1) and the **target architecture** (Post-MVP). QuickScale follows a **"start simple, evolve organically"** strategy. For the narrative rationale behind this evolution, defer to the [strategic overview in QUICKSCALE.md](./QUICKSCALE.md#evolution-strategy-personal-toolkit-first); this section focuses on the technical implications.
+**CRITICAL CLARIFICATION**: This document describes both the **MVP implementation** (Phase 1) and the **target architecture** (Post-MVP). QuickScale follows a **"start simple, evolve organically"** strategy. For the narrative rationale behind this evolution, defer to the [strategic overview in QUICKSCALE.md](../overview/quickscale.md#evolution-strategy-personal-toolkit-first); this section focuses on the technical implications.
 
 ### **Strategic Evolution Path:**
-- **MVP Goal**: Personal toolkit for client projects (CONTENDING-ALTERNATIVE approach)
-- **Long-term Vision**: Community ecosystem platform with marketplace
-- **Implementation Strategy**: Build MVP fast, evolve based on real usage
 
 ### **MVP (Phase 1) - Personal Toolkit First:**
 - ✅ **quickscale_core**: Core scaffolding, minimal utilities, git subtree integration
 - ✅ **quickscale_cli**: Simple CLI - just `quickscale init myapp` command
 - ✅ **Scaffolded starter**: Generates minimal Django starter project users own completely
-- ✅ **Git subtree distribution**: Git subtree (ONLY MVP distribution mechanism)
+ These requirements ensure QuickScale matches competitors on production-readiness while maintaining its unique composability advantage. See [COMPETITIVE_ANALYSIS.md "What Must Be Incorporated"](../overview/competitive_analysis.md#what-quickscale-must-incorporate-from-competitors) for detailed analysis.
 - ✅ **Django settings inheritance**: Simple Python imports, no YAML config required
 - ✅ **Single starter template**: One way to create projects (no multiple templates)
 
 Note: The MVP CLI intentionally implements a single, ultra-simple command: `quickscale init <project>`. Helper wrapper commands for git-subtree workflows (for example `quickscale embed-core`, `quickscale update-core`, `quickscale sync-push`) are not required for the initial release and therefore are not part of the MVP CLI. Those helpers are deferred to the Post-MVP backlog and will only be reconsidered after the initial `quickscale init` release proves sustained manual demand from users who opt into embedding the core.
 
-**What MVP Generates:** See the [authoritative MVP structure diagram in SCAFFOLDING.md §3](./SCAFFOLDING.md#mvp-structure) for the full tree. The starter remains the standard Django layout with standalone settings by default.
+**What MVP Generates:** See the [authoritative MVP structure diagram in SCAFFOLDING.md §3](./scaffolding.md#mvp-structure) for the full tree. The starter remains the standard Django layout with standalone settings by default.
 
 ### Integration note: Personal Toolkit (git-subtree) ✅ {#integration-note-personal-toolkit-git-subtree}
 
@@ -114,7 +111,7 @@ git add quickscale_modules/myfeature && git commit -m "chore(modules): extract m
 - ❌ **PyPI distribution**: For commercial modules, subscriptions, external agencies
 - ❌ **Marketplace ecosystem**: Community-driven package discovery
 
-**Post-MVP Package Structure (When Ready):** Refer to the [detailed post-MVP layout in SCAFFOLDING.md §4](./SCAFFOLDING.md#post-mvp-structure) for the canonical directory tree and packaging notes. Key enforcement rules are summarised in the MVP feature matrix and the naming matrix inside SCAFFOLDING.md §6.
+**Post-MVP Package Structure (When Ready):** Refer to the [detailed post-MVP layout in SCAFFOLDING.md §4](./scaffolding.md#post-mvp-structure) for the canonical directory tree and packaging notes. Key enforcement rules are summarised in the MVP feature matrix and the naming matrix inside SCAFFOLDING.md §6.
 
 Implementation policy (MVP vs Post-MVP):
 - `quickscale_core` remains a regular Python package and MUST include an `__init__.py`.
@@ -138,7 +135,7 @@ This matrix is the authoritative source of truth for what is IN / OUT / PLANNED 
 | `quickscale_core` embedding via git-subtree (manual documented workflow) | IN (manual) | Manual subtree commands are documented and supported; embedding is opt-in and advanced. |
 | CLI git-subtree wrapper commands (`embed-core`, `update-core`, `sync-push`) | PLANNED | Post-MVP backlog; implement only after manual workflows demonstrate sustained demand. |
 | Settings inheritance from `quickscale_core` into generated project | OPTIONAL | Default generated project uses standalone `settings.py`. If user explicitly embeds `quickscale_core`, optional settings inheritance is allowed and documented. |
-| **PRODUCTION-READY FOUNDATIONS (Competitive Requirement)** | | **See [COMPETITIVE_ANALYSIS.md §1-3](../COMPETITIVE_ANALYSIS.md#-critical-for-mvp-viability-must-have)** |
+| **PRODUCTION-READY FOUNDATIONS (Competitive Requirement)** | | **See [COMPETITIVE_ANALYSIS.md §1-3](../overview/competitive_analysis.md#-critical-for-mvp-viability-must-have)** |
 | Docker setup (Dockerfile + docker-compose.yml) | IN | Production-ready multi-stage Dockerfile + local dev docker-compose with PostgreSQL & Redis services. Match Cookiecutter quality. |
 | PostgreSQL configuration (dev + production) | IN | Split settings: SQLite for local dev, PostgreSQL for production. DATABASE_URL env var support via python-decouple/django-environ. |
 | Environment-based configuration (.env + split settings) | IN | settings/base.py, settings/local.py, settings/production.py pattern. Secure SECRET_KEY loading from environment. |
@@ -160,7 +157,7 @@ Notes:
 - This table is authoritative for release planning and documentation. If any document needs to show an example layout or convenience (e.g., `quickscale_modules/` appearing in a monorepo example), it must note that the item is "optional/personal-monorepo convenience" and point readers to this matrix for MVP status.
 
 **Competitive Rationale for Production-Ready Foundations**:
-The production-ready foundations (Docker, PostgreSQL, pytest, CI/CD, etc.) are classified as **P0 - Critical for MVP Viability** based on competitive analysis. Every successful Django boilerplate (SaaS Pegasus, Cookiecutter, Apptension) provides these as table stakes. Without them, QuickScale would be perceived as a toy project rather than a professional tool suitable for agency work. These requirements ensure QuickScale matches competitors on production-readiness while maintaining its unique composability advantage. See [COMPETITIVE_ANALYSIS.md "What Must Be Incorporated"](./COMPETITIVE_ANALYSIS.md#what-quickscale-must-incorporate-from-competitors) for detailed analysis.
+The production-ready foundations (Docker, PostgreSQL, pytest, CI/CD, etc.) are classified as **P0 - Critical for MVP Viability** based on competitive analysis. Every successful Django boilerplate (SaaS Pegasus, Cookiecutter, Apptension) provides these as table stakes. Without them, QuickScale would be perceived as a toy project rather than a professional tool suitable for agency work. These requirements ensure QuickScale matches competitors on production-readiness while maintaining its unique composability advantage. See [COMPETITIVE_ANALYSIS.md "What Must Be Incorporated"](../overview/competitive_analysis.md#what-quickscale-must-incorporate-from-competitors) for detailed analysis.
 
 Authoritative policy (tie-breakers)
 ----------------------------------
@@ -223,9 +220,9 @@ QuickScale provides building blocks and acceleration tools, not complete busines
 - **Themes** (Post-MVP): Starting points that require customization for specific business needs
 - **Frontends** (MVP): Directory-based presentation layer for customization via scaffolded templates
 
-**Target Architecture Structure (Post-MVP):** The full tree lives in [SCAFFOLDING.md §2](./SCAFFOLDING.md#2-monorepo-target-layout-post-mvp-end-state). This section focuses on the architectural rationale; see SCAFFOLDING.md for the canonical layout.
+**Target Architecture Structure (Post-MVP):** The full tree lives in [SCAFFOLDING.md §2](./scaffolding.md#2-monorepo-target-layout-post-mvp-end-state). This section focuses on the architectural rationale; see SCAFFOLDING.md for the canonical layout.
 
-MVP Architecture Structure (Phase 1): refer to [SCAFFOLDING.md §3](./SCAFFOLDING.md#mvp-structure) for the generated package tree. DECISIONS.md records the policies that guide that layout rather than duplicating the tree.
+MVP Architecture Structure (Phase 1): refer to [SCAFFOLDING.md §3](./scaffolding.md#mvp-structure) for the generated package tree. DECISIONS.md records the policies that guide that layout rather than duplicating the tree.
 
 **Key Advantages of Library-Style Architecture:**
 - ✅ **Familiar Mental Model**: Like Python's ecosystem (import what you need)
@@ -494,7 +491,7 @@ The **Backend Extension & Frontend Development** decision describes the long‑t
 - MVP: The CLI and scaffold produce a minimal Django project and optional `custom_frontend/` directory. The MVP intentionally does NOT generate `backend_extensions.py` automatically. This avoids regeneration risks and keeps the generated project fully owned by the user.
 - Post‑MVP: When module and theme packaging is introduced, the scaffolding may optionally generate `backend_extensions.py` templates or helpers as part of richer project generation flows.
 
-*Illustrative Backend Extension Pattern (Post‑MVP):* (Commercial licensing integrations expand on this pattern in [`COMMERCIAL.md`](./COMMERCIAL.md#subscription-based-repository-implementation).)
+*Illustrative Backend Extension Pattern (Post‑MVP):* (Commercial licensing integrations expand on this pattern in [`COMMERCIAL.md`](../overview/commercial.md#subscription-based-repository-implementation).)
 ```python
 # Example: illustrative backend_extensions.py (Post‑MVP)
 from quickscale_themes.starter import models as starter_models
@@ -513,9 +510,9 @@ class ExtendedBusinessLogic(starter_business.StarterBusiness):
     return result
 ```
 
-*Directory‑Based Frontend Pattern (MVP illustrative):* Refer to the concise starter tree in [SCAFFOLDING.md §5](./SCAFFOLDING.md#5-generated-project-output) for the canonical layout. This section only records the decision that `custom_frontend/` remains optional in MVP while richer tooling is deferred.
+*Directory‑Based Frontend Pattern (MVP illustrative):* Refer to the concise starter tree in [SCAFFOLDING.md §5](./scaffolding.md#5-generated-project-output) for the canonical layout. This section only records the decision that `custom_frontend/` remains optional in MVP while richer tooling is deferred.
 
-*Generated Project Structure (MVP):* The structure is catalogued once in [SCAFFOLDING.md §5.1](./SCAFFOLDING.md#51-mvp-ultra-minimal-django-project); DECISIONS.md defers to that reference to avoid duplication.
+*Generated Project Structure (MVP):* The structure is catalogued once in [SCAFFOLDING.md §5.1](./scaffolding.md#51-mvp-ultra-minimal-django-project); DECISIONS.md defers to that reference to avoid duplication.
 
 **MVP Core Features:**
 1. **Directory‑Based Frontend**: Optional `custom_frontend/` with template and static directories
@@ -631,7 +628,7 @@ Package Structure and Naming Conventions
 
 **AUTHORITATIVE DECISION: PEP 420 Namespace Packages**
 
-The canonical naming and import matrix now lives in [SCAFFOLDING.md §6](./SCAFFOLDING.md#6-naming-import-matrix-summary). This section records the policy-level decisions only:
+The canonical naming and import matrix now lives in [SCAFFOLDING.md §6](./scaffolding.md#6-naming-import-matrix-summary). This section records the policy-level decisions only:
 
 - Post-MVP modules and themes MUST use PEP 420 implicit namespace packages so independently released wheels can share the `quickscale_modules` / `quickscale_themes` namespaces without a namespace `__init__.py`.
 - MVP starters remain simple: `quickscale_core` is a regular package with an explicit `__init__.py`, no namespace packaging required until Phase 2+.

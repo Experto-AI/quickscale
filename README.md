@@ -1,4 +1,3 @@
-
 # 🚀 QuickScale
 
 <!-- 
@@ -35,24 +34,25 @@ QuickScale is a **composable Django framework** designed for **solo developers a
 - **Scale your development business**: Standardize your tech stack and accelerate client project delivery
 - **Build a community ecosystem**: Share and monetize your extensions while benefiting from community contributions
 
-🧭 **Evolution Snapshot**: QuickScale intentionally ships as a personal toolkit today and only grows into a community platform when real demand emerges. Catch the full story in the [evolution overview](./QUICKSCALE.md#evolution-strategy-personal-toolkit-first).
+🧭 **Evolution Snapshot**: QuickScale intentionally ships as a personal toolkit today and only grows into a community platform when real demand emerges. Catch the full story in the [evolution overview](./docs/overview/quickscale.md#evolution-strategy-personal-toolkit-first).
 
 ## Documentation map
 
 ```
-Repository docs
+Repository docs (moved into `docs/`)
 ├── README.md — Quick start guidance for newcomers (this file)
-├── DECISIONS.md — Authoritative technical rules and MVP scope
-├── ROADMAP.md — Execution timeline that follows DECISIONS.md
-├── SCAFFOLDING.md — Directory and package layout standards
-├── QUICKSCALE.md — Strategic vision and market positioning
-├── COMMERCIAL.md — Post-MVP monetisation guidance
-└── COMPETITIVE_ANALYSIS.md — Market comparison vs SaaS Pegasus and alternatives
+├── docs/index.md — Documentation index / gateway
+├── docs/technical/decisions.md — Authoritative technical rules and MVP scope
+├── docs/technical/roadmap.md — Execution timeline that follows DECISIONS.md
+├── docs/technical/scaffolding.md — Directory and package layout standards
+├── docs/overview/quickscale.md — Strategic vision and market positioning
+├── docs/overview/commercial.md — Post-MVP monetisation guidance
+└── docs/overview/competitive_analysis.md — Market comparison vs SaaS Pegasus and alternatives
 ```
 
 - Start with `README.md` for the big-picture overview, then dive into `DECISIONS.md` whenever you need the canonical rule or tie-breaker.
-- Use `ROADMAP.md` only for planning work that implements decisions already captured in `DECISIONS.md`.
-- Maintainers should cross-check the [document responsibilities section in `DECISIONS.md`](./DECISIONS.md#document-responsibilities-short) to keep this map aligned.
+- Use `ROADMAP.md` only for planning work that implements decisions already captured in `docs/technical/decisions.md`.
+- Maintainers should cross-check the [document responsibilities section in `DECISIONS.md`](./docs/technical/decisions.md#document-responsibilities-short) to keep this map aligned.
 
 ## SSOT (Single Source of Truth) Reference
 
@@ -60,11 +60,11 @@ This table shows which document to consult for authoritative decisions on common
 
 | Topic | Single Source | Notes |
 |---|---|---|
-| MVP Scope & Feature Matrix | `DECISIONS.md` | Canonical IN/OUT matrix for MVP
-| Git Subtree Workflow | `DECISIONS.md#integration-note-personal-toolkit-git-subtree` | Full commands and guidance
-| Directory Layouts / Scaffolding | `SCAFFOLDING.md` | Full tree diagrams and templates
-| Strategic Rationale / Evolution | `QUICKSCALE.md` | Long-form narrative and market context
-| Commercial Models & Licensing | `COMMERCIAL.md` | Post-MVP monetization guidance
+| MVP Scope & Feature Matrix | `docs/technical/decisions.md` | Canonical IN/OUT matrix for MVP
+| Git Subtree Workflow | `docs/technical/decisions.md#integration-note-personal-toolkit-git-subtree` | Full commands and guidance
+| Directory Layouts / Scaffolding | `docs/technical/scaffolding.md` | Full tree diagrams and templates
+| Strategic Rationale / Evolution | `docs/overview/quickscale.md` | Long-form narrative and market context
+| Commercial Models & Licensing | `docs/overview/commercial.md` | Post-MVP monetization guidance
 
 
 ### Primary Use Cases:
@@ -76,16 +76,16 @@ This table shows which document to consult for authoritative decisions on common
 ### Development Flow (MVP)
 1. `quickscale init myapp`
   - Generates the minimal Django starter described in the MVP Feature Matrix
-  - Ships with standalone `settings.py` by default; there is NO automatic settings inheritance. Advanced users who manually embed `quickscale_core` via git subtree may opt-in to inherit from `quickscale_core.settings` (see [`DECISIONS.md`](./DECISIONS.md#mvp-feature-matrix-authoritative)).
-  - **Optional**: Embed `quickscale_core` via git subtree after generation; follow the [Personal Toolkit workflow](./DECISIONS.md#integration-note-personal-toolkit-git-subtree) for canonical commands and helper roadmap
+  - Ships with standalone `settings.py` by default; there is NO automatic settings inheritance. Advanced users who manually embed `quickscale_core` via git subtree may opt-in to inherit from `quickscale_core.settings` (see [`DECISIONS.md`](./docs/technical/decisions.md#mvp-feature-matrix-authoritative)).
+  - **Optional**: Embed `quickscale_core` via git subtree after generation; follow the [Personal Toolkit workflow](./docs/technical/decisions.md#integration-note-personal-toolkit-git-subtree) for canonical commands and helper roadmap
 2. Add your custom Django apps and features
 3. Adopt optional inheritance or module extraction patterns only when you embed the core; the rules and best practices stay centralized in `DECISIONS.md`
 4. Build your unique client application
 5. Deploy using standard Django deployment patterns
 
-ℹ️ QuickScale's MVP centers on the personal toolkit workflow. Extraction patterns, module packaging, and subtree helper command plans stay documented in `DECISIONS.md` so this README can stay concise.
+ℹ️ QuickScale's MVP centers on the personal toolkit workflow. Extraction patterns, module packaging, and subtree helper command plans stay documented in `docs/technical/decisions.md` so this README can stay concise.
 
-🔎 **Scope note**: The [MVP Feature Matrix](./DECISIONS.md#mvp-feature-matrix-authoritative) is the single source of truth for what's in or out.
+🔎 **Scope note**: The [MVP Feature Matrix](./docs/technical/decisions.md#mvp-feature-matrix-authoritative) is the single source of truth for what's in or out.
 
  ### What MVP Generates (Production-Ready)
 ```bash
@@ -129,9 +129,9 @@ myapp/
     └── quickscale_core/
 ```
 
- **Key Point**: The generated project is **production-ready** and **yours to own and modify**. QuickScale provides professional foundations (Docker, PostgreSQL, pytest, CI/CD) matching industry standards, while maintaining full customizability. For tie-breakers about MVP scope, see [DECISIONS.md MVP Feature Matrix](./DECISIONS.md#mvp-feature-matrix-authoritative).
+ **Key Point**: The generated project is **production-ready** and **yours to own and modify**. QuickScale provides professional foundations (Docker, PostgreSQL, pytest, CI/CD) matching industry standards, while maintaining full customizability. For tie-breakers about MVP scope, see [DECISIONS.md MVP Feature Matrix](./docs/technical/decisions.md#mvp-feature-matrix-authoritative).
 
-**🎯 Competitive Positioning**: QuickScale generates projects that match SaaS Pegasus and Cookiecutter on production-readiness while offering unique composability advantages. See [COMPETITIVE_ANALYSIS.md](./COMPETITIVE_ANALYSIS.md) for detailed comparison.
+**🎯 Competitive Positioning**: QuickScale generates projects that match SaaS Pegasus and Cookiecutter on production-readiness while offering unique composability advantages. See [COMPETITIVE_ANALYSIS.md](./docs/overview/competitive_analysis.md) for detailed comparison.
 
 ## Key Benefits
 
@@ -152,7 +152,7 @@ myapp/
 - **Standard Patterns**: No magic, no custom abstractions—just excellent Django
 - **Simple Deployment**: Standard Django deployment patterns, cloud-agnostic
 
-See [COMPETITIVE_ANALYSIS.md](./COMPETITIVE_ANALYSIS.md) for detailed comparison with SaaS Pegasus, Cookiecutter, and alternatives.
+See [COMPETITIVE_ANALYSIS.md](./docs/overview/competitive_analysis.md) for detailed comparison with SaaS Pegasus, Cookiecutter, and alternatives.
 
 ## QuickScale Philosophy: Enabler, Not Complete Solutions
 
@@ -172,20 +172,20 @@ QuickScale provides the foundation and building blocks, not complete vertical so
 
 ## From Template to Client Project
 
-Start with the generated Django starter, build what your client needs, and only later decide if a pattern is worth extracting into `quickscale_modules/`. Distribution upgrades (PyPI, subscriptions, etc.) stay Post-MVP—follow the [MVP Feature Matrix](./DECISIONS.md#mvp-feature-matrix-authoritative) and [`QUICKSCALE.md`](./QUICKSCALE.md#evolution-strategy-personal-toolkit-first) for the bigger story.
+Start with the generated Django starter, build what your client needs, and only later decide if a pattern is worth extracting into `quickscale_modules/`. Distribution upgrades (PyPI, subscriptions, etc.) stay Post-MVP—follow the [MVP Feature Matrix](./docs/technical/decisions.md#mvp-feature-matrix-authoritative) and [`QUICKSCALE.md`](./docs/overview/quickscale.md#evolution-strategy-personal-toolkit-first) for the bigger story.
 
 ---
 
  ### Development Approach (MVP)
 
-QuickScale currently ships a single CLI entry point: `quickscale init`. The [CLI command matrix](./DECISIONS.md#cli-command-matrix) tracks the **planned** additions and their phases, keeping this README focused on commands that already exist.
+QuickScale currently ships a single CLI entry point: `quickscale init`. The [CLI command matrix](./docs/technical/decisions.md#cli-command-matrix) tracks the **planned** additions and their phases, keeping this README focused on commands that already exist.
 
 ### **Post-MVP: Configuration-Driven (Optional)**
-Declarative configuration is a Post-MVP consideration. Prototype commands, sample schemas, and status notes now live exclusively in `DECISIONS.md`.
+Declarative configuration is a Post-MVP consideration. Prototype commands, sample schemas, and status notes now live exclusively in `docs/technical/decisions.md`.
 
 ### Settings Pattern (Post-MVP)
 
-Generated projects use standalone `settings.py` files by default. Optional inheritance and future settings plans are recorded in `DECISIONS.md` alongside the authoritative MVP feature matrix.
+Generated projects use standalone `settings.py` files by default. Optional inheritance and future settings plans are recorded in `docs/technical/decisions.md` alongside the authoritative MVP feature matrix.
 
 ---
 
@@ -217,7 +217,7 @@ python manage.py runserver
 
 #### **Update Commands (Post-MVP Backlog)**
 
-ℹ️ Wrapper helpers are deferred to the Post-MVP backlog. Track any future work in the [CLI command matrix](./DECISIONS.md#cli-command-matrix); until they ship, rely on the manual commands documented in [`DECISIONS.md`](./DECISIONS.md#integration-note-personal-toolkit-git-subtree).
+ℹ️ Wrapper helpers are deferred to the Post-MVP backlog. Track any future work in the [CLI command matrix](./docs/technical/decisions.md#cli-command-matrix); until they ship, rely on the manual commands documented in [`DECISIONS.md`](./docs/technical/decisions.md#integration-note-personal-toolkit-git-subtree).
 
 ## Glossary
 
@@ -233,10 +233,10 @@ Add new terms here as documentation evolves; this section consolidates terminolo
 
 ## Learn More
 
-- **[DECISIONS.md](./DECISIONS.md)** - Technical specifications and implementation rules
-- **[QUICKSCALE.md](./QUICKSCALE.md)** - Strategic vision and competitive positioning
-- **[COMPETITIVE_ANALYSIS.md](./COMPETITIVE_ANALYSIS.md)** - Comparison vs SaaS Pegasus and alternatives
-- **[ROADMAP.md](./ROADMAP.md)** - Development roadmap and implementation plan
+- **[DECISIONS.md](./docs/technical/decisions.md)** - Technical specifications and implementation rules
+- **[QUICKSCALE.md](./docs/overview/quickscale.md)** - Strategic vision and competitive positioning
+- **[COMPETITIVE_ANALYSIS.md](./docs/overview/competitive_analysis.md)** - Comparison vs SaaS Pegasus and alternatives
+- **[ROADMAP.md](./docs/technical/roadmap.md)** - Development roadmap and implementation plan
 
-For optional backend customization patterns, reference the [backend extensions policy](./DECISIONS.md#backend-extensions-policy).
+For optional backend customization patterns, reference the [backend extensions policy](./docs/technical/decisions.md#backend-extensions-policy).
 
