@@ -21,14 +21,25 @@ TARGET AUDIENCE: Solo developers, development agencies, commercial extension dev
 
 QuickScale's Apache 2.0 license enables commercial extensions and subscription models. This document shows how **solo developers and agencies** can build premium modules/themes, monetize their work, and create community ecosystems while leveraging the open source QuickScale foundation.
 
-🔎 **Scope note**: Commercial distribution via PyPI and private repositories is **Post-MVP**. The MVP sticks to the "Personal Toolkit" (git-subtree) approach for code sharing across your own projects; packaging arrives in Phase 3 (12-18+ months after MVP).
+🔎 **Scope note**: Commercial distribution via PyPI and private repositories is **Phase 4 (v2.0.0+)** per [ROADMAP.md Post-MVP evolution](./ROADMAP.md#post-mvp-evolution-phases-2). The MVP (Phase 1) uses git-subtree for code sharing across your own projects. Packaging and commercial distribution capabilities arrive in Phase 4.
 
 ## Quick Reference
 
 - **License**: Apache 2.0 allows commercial use, private distribution, and proprietary extensions.
-- **MVP status**: Everything beyond personal git-subtree workflows is Post-MVP planning.
+- **Phase**: Commercial PyPI distribution is **Phase 4 (v2.0.0+)**. Everything beyond personal git-subtree workflows is Post-MVP planning.
 - **Where to start**: Embed QuickScale as a personal toolkit first; revisit this guide once you have repeatable commercial demand.
 - **Technical patterns**: See the [backend extensions policy](./DECISIONS.md#backend-extensions-policy) for canonical code hooks.
+
+## Commercial Distribution Timeline
+
+| Phase | Version | Commercial Capability |
+|-------|---------|---------------------|
+| Phase 1 | v1.0.0 | Personal toolkit only (git subtree) |
+| Phase 2 | v1.1-v1.x | Module extraction via git subtree |
+| Phase 3 | v1.x | Professional polish, prepare for distribution |
+| Phase 4 | v2.0.0+ | **PyPI + private repository distribution enabled** |
+
+See [ROADMAP.md](./ROADMAP.md) for detailed phase descriptions and timeline.
 
 ## Table of Contents
 - [Commercial Licensing Rights](#commercial-licensing-rights)

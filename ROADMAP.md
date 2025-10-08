@@ -48,7 +48,7 @@ Execution details live here; the "personal toolkit first, community platform lat
 - ✅ **Current Version**: v0.51.0
 - ✅ **Evolution Strategy Defined**: Start simple, grow organically
 - ✅ **MVP Scope Clarified**: Simple CLI + project scaffolding + git subtree documentation
-- ✅ **Legacy Backup Available**: Complete v0.41.0 preserved in `quickscale-legacy/`
+- ✅ **Legacy Backup Available**: Complete v0.41.0 preserved in `../quickscale-legacy/`
 - ✅ **Post-MVP Path Clear**: Module/theme packages when proven necessary
 - 🔄 **Next Release**: v0.52.0 - Project Foundation
 
@@ -63,6 +63,8 @@ Each minor version (0.x.0) delivers a verifiable improvement that builds toward 
 - **v0.58.0**: MVP validation (proven with real project)
 - **v1.0.0**: MVP release (production-ready personal toolkit)
 - **v1.x.0**: Post-MVP features (modules, themes, automation)
+
+> Note: For clarity across project documentation, the releases **v0.52 through v1.0.0** are considered collectively the "MVP" that delivers a production-ready personal toolkit. The earlier 0.52-0.55 releases are the "Foundation Phase" (incremental foundations) that prepare the codebase for the cumulative MVP deliverable.
 
 ### **Evolution Context Reference**
 Need the narrative backdrop? Jump to [`QUICKSCALE.md`](./QUICKSCALE.md#evolution-strategy-personal-toolkit-first) and come back here for the tasks.
@@ -155,7 +157,7 @@ black --check .
   - [ ] Create `quickscale/` monorepo root with README.md, LICENSE, .gitignore
   - [ ] Initialize git repository
   - [ ] Create `docs/`, `scripts/`, `legacy/` directories
-  - [ ] Copy v0.41.0 archive to `quickscale-legacy/` if available
+  - [ ] Copy v0.41.0 archive to `../quickscale-legacy/` if available
 - [ ] **Create package directories**
   - [ ] Create `quickscale_core/` package root
   - [ ] Create `quickscale_cli/` package root
@@ -178,7 +180,7 @@ black --check .
 
 **Tasks**:
 - [ ] **Inventory legacy QuickScale artifacts**
-  - [ ] Document what exists in `quickscale-legacy/` or v0.41.0 archive
+  - [ ] Document what exists in `../quickscale-legacy/` or v0.41.0 archive
   - [ ] List all templates, utilities, configs, and scripts
   - [ ] Note test coverage and current compatibility status
 - [ ] **Evaluate reusability**
@@ -272,7 +274,7 @@ black --check .
   - [ ] Create `.pre-commit-config.yaml` with black, ruff, trailing whitespace
   - [ ] Document pre-commit setup in contributing guide
 - [ ] **Create development documentation**
-  - [ ] Create `CONTRIBUTING.md` with setup instructions
+  - [ ] Integrate contributing guidelines into DECISIONS.md
   - [ ] Document how to run tests: `pytest quickscale_core/tests/`
   - [ ] Document how to run linters: `ruff check .`
   - [ ] Document how to build packages: `python -m build`
@@ -396,18 +398,14 @@ print(template.render(project_name='testproject'))
 **🎯 Competitive Requirement**: Match Cookiecutter on DevOps quality (see [COMPETITIVE_ANALYSIS.md §1 & §5](./COMPETITIVE_ANALYSIS.md#5-cicd-pipeline-templates))
 
 **Tasks**:
-- [ ] **Create `requirements.txt.j2` template (production-ready)**
+- [ ] **Create `pyproject.toml.j2` template (production-ready Poetry metadata)**
   - [ ] Django>=5.0,<6.0
   - [ ] psycopg2-binary (PostgreSQL driver)
   - [ ] python-decouple or django-environ (environment config)
   - [ ] whitenoise (static files in production)
   - [ ] gunicorn (production WSGI server)
-  - [ ] Comment: "Production dependencies. See requirements-dev.txt for development"
-- [ ] **Create `requirements-dev.txt.j2` template**
-  - [ ] pytest, pytest-django, pytest-cov
-  - [ ] factory-boy (test data generation)
-  - [ ] black, ruff, isort (code quality)
-  - [ ] django-debug-toolbar (optional)
+  - [ ] Comment: "Production dependencies declared in pyproject.toml. Dev deps in `[tool.poetry.dev-dependencies]`"
+  
 - [ ] **Create Docker templates**
   - [ ] **`Dockerfile.j2`** - Production-ready multi-stage build
     - [ ] Python slim base image
@@ -498,11 +496,11 @@ with tempfile.TemporaryDirectory() as tmpdir:
     output_path = Path(tmpdir) / 'testproject'
     gen.generate('testproject', output_path)
 
-    # Verify structure
-    assert (output_path / 'manage.py').exists()
-    assert (output_path / 'testproject' / 'settings.py').exists()
-    assert (output_path / 'requirements.txt').exists()
-    print('✅ Generator works!')
+  # Verify structure
+  assert (output_path / 'manage.py').exists()
+  assert (output_path / 'testproject' / 'settings.py').exists()
+  assert (output_path / 'pyproject.toml').exists()
+  print('✅ Generator works!')
 "
 
 # Run generator tests
@@ -630,10 +628,11 @@ cd testproject
 # Verify generated project works
 python -m venv venv
 source venv/bin/activate  # On Windows: venv\Scripts\activate
-pip install -r requirements.txt
-python manage.py check
-python manage.py migrate
-python manage.py runserver &
+# Recommended: use Poetry
+poetry install
+poetry run python manage.py check
+poetry run python manage.py migrate
+poetry run python manage.py runserver &
 SERVER_PID=$!
 sleep 3
 curl http://localhost:8000 | grep "Welcome"
@@ -697,9 +696,8 @@ def init(project_name: str):
         click.secho(f"✅ Created project: {project_name}", fg='green')
         click.echo("\nNext steps:")
         click.echo(f"  cd {project_name}")
-        click.echo("  python -m venv venv")
-        click.echo("  source venv/bin/activate  # On Windows: venv\\Scripts\\activate")
-        click.echo("  pip install -r requirements.txt")
+        click.echo("  # Recommended: use Poetry for dependency management")
+        click.echo("  poetry install")
         click.echo("  python manage.py migrate")
         click.echo("  python manage.py runserver")
     except Exception as e:
@@ -866,7 +864,7 @@ tox  # or manually test with py310, py311, py312
 - [ ] **Test with fresh Python environment**
   - [ ] Test with Python 3.10, 3.11, 3.12 (different versions)
   - [ ] Test on different OS: Linux, macOS, Windows (if possible)
-- [ ] **Validate generated requirements.txt**
+- [ ] **Validate generated pyproject.toml / poetry.lock**
   - [ ] All packages install successfully
   - [ ] No version conflicts
   - [ ] Django version is compatible
@@ -886,14 +884,14 @@ tox  # or manually test with py310, py311, py312
 **✅ Verifiable Improvement**:
 - README.md includes installation and usage examples
 - Git subtree workflow documented in DECISIONS.md
-- Developer documentation (CONTRIBUTING.md) complete
+- Developer documentation (integrated into DECISIONS.md) complete
 - All documentation links work and point to correct sections
 - Generated project README provides clear next steps
 
 **Release Validation**:
 ```bash
 # Verify documentation exists
-ls README.md DECISIONS.md ROADMAP.md SCAFFOLDING.md CONTRIBUTING.md
+ls README.md DECISIONS.md ROADMAP.md SCAFFOLDING.md
 
 # Check for broken links (optional)
 markdown-link-check *.md
@@ -964,9 +962,10 @@ cd real_client_project
 # 2. Set up and run
 python -m venv venv
 source venv/bin/activate
-pip install -r requirements.txt
-python manage.py migrate
-python manage.py runserver
+# Recommended: use Poetry
+poetry install
+poetry run python manage.py migrate
+poetry run python manage.py runserver
 
 # 3. Build real features (spend 1-2 days)
 # - Add models
@@ -1158,6 +1157,13 @@ See [MVP Feature Matrix in DECISIONS.md](./DECISIONS.md#mvp-feature-matrix-autho
 
 **Key Principle**: **Build modules from REAL client needs, not speculation**
 
+**Namespace Packaging Transition Timeline**:
+- **v1.0.0 (MVP)**: Regular packages with temporary `__init__.py` allowed
+- **v1.1.0 (First module)**: Remove namespace `__init__.py`, adopt PEP 420
+- **v1.2.0+**: All new modules MUST use PEP 420 from start
+
+**CI Reminder**: Add a pre-publish CI check (pre-release or package build job) that fails when `quickscale_modules/__init__.py` or `quickscale_themes/__init__.py` exist. This prevents accidental publishing with an `__init__.py` present and enforces the PEP 420 transition.
+
 **Prerequisites Before Starting Post-MVP Development**:
 - ✅ MVP (Phase 1) completed and validated
 - ✅ Built 2-3 client projects successfully using MVP
@@ -1169,16 +1175,25 @@ See [MVP Feature Matrix in DECISIONS.md](./DECISIONS.md#mvp-feature-matrix-autho
 Each release adds one proven module or significant improvement based on real needs.
 
 **Example Release Sequence** (aligned with competitive priorities):
+
 - **v1.1.0**: `quickscale_modules.auth` - django-allauth integration (P1 - Critical for SaaS)
 - **v1.2.0**: `quickscale_modules.billing` - dj-stripe subscriptions (P1 - Core monetization)
-- **v1.3.0**: `quickscale_modules.teams` - Multi-tenancy patterns (P1 - B2B requirement)
+- **v1.3.0**: `quickscale_modules.teams` - Multi-tenancy patterns (P1 - B2B requirement) 🎯 **SAAS FEATURE PARITY MILESTONE**
 - **v1.4.0**: `quickscale_modules.notifications` - Email infrastructure (P2 - Common need)
-- **v1.5.0**: CLI git subtree helpers (if proven necessary from usage)
+- **v1.5.0 (conditional) or v2.0**: CLI git subtree helpers (implement lightweight helpers in v1.5 if manual workflow proves painful; v2.0 reserved for richer orchestration/automation if demand justifies it)
 - **v1.6.0**: HTMX frontend variant template (P2 - Differentiation)
 - **v1.7.0**: React frontend variant template (P2 - SPA option)
 - **v1.x.0**: Additional modules based on real client needs
 
-**🎯 Competitive Parity Goal (v1.3.0)**: At this point, QuickScale matches SaaS Pegasus on core features (auth, billing, teams) while offering superior architecture (composability, shared updates). See [COMPETITIVE_ANALYSIS.md Timeline](./COMPETITIVE_ANALYSIS.md#timeline-reality-check).
+**🎯 SaaS Feature Parity Achieved at v1.3.0**: At this release, QuickScale matches SaaS Pegasus on core SaaS features (auth, billing, teams) while offering superior architecture (composability, shared updates). This milestone represents feature parity with established Django SaaS boilerplates. See [COMPETITIVE_ANALYSIS.md Timeline](./COMPETITIVE_ANALYSIS.md#timeline-reality-check).
+
+### Milestone Summary
+
+| Milestone | Version | Competitive Aspect |
+|---|---:|---|
+| Production Parity | v1.0 | Production-ready foundations (Docker, CI/CD, testing, security) |
+| SaaS Feature Parity | v1.3 | Core SaaS features: auth, billing, teams |
+| Ecosystem Leadership | v2.0+ | Marketplace, PyPI/private repo distribution, commercial extensions |
 
 **Note**: Prioritization is based on competitive analysis. Adjust based on YOUR actual client needs.
 
@@ -1256,13 +1271,11 @@ Each release adds one proven module or significant improvement based on real nee
 
 **Competitive Context**: This sequence matches successful competitors' feature prioritization while maintaining QuickScale's reusability advantage. See [COMPETITIVE_ANALYSIS.md Strategic Recommendations](./COMPETITIVE_ANALYSIS.md#strategic-recommendations).
 
-#### **Admin Module Scope Exploration (Under Evaluation)**
-**Note**: Admin module scope is NOT confirmed for Phase 2. See ROADMAP admin module tracking tasks below.
+#### **Admin Module Scope**
 
-- [ ] Review auth vs admin responsibilities in `DECISIONS.md`
-- [ ] Define admin module scope (dashboard UX? moderation? something else?)
-- [ ] Draft scope options for `quickscale_modules.admin`
-- [ ] Record decision in `DECISIONS.md` with rationale
+The admin module scope has been defined in [DECISIONS.md Admin Module Scope Definition](./DECISIONS.md#admin-module-scope-definition).
+
+**Summary**: Enhanced Django admin interface with custom views, system configuration, monitoring dashboards, and audit logging. Distinct from auth module (user authentication/authorization).
 
 #### **Module Creation Checklist**:
 - [ ] Used successfully in 2-3 client projects
@@ -1276,16 +1289,16 @@ Each release adds one proven module or significant improvement based on real nee
 
 ---
 
-### **Git Subtree Workflow Refinement (potential v1.x.0 release)**
+### **Git Subtree Workflow Refinement (v1.5 conditional / Post-MVP)**
 
 Based on MVP usage feedback, improve code sharing workflow:
 
-**Evaluate CLI Automation** (only if manual workflow proves painful):
+**Evaluate CLI Automation** (target: v1.5 conditional; defer to v2.0 if tied to marketplace automation):
 - [ ] **Assess demand for CLI helpers**
   - [ ] Survey how often you use git subtree manually
   - [ ] Document pain points with manual workflow
   - [ ] Determine if automation would save significant time
-- [ ] **If justified, add CLI commands**:
+- [ ] **If justified, add CLI commands (target v1.5; conditional)**:
   - [ ] `quickscale embed-core <project>` - Embed quickscale_core via git subtree
   - [ ] `quickscale update-core <project>` - Pull updates from monorepo
   - [ ] `quickscale sync-push <project>` - Push improvements back to monorepo
@@ -1295,6 +1308,12 @@ Based on MVP usage feedback, improve code sharing workflow:
   - [ ] Semantic versioning for modules
   - [ ] Compatibility tracking between core and modules
 - [ ] **Create extraction helper scripts** (optional)
+
+**Success Criteria (example)**: Implement CLI helpers when one or more of the following are true:
+- Manual subtree operations exceed 10 instances/month across maintainers OR
+- Teams have performed 5+ module extractions manually and report significant time savings from automation.
+
+(Adjust thresholds based on observed usage and community feedback.)
   - [ ] Script to assist moving code from client project to quickscale_modules/
   - [ ] Validation script to check module structure
 
@@ -1465,6 +1484,17 @@ This roadmap can be implemented incrementally, with each task building on the pr
 - **v1.0.0**: MVP release (production-ready personal toolkit)
 - **v1.x.0**: Post-MVP (modules extracted from real needs)
 - **v2.0.0+**: Community platform (optional, if proven successful)
+
+### **Version Milestone Mapping**
+
+| Version | Milestone | Competitive Status |
+|---------|-----------|-------------------|
+| v1.0.0 | MVP Launch | Foundation ready |
+| v1.1.0 | Auth Module | Closing feature gap |
+| v1.2.0 | Billing Module | Near parity |
+| v1.3.0 | Teams Module | **🎯 SaaS Feature Parity** |
+| v1.4.0+ | Additional Modules | Differentiation & ecosystem growth |
+| v2.0.0+ | Community Platform | Optional marketplace capabilities |
 
 ---
 
