@@ -1,7 +1,7 @@
 # QuickScale Competitive Analysis
 
 <!--
-COMPETITIVE_ANALYSIS.md - Market Comparison & Positioning
+competitive_analysis.md - Market Comparison & Positioning
 
 PURPOSE: This document provides a comprehensive comparison of QuickScale against major Django SaaS boilerplates and starter kits in the market.
 
@@ -805,9 +805,9 @@ The competitors validate the market and show what features matter. QuickScale's 
 
 ## See Also
 
-- [QUICKSCALE.md](../overview/quickscale.md) - Strategic vision and evolution rationale
-- [DECISIONS.md](../technical/decisions.md) - Technical architecture decisions
-- [ROADMAP.md](../technical/roadmap.md) - Development timeline
-- [COMMERCIAL.md](../overview/commercial.md) - Commercial extension strategy
+- [quickscale.md](../overview/quickscale.md) - Strategic vision and evolution rationale
+- [decisions.md](../technical/decisions.md) - Technical architecture decisions
+- [roadmap.md](../technical/roadmap.md) - Development timeline
+- [commercial.md](../overview/commercial.md) - Commercial extension strategy
 
 

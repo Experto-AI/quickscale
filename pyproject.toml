@@ -1,0 +1,14 @@
+[tool.poetry]
+name = "quickscale-monorepo"
+version = "0.0.0"
+description = "Repository-level helper project that installs the quickscale meta-package for local development"
+authors = ["Experto AI <victor@experto.ai>"]
+
+[tool.poetry.dependencies]
+python = ">=3.10,<4.0"
+quickscale = {path = "./quickscale", develop = true}
+black = "^25.9.0"
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"

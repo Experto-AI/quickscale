@@ -1,7 +1,7 @@
 # QuickScale Commercial Extensions
 
 <!-- 
-COMMERCIAL.md - Commercial Extensions and Business Model
+commercial.md - Commercial Extensions and Business Model
 
 PURPOSE: This document outlines how solo developers and agencies can commercialize QuickScale extensions, create subscription models for premium modules/themes, and build community ecosystems while maintaining open source foundations.
 
@@ -21,7 +21,7 @@ TARGET AUDIENCE: Solo developers, development agencies, commercial extension dev
 
 QuickScale's Apache 2.0 license enables commercial extensions and subscription models. This document shows how **solo developers and agencies** can build premium modules/themes, monetize their work, and create community ecosystems while leveraging the open source QuickScale foundation.
 
-🔎 **Scope note**: Commercial distribution via PyPI and private repositories is **Phase 4 (v2.0.0+)** per [ROADMAP.md Post-MVP evolution](./ROADMAP.md#post-mvp-evolution-phases-2). The MVP (Phase 1) uses git-subtree for code sharing across your own projects. Packaging and commercial distribution capabilities arrive in Phase 4.
+🔎 **Scope note**: Commercial distribution via PyPI and private repositories is **Phase 4 (v2.0.0+)** per [roadmap.md Post-MVP evolution](../technical/roadmap.md#post-mvp-evolution-phases-2). The MVP (Phase 1) uses git-subtree for code sharing across your own projects. Packaging and commercial distribution capabilities arrive in Phase 4.
 
 ## Quick Reference
 
@@ -39,7 +39,7 @@ QuickScale's Apache 2.0 license enables commercial extensions and subscription m
 | Phase 3 | v1.x | Professional polish, prepare for distribution |
 | Phase 4 | v2.0.0+ | **PyPI + private repository distribution enabled** |
 
-See [ROADMAP.md](./ROADMAP.md) for detailed phase descriptions and timeline.
+See [roadmap.md](../technical/roadmap.md) for detailed phase descriptions and timeline.
 
 ## Table of Contents
 - [Commercial Licensing Rights](#commercial-licensing-rights)
@@ -562,6 +562,6 @@ Compatibility note: The new QuickScale architecture is intentionally breaking an
 
 ## See Also
 
-- [DECISIONS.md](../technical/decisions.md) — authoritative technical scope and backend extension policy
-- [SCAFFOLDING.md](../technical/scaffolding.md) — canonical directory structures and naming matrix
-- [ROADMAP.md](../technical/roadmap.md) — implementation phases that unlock the commercial playbook
+- [decisions.md](../technical/decisions.md) — authoritative technical scope and backend extension policy
+- [scaffolding.md](../technical/scaffolding.md) — canonical directory structures and naming matrix
+- [roadmap.md](../technical/roadmap.md) — implementation phases that unlock the commercial playbook
