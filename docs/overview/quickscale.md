@@ -1,7 +1,7 @@
-# QuickScale Evolution: Strategic Vision & Context
+# QuickScale: Strategic Vision & Context
 
 <!-- 
-QUICKSCALE.md - Strategic Vision and Context
+quickscale.md - Strategic Vision and Context
 
 PURPOSE: This document provides the strategic background, competitive positioning, and evolution rationale for QuickScale's architectural transformation.
 
@@ -11,7 +11,7 @@ CONTENT GUIDELINES:
 - Explain the business rationale for architectural decisions
 - Document historical context and evolution reasoning
 - Provide future vision and strategic direction
-- Avoid detailed technical specifications (those belong in DECISIONS.md)
+- Avoid detailed technical specifications (those belong in decisions.md)
 - Avoid user-facing tutorials or quick starts (those belong in README.md)
 
 WHAT TO ADD HERE:
@@ -24,10 +24,10 @@ WHAT TO ADD HERE:
 - Success metrics and market validation
 
 WHAT NOT TO ADD HERE:
-- Detailed technical implementation rules (belongs in DECISIONS.md)
-- Package naming conventions or code examples (belongs in DECISIONS.md)
+- Detailed technical implementation rules (belongs in decisions.md)
+- Package naming conventions or code examples (belongs in decisions.md)
 - User tutorials or getting started guides (belongs in README.md)  
-- Implementation timelines or task lists (belongs in ROADMAP.md)
+- Implementation timelines or task lists (belongs in roadmap.md)
 
 TARGET AUDIENCE: Stakeholders, strategic decision makers, contributors, potential partners
 -->
@@ -44,24 +44,24 @@ TARGET AUDIENCE: Stakeholders, strategic decision makers, contributors, potentia
 
 ## Executive Summary
 
-### **Strategic Evolution: Start Simple, Grow Organically** {#evolution-strategy-personal-toolkit-first}
+### **Strategic Evolution: Start Simple, Grow Organically** 
 
 QuickScale follows a **"personal toolkit first, community platform later"** evolution strategy.
 
-**Note**: The "Personal Toolkit" approach is the official MVP implementation strategy. See [Personal Toolkit workflow in DECISIONS.md](../technical/decisions.md#integration-note-personal-toolkit-git-subtree) for detailed git subtree workflows, extraction patterns, and implementation guidance.
+**Note**: The "Personal Toolkit" approach is the official MVP implementation strategy. See [Personal Toolkit workflow in decisions.md](../technical/decisions.md#integration-note-personal-toolkit-git-subtree) for detailed git subtree workflows, extraction patterns, and implementation guidance.
 
 ### **Why This Evolution is Needed**
 
-QuickScale's current static project generator faces fundamental limitations that prevent it from reaching its full potential:
+QuickScale's legacy static project generator has practical limits that motivated the redesign:
 
-- **No Shared Updates**: Each project is independent, missing security fixes and feature updates
-- **Repetitive Setup**: Every project requires reinventing the same Django foundations
-- **Maintenance Burden**: Bug fixes and improvements must be manually applied across all projects
-- **Limited Commercialization**: No clear path to monetize reusable components or offer premium services
+- Shared updates are difficult (security/feature fixes don't propagate)
+- Projects repeatedly reimplement the same Django foundations
+- Maintenance and scaling of improvements is manual and error-prone
+- No clear productization path for reusable components or commercial modules
 
 ### **The Evolution Solution (Two-Phase Strategy)**
 
-**Phase 1 (MVP): Personal Toolkit** *(Start Here - CONTENDING-ALTERNATIVE Approach)*
+**Phase 1 (MVP): Personal Toolkit** 
 - Build a **simple project generator** for YOUR client projects
 - Use **git subtree** to share code across your projects
 - Extract reusable patterns **from real client work** (not speculation)
@@ -183,53 +183,24 @@ Based on analysis of established Django CMS platforms (Wagtail, Django CMS, Mezz
 
 **v0.41.0 Status:**
 - ✅ **Preserved**: Complete v0.41.0 codebase archived in `../quickscale-legacy/` directory
--- ✅ **Documented**: Legacy analysis guidance consolidated under `legacy/analysis/` (to be created in Phase 1)
+- ✅ **Documented**: Legacy analysis guidance consolidated under `docs/legacy/` (to be created in Phase 1)
 - ❌ **Not Migrated**: Existing v0.41.0 projects will NOT automatically migrate
 - ❌ **No Migration Tools**: Automated migration is out-of-scope for MVP
 
-**Manual Migration Approach:**
-1. **Review Legacy Analysis**: See `legacy/analysis/` for patterns worth preserving
-2. **Extract Valuable Assets**: Manually identify useful Docker configs, utilities, patterns
-3. **Create New Project**: Use `quickscale init` to generate fresh v1.0 project
-4. **Port Custom Code**: Manually migrate your business logic and customizations
-5. **Leverage New Patterns**: Use `custom_frontend/` for customization. `backend_extensions.py` is a Post‑MVP convention and may be added manually by users in MVP; richer scaffolding for it is Post‑MVP (Post‑MVP illustrative pattern — not generated by the MVP `quickscale init` command).
-
-**What Can Be Extracted from v0.41.0:**
-- Docker deployment configurations
-- Useful utility functions
-- Custom middleware patterns
-- Testing strategies
-- Deployment scripts
-
-**What Should NOT Be Migrated:**
-- Old project structure patterns
-- Deprecated configuration approaches
-- Legacy framework assumptions
-- Outdated dependency versions
-
-**For v0.41.0 Users:**
-- v0.41.0 remains functional but is now in maintenance mode
-- Security fixes may be backported if critical
-- New features will only be added to v1.0+
-- Consider v1.0 for new projects, keep v0.41.0 for existing ones
+### **Competitive Landscape Analysis**
 
 ## Evolution Rationale
 
-### **Why This Transformation is Essential**
+### **Why this matters (short version)**
 
-QuickScale's evolution from a static project generator to a composable Django foundation addresses critical market needs:
+The core rationale is covered above: projects need shared updates, reusable starting points, and a path to productize proven patterns. Concretely this enables:
 
-**Technical Evolution Benefits:**
-- **Shared Updates**: Move from isolated projects to connected ecosystem with security fixes and improvements
-- **Vertical Specialization**: Enable domain-specific starting points rather than generic templates
-- **Clear Separation**: Decouple backend functionality, business logic, and presentation layers
-- **Community Growth**: Create marketplace for specialized modules and themes
+- an ecosystem where security and feature improvements propagate,
+- domain-specific starting points (vertical specialization) instead of one-size-fits-all templates,
+- clearer separation between core infrastructure, business logic, and presentation, and
+- a foundation that supports community contributions and commercial modules.
 
-**Strategic Market Position:**
-- **Foundation, Not Products**: Provide building blocks rather than complete solutions
-- **Python-Native Simplicity**: Leverage familiar Django patterns instead of complex abstractions  
-- **Development Acceleration**: Enable faster custom SaaS development through proven foundations
-- **Ecosystem Approach**: Build community-driven marketplace like Python's package ecosystem
+These points are intentionally summarized here so the "Competitive Landscape Analysis" below can focus on market positioning and comparisons.
 
 ### **Competitive Landscape Analysis**
 
@@ -319,21 +290,4 @@ This approach enables:
 - **Multi-Tenant Support**: SaaS-as-a-Service platform capabilities
 - **AI Integration**: Automated customization and optimization suggestions
 
-### **Strategic Partnerships**
-
-**Django Ecosystem Integration:**
-- Contribute improvements back to underlying Django packages
-- Partner with django-allauth, dj-stripe, and other foundation packages
-- Sponsor and support Django community events and development
-
-**Cloud Platform Partnerships:**
-- Optimized deployment patterns for major cloud providers
-- Integration with platform-specific services and tooling
-- Simplified scaling and monitoring solutions
-
-**Technology Integration:**
-- Frontend framework partnerships (React, Vue, HTMX communities)
-- Payment processor integrations beyond Stripe
-- Analytics and monitoring platform integrations
-
-For detailed technical specifications and implementation rules, see [DECISIONS.md](../technical/decisions.md).
+For detailed technical specifications and implementation rules, see [decisions.md](../technical/decisions.md).

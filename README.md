@@ -36,51 +36,22 @@ QuickScale is a **composable Django framework** designed for **solo developers a
 
 🧭 **Evolution Snapshot**: QuickScale intentionally ships as a personal toolkit today and only grows into a community platform when real demand emerges. Catch the full story in the [evolution overview](./docs/overview/quickscale.md#evolution-strategy-personal-toolkit-first).
 
-## Documentation map
+## Documentation Guide
 
-```
-Repository docs (moved into `docs/`)
-├── README.md — Quick start guidance for newcomers (this file)
-├── docs/index.md — Documentation index / gateway
-├── docs/technical/decisions.md — Authoritative technical rules and MVP scope
-├── docs/technical/roadmap.md — Execution timeline that follows DECISIONS.md
-├── docs/technical/scaffolding.md — Directory and package layout standards
-├── docs/overview/quickscale.md — Strategic vision and market positioning
-├── docs/overview/commercial.md — Post-MVP monetisation guidance
-└── docs/overview/competitive_analysis.md — Market comparison vs SaaS Pegasus and alternatives
-```
+**Start here for your needs:**
+- 📖 **New user?** You're in the right place. This README shows you what QuickScale is and how to get started.
+- 🔧 **Need commands?** See [User Manual](./docs/technical/user_manual.md) for all commands and workflows
+- 📋 **Planning a feature?** Check [DECISIONS.md](./docs/technical/decisions.md) for the authoritative MVP scope and technical rules
+- 🗓️ **Timeline & tasks?** See [ROADMAP.md](./docs/technical/roadmap.md)
+- 🏗️ **Project structure?** See [SCAFFOLDING.md](./docs/technical/scaffolding.md) for complete directory layouts
+- 🎯 **Why QuickScale?** See [Strategic Vision](./docs/overview/quickscale.md) for competitive positioning
 
-- Start with `README.md` for the big-picture overview, then dive into `DECISIONS.md` whenever you need the canonical rule or tie-breaker.
-- Use `ROADMAP.md` only for planning work that implements decisions already captured in `docs/technical/decisions.md`.
-- Maintainers should cross-check the [document responsibilities section in `DECISIONS.md`](./docs/technical/decisions.md#document-responsibilities-short) to keep this map aligned.
-
-## Glossary
-
-Canonical terminology used across QuickScale documentation:
-
-- **MVP** = Minimum Viable Product = Phase 1 = Personal Toolkit approach
-- **Post-MVP** = Phase 2+ (prefer explicit phase numbers when possible)
-- **Phase 1** = MVP (Personal Toolkit)
-- **Phase 2** = Module extraction (v1.1-v1.x)
-- **Phase 3** = Professional polish (v1.x)
-- **Phase 4** = Community platform (v2.0+)
-- **Module** = Backend module (Django app under `quickscale_modules`)
-- **Theme** = Starting point Django app under `quickscale_themes`
+**Quick Reference:**
+- **MVP** = Phase 1 (Personal Toolkit)
+- **Post-MVP** = Phase 2+ (Modules & Themes)
 - **Generated Project** = Output of `quickscale init`
 
-**Usage**: Prefer "MVP" or "Phase 1" over "Personal Toolkit" in technical docs. Use "Personal Toolkit" in strategic/marketing contexts.
-
-## SSOT (Single Source of Truth) Reference
-
-This table shows which document to consult for authoritative decisions on common topics.
-
-| Topic | Single Source | Notes |
-|---|---|---|
-| MVP Scope & Feature Matrix | `docs/technical/decisions.md` | Canonical IN/OUT matrix for MVP
-| Git Subtree Workflow | `docs/technical/decisions.md#integration-note-personal-toolkit-git-subtree` | Full commands and guidance
-| Directory Layouts / Scaffolding | `docs/technical/scaffolding.md` | Full tree diagrams and templates
-| Strategic Rationale / Evolution | `docs/overview/quickscale.md` | Long-form narrative and market context
-| Commercial Models & Licensing | `docs/overview/commercial.md` | Post-MVP monetization guidance
+See [DECISIONS.md - Glossary section](./docs/technical/decisions.md#document-responsibilities-short) for complete terminology and Single Source of Truth reference
 
 
 ### Primary Use Cases:
@@ -103,151 +74,56 @@ This table shows which document to consult for authoritative decisions on common
 
 🔎 **Scope note**: The [MVP Feature Matrix](./docs/technical/decisions.md#mvp-feature-matrix-authoritative) is the single source of truth for what's in or out.
 
- ### What MVP Generates (Production-Ready)
-```bash
-$ quickscale init myapp
+### What You Get
 
-myapp/
-├── manage.py                    # Standard Django
-├── myapp/
-│   ├── __init__.py
-│   ├── settings/               # Split settings for dev/prod
-│   │   ├── __init__.py
-│   │   ├── base.py            # Shared configuration
-│   │   ├── local.py           # Development settings
-│   │   └── production.py      # Production settings (PostgreSQL, security)
-│   ├── urls.py
-│   ├── wsgi.py
-│   └── asgi.py
-├── templates/
-│   └── index.html              # Simple homepage
-├── static/
-│   └── css/
-├── tests/                       # pytest + factory_boy setup
-│   ├── conftest.py
-│   └── test_example.py
-├── .github/workflows/           # CI/CD automation
-│   └── ci.yml                  # GitHub Actions: tests, linting, coverage
-├── docker-compose.yml           # Local dev: Django + PostgreSQL + Redis
-├── Dockerfile                   # Production-ready container
-├── .dockerignore
-├── .env.example                 # Environment variables template
-├── .gitignore
-├── .editorconfig
-├── .pre-commit-config.yaml      # Code quality hooks (black, ruff)
-├── pyproject.toml               # Poetry metadata and dependencies (generated)
-├── poetry.lock                  # Deterministic lockfile
-└── README.md                    # Comprehensive setup & deployment guide
+Running `quickscale init myapp` generates a **production-ready Django project** with:
 
-# quickscale/ (embeddable via manual subtree)
-# Commands live in DECISIONS.md; CLI helpers sit in the Post-MVP backlog.
-└── quickscale/
-    └── quickscale_core/
+- ✅ **Docker** setup (development + production)
+- ✅ **PostgreSQL** configuration
+- ✅ **Environment-based** settings (dev/prod split)
+- ✅ **Security** best practices (SECRET_KEY, ALLOWED_HOSTS, etc.)
+- ✅ **Testing** infrastructure (pytest + factory_boy)
+- ✅ **CI/CD** pipeline (GitHub Actions)
+- ✅ **Code quality** hooks (black, ruff, isort)
+- ✅ **Poetry** for dependency management
 
-⚠️ Note: The generated starter does NOT include `quickscale_modules/`. Extracting reusable apps into `quickscale_modules/` is an advanced, manual workflow for maintainers and personal monorepos — see `DECISIONS.md#module-extraction-workflow` for guidance.
-```
+**See the complete project structure:** [SCAFFOLDING.md - Generated Project Output](./docs/technical/scaffolding.md#5-generated-project-output)
 
- **Key Point**: The generated project is **production-ready** and **yours to own and modify**. QuickScale provides professional foundations (Docker, PostgreSQL, pytest, CI/CD) matching industry standards, while maintaining full customizability. For tie-breakers about MVP scope, see [DECISIONS.md MVP Feature Matrix](./docs/technical/decisions.md#mvp-feature-matrix-authoritative).
+The generated project is **yours to own and modify** - no vendor lock-in, just Django best practices.
 
-**🎯 Competitive Positioning**: QuickScale generates projects that match SaaS Pegasus and Cookiecutter on production-readiness while offering unique composability advantages. See [COMPETITIVE_ANALYSIS.md](./docs/overview/competitive_analysis.md) for detailed comparison.
+## Why QuickScale?
 
-## Key Benefits
+✅ **Production-ready from day one** - Docker, PostgreSQL, pytest, CI/CD, security best practices
+✅ **Built on Django** - No magic, just excellent Django patterns and battle-tested packages
+✅ **Shared improvements** - Security fixes and updates flow across all your projects via git subtree
+✅ **Full ownership** - Generated projects are 100% yours, no vendor lock-in
 
-**Production-Ready Foundations** (Match competitors on quality):
-- **Docker & PostgreSQL**: Production-ready containerization and database setup from day one
-- **Security Best Practices**: Environment-based config, secure defaults, proper middleware configuration
-- **Testing Infrastructure**: pytest + factory_boy with CI/CD via GitHub Actions
-- **Professional Tooling**: Pre-commit hooks (black, ruff, isort) for code quality
+**QuickScale is a development accelerator**, not a complete solution. You start with production-ready foundations and build your unique client application on top.
 
-**Unique QuickScale Advantages** (Beat competitors on architecture):
-- **Shared Updates**: Get security fixes and improvements across all client projects via git subtree
-- **Composable Modules**: Reuse authentication, billing, teams across projects (Post-MVP)
-- **Agency-Optimized**: Build multiple client SaaS apps with consistent, reusable foundations
-- **Full Ownership**: Generated projects are yours to modify with no vendor lock-in
-
-**Django Ecosystem** (Built on proven foundations):
-- **Battle-Tested Packages**: django-allauth (auth), dj-stripe (payments), django-anymail (email)
-- **Standard Patterns**: No magic, no custom abstractions—just excellent Django
-- **Simple Deployment**: Standard Django deployment patterns, cloud-agnostic
-
-See [COMPETITIVE_ANALYSIS.md](./docs/overview/competitive_analysis.md) for detailed comparison with SaaS Pegasus, Cookiecutter, and alternatives.
-
-## QuickScale Philosophy: Enabler, Not Complete Solutions
-
-QuickScale provides the foundation and building blocks, not complete vertical solutions:
-
-✅ **What QuickScale IS:**
-- Foundation for building custom SaaS applications
-- Modules built on proven Django foundations (dj-stripe, django-allauth, etc.)
-- Starting point themes you must extend (models, business logic, UX)
-- Development accelerator, not an end product
-
-❌ **What QuickScale is NOT:**
-- Complete e-commerce / CRM / real estate platform
-- Ready-to-use vertical SaaS
-- One-size-fits-all template pack
-- Runtime plugin loader (no WordPress-style activation)
-
-## From Template to Client Project
-
-Start with the generated Django starter, build what your client needs, and only later decide if a pattern is worth extracting into `quickscale_modules/`. Distribution upgrades (PyPI, subscriptions, etc.) stay Post-MVP—follow the [MVP Feature Matrix](./docs/technical/decisions.md#mvp-feature-matrix-authoritative) and [`QUICKSCALE.md`](./docs/overview/quickscale.md#evolution-strategy-personal-toolkit-first) for the bigger story.
+See [COMPETITIVE_ANALYSIS.md](./docs/overview/competitive_analysis.md) for detailed comparison with SaaS Pegasus and Cookiecutter.
 
 ---
 
- ### Development Approach (MVP)
 
-QuickScale currently ships a single CLI entry point: `quickscale init`. The [CLI command matrix](./docs/technical/decisions.md#cli-command-matrix) tracks the **planned** additions and their phases, keeping this README focused on commands that already exist.
-
-### **Post-MVP: Configuration-Driven (Optional)**
-Declarative configuration is a Post-MVP consideration. Prototype commands, sample schemas, and status notes now live exclusively in `docs/technical/decisions.md`.
-
-### Settings Pattern (Post-MVP)
-
-Generated projects use standalone `settings.py` files by default. Optional inheritance and future settings plans are recorded in `docs/technical/decisions.md` alongside the authoritative MVP feature matrix.
-
----
-
-## CLI Reference (MVP)
-
-### **QuickScale CLI - Simple and Minimal**
-
-#### **Project Creation**
+## Quick Start
 
 ```bash
-quickscale init <project_name>
-```
+# Install QuickScale
+pip install -e quickscale_cli/
 
-**That's it.** No flags, no options, no complexity.
-
-**What It Does:**
-1. Creates Django project structure
-2. Generates minimal starter application  
-3. Optionally embeds `quickscale_core` utilities via git subtree
-4. Ready to code in 30 seconds
-
-**Example:**
-```bash
+# Create your first project
 quickscale init myapp
+
+# Start developing
 cd myapp
-python manage.py runserver
-# Visit http://localhost:8000 - see your minimal starter!
+poetry install
+poetry run python manage.py migrate
+poetry run python manage.py runserver
 ```
 
-#### **Update Commands (Post-MVP Backlog)**
+**That's it!** Visit http://localhost:8000 to see your new Django project.
 
-ℹ️ Wrapper helpers are deferred to the Post-MVP backlog. Track any future work in the [CLI command matrix](./docs/technical/decisions.md#cli-command-matrix); until they ship, rely on the manual commands documented in [`DECISIONS.md`](./docs/technical/decisions.md#integration-note-personal-toolkit-git-subtree).
-
-## Glossary
-
-Canonical terminology used across QuickScale documentation:
-
-- MVP = Phase 1 (minimal personal toolkit)
-- Post-MVP = Phase 2+ (features planned after MVP; prefer explicit phase numbers)
-- Module = Backend module (Django app under `quickscale_modules`)
-- Theme = Starting point Django app under `quickscale_themes`
-- Generated Project = Output of `quickscale init`
-
-Add new terms here as documentation evolves; this section consolidates terminology so other docs can link here as the canonical source.
+**For complete command reference and workflows**, see the [User Manual](./docs/technical/user_manual.md).
 
 ## Learn More
 
@@ -255,15 +131,5 @@ Add new terms here as documentation evolves; this section consolidates terminolo
 - **[QUICKSCALE.md](./docs/overview/quickscale.md)** - Strategic vision and competitive positioning
 - **[COMPETITIVE_ANALYSIS.md](./docs/overview/competitive_analysis.md)** - Comparison vs SaaS Pegasus and alternatives
 - **[ROADMAP.md](./docs/technical/roadmap.md)** - Development roadmap and implementation plan
-
-For optional backend customization patterns, reference the [backend extensions policy](./docs/technical/decisions.md#backend-extensions-policy).
-
-
-## Optional backend customization (opt-in example)
-
-The MVP does NOT auto-generate a `backend_extensions.py` file. If you'd like a single, discoverable place to wire project-specific backend customizations, copy the example in `examples/client_extensions/` into your generated project and optionally enable it by adding `client_extensions` to `INSTALLED_APPS`.
-
-The example shows a minimal `backend_extensions.register()` contract and `AppConfig.ready()` wiring so you can opt in to a single extension entry point without changing the generator's minimal output.
-
-
+- **[User Manual](./docs/technical/user_manual.md)** - Commands and workflows
 

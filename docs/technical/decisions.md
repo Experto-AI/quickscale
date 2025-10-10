@@ -1,7 +1,7 @@
-# DECISIONS: QuickScale Architecture & Technical Specifications
+# decisions.md
 
 <!-- 
-DECISIONS.md - Authoritative Technical Specification
+decisions.md - Authoritative Technical Specification
 
 PURPOSE: This document is the single source of truth for all architectural decisions, technical implementation rules, and development standards for QuickScale.
 
@@ -23,9 +23,9 @@ WHAT TO ADD HERE:
 - Integration patterns between core, modules, and themes
 
 WHAT NOT TO ADD HERE:
-- Strategic rationale or competitive analysis (belongs in QUICKSCALE.md)
+- Strategic rationale or competitive analysis (belongs in quickscale.md)
 - User-facing documentation or getting started guides (belongs in README.md)
-- Implementation timelines or roadmap items (belongs in ROADMAP.md)
+- Implementation timelines or roadmap items (belongs in roadmap.md)
 
 TARGET AUDIENCE: Maintainers, core contributors, community package developers, CI engineers
 -->
@@ -34,21 +34,16 @@ TARGET AUDIENCE: Maintainers, core contributors, community package developers, C
 
 This document records authoritative architecture, technical & behaviour decisions for QuickScale. It is the single source of truth for how we structure packages, name artifacts, run tests, and what patterns are explicitly forbidden.
 
-## Scope
+## Scope & Decision Owners
 
 - Applies to the QuickScale repository and all first-party packages (core, CLI, themes, modules).
-- Intended for maintainers, core contributors, community package authors, and CI engineers.
-
-## Decision Owners
-
 - QuickScale maintainers (Experto-AI and core contributors) are the authoritative owners of these decisions.
-- Community contributors must follow these decisions when creating themes or modules. Exceptions must be approved by maintainers and documented here.
 
 ## Documentation Maintenance Guidelines
 
 ### Single Source of Truth (SSOT) Principle
 
-**DECISIONS.md is authoritative for**:
+**decisions.md is authoritative for**:
 - Architectural decisions and rationale
 - Technical specifications and rules
 - MVP feature scope (Feature Matrix)
@@ -56,32 +51,29 @@ This document records authoritative architecture, technical & behaviour decision
 - Explicit prohibitions
 
 **When updating scope or architecture**:
-1. ✅ Update DECISIONS.md FIRST
-2. ✅ Then update referencing documents (README, ROADMAP, SCAFFOLDING)
+1. ✅ Update decisions.md FIRST
+2. ✅ Then update referencing documents (README, ROADMAP, SCAFFOLDING, others)
 3. ✅ Add cross-references so readers can find the SSOT
-4. ❌ Never contradict DECISIONS.md in other docs
+4. ❌ Never contradict decisions.md in other docs
 
 ### Conflict Resolution
 
 If documents conflict:
-1. **DECISIONS.md wins** - it's the tie-breaker
-2. Update conflicting document to match DECISIONS.md
-3. Add PR review step: check DECISIONS.md alignment
+1. **decisions.md wins** - it's the tie-breaker
+2. Update conflicting document to match decisions.md
+3. Add PR review step: check decisions.md alignment
 
 ### Documentation Cross-Reference Standards
 
-When referencing concepts defined elsewhere:
-- Link to the canonical section (don't duplicate content)
-- Use consistent link format: `[descriptive text](./DOCUMENT.md#section-anchor)`
-- Prefer deep links over file-level references
+When referencing concepts defined elsewhere link to the canonical section (don't duplicate content) using consistent link format `[descriptive text](./DOCUMENT.md#section-anchor)` deep link instead of file-level reference.
 
 ## MVP vs. Post-MVP Scope
 
-**CRITICAL CLARIFICATION**: This document describes both the **MVP implementation** (Phase 1) and the **target architecture** (Post-MVP). QuickScale follows a **"start simple, evolve organically"** strategy. For the narrative rationale behind this evolution, defer to the [strategic overview in QUICKSCALE.md](../overview/quickscale.md#evolution-strategy-personal-toolkit-first); this section focuses on the technical implications.
+**CRITICAL CLARIFICATION**: This document describes both the **MVP implementation** (Phase 1) and the **target architecture** (Post-MVP). QuickScale follows a **"start simple, evolve organically"** strategy. For the narrative rationale behind this evolution, defer to the [strategic overview in quickscale.md](../overview/quickscale.md#evolution-strategy-personal-toolkit-first); this section focuses on the technical implications.
 
 ### MVP Definition (clarification)
 
-To remove ambiguity across documentation, the project defines the term "MVP" as the cumulative set of releases from **v0.52** through **v1.0.0** that together deliver a production-ready personal toolkit. Early 0.52-0.55 releases are considered the "Foundation Phase" (incremental engineering steps that prepare the ground for the MVP). When other documents reference "Foundation" or "Phase 1 increments", they refer to the pre-MVP incremental releases (v0.52-v0.55). This file (`DECISIONS.md`) remains the authoritative source for feature-inclusion decisions and is the tie-breaker if other docs disagree about whether a feature is in the MVP.
+To remove ambiguity across documentation, the project defines the term "MVP" as the cumulative set of releases from **v0.52** through **v1.0.0** that together deliver a production-ready personal toolkit. Early 0.52-0.55 releases are considered the "Foundation Phase" (incremental engineering steps that prepare the ground for the MVP). When other documents reference "Foundation" or "Phase 1 increments", they refer to the pre-MVP incremental releases (v0.52-v0.55). This file (`decisions.md`) remains the authoritative source for feature-inclusion decisions and is the tie-breaker if other docs disagree about whether a feature is in the MVP.
 
 Guidance summary:
 - "Foundation Phase" = v0.52 - v0.55 (incremental foundation work)
@@ -94,13 +86,13 @@ Guidance summary:
 - ✅ **quickscale_core**: Core scaffolding, minimal utilities, git subtree integration
 - ✅ **quickscale_cli**: Simple CLI - just `quickscale init myapp` command
 - ✅ **Scaffolded starter**: Generates minimal Django starter project users own completely
- These requirements ensure QuickScale matches competitors on production-readiness while maintaining its unique composability advantage. See [COMPETITIVE_ANALYSIS.md "What Must Be Incorporated"](../overview/competitive_analysis.md#what-quickscale-must-incorporate-from-competitors) for detailed analysis.
+ These requirements ensure QuickScale matches competitors on production-readiness while maintaining its unique composability advantage. See [competitive_analysis.md "What Must Be Incorporated"](../overview/competitive_analysis.md#what-quickscale-must-incorporate-from-competitors) for detailed analysis.
 - ✅ **Django settings inheritance**: Simple Python imports, no YAML config required
 - ✅ **Single starter template**: One way to create projects (no multiple templates)
 
 Note: The MVP CLI intentionally implements a single, ultra-simple command: `quickscale init <project>`. Helper wrapper commands for git-subtree workflows (for example `quickscale embed-core`, `quickscale update-core`, `quickscale sync-push`) are not required for the initial release and therefore are not part of the MVP CLI. Those helpers are deferred to the Post-MVP backlog and will only be reconsidered after the initial `quickscale init` release proves sustained manual demand from users who opt into embedding the core.
 
-**What MVP Generates:** See the [authoritative MVP structure diagram in SCAFFOLDING.md §3](./scaffolding.md#mvp-structure) for the full tree. The starter remains the standard Django layout with standalone settings by default.
+**What MVP Generates:** See the [authoritative MVP structure diagram in scaffolding.md §3](./scaffolding.md#mvp-structure) for the full tree. The starter remains the standard Django layout with standalone settings by default.
 
 ### Integration note: Personal Toolkit (git-subtree) ✅ {#integration-note-personal-toolkit-git-subtree}
 
@@ -167,7 +159,7 @@ git subtree push --prefix=path/to/extracted/module origin main
 Migration checklist (MVP → Post‑MVP packaging):
 - Remove `quickscale_modules/__init__.py` and `quickscale_themes/__init__.py` (PEP 420 namespace)
 - Ensure each module has a `pyproject.toml` and uses `find_namespace_packages()`
-- Validate installs by creating a wheel and installing it in an isolated venv
+- Validate installs by creating a wheel and installing it in an isolated virtual environment (Poetry-managed virtualenvs are recommended)
 - Add CI checks to fail builds where a namespace `__init__.py` remains prior to publish
 
 
@@ -182,7 +174,7 @@ Migration checklist (MVP → Post‑MVP packaging):
 - ❌ **PyPI distribution**: For commercial modules, subscriptions, external agencies
 - ❌ **Marketplace ecosystem**: Community-driven package discovery
 
-**Post-MVP Package Structure (When Ready):** Refer to the [detailed post-MVP layout in SCAFFOLDING.md §4](./scaffolding.md#post-mvp-structure) for the canonical directory tree and packaging notes. Key enforcement rules are summarised in the MVP feature matrix and the naming matrix inside SCAFFOLDING.md §6.
+**Post-MVP Package Structure (When Ready):** Refer to the [detailed post-MVP layout in scaffolding.md §4](./scaffolding.md#post-mvp-structure) for the canonical directory tree and packaging notes. Key enforcement rules are summarised in the MVP feature matrix and the naming matrix inside scaffolding.md §6.
 
 Implementation policy (MVP vs Post-MVP):
 - `quickscale_core` remains a regular Python package and MUST include an `__init__.py`.
@@ -199,11 +191,11 @@ This matrix is the authoritative source of truth for **what is IN / OUT / PLANNE
 
 **Not in scope**: Implementation details (e.g., specific template files, task breakdowns)
 
-**For implementation details**: See [ROADMAP.md](./ROADMAP.md) which implements the features defined in this matrix.
+**For implementation details**: See [roadmap.md](./roadmap.md) which implements the features defined in this matrix.
 
-**Tie-breaker rule**: If ROADMAP.md conflicts with this matrix on feature scope, this matrix wins. Update ROADMAP to match.
+**Tie-breaker rule**: If roadmap.md conflicts with this matrix on feature scope, this matrix wins. Update ROADMAP to match.
 
-Other documents (README.md, ROADMAP.md, SCAFFOLDING.md, COMMERCIAL.md) MUST reference this section when describing MVP scope; DECISIONS.md is the tie-breaker for any ambiguity.
+Other documents (README.md, roadmap.md, scaffolding.md, commercial.md) MUST reference this section when describing MVP scope; decisions.md is the tie-breaker for any ambiguity.
 
 | Feature / Area | MVP Status | Notes / Decision Reference |
 |---|---:|---|
@@ -214,7 +206,7 @@ Other documents (README.md, ROADMAP.md, SCAFFOLDING.md, COMMERCIAL.md) MUST refe
 | `quickscale_core` embedding via git-subtree (manual documented workflow) | IN (manual) | Manual subtree commands are documented and supported; embedding is opt-in and advanced. |
 | CLI git-subtree wrapper commands (`embed-core`, `update-core`, `sync-push`) | PLANNED | Post-MVP backlog; implement only after manual workflows demonstrate sustained demand. |
 | Settings inheritance from `quickscale_core` into generated project | OPTIONAL | Default generated project uses standalone `settings.py`. If user explicitly embeds `quickscale_core`, optional settings inheritance is allowed and documented. |
-| **PRODUCTION-READY FOUNDATIONS (Competitive Requirement)** | | **See [COMPETITIVE_ANALYSIS.md §1-3](../overview/competitive_analysis.md#-critical-for-mvp-viability-must-have)** |
+| **PRODUCTION-READY FOUNDATIONS (Competitive Requirement)** | | **See [competitive_analysis.md §1-3](../overview/competitive_analysis.md#-critical-for-mvp-viability-must-have)** |
 | Docker setup (Dockerfile + docker-compose.yml) | IN | Production-ready multi-stage Dockerfile + local dev docker-compose with PostgreSQL & Redis services. Match Cookiecutter quality. |
 | PostgreSQL configuration (dev + production) | IN | Split settings: SQLite for local dev, PostgreSQL for production. DATABASE_URL env var support via python-decouple/django-environ. |
 | Environment-based configuration (.env + split settings) | IN | settings/base.py, settings/local.py, settings/production.py pattern. Secure SECRET_KEY loading from environment. |
@@ -229,19 +221,19 @@ Other documents (README.md, ROADMAP.md, SCAFFOLDING.md, COMMERCIAL.md) MUST refe
 | `quickscale_modules/` (extracted reusable apps in personal monorepo) | OPTIONAL / NOT REQUIRED | Allowed as a local convenience for personal monorepos, but NOT a required MVP artifact. Packaging for distribution is Post-MVP. |
 | `quickscale_themes/` packaged themes | OUT (Post-MVP) | Themes become packages in Post-MVP only. |
 | YAML declarative configuration (`quickscale.yml`) | OUT (Post-MVP) | Deferred. |
-| PyPI / private-registry distribution for commercial modules | OUT (Post-MVP) | Commercial distribution is Post-MVP (see COMMERCIAL.md). |
+| PyPI / private-registry distribution for commercial modules | OUT (Post-MVP) | Commercial distribution is Post-MVP (see commercial.md). |
 | Multiple starter templates / `--template` flag | OUT (Post-MVP) | Single starter only for MVP. |
 
 Notes:
 - This table is authoritative for release planning and documentation. If any document needs to show an example layout or convenience (e.g., `quickscale_modules/` appearing in a monorepo example), it must note that the item is "optional/personal-monorepo convenience" and point readers to this matrix for MVP status.
 
 **Competitive Rationale for Production-Ready Foundations**:
-The production-ready foundations (Docker, PostgreSQL, pytest, CI/CD, etc.) are classified as **P0 - Critical for MVP Viability** based on competitive analysis. Every successful Django boilerplate (SaaS Pegasus, Cookiecutter, Apptension) provides these as table stakes. Without them, QuickScale would be perceived as a toy project rather than a professional tool suitable for agency work. These requirements ensure QuickScale matches competitors on production-readiness while maintaining its unique composability advantage. See [COMPETITIVE_ANALYSIS.md "What Must Be Incorporated"](../overview/competitive_analysis.md#what-quickscale-must-incorporate-from-competitors) for detailed analysis.
+The production-ready foundations (Docker, PostgreSQL, pytest, CI/CD, etc.) are classified as **P0 - Critical for MVP Viability** based on competitive analysis. Every successful Django boilerplate (SaaS Pegasus, Cookiecutter, Apptension) provides these as table stakes. Without them, QuickScale would be perceived as a toy project rather than a professional tool suitable for agency work. These requirements ensure QuickScale matches competitors on production-readiness while maintaining its unique composability advantage. See [competitive_analysis.md "What Must Be Incorporated"](../overview/competitive_analysis.md#what-quickscale-must-incorporate-from-competitors) for detailed analysis.
 
 Authoritative policy (tie-breakers)
 ----------------------------------
 
-- **Settings inheritance (authoritative)**: The MVP generator creates a standalone `settings.py` by default and does **not** scaffold automatic inheritance from `quickscale_core.settings`. Teams that manually embed `quickscale_core` into a generated project via git subtree may opt-in to inherit from `quickscale_core.settings` by editing their generated `settings.py`. This is an advanced, manual pattern and is intentionally not automatic in the MVP. DECISIONS.md is the canonical location for this policy; other documents must link to this section for tie-breakers.
+- **Settings inheritance (authoritative)**: The MVP generator creates a standalone `settings.py` by default and does **not** scaffold automatic inheritance from `quickscale_core.settings`. Teams that manually embed `quickscale_core` into a generated project via git subtree may opt-in to inherit from `quickscale_core.settings` by editing their generated `settings.py`. This is an advanced, manual pattern and is intentionally not automatic in the MVP. decisions.md is the canonical location for this policy; other documents must link to this section for tie-breakers.
 
 - **Packaging / generated-project policy (authoritative)**: Generated user projects (the starters created by `quickscale init`) use `pyproject.toml` and Poetry as the canonical packaging and dependency management tool for both MVP and Post‑MVP.
 
@@ -264,15 +256,15 @@ The CLI remains intentionally minimal. This matrix tracks **pending and planned*
 ## Document responsibilities (short)
 
 To avoid overlap and conflicting statements across files, the repository follows these responsibilities:
-- `DECISIONS.md`: authoritative technical decisions, MVP feature matrix, package layout rules, and any tie-breakers. Use this file as the source of truth for "what" and "how" decisions.
-- `ROADMAP.md`: timeline, phases, tasks, and acceptance criteria. Roadmap items should reference DECISIONS.md for technical specifics.
-- `SCAFFOLDING.md`: example layouts and scaffolding guidance. Example blocks must be annotated as "example / optional" when they show conveniences that are not required for MVP.
+- `decisions.md`: authoritative technical decisions, MVP feature matrix, package layout rules, and any tie-breakers. Use this file as the source of truth for "what" and "how" decisions.
+- `roadmap.md`: timeline, phases, tasks, and acceptance criteria. Roadmap items should reference decisions.md for technical specifics.
+- `scaffolding.md`: example layouts and scaffolding guidance. Example blocks must be annotated as "example / optional" when they show conveniences that are not required for MVP.
 - `README.md`: user-facing getting-started and high-level summary. It also carries the newcomer documentation map and canonical glossary, so keep that section in sync with this responsibility list and ensure it links back here for authoritative scope.
-- `COMMERCIAL.md`: commercial models and Post-MVP guidance only; avoid asserting MVP behavior.
+- `commercial.md`: commercial models and Post-MVP guidance only; avoid asserting MVP behavior.
 
-**Terminology**: For canonical terms (MVP, Phase 1, Post-MVP, etc.), refer to the [Glossary in README.md](./README.md#glossary) for standardized usage across all documentation.
+**Terminology**: For canonical terms (MVP, Phase 1, Post-MVP, etc.), refer to the [Glossary in README.md](../README.md#glossary) for standardized usage across all documentation.
 
-Maintainers should update `DECISIONS.md` first when changing technical scope; other documents must be updated to reference the new decisions.
+Maintainers should update `decisions.md` first when changing technical scope; other documents must be updated to reference the new decisions.
 
 ## Testing Standards (Authoritative)
 
@@ -339,9 +331,9 @@ QuickScale provides building blocks and acceleration tools, not complete busines
 - **Themes** (Post-MVP): Starting points that require customization for specific business needs
 - **Frontends** (MVP): Directory-based presentation layer for customization via scaffolded templates
 
-**Target Architecture Structure (Post-MVP):** The full tree lives in [SCAFFOLDING.md §2](./scaffolding.md#2-monorepo-target-layout-post-mvp-end-state). This section focuses on the architectural rationale; see SCAFFOLDING.md for the canonical layout.
+**Target Architecture Structure (Post-MVP):** The full tree lives in [scaffolding.md §2](./scaffolding.md#2-monorepo-target-layout-post-mvp-end-state). This section focuses on the architectural rationale; see scaffolding.md for the canonical layout.
 
-MVP Architecture Structure (Phase 1): refer to [SCAFFOLDING.md §3](./scaffolding.md#mvp-structure) for the generated package tree. DECISIONS.md records the policies that guide that layout rather than duplicating the tree.
+MVP Architecture Structure (Phase 1): refer to [scaffolding.md §3](./scaffolding.md#mvp-structure) for the generated package tree. decisions.md records the policies that guide that layout rather than duplicating the tree.
 
 **Key Advantages of Library-Style Architecture:**
 - ✅ **Familiar Mental Model**: Like Python's ecosystem (import what you need)
@@ -611,7 +603,7 @@ QuickScale uses different distribution strategies for different phases:
 - Faster iteration without version bumps
 
 **Why Package Registry for Post-MVP:**
-- Commercial extension monetization (see COMMERCIAL.md)
+- Commercial extension monetization (see commercial.md)
 - Community marketplace support
 - Standard dependency management for extensions
 - Optional (git subtree remains supported)
@@ -638,13 +630,13 @@ The **Backend Extension & Frontend Development** decision describes the long‑t
 
 Decision: The MVP does NOT scaffold a `backend_extensions.py` file. Projects own backend customizations; the recommended, idiomatic pattern is to add a local app (e.g. `client_extensions`) and perform startup wiring in an `AppConfig.ready()` method (idempotent registration).
 
-Post‑MVP: tooling may optionally provide scaffolds or helpers; any contract will be recorded here in DECISIONS.md.
+Post‑MVP: tooling may optionally provide scaffolds or helpers; any contract will be recorded here in decisions.md.
 
 **Implementation Notes:**
 - MVP: The CLI and scaffold produce a minimal Django project and optional `custom_frontend/` directory. The MVP intentionally does NOT generate `backend_extensions.py` automatically. This avoids regeneration risks and keeps the generated project fully owned by the user.
 - Post‑MVP: When module and theme packaging is introduced, the scaffolding may optionally generate `backend_extensions.py` templates or helpers as part of richer project generation flows.
 
-*Illustrative Backend Extension Pattern (Post‑MVP):* (Commercial licensing integrations expand on this pattern in [`COMMERCIAL.md`](../overview/commercial.md#subscription-based-repository-implementation).)
+*Illustrative Backend Extension Pattern (Post‑MVP):* (Commercial licensing integrations expand on this pattern in [`commercial.md`](../overview/commercial.md#subscription-based-repository-implementation).)
 ```python
 # Example: illustrative backend_extensions.py (Post‑MVP)
 from quickscale_themes.starter import models as starter_models
@@ -663,9 +655,9 @@ class ExtendedBusinessLogic(starter_business.StarterBusiness):
     return result
 ```
 
-*Directory‑Based Frontend Pattern (MVP illustrative):* Refer to the concise starter tree in [SCAFFOLDING.md §5](./scaffolding.md#5-generated-project-output) for the canonical layout. This section only records the decision that `custom_frontend/` remains optional in MVP while richer tooling is deferred.
+*Directory‑Based Frontend Pattern (MVP illustrative):* Refer to the concise starter tree in [scaffolding.md §5](./scaffolding.md#5-generated-project-output) for the canonical layout. This section only records the decision that `custom_frontend/` remains optional in MVP while richer tooling is deferred.
 
-*Generated Project Structure (MVP):* The structure is catalogued once in [SCAFFOLDING.md §5.1](./scaffolding.md#51-mvp-ultra-minimal-django-project); DECISIONS.md defers to that reference to avoid duplication.
+*Generated Project Structure (MVP):* The structure is catalogued once in [scaffolding.md §5.1](./scaffolding.md#51-mvp-ultra-minimal-django-project); decisions.md defers to that reference to avoid duplication.
 
 **MVP Core Features:**
 1. **Directory‑Based Frontend**: Optional `custom_frontend/` with template and static directories
@@ -781,11 +773,11 @@ Package Structure and Naming Conventions
 
 **AUTHORITATIVE DECISION: PEP 420 Namespace Packages**
 
-The canonical naming and import matrix now lives in [SCAFFOLDING.md §6](./scaffolding.md#6-naming-import-matrix-summary). This section records the policy-level decisions only:
+The canonical naming and import matrix now lives in [scaffolding.md §6](./scaffolding.md#6-naming-import-matrix-summary). This section records the policy-level decisions only:
 
 - Post-MVP modules and themes MUST use PEP 420 implicit namespace packages so independently released wheels can share the `quickscale_modules` / `quickscale_themes` namespaces without a namespace `__init__.py`.
 - MVP starters remain simple: `quickscale_core` is a regular package with an explicit `__init__.py`, no namespace packaging required until Phase 2+.
-- When preparing a namespace package for release, follow the directory layout and app-label guidance captured in SCAFFOLDING.md §6; do not duplicate the matrix elsewhere.
+- When preparing a namespace package for release, follow the directory layout and app-label guidance captured in scaffolding.md §6; do not duplicate the matrix elsewhere.
 
 **Why PEP 420 Namespaces (recap):** independent distribution, conflict-free installs, standard Python behaviour, and room for third-party extensions.
 
@@ -829,7 +821,7 @@ When extracting a module for independent distribution:
 
 **PEP 420 Validation**: Include namespace package compliance checks in CI pipeline to ensure proper `find_namespace_packages()` configuration and absence of namespace `__init__.py` files.
 
-**Guidelines Location**: Namespace package guidelines are documented in this section and cross-referenced in SCAFFOLDING.md examples.
+**Guidelines Location**: Namespace package guidelines are documented in this section and cross-referenced in scaffolding.md examples.
 
 Detailed technical notes
 ------------------------

@@ -1,0 +1,78 @@
+[tool.poetry]
+name = "quickscale-cli"
+version = "0.52.0"
+description = "Command-line interface for QuickScale Django project generator"
+authors = ["Experto AI <victor@experto.ai>"]
+readme = "README.md"
+license = "Apache-2.0"
+keywords = ["django", "cli", "project-generator", "saas"]
+homepage = "https://github.com/Experto-AI/quickscale"
+repository = "https://github.com/Experto-AI/quickscale"
+documentation = "https://github.com/Experto-AI/quickscale/tree/main/docs"
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: Apache Software License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Framework :: Django",
+    "Framework :: Django :: 4.2",
+    "Framework :: Django :: 5.0",
+]
+packages = [{include = "quickscale_cli", from = "src"}]
+
+[tool.poetry.dependencies]
+python = "^3.10"
+click = "^8.1.0"
+quickscale-core = {path = "../quickscale_core", develop = true}
+
+[tool.poetry.group.dev.dependencies]
+pytest = "^7.4.0"
+pytest-cov = "^4.1.0"
+black = "^23.7.0"
+ruff = "^0.0.286"
+
+[tool.poetry.scripts]
+quickscale = "quickscale_cli.main:cli"
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+python_files = ["test_*.py"]
+python_classes = ["Test*"]
+python_functions = ["test_*"]
+addopts = [
+    "--strict-markers",
+    "--strict-config",
+    "--cov=quickscale_cli",
+    "--cov-report=term-missing",
+    "--cov-report=html",
+]
+
+[tool.black]
+line-length = 100
+target-version = ['py310', 'py311', 'py312']
+include = '\.pyi?$'
+
+[tool.ruff]
+line-length = 100
+target-version = "py310"
+select = [
+    "E",  # pycodestyle errors
+    "W",  # pycodestyle warnings
+    "F",  # pyflakes
+    "I",  # isort
+    "N",  # pep8-naming
+    "UP", # pyupgrade
+]
+ignore = []
+
+[tool.ruff.isort]
+known-first-party = ["quickscale_cli", "quickscale_core"]
+
+
