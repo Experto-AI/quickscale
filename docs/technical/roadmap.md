@@ -134,21 +134,11 @@ This policy ensures completed work is archived in a discoverable place and the r
 
 ---
 
-### Release v0.52.0: Project Foundation — completed
+### Completed Releases/Tasks/Sprints:
 
-Full documentation on `docs/releases/release-v0.52.0.md` 
-
----
-
-### Release v0.53.1: Core Django Project Templates — completed
-
-Full documentation on `docs/releases/release-v0.53.1.md`
-
----
-
-### Release 0.53.2: Templates and Static Files - completed
-
-Full documentation on `docs/releases/release-v0.53.2.md`
+- Release v0.52.0: Project Foundation: `docs/releases/release-v0.52.0.md`
+- Release v0.53.1: Core Django Project Templates: `docs/releases/release-v0.53.1.md`
+- Release v0.53.2: Templates and Static Files: `docs/releases/release-v0.53.2.md`
 
 ---
 
