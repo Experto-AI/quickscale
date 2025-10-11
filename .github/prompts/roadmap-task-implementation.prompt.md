@@ -65,12 +65,14 @@ QUALITY & STYLE
 - Follow existing code style and patterns in the repo.
 - Use type hints and docstrings for new public functions/classes.
 - Keep changes minimal and focused; avoid large refactors unless explicitly required by the task.
+- Run `./scripts/lint.sh` to verify code quality (ruff format, ruff check, mypy) before finalizing.
 
 TESTING REQUIREMENTS
 ---------------------
 - Write tests for all new functionality (unit tests + small integration tests when required).
 - Use existing test frameworks and fixtures in the repo (pytest, Click's CliRunner, etc.).
-- Ensure tests run locally and pass before marking task complete.
+- Run `./scripts/test-all.sh` to execute all tests across packages.
+- Ensure all tests pass before marking task complete.
 
 DELIVERABLES (to fill per task)
 -------------------------------
@@ -115,19 +117,26 @@ WORKFLOW (recommended execution steps)
 13. Generate tests AFTER code review is complete (implementation-first approach)
 14. Follow test structure and organization patterns from testing.md
 15. Use proper mocking for isolation (NO global mocking)
-16. Run tests and validation commands; fix any issues
+16. Run `./scripts/lint.sh` to verify code quality
+17. Run `./scripts/test-all.sh` to execute all tests
+18. Run task-specific validation commands; fix any issues
 
 **STAGE 5: COMPLETION**
-17. Update docs or README snippets only if the task requests it
-18. Prepare final checklist comment linking implemented files and test results
+19. Update docs or README snippets only if the task requests it
+20. **Mark roadmap items as complete**: Open `docs/technical/roadmap.md` and check [x] all completed items in the task's checklist
+21. Create release document in `docs/releases/` using the release template (see COMPLETION REPORTING section)
+22. DO NOT create any other reports, summaries, or completion documents outside of `docs/releases/`
 
 SUCCESS CRITERIA
 ----------------
 The task is complete when all these are met:
 - All items from the roadmap task checklist are implemented (Done)
-- All tests pass locally (Done)
-- Validation commands succeed (Done)
+- All items in the roadmap task are marked [x] as complete in `docs/technical/roadmap.md` (Done)
+- Code quality checks pass: `./scripts/lint.sh` succeeds (Done)
+- All tests pass: `./scripts/test-all.sh` succeeds (Done)
+- Task-specific validation commands succeed (Done)
 - No out-of-scope features were introduced (Verified)
+- Release document created in `docs/releases/` following the template (Done)
 
 COMMITS & PR NOTES
 ------------------
@@ -147,7 +156,10 @@ Reference examples:
 - `docs/releases/release-v0.52.0.md` - Project Foundation
 - `docs/releases/release-v0.53.1.md` - Core Django Templates
 
-The release template is the authoritative format for task completion documentation.
+**CRITICAL: The release template is the ONLY format for task completion documentation.**
+- DO NOT create reports, summaries, or completion documents in any other location
+- DO NOT create custom documentation formats or ad-hoc summary files
+- All task completion information must be recorded in `docs/releases/` only
 
 START NOW
 ---------

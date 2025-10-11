@@ -1,0 +1,123 @@
+/* {{ project_name }} - Base Styles */
+
+/* Global Styles */
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+}
+
+body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    line-height: 1.6;
+    color: #333;
+    background-color: #f5f5f5;
+}
+
+/* Header */
+header {
+    background-color: #2c3e50;
+    color: white;
+    padding: 1rem 2rem;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+}
+
+header nav h1 {
+    font-size: 1.5rem;
+    font-weight: 600;
+}
+
+/* Main Content */
+main {
+    max-width: 1200px;
+    margin: 2rem auto;
+    padding: 0 2rem;
+}
+
+.welcome-container {
+    background: white;
+    border-radius: 8px;
+    padding: 2rem;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+}
+
+.welcome-container h1 {
+    color: #2c3e50;
+    margin-bottom: 1rem;
+    font-size: 2.5rem;
+}
+
+.welcome-container > p {
+    color: #666;
+    font-size: 1.1rem;
+    margin-bottom: 2rem;
+}
+
+.next-steps,
+.resources {
+    margin-top: 2rem;
+}
+
+.next-steps h2,
+.resources h2 {
+    color: #34495e;
+    margin-bottom: 1rem;
+    font-size: 1.5rem;
+}
+
+.next-steps ul,
+.resources ul {
+    list-style-position: inside;
+    padding-left: 1rem;
+}
+
+.next-steps li,
+.resources li {
+    margin-bottom: 0.5rem;
+    color: #555;
+}
+
+.resources a {
+    color: #3498db;
+    text-decoration: none;
+}
+
+.resources a:hover {
+    text-decoration: underline;
+}
+
+code {
+    background-color: #f4f4f4;
+    padding: 0.2rem 0.4rem;
+    border-radius: 3px;
+    font-family: "Courier New", monospace;
+    font-size: 0.9em;
+}
+
+/* Footer */
+footer {
+    background-color: #2c3e50;
+    color: white;
+    text-align: center;
+    padding: 1rem;
+    margin-top: 3rem;
+}
+
+footer p {
+    font-size: 0.9rem;
+}
+
+/* Responsive Design */
+@media (max-width: 768px) {
+    main {
+        padding: 0 1rem;
+    }
+
+    .welcome-container {
+        padding: 1.5rem;
+    }
+
+    .welcome-container h1 {
+        font-size: 2rem;
+    }
+}

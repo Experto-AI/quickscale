@@ -45,13 +45,15 @@ Execution details live here; the "personal toolkit first, community platform lat
 **AUTHORITATIVE SCOPE REFERENCE**: The [MVP Feature Matrix in decisions.md](./decisions.md#mvp-feature-matrix-authoritative) is the single source of truth for what's IN/OUT/PLANNED. When this roadmap conflicts with decisions.md, decisions.md wins.
 
 ### **📋 Current State Assessment**
-- ✅ **Current Version**: v0.52.0 (Released)
+- ✅ **Current Version**: v0.53.2 (Released)
 - ✅ **Evolution Strategy Defined**: Start simple, grow organically
 - ✅ **MVP Scope Clarified**: Simple CLI + project scaffolding + git subtree documentation
 - ✅ **Legacy Backup Available**: Complete v0.41.0 preserved in `../quickscale-legacy/`
 - ✅ **Post-MVP Path Clear**: Module/theme packages when proven necessary
-- ✅ **v0.52.0 Complete**: Project foundation established (packages installable, tests passing, CLI working)
-- 🔄 **Next Release**: v0.53.0 - Template System
+- ✅ **v0.53.1 Complete**: Core Django templates implemented and documented
+- 🔄 **Next Release**: v0.53.3 - Templates and Static Files
+
+  <!-- NOTE: updated to reflect latest documented release and next semantic bump -->
 
 ### **🎯 Release Strategy**
 Each minor version (0.x.0) delivers a verifiable improvement that builds toward MVP:
@@ -144,26 +146,9 @@ Full documentation on `docs/releases/release-v0.53.1.md`
 
 ---
 
-### **Task 0.53.2: Templates and Static Files**
-**Priority**: Create frontend templates and static file structure
+### Release 0.53.2: Templates and Static Files - completed
 
-**Tasks**:
-- [ ] **Create `templates/index.html.j2`**
-  - [ ] Simple homepage with "Welcome to {{project_name}}" message
-  - [ ] Basic HTML structure (DOCTYPE, html, head, body)
-  - [ ] Link to static CSS if present
-- [ ] **Create `templates/base.html.j2` (optional but useful)**
-  - [ ] Base template with blocks for title, content, scripts
-  - [ ] Basic responsive meta tags
-- [ ] **Create static files structure templates**
-  - [ ] Template creates `static/css/` directory
-  - [ ] Template creates `static/js/` directory
-  - [ ] Template creates `static/images/` directory
-  - [ ] Optional: Basic `static/css/style.css` with minimal styling
-
-**Deliverable**: Frontend template files for generated projects
-
-**Validation**: Templates render valid HTML; directory structure is created
+Full documentation on `docs/releases/release-v0.53.2.md`
 
 ---
 
@@ -240,7 +225,7 @@ Full documentation on `docs/releases/release-v0.53.1.md`
 
 **Deliverable**: Tests ensuring all templates work correctly
 
-**Validation**: `pytest quickscale_core/tests/test_scaffold/test_templates.py` passes
+**Validation**: `pytest quickscale_core/tests/test_generator/test_templates.py` passes
 
 ---
 
@@ -275,6 +260,8 @@ with tempfile.TemporaryDirectory() as tmpdir:
   assert (output_path / 'manage.py').exists()
   assert (output_path / 'testproject' / 'settings.py').exists()
   assert (output_path / 'pyproject.toml').exists()
+  # Per decisions.md, generated projects must include a poetry.lock
+  assert (output_path / 'poetry.lock').exists()
   print('✅ Generator works!')
 "
 
@@ -288,7 +275,7 @@ pytest quickscale_core/tests/test_scaffold/test_generator.py -v
 **Priority**: Implement the main generator class
 
 **Tasks**:
-- [ ] **Create `quickscale_core/src/quickscale_core/scaffold/` package**
+  - [ ] **Create `quickscale_core/src/quickscale_core/generator/` package**
   - [ ] Create `__init__.py` exposing ProjectGenerator
   - [ ] Create `generator.py` with ProjectGenerator class
 - [ ] **Implement ProjectGenerator class**
@@ -326,6 +313,25 @@ class ProjectGenerator:
         # Write files to disk
         pass
 ```
+
+    **Dependencies**:
+    - decisions.md (MVP Feature Matrix) — confirm generated project structure and in-scope files
+    - scaffolding.md — canonical generated project tree and file names
+
+    **Explicit Deliverables (file paths)**:
+    - `quickscale_core/src/quickscale_core/generator/__init__.py`  (exports ProjectGenerator)
+    - `quickscale_core/src/quickscale_core/generator/generator.py` (ProjectGenerator implementation)
+    - `quickscale_core/src/quickscale_core/generator/templates/` (set of .j2 templates — manage.py.j2, settings.py.j2, pyproject.toml.j2, etc.)
+    - `quickscale_core/src/quickscale_core/utils/file_utils.py`
+
+    **Acceptance criteria (verifiable)**:
+    - Unit tests: `pytest quickscale_core/tests/test_scaffold/test_generator.py` passes
+    - Programmatic smoke test: running the provided python -c snippet in the roadmap creates a project with `manage.py`, `<project>/settings.py`, and `pyproject.toml` present
+    - Templates render without undefined variables (Jinja2) and generated Python files parse (e.g., `python -m py_compile` succeeds on generated settings)
+    - Generator handles invalid input (invalid project name, existing directory) with clear error messages and does not leave partial output on failure (rollback)
+    - File permissions: `manage.py` in generated project is executable
+
+    **Notes**: Keep changes minimal and consistent with `decisions.md` conventions. If scaffolding.md and decisions.md disagree on exact filenames, defer to `decisions.md` and open a decision update issue.
 
 **Deliverable**: Working ProjectGenerator that creates project structure
 
