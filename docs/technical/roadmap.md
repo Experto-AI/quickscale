@@ -132,57 +132,15 @@ This policy ensures completed work is archived in a discoverable place and the r
 
 ---
 
-## Release v0.52.0: Project Foundation — completed
+### Release v0.52.0: Project Foundation — completed
 
 Full documentation on `docs/releases/release-v0.52.0.md` 
 
 ---
 
-### **Task 0.53.1: Core Django Project Templates (Production-Ready)**
-**Priority**: Create essential Django project files with **production-ready configurations**
+### Release v0.53.1: Core Django Project Templates — completed
 
-**🎯 Competitive Requirement**: Match Cookiecutter/Pegasus on production-ready defaults (see [competitive_analysis.md §1](../overview/competitive_analysis.md#1-production-ready-django-foundations))
-
-**Tasks**:
-- [ ] **Create `manage.py.j2` template**
-  - [ ] Standard Django manage.py with `{{project_name}}` variable
-  - [ ] Executable permissions reminder in documentation
-- [ ] **Create split settings templates (production-grade)**
-  - [ ] **`settings/__init__.py.j2`** - Settings package marker
-  - [ ] **`settings/base.py.j2`** - Shared settings (INSTALLED_APPS, MIDDLEWARE, templates, etc.)
-    - [ ] **IMPORTANT**: Standalone settings (NO imports from quickscale_core)
-    - [ ] Use python-decouple or django-environ for environment variables
-    - [ ] Secure SECRET_KEY loading from environment
-    - [ ] Proper ALLOWED_HOSTS configuration
-    - [ ] Django security middleware configured
-    - [ ] Static files with WhiteNoise configuration
-    - [ ] Logging configuration (console + file handlers)
-  - [ ] **`settings/local.py.j2`** - Development settings
-    - [ ] DEBUG = True
-    - [ ] SQLite database for quick local dev
-    - [ ] Django Debug Toolbar enabled (optional)
-  - [ ] **`settings/production.py.j2`** - Production settings
-    - [ ] DEBUG = False via environment variable
-    - [ ] PostgreSQL database configuration
-    - [ ] Security settings (SECURE_SSL_REDIRECT, SESSION_COOKIE_SECURE, etc.)
-    - [ ] Sentry integration scaffolding (commented)
-- [ ] **Create `urls.py.j2` template**
-  - [ ] Admin route
-  - [ ] Root route pointing to index view
-  - [ ] Debug toolbar URLs (if DEBUG=True)
-- [ ] **Create `wsgi.py.j2` and `asgi.py.j2` templates**
-  - [ ] Standard Django WSGI/ASGI applications
-  - [ ] Environment-based settings module selection
-- [ ] **Create `__init__.py.j2` template**
-  - [ ] Empty or minimal package marker
-
-**Deliverable**: **Production-ready** Django project templates
-
-**Validation**: Generated settings work in both dev and production; security best practices included
-
-**Competitive Benchmark**: Should match or exceed Cookiecutter's settings quality
-
-**Reference**: See [scaffolding.md §5.1](./scaffolding.md#51-mvp-ultra-minimal-django-project) + [competitive_analysis.md §1](../overview/competitive_analysis.md#1-production-ready-django-foundations)
+Full documentation on `docs/releases/release-v0.53.1.md`
 
 ---
 
