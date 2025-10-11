@@ -5,6 +5,8 @@ Purpose
 -------
 This prompt instructs the assistant to produce a single, high-quality release commit message for a new release. The assistant must locate and read the corresponding release notes and roadmap entry for the version, gather the list of commits since the previous tag, inspect the files staged for commit, and synthesize those inputs into a concise, meaningful commit title and a short, useful commit body.
 
+This prompt operates in the REVIEW stage - use `docs/contrib/review.md` for quality control guidelines before finalizing the release.
+
 Behavior contract (inputs / outputs / success criteria)
 -----------------------------------------------------
 - Inputs: optional release version string (e.g. `0.52.0`). If no version is provided, ask the user for it.
@@ -28,11 +30,18 @@ Required actions (what the assistant must do)
    - Body: short summary paragraph, 3–8 bullets of notable changes (features, fixes, breaking changes), link or path to the release notes, and a short listing of the most notable commits (hash + subject + author). If there are migration steps or breaking changes, list them clearly and first.
 7. If the staged files do not match the release notes or the commits (e.g., staged files are empty), warn the user and offer to continue or abort.
 
+8. After composing the commit message and verifying the release notes file exists (e.g. `docs/releases/release-v{version}.md`), update the roadmap entry for that version at `docs/technical/roadmap.md`:
+  - Remove or collapse the detailed task/sprint checklists related to the released version.
+  - Replace the removed section with a concise single-line pointer such as `Release v{version}:` (optionally followed by a one-line summary or link to the release notes).
+  - If the roadmap entry cannot be found, warn the user and offer a suggested one-line replacement to insert manually.
+  - Do not modify unrelated roadmap sections; commit only the minimal roadmap cleanup change alongside the release commit if the user confirms.
+
 Formatting and stylistic constraints
 ----------------------------------
 - Title: 50 characters preferred, never exceed 72 characters. Example formats to prefer:
-  - `chore(release): v{version} — short summary`
-  - `release: v{version} — <short summary>`
+- Title: 50 characters preferred, never exceed 72 characters. Example formats to prefer:
+  - `v{version} feat: short summary`
+  - `v{version} chore: short summary`
 - Body: wrap at ~72 characters, keep paragraphs short. Use bullets for lists. Use present/imperative tense in the title and short past/present summary in body.
 - Avoid verbose prose. Prioritize clarity: what changed and why it matters.
 
@@ -56,14 +65,14 @@ Body (optional, recommended)
 - Short 1–2 sentence summary.
 - Bullet list of notable changes (features, fixes, breaking changes).
 - "Release notes: docs/releases/<file>" (or URL if available).
-- "Commits since last tag (<n>):" followed by 3–6 of the most important commits (one per line).
+ - "Release notes: docs/releases/<file>" (or URL if available).
 
 Examples
 --------
 Example 1 (simple):
 
 Title:
-chore(release): v0.52.0 — faster scaffolding and critical bugfixes
+v0.52.0 feat: faster scaffolding and critical bugfixes
 
 Body:
 Release v0.52.0 — speeds up project scaffolding and fixes a critical template rendering bug.
@@ -73,16 +82,12 @@ Release v0.52.0 — speeds up project scaffolding and fixes a critical template 
 - Updated docs: `docs/releases/release-v0.52.0.md`.
 
 Release notes: docs/releases/release-v0.52.0.md
-
-Commits since last tag (6):
-abc1234 Parallelize template rendering (Alice)
-def5678 Fix template rendering crash on spaced names (Bob)
 ...
 
 Example 2 (breaking changes):
 
 Title:
-chore(release): v1.0.0 — initial stable release (breaking changes)
+v1.0.0 feat: initial stable release (breaking changes)
 
 Body:
 Release v1.0.0 — initial stable release.
@@ -94,8 +99,6 @@ Migration steps:
 1. Backup and convert your `quickscale.conf` using `quickscale migrate-config`.
 
 Release notes: docs/releases/release-v1.0.0.md
-
-Commits since last tag (12):
 ...
 
 Behavior on missing/ambiguous data

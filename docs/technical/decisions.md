@@ -67,6 +67,11 @@ If documents conflict:
 
 When referencing concepts defined elsewhere link to the canonical section (don't duplicate content) using consistent link format `[descriptive text](./DOCUMENT.md#section-anchor)` deep link instead of file-level reference.
 
+### AI assistant integration: Rules + Shared Principles
+
+- Canonical contributing guide location: `docs/contrib/contributing.md`.
+- Rules + Shared Principles: `docs/contrib/plan.md`, `docs/contrib/code.md`, `docs/contrib/review.md`, `docs/contrib/testing.md`, and `docs/contrib/debug.md`.
+
 ### Release Documentation Standard
 
 All releases must be documented using the [standard release template](./release_template.md). Release documents should be created in `docs/releases/` following the naming convention `release-vX.XX.X.md`.

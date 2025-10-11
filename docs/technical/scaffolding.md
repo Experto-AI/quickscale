@@ -193,6 +193,33 @@ Requirements vs Packaging note: See [Package Structure and Naming Conventions in
 
 
 ---
+## 12. AI Assistant Integration: Rules + Shared Principles
+
+```
+docs/
+└── contrib/
+    ├── contributing.md            # Human-facing index/navigation (canonical contributor guide)
+    ├── plan.md                    # Stage 1: planning & pre-task review
+    ├── code.md                    # Stage 2: implementation rules
+    ├── review.md                  # Stage 3: quality control / self-review
+    ├── testing.md                 # Stage 4: test generation (implementation-first policy)
+    ├── debug.md                   # Stage 5: debugging & root-cause analysis
+    └── shared/
+        ├── code_principles.md
+        ├── architecture_guidelines.md
+        ├── testing_standards.md
+        ├── task_focus_guidelines.md
+        └── documentation_standards.md
+
+.github/
+└── prompts/
+    ├── roadmap-plan-review-and-update.prompt.md
+    ├── roadmap-task-implementation.prompt.md
+    └── release-commit-message-and-roadmap-cleaning.prompt.md
+```
+
+
+---
 ## 3. Phase 1 (MVP) Required Structure {#mvp-structure}
 Only `quickscale_core` + `quickscale_cli` needed. NO schemas, NO examples, NO packaged themes. Just project scaffolding templates.
 

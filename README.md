@@ -40,18 +40,18 @@ QuickScale is a **composable Django framework** designed for **solo developers a
 
 **Start here for your needs:**
 - 📖 **New user?** You're in the right place. This README shows you what QuickScale is and how to get started.
-- 🔧 **Need commands?** See [User Manual](./docs/technical/user_manual.md) for all commands and workflows
-- 📋 **Planning a feature?** Check [DECISIONS.md](./docs/technical/decisions.md) for the authoritative MVP scope and technical rules
-- 🗓️ **Timeline & tasks?** See [ROADMAP.md](./docs/technical/roadmap.md)
-- 🏗️ **Project structure?** See [SCAFFOLDING.md](./docs/technical/scaffolding.md) for complete directory layouts
-- 🎯 **Why QuickScale?** See [Strategic Vision](./docs/overview/quickscale.md) for competitive positioning
+- 🔧 **Need commands?** See [user_manual.md](./docs/technical/user_manual.md) for all commands and workflows
+- 📋 **Planning a feature?** Check [decisions.md](./docs/technical/decisions.md) for the authoritative MVP scope and technical rules
+- 🗓️ **Timeline & tasks?** See [roadmap.md](./docs/technical/roadmap.md)
+- 🏗️ **Project structure?** See [scaffolding.md](./docs/technical/scaffolding.md) for complete directory layouts
+- 🎯 **Why QuickScale?** See [quickscale.md](./docs/overview/quickscale.md) for competitive positioning
 
 **Quick Reference:**
 - **MVP** = Phase 1 (Personal Toolkit)
 - **Post-MVP** = Phase 2+ (Modules & Themes)
 - **Generated Project** = Output of `quickscale init`
 
-See [DECISIONS.md - Glossary section](./docs/technical/decisions.md#document-responsibilities-short) for complete terminology and Single Source of Truth reference
+See [decisions.md - Glossary section](./docs/technical/decisions.md#document-responsibilities-short) for complete terminology and Single Source of Truth reference
 
 
 ### Primary Use Cases:
@@ -63,7 +63,7 @@ See [DECISIONS.md - Glossary section](./docs/technical/decisions.md#document-res
 ### Development Flow (MVP)
 1. `quickscale init myapp`
   - Generates the minimal Django starter described in the MVP Feature Matrix
-  - Ships with standalone `settings.py` by default; there is NO automatic settings inheritance. Advanced users who manually embed `quickscale_core` via git subtree may opt-in to inherit from `quickscale_core.settings` (see [`DECISIONS.md`](./docs/technical/decisions.md#mvp-feature-matrix-authoritative)).
+  - Ships with standalone `settings.py` by default; there is NO automatic settings inheritance. Advanced users who manually embed `quickscale_core` via git subtree may opt-in to inherit from `quickscale_core.settings` (see [decisions.md](./docs/technical/decisions.md#mvp-feature-matrix-authoritative)).
   - **Optional**: Embed `quickscale_core` via git subtree after generation; follow the [Personal Toolkit workflow](./docs/technical/decisions.md#integration-note-personal-toolkit-git-subtree) for canonical commands and helper roadmap
 2. Add your custom Django apps and features
 3. Adopt optional inheritance or module extraction patterns only when you embed the core; the rules and best practices stay centralized in `DECISIONS.md`
@@ -87,7 +87,7 @@ Running `quickscale init myapp` generates a **production-ready Django project** 
 - ✅ **Code quality** hooks (black, ruff, isort)
 - ✅ **Poetry** for dependency management
 
-**See the complete project structure:** [SCAFFOLDING.md - Generated Project Output](./docs/technical/scaffolding.md#5-generated-project-output)
+**See the complete project structure:** [scaffolding.md - Generated Project Output](./docs/technical/scaffolding.md#5-generated-project-output)
 
 The generated project is **yours to own and modify** - no vendor lock-in, just Django best practices.
 
@@ -100,7 +100,7 @@ The generated project is **yours to own and modify** - no vendor lock-in, just D
 
 **QuickScale is a development accelerator**, not a complete solution. You start with production-ready foundations and build your unique client application on top.
 
-See [COMPETITIVE_ANALYSIS.md](./docs/overview/competitive_analysis.md) for detailed comparison with SaaS Pegasus and Cookiecutter.
+See [competitive_analysis.md](./docs/overview/competitive_analysis.md) for detailed comparison with SaaS Pegasus and Cookiecutter.
 
 ---
 
@@ -123,13 +123,14 @@ poetry run python manage.py runserver
 
 **That's it!** Visit http://localhost:8000 to see your new Django project.
 
-**For complete command reference and workflows**, see the [User Manual](./docs/technical/user_manual.md).
+**For complete command reference and workflows**, see the [user_manual.md](./docs/technical/user_manual.md).
 
 ## Learn More
 
-- **[DECISIONS.md](./docs/technical/decisions.md)** - Technical specifications and implementation rules
-- **[QUICKSCALE.md](./docs/overview/quickscale.md)** - Strategic vision and competitive positioning
-- **[COMPETITIVE_ANALYSIS.md](./docs/overview/competitive_analysis.md)** - Comparison vs SaaS Pegasus and alternatives
-- **[ROADMAP.md](./docs/technical/roadmap.md)** - Development roadmap and implementation plan
-- **[User Manual](./docs/technical/user_manual.md)** - Commands and workflows
+- **[decisions.md](./docs/technical/decisions.md)** - Technical specifications and implementation rules
+- **[quickscale.md](./docs/overview/quickscale.md)** - Strategic vision and competitive positioning
+- **[competitive_analysis.md](./docs/overview/competitive_analysis.md)** - Comparison vs SaaS Pegasus and alternatives
+- **[roadmap.md](./docs/technical/roadmap.md)** - Development roadmap and implementation plan
+- **[user_manual.md](./docs/technical/user_manual.md)** - Commands and workflows
+- **[contributing.md](./docs/contrib/contributing.md)** - Development workflow and coding standards
 
