@@ -67,6 +67,25 @@ If documents conflict:
 
 When referencing concepts defined elsewhere link to the canonical section (don't duplicate content) using consistent link format `[descriptive text](./DOCUMENT.md#section-anchor)` deep link instead of file-level reference.
 
+### Release Documentation Standard
+
+All releases must be documented using the [standard release template](./release_template.md). Release documents should be created in `docs/releases/` following the naming convention `release-vX.XX.X.md`.
+
+**Key requirements for release documentation:**
+- Use the template structure from [release_template.md](./release_template.md)
+- Include verifiable improvements with actual test output
+- Document all files created/changed
+- Provide validation commands that others can run
+- Explicitly state in-scope vs. out-of-scope items
+- Complete release checklist before marking as COMPLETE
+- Update roadmap to reflect completion status
+
+**Example releases following this standard:**
+- [Release v0.52.0](../releases/release-v0.52.0.md) - Project Foundation
+- [Release v0.53.1](../releases/release-v0.53.1.md) - Core Django Templates
+
+This ensures consistency, traceability, and reproducibility across all QuickScale releases.
+
 ## MVP vs. Post-MVP Scope
 
 **CRITICAL CLARIFICATION**: This document describes both the **MVP implementation** (Phase 1) and the **target architecture** (Post-MVP). QuickScale follows a **"start simple, evolve organically"** strategy. For the narrative rationale behind this evolution, defer to the [strategic overview in quickscale.md](../overview/quickscale.md#evolution-strategy-personal-toolkit-first); this section focuses on the technical implications.

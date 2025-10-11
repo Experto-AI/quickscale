@@ -181,8 +181,11 @@ htmlcov/
 
 .vscode/
 .claude/
+.github/
 
-
+# LEGACY
+# symlink, not directory
+quickscale-legacy
 
 
 

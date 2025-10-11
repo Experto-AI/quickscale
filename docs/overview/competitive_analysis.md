@@ -801,7 +801,28 @@ Priority 2 (competitive advantage):
 
 The competitors validate the market and show what features matter. QuickScale's unique architecture (git subtree distribution, composable modules, shared updates) provides sustainable competitive advantage once core features reach parity.
 
----
+
+## Version → Feature mapping
+
+The table below consolidates the repository's release-to-feature mapping and competitive milestones (authoritative mapping of planned versions to major milestones). Each row now shows parity against the main competitors to make it clear which competitor features we intend to match at each milestone.
+
+| Version | Milestone | Competitive Status | Cookiecutter parity | Apptension parity | SaaS Pegasus parity | Ready SaaS parity |
+|---------|-----------|-------------------|---------------------|--------------------|---------------------|-------------------|
+| v0.52.0 | Project foundation (packages, tooling, dev environment) | Foundation ready | Production-ready defaults (env, Docker, Postgres, whitenoise) | Production-ready infra basics | Production-ready foundations | Docker + compose, production defaults |
+| v0.53.0 | Templates (Jinja2 templates for Django projects) | Templates delivered | Template quality & options (scaffolding choices) | Starter templates present (backend/frontend) | Template variants (frontend choices) | Starter templates available |
+| v0.54.0 | Generator (scaffolding engine) | Scaffolding capability | Generator options & project scaffolding | CLI/manual scaffolding support | Init/generator UX parity | Project generator parity |
+| v0.55.0 | CLI (`quickscale init` command) | Developer UX improvement | N/A (cookiecutter-driven) | CLI starter experience available | Comparable `init` UX | N/A / basic installer |
+| v0.56.0 | Quality & testing (comprehensive test suite) | Reliability & CI | Pytest + GH Actions parity, pre-commit | Testing & CI configured | Comparable CI/testing setup | Basic testing/CI support |
+| v0.57.0 | Documentation (user guides complete) | Documentation complete | Matches thorough docs & guides | Good docs & examples | Matches Pegasus-level docs | Basic but improving docs |
+| v0.58.0 | MVP validation (real project built) | MVP validated | Demonstrates deployable projects like Cookiecutter starters | Demonstrates deployable sample projects | Demonstrates production-ready sample like Pegasus | Demonstrates deployable sample |
+| v1.0.0 | MVP release (production-ready personal toolkit) | MVP Launch | Starter parity (production-ready starter) | Starter parity (full stack) | Starter parity (core SaaS features) | Starter parity (Stripe, Docker) |
+| v1.1.0 | Auth Module (`quickscale_modules.auth`) | Closing feature gap | django-allauth + custom user (parity) | Social OAuth/2FA support parity | Matches Pegasus auth (social login, email verification) | Matches Ready SaaS auth features |
+| v1.2.0 | Billing Module (`quickscale_modules.billing`) | Near parity | Billing scaffolding (Stripe via dj-stripe) | Full Stripe subscriptions & management parity | Matches Pegasus billing (dj-stripe, webhooks) | Matches Ready SaaS billing (Stripe) |
+| v1.3.0 | Teams Module (`quickscale_modules.teams`) | 🎯 SaaS Feature Parity | Teams/roles patterns (if required) | Multi-tenancy & roles parity | Matches Pegasus teams (invitations, roles, tenant patterns) | Matches Ready SaaS team features |
+| v1.4.0+ | Additional Modules | Differentiation & ecosystem growth | Optional integrations: Celery, Anymail, storage | Email templates, scheduling, Storybook parity | Notifications, API scaffolding parity | Notifications/email parity |
+| v2.0.0+ | Community Platform | Optional marketplace capabilities | N/A (Cookiecutter not a marketplace) | N/A (Apptension not marketplace) | Community/marketplace parity (if pursued) | N/A |
+
+Notes: rows mark where QuickScale aims to provide comparable functionality; exact scope may vary (e.g., we intentionally avoid Wagtail integration for MVP while matching core SaaS features). 
 
 ## See Also
 

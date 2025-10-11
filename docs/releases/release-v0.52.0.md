@@ -1,6 +1,6 @@
 # Release v0.52.0: Project Foundation - COMPLETED ✅
 
-**Release Date**: October 8, 2025
+**Release Date**: 2025-10-08
 
 ## Overview
 

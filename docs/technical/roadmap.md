@@ -134,8 +134,7 @@ This policy ensures completed work is archived in a discoverable place and the r
 
 ## Release v0.52.0: Project Foundation — completed
 
-The detailed release notes for v0.52.0 have been moved to `docs/releases/release-v0.52.0.md` and the full release section has been removed from this roadmap per the release documentation policy. See the release doc for validation commands, checklist, and next steps.
-
+Full documentation on `docs/releases/release-v0.52.0.md` 
 
 ---
 
@@ -1280,30 +1279,6 @@ This roadmap can be implemented incrementally, with each task building on the pr
 - **Directory Structures**: [scaffolding.md](./scaffolding.md)
 - **Strategic Vision**: [quickscale.md](../overview/quickscale.md#evolution-strategy-personal-toolkit-first)
 - **Commercial Models**: [commercial.md](../overview/commercial.md)
-
-### **Release Quick Reference**
-- **v0.52.0**: Project foundation (packages, tooling, dev environment)
-- **v0.53.0**: Templates (Jinja2 templates for Django projects)
-- **v0.54.0**: Generator (scaffolding engine)
-- **v0.55.0**: CLI (`quickscale init` command)
-- **v0.56.0**: Quality & testing (comprehensive test suite)
-- **v0.57.0**: Documentation (user guides complete)
-- **v0.58.0**: MVP validation (real project built)
-- **v1.0.0**: MVP release (production-ready personal toolkit)
-- **v1.x.0**: Post-MVP (modules extracted from real needs)
-- **v2.0.0+**: Community platform (optional, if proven successful)
-
-### **Version Milestone Mapping**
-
-| Version | Milestone | Competitive Status |
-|---------|-----------|-------------------|
-| v1.0.0 | MVP Launch | Foundation ready |
-| v1.1.0 | Auth Module | Closing feature gap |
-| v1.2.0 | Billing Module | Near parity |
-| v1.3.0 | Teams Module | **🎯 SaaS Feature Parity** |
-| v1.4.0+ | Additional Modules | Differentiation & ecosystem growth |
-| v2.0.0+ | Community Platform | Optional marketplace capabilities |
-
----
+> For the authoritative Version → Feature mapping and competitive milestone table, see [docs/overview/competitive_analysis.md#version-→-feature-mapping](../overview/competitive_analysis.md#version-%E2%86%92-feature-mapping).
 
 **Maintainers**: Update this roadmap as tasks are completed. Mark completed tasks with ✅. When technical scope changes, update decisions.md first, then update this roadmap to reflect those decisions.

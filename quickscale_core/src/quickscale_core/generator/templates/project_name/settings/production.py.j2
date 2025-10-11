@@ -1,0 +1,197 @@
+"""
+Production settings for {{ project_name }}.
+
+This file contains production-ready security and performance configurations:
+- DEBUG disabled
+- PostgreSQL database
+- Security middleware and settings
+- Static file serving with WhiteNoise
+- Comprehensive logging
+
+REQUIRED ENVIRONMENT VARIABLES:
+- SECRET_KEY: Django secret key (generate with: python -c 'from django.core.management.utils import get_random_secret_key; print(get_random_secret_key())')
+- DATABASE_URL: PostgreSQL connection string (e.g., postgresql://user:password@localhost:5432/dbname)
+- ALLOWED_HOSTS: Comma-separated list of allowed hostnames
+- SENTRY_DSN: (optional) Sentry error tracking DSN
+"""
+
+from .base import *  # noqa: F403
+
+from decouple import config
+
+# SECURITY: DEBUG must be False in production
+DEBUG = False
+
+# SECURITY: Restrict allowed hosts
+ALLOWED_HOSTS = config(
+    "ALLOWED_HOSTS",
+    default="",
+    cast=lambda v: [s.strip() for s in v.split(",") if s.strip()],
+)
+
+# SECURITY: Require HTTPS in production
+SECURE_SSL_REDIRECT = config("SECURE_SSL_REDIRECT", default=True, cast=bool)
+SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
+
+# SECURITY: Cookie security
+SESSION_COOKIE_SECURE = True
+CSRF_COOKIE_SECURE = True
+SESSION_COOKIE_HTTPONLY = True
+CSRF_COOKIE_HTTPONLY = True
+
+# SECURITY: HSTS (HTTP Strict Transport Security)
+SECURE_HSTS_SECONDS = config("SECURE_HSTS_SECONDS", default=31536000, cast=int)  # 1 year
+SECURE_HSTS_INCLUDE_SUBDOMAINS = True
+SECURE_HSTS_PRELOAD = True
+
+# SECURITY: Content Security Policy headers
+SECURE_CONTENT_TYPE_NOSNIFF = True
+SECURE_BROWSER_XSS_FILTER = True
+X_FRAME_OPTIONS = "DENY"
+
+# Database - PostgreSQL for production
+# Use DATABASE_URL environment variable for easy deployment
+DATABASES = {
+    "default": {
+        "ENGINE": "django.db.backends.postgresql",
+        "NAME": config("DB_NAME", default="{{ project_name }}_db"),
+        "USER": config("DB_USER", default="postgres"),
+        "PASSWORD": config("DB_PASSWORD", default=""),
+        "HOST": config("DB_HOST", default="localhost"),
+        "PORT": config("DB_PORT", default="5432"),
+        "CONN_MAX_AGE": config("DB_CONN_MAX_AGE", default=600, cast=int),
+    }
+}
+
+# Alternative: Use DATABASE_URL (requires dj-database-url)
+# import dj_database_url
+# DATABASES = {
+#     "default": dj_database_url.config(
+#         default=config("DATABASE_URL"),
+#         conn_max_age=600,
+#         conn_health_checks=True,
+#     )
+# }
+
+# Email configuration
+EMAIL_BACKEND = "django.core.mail.backends.smtp.EmailBackend"
+EMAIL_HOST = config("EMAIL_HOST", default="localhost")
+EMAIL_PORT = config("EMAIL_PORT", default=587, cast=int)
+EMAIL_USE_TLS = config("EMAIL_USE_TLS", default=True, cast=bool)
+EMAIL_HOST_USER = config("EMAIL_HOST_USER", default="")
+EMAIL_HOST_PASSWORD = config("EMAIL_HOST_PASSWORD", default="")
+DEFAULT_FROM_EMAIL = config("DEFAULT_FROM_EMAIL", default="noreply@{{ project_name }}.com")
+SERVER_EMAIL = config("SERVER_EMAIL", default="server@{{ project_name }}.com")
+
+# Static files - WhiteNoise for efficient serving
+STATIC_ROOT = BASE_DIR / "staticfiles"  # noqa: F405
+STATICFILES_STORAGE = "whitenoise.storage.CompressedManifestStaticFilesStorage"
+
+# Media files - consider using cloud storage (S3, GCS) in production
+# MEDIA_URL = config("MEDIA_URL", default="/media/")
+# MEDIA_ROOT = BASE_DIR / "media"  # noqa: F405
+
+# Cache configuration - Redis recommended for production
+# CACHES = {
+#     "default": {
+#         "BACKEND": "django_redis.cache.RedisCache",
+#         "LOCATION": config("REDIS_URL", default="redis://localhost:6379/1"),
+#         "OPTIONS": {
+#             "CLIENT_CLASS": "django_redis.client.DefaultClient",
+#         },
+#     }
+# }
+
+# Session backend - Redis for better performance (optional)
+# SESSION_ENGINE = "django.contrib.sessions.backends.cache"
+# SESSION_CACHE_ALIAS = "default"
+
+# Sentry error tracking (optional but recommended)
+# Uncomment and configure if using Sentry
+# import sentry_sdk
+# from sentry_sdk.integrations.django import DjangoIntegration
+#
+# SENTRY_DSN = config("SENTRY_DSN", default="")
+# if SENTRY_DSN:
+#     sentry_sdk.init(
+#         dsn=SENTRY_DSN,
+#         integrations=[DjangoIntegration()],
+#         traces_sample_rate=config("SENTRY_TRACES_SAMPLE_RATE", default=0.1, cast=float),
+#         send_default_pii=False,
+#         environment=config("ENVIRONMENT", default="production"),
+#     )
+
+# Logging - production-grade configuration
+LOGGING = {
+    "version": 1,
+    "disable_existing_loggers": False,
+    "formatters": {
+        "verbose": {
+            "format": "{levelname} {asctime} {module} {process:d} {thread:d} {message}",
+            "style": "{",
+        },
+        "simple": {
+            "format": "{levelname} {message}",
+            "style": "{",
+        },
+    },
+    "filters": {
+        "require_debug_false": {
+            "()": "django.utils.log.RequireDebugFalse",
+        },
+    },
+    "handlers": {
+        "console": {
+            "class": "logging.StreamHandler",
+            "formatter": "verbose",
+        },
+        "file": {
+            "class": "logging.handlers.RotatingFileHandler",
+            "filename": BASE_DIR / "logs" / "django.log",  # noqa: F405
+            "maxBytes": 1024 * 1024 * 10,  # 10 MB
+            "backupCount": 10,
+            "formatter": "verbose",
+        },
+        "error_file": {
+            "class": "logging.handlers.RotatingFileHandler",
+            "filename": BASE_DIR / "logs" / "django_error.log",  # noqa: F405
+            "maxBytes": 1024 * 1024 * 10,  # 10 MB
+            "backupCount": 10,
+            "formatter": "verbose",
+            "level": "ERROR",
+        },
+        "mail_admins": {
+            "level": "ERROR",
+            "class": "django.utils.log.AdminEmailHandler",
+            "filters": ["require_debug_false"],
+            "formatter": "verbose",
+        },
+    },
+    "root": {
+        "handlers": ["console", "file"],
+        "level": "INFO",
+    },
+    "loggers": {
+        "django": {
+            "handlers": ["console", "file", "error_file"],
+            "level": "INFO",
+            "propagate": False,
+        },
+        "django.request": {
+            "handlers": ["mail_admins", "error_file"],
+            "level": "ERROR",
+            "propagate": False,
+        },
+        "{{ project_name }}": {
+            "handlers": ["console", "file", "error_file"],
+            "level": "INFO",
+            "propagate": False,
+        },
+    },
+}
+
+# ADMINS - receive error emails
+ADMINS = [
+    ("Admin", config("ADMIN_EMAIL", default="admin@{{ project_name }}.com")),
+]
+MANAGERS = ADMINS
