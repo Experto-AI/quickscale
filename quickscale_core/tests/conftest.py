@@ -1,7 +1,5 @@
 """Pytest configuration for quickscale_core tests."""
 
-from typing import Dict
-
 import pytest
 
 
@@ -12,7 +10,7 @@ def sample_project_name() -> str:
 
 
 @pytest.fixture
-def sample_project_config() -> Dict[str, str]:
+def sample_project_config() -> dict[str, str]:
     """Provide sample project configuration dictionary for testing."""
     return {
         "project_name": "testproject",

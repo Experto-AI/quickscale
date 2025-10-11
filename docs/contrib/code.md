@@ -299,20 +299,26 @@ import matplotlib.pyplot as plt
 ### Write Clear, Concise Docstrings
 Reference: [Documentation Standards](shared/documentation_standards.md)
 
+Use single-line Google-style docstrings for all public functions, methods, and classes. Follow Google docstring conventions while ignoring certain PEP 257 rules for brevity:
+
+- **Single-line format**: No ending punctuation (ignore PEP 257 D400/D415)
+- **Google style**: No blank line before class docstrings (ignore PEP 257 D203)
+- **Concise**: Focus on functionality, not implementation details
+
 ```python
 def authenticate_user():
-    """Verify user credentials before allowing access."""
+    """Verify user credentials before allowing access"""
     # Implementation
 
 class UserManager:
-    """Manages user operations and authentication."""
+    """Manages user operations and authentication"""
     # Implementation
 ```
 
 ### Document Only Functionality, Not Arguments or Returns
 ```python
 def process_payment(amount, method, customer_id):
-    """Process customer payment through payment gateway."""
+    """Process customer payment through payment gateway"""
     # Implementation
 ```
 

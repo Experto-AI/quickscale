@@ -2,7 +2,6 @@
 
 import ast
 from pathlib import Path
-from typing import Dict
 
 import pytest
 from jinja2 import Environment, FileSystemLoader
@@ -24,7 +23,7 @@ def jinja_env(template_dir: Path) -> Environment:
 
 
 @pytest.fixture
-def test_context() -> Dict[str, str]:
+def test_context() -> dict[str, str]:
     """Provide sample context data for template rendering tests."""
     return {
         "project_name": "testproject",
@@ -83,7 +82,7 @@ class TestTemplateLoading:
 class TestTemplateRendering:
     """Verify templates render correctly with sample context data."""
 
-    def test_manage_py_renders(self, jinja_env: Environment, test_context: Dict[str, str]) -> None:
+    def test_manage_py_renders(self, jinja_env: Environment, test_context: dict[str, str]) -> None:
         """Test manage.py renders with project name and shebang."""
         template = jinja_env.get_template("manage.py.j2")
         output = template.render(test_context)
@@ -92,42 +91,48 @@ class TestTemplateRendering:
         assert "testproject" in output
         assert "#!/usr/bin/env python" in output
 
-    def test_settings_base_renders(self, jinja_env: Environment, test_context: Dict[str, str]) -> None:
+    def test_settings_base_renders(
+        self, jinja_env: Environment, test_context: dict[str, str]
+    ) -> None:
         """Test base settings renders with project name."""
         template = jinja_env.get_template("project_name/settings/base.py.j2")
         output = template.render(test_context)
         assert output is not None
         assert "testproject" in output
 
-    def test_settings_local_renders(self, jinja_env: Environment, test_context: Dict[str, str]) -> None:
+    def test_settings_local_renders(
+        self, jinja_env: Environment, test_context: dict[str, str]
+    ) -> None:
         """Test local settings renders with project name."""
         template = jinja_env.get_template("project_name/settings/local.py.j2")
         output = template.render(test_context)
         assert output is not None
         assert "testproject" in output
 
-    def test_settings_production_renders(self, jinja_env: Environment, test_context: Dict[str, str]) -> None:
+    def test_settings_production_renders(
+        self, jinja_env: Environment, test_context: dict[str, str]
+    ) -> None:
         """Test production settings renders with project name."""
         template = jinja_env.get_template("project_name/settings/production.py.j2")
         output = template.render(test_context)
         assert output is not None
         assert "testproject" in output
 
-    def test_urls_renders(self, jinja_env: Environment, test_context: Dict[str, str]) -> None:
+    def test_urls_renders(self, jinja_env: Environment, test_context: dict[str, str]) -> None:
         """Test URL configuration renders with project name."""
         template = jinja_env.get_template("project_name/urls.py.j2")
         output = template.render(test_context)
         assert output is not None
         assert "testproject" in output
 
-    def test_wsgi_renders(self, jinja_env: Environment, test_context: Dict[str, str]) -> None:
+    def test_wsgi_renders(self, jinja_env: Environment, test_context: dict[str, str]) -> None:
         """Test WSGI configuration renders with project name."""
         template = jinja_env.get_template("project_name/wsgi.py.j2")
         output = template.render(test_context)
         assert output is not None
         assert "testproject" in output
 
-    def test_asgi_renders(self, jinja_env: Environment, test_context: Dict[str, str]) -> None:
+    def test_asgi_renders(self, jinja_env: Environment, test_context: dict[str, str]) -> None:
         """Test ASGI configuration renders with project name."""
         template = jinja_env.get_template("project_name/asgi.py.j2")
         output = template.render(test_context)
@@ -138,43 +143,51 @@ class TestTemplateRendering:
 class TestPythonSyntaxValidity:
     """Verify rendered Python templates produce syntactically valid code."""
 
-    def test_manage_py_valid_python(self, jinja_env: Environment, test_context: Dict[str, str]) -> None:
+    def test_manage_py_valid_python(
+        self, jinja_env: Environment, test_context: dict[str, str]
+    ) -> None:
         """Test rendered manage.py produces valid Python syntax."""
         template = jinja_env.get_template("manage.py.j2")
         output = template.render(test_context)
         ast.parse(output)
 
-    def test_settings_base_valid_python(self, jinja_env: Environment, test_context: Dict[str, str]) -> None:
+    def test_settings_base_valid_python(
+        self, jinja_env: Environment, test_context: dict[str, str]
+    ) -> None:
         """Test rendered base settings produces valid Python syntax."""
         template = jinja_env.get_template("project_name/settings/base.py.j2")
         output = template.render(test_context)
         ast.parse(output)
 
-    def test_settings_local_valid_python(self, jinja_env: Environment, test_context: Dict[str, str]) -> None:
+    def test_settings_local_valid_python(
+        self, jinja_env: Environment, test_context: dict[str, str]
+    ) -> None:
         """Test rendered local settings produces valid Python syntax."""
         template = jinja_env.get_template("project_name/settings/local.py.j2")
         output = template.render(test_context)
         ast.parse(output)
 
-    def test_settings_production_valid_python(self, jinja_env: Environment, test_context: Dict[str, str]) -> None:
+    def test_settings_production_valid_python(
+        self, jinja_env: Environment, test_context: dict[str, str]
+    ) -> None:
         """Test rendered production settings produces valid Python syntax."""
         template = jinja_env.get_template("project_name/settings/production.py.j2")
         output = template.render(test_context)
         ast.parse(output)
 
-    def test_urls_valid_python(self, jinja_env: Environment, test_context: Dict[str, str]) -> None:
+    def test_urls_valid_python(self, jinja_env: Environment, test_context: dict[str, str]) -> None:
         """Test rendered URL configuration produces valid Python syntax."""
         template = jinja_env.get_template("project_name/urls.py.j2")
         output = template.render(test_context)
         ast.parse(output)
 
-    def test_wsgi_valid_python(self, jinja_env: Environment, test_context: Dict[str, str]) -> None:
+    def test_wsgi_valid_python(self, jinja_env: Environment, test_context: dict[str, str]) -> None:
         """Test rendered WSGI configuration produces valid Python syntax."""
         template = jinja_env.get_template("project_name/wsgi.py.j2")
         output = template.render(test_context)
         ast.parse(output)
 
-    def test_asgi_valid_python(self, jinja_env: Environment, test_context: Dict[str, str]) -> None:
+    def test_asgi_valid_python(self, jinja_env: Environment, test_context: dict[str, str]) -> None:
         """Test rendered ASGI configuration produces valid Python syntax."""
         template = jinja_env.get_template("project_name/asgi.py.j2")
         output = template.render(test_context)
@@ -184,25 +197,33 @@ class TestPythonSyntaxValidity:
 class TestRequiredVariables:
     """Verify templates correctly use required context variables."""
 
-    def test_project_name_in_manage_py(self, jinja_env: Environment, test_context: Dict[str, str]) -> None:
+    def test_project_name_in_manage_py(
+        self, jinja_env: Environment, test_context: dict[str, str]
+    ) -> None:
         """Test project_name variable is correctly rendered in manage.py settings path."""
         template = jinja_env.get_template("manage.py.j2")
         output = template.render(test_context)
         assert "testproject.settings" in output
 
-    def test_project_name_in_settings(self, jinja_env: Environment, test_context: Dict[str, str]) -> None:
+    def test_project_name_in_settings(
+        self, jinja_env: Environment, test_context: dict[str, str]
+    ) -> None:
         """Test project_name variable is correctly rendered in base settings."""
         template = jinja_env.get_template("project_name/settings/base.py.j2")
         output = template.render(test_context)
         assert "testproject" in output
 
-    def test_project_name_in_wsgi(self, jinja_env: Environment, test_context: Dict[str, str]) -> None:
+    def test_project_name_in_wsgi(
+        self, jinja_env: Environment, test_context: dict[str, str]
+    ) -> None:
         """Test project_name variable is correctly rendered in WSGI settings path."""
         template = jinja_env.get_template("project_name/wsgi.py.j2")
         output = template.render(test_context)
         assert "testproject.settings" in output
 
-    def test_project_name_in_asgi(self, jinja_env: Environment, test_context: Dict[str, str]) -> None:
+    def test_project_name_in_asgi(
+        self, jinja_env: Environment, test_context: dict[str, str]
+    ) -> None:
         """Test project_name variable is correctly rendered in ASGI settings path."""
         template = jinja_env.get_template("project_name/asgi.py.j2")
         output = template.render(test_context)
@@ -212,21 +233,25 @@ class TestRequiredVariables:
 class TestProductionReadyFeatures:
     """Verify production-ready security and configuration features are present."""
 
-    def test_security_middleware_in_base(self, jinja_env: Environment, test_context: Dict[str, str]) -> None:
+    def test_security_middleware_in_base(
+        self, jinja_env: Environment, test_context: dict[str, str]
+    ) -> None:
         """Test security middleware is configured in base settings."""
         template = jinja_env.get_template("project_name/settings/base.py.j2")
         output = template.render(test_context)
         assert "SecurityMiddleware" in output
         assert "WhiteNoiseMiddleware" in output
 
-    def test_logging_configured(self, jinja_env: Environment, test_context: Dict[str, str]) -> None:
+    def test_logging_configured(self, jinja_env: Environment, test_context: dict[str, str]) -> None:
         """Test logging with rotating file handler is configured in base settings."""
         template = jinja_env.get_template("project_name/settings/base.py.j2")
         output = template.render(test_context)
         assert "LOGGING" in output
         assert "RotatingFileHandler" in output
 
-    def test_production_security_settings(self, jinja_env: Environment, test_context: Dict[str, str]) -> None:
+    def test_production_security_settings(
+        self, jinja_env: Environment, test_context: dict[str, str]
+    ) -> None:
         """Test production security settings include SSL and cookie security."""
         template = jinja_env.get_template("project_name/settings/production.py.j2")
         output = template.render(test_context)
@@ -235,19 +260,21 @@ class TestProductionReadyFeatures:
         assert "CSRF_COOKIE_SECURE" in output
         assert "SECURE_HSTS_SECONDS" in output
 
-    def test_postgresql_in_production(self, jinja_env: Environment, test_context: Dict[str, str]) -> None:
+    def test_postgresql_in_production(
+        self, jinja_env: Environment, test_context: dict[str, str]
+    ) -> None:
         """Test production settings configure PostgreSQL database."""
         template = jinja_env.get_template("project_name/settings/production.py.j2")
         output = template.render(test_context)
         assert "postgresql" in output
 
-    def test_whitenoise_in_base(self, jinja_env: Environment, test_context: Dict[str, str]) -> None:
+    def test_whitenoise_in_base(self, jinja_env: Environment, test_context: dict[str, str]) -> None:
         """Test WhiteNoise static file serving is configured in base settings."""
         template = jinja_env.get_template("project_name/settings/base.py.j2")
         output = template.render(test_context)
         assert "whitenoise" in output.lower()
 
-    def test_decouple_used(self, jinja_env: Environment, test_context: Dict[str, str]) -> None:
+    def test_decouple_used(self, jinja_env: Environment, test_context: dict[str, str]) -> None:
         """Test python-decouple is used for environment-based configuration."""
         template = jinja_env.get_template("project_name/settings/base.py.j2")
         output = template.render(test_context)

@@ -8,19 +8,23 @@ echo ""
 
 echo "📦 Checking quickscale_core..."
 cd quickscale_core
-echo "  → Running black..."
-poetry run black --check src/ tests/
-echo "  → Running ruff..."
-poetry run ruff check src/ tests/
+echo "  → Running ruff format..."
+poetry run ruff format .
+echo "  → Running ruff check..."
+poetry run ruff check src/ tests/ --fix
+echo "  → Running mypy..."
+poetry run mypy src/
 cd ..
 
 echo ""
 echo "📦 Checking quickscale_cli..."
 cd quickscale_cli
-echo "  → Running black..."
-poetry run black --check src/ tests/
-echo "  → Running ruff..."
-poetry run ruff check src/ tests/
+echo "  → Running ruff format..."
+poetry run ruff format .
+echo "  → Running ruff check..."
+poetry run ruff check src/ tests/ --fix
+echo "  → Running mypy..."
+poetry run mypy src/
 cd ..
 
 echo ""
