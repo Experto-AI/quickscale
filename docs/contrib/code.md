@@ -165,6 +165,51 @@ def contains_prohibited_characters(text):
 #   repository.py      # User data access
 ```
 
+### Prefer Classes Over Loose Functions for Related Behavior
+When organizing code, consider the relationship between functions:
+
+**Use a class** if the functions:
+- Share state or operate on the same data
+- Represent a cohesive unit of behavior
+- Would benefit from encapsulation and instance methods
+
+**Keep as standalone functions** only if they're:
+- Truly independent utilities with no shared context
+- Pure functions with no side effects
+- Simple helpers that don't form a logical group
+
+```python
+# Prefer: Related functions grouped in a class
+class UserManager:
+    """Manages user operations and state."""
+    
+    def __init__(self, db_connection):
+        self.db = db_connection
+        self._cache = {}
+    
+    def get_user(self, user_id):
+        """Retrieve user from cache or database."""
+        # Implementation with shared cache state
+    
+    def update_user(self, user_id, data):
+        """Update user data and invalidate cache."""
+        # Implementation with shared cache state
+    
+    def delete_user(self, user_id):
+        """Delete user and clean up cache."""
+        # Implementation with shared cache state
+
+# Avoid: Loose functions that should be grouped
+def get_user(db, cache, user_id):
+    # Function with external dependencies
+    
+def update_user(db, cache, user_id, data):
+    # Function with external dependencies
+    
+def delete_user(db, cache, user_id):
+    # Function with external dependencies
+```
+
 ### Use Exceptions for Error Handling
 ```python
 def get_user_data(user_id: int) -> dict:

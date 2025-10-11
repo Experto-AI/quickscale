@@ -1,70 +1,47 @@
-"""Example backend extensions contract and wiring.
+"""Example backend extensions for Django project customization."""
 
-Copy this file into your generated project (for example into a `client_extensions/` app)
-and add the app to `INSTALLED_APPS`. Keep the wiring idempotent to avoid duplicate
-registrations during tests or multiple AppConfig.ready() calls.
-"""
+import logging
+from typing import Any
 
 from django.apps import AppConfig
 
+logger = logging.getLogger(__name__)
+
 
 class ClientExtensionsConfig(AppConfig):
+    """Django app configuration for client-specific extensions."""
+
     name = "client_extensions"
 
-    def ready(self):
-        # Idempotent registration example
+    def ready(self) -> None:
+        """Initialize backend extensions when Django starts."""
         from . import backend_extensions_impl
 
         backend_extensions_impl.register()
 
 
-def register():
-    """Simple registration hook called from AppConfig.ready().
-
-    Implement any project-specific startup wiring here (signals, receivers,
-    patching third-party behaviour, etc.). Keep this function fast and idempotent.
-    """
-    # Example: connect a signal handler (import inside function to avoid side-effects)
+def register() -> None:
+    """Register project-specific backend extensions and startup wiring."""
+    # Example: Connect a signal handler with lazy import
     try:
-        from django.db.models.signals import post_save
         from django.contrib.auth import get_user_model
+        from django.db.models.signals import post_save
 
-        def _on_user_save(sender, instance, created, **kwargs):
+        def _on_user_save(sender: Any, instance: Any, created: bool, **kwargs: Any) -> None:
+            """Handle user creation events for onboarding tasks."""
             if created:
-                # perform lightweight onboarding tasks
-                pass
+                # Perform lightweight onboarding tasks
+                logger.info(f"New user created: {instance.pk}")
 
         post_save.connect(_on_user_save, sender=get_user_model(), weak=False)
-    except Exception:
-        # Keep startup robust in minimal generated projects; log if needed.
-        pass
+    except ImportError as e:
+        logger.warning(f"Could not register user signal handler: {e}")
+        raise
+    except Exception as e:
+        logger.error(f"Unexpected error during extension registration: {e}")
+        raise
 
 
 if __name__ == "__main__":
     # Quick local test
     register()
-"""Minimal example of a backend extensions registration module.
-
-Place project-specific startup wiring here (signals, admin enhancements, feature
-flags, optional integrations). Keep code idempotent and import-safe.
-"""
-
-def register():
-    """Register project-specific backend extensions.
-
-    This function should be safe to call multiple times and avoid side-effects on
-    import. Prefer lazy imports inside the function so startup ordering is stable.
-    """
-    # Example: wire a signal handler lazily
-    try:
-        from django.db.models.signals import post_save
-
-        def _on_save(sender, instance, created, **kwargs):
-            # Put project-specific behavior here
-            return None
-
-        # In real code, guard registration to avoid double-binding
-        # post_save.connect(_on_save, sender=MyModel)
-    except Exception:
-        # Keep example safe; real projects should log errors instead
-        pass

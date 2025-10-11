@@ -1,9 +1,4 @@
-"""
-QuickScale CLI - Main Entry Point
-
-Ultra-simple CLI for QuickScale Django project generator.
-MVP focuses on single command: `quickscale init <project>`
-"""
+"""QuickScale CLI - Main entry point for project generation commands."""
 
 import click
 
@@ -13,40 +8,22 @@ import quickscale_core
 
 @click.group()
 @click.version_option(version=quickscale_cli.__version__, prog_name="quickscale")
-def cli():
-    """
-    QuickScale - Django SaaS Project Generator
-
-    Generate production-ready Django projects in seconds.
-
-    MVP Command:
-      quickscale init <project>  Generate a new Django project
-
-    For more information, visit: https://github.com/Experto-AI/quickscale
-    """
+def cli() -> None:
+    """QuickScale - Django SaaS Project Generator."""
     pass
 
 
 @cli.command()
-def version():
-    """Show version information."""
+def version() -> None:
+    """Show version information for CLI and core packages."""
     click.echo(f"QuickScale CLI v{quickscale_cli.__version__}")
     click.echo(f"QuickScale Core v{quickscale_core.__version__}")
 
 
 @cli.command()
 @click.argument("project_name")
-def init(project_name):
-    """
-    Generate a new Django project.
-
-    PROJECT_NAME: Name of the project to create
-
-    Example:
-      quickscale init myapp
-
-    This will create a new Django project with production-ready configurations.
-    """
+def init(project_name: str) -> None:
+    """Generate a new Django project with production-ready configurations."""
     click.echo(f"🚀 Generating project: {project_name}")
     click.echo("⚠️  Project generation not yet implemented (v0.52.0 foundation phase)")
     click.echo("📋 Coming in v0.53.0: Template system")
