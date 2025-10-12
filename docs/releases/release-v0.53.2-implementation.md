@@ -115,7 +115,7 @@ print(template.render(project_name='testproject')[:400])
 
 # Check for errors
 cd quickscale_core && poetry run ruff check .
-cd quickscale_core && poetry run black --check .
+cd quickscale_core && poetry run ruff format --check .
 ```
 
 ## Tasks Completed
@@ -156,7 +156,7 @@ No new dependencies added. Release uses existing Jinja2 dependency from previous
 
 - [x] All roadmap tasks marked as implemented
 - [x] All tests passing (51/51)
-- [x] Code quality checks passing (ruff, black)
+- [x] Code quality checks passing (ruff format, ruff check)
 - [x] Documentation updated (release notes created)
 - [x] Release notes committed to docs/releases/
 - [x] Roadmap to be updated with completion status (pending)

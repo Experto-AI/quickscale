@@ -17,7 +17,7 @@ This release continues the template system foundation started in v0.53.1 and v0.
 - ✅ **Production-grade Docker setup**: Multi-stage builds, non-root user, optimized layer caching, health checks
 - ✅ **Complete development environment**: PostgreSQL 16, Redis 7, volume persistence, service health checks
 - ✅ **Poetry metadata with all required dependencies**: Django 5.x, PostgreSQL driver, environment config, static file serving, production WSGI server
-- ✅ **Comprehensive development tooling**: pytest, pytest-django, black, ruff, mypy, isort with pre-configured settings
+- ✅ **Comprehensive development tooling**: pytest, pytest-django, ruff (format & lint), mypy with pre-configured settings
 - ✅ **Security best practices**: Environment-based secrets, .env templates, proper .gitignore patterns
 - ✅ **Editor consistency**: .editorconfig for consistent coding styles across editors and teams
 - ✅ **51 new test cases added**: covering template loading, rendering, content validation, and production-ready features
@@ -181,7 +181,7 @@ From roadmap Task 0.53.3:
   - [x] python-decouple (environment config)
   - [x] whitenoise (static files in production)
   - [x] gunicorn (production WSGI server)
-  - [x] Development dependencies (pytest, black, ruff, mypy, etc.)
+  - [x] Development dependencies (pytest, ruff, mypy, etc.)
   
 - [x] **Create Docker templates**
   - [x] **`Dockerfile.j2`** - Production-ready multi-stage build
@@ -192,7 +192,6 @@ From roadmap Task 0.53.3:
   - [x] **`docker-compose.yml.j2`** - Local development setup
     - [x] Django service with volume mounts
     - [x] PostgreSQL 16 service with persistent volume
-    - [x] Redis 7 service (for future Celery)
     - [x] Service health checks and dependencies
   - [x] **`.dockerignore.j2`** - Exclude unnecessary files
   
@@ -201,7 +200,6 @@ From roadmap Task 0.53.3:
   - [x] DEBUG flag
   - [x] DATABASE_URL with PostgreSQL connection string
   - [x] ALLOWED_HOSTS
-  - [x] REDIS_URL
   - [x] Helpful comments explaining each variable
   
 - [x] **Create `.gitignore.j2` template**
@@ -235,7 +233,7 @@ From roadmap Task 0.53.3:
 
 ✅ **Production-ready DevOps templates** - Complete Docker, Docker Compose, and environment configuration
 ✅ **Poetry metadata** - Full dependency management with production and development packages
-✅ **Development tooling** - pytest, black, ruff, mypy, isort configuration
+✅ **Development tooling** - pytest, ruff (format & lint), mypy configuration
 ✅ **Comprehensive test coverage** - 51 new tests validating all template content
 ✅ **Security best practices** - Environment variables, .gitignore, non-root Docker user
 ✅ **Editor consistency** - .editorconfig for team collaboration
@@ -263,8 +261,8 @@ This release establishes production-ready foundations that match competitor tool
 
 **Competitive Benchmark Achievement**:
 - ✅ Multi-stage Docker builds (like Cookiecutter Django)
-- ✅ PostgreSQL + Redis services (like SaaS Pegasus)
-- ✅ Complete development tooling (like Django Unicorn)
+- ✅ PostgreSQL service with persistent volumes
+- ✅ Complete development tooling with ruff (like Django Unicorn)
 - ✅ Security best practices (environment-based secrets)
 - ✅ Optimized Docker layer caching
 - ✅ Non-root container user

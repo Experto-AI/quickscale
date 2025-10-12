@@ -71,13 +71,11 @@ poetry run pytest tests/test_cli.py -q
 Use the repository lint script or run linters directly via Poetry:
 
 ```bash
-# Run lint script (calls ruff/black/isort as configured)
+# Run lint script (calls ruff format and ruff check)
 ./scripts/lint.sh
 
-# Or run common linters directly
-poetry run ruff check .
-poetry run black --check .
-poetry run isort --check-only .
+# Or run tools individually
+poetry run ruff format --check .
 ```
 
 Pre-commit hooks are configured in `.pre-commit-config.yaml`. After bootstrapping you may want to run:
@@ -132,7 +130,7 @@ Run these scripts from the repository root.
 - Bootstrapping: `./scripts/bootstrap.sh`
 - Install deps (Poetry): `poetry install`
 - Tests: `./scripts/test-all.sh` or `poetry run pytest`
-- Lint: `./scripts/lint.sh` or `poetry run ruff check .` / `poetry run black --check .`
+- Lint: `./scripts/lint.sh` or `poetry run ruff format --check .` / `poetry run ruff check .`
 - CLI help: `quickscale --help`
 - Create project: `quickscale init <name>`
 
@@ -158,8 +156,8 @@ poetry run pytest
 poetry run quickscale --help
 
 # Run linters / formatters
+poetry run ruff format --check .
 poetry run ruff check .
-poetry run black --check .
 ```
 
 Dependency management

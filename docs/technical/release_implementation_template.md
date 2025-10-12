@@ -135,7 +135,7 @@ command to validate feature 3
 
 - [ ] All roadmap tasks marked as implemented
 - [ ] All tests passing
-- [ ] Code quality checks passing (ruff, black)
+- [ ] Code quality checks passing (ruff format, ruff check)
 - [ ] Documentation updated
 - [ ] Release notes committed to docs/releases/
 - [ ] Roadmap updated with completion status

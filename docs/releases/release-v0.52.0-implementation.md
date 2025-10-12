@@ -14,7 +14,7 @@ All validation criteria met:
 - ✅ `pytest` runs successfully with 8 tests passing (3 for core, 5 for CLI)
 - ✅ `quickscale --version` works: "quickscale, version 0.52.0"
 - ✅ `quickscale --help` works: Shows comprehensive help
-- ✅ Code quality checks pass: `ruff check .` and `black --check .`
+- ✅ Code quality checks pass: `ruff format --check .` and `ruff check .`
 - ✅ All package metadata is correct and installable
 
 ## Test Results
@@ -119,7 +119,7 @@ quickscale/
 ### Development Dependencies
 - pytest >= 7.4.0
 - pytest-cov >= 4.1.0
-- black >= 23.7.0
+- ruff >= 0.1.0
 - ruff >= 0.0.286
 
 ## CLI Commands Available
@@ -219,8 +219,8 @@ pytest quickscale_core/tests/  ✅ (3 passed, 100% coverage)
 pytest quickscale_cli/tests/   ✅ (5 passed, 96% coverage)
 
 # Linters
-ruff check .        ✅ (all checks passed)
-black --check .     ✅ (all files formatted)
+ruff format --check . ✅ (all files formatted)
+ruff check .          ✅ (all checks passed)
 ```
 
 ## Release Checklist

@@ -468,7 +468,7 @@ def init(project_name: str):
 - pytest with factory_boy configured in generated projects
 - GitHub Actions CI/CD pipeline working for generated projects
 - Pre-commit hooks configured and documented
-- All code quality checks pass (ruff, black, mypy optional)
+- All code quality checks pass (ruff format, ruff check, mypy optional)
 - Integration tests pass (full workflow from CLI to working project)
 - Cross-platform testing (Linux, macOS, Windows if possible)
 - Cross-version testing (Python 3.10, 3.11, 3.12)
@@ -483,8 +483,8 @@ pytest --cov=quickscale_core --cov-fail-under=80
 pytest --cov=quickscale_cli --cov-fail-under=75
 
 # Run quality checks
+ruff format --check .
 ruff check .
-black --check .
 mypy quickscale_core/ quickscale_cli/  # optional
 
 # Run integration tests
@@ -534,18 +534,18 @@ tox  # or manually test with py310, py311, py312
   - [ ] Focus on critical paths (generator, file I/O, validation)
 - [ ] **Run code quality checks**
   - [ ] Run `ruff check .` - no errors
-  - [ ] Run `black --check .` - code formatted
+  - [ ] Run `ruff format --check .` - code formatted
   - [ ] Run `mypy .` - type checking passes (optional but recommended)
 - [ ] **Create CI/CD templates for generated projects**
   - [ ] **`.github/workflows/ci.yml.j2`** - GitHub Actions workflow
     - [ ] Run tests on push/PR
     - [ ] Test matrix: Python 3.10, 3.11, 3.12
     - [ ] Test matrix: Django 4.2, 5.0
-    - [ ] Run linters (ruff, black)
+    - [ ] Run linters (ruff format, ruff check)
     - [ ] Upload coverage reports
   - [ ] **`.github/workflows/deploy.yml.j2`** - Deployment workflow (basic example)
   - [ ] **`.pre-commit-config.yaml.j2`** - Pre-commit hooks
-    - [ ] black (code formatting)
+    - [ ] ruff format (code formatting)
     - [ ] ruff (linting)
     - [ ] trailing-whitespace, end-of-file-fixer
 - [ ] **Create pytest templates for generated projects**
@@ -835,7 +835,7 @@ twine upload quickscale_core/dist/* quickscale_cli/dist/*
   - [ ] ✅ Security best practices (SECRET_KEY, ALLOWED_HOSTS, middleware)
   - [ ] ✅ pytest + factory_boy test setup
   - [ ] ✅ GitHub Actions CI/CD pipeline
-  - [ ] ✅ Pre-commit hooks (black, ruff, isort)
+  - [ ] ✅ Pre-commit hooks (ruff format, ruff check)
   - [ ] ✅ WhiteNoise static files configuration
   - [ ] ✅ Gunicorn WSGI server for production
 - [ ] 🖥️ Ultra-simple CLI: `quickscale init myapp`

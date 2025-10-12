@@ -403,7 +403,7 @@ These features are essential for competing with Pegasus and Ready SaaS in the Sa
 
 **Must incorporate:**
 - ✅ **GitHub Actions workflow** - Run tests, linting, coverage on every PR
-- ✅ **Pre-commit hooks** - black, isort, flake8, mypy locally before commit
+- ✅ **Pre-commit hooks** - ruff (format & lint), mypy locally before commit
 - ✅ **Automated testing matrix** - Test across Python 3.10, 3.11, 3.12 + Django 4.2, 5.0
 - ✅ **Deployment workflows** - Sample deploy-to-production GitHub Action
 - ✅ **Dependency updates** - Dependabot configuration for security updates
@@ -579,7 +579,7 @@ quickscale init myapp
 6. ✅ Static files setup (WhiteNoise configured)
 7. ✅ Custom User model scaffold (AbstractUser extension)
 8. ✅ GitHub Actions workflow for CI/CD
-9. ✅ Pre-commit hooks configuration (black, isort, flake8)
+9. ✅ Pre-commit hooks configuration (ruff format, ruff check)
 
 **Success criteria**: Generated project is production-deployable immediately. No "TODO: configure X" comments.
 

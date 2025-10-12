@@ -601,7 +601,6 @@ class TestPyprojectTomlContent:
         assert "[tool.poetry.group.dev.dependencies]" in output
         assert "pytest" in output
         assert "pytest-django" in output
-        assert "black" in output
         assert "ruff" in output
         assert "mypy" in output
 
@@ -614,21 +613,15 @@ class TestPyprojectTomlContent:
         assert "[tool.pytest.ini_options]" in output
         assert "DJANGO_SETTINGS_MODULE" in output
 
-    def test_black_configuration(
-        self, jinja_env: Environment, test_context: dict[str, str]
-    ) -> None:
-        """Test pyproject.toml includes black formatter configuration."""
-        template = jinja_env.get_template("pyproject.toml.j2")
-        output = template.render(test_context)
-        assert "[tool.black]" in output
-        assert "line-length" in output
-
     def test_ruff_configuration(self, jinja_env: Environment, test_context: dict[str, str]) -> None:
-        """Test pyproject.toml includes ruff linter configuration."""
+        """Test pyproject.toml includes ruff formatter and linter configuration."""
         template = jinja_env.get_template("pyproject.toml.j2")
         output = template.render(test_context)
         assert "[tool.ruff]" in output
         assert "select" in output
+        assert "line-length" in output
+        # Verify comment about ruff format replacing black
+        assert "handled by ruff format" in output
 
 
 class TestDockerfileContent:
@@ -695,13 +688,6 @@ class TestDockerComposeContent:
         assert "postgres:" in output
         assert "POSTGRES_DB" in output
 
-    def test_redis_service(self, jinja_env: Environment, test_context: dict[str, str]) -> None:
-        """Test docker-compose.yml includes Redis service."""
-        template = jinja_env.get_template("docker-compose.yml.j2")
-        output = template.render(test_context)
-        assert "redis:" in output
-        assert "redis:" in output
-
     def test_web_service(self, jinja_env: Environment, test_context: dict[str, str]) -> None:
         """Test docker-compose.yml includes web service."""
         template = jinja_env.get_template("docker-compose.yml.j2")
@@ -715,7 +701,8 @@ class TestDockerComposeContent:
         output = template.render(test_context)
         assert "volumes:" in output
         assert "postgres_data:" in output
-        assert "redis_data:" in output
+        assert "static_volume:" in output
+        assert "media_volume:" in output
 
     def test_healthchecks(self, jinja_env: Environment, test_context: dict[str, str]) -> None:
         """Test docker-compose.yml includes healthchecks."""
@@ -731,7 +718,7 @@ class TestDockerComposeContent:
         template = jinja_env.get_template("docker-compose.yml.j2")
         output = template.render(test_context)
         assert "DATABASE_URL" in output
-        assert "REDIS_URL" in output
+        assert "DJANGO_SETTINGS_MODULE" in output
 
 
 class TestEnvExampleContent:
@@ -763,12 +750,6 @@ class TestEnvExampleContent:
         assert "DATABASE_URL=" in output
         assert "postgresql://" in output
         assert "testproject" in output
-
-    def test_redis_url(self, jinja_env: Environment, test_context: dict[str, str]) -> None:
-        """Test .env.example includes REDIS_URL."""
-        template = jinja_env.get_template(".env.example.j2")
-        output = template.render(test_context)
-        assert "REDIS_URL=" in output
 
     def test_helpful_comments(self, jinja_env: Environment, test_context: dict[str, str]) -> None:
         """Test .env.example includes explanatory comments."""
