@@ -476,16 +476,10 @@ def init(project_name: str):
 **Release Validation**:
 ```bash
 # Run full test suite with coverage
-pytest --cov=quickscale_core --cov=quickscale_cli --cov-report=term-missing
-
-# Verify coverage thresholds
-pytest --cov=quickscale_core --cov-fail-under=80
-pytest --cov=quickscale_cli --cov-fail-under=75
+./scripts/test-all.sh
 
 # Run quality checks
-ruff format --check .
-ruff check .
-mypy quickscale_core/ quickscale_cli/  # optional
+./scripts/lint.sh
 
 # Run integration tests
 pytest -m integration -v
@@ -533,9 +527,7 @@ tox  # or manually test with py310, py311, py312
   - [ ] `quickscale_cli`: >75% coverage
   - [ ] Focus on critical paths (generator, file I/O, validation)
 - [ ] **Run code quality checks**
-  - [ ] Run `ruff check .` - no errors
-  - [ ] Run `ruff format --check .` - code formatted
-  - [ ] Run `mypy .` - type checking passes (optional but recommended)
+  - [ ] Run `./scripts/lint.sh` - no errors
 - [ ] **Create CI/CD templates for generated projects**
   - [ ] **`.github/workflows/ci.yml.j2`** - GitHub Actions workflow
     - [ ] Run tests on push/PR

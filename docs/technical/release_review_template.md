@@ -249,11 +249,9 @@ Total: [N] tests ✅/❌
 
 ### Code Quality
 
-**✅/❌ ALL QUALITY CHECKS PASSING**:
+**✅/❌ LINT SCRIPT PASSES**:
 ```bash
-ruff format: [result] ✅/❌
-ruff check: [result] ✅/❌
-mypy: [result] ✅/❌
+./scripts/lint.sh: [result] ✅/❌
 ```
 
 ### Coverage
