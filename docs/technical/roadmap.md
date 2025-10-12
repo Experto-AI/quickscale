@@ -46,6 +46,7 @@ Execution details live here; the "personal toolkit first, community platform lat
 
 ### **📋 Current State Assessment**
 - ✅ **Current Version**: v0.53.2 (Released)
+- ⚠️ **Version Metadata Mismatch**: `pyproject.toml` files show version 0.52.0 but latest release is v0.53.2 - requires synchronization
 - ✅ **Evolution Strategy Defined**: Start simple, grow organically
 - ✅ **MVP Scope Clarified**: Simple CLI + project scaffolding + git subtree documentation
 - ✅ **Legacy Backup Available**: Complete v0.41.0 preserved in `../quickscale-legacy/`
@@ -119,16 +120,19 @@ Need the narrative backdrop? Jump to [`quickscale.md`](../overview/quickscale.md
 
 When a roadmap release or major roadmap item is implemented, maintainers MUST create a release document under `docs/releases/` and remove the corresponding detailed release section from this roadmap. This keeps the roadmap focused on upcoming work and preserves completed release artifacts as standalone documents.
 
-Required release doc conventions:
-- Filename: `docs/releases/release-<version>.md` (lowercase, e.g. `release-v0.52.0.md`).
-- Minimum content: release title, release date, summary of verifiable improvements, completed tasks checklist, validation commands, and a short "Next steps" list.
-- Link back to this roadmap and to `decisions.md` where appropriate.
+Required release documentation conventions:
+- **Implementation filename**: `docs/releases/release-<version>-implementation.md` (e.g. `release-v0.52.0-implementation.md`)
+- **Review filename**: `docs/releases/release-<version>-review.md` (e.g. `release-v0.52.0-review.md`)
+- Minimum content (implementation): release title, release date, summary of verifiable improvements, completed tasks checklist, validation commands, and a short "Next steps" list
+- Minimum content (review): comprehensive quality assessment, scope compliance check, code quality validation, testing review, approval status
+- Link back to this roadmap and to `decisions.md` where appropriate
 
 Process (post-implementation):
-1. Create `docs/releases/release-<version>.md` with the required content.
-2. Commit the release doc.
-3. Remove the completed release section from `docs/technical/roadmap.md` (or replace it with a one-line pointer to the release doc).
-4. Update indexes/README links if necessary.
+1. Create `docs/releases/release-<version>-implementation.md` with implementation details, test results, and validation
+2. (Optional) Create `docs/releases/release-<version>-review.md` with quality assessment and approval status
+3. Commit the release documentation
+4. Remove the completed release section from `docs/technical/roadmap.md` (or replace it with a one-line pointer to the release docs)
+5. Update indexes/README links if necessary
 
 This policy ensures completed work is archived in a discoverable place and the roadmap remains current and actionable.
 
@@ -136,67 +140,10 @@ This policy ensures completed work is archived in a discoverable place and the r
 
 ### Completed Releases/Tasks/Sprints:
 
-- Release v0.52.0: Project Foundation: `docs/releases/release-v0.52.0.md`
-- Release v0.53.1: Core Django Project Templates: `docs/releases/release-v0.53.1.md`
-- Release v0.53.2: Templates and Static Files: `docs/releases/release-v0.53.2.md`
-
----
-
-### **Task 0.53.3: Project Metadata & DevOps Templates**
-**Priority**: Create supporting files with **production-grade DevOps setup**
-
-**🎯 Competitive Requirement**: Match Cookiecutter on DevOps quality (see [competitive_analysis.md §1 & §5](../overview/competitive_analysis.md#5-cicd-pipeline-templates))
-
-**Tasks**:
-- [ ] **Create `pyproject.toml.j2` template (production-ready Poetry metadata)**
-  - [ ] Django>=5.0,<6.0
-  - [ ] psycopg2-binary (PostgreSQL driver)
-  - [ ] python-decouple or django-environ (environment config)
-  - [ ] whitenoise (static files in production)
-  - [ ] gunicorn (production WSGI server)
-  - [ ] Comment: "Production dependencies declared in pyproject.toml. Dev deps in `[tool.poetry.dev-dependencies]`"
-  
-- [ ] **Create Docker templates**
-  - [ ] **`Dockerfile.j2`** - Production-ready multi-stage build
-    - [ ] Python slim base image
-    - [ ] Non-root user
-    - [ ] Optimized layer caching
-  - [ ] **`docker-compose.yml.j2`** - Local development setup
-    - [ ] Django service with volume mounts
-    - [ ] PostgreSQL service with persistent volume
-    - [ ] Redis service (for future Celery)
-  - [ ] **`.dockerignore.j2`** - Exclude unnecessary files
-- [ ] **Create `.env.example.j2` template**
-  - [ ] SECRET_KEY=your-secret-key-here
-  - [ ] DEBUG=True
-  - [ ] DATABASE_URL=postgresql://user:password@localhost:5432/dbname
-  - [ ] ALLOWED_HOSTS=localhost,127.0.0.1
-  - [ ] Comments explaining each variable
-- [ ] **Create `.gitignore.j2` template**
-  - [ ] Python artifacts (__pycache__, *.pyc, .pytest_cache)
-  - [ ] Development environment (Poetry-managed virtualenvs; venv/env optional)
-  - [ ] Django artifacts (db.sqlite3, media/, staticfiles/)
-  - [ ] IDE files (.vscode/, .idea/, *.swp)
-  - [ ] Environment files (.env, .env.local)
-  - [ ] Docker volumes
-- [ ] **Create `README.md.j2` template (comprehensive)**
-  - [ ] Project name and description
-  - [ ] Prerequisites (Python, Docker, PostgreSQL)
-  - [ ] **Local Development Setup** (with Docker and without)
-  - [ ] Running tests instructions
-  - [ ] Deployment instructions (basic)
-  - [ ] Project structure overview
-  - [ ] Link to QuickScale documentation
-- [ ] **Create `.editorconfig.j2` template**
-  - [ ] Consistent editor settings (indent, line endings, charset)
-
-**Deliverable**: **Production-ready** project metadata and DevOps configuration
-
-**Validation**: Docker setup works; .env loads correctly; README instructions are complete
-
-**Competitive Benchmark**: Should match Cookiecutter's production-readiness
-
-**Reference**: [competitive_analysis.md §1 (Production Foundations)](../overview/competitive_analysis.md#1-production-ready-django-foundations)
+- Release v0.52.0: Project Foundation: `docs/releases/release-v0.52.0-implementation.md`
+- Release v0.53.1: Core Django Project Templates: `docs/releases/release-v0.53.1-implementation.md`
+- Release v0.53.2: Templates and Static Files: `docs/releases/release-v0.53.2-implementation.md`
+- Release v0.53.3: Project Metadata & DevOps Templates: `docs/releases/release-v0.53.3-implementation.md`
 
 ---
 

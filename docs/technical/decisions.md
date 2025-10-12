@@ -74,10 +74,17 @@ When referencing concepts defined elsewhere link to the canonical section (don't
 
 ### Release Documentation Standard
 
-All releases must be documented using the [standard release template](./release_template.md). Release documents should be created in `docs/releases/` following the naming convention `release-vX.XX.X.md`.
+All releases must be documented using the [standard release implementation template](./release_implementation_template.md). Release implementation documents should be created in `docs/releases/` following the naming convention `release-vX.XX.X-implementation.md`.
 
-**Key requirements for release documentation:**
-- Use the template structure from [release_template.md](./release_template.md)
+All release reviews must be documented using the [standard release review template](./release_review_template.md). Release review documents should be created in `docs/releases/` following the naming convention `release-vX.XX.X-review.md`.
+
+This dual-template system ensures:
+- **Implementation documentation** captures what was built, test results, and validation
+- **Review documentation** captures quality assessment, compliance checks, and approval status
+
+**Key requirements for release implementation documentation:**
+- Use the template structure from [release_implementation_template.md](./release_implementation_template.md)
+- Follow naming convention: `release-vX.XX.X-implementation.md`
 - Include verifiable improvements with actual test output
 - Document all files created/changed
 - Provide validation commands that others can run
@@ -85,9 +92,15 @@ All releases must be documented using the [standard release template](./release_
 - Complete release checklist before marking as COMPLETE
 - Update roadmap to reflect completion status
 
+**Key requirements for release review documentation:**
+- Use the template structure from [release_review_template.md](./release_review_template.md)
+- Follow naming convention: `release-vX.XX.X-review.md`
+- Include comprehensive quality assessment with specific file:line references
+- Provide clear approval status and actionable recommendations
+
 **Example releases following this standard:**
-- [Release v0.52.0](../releases/release-v0.52.0.md) - Project Foundation
-- [Release v0.53.1](../releases/release-v0.53.1.md) - Core Django Templates
+- [Release v0.52.0 Implementation](../releases/release-v0.52.0-implementation.md) - Project Foundation
+- [Release v0.53.1 Implementation](../releases/release-v0.53.1-implementation.md) - Core Django Templates
 
 This ensures consistency, traceability, and reproducibility across all QuickScale releases.
 

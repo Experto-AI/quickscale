@@ -1,19 +1,22 @@
-# Release Template
+# Release Implementation Template
 
 <!-- 
-release_template.md - Standard Release Documentation Template
+release_implementation_template.md - Standard Release Implementation Documentation Template
 
-PURPOSE: Provides a consistent structure for documenting QuickScale releases in docs/releases/
+PURPOSE: Provides a consistent structure for documenting QuickScale release implementations in docs/releases/
 
-USAGE: Copy this template when creating a new release document. Fill in all sections with 
-       release-specific details. See examples in docs/releases/ for reference.
+USAGE: Copy this template when creating a new release implementation document. Fill in all sections 
+       with release-specific details. Save as release-v[VERSION]-implementation.md in docs/releases/. 
+       See examples in docs/releases/ for reference.
 
 TARGET AUDIENCE: Maintainers, contributors, users reviewing release history
 -->
 
 ## Overview
 
-This document provides the standard template for QuickScale release documentation. All release notes should follow this structure to ensure consistency, completeness, and traceability.
+This document provides the standard template for QuickScale release implementation documentation. All release implementation notes should follow this structure to ensure consistency, completeness, and traceability.
+
+**Companion document**: After implementation is complete, a release review document (`release-v[VERSION]-review.md`) should be created using the [release review template](./release_review_template.md) to document quality assessment and approval status.
 
 ## Template Structure
 
@@ -208,11 +211,16 @@ Use these standard status indicators:
 
 ### File Naming Convention
 
-Release documents should be named:
-- `release-vX.XX.X.md` for standard releases
-- `release-vX.XX.X-rc1.md` for release candidates
+Release implementation documents should be named:
+- `release-vX.XX.X-implementation.md` for standard releases
+- `release-vX.XX.X-rc1-implementation.md` for release candidates
+
+Release review documents should be named:
+- `release-vX.XX.X-review.md` for quality reviews
 
 Store in: `docs/releases/`
+
+**Naming rationale**: The `-implementation` suffix distinguishes implementation documentation (what was built, how it works, test results) from review documentation (quality assessment, compliance checks, approval status).
 
 ### Maintenance
 
@@ -227,4 +235,5 @@ Store in: `docs/releases/`
 - [Roadmap](./roadmap.md) - Track task implementation progress
 - [Technical Decisions](./decisions.md) - Architectural decisions and rules
 - [Scaffolding](./scaffolding.md) - Project structure patterns
-- [Release Directory](../releases/) - All release notes
+- [Release Directory](../releases/) - All release documentation
+- [Release Review Template](./release_review_template.md) - Template for quality review documentation
