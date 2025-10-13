@@ -247,6 +247,14 @@ Other documents (README.md, roadmap.md, scaffolding.md, commercial.md) MUST refe
 - pytest.ini (test configuration)
 - .github/workflows/ci.yml (automated testing)
 
+### Test Isolation Policy (CRITICAL)
+
+**Policy (MANDATORY):**
+- ❌ **NEVER create test artifacts in the codebase directory**
+- ✅ **ALWAYS use isolated filesystems for tests that create files**
+- ✅ CLI tests: Use `CliRunner.isolated_filesystem()` context manager
+- ✅ File generation tests: Use `pytest.tmp_path` or `pytest.tmpdir` fixtures
+- ✅ Integration tests: Use temporary directories (`tempfile.mkdtemp()`)
 
 ## Architecture (Post-MVP Vision)
 

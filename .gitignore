@@ -187,6 +187,13 @@ htmlcov/
 # symlink, not directory
 quickscale-legacy
 
-
-
-
+# Test artifacts (should NEVER be in codebase - use isolated_filesystem() in tests)
+# These patterns catch common test project names to prevent accidental commits
+quickscale_cli/testproject*/
+quickscale_cli/existing_project/
+quickscale_cli/my_test_project/
+quickscale_cli/structuretest/
+quickscale_cli/messagetest/
+quickscale_cli/*_test_*/
+quickscale_core/testproject*/
+quickscale_core/*_test_*/

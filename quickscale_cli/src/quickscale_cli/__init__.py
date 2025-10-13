@@ -1,6 +1,6 @@
 """QuickScale CLI Package - Command-line interface for Django project generation."""
 
-__version__ = "0.52.0"
+__version__ = "0.55.0"
 __author__ = "Experto AI"
 __email__ = "victor@experto.ai"
 
