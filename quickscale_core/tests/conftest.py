@@ -18,3 +18,10 @@ def sample_project_config() -> dict[str, str]:
         "email": "test@example.com",
         "description": "A test Django project",
     }
+
+
+def pytest_configure(config):
+    """Register custom markers"""
+    config.addinivalue_line(
+        "markers", "integration: mark test as integration test (end-to-end workflow)"
+    )

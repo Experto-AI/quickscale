@@ -30,203 +30,105 @@ WHAT NOT TO ADD HERE:
 TARGET AUDIENCE: Maintainers, core contributors, community package developers, CI engineers
 -->
 
-## Purpose
+# Technical Decisions (Authoritative)
 
-This document records authoritative architecture, technical & behaviour decisions for QuickScale. It is the single source of truth for how we structure packages, name artifacts, run tests, and what patterns are explicitly forbidden.
+**Purpose:** Single source of truth for QuickScale architecture, technical rules, and development standards for AI coding assistants and maintainers.
 
-## Scope & Decision Owners
+**Scope:** All first-party packages (core, CLI, themes, modules). Experto-AI and core contributors own these decisions.
 
-- Applies to the QuickScale repository and all first-party packages (core, CLI, themes, modules).
-- QuickScale maintainers (Experto-AI and core contributors) are the authoritative owners of these decisions.
+## Quick Reference (AI Context)
 
-## Documentation Maintenance Guidelines
+**MVP Essentials:**
+- ✅ Single CLI command: `quickscale init myapp`
+- ✅ Generates standalone Django project (Poetry + pyproject.toml)
+- ✅ Production-ready: Docker, PostgreSQL, pytest, CI/CD, security best practices
+- ✅ Git subtree for core distribution (manual commands documented)
+- ❌ NO YAML config, NO multiple templates, NO CLI wrappers (all Post-MVP)
 
-### Single Source of Truth (SSOT) Principle
+**Development Stack:**
+- ✅ Poetry (package manager), Ruff (format + lint), MyPy (type check), pytest (testing)
+- ✅ src/ layout for all packages
+- ❌ NO Black, NO Flake8, NO requirements.txt, NO setup.py
 
-**decisions.md is authoritative for**:
-- Architectural decisions and rationale
-- Technical specifications and rules
-- MVP feature scope (Feature Matrix)
-- Behavioral decisions (what/why/how)
-- Explicit prohibitions
+**Key Constraints:**
+- 70% test coverage minimum (CI enforced)
+- decisions.md is authoritative (update FIRST, never contradict)
+- Sub-packages MUST NOT have README.md (use root README only)
+- Settings: Standalone by default (NO automatic inheritance)
 
-**When updating scope or architecture**:
-1. ✅ Update decisions.md FIRST
-2. ✅ Then update referencing documents (README, ROADMAP, SCAFFOLDING, others)
-3. ✅ Add cross-references so readers can find the SSOT
-4. ❌ Never contradict decisions.md in other docs
+## Critical Rules
 
-### Conflict Resolution
+**Documentation Hierarchy:**
+- ✅ decisions.md is authoritative - always wins conflicts
+- ✅ Update decisions.md FIRST, then other docs
+- ✅ Contributing guides: `docs/contrib/*.md`
+- ✅ Release docs: `docs/releases/release-vX.XX.X-{implementation,review}.md`
+- ❌ Never contradict decisions.md elsewhere
 
-If documents conflict:
-1. **decisions.md wins** - it's the tie-breaker
-2. Update conflicting document to match decisions.md
-3. Add PR review step: check decisions.md alignment
+**Package README Policy:**
+- ❌ Sub-packages (quickscale_core, quickscale_cli) MUST NOT have README.md
+- ✅ Use root README.md only (avoids duplication)
 
-### Documentation Cross-Reference Standards
+## MVP vs Post-MVP Scope
 
-When referencing concepts defined elsewhere link to the canonical section (don't duplicate content) using consistent link format `[descriptive text](./DOCUMENT.md#section-anchor)` deep link instead of file-level reference.
+**Terminology:**
+- Foundation Phase: v0.52-v0.55 (incremental foundation)
+- MVP: v0.56-v1.0.0 (production-ready personal toolkit)
+- Post-MVP: v1.1+ (modules, packaging, marketplace)
 
-### AI assistant integration: Rules + Shared Principles
+**MVP (v0.56-v1.0.0):**
+- ✅ `quickscale_core`: Scaffolding + git subtree integration (monolithic package)
+- ✅ `quickscale_cli`: Single command `quickscale init myapp` (no flags)
+- ✅ Generated project: Standalone Django (user owns completely)
+- ✅ Settings: Standalone settings.py (NO inheritance from core by default)
+- ✅ Templates: Single starter template only
+- ❌ CLI git subtree helpers - Post-MVP
+- ❌ Multiple templates - Post-MVP
+- ❌ YAML configuration - Post-MVP
 
-- Canonical contributing guide location: `docs/contrib/contributing.md`.
-- Rules + Shared Principles: `docs/contrib/plan.md`, `docs/contrib/code.md`, `docs/contrib/review.md`, `docs/contrib/testing.md`, and `docs/contrib/debug.md`.
+**MVP Output:** See [scaffolding.md §3](./scaffolding.md#mvp-structure)
 
-### Release Documentation Standard
+### Git Subtree Integration (MVP) {#integration-note-personal-toolkit-git-subtree}
 
-All releases must be documented using the [standard release implementation template](./release_implementation_template.md). Release implementation documents should be created in `docs/releases/` following the naming convention `release-vX.XX.X-implementation.md`.
+**Strategy (MVP Workflow):**
+1. `quickscale init myapp` → Standalone Django project (user owns)
+2. OPTIONAL: Embed `quickscale_core` via git subtree (advanced users)
+3. OPTIONAL: Extract patterns to `quickscale_modules/` (personal monorepo convention)
+4. CLI wrappers for subtree ops: Post-MVP backlog
 
-All release reviews must be documented using the [standard release review template](./release_review_template.md). Release review documents should be created in `docs/releases/` following the naming convention `release-vX.XX.X-review.md`.
+**`quickscale_modules/` Convention:**
+- ❌ NOT generated by CLI
+- ✅ Optional local convention (personal monorepos)
+- ✅ Becomes PEP 420 namespace in Post-MVP (remove `__init__.py` before PyPI)
+- ✅ Use for patterns reused across 2+ projects
 
-This dual-template system ensures:
-- **Implementation documentation** captures what was built, test results, and validation
-- **Review documentation** captures quality assessment, compliance checks, and approval status
-
-**Key requirements for release implementation documentation:**
-- Use the template structure from [release_implementation_template.md](./release_implementation_template.md)
-- Follow naming convention: `release-vX.XX.X-implementation.md`
-- Include verifiable improvements with actual test output
-- Document all files created/changed
-- Provide validation commands that others can run
-- Explicitly state in-scope vs. out-of-scope items
-- Complete release checklist before marking as COMPLETE
-- Update roadmap to reflect completion status
-
-**Key requirements for release review documentation:**
-- Use the template structure from [release_review_template.md](./release_review_template.md)
-- Follow naming convention: `release-vX.XX.X-review.md`
-- Include comprehensive quality assessment with specific file:line references
-- Provide clear approval status and actionable recommendations
-
-**Example releases following this standard:**
-- [Release v0.52.0 Implementation](../releases/release-v0.52.0-implementation.md) - Project Foundation
-- [Release v0.53.1 Implementation](../releases/release-v0.53.1-implementation.md) - Core Django Templates
-
-This ensures consistency, traceability, and reproducibility across all QuickScale releases.
-
-### README.md Policy for Packages
-
-**Decision**: Sub-packages (quickscale_core, quickscale_cli, etc.) MUST NOT include README.md files.
-
-**Rationale**:
-- Avoids duplication and sync overhead with root README.md
-- Sub-packages are internal implementation details, not standalone distributions
-
-## MVP vs. Post-MVP Scope
-
-**CRITICAL CLARIFICATION**: This document describes both the **MVP implementation** (Phase 1) and the **target architecture** (Post-MVP). QuickScale follows a **"start simple, evolve organically"** strategy. For the narrative rationale behind this evolution, defer to the [strategic overview in quickscale.md](../overview/quickscale.md#evolution-strategy-personal-toolkit-first); this section focuses on the technical implications.
-
-### MVP Definition (clarification)
-
-To remove ambiguity across documentation, the project defines the term "MVP" as the cumulative set of releases from **v0.52** through **v1.0.0** that together deliver a production-ready personal toolkit. Early 0.52-0.55 releases are considered the "Foundation Phase" (incremental engineering steps that prepare the ground for the MVP). When other documents reference "Foundation" or "Phase 1 increments", they refer to the pre-MVP incremental releases (v0.52-v0.55). This file (`decisions.md`) remains the authoritative source for feature-inclusion decisions and is the tie-breaker if other docs disagree about whether a feature is in the MVP.
-
-Guidance summary:
-- "Foundation Phase" = v0.52 - v0.55 (incremental foundation work)
-- "MVP" = v0.56 - v1.0.0 (production-ready personal toolkit; cumulative)
-- Post-MVP = v1.1+ (module extraction, packaging, marketplace evolution)
-
-### **Strategic Evolution Path:**
-
-### **MVP (Phase 1) - Personal Toolkit First:**
-- ✅ **quickscale_core**: Core scaffolding, minimal utilities, git subtree integration
-- ✅ **quickscale_cli**: Simple CLI - just `quickscale init myapp` command
-- ✅ **Scaffolded starter**: Generates minimal Django starter project users own completely
- These requirements ensure QuickScale matches competitors on production-readiness while maintaining its unique composability advantage. See [competitive_analysis.md "What Must Be Incorporated"](../overview/competitive_analysis.md#what-quickscale-must-incorporate-from-competitors) for detailed analysis.
-- ✅ **Django settings inheritance**: Simple Python imports, no YAML config required
-- ✅ **Single starter template**: One way to create projects (no multiple templates)
-
-Note: The MVP CLI intentionally implements a single, ultra-simple command: `quickscale init <project>`. Helper wrapper commands for git-subtree workflows (for example `quickscale embed-core`, `quickscale update-core`, `quickscale sync-push`) are not required for the initial release and therefore are not part of the MVP CLI. Those helpers are deferred to the Post-MVP backlog and will only be reconsidered after the initial `quickscale init` release proves sustained manual demand from users who opt into embedding the core.
-
-**What MVP Generates:** See the [authoritative MVP structure diagram in scaffolding.md §3](./scaffolding.md#mvp-structure) for the full tree. The starter remains the standard Django layout with standalone settings by default.
-
-### Integration note: Personal Toolkit (git-subtree) ✅ {#integration-note-personal-toolkit-git-subtree}
-
-**This is the canonical Personal Toolkit documentation. Other documents reference this section.**
-
-The Personal Toolkit approach is the chosen MVP implementation strategy:
-1. Generate client projects from starter with `quickscale init`
-2. Optionally embed `quickscale_core` via Git subtree (ONLY MVP distribution mechanism)
-3. Extract reusable patterns into `quickscale_modules/` directory as they prove valuable across 2+ client projects (optional; NOT required for MVP)
-4. CLI wrapper commands remain a Post-MVP consideration; until introduced, rely on the documented manual subtree operations
-
-- **Module Extraction Clarification**:
-- ✅ **MVP (recommended default)**: `quickscale_modules/` is NOT required and should NOT be created as part of the generated starter. Extraction of reusable code into an explicit `quickscale_modules/` workspace directory is an optional, later-stage workflow that teams may adopt once they have ≥2 projects and a clear reusable pattern.
-- ✅ **MVP (advanced users)**: Teams that prefer a personal monorepo layout may create `quickscale_modules/` locally to organize extracted code; this is purely a local convention and is not part of the initial generated template.
-- ❌ **Post-MVP**: When packaging modules for community distribution, `quickscale_modules/` becomes a canonical place to organize packages and will follow PEP 420 namespace guidelines.
-- ❌ **Post-MVP**: Package modules for PyPI distribution and community sharing
-- ❌ **Post-MVP**: PEP 420 namespace packaging and version management
-
-The `quickscale_modules/` directory is a workspace convention for organizing YOUR reusable code, not a published package namespace in MVP.
-
-**Git Subtree Workflow (Manual Commands for MVP)**:
+**Git Subtree Commands (Manual - MVP):**
 ```bash
-# 1) Embed core into a client repo
+# Embed core
 git subtree add --prefix=quickscale https://github.com/Experto-AI/quickscale.git main --squash
 
-# 2) Pull updates from quickscale into client
+# Pull updates
 git subtree pull --prefix=quickscale https://github.com/Experto-AI/quickscale.git main --squash
 
-# 3) Push client improvements back to quickscale
+# Push improvements back
 git subtree push --prefix=quickscale https://github.com/Experto-AI/quickscale.git feature-branch
-
-# 4) Extraction pattern (move client code to quickscale_modules/)
-mkdir -p quickscale_modules/myfeature
-cp -r ../client_acme/acme/myfeature.py quickscale_modules/myfeature/
-git add quickscale_modules/myfeature && git commit -m "chore(modules): extract myfeature"
 ```
 
-**Note**: CLI wrapper commands (`quickscale embed-core`, `quickscale update-core`, `quickscale sync-push`) are deferred to Post-MVP. Until implemented, use the manual commands above.
-
-### Module Extraction Workflow (Advanced Users)
-
-Intent: This section documents the recommended workflow for extracting reusable code into a `quickscale_modules/` workspace. It is an advanced, optional workflow for maintainers and teams that manage multiple client projects. It is NOT part of the starter generated by `quickscale init`.
-
-Key rules:
-- The generated project (output of `quickscale init`) does NOT include a `quickscale_modules/` directory by default.
-- `quickscale_modules/` is a workspace/monorepo convention used by maintainers (official modules) and by advanced users (personal monorepo) to organize reusable Django apps.
-- During Post‑MVP packaging, `quickscale_modules/` will be a PEP 420 implicit namespace root (no `__init__.py`). A temporary `__init__.py` may be used locally during MVP development but MUST be removed prior to publishing packages.
-
-When to extract:
-- Extract when a feature is reused across 2+ projects or when you need independent versioning and testing.
-
-Canonical commands (MVP manual git subtree patterns):
-```bash
-# Add core into a client repo
-git subtree add --prefix=quickscale https://github.com/Experto-AI/quickscale.git main --squash
-
-# Pull updates from quickscale into client
-git subtree pull --prefix=quickscale https://github.com/Experto-AI/quickscale.git main --squash
-
-# Push client improvements back to quickscale (when appropriate)
-git subtree push --prefix=path/to/extracted/module origin main
-```
-
-Migration checklist (MVP → Post‑MVP packaging):
-- Remove `quickscale_modules/__init__.py` and `quickscale_themes/__init__.py` (PEP 420 namespace)
-- Ensure each module has a `pyproject.toml` and uses `find_namespace_packages()`
-- Validate installs by creating a wheel and installing it in an isolated virtual environment (Poetry-managed virtualenvs are recommended)
-- Add CI checks to fail builds where a namespace `__init__.py` remains prior to publish
 
 
+**Post-MVP (v1.1+):**
+- 📦 `quickscale_modules/*`: PyPI packages (auth, payments, billing, admin)
+- 📦 `quickscale_themes/*`: PyPI packages (theme starters)
+- 📦 YAML configuration system (declarative project definition)
+- 📦 Marketplace ecosystem (commercial extensions)
 
-### **Post-MVP (Phases 2+) - Organic Evolution:**
-- ❌ **quickscale_modules/***: Packaged backend modules (auth, payments, billing, etc.)
-  - Built as needed from real client projects (extraction pattern)
-  - Distributed via git subtree initially, PyPI later for commercial use
-- ❌ **quickscale_themes/***: Packaged theme applications
-  - Emerge from successful client project patterns
-- ❌ **YAML configuration**: Optional declarative config system (TBD if needed)
-- ❌ **PyPI distribution**: For commercial modules, subscriptions, external agencies
-- ❌ **Marketplace ecosystem**: Community-driven package discovery
+**Structure:** See [scaffolding.md §4](./scaffolding.md#post-mvp-structure)
 
-**Post-MVP Package Structure (When Ready):** Refer to the [detailed post-MVP layout in scaffolding.md §4](./scaffolding.md#post-mvp-structure) for the canonical directory tree and packaging notes. Key enforcement rules are summarised in the MVP feature matrix and the naming matrix inside scaffolding.md §6.
-
-Implementation policy (MVP vs Post-MVP):
-- `quickscale_core` remains a regular Python package and MUST include an `__init__.py`.
-- `quickscale_modules` and `quickscale_themes` transition to PEP 420 implicit namespace roots when published; if you add a temporary `__init__.py` during MVP experimentation, remove it before distributing packages.
-
-Packaging / generated project rule (explicit):
-See the "Packaging / generated-project policy (authoritative)" section later in this file for the canonical packaging decision (Poetry / `pyproject.toml` for generated projects and packages).
+**Packaging Rules:**
+- ✅ `quickscale_core`: Regular package (has `__init__.py`)
+- ✅ `quickscale_modules/`, `quickscale_themes/`: PEP 420 namespaces (NO `__init__.py` at root)
+- ✅ Poetry + pyproject.toml for ALL packages
+- ✅ `find_namespace_packages()` for modules/themes (Post-MVP)
 
 ## MVP Feature Matrix (authoritative)
 
@@ -269,645 +171,310 @@ Other documents (README.md, roadmap.md, scaffolding.md, commercial.md) MUST refe
 | PyPI / private-registry distribution for commercial modules | OUT (Post-MVP) | Commercial distribution is Post-MVP (see commercial.md). |
 | Multiple starter templates / `--template` flag | OUT (Post-MVP) | Single starter only for MVP. |
 
-Notes:
-- This table is authoritative for release planning and documentation. If any document needs to show an example layout or convenience (e.g., `quickscale_modules/` appearing in a monorepo example), it must note that the item is "optional/personal-monorepo convenience" and point readers to this matrix for MVP status.
+**Notes:**
+- This table is authoritative for release planning
+- Production foundations (Docker, PostgreSQL, pytest, CI/CD) are P0 - table stakes for professional tool
+- See [competitive_analysis.md](../overview/competitive_analysis.md#what-quickscale-must-incorporate-from-competitors)
 
-**Competitive Rationale for Production-Ready Foundations**:
-The production-ready foundations (Docker, PostgreSQL, pytest, CI/CD, etc.) are classified as **P0 - Critical for MVP Viability** based on competitive analysis. Every successful Django boilerplate (SaaS Pegasus, Cookiecutter, Apptension) provides these as table stakes. Without them, QuickScale would be perceived as a toy project rather than a professional tool suitable for agency work. These requirements ensure QuickScale matches competitors on production-readiness while maintaining its unique composability advantage. See [competitive_analysis.md "What Must Be Incorporated"](../overview/competitive_analysis.md#what-quickscale-must-incorporate-from-competitors) for detailed analysis.
+## Authoritative Policies
 
-Authoritative policy (tie-breakers)
-----------------------------------
+**Settings Inheritance:**
+- ✅ MVP: Standalone `settings.py` (no automatic inheritance from quickscale_core)
+- ✅ Optional: Manual inheritance after git subtree embed (advanced users)
+- ❌ NO automatic settings inheritance in MVP
 
-- **Settings inheritance (authoritative)**: The MVP generator creates a standalone `settings.py` by default and does **not** scaffold automatic inheritance from `quickscale_core.settings`. Teams that manually embed `quickscale_core` into a generated project via git subtree may opt-in to inherit from `quickscale_core.settings` by editing their generated `settings.py`. This is an advanced, manual pattern and is intentionally not automatic in the MVP. decisions.md is the canonical location for this policy; other documents must link to this section for tie-breakers.
+**Packaging (All QuickScale Packages):**
+- ✅ Poetry package manager
+- ✅ pyproject.toml + poetry.lock (required)
+- ✅ src/ layout (prevents accidental imports)
+- ❌ NO requirements.txt generation
+- ❌ NO setup.py files
 
-- **Packaging / generated-project policy (authoritative)**: Generated user projects (the starters created by `quickscale init`) use `pyproject.toml` and Poetry as the canonical packaging and dependency management tool for both MVP and Post‑MVP.
+**Development Tools:**
+- ✅ Ruff: Format + lint (replaces Black + Flake8)
+- ✅ MyPy: Type checking (strict mode)
+- ✅ pytest + pytest-django: Testing
+- ✅ pytest-cov: Coverage reporting
+- ❌ NO Black (use Ruff format)
+- ❌ NO Flake8 (use Ruff check)
 
-- **Packaging / generated-project policy (authoritative)**: Generated starters created by `quickscale init` MUST include a `pyproject.toml` and a `poetry.lock`. Poetry is the canonical packaging tool for MVP and Post‑MVP; the generator does not emit a `requirements.txt` by default.
+### CLI Commands {#cli-command-matrix}
 
-- QuickScale first-party packages (core, CLI, modules) MUST include `pyproject.toml` when prepared for distribution. Rationale: Poetry + lockfiles enable deterministic installs, align with PEP 517/518/621, and simplify later packaging for PyPI.
+**MVP (v0.56-v1.0.0):**
+- ✅ `quickscale init <project>` - ONLY command (no flags, single starter template)
 
-- **Development tools policy (authoritative)**: 
-  - Poetry is the canonical package manager.
-  - MyPy is the canonical type checker with strict settings.
-  - Ruff is the canonical formatter and linter (replaces Black and Flake8).
+**Post-MVP (Planned):**
+- 📋 `quickscale embed-core` - Wrapper for git subtree add
+- 📋 `quickscale update-core` - Wrapper for git subtree pull
+- 📋 `quickscale sync-push` - Wrapper for git subtree push
+- 📋 `quickscale init --template=<name>` - Multiple template support
+- ❌ `quickscale validate` - YAML configuration validation (requires config system)
+- ❌ `quickscale generate` - Generate from config (requires config system)
 
-### CLI Command Reference Matrix {#cli-command-matrix}
+## Document Responsibilities
 
-| Command | MVP Status | Target Phase | Description | Notes |
-|---------|------------|--------------|-------------|-------|
-| `quickscale embed-core` | 📋 PLANNED | v1.5 / v2.0 (conditional) | Embed `quickscale_core` via git subtree | Implement if manual workflow proves painful; v1.5 = lightweight helpers, v2.0 = richer orchestration/automation depending on usage metrics |
-| `quickscale update-core` | 📋 PLANNED | v1.5 / v2.0 (conditional) | Pull git subtree updates into client project | Consider bundling with embed-core decision; implement if manual workflow proves painful |
-| `quickscale sync-push` | 📋 PLANNED | v1.5 / v2.0 (conditional) | Push improvements back to QuickScale repo | Automates documented manual subtree push; conditional on usage metrics |
-| `quickscale validate` | ❌ POST-MVP | 2+ | Validate YAML/JSON configuration | Depends on configuration system approval |
-| `quickscale generate` | ❌ POST-MVP | 2+ | Generate project from configuration | Builds on declarative config capabilities |
+- **decisions.md**: Technical decisions, MVP matrix, tie-breakers (authoritative)
+- **roadmap.md**: Timeline, phases, tasks
+- **scaffolding.md**: Layout examples
+- **README.md**: User guide, glossary
+- **commercial.md**: Commercial models (Post-MVP)
 
-The CLI remains intentionally minimal. This matrix tracks **pending and planned** commands; implemented commands (currently just `quickscale init`) are documented in the user-facing CLI reference to avoid duplication.
+**Rule:** Update decisions.md FIRST when changing scope.
 
-## Document responsibilities (short)
+## Testing Standards
 
-To avoid overlap and conflicting statements across files, the repository follows these responsibilities:
-- `decisions.md`: authoritative technical decisions, MVP feature matrix, package layout rules, and any tie-breakers. Use this file as the source of truth for "what" and "how" decisions.
-- `roadmap.md`: timeline, phases, tasks, and acceptance criteria. Roadmap items should reference decisions.md for technical specifics.
-- `scaffolding.md`: example layouts and scaffolding guidance. Example blocks must be annotated as "example / optional" when they show conveniences that are not required for MVP.
-- `README.md`: user-facing getting-started and high-level summary. It also carries the newcomer documentation map and canonical glossary, so keep that section in sync with this responsibility list and ensure it links back here for authoritative scope.
-- `commercial.md`: commercial models and Post-MVP guidance only; avoid asserting MVP behavior.
+**Coverage Targets:**
+- ✅ 70% minimum: `quickscale_core`, `quickscale_cli`, modules, themes
+- ✅ CI fails if below threshold
+- ✅ Coverage reports on every CI run
 
-**Terminology**: For canonical terms (MVP, Phase 1, Post-MVP, etc.), refer to the [Glossary in README.md](../README.md#glossary) for standardized usage across all documentation.
+**Test Requirements:**
+- ✅ New features: Tests required
+- ✅ Bug fixes: Regression tests required
+- ✅ CLI: Integration tests
+- ✅ Business logic: Unit tests
+- ✅ Critical paths: E2E tests
 
-Maintainers should update `decisions.md` first when changing technical scope; other documents must be updated to reference the new decisions.
+**Test Stack:**
+- ✅ pytest + pytest-django: Test framework
+- ✅ factory_boy: Test fixtures
+- ✅ pytest-cov: Coverage measurement
+- ✅ GitHub Actions: CI/CD
 
-## Testing Standards (Authoritative)
-
-### Coverage Targets
-
-All QuickScale packages and modules must meet minimum test coverage thresholds:
-
-- **quickscale_core**: Minimum 70% test coverage
-- **quickscale_cli**: Minimum 70% test coverage
-- **quickscale_modules/***: Minimum 70% test coverage per module (Post-MVP)
-- **quickscale_themes/***: Minimum 70% test coverage per theme (Post-MVP)
-
-### Testing Requirements
-
-- All new features MUST include tests
-- Bug fixes MUST include regression tests
-- Integration tests for CLI workflows
-- Unit tests for business logic
-- End-to-end tests for critical user paths
-
-### Test Infrastructure
-
-- **pytest** with pytest-django for Django components
-- **factory_boy** for test data generation
-- **Coverage measured** with pytest-cov
-- **CI fails** if coverage drops below targets
-- **Coverage reports** generated on each CI run
-
-### Generated Project Testing
-
-Generated projects (`quickscale init myapp`) include:
-- Sample test demonstrating pytest-django patterns
-- factory_boy configuration for model factories
-- pytest.ini configuration
-- GitHub Actions CI workflow with coverage reporting
-
-**When reading this document**: Sections describing module packages, theme packages, or complex configuration schemas refer to the **target architecture (Post-MVP)**, not the MVP implementation. The MVP is deliberately minimal - a personal toolkit that can evolve.
+**Generated Projects Include:**
+- Sample pytest-django test (demonstrates patterns)
+- factory_boy configuration (for model factories)
+- pytest.ini (test configuration)
+- .github/workflows/ci.yml (automated testing)
 
 
-High-level decisions (what)
----------------------------
+## Architecture (Post-MVP Vision)
 
-**ARCHITECTURAL DECISION: Library-Style Backend Modules (Post-MVP Vision)**
+**Library-Style Backend Modules:**
+- ✅ Backend Modules: Reusable packages (auth, payments, billing, admin)
+- ✅ Themes: Starting point applications (customize for business needs)
+- ✅ Frontends: Directory-based presentation layer
+- ✅ Built on proven Django foundations (django-allauth, dj-stripe, etc.)
 
-The **Library-Style Backend Modules** architecture for development acceleration and customization.
+**MVP Status:**
+- ✅ `quickscale_core`: Scaffolding, utilities
+- ✅ Directory-based frontends: Scaffolded templates
+- ❌ `quickscale_modules/*`: Post-MVP only
+- ❌ `quickscale_themes/*`: Post-MVP only
 
-ℹ️ **Post-MVP Architecture Vision** – the details below outline future phases, not current MVP scope.
+**See:** [scaffolding.md §2-3](./scaffolding.md#mvp-structure) for layouts
 
-The architecture described below represents the **target end-state (Post-MVP)**. For MVP implementation status:
-- ✅ **quickscale_core**: Implemented in Phase 1
-- ✅ **Directory-based frontends**: Implemented in Phase 1 (scaffolded files)
-- ❌ **quickscale_modules/***: Post-MVP (Phase 2+) - NOT in MVP
-- ❌ **quickscale_themes/***: Post-MVP (Phase 2+) - NOT in MVP
-- ❌ **Module/theme packages**: Post-MVP - MVP uses scaffolding only
+### Module Boundaries (Post-MVP)
 
-**Core Architecture Concept (Target State):**
-- **Backend Modules** = Built on proven Django foundations (dj-stripe, django-allauth, etc.) providing reusable functionality like backup, analytics, payments
-- **Starting Point Themes** = Foundation Django applications that developers customize for their specific business needs
-- **Directory-Based Frontends** = Custom frontend development via directory structure
+**Admin Module (`quickscale_modules.admin`):**
+- ✅ Enhanced Django admin interface
+- ✅ System configuration, feature flags
+- ✅ Monitoring dashboards
+- ✅ Audit logging
+- ❌ NOT authentication/authorization (use `auth` module)
 
-**QuickScale as Development Foundation (Target State):**
-QuickScale provides building blocks and acceleration tools, not complete business solutions:
-- **Foundation (Core)**: Project scaffolding, configuration system, extension points, common utilities (hook system deferred to later phase)
-- **Backend Modules** (Post-MVP): Built on proven Django foundations (django-allauth for auth, enhanced Django admin, dj-stripe, etc.) providing reusable functionality packages such as auth, admin, payments, billing, notifications, backup, analytics
-- **Themes** (Post-MVP): Starting points that require customization for specific business needs
-- **Frontends** (MVP): Directory-based presentation layer for customization via scaffolded templates
+**Auth Module (`quickscale_modules.auth`):**
+- ✅ User identity, authentication, authorization
+- ✅ User registration, profile management
+- ❌ NOT admin interface enhancements
 
-**Target Architecture Structure (Post-MVP):** The full tree lives in [scaffolding.md §2](./scaffolding.md#2-monorepo-target-layout-post-mvp-end-state). This section focuses on the architectural rationale; see scaffolding.md for the canonical layout.
+**Dependency Injection (Testing Only):**
+- ✅ Production: Direct imports
+- ✅ Tests: Constructor injection for mocking
+- ❌ No DI frameworks or service registries
 
-MVP Architecture Structure (Phase 1): refer to [scaffolding.md §3](./scaffolding.md#mvp-structure) for the generated package tree. decisions.md records the policies that guide that layout rather than duplicating the tree.
-
-**Key Advantages of Library-Style Architecture:**
-- ✅ **Familiar Mental Model**: Like Python's ecosystem (import what you need)
-- ✅ **Maximum Reusability**: Modules work across all themes and custom applications
-- ✅ **Clear Separation**: Modules = libraries, Themes = starting points, Frontends = presentations
-- ✅ **Development Acceleration**: Start with foundations, customize for specific needs
-- ✅ **Developer Specialization**: Module developers vs Theme maintainers vs Application developers
-- ✅ **Composability**: Applications pick exactly the modules they need and customize themes
-
-**Community Specialization Model:**
-- **Module Developers**: Focus on integrating proven Django apps with QuickScale patterns
-  - Authentication experts integrate django-allauth into `quickscale_modules/auth`
-  - Admin interface experts enhance Django admin in `quickscale_modules/admin`
-  - Payment processing experts integrate dj-stripe into `quickscale_modules/payments`
-  - Email experts integrate django-anymail into `quickscale_modules/notifications`
-  - (Future) Analytics experts build `quickscale_modules/analytics`
-- **Theme Maintainers**: Focus on foundational patterns and examples
-  - Provide starting point themes like `starter` and `todo`
-  - Maintain example implementations showing best practices
-- **Application Developers**: Focus on building custom business applications
-  - Use starting point themes as foundations
-  - Customize models, business logic, and presentation for their specific needs
-  - Integrate modules to add functionality
-
-### Admin Module Scope Definition
-
-**Status**: Defined for Post-MVP implementation
-
-The `quickscale_modules.admin` module provides enhanced Django admin capabilities with custom views, system configuration, monitoring dashboards, and audit logging.
-
-**Admin Module IS:**
-- ✅ **Enhanced Django Admin Interface**: Custom admin views, improved UX, bulk actions
-- ✅ **System Configuration**: Settings management, feature flags, environment configuration
-- ✅ **Monitoring Dashboards**: System health metrics, performance monitoring, application insights
-- ✅ **Audit Logging**: Activity tracking, change history, compliance logging
-- ✅ **Admin Workflows**: Custom admin actions, batch operations, data management tools
-
-**Admin Module IS NOT:**
-- ❌ **User Authentication**: Authentication, login/logout, password management (belongs in `quickscale_modules.auth`)
-- ❌ **User Management**: User registration, profile management, permissions (belongs in `quickscale_modules.auth`)
-- ❌ **Authorization**: Role-based access control, permissions (belongs in `quickscale_modules.auth`)
-
-**Clear Module Boundaries:**
-- **auth module**: Handles user identity, authentication, authorization, and user-facing account management
-- **admin module**: Handles administrative interface enhancements, system configuration, and operational tools
-
-**Post-MVP Implementation Notes:**
-- Built on Django's admin framework with custom ModelAdmin classes and views
-- Provides reusable admin mixins and utilities for common patterns
-- Integrates with audit logging for compliance and security
-- Extensible through standard Django admin customization patterns
-
-**Implementation Challenges & Mitigations:**
-- **API Compatibility**: Modules need stable APIs → Semantic versioning, clear API documentation, compatibility matrices
-- **Integration Complexity**: Themes integrating multiple modules → Standard interfaces, integration guides, example implementations  
-- **Documentation Overhead**: Each module needs docs → Documentation templates, automated API docs, community examples
-
-6. Testing Strategy (Unified DI Policy)
-   - Production code uses direct imports of services (no service container / registry).
-   - Tests MAY pass alternative implementations (constructor/function parameter injection) for isolation.
-   - Keep injection shallow: only boundary collaborators (payment gateway, billing calculator, notification sender).
-   - No global mutable registries. No runtime plugin mutation of core.
-   - Example pattern (minimal):
-     ```python
-     class OrderProcessor:
-         def __init__(self, payment_service=None):
-             from quickscale_modules.payments import services as payment_services
-             self.payment_service = payment_service or payment_services.DefaultPaymentService()
-     ```
-
-**ARCHITECTURAL DECISION: Configuration-Driven Project Definition**
-
-The **Configuration-Driven Alternative** approach for project definition and assembly.
-
-ℹ️ **Configuration status**: YAML/JSON-driven project definition is Post-MVP vision work. Phase 1 sticks with plain Django settings files; any schemas shown here are illustrative only.
-
-**MVP Approach (Phase 1):**
-- Projects use standard Django settings.py (no inheritance, no YAML)
-- Settings inheritance from `quickscale_core.settings` is Post-MVP (TBD if needed)
-- No configuration files or schemas required
-- Generated projects are standalone and fully owned by user
-
-**Post-MVP Evolution (Phase 2+):**
-- **Declarative Configuration** = YAML/JSON files define project structure and features (if proven useful)
-- Evaluate if configuration layer adds value based on MVP usage
-- **Code Generation** = CLI generates Django code from configuration specifications
-- **Version Control Integration** = Configuration files tracked in Git for change management
-- **Schema Validation** = Prevent invalid configurations through schema validation
-
-**Post-MVP illustrative schema (v1.0 example — NOT used in MVP)**
-
-The snippet below is an illustrative, minimal configuration schema provided as a Post-MVP design example. It is included for planning and compatibility discussions only; the MVP does not read or validate YAML/JSON configuration files.
-
-```yaml
-schema_version: 1
-project:
-  name: myapp
-  version: 1.0.0
-
-# NOTE (Post-MVP example): In this illustrative example the 'theme' key would refer to a
-# packaged theme. In the MVP this field is ignored and packaged themes are not loaded.
-theme: starter
-
-# Python inheritance entrypoint (illustrative)
-backend_extensions: myapp.extensions
-
-# Directory-based frontend only in MVP; Post-MVP examples may extend this
-frontend:
-  source: ./custom_frontend/
-  variant: default
+```python
+class OrderProcessor:
+    def __init__(self, payment_service=None):
+        from quickscale_modules.payments import services
+        self.payment_service = payment_service or services.DefaultPaymentService()
 ```
 
-Schema notes (illustrative / Post-MVP compatibility guidance):
-- `modules` field: NOT supported in MVP (would be a validation error if enforced in MVP)
-- `customizations` field: NOT supported in MVP
-- `theme` field: Reserved for Post-MVP use; in MVP this has no runtime effect
-- `frontend`: MVP only supports a simple directory-based frontend; Post-MVP schemas may extend this
+### Configuration (Post-MVP)
 
-**Post-MVP Configuration Schema v2.0 (Target Architecture):**
+**MVP:**
+- ✅ Standard Django `settings.py` (no YAML)
+- ✅ No configuration files
+- ✅ Standalone projects
+- ❌ NO declarative configuration
+
+**Post-MVP (Illustrative - NOT Implemented):**
 ```yaml
+# Example only - NOT used in MVP
 schema_version: 2
-project:
-  name: mystore
-  version: 1.0.0
-
-# Post-MVP: Actual theme package loading
+project: {name: mystore, version: 1.0.0}
 theme: starter
-
-# Python inheritance entrypoint
 backend_extensions: myapp.extensions
-
-# Post-MVP: Module system with package loading
 modules:
-  payments:
-    provider: stripe   # charge execution
-  billing:
-    provider: stripe   # subscription & entitlement logic
-  # notifications: { provider: sendgrid }
-  # backup: { provider: aws, schedule: daily }
-
-frontend:
-  source: ./custom_frontend/
-  variant: default
-
-# Post-MVP: Advanced customization support
-customizations:
-  models:
-    - name: Product
-      fields:
-        - { name: name, type: string }
-        - { name: price, type: decimal }
-  business_rules:
-    - "Products require approval before listing"
-    - "Orders over $1000 need manager approval"
+  payments: {provider: stripe}
+  billing: {provider: stripe}
+frontend: {source: ./custom_frontend/, variant: default}
 ```
 
-**Deprecated fields/structures** (all versions): `features`, `components`, `technologies`, `primary`, or any `frontend` keys outside `source` and `variant`. These MUST NOT appear in configs (validation error).
+**CLI (Post-MVP Ideas):**
+- `quickscale validate` - Validate config
+- `quickscale generate` - Generate from config
+- ❌ NOT in MVP
 
-**Key Advantages of Configuration-Driven Architecture:**
-- ✅ **Non-Developer Accessibility**: Business users can modify project configurations without coding
-- ✅ **Version Control Friendly**: Configuration changes tracked and reviewable in Git
-- ✅ **Automated CI/CD**: Deployment pipelines can process configuration files automatically
-- ✅ **Self-Documenting**: Configuration serves as living project documentation
-- ✅ **Schema Validation**: Prevents invalid configurations through automated validation
-- ✅ **Reproducible Deployments**: Exact project recreation from configuration files
+### Distribution Strategy
 
-**CLI Integration Pattern (Post-MVP illustrative):**
-```bash
-# Interactive configuration creation (Post-MVP idea / illustrative only)
-quickscale init --interactive        # (Post-MVP idea) Creates quickscale.yml through guided wizard
-quickscale validate                  # (Post-MVP idea) Validates configuration against schemas
-quickscale generate                  # (Post-MVP idea) Generates Django code from configuration
-quickscale preview                   # (Post-MVP idea) Shows what will be generated without creating files
-quickscale deploy --env=staging      # (Post-MVP idea) Deploys based on configuration + environment
-```
+**MVP - Git Subtree:**
+- ✅ Primary distribution mechanism
+- ✅ CLI: `quickscale init myapp` (single command)
+- ✅ Manual git subtree commands (documented)
+- ✅ No package registries, offline development
+- ❌ No CLI wrapper helpers (`embed-core`, `update-core`, `sync-push`) - Post-MVP
 
-**Implementation Strategy:**
-- Configuration schema definitions for validation
-- Template engine for code generation from configurations
-- Environment-specific configuration overrides
-- Migration system for configuration format changes
-- Integration with existing Library-Style Backend Modules architecture
+**Post-MVP - PyPI:**
+- 📦 Optional for modules/themes only
+- 📦 NOT for core (stays git-based)
+- 📦 For commercial extensions, marketplace
 
-**ARCHITECTURAL DECISION: Git Subtree Distribution**
+**Backward Compatibility:**
+- ❌ Intentionally breaking from legacy QuickScale
+- ❌ No automated migration
 
-The **Git Subtree Distribution** decision establishes git subtree as the mechanism for distributing and managing shared code across multiple client projects.
+### Backend Extensions & Frontends {#backend-extensions-policy}
 
-Git Subtree Distribution Concept:
-- **Git Subtree Operations**: Git subtree (ONLY MVP distribution mechanism) is the canonical workflow for sharing code; the document provides examples and guidance for users in the MVP.
-- **CLI Command Abstraction (MVP scope)**: Git subtree is the primary distribution mechanism for the MVP. Lightweight CLI wrapper commands to perform common embed/update/sync workflows (for example: `quickscale embed-core`, `quickscale update-core`, `quickscale sync-push`) are deferred to Post-MVP evaluation. Until those helpers are implemented, the documented manual `git subtree` commands are the supported workflow for advanced users.
-- **Monorepo Source of Truth**: All shared code maintained in the quickscale monorepo with proper versioning
-- **Automated Dependency Management (MVP)**: CLI wrapper commands for subtree operations remain on the Post-MVP backlog and are not included in the initial `quickscale init` release. More advanced automation (batch updates, centralized orchestration, conflict heuristics) may be expanded Post‑MVP.
+**MVP Backend:**
+- ❌ NO `backend_extensions.py` generated
+- ✅ Add local Django app for customizations
+- ✅ Use `AppConfig.ready()` for wiring
 
-# CLI Command Structure (MVP vs Post-MVP):
-
-MVP (authoritative):
-```bash
-# Ultra-minimal CLI surface (single command, no flags)
-quickscale init myapp
-```
-
-Notes:
-- The MVP intentionally exposes a single, simple entrypoint: `quickscale init <project_name>`. No flags or template variants are part of the MVP contract.
-- Wrapper helpers to simplify git-subtree workflows (for example: `quickscale embed-core`, `quickscale update-core`, `quickscale sync-push`) are a Post-MVP evaluation item. They MUST preserve the documented manual `git subtree` commands if introduced and must not change the MVP CLI's minimal surface.
-
-Post-MVP (illustrative ideas — NOT part of MVP):
-```bash
-# Interactive or advanced commands considered only for Post-MVP
-quickscale init --interactive        # (Post-MVP idea) create quickscale.yml through guided wizard
-quickscale validate                  # (Post-MVP idea) validate configuration against schemas
-quickscale generate                  # (Post-MVP idea) generate Django code from configuration
-quickscale preview                   # (Post-MVP idea) show what will be generated without creating files
-quickscale deploy --env=staging      # (Post-MVP idea) deploy based on configuration + environment
-```
-
-Implementation note: keep the MVP CLI small. Any advanced flag/command must be introduced later with clear migration notes and tests.
-
-**Key Advantages of Git Subtree Distribution:**
-- ✅ **Zero External Dependencies**: No package registries or artifact repositories required
-- ✅ **Version Control Transparency**: All code changes tracked in git history with proper attribution
-- ✅ **Offline Development**: No network dependency for development after initial setup
-- ✅ **Conflict Resolution**: Standard git merge tools handle code conflicts
-- ✅ **Bidirectional Sync**: Changes can flow from monorepo to projects and back
-- ✅ **Selective Updates**: Update individual components without affecting others
-
-**MVP Distribution Guidance**
-- For the MVP, git subtree is the default distribution mechanism for embedding `quickscale_core` and the minimal starter theme into client projects. This keeps the developer workflow simple and avoids early reliance on package indices.
-- Publishing modules/themes to package registries (pip) for private or subscription distribution is considered Post-MVP and will be designed after initial feedback from the community and commercial users.
-
-**Backward compatibility stance**
-- The new QuickScale architecture is intentionally breaking. Automated migration of existing QuickScale projects is out-of-scope for the MVP. The project provides legacy analysis and extraction guidance to help maintainers manually migrate useful assets where feasible.
-
-**Distribution Architecture:**
-- **Monorepo Structure**: `quickscale_core/`, `quickscale_modules/`, `quickscale_themes/`, `quickscale_cli/`
-- **Project Integration**: Each client project contains git subtrees for shared components
-- **Version Management**: Semantic versioning with git tags for stable releases
-- **Branch Strategy**: `main` for stable releases, feature branches for development
-
-**Implementation Requirements:**
-- For MVP: document manual git subtree workflows clearly and provide examples for maintainers and client projects.
-- CLI helper commands for git-subtree workflows are NOT included in the initial MVP `quickscale init` release; they remain on the Post-MVP backlog. If introduced later, those helpers must include proper error handling, clear conflict-resolution guidance, and automated tests in CI/CD. Post-MVP enhancements may extend automation to batch or centralized workflows. Documentation must explain failure modes and recovery steps.
-
-**Distribution Strategy: MVP vs. Post-MVP**
-
-**AUTHORITATIVE STATEMENT ON DISTRIBUTION:**
-
-QuickScale uses different distribution strategies for different phases:
-
-**MVP (Phase 1) - Git Subtree Distribution:**
-- ✅ **Primary mechanism**: Git subtree for embedding quickscale_core into client projects
-- ✅ **CLI commands (MVP)**: `quickscale init` is the single CLI command included in the initial release. Lightweight wrapper commands for subtree workflows (for example `quickscale embed-core`, `quickscale update-core`, `quickscale sync-push`) are deferred to Post-MVP and are NOT part of the initial `init` release. Post-MVP may add further convenience flags and batch automation.
-- ✅ **Benefits**: No package registry dependencies, offline development, simple workflows
-- ✅ **Use cases**: Solo developers, small agencies, rapid iteration
-- ❌ **Not using**: PyPI, pip packages, package registries (for core distribution)
-
-**Post-MVP (Phase 3:) - Package Registry Distribution:**
-- 📦 **Additional option**: PyPI publishing for modules and themes
-- 📦 **Use cases**: Commercial extensions, subscription models, marketplace ecosystem
-- 📦 **Benefits**: Version management, dependency resolution, wider distribution
-- 📦 **Scope**: Modules and themes only, NOT core (core stays git-based)
-
-**Why Git Subtree for MVP:**
-- No external dependencies for distribution
-- Simple developer workflow
-- Proven pattern for code sharing
-- Aligns with solo developer/agency use cases
-- Faster iteration without version bumps
-
-**Why Package Registry for Post-MVP:**
-- Commercial extension monetization (see commercial.md)
-- Community marketplace support
-- Standard dependency management for extensions
-- Optional (git subtree remains supported)
-
-**ARCHITECTURAL DECISION: Backend Extension & Frontend Development (Post‑MVP)** {#backend-extensions-policy}
-
-The **Backend Extension & Frontend Development** decision describes the long‑term, Post‑MVP pattern for simple project customization using standard Django patterns. For the MVP we keep the scaffolding minimal and avoid generating runtime extension files; the extension pattern below is targeted at Post‑MVP when module/theme packaging and optional generation facilities are introduced.
-
-**Backend Extension Pattern (Post‑MVP):**
-- Themes provide inheritance‑friendly base classes (models, services, forms).
-- Projects MAY use `backend_extensions.py` for customizations via Python inheritance in Post‑MVP toolchains (generators or templates).
-- Call `super()` in extensions for compatibility with theme updates.
-
-**Frontend Development Pattern (MVP & Post‑MVP):**
-- Directory‑based frontends (`frontend.source`) are supported in the MVP for local development and customization; richer tooling and optional generation are Post‑MVP.
-- Basic variant support (MVP: simple folder variants) maps to `variants/<name>/` folders for different UX styles.
-
-**Configuration Rules (MVP scope):**
-- `frontend` accepts only `source` and `variant` keys in MVP scope.
-- `backend_extensions.py` is a Post‑MVP convention and is not automatically generated by the MVP CLI. Projects may add a `backend_extensions.py` manually if desired; Post‑MVP tooling may optionally scaffold/import it.
-- Schema validation provides clear errors for missing directories or configuration (Post‑MVP schema tooling).
-
-### Backend customization (MVP decision)
-
-Decision: The MVP does NOT scaffold a `backend_extensions.py` file. Projects own backend customizations; the recommended, idiomatic pattern is to add a local app (e.g. `client_extensions`) and perform startup wiring in an `AppConfig.ready()` method (idempotent registration).
-
-Post‑MVP: tooling may optionally provide scaffolds or helpers; any contract will be recorded here in decisions.md.
-
-**Implementation Notes:**
-- MVP: The CLI and scaffold produce a minimal Django project and optional `custom_frontend/` directory. The MVP intentionally does NOT generate `backend_extensions.py` automatically. This avoids regeneration risks and keeps the generated project fully owned by the user.
-- Post‑MVP: When module and theme packaging is introduced, the scaffolding may optionally generate `backend_extensions.py` templates or helpers as part of richer project generation flows.
-
-*Illustrative Backend Extension Pattern (Post‑MVP):* (Commercial licensing integrations expand on this pattern in [`commercial.md`](../overview/commercial.md#subscription-based-repository-implementation).)
+**Post-MVP Pattern (Illustrative):**
 ```python
-# Example: illustrative backend_extensions.py (Post‑MVP)
-from quickscale_themes.starter import models as starter_models
-from quickscale_themes.starter import business as starter_business
-
-class ExtendedUser(starter_models.User):
-  """Extended user model with custom fields"""
-  department = models.CharField(max_length=100)
-    
-class ExtendedBusinessLogic(starter_business.StarterBusiness):
-  """Extended business logic with custom rules"""
-  def process_order(self, order):
-    # Custom business logic
-    result = super().process_order(order)
-    # Additional custom processing
-    return result
+# backend_extensions.py - NOT in MVP
+from quickscale_themes.starter import models
+class ExtendedUser(models.User):
+    department = models.CharField(max_length=100)
 ```
 
-*Directory‑Based Frontend Pattern (MVP illustrative):* Refer to the concise starter tree in [scaffolding.md §5](./scaffolding.md#5-generated-project-output) for the canonical layout. This section only records the decision that `custom_frontend/` remains optional in MVP while richer tooling is deferred.
+**MVP Frontend:**
+- ✅ Optional `custom_frontend/` directory
+- ✅ Basic variant support
+- ✅ Standard Django templates
+- ❌ No advanced tooling
 
-*Generated Project Structure (MVP):* The structure is catalogued once in [scaffolding.md §5.1](./scaffolding.md#51-mvp-ultra-minimal-django-project); decisions.md defers to that reference to avoid duplication.
+**See:** [scaffolding.md §5](./scaffolding.md#5-generated-project-output)
 
-**MVP Core Features:**
-1. **Directory‑Based Frontend**: Optional `custom_frontend/` with template and static directories
-2. **Basic Variant Support**: Simple variant switching via `frontend.variant` configuration
-3. **Django Settings Integration**: Automatic template and static file directory configuration
-4. **Standard Django Patterns**: No custom framework overhead, pure Django approach
+### Database Architecture
 
-**MVP Limitations:**
-- ❌ **No multi‑client config array** - Just single `variant` string for now
-- ❌ **No automated API contract versioning** - Manual compatibility for MVP  
-- ❌ **No registry or marketplace** - Directory‑based development only
-- ❌ **No advanced CLI features** - Basic project creation only
+**Standard Django Apps (Post-MVP):**
+- ✅ Each module is a Django app with `app_label`
+- ✅ Tables: `{app_label}_{model_name}` (Django default)
+- ✅ Standard migrations handle dependencies
+- ✅ Proven at scale (Wagtail, Django CMS)
 
-**ARCHITECTURAL DECISION: Standard Django Database Architecture**
-
-The **Standard Django App-based Database Architecture**.
-
-**Database Architecture Concept:**
-- **Standard Django Apps**: Each backend module and theme is a standard Django app with its own `app_label`
-- **Django's Built-in Namespacing**: Tables automatically namespaced as `{app_label}_{model_name}`
-- **Standard Migration System**: Django's migration system handles dependencies and schema changes
-- **No Custom Table Naming**: Use Django's default table naming patterns
-
-**Database Structure:**
 ```python
-# Each module is a standard Django app
-# quickscale_modules/payments/ (Django app with app_label='quickscale_payments')
+# Post-MVP example
 class Transaction(models.Model):
     amount = models.DecimalField(max_digits=10, decimal_places=2)
-    status = models.CharField(max_length=20)
-    
     class Meta:
         app_label = 'quickscale_payments'
-# Results in table: quickscale_payments_transaction
-
-# quickscale_modules/analytics/ (Django app with app_label='quickscale_analytics')
-class Event(models.Model):
-    event_type = models.CharField(max_length=100)
-    timestamp = models.DateTimeField(auto_now_add=True)
-    
-    class Meta:
-        app_label = 'quickscale_analytics'
-# Results in table: quickscale_analytics_event
+# Table: quickscale_payments_transaction
 ```
 
-**Key Advantages of Standard Django Architecture:**
-- ✅ **Zero Conflicts**: Django's app_label system automatically prevents table name conflicts
-- ✅ **Standard Migrations**: `python manage.py migrate` handles all inter-app dependencies automatically
-- ✅ **Proven at Scale**: Used successfully by Wagtail (NASA, Google), Django CMS, and all major Django platforms
-- ✅ **Normal Django Patterns**: Admin, signals, management commands, ForeignKeys all work normally
-- ✅ **Developer Familiarity**: Every Django developer understands this approach
-- ✅ **Simple Deployment**: Standard Django deployment patterns, no special database coordination needed
-
-**INSTALLED_APPS Configuration (truly modular - only install what you need):**
+**INSTALLED_APPS (Post-MVP):**
 ```python
 INSTALLED_APPS = [
-  'quickscale_core',                 # Core scaffolding & utilities (minimal)
-  # Optional modules - install only what your app needs (use dotted import paths):
-  # 'quickscale_modules.auth',       # Authentication & user management
-  # 'quickscale_modules.admin',      # Enhanced Django admin, monitoring, audit logging
-  # 'quickscale_modules.payments',   # Payments backend module
-  # 'quickscale_modules.billing',    # Billing backend module
-  # 'quickscale_modules.notifications',  # future
-  # 'quickscale_modules.backup',          # future
-  # 'quickscale_modules.analytics',       # future
-  # Themes are standard Django apps as well:
-  # 'quickscale_themes.starter',
+    'quickscale_core',
+    # 'quickscale_modules.auth',
+    # 'quickscale_modules.payments',
+    # 'quickscale_themes.starter',
 ]
 ```
-**Multiple Frontends** = Each theme supports N presentation technologies (HTMX, React, Vue, etc.) that may be bundled with the theme or installed as standalone frontend packages
-**Cross-Module Relationships:**
-```python
-# Standard Django ForeignKey relationships work normally between apps
-from quickscale_modules.auth.models import User
-from quickscale_modules.payments.models import Transaction
 
-class Order(models.Model):
-    user = models.ForeignKey('quickscale_modules_auth.User', on_delete=models.CASCADE)
-    transaction = models.ForeignKey('quickscale_modules_payments.Transaction', on_delete=models.SET_NULL, null=True)
+## Operational Decisions
+
+**Core Principles:**
+- ✅ Starting points over complete solutions (customize for business needs)
+- ✅ Creation-time assembly (NO runtime dynamic loading)
+- ✅ Standard Django architecture (app_label namespacing, standard migrations)
+- ✅ Separate CLI package (independent release cadence from core)
+- ✅ src/ layout (prevents import errors during testing/building)
+- ✅ Direct imports (NO DI frameworks or service registries)
+- ✅ Single providers (Stripe payments, SendGrid email - embrace specifics)
+- ✅ Version pinning (predictable compatibility for Django foundations)
+
+**Post-MVP Only:**
+- ❌ PEP 420 namespace packages (Post-MVP: independent module distribution)
+- ❌ Hook/event system (deferred to Post-MVP)
+- ❌ YAML configuration (deferred to Post-MVP)
+
+## Prohibitions (Critical - DO NOT)
+
+**Package Structure:**
+- ❌ Nested package names (NO `quickscale/quickscale_core`)
+- ❌ Tests inside `src/` (place in parallel `tests/` directory)
+- ❌ README.md in sub-packages (use root README only)
+
+**Dependencies & Versions:**
+- ❌ Unpinned versions in production
+- ❌ Black or Flake8 (use Ruff instead)
+- ❌ requirements.txt or setup.py (use Poetry + pyproject.toml)
+
+**Architecture & Patterns:**
+- ❌ Runtime dynamic `INSTALLED_APPS` modifications
+- ❌ DI frameworks or service registries (direct imports in production)
+- ❌ Abstract provider interfaces (embrace Stripe, SendGrid specifics)
+- ❌ Custom database table naming (use Django's `app_label` default)
+- ❌ HTTP APIs from modules (expose Python service layer only)
+- ❌ Tight coupling themes to modules
+
+**Configuration (Post-MVP):**
+- ❌ Execute code in config files (pure data YAML only)
+- ❌ Deep nesting in config syntax (keep flat and readable)
+
+## Package Structure
+
+**PEP 420 Namespace Packages (Post-MVP):**
+- ✅ `quickscale_modules/`, `quickscale_themes/`: PEP 420 namespaces (no `__init__.py` at root)
+- ✅ `quickscale_core`: Regular package (has `__init__.py`)
+- ✅ Use `find_namespace_packages()` in `pyproject.toml`
+
+**See:** [scaffolding.md §6](./scaffolding.md#6-naming-import-matrix-summary) for complete matrix
+
+**Migration Checklist (MVP → Post-MVP):**
+1. ✅ Verify editable install works
+2. ❌ Delete namespace `__init__.py` files
+3. ✅ Update to `find_namespace_packages()`
+4. ✅ Test multi-module install
+5. ✅ Publish to PyPI
+
+**CI Requirements:**
+- ✅ Fail build if namespace `__init__.py` exists
+- ✅ Validate PEP 420 compliance
+
+## Technical Reference
+
+**src/ Layout Example:**
+```
+quickscale_core/
+  pyproject.toml
+  src/quickscale_core/
+    __init__.py
+    apps.py
+  tests/
 ```
 
-Behaviour & operational decisions (why)
--------------------------------------
--- **Foundation, not complete solutions**: QuickScale provides starting points that developers customize for their specific business needs, not ready-to-use complete applications
-- **Creation-time assembly**: we intentionally choose not to support runtime dynamic loading of themes/modules. This aligns with Django patterns and avoids runtime migration/coordination complexity.
-- **Standard Django database architecture**: each backend module and theme is a standard Django app with its own app_label. This leverages Django's built-in table namespacing and migration system, following proven patterns used by all successful Django platforms (Wagtail, Django CMS).
-- **Customization-focused themes**: starting point themes provide foundational patterns and examples that developers extend and customize rather than complete industry solutions
-- **Separate CLI**: bootstrapping must be possible before a full core install; the CLI also has a different release cadence and responsibilities.
-- **src/ layout**: prevents accidental imports of local source when running tests or building packages.
-- **Namespace packages**: allow many independently distributed themes/modules to share top-level import names (no `__init__.py` at namespace root).
-- **Configuration-driven development**: project structure and features defined declaratively in YAML/JSON configuration files rather than imperative CLI commands. This enables version control of project configuration, automated deployments, and non-developer participation in project definition.
-- **Direct imports with minimal dependency injection**: themes import modules directly; constructor-based injection only for tests (no DI frameworks/service containers).
-- **Hook system deferred**: initial phases do not implement the hook/event system; future phase will introduce a lightweight event dispatcher.
-- **Single provider implementations**: embrace specific provider implementations (Stripe, SendGrid) rather than abstract interfaces, allowing access to full feature sets and reducing complexity.
-- **Version pinning for Django foundations**: QuickScale modules pin exact versions of their underlying Django apps (e.g., `quickscale-module-auth==0.9.0` pins `django-allauth==1.2.3`) for predictable, tested compatibility.
+**Namespace Example (PEP 420):**
+```
+quickscale_themes/ecommerce/src/quickscale_themes/ecommerce/...
+# NO __init__.py at quickscale_themes/
+```
 
-What NOT to do (explicit prohibitions)
--------------------------------------
-- DO NOT implement runtime dynamic `INSTALLED_APPS` modifications to install themes/modules while an application is running.
-- DO NOT place first-party packages under a nested `quickscale/quickscale_*` directory (avoid `quickscale/quickscale_core`); this creates import and packaging ambiguity.
-- DO NOT expose external HTTP APIs from modules; they should expose functionality via a Python service layer (e.g., classes in `services.py`).
-- DO NOT tightly couple themes to modules. (Interim) Until hook system ships, use explicit service calls; refactor to hooks later.
-- DO NOT place tests inside `src/` (keeps packaging lean and avoids shipping tests in wheel unless explicitly desired).
-- DO NOT rely on implicit, unpinned versions for production assemblies. The CLI must pin compatible versions at project creation time.
-- DO NOT allow configuration files to execute arbitrary code or import Python modules; configurations must be pure data YAML for security and portability.
-- DO NOT create configuration formats that require deep nesting or complex syntax; prioritize readability and maintainability for non-developers.
-- DO NOT use complex service registry patterns or dependency injection frameworks. Use simple constructor-based dependency injection for testing purposes only.
-- DO NOT abstract away provider-specific features behind generic interfaces. Embrace single implementations (e.g., Stripe for payments) to access full feature sets.
-- DO NOT use custom database table naming schemes, event sourcing, or shared schema patterns. Use standard Django app architecture with Django's built-in table namespacing via app_label.
+**Compatibility Metadata:**
+```toml
+[project.metadata.quickscale]
+core-compatibility = ">=2.0.0,<3.0.0"
+```
 
-Package Structure and Naming Conventions
------------------------------------------
+**Module Boundaries:**
 
-**AUTHORITATIVE DECISION: PEP 420 Namespace Packages**
-
-The canonical naming and import matrix now lives in [scaffolding.md §6](./scaffolding.md#6-naming-import-matrix-summary). This section records the policy-level decisions only:
-
-- Post-MVP modules and themes MUST use PEP 420 implicit namespace packages so independently released wheels can share the `quickscale_modules` / `quickscale_themes` namespaces without a namespace `__init__.py`.
-- MVP starters remain simple: `quickscale_core` is a regular package with an explicit `__init__.py`, no namespace packaging required until Phase 2+.
-- When preparing a namespace package for release, follow the directory layout and app-label guidance captured in scaffolding.md §6; do not duplicate the matrix elsewhere.
-
-**Why PEP 420 Namespaces (recap):** independent distribution, conflict-free installs, standard Python behaviour, and room for third-party extensions.
-
-**MVP Note:** During Phase 1, generated projects and in-repo packages use conventional packages for simplicity. Transition to namespace packages only when modules/themes graduate to separate distributions.
-
-## Packaging & namespaces (summary)
-
-Keep packaging guidance short and easy to find: for the MVP treat `quickscale_core` as a normal, single package (regular `__init__.py`, simple editable installs, and easy subtree embedding). For Phase 2+ where modules/themes are released independently, adopt PEP 420 implicit namespace packages for `quickscale_modules` and `quickscale_themes` so independent wheels can contribute subpackages under the same logical namespace (use `find_namespace_packages()` in `pyproject.toml`). This approach preserves simple developer experience in MVP while enabling an ecosystem of independently-versioned modules/themes later.
-
-## Namespace Package Migration Checklist (MVP → Post-MVP)
-
-When extracting a module for independent distribution:
-
-**Step 1: Verify MVP Package Structure**
-- ✅ Module works as editable install via git subtree
-- ✅ Tests pass with temporary `__init__.py`
-- ✅ No circular imports or dependency issues
-
-**Step 2: Remove Namespace `__init__.py`**
-- ❌ Delete `quickscale_modules/__init__.py`
-- ❌ Delete `quickscale_themes/__init__.py`
-- ✅ Keep `quickscale_modules/auth/__init__.py` (leaf package)
-
-**Step 3: Update `pyproject.toml`**
-- Use `find_namespace_packages()` instead of `find_packages()`
-- Configure namespace package in build settings
-
-**Step 4: Test Namespace Package**
-- Install two different modules in same environment
-- Verify both work without conflicts
-- Check `import quickscale_modules.auth` succeeds
-
-**Step 5: Publish to PyPI**
-- Build wheel with `python -m build`
-- Verify wheel metadata with `wheel unpack`
-- Test install from wheel before publishing
-
-## Namespace Package Quality Assurance
-
-**CI Checks**: Add automated checks to fail builds where namespace `__init__.py` files exist in published modules. This prevents accidental inclusion of temporary MVP `__init__.py` files.
-
-**PEP 420 Validation**: Include namespace package compliance checks in CI pipeline to ensure proper `find_namespace_packages()` configuration and absence of namespace `__init__.py` files.
-
-**Guidelines Location**: Namespace package guidelines are documented in this section and cross-referenced in scaffolding.md examples.
-
-Detailed technical notes
-------------------------
-- src layout example (package `quickscale_core`):
-  - `quickscale_core/pyproject.toml`
-  - `quickscale_core/src/quickscale_core/__init__.py`
-  - `quickscale_core/src/quickscale_core/apps.py`
-  - `quickscale_core/tests/`
-
-- Namespace example (PEP 420 implicit):
-  - `quickscale_themes/ecommerce/src/quickscale_themes/ecommerce/...`
-  - `quickscale_themes/realestate/src/quickscale_themes/realestate/...`
-  - No `src/quickscale_themes/__init__.py` file required.
-
-- Compatibility metadata (example in `pyproject.toml`):
-  ```toml
-  [project.metadata.quickscale]
-  core-compatibility = ">=2.0.0,<3.0.0"
-  ```
-
-- Dependency injection example (tests only):
-  ```python
-  class StarterTheme:
-    def __init__(self, payment_service=None):
-      from quickscale_modules.payments import services as payment_services
-      self.payment_service = payment_service or payment_services.DefaultPaymentService()
-  ```
-
-Billing vs Payments Boundary (Authoritative):
 | Concern | Billing Module | Payments Module |
 |---------|----------------|-----------------|
-| Primary Role | Subscription & plan management, entitlements | Charge execution, refunds, payment intents |
-| Data Models | Plan, Subscription, Entitlement | Transaction, ProviderWebhookEvent |
-| External Integration | Billing provider APIs (e.g., Stripe Billing) | Payment provider APIs (e.g., Stripe Payments) |
-| Provides to Themes | Subscription status checks, entitlement decorators | Payment execution services |
-| Not Responsible For | Direct charge execution | Subscription lifecycle logic |
-
-_Legacy configuration example removed: see canonical configuration schema v1 earlier (uses `modules:` rather than `features:` and omits admin as a module)._
+| Role | Subscriptions, entitlements | Charge execution, refunds |
+| Models | Plan, Subscription | Transaction, WebhookEvent |
+| Integration | Stripe Billing API | Stripe Payments API |
+| Provides | Status checks, decorators | Payment execution services |
+| NOT | Charge execution | Subscription logic |
