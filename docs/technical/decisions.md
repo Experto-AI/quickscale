@@ -187,8 +187,10 @@ Other documents (README.md, roadmap.md, scaffolding.md, commercial.md) MUST refe
 - ✅ Poetry package manager
 - ✅ pyproject.toml + poetry.lock (required)
 - ✅ src/ layout (prevents accidental imports)
+- ✅ Use ./scripts/install_global.sh for global Poetry install
 - ❌ NO requirements.txt generation
 - ❌ NO setup.py files
+- ❌ NO pip commands (use Poetry only)
 
 **Development Tools:**
 - ✅ Ruff: Format + lint (replaces Black + Flake8)
@@ -415,6 +417,7 @@ INSTALLED_APPS = [
 - ❌ Nested package names (NO `quickscale/quickscale_core`)
 - ❌ Tests inside `src/` (place in parallel `tests/` directory)
 - ❌ README.md in sub-packages (use root README only)
+- ❌ NEVER run `quickscale init` in the QuickScale codebase (would generate unwanted project files)
 
 **Dependencies & Versions:**
 - ❌ Unpinned versions in production

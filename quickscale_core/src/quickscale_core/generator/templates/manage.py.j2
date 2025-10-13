@@ -4,17 +4,46 @@ import os
 import sys
 
 
+def check_dependencies():
+    """Check if required dependencies are installed and provide helpful error messages."""
+    missing_deps = []
+    
+    # Check for python-decouple (required by settings)
+    try:
+        import decouple  # noqa: F401
+    except ImportError:
+        missing_deps.append("python-decouple")
+    
+    # Check for Django
+    try:
+        import django  # noqa: F401
+    except ImportError:
+        missing_deps.append("Django")
+    
+    if missing_deps:
+        deps_list = ", ".join(missing_deps)
+        raise ImportError(
+            f"\n\n❌ Missing required dependencies: {deps_list}\n\n"
+            "This project uses Poetry for dependency management.\n"
+            "Please install dependencies first:\n\n"
+            "  poetry install\n\n"
+            "Then run commands using Poetry:\n\n"
+            "  poetry run python manage.py <command>\n\n"
+            "Or activate the Poetry virtual environment:\n\n"
+            "  poetry shell\n"
+            "  python manage.py <command>\n"
+        )
+
+
 def main():
     """Run administrative tasks."""
+    # Check dependencies FIRST before anything else
+    check_dependencies()
+    
     os.environ.setdefault("DJANGO_SETTINGS_MODULE", "{{ project_name }}.settings.local")
-    try:
-        from django.core.management import execute_from_command_line
-    except ImportError as exc:
-        raise ImportError(
-            "Couldn't import Django. Are you sure it's installed and "
-            "available on your PYTHONPATH environment variable? Did you "
-            "forget to activate a virtual environment?"
-        ) from exc
+    
+    from django.core.management import execute_from_command_line
+    
     execute_from_command_line(sys.argv)
 
 

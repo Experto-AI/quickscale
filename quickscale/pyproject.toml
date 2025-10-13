@@ -1,9 +1,8 @@
 [tool.poetry]
 name = "quickscale"
-version = "0.52.0"
+version = "0.56.0"
 description = "Meta-package that installs quickscale-core and quickscale-cli together"
 authors = ["Experto AI <victor@experto.ai>"]
-readme = "README.md"
 license = "Apache-2.0"
 homepage = "https://github.com/Experto-AI/quickscale"
 repository = "https://github.com/Experto-AI/quickscale"

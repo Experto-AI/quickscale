@@ -20,8 +20,33 @@ class ProjectGenerator:
     def __init__(self, template_dir: Path | None = None):
         """Initialize generator with template directory"""
         if template_dir is None:
-            # Use default template directory in package
-            template_dir = Path(__file__).parent / "templates"
+            # Try to find templates in development environment first
+            import quickscale_core
+            package_dir = Path(quickscale_core.__file__).parent
+            
+            # Check if we're in development (source directory exists)
+            dev_template_dir = package_dir / "generator" / "templates"
+            if dev_template_dir.exists():
+                template_dir = dev_template_dir
+            else:
+                # Fall back to package templates (should be included)
+                template_dir = package_dir / "templates"
+                
+                # If package templates don't exist, try to find source templates
+                # by walking up from the current file location
+                if not template_dir.exists():
+                    current_file = Path(__file__)
+                    # Try common development layouts
+                    possible_paths = [
+                        current_file.parent / "templates",  # Same directory
+                        current_file.parent.parent / "generator" / "templates",  # Parent
+                        Path.cwd() / "quickscale_core" / "src" / "quickscale_core" / "generator" / "templates",  # From repo root
+                    ]
+                    
+                    for path in possible_paths:
+                        if path.exists():
+                            template_dir = path
+                            break
 
         # Validate template directory exists
         if not template_dir.exists():
@@ -29,7 +54,7 @@ class ProjectGenerator:
 
         self.template_dir = template_dir
         self.env = Environment(
-            loader=FileSystemLoader(str(template_dir)),
+            loader=FileSystemLoader(str(template_dir), followlinks=True),
             keep_trailing_newline=True,
         )
 
@@ -125,11 +150,12 @@ class ProjectGenerator:
                 False,
             ),
             # Template files
+            ("templates/base.html.j2", "templates/base.html", False),
             ("templates/index.html.j2", "templates/index.html", False),
             # Static files
             ("static/css/style.css.j2", "static/css/style.css", False),
             # CI/CD and quality tools
-            (".github/workflows/ci.yml.j2", ".github/workflows/ci.yml", False),
+            ("github/workflows/ci.yml.j2", ".github/workflows/ci.yml", False),
             (".pre-commit-config.yaml.j2", ".pre-commit-config.yaml", False),
             # Tests
             ("tests/__init__.py.j2", "tests/__init__.py", False),

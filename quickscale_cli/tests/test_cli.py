@@ -1,5 +1,6 @@
 """Tests for QuickScale CLI main commands."""
 
+import sys
 from pathlib import Path
 
 import quickscale_cli
@@ -159,3 +160,95 @@ def test_init_command_creates_correct_structure(cli_runner):
         # Verify templates and static directories
         assert (project_path / "templates").exists()
         assert (project_path / "static").exists()
+
+
+def test_init_command_includes_all_required_dependencies(cli_runner):
+    """Test that pyproject.toml includes all dependencies used in generated code"""
+    project_name = "depstest"
+
+    with cli_runner.isolated_filesystem():
+        result = cli_runner.invoke(cli, ["init", project_name], catch_exceptions=False)
+        assert result.exit_code == 0
+
+        project_path = Path(project_name)
+        
+        # Read pyproject.toml
+        pyproject_content = (project_path / "pyproject.toml").read_text()
+        
+        # Critical dependencies that MUST be in pyproject.toml
+        required_deps = [
+            "Django",           # Core framework
+            "python-decouple",  # Used in settings/base.py for config
+            "whitenoise",       # Used in settings/base.py for static files
+            "gunicorn",         # Production WSGI server
+            "psycopg2-binary",  # PostgreSQL adapter
+        ]
+        
+        # Verify each required dependency is declared
+        for dep in required_deps:
+            assert dep in pyproject_content, (
+                f"Missing required dependency '{dep}' in pyproject.toml. "
+                f"This dependency is imported in generated code and must be declared."
+            )
+
+
+def test_init_command_helpful_error_without_dependencies(cli_runner):
+    """Test that manage.py shows helpful error when dependencies are missing"""
+    import subprocess
+    
+    project_name = "nodepstest"
+
+    with cli_runner.isolated_filesystem():
+        result = cli_runner.invoke(cli, ["init", project_name], catch_exceptions=False)
+        assert result.exit_code == 0
+
+        project_path = Path(project_name)
+        
+        # Try to run manage.py without installing dependencies
+        # This simulates user running "python manage.py" without "poetry install"
+        result = subprocess.run(
+            [sys.executable, "manage.py", "check"],
+            cwd=project_path,
+            capture_output=True,
+            text=True,
+        )
+        
+        # Should fail with helpful error message
+        assert result.returncode != 0
+        output = result.stderr + result.stdout
+        
+        # Verify helpful error message is shown
+        assert "Missing required dependencies" in output or "python-decouple" in output
+        assert "poetry install" in output
+        assert "poetry run" in output
+
+
+def test_generated_project_settings_imports(cli_runner):
+    """Test that generated settings files only import declared dependencies"""
+    project_name = "importstest"
+
+    with cli_runner.isolated_filesystem():
+        result = cli_runner.invoke(cli, ["init", project_name], catch_exceptions=False)
+        assert result.exit_code == 0
+
+        project_path = Path(project_name)
+        
+        # Read settings files
+        base_settings = (project_path / project_name / "settings" / "base.py").read_text()
+        local_settings = (project_path / project_name / "settings" / "local.py").read_text()
+        prod_settings = (project_path / project_name / "settings" / "production.py").read_text()
+        
+        # Read pyproject.toml to get declared dependencies
+        pyproject_content = (project_path / "pyproject.toml").read_text()
+        
+        # Check that imports in settings match declared dependencies
+        import_checks = [
+            ("decouple", "python-decouple"),  # from decouple import config
+            ("whitenoise", "whitenoise"),      # WhiteNoiseMiddleware in settings
+        ]
+        
+        for import_name, dep_name in import_checks:
+            if import_name in base_settings or import_name in local_settings or import_name in prod_settings:
+                assert dep_name in pyproject_content, (
+                    f"Settings import '{import_name}' but '{dep_name}' not in pyproject.toml"
+                )

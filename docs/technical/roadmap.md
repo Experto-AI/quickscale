@@ -182,30 +182,51 @@ cat doctest/README.md  # Should have clear instructions
 ### **Task 0.57.1: User Documentation**
 **Priority**: Create comprehensive user-facing documentation
 
+**Dependencies**:
+- v0.56.0 complete (✅ confirmed)
+- Generated project templates stable
+- CLI commands finalized
+
 **Tasks**:
 - [ ] **Update README.md**
-  - [ ] Add installation instructions for quickscale CLI
-  - [ ] Add usage examples with `quickscale init`
-  - [ ] Add "What you get" section (generated project structure)
-  - [ ] Update links to other documentation
+  - [ ] Add installation instructions for quickscale CLI (target: README.md lines 90-110)
+    - Acceptance: User can install via `pip install -e quickscale_cli/` and verify with `quickscale --version`
+  - [ ] Add usage examples with `quickscale init` (target: README.md lines 112-130)
+    - Acceptance: Example shows full workflow from `quickscale init` to `runserver`
+  - [ ] Add "What you get" section with generated project structure (target: README.md lines 50-80)
+    - Acceptance: Lists all generated files/directories with brief descriptions
+  - [ ] Update links to other documentation (verify all internal links)
+    - Acceptance: Run `markdown-link-check README.md` with zero broken links
 - [ ] **Update decisions.md** (if needed)
-  - [ ] Document any technical decisions made during implementation
-  - [ ] Update MVP Feature Matrix status (mark completed features)
+  - [ ] Document any technical decisions made during v0.52-v0.56 (target: decisions.md §MVP Feature Matrix)
+    - Acceptance: All v0.56.0 features marked "IN" with correct status
+  - [ ] Update MVP Feature Matrix status for v0.56.0 completed features (target: decisions.md lines 150-180)
+    - Acceptance: CI/CD, testing infrastructure marked as complete
 - [ ] **Create developer documentation**
-  - [ ] Document project structure (monorepo layout)
-  - [ ] Document how to contribute
-  - [ ] Document how to run tests and linters
-  - [ ] Document release process (when ready)
+  - [ ] Verify contributing.md is up to date (target: docs/contrib/contributing.md)
+    - Acceptance: All workflow stages (PLAN→CODE→REVIEW→TESTING→DEBUG) documented
+  - [ ] Create/update development setup guide (target: docs/technical/development.md or README.md §Development)
+    - Acceptance: New contributor can clone, install, run tests in <15 minutes
+  - [ ] Document how to run tests and linters (target: README.md or docs/technical/development.md)
+    - Acceptance: Shows commands for `poetry run pytest`, `poetry run ruff check`, `poetry run mypy`
+  - [ ] Document basic release process basics (target: docs/contrib/contributing.md or new docs/technical/releasing.md)
+    - Acceptance: Shows version bump, changelog update, git tag creation steps
 - [ ] **Document Git Subtree workflow** (for advanced users)
-  - [ ] Verify manual git subtree commands in decisions.md are accurate
-  - [ ] Create troubleshooting guide for common git subtree issues
-  - [ ] Document when/why users might want to embed quickscale_core
+  - [ ] Verify manual git subtree commands in decisions.md are accurate (target: decisions.md §Git Subtree Integration)
+    - Acceptance: Commands copy-pasteable and work on clean project
+    - Validation: Test commands on fresh `quickscale init` project
+  - [ ] Create troubleshooting guide for common git subtree issues (target: docs/technical/git-subtree-guide.md or decisions.md §Troubleshooting)
+    - Acceptance: Covers merge conflicts, push failures, branch mismatches
+  - [ ] Document when/why users might want to embed quickscale_core (target: decisions.md §Git Subtree Integration)
+    - Acceptance: Clear use case examples (personal monorepo, shared improvements, module extraction)
+
+**Quality Gates**:
+- All internal documentation links verified with `markdown-link-check`
+- README.md reviewed by fresh eyes (or AI assistant in user role)
+- Git subtree commands tested on clean environment
+- No broken references to non-existent files or sections
 
 **Deliverable**: Complete documentation for MVP users and contributors
-
-**Validation**: New user can follow docs and create their first project
-
-**Documentation Reference**: See [decisions.md Document Responsibilities](./decisions.md#document-responsibilities-short) for what goes where.
 
 ---
 
@@ -258,26 +279,52 @@ poetry run python manage.py runserver
 ### **Task 0.58.1: Real-World Project Validation**
 **Priority**: **MOST IMPORTANT** - Validate MVP with actual usage
 
+**Dependencies**:
+- v0.57.0 complete (documentation needed for validation)
+- quickscale_cli functional
+- Generated project templates production-ready
+
 **Tasks**:
 - [ ] **Generate a real client project**
   - [ ] Use `quickscale init client_test` to create project
-  - [ ] Follow all setup steps (poetry install, migrate, runserver). `venv` creation is optional for users who prefer it.
+  - [ ] Follow all setup steps (poetry install, migrate, runserver)
+    - Acceptance: Project runs without errors, shows Django welcome page
   - [ ] Build a simple feature (e.g., basic CRUD, user registration, etc.)
+    - Acceptance: Feature includes model, view, template, tests, and works end-to-end
+    - Deliverable: Document feature scope and implementation time (target: validation-notes.md)
   - [ ] Deploy to staging environment (optional but recommended)
+    - Acceptance: If deployed, document deployment steps and any issues encountered
 - [ ] **Document pain points**
-  - [ ] Note any missing features or unclear documentation
-  - [ ] Record any errors or confusing error messages
-  - [ ] Identify workflow improvements needed
+  - [ ] Note any missing features or unclear documentation (target: validation-notes.md §Pain Points)
+    - Acceptance: Specific examples with reproduction steps
+  - [ ] Record any errors or confusing error messages (target: validation-notes.md §Errors)
+    - Acceptance: Include full error text and resolution (if found)
+  - [ ] Identify workflow improvements needed (target: validation-notes.md §Improvements)
+    - Acceptance: Prioritized list (P0/P1/P2) with impact assessment
 - [ ] **Collect feedback**
-  - [ ] What worked well?
-  - [ ] What was confusing or difficult?
-  - [ ] What would make the MVP more useful?
+  - [ ] What worked well? (target: validation-notes.md §Wins)
+  - [ ] What was confusing or difficult? (target: validation-notes.md §Confusion)
+  - [ ] What would make the MVP more useful? (target: validation-notes.md §Wishlist)
 - [ ] **Create improvement backlog**
-  - [ ] Log issues found during validation
-  - [ ] Prioritize fixes vs. Post-MVP enhancements
-  - [ ] Update roadmap with lessons learned
+  - [ ] Log all issues found during validation (target: GitHub Issues or validation-notes.md §Backlog)
+    - Acceptance: Each issue has title, description, priority, and proposed fix
+  - [ ] Prioritize fixes vs. Post-MVP enhancements (target: validation-notes.md §Prioritization)
+    - Acceptance: Clear separation of blockers (must fix for v1.0) vs. nice-to-haves
+  - [ ] Update roadmap.md with lessons learned (target: roadmap.md §Task 1.0.1)
+    - Acceptance: Task 1.0.1 populated with specific issues to fix
+
+**Quality Gates**:
+- Can build working client project in <1 day (success criteria)
+- Project runs without critical errors
+- All pain points documented with reproduction steps
+- Improvement backlog prioritized and actionable
 
 **Deliverable**: PROOF that MVP works for real projects + prioritized improvement list
+
+**Output Artifacts**:
+- `validation-notes.md` in docs/releases/ (comprehensive validation report)
+- Working client project in examples/ or separate repo
+- Updated Task 1.0.1 in roadmap.md with specific fixes needed
 
 **Success Criteria**: Can build a working client project from generated starter in < 1 day
 
@@ -285,31 +332,43 @@ poetry run python manage.py runserver
 
 ---
 
-### **Task 0.58.2: Improvement Backlog Creation**
-**Priority**: Prepare MVP for initial release
+### **Task 0.58.2: Release Preparation & Package Verification**
+**Priority**: Prepare v0.58.0 artifacts
+
+**Dependencies**:
+- Task 0.58.1 complete (validation finished)
+- All critical issues from validation addressed
 
 **Tasks**:
 - [ ] **Version and tagging**
-  - [ ] Set version to `0.1.0` in `pyproject.toml` files
-  - [ ] Create git tag: `v0.1.0`
-  - [ ] Create CHANGELOG.md with MVP release notes
+  - [ ] Set version to `0.58.0` in pyproject.toml files (quickscale_core, quickscale_cli)
+    - Acceptance: `grep "version" */pyproject.toml` shows 0.58.0
+  - [ ] Create git tag: `v0.58.0`
+    - Command: `git tag -a v0.58.0 -m "Release v0.58.0: MVP Validation"`
+  - [ ] Update CHANGELOG.md with v0.58.0 entry
+    - Acceptance: Entry includes date, summary, validation results
 - [ ] **Package verification**
   - [ ] Build packages: `python -m build` in both quickscale_core and quickscale_cli
+    - Acceptance: Both packages build without errors
   - [ ] Test installation from built wheels
+    - Acceptance: `pip install dist/*.whl` succeeds in clean virtualenv
   - [ ] Verify package metadata is correct
+    - Command: `twine check dist/*`
+    - Acceptance: No warnings or errors
 - [ ] **Create release notes**
-  - [ ] Summarize what's included in MVP
-  - [ ] Clearly state limitations (what's NOT included)
-  - [ ] Link to documentation and getting started guide
-  - [ ] Include upgrade path from v0.41.0 (manual migration required)
-- [ ] **Optional: PyPI test upload**
-  - [ ] Upload to TestPyPI for validation
-  - [ ] Test installation from TestPyPI
-  - [ ] NOTE: Public PyPI release is optional for MVP (can stay git-only)
+  - [ ] Create docs/releases/release-v0.58.0-implementation.md
+    - Acceptance: Follows template (title, date, summary, tasks, validation, next steps)
+  - [ ] Document validation results (wins, pain points, backlog)
+    - Acceptance: Links to validation-notes.md or embeds key findings
 
-**Deliverable**: Shippable MVP release (v0.1.0)
+**Note**: Full PyPI upload and v1.0.0 version bump deferred to Task 1.0.2.
 
-**Validation**: Clean install works; README guides users successfully
+**Deliverable**: v0.58.0 release artifacts and validation documentation
+
+**Validation**:
+- Packages install cleanly from wheels
+- Release documentation complete
+- Validation results documented
 
 ---
 

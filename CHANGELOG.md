@@ -2,6 +2,7 @@
 
 See docs/releases/ for detailed release notes.
 
+v0.56.0 — 2025-10-13 — Quality, Testing & CI/CD
 v0.55.0 — 2025-10-13 — CLI implementation
 v0.54.0 — 2025-10-13 — Project Generator
 v0.53.3 — 2025-10-12 — Project Metadata & DevOps Templates
