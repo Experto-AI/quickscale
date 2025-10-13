@@ -1,0 +1,52 @@
+"""Example tests demonstrating pytest patterns for {{ project_name }}"""
+
+import pytest
+from django.contrib.auth import get_user_model
+from django.test import Client
+
+User = get_user_model()
+
+
+@pytest.mark.django_db
+class TestUserModel:
+    """Tests for User model"""
+
+    def test_create_user(self, user_data):
+        """Test user creation"""
+        user = User.objects.create_user(**user_data)
+
+        assert user.username == user_data["username"]
+        assert user.email == user_data["email"]
+        assert user.check_password(user_data["password"])
+        assert not user.is_staff
+        assert not user.is_superuser
+
+    def test_create_superuser(self):
+        """Test superuser creation"""
+        admin = User.objects.create_superuser(
+            username="admin",
+            email="admin@example.com",
+            password="adminpass123",
+        )
+
+        assert admin.is_staff
+        assert admin.is_superuser
+
+    def test_user_string_representation(self, user):
+        """Test user __str__ method"""
+        assert str(user) == user.username
+
+
+@pytest.mark.django_db
+class TestAuthentication:
+    """Tests for authentication"""
+
+    def test_user_can_login(self, client, user):
+        """Test that user can log in"""
+        response = client.login(username=user.username, password="testpass123")
+        assert response is True
+
+    def test_user_cannot_login_with_wrong_password(self, client, user):
+        """Test that login fails with wrong password"""
+        response = client.login(username=user.username, password="wrongpassword")
+        assert response is False

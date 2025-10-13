@@ -49,6 +49,12 @@ addopts = [
     "--cov-report=html",
 ]
 
+[tool.coverage.run]
+omit = [
+    "*/templates/*.j2",
+    "*/templates/**/*.j2",
+]
+
 [tool.ruff]
 line-length = 100
 target-version = "py310"

@@ -128,6 +128,13 @@ class ProjectGenerator:
             ("templates/index.html.j2", "templates/index.html", False),
             # Static files
             ("static/css/style.css.j2", "static/css/style.css", False),
+            # CI/CD and quality tools
+            (".github/workflows/ci.yml.j2", ".github/workflows/ci.yml", False),
+            (".pre-commit-config.yaml.j2", ".pre-commit-config.yaml", False),
+            # Tests
+            ("tests/__init__.py.j2", "tests/__init__.py", False),
+            ("tests/conftest.py.j2", "tests/conftest.py", False),
+            ("tests/test_example.py.j2", "tests/test_example.py", False),
         ]
 
         # Render and write all files

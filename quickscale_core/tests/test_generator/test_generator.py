@@ -88,6 +88,26 @@ class TestProjectGeneratorPathChecks:
             # Restore permissions for cleanup
             readonly_dir.chmod(0o755)
 
+    def test_generate_creates_parent_directory(self, tmp_path):
+        """Should create parent directory if it does not exist"""
+        generator = ProjectGenerator()
+        project_name = "myproject"
+
+        # Create a nested path where intermediate directories don't exist
+        output_path = tmp_path / "level1" / "level2" / project_name
+
+        # Parent directories should not exist yet
+        assert not (tmp_path / "level1").exists()
+
+        # Generate project - should create parent directories
+        generator.generate(project_name, output_path)
+
+        # Verify project was created
+        assert output_path.exists()
+        assert (output_path / "manage.py").exists()
+        assert (tmp_path / "level1").exists()
+        assert (tmp_path / "level1" / "level2").exists()
+
 
 class TestProjectGeneratorGeneration:
     """Tests for successful project generation"""

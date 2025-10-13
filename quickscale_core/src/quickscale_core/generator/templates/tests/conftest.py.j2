@@ -1,0 +1,42 @@
+"""Pytest configuration and fixtures for {{ project_name }} tests"""
+
+import pytest
+from django.contrib.auth import get_user_model
+
+User = get_user_model()
+
+
+@pytest.fixture
+def user_data():
+    """Sample user data for testing"""
+    return {
+        "username": "testuser",
+        "email": "test@example.com",
+        "password": "testpass123",
+    }
+
+
+@pytest.fixture
+def create_user(db, user_data):
+    """Factory fixture to create test users"""
+    def _create_user(**kwargs):
+        data = user_data.copy()
+        data.update(kwargs)
+        return User.objects.create_user(**data)
+    return _create_user
+
+
+@pytest.fixture
+def user(create_user):
+    """Create a standard test user"""
+    return create_user()
+
+
+@pytest.fixture
+def admin_user(db):
+    """Create an admin user for testing"""
+    return User.objects.create_superuser(
+        username="admin",
+        email="admin@example.com",
+        password="adminpass123",
+    )

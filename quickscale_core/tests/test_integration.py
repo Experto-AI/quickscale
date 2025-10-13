@@ -95,3 +95,32 @@ class TestProjectGenerationIntegration:
 
         assert project1 not in pyproject2
         assert project2 not in pyproject1
+
+    def test_cicd_files_generated(self, tmp_path):
+        """Generated project should include CI/CD files"""
+        generator = ProjectGenerator()
+        project_name = "cicdtest"
+        output_path = tmp_path / project_name
+
+        generator.generate(project_name, output_path)
+
+        # Verify CI/CD files exist
+        assert (output_path / ".github" / "workflows" / "ci.yml").exists()
+        assert (output_path / ".pre-commit-config.yaml").exists()
+        assert (output_path / "tests" / "__init__.py").exists()
+        assert (output_path / "tests" / "conftest.py").exists()
+        assert (output_path / "tests" / "test_example.py").exists()
+
+        # Verify CI file has correct content
+        ci_content = (output_path / ".github" / "workflows" / "ci.yml").read_text()
+        assert "name: CI" in ci_content
+        assert "pytest --cov" in ci_content
+        assert project_name in ci_content  # Project name should be in coverage command
+
+        # Verify pre-commit config has ruff
+        precommit_content = (output_path / ".pre-commit-config.yaml").read_text()
+        assert "ruff" in precommit_content
+
+        # Verify pyproject.toml has pre-commit dependency
+        pyproject_content = (output_path / "pyproject.toml").read_text()
+        assert "pre-commit" in pyproject_content
