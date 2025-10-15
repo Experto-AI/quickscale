@@ -813,12 +813,12 @@ The table below consolidates the repository's release-to-feature mapping and com
 | v0.54.0 | Generator (scaffolding engine) | Scaffolding capability | Generator options & project scaffolding | CLI/manual scaffolding support | Init/generator UX parity | Project generator parity |
 | v0.55.0 | CLI (`quickscale init` command) | Developer UX improvement | N/A (cookiecutter-driven) | CLI starter experience available | Comparable `init` UX | N/A / basic installer |
 | v0.56.0-v0.56.2 | Quality, testing & **MVP validated** | MVP working & validated | Pytest + GH Actions + working starter | Testing/CI + sample project | Comparable CI/testing + starter | Testing/CI + starter |
-| v1.0.0 | MVP release (production-ready personal toolkit) | MVP Launch | Starter parity (production-ready starter) | Starter parity (full stack) | Starter parity (core SaaS features) | Starter parity (Stripe, Docker) |
-| v1.1.0 | Auth Module (`quickscale_modules.auth`) | Closing feature gap | django-allauth + custom user (parity) | Social OAuth/2FA support parity | Matches Pegasus auth (social login, email verification) | Matches Ready SaaS auth features |
-| v1.2.0 | Billing Module (`quickscale_modules.billing`) | Near parity | Billing scaffolding (Stripe via dj-stripe) | Full Stripe subscriptions & management parity | Matches Pegasus billing (dj-stripe, webhooks) | Matches Ready SaaS billing (Stripe) |
-| v1.3.0 | Teams Module (`quickscale_modules.teams`) | 🎯 SaaS Feature Parity | Teams/roles patterns (if required) | Multi-tenancy & roles parity | Matches Pegasus teams (invitations, roles, tenant patterns) | Matches Ready SaaS team features |
-| v1.4.0+ | Additional Modules | Differentiation & ecosystem growth | Optional integrations: Celery, Anymail, storage | Email templates, scheduling, Storybook parity | Notifications, API scaffolding parity | Notifications/email parity |
-| v2.0.0+ | Community Platform | Optional marketplace capabilities | N/A (Cookiecutter not a marketplace) | N/A (Apptension not marketplace) | Community/marketplace parity (if pursued) | N/A |
+| v0.57.0 | MVP release (production-ready personal toolkit) | MVP Launch | Starter parity (production-ready starter) | Starter parity (full stack) | Starter parity (core SaaS features) | Starter parity (Stripe, Docker) |
+| v0.58.0 | Auth Module (`quickscale_modules.auth`) | Closing feature gap | django-allauth + custom user (parity) | Social OAuth/2FA support parity | Matches Pegasus auth (social login, email verification) | Matches Ready SaaS auth features |
+| v0.59.0 | Billing Module (`quickscale_modules.billing`) | Near parity | Billing scaffolding (Stripe via dj-stripe) | Full Stripe subscriptions & management parity | Matches Pegasus billing (dj-stripe, webhooks) | Matches Ready SaaS billing (Stripe) |
+| v0.60.0 | Teams Module (`quickscale_modules.teams`) | 🎯 SaaS Feature Parity | Teams/roles patterns (if required) | Multi-tenancy & roles parity | Matches Pegasus teams (invitations, roles, tenant patterns) | Matches Ready SaaS team features |
+| v0.61.0+ | Additional Modules | Differentiation & ecosystem growth | Optional integrations: Celery, Anymail, storage | Email templates, scheduling, Storybook parity | Notifications, API scaffolding parity | Notifications/email parity |
+| v1.0.0+ | Community Platform | Optional marketplace capabilities | N/A (Cookiecutter not a marketplace) | N/A (Apptension not marketplace) | Community/marketplace parity (if pursued) | N/A |
 
 Notes: rows mark where QuickScale aims to provide comparable functionality; exact scope may vary (e.g., we intentionally avoid Wagtail integration for MVP while matching core SaaS features). 
 

@@ -196,8 +196,9 @@ QuickScale follows semantic versioning with special meaning during MVP:
 
 - **0.5X.X**: Foundation phase (project structure, tooling)
 - **0.5X.Y**: Incremental tasks within a release (Y = task number)
-- **1.0.0**: MVP completion (production-ready personal toolkit)
-- **1.X.0**: Post-MVP features (module extraction, marketplace)
+- **0.57.0**: MVP completion (production-ready personal toolkit)
+- **0.5X.0**: Post-MVP features (module extraction, marketplace)
+- **1.0.0+**: Community Platform (PyPI distribution, marketplace)
 - **X.0.0**: Major architectural changes
 
 ### Status Values

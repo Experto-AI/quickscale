@@ -73,10 +73,10 @@ TARGET AUDIENCE: Maintainers, core contributors, community package developers, C
 
 **Terminology:**
 - Foundation Phase: v0.52-v0.55 (incremental foundation)
-- MVP: v0.56-v1.0.0 (production-ready personal toolkit)
-- Post-MVP: v1.1+ (modules, packaging, marketplace)
+- MVP: v0.56-v0.57.0 (production-ready personal toolkit)
+- Post-MVP: v0.58+ (modules, packaging, marketplace)
 
-**MVP (v0.56-v1.0.0):**
+**MVP (v0.56-v0.57.0):**
 - ✅ `quickscale_core`: Scaffolding + git subtree integration (monolithic package)
 - ✅ `quickscale_cli`: Single command `quickscale init myapp` (no flags)
 - ✅ Generated project: Standalone Django (user owns completely)
@@ -116,7 +116,7 @@ git subtree push --prefix=quickscale https://github.com/Experto-AI/quickscale.gi
 
 
 
-**Post-MVP (v1.1+):**
+**Post-MVP (v0.58+):**
 - 📦 `quickscale_modules/*`: PyPI packages (auth, payments, billing, admin)
 - 📦 `quickscale_themes/*`: PyPI packages (theme starters)
 - 📦 YAML configuration system (declarative project definition)
@@ -202,7 +202,7 @@ Other documents (README.md, roadmap.md, scaffolding.md, commercial.md) MUST refe
 
 ### CLI Commands {#cli-command-matrix}
 
-**MVP (v0.56-v1.0.0):**
+**MVP (v0.56-v0.57.0):**
 - ✅ `quickscale init <project>` - ONLY command (no flags, single starter template)
 
 **Post-MVP (Planned):**
@@ -312,7 +312,7 @@ class OrderProcessor:
 ```yaml
 # Example only - NOT used in MVP
 schema_version: 2
-project: {name: mystore, version: 1.0.0}
+project: {name: mystore, version: 0.57.0}
 theme: starter
 backend_extensions: myapp.extensions
 modules:

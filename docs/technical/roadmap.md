@@ -46,14 +46,12 @@ Execution details live here; the "personal toolkit first, community platform lat
 
 ### **📋 Current State Assessment**
 - ✅ **Current Version**: v0.56.2 (Released)
-- 🔄 **Next Release**: v1.0.0 - MVP Launch (Ready for production use)
+- 🔄 **Next Release**: v0.57.0 - MVP Launch (Ready for production use)
 - ✅ **Evolution Strategy Defined**: Start simple, grow organically
 - ✅ **MVP Scope Clarified**: Simple CLI + project scaffolding + git subtree documentation
 - ✅ **Legacy Backup Available**: Complete v0.41.0 preserved in `../quickscale-legacy/`
 - ✅ **Post-MVP Path Clear**: Module/theme packages when proven necessary
 - ✅ **MVP Validated**: v0.56.2 successfully generates minimal running Django projects
-
-  <!-- NOTE: v0.57 and v0.58 skipped - documentation and validation complete in v0.56.2 -->
 
 ### **🎯 Release Strategy**
 Each minor version (0.x.0) delivers a verifiable improvement that builds toward MVP:
@@ -62,25 +60,23 @@ Each minor version (0.x.0) delivers a verifiable improvement that builds toward 
 - **v0.54.0**: Project generator (can generate Django projects) ✅
 - **v0.55.0**: CLI implementation (`quickscale init` command works) ✅
 - **v0.56.0**: Quality & testing (comprehensive test suite) ✅
-- ~~**v0.57.0**: Documentation complete~~ - **SKIPPED** (sufficient in v0.56.2)
-- ~~**v0.58.0**: MVP validation~~ - **SKIPPED** (validated in v0.56.2)
-- **v1.0.0**: MVP release (production-ready personal toolkit) 🎯 **NEXT**
-- **v1.x.0**: Post-MVP features (modules, themes, automation)
+- **v0.57.0**: MVP release (production-ready personal toolkit) 🎯 **NEXT**
+- **v0.5x.0**: Post-MVP features (modules, themes, automation)
 
-> Note: For clarity across project documentation, the releases **v0.52 through v1.0.0** are considered collectively the "MVP" that delivers a production-ready personal toolkit. The earlier 0.52-0.55 releases are the "Foundation Phase" (incremental foundations) that prepare the codebase for the cumulative MVP deliverable.
+> Note: For clarity across project documentation, the releases **v0.52 through v0.57.0** are considered collectively the "MVP" that delivers a production-ready personal toolkit. The earlier 0.52-0.55 releases are the "Foundation Phase" (incremental foundations) that prepare the codebase for the cumulative MVP deliverable.
 
 ### **Evolution Context Reference**
 Need the narrative backdrop? Jump to [`quickscale.md`](../overview/quickscale.md#evolution-strategy-personal-toolkit-first) and come back here for the tasks.
 
 ---
 
-## **MVP Roadmap: v0.51.0 → v1.0.0**
+## **MVP Roadmap: v0.51.0 → v0.57.0**
 
 **🎯 Objective**: Build a simple project generator that creates **production-ready** Django starter projects you can use for client work immediately.
 
 **MVP Scope**: Minimal CLI + production-ready scaffolding. Git subtree is the ONLY MVP distribution mechanism (documented manual workflow). CLI wrapper helpers for subtree operations are deferred to Post-MVP.
 
-**Success Criteria (v1.0.0)**:
+**Success Criteria (v0.57.0)**:
 - `quickscale init myapp` generates **production-ready** Django project in < 30 seconds
 - Generated project includes Docker, PostgreSQL, pytest, CI/CD, security best practices
 - Generated project runs with `python manage.py runserver` immediately
@@ -149,37 +145,7 @@ This policy ensures completed work is archived in a discoverable place and the r
 
 ---
 
-## **Skipped Releases (Redundant)**
-
-### **Release v0.57.0: Documentation Complete** ⏭️ **SKIPPED**
-
-**Reason for Skip**: Documentation was sufficient in v0.56.2. The project already includes:
-- Clear README.md with installation and usage
-- Complete technical documentation in decisions.md
-- Git subtree workflow documented
-- Generated project includes comprehensive README
-
-**Original Objective**: Complete all user-facing and developer documentation
-
-**Status**: ✅ **Objectives met in v0.56.2** - No additional release needed
-
----
-
-### **Release v0.58.0: MVP Validation** ⏭️ **SKIPPED**
-
-**Reason for Skip**: MVP successfully validated in v0.56.2. The tool:
-- ✅ Installs cleanly as a package
-- ✅ `quickscale init` command works
-- ✅ Generates minimal running Django project
-- ✅ Generated project includes homepage that works out of the box
-
-**Original Objective**: Validate MVP with real-world usage
-
-**Status**: ✅ **Validation complete in v0.56.2** - Tool is production-ready
-
----
-
-## **Release v1.0.0: MVP Launch** 🚀 **[CURRENT FOCUS]**
+## **Release v0.57.0: MVP Launch** 🚀 **[CURRENT FOCUS]**
 
 **Priority**: Complete all user-facing and developer documentation
 
@@ -295,9 +261,9 @@ cat doctest/README.md  # Should have clear instructions
   - [ ] Log all issues found during validation (target: GitHub Issues or validation-notes.md §Backlog)
     - Acceptance: Each issue has title, description, priority, and proposed fix
   - [ ] Prioritize fixes vs. Post-MVP enhancements (target: validation-notes.md §Prioritization)
-    - Acceptance: Clear separation of blockers (must fix for v1.0) vs. nice-to-haves
-  - [ ] Update roadmap.md with lessons learned (target: roadmap.md §Task 1.0.1)
-    - Acceptance: Task 1.0.1 populated with specific issues to fix
+    - Acceptance: Clear separation of blockers (must fix for v0.57.0) vs. nice-to-haves
+  - [ ] Update roadmap.md with lessons learned (target: roadmap.md §Task 0.57.1)
+    - Acceptance: Task 0.57.1 populated with specific issues to fix
 
 **Quality Gates**:
 - Can build working client project in <1 day (success criteria)
@@ -310,7 +276,7 @@ cat doctest/README.md  # Should have clear instructions
 **Output Artifacts**:
 - `validation-notes.md` in docs/releases/ (comprehensive validation report)
 - Working client project in examples/ or separate repo
-- Updated Task 1.0.1 in roadmap.md with specific fixes needed
+- Updated Task 0.57.1 in roadmap.md with specific fixes needed
 
 **Success Criteria**: Can build a working client project from generated starter in < 1 day
 
@@ -318,52 +284,8 @@ cat doctest/README.md  # Should have clear instructions
 
 ---
 
-## **Release v1.0.0: MVP Launch** 🚀 **[CURRENT FOCUS]**
-
-**Priority**: Production-ready release of personal toolkit
-
-**Objective**: Stable, documented, tested personal toolkit ready for real client work.
-
-**✅ Verifiable Improvement**:
-- v0.56.2 validated and working
-- Release artifacts built and tested
-- CHANGELOG.md complete with all changes since v0.51.0
-- Git tag created (v1.0.0)
-- Optional: Published to TestPyPI or PyPI
-
-**Release Validation**:
-```bash
-# Build release packages
-cd quickscale_core && python -m build && cd ..
-cd quickscale_cli && python -m build && cd ..
-
-# Test installation from wheels
-pip install quickscale_core/dist/quickscale_core-1.0.0-*.whl
-pip install quickscale_cli/dist/quickscale_cli-1.0.0-*.whl
-
-# Verify everything works
-quickscale --version  # Should show 1.0.0
-quickscale init v1test
-cd v1test && python manage.py check
-
-# Create git tag
-git tag -a v1.0.0 -m "Release v1.0.0: MVP Personal Toolkit"
-git push origin v1.0.0
-
-# Optional: publish to PyPI
-twine upload quickscale_core/dist/* quickscale_cli/dist/*
-```
-
-**🎉 SUCCESS CRITERIA**:
-- Complete personal toolkit for generating Django projects ✅
-- Proven working in v0.56.2 ✅
-- Ready for daily use ✅
-- Foundation for Post-MVP evolution ✅
-
----
-
-### **Task 1.0.1: Final Polish & Quality Assurance**
-**Status**: Optional improvements before v1.0.0 release
+### **Task 0.57.1: Final Polish & Quality Assurance**
+**Status**: Optional improvements before v0.57.0 release
 
 **Tasks**:
 - [ ] Review all generated project files for completeness
@@ -372,33 +294,33 @@ twine upload quickscale_core/dist/* quickscale_cli/dist/*
 - [ ] Ensure all examples in docs work correctly
 - [ ] Address any remaining issues found during testing
 
-**Deliverable**: Polished v1.0.0 ready for release
+**Deliverable**: Polished v0.57.0 ready for release
 
 ---
 
-### **Task 1.0.2: Release Preparation & Publishing**
-**Status**: Final steps to tag and publish v1.0.0
+### **Task 0.57.2: Release Preparation & Publishing**
+**Status**: Final steps to tag and publish v0.57.0
 
 **Tasks**:
-- [ ] Set version to `1.0.0` in all `pyproject.toml` files
+- [ ] Set version to `0.57.0` in all `pyproject.toml` files
   - `quickscale_core/pyproject.toml`
   - `quickscale_cli/pyproject.toml`
-- [ ] Update VERSION file to `1.0.0` (already done ✅)
-- [ ] Create CHANGELOG.md with all changes v0.51.0 → v1.0.0
+- [ ] Update VERSION file to `0.57.0`
+- [ ] Create CHANGELOG.md with all changes v0.51.0 → v0.57.0
 - [ ] Build packages: `python -m build` in both packages
 - [ ] Test installation from built wheels in clean virtualenv
-- [ ] Create git tag: `git tag -a v1.0.0 -m "Release v1.0.0: MVP Personal Toolkit"`
-- [ ] Push tag: `git push origin v1.0.0`
+- [ ] Create git tag: `git tag -a v0.57.0 -m "Release v0.57.0: MVP Personal Toolkit"`
+- [ ] Push tag: `git push origin v0.57.0`
 - [ ] Create GitHub release with release notes
 - [ ] Optional: Upload to TestPyPI first, then PyPI
 
-**Deliverable**: Production-ready QuickScale v1.0.0 tagged and published
+**Deliverable**: Production-ready QuickScale v0.57.0 tagged and published
 
 ---
 
-## **MVP Deliverables Summary (v1.0.0)**
+## **MVP Deliverables Summary (v0.57.0)**
 
-### **✅ v1.0.0 Deliverables - Personal Toolkit (Production-Ready)**
+### **✅ v0.57.0 Deliverables - Personal Toolkit (Production-Ready)**
 - [ ] 📦 `quickscale_core` package with minimal utilities and template engine
 - [ ] 📦 `quickscale_cli` package with `quickscale init` command
 - [ ] 🏗️ Project scaffolding creating **production-ready** Django starter with:
@@ -436,20 +358,20 @@ See [MVP Feature Matrix in decisions.md](./decisions.md#mvp-feature-matrix-autho
 
 ---
 
-## **Post-MVP: Organic Evolution (v1.1.0+)**
+## **Post-MVP: Organic Evolution (v0.58.0+)**
 
 **🎯 Objective**: Extract reusable patterns from real client work. Don't build speculatively.
 
 **Timeline**: Ongoing (happens naturally as you build more client projects)
 
-**Release Strategy**: Minor versions (v1.x.0) add incremental improvements based on real usage
+**Release Strategy**: Minor versions (v0.5x.0) add incremental improvements based on real usage
 
 **Key Principle**: **Build modules from REAL client needs, not speculation**
 
 **Namespace Packaging Transition Timeline**:
-- **v1.0.0 (MVP)**: Regular packages with temporary `__init__.py` allowed
-- **v1.1.0 (First module)**: Remove namespace `__init__.py`, adopt PEP 420
-- **v1.2.0+**: All new modules MUST use PEP 420 from start
+- **v0.57.0 (MVP)**: Regular packages with temporary `__init__.py` allowed
+- **v0.58.0 (First module)**: Remove namespace `__init__.py`, adopt PEP 420
+- **v0.59.0+**: All new modules MUST use PEP 420 from start
 
 **CI Reminder**: Add a pre-publish CI check (pre-release or package build job) that fails when `quickscale_modules/__init__.py` or `quickscale_themes/__init__.py` exist. This prevents accidental publishing with an `__init__.py` present and enforces the PEP 420 transition.
 
@@ -459,22 +381,22 @@ See [MVP Feature Matrix in decisions.md](./decisions.md#mvp-feature-matrix-autho
 - ✅ Identified repeated patterns worth extracting
 - ✅ Git subtree workflow working smoothly
 
-### **v1.1.0 - v1.x.0: Pattern Extraction & Module Development**
+### **v0.58.0 - v0.6x.0: Pattern Extraction & Module Development**
 
 Each release adds one proven module or significant improvement based on real needs.
 
 **Example Release Sequence** (aligned with competitive priorities):
 
-- **v1.1.0**: `quickscale_modules.auth` - django-allauth integration (P1 - Critical for SaaS)
-- **v1.2.0**: `quickscale_modules.billing` - dj-stripe subscriptions (P1 - Core monetization)
-- **v1.3.0**: `quickscale_modules.teams` - Multi-tenancy patterns (P1 - B2B requirement) 🎯 **SAAS FEATURE PARITY MILESTONE**
-- **v1.4.0**: `quickscale_modules.notifications` - Email infrastructure (P2 - Common need)
-- **v1.5.0 (conditional) or v2.0**: CLI git subtree helpers (implement lightweight helpers in v1.5 if manual workflow proves painful; v2.0 reserved for richer orchestration/automation if demand justifies it)
-- **v1.6.0**: HTMX frontend variant template (P2 - Differentiation)
-- **v1.7.0**: React frontend variant template (P2 - SPA option)
-- **v1.x.0**: Additional modules based on real client needs
+- **v0.58.0**: `quickscale_modules.auth` - django-allauth integration (P1 - Critical for SaaS)
+- **v0.59.0**: `quickscale_modules.billing` - dj-stripe subscriptions (P1 - Core monetization)
+- **v0.60.0**: `quickscale_modules.teams` - Multi-tenancy patterns (P1 - B2B requirement) 🎯 **SAAS FEATURE PARITY MILESTONE**
+- **v0.61.0**: `quickscale_modules.notifications` - Email infrastructure (P2 - Common need)
+- **v0.62.0 (conditional) or v1.0.0**: CLI git subtree helpers (implement lightweight helpers in v0.62.0 if manual workflow proves painful; v1.0.0 reserved for richer orchestration/automation if demand justifies it)
+- **v0.63.0**: HTMX frontend variant template (P2 - Differentiation)
+- **v0.64.0**: React frontend variant template (P2 - SPA option)
+- **v0.6x.0**: Additional modules based on real client needs
 
-**🎯 Competitive Parity Goal (v1.3.0)**: At this point, QuickScale matches SaaS Pegasus on core features (auth, billing, teams) while offering superior architecture (composability, shared updates). See [competitive_analysis.md Timeline](../overview/competitive_analysis.md#timeline-reality-check).
+**🎯 Competitive Parity Goal (v0.60.0)**: At this point, QuickScale matches SaaS Pegasus on core features (auth, billing, teams) while offering superior architecture (composability, shared updates). See [competitive_analysis.md Timeline](../overview/competitive_analysis.md#timeline-reality-check).
 
 **Note**: Prioritization is based on competitive analysis. Adjust based on YOUR actual client needs.
 
@@ -508,7 +430,7 @@ Each release adds one proven module or significant improvement based on real nee
 
 ---
 
-### **Module Creation Guide (for v1.x.0 releases)**
+### **Module Creation Guide (for v0.5x.0 releases)**
 
 **Don't build these upfront. Build them when you actually need them 2-3 times.**
 
@@ -570,22 +492,22 @@ The admin module scope has been defined in [decisions.md Admin Module Scope Defi
 
 ---
 
-### **Git Subtree Workflow Refinement (v1.5 conditional / Post-MVP)**
+### **Git Subtree Workflow Refinement (v0.62.0 conditional / Post-MVP)**
 
 Based on MVP usage feedback, improve code sharing workflow:
 
-**Evaluate CLI Automation** (target: v1.5 conditional; defer to v2.0 if tied to marketplace automation):
+**Evaluate CLI Automation** (target: v0.62.0 conditional; defer to v1.0.0 if tied to marketplace automation):
 - [ ] **Assess demand for CLI helpers**
   - [ ] Survey how often you use git subtree manually
   - [ ] Document pain points with manual workflow
   - [ ] Determine if automation would save significant time
-- [ ] **If justified, add CLI commands (target v1.5; conditional)**:
+- [ ] **If justified, add CLI commands (target v0.62.0; conditional)**:
   - [ ] `quickscale embed-core <project>` - Embed quickscale_core via git subtree
   - [ ] `quickscale update-core <project>` - Pull updates from monorepo
   - [ ] `quickscale sync-push <project>` - Push improvements back to monorepo
   - [ ] Update [CLI Command Matrix](./decisions.md#cli-command-matrix) with implementation status
 - [ ] **Document versioning strategy**
-  - [ ] Git tags for stable snapshots (e.g., `core-v1.0.0`)
+  - [ ] Git tags for stable snapshots (e.g., `core-v0.57.0`)
   - [ ] Semantic versioning for modules
   - [ ] Compatibility tracking between core and modules
 - [ ] **Create extraction helper scripts** (optional)
@@ -602,7 +524,7 @@ Based on MVP usage feedback, improve code sharing workflow:
 
 ---
 
-### **Configuration System Evaluation (potential v1.x.0 release)**
+### **Configuration System Evaluation (potential v0.6x.0 release)**
 
 **After 5+ client projects**, evaluate if YAML config would be useful.
 
@@ -623,27 +545,27 @@ Based on MVP usage feedback, improve code sharing workflow:
 
 ---
 
-## **v2.0.0+: Community Platform (Optional Evolution)**
+## **v1.0.0+: Community Platform (Optional Evolution)**
 
 **🎯 Objective**: IF proven successful personally, evolve into community platform.
 
 **Timeline**: 12-18+ months after MVP (or never, if personal toolkit is enough)
 
-**Version Strategy**: Major version (v2.0.0) for community platform features
+**Version Strategy**: Major version (v1.0.0) for community platform features
 
 **Example Release Sequence**:
-- **v2.0.0**: PyPI publishing + package distribution
-- **v2.1.0**: Theme package system
-- **v2.2.0**: Marketplace basics
-- **v2.x.0**: Advanced community features
+- **v1.0.0**: PyPI publishing + package distribution
+- **v1.1.0**: Theme package system
+- **v1.2.0**: Marketplace basics
+- **v1.x.0**: Advanced community features
 
-**Prerequisites Before Starting v2.0.0**:
+**Prerequisites Before Starting v1.0.0**:
 - ✅ 10+ successful client projects built with QuickScale
 - ✅ 5+ proven reusable modules extracted
 - ✅ Clear evidence that others want to use your patterns
 - ✅ Bandwidth to support community and marketplace
 
-### **v2.0.0: Package Distribution**
+### **v1.0.0: Package Distribution**
 
 When you're ready to share with community:
 
@@ -663,7 +585,7 @@ When you're ready to share with community:
 
 ---
 
-### **v2.1.0: Theme Package System**
+### **v1.1.0: Theme Package System**
 
 If reusable business logic patterns emerge:
 
@@ -684,7 +606,7 @@ If reusable business logic patterns emerge:
 
 ---
 
-### **v2.2.0: Marketplace & Community**
+### **v1.2.0: Marketplace & Community**
 
 Only if there's real demand:
 
@@ -709,7 +631,7 @@ See [commercial.md](../overview/commercial.md) for detailed commercial distribut
 
 ---
 
-### **v2.3.0: Advanced Configuration**
+### **v1.3.0: Advanced Configuration**
 
 If YAML config proves useful in Phase 2:
 
@@ -728,7 +650,7 @@ If YAML config proves useful in Phase 2:
   - [ ] Real-time validation
   - [ ] Preview generated project
 
-**IMPORTANT**: v2.0.0+ is OPTIONAL. Many successful solo developers and agencies never need a community platform. Evaluate carefully before investing in marketplace features.
+**IMPORTANT**: v1.0.0+ is OPTIONAL. Many successful solo developers and agencies never need a community platform. Evaluate carefully before investing in marketplace features.
 
 ---
 
