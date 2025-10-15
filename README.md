@@ -108,8 +108,8 @@ See [competitive_analysis.md](./docs/overview/competitive_analysis.md) for detai
 ## Quick Start
 
 ```bash
-# Install QuickScale
-pip install -e quickscale_cli/
+# Install QuickScale globally
+./scripts/install_global.sh
 
 # Create your first project
 quickscale init myapp

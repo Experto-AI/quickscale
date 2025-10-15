@@ -6,7 +6,7 @@ and use the bundled script to sync metadata and embed a static package version.
 What to do for a release (exact steps)
 
 1) Edit VERSION
-   - Open `VERSION` and set the new version (eg. 0.58.0)
+   - Open `VERSION` and set the new version (eg. 0.56.3 or 1.0.0)
 
 2) Sync pyproject/docs and embed the static version
    - Dry-run to see changes: 

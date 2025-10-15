@@ -36,8 +36,8 @@ update_pyproject() {
     return 1
   fi
   local before; before=$(cat "$path")
-  # Replace the first version = "..." occurrence
-  sed -E -i "0,/^(version[[:space:]]*=[[:space:]]\")/s//version = \"${version}\"/" "$path"
+  # Replace the first version = "..." occurrence (full match including old version)
+  sed -E -i "0,/^version[[:space:]]*=[[:space:]]*\"[^\"]+\"/s//version = \"${version}\"/" "$path"
   local after; after=$(cat "$path")
   if [[ "$before" != "$after" ]]; then
     echo "  UPDATED: $path"

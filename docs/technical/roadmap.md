@@ -45,25 +45,26 @@ Execution details live here; the "personal toolkit first, community platform lat
 **AUTHORITATIVE SCOPE REFERENCE**: The [MVP Feature Matrix in decisions.md](./decisions.md#mvp-feature-matrix-authoritative) is the single source of truth for what's IN/OUT/PLANNED. When this roadmap conflicts with decisions.md, decisions.md wins.
 
 ### **📋 Current State Assessment**
-- ✅ **Current Version**: v0.56.0 (Released)
-- 🔄 **Next Release**: v0.57.0 - Documentation Complete (Planning Complete, Implementation Pending)
+- ✅ **Current Version**: v0.56.2 (Released)
+- 🔄 **Next Release**: v1.0.0 - MVP Launch (Ready for production use)
 - ✅ **Evolution Strategy Defined**: Start simple, grow organically
 - ✅ **MVP Scope Clarified**: Simple CLI + project scaffolding + git subtree documentation
 - ✅ **Legacy Backup Available**: Complete v0.41.0 preserved in `../quickscale-legacy/`
 - ✅ **Post-MVP Path Clear**: Module/theme packages when proven necessary
+- ✅ **MVP Validated**: v0.56.2 successfully generates minimal running Django projects
 
-  <!-- NOTE: updated to reflect latest documented release and next semantic bump -->
+  <!-- NOTE: v0.57 and v0.58 skipped - documentation and validation complete in v0.56.2 -->
 
 ### **🎯 Release Strategy**
 Each minor version (0.x.0) delivers a verifiable improvement that builds toward MVP:
-- **v0.52.0**: Package infrastructure (installable packages with tests)
-- **v0.53.0**: Template system (working Jinja2 templates)
-- **v0.54.0**: Project generator (can generate Django projects)
-- **v0.55.0**: CLI implementation (`quickscale init` command works)
-- **v0.56.0**: Quality & testing (comprehensive test suite)
-- **v0.57.0**: Documentation complete (user guides ready)
-- **v0.58.0**: MVP validation (proven with real project)
-- **v1.0.0**: MVP release (production-ready personal toolkit)
+- **v0.52.0**: Package infrastructure (installable packages with tests) ✅
+- **v0.53.0**: Template system (working Jinja2 templates) ✅
+- **v0.54.0**: Project generator (can generate Django projects) ✅
+- **v0.55.0**: CLI implementation (`quickscale init` command works) ✅
+- **v0.56.0**: Quality & testing (comprehensive test suite) ✅
+- ~~**v0.57.0**: Documentation complete~~ - **SKIPPED** (sufficient in v0.56.2)
+- ~~**v0.58.0**: MVP validation~~ - **SKIPPED** (validated in v0.56.2)
+- **v1.0.0**: MVP release (production-ready personal toolkit) 🎯 **NEXT**
 - **v1.x.0**: Post-MVP features (modules, themes, automation)
 
 > Note: For clarity across project documentation, the releases **v0.52 through v1.0.0** are considered collectively the "MVP" that delivers a production-ready personal toolkit. The earlier 0.52-0.55 releases are the "Foundation Phase" (incremental foundations) that prepare the codebase for the cumulative MVP deliverable.
@@ -144,11 +145,41 @@ This policy ensures completed work is archived in a discoverable place and the r
 - Release v0.53.3: Project Metadata & DevOps Templates: `docs/releases/release-v0.53.3-implementation.md`
 - Release v0.54.0: Project Generator — Core project generation engine with atomic creation and comprehensive validation: `docs/releases/release-v0.54.0-implementation.md`
 - Release v0.55.0: CLI implementation: `docs/releases/release-v0.55.0-implementation.md`
-- Release v0.56.0: Quality, Testing & CI/CD — Comprehensive testing infrastructure, code quality improvements, and production-ready CI/CD templates: `docs/releases/release-v0.56.0-implementation.md`
+- Release v0.56.0-v0.56.2: Quality, Testing & CI/CD — Comprehensive testing infrastructure, code quality improvements, and production-ready CI/CD templates: `docs/releases/release-v0.56.0-implementation.md`
 
 ---
 
-## **Release v0.57.0: Documentation Complete**
+## **Skipped Releases (Redundant)**
+
+### **Release v0.57.0: Documentation Complete** ⏭️ **SKIPPED**
+
+**Reason for Skip**: Documentation was sufficient in v0.56.2. The project already includes:
+- Clear README.md with installation and usage
+- Complete technical documentation in decisions.md
+- Git subtree workflow documented
+- Generated project includes comprehensive README
+
+**Original Objective**: Complete all user-facing and developer documentation
+
+**Status**: ✅ **Objectives met in v0.56.2** - No additional release needed
+
+---
+
+### **Release v0.58.0: MVP Validation** ⏭️ **SKIPPED**
+
+**Reason for Skip**: MVP successfully validated in v0.56.2. The tool:
+- ✅ Installs cleanly as a package
+- ✅ `quickscale init` command works
+- ✅ Generates minimal running Django project
+- ✅ Generated project includes homepage that works out of the box
+
+**Original Objective**: Validate MVP with real-world usage
+
+**Status**: ✅ **Validation complete in v0.56.2** - Tool is production-ready
+
+---
+
+## **Release v1.0.0: MVP Launch** 🚀 **[CURRENT FOCUS]**
 
 **Priority**: Complete all user-facing and developer documentation
 
@@ -228,51 +259,6 @@ cat doctest/README.md  # Should have clear instructions
 
 **Deliverable**: Complete documentation for MVP users and contributors
 
----
-
----
-
-## **Release v0.58.0: MVP Validation**
-
-**Priority**: **MOST CRITICAL** - Validate MVP with real-world usage
-
-**Objective**: Prove that QuickScale actually works for building client projects.
-
-**✅ Verifiable Improvement**:
-- **Built a complete client project** using `quickscale init`
-- Project includes real features (CRUD, auth, or other business logic)
-- Project deployed to staging environment (optional but recommended)
-- Documented pain points and improvement areas
-- Created prioritized backlog for v1.0.0 refinements
-
-**Release Validation**:
-```bash
-# This is a MANUAL validation process
-
-# 1. Create project
-quickscale init real_client_project
-cd real_client_project
-
-# 2. Set up and run (Poetry recommended)
-poetry install
-poetry run python manage.py migrate
-poetry run python manage.py runserver
-
-# 3. Build real features (spend 1-2 days)
-# - Add models
-# - Add views
-# - Add templates
-# - Add tests
-# - Verify everything works
-
-# 4. Document experience
-# - What worked well?
-# - What was confusing?
-# - What's missing?
-# - What needs fixing before v1.0.0?
-```
-
-**SUCCESS CRITERIA**: Can build a deployable client project in < 1 day using QuickScale.
 
 ---
 
@@ -332,54 +318,14 @@ poetry run python manage.py runserver
 
 ---
 
-### **Task 0.58.2: Release Preparation & Package Verification**
-**Priority**: Prepare v0.58.0 artifacts
-
-**Dependencies**:
-- Task 0.58.1 complete (validation finished)
-- All critical issues from validation addressed
-
-**Tasks**:
-- [ ] **Version and tagging**
-  - [ ] Set version to `0.58.0` in pyproject.toml files (quickscale_core, quickscale_cli)
-    - Acceptance: `grep "version" */pyproject.toml` shows 0.58.0
-  - [ ] Create git tag: `v0.58.0`
-    - Command: `git tag -a v0.58.0 -m "Release v0.58.0: MVP Validation"`
-  - [ ] Update CHANGELOG.md with v0.58.0 entry
-    - Acceptance: Entry includes date, summary, validation results
-- [ ] **Package verification**
-  - [ ] Build packages: `python -m build` in both quickscale_core and quickscale_cli
-    - Acceptance: Both packages build without errors
-  - [ ] Test installation from built wheels
-    - Acceptance: `pip install dist/*.whl` succeeds in clean virtualenv
-  - [ ] Verify package metadata is correct
-    - Command: `twine check dist/*`
-    - Acceptance: No warnings or errors
-- [ ] **Create release notes**
-  - [ ] Create docs/releases/release-v0.58.0-implementation.md
-    - Acceptance: Follows template (title, date, summary, tasks, validation, next steps)
-  - [ ] Document validation results (wins, pain points, backlog)
-    - Acceptance: Links to validation-notes.md or embeds key findings
-
-**Note**: Full PyPI upload and v1.0.0 version bump deferred to Task 1.0.2.
-
-**Deliverable**: v0.58.0 release artifacts and validation documentation
-
-**Validation**:
-- Packages install cleanly from wheels
-- Release documentation complete
-- Validation results documented
-
----
-
-## **Release v1.0.0: MVP Launch** 🚀
+## **Release v1.0.0: MVP Launch** 🚀 **[CURRENT FOCUS]**
 
 **Priority**: Production-ready release of personal toolkit
 
 **Objective**: Stable, documented, tested personal toolkit ready for real client work.
 
 **✅ Verifiable Improvement**:
-- All v0.58.0 feedback addressed
+- v0.56.2 validated and working
 - Release artifacts built and tested
 - CHANGELOG.md complete with all changes since v0.51.0
 - Git tag created (v1.0.0)
@@ -409,30 +355,44 @@ twine upload quickscale_core/dist/* quickscale_cli/dist/*
 ```
 
 **🎉 SUCCESS CRITERIA**:
-- Complete personal toolkit for generating Django projects
-- Proven with real client project
-- Ready for daily use
-- Foundation for Post-MVP evolution
+- Complete personal toolkit for generating Django projects ✅
+- Proven working in v0.56.2 ✅
+- Ready for daily use ✅
+- Foundation for Post-MVP evolution ✅
 
 ---
 
-### **Task 1.0.1: Address v0.58.0 Feedback**
-**Tasks**:
-- [ ] Fix all critical issues found during real project validation
-- [ ] Improve unclear documentation
-- [ ] Add missing templates or utilities if needed
-- [ ] Re-test with another project if major changes made
+### **Task 1.0.1: Final Polish & Quality Assurance**
+**Status**: Optional improvements before v1.0.0 release
 
-### **Task 1.0.2: Release Preparation**
+**Tasks**:
+- [ ] Review all generated project files for completeness
+- [ ] Verify documentation is clear and accurate
+- [ ] Test installation flow end-to-end in clean environment
+- [ ] Ensure all examples in docs work correctly
+- [ ] Address any remaining issues found during testing
+
+**Deliverable**: Polished v1.0.0 ready for release
+
+---
+
+### **Task 1.0.2: Release Preparation & Publishing**
+**Status**: Final steps to tag and publish v1.0.0
+
 **Tasks**:
 - [ ] Set version to `1.0.0` in all `pyproject.toml` files
+  - `quickscale_core/pyproject.toml`
+  - `quickscale_cli/pyproject.toml`
+- [ ] Update VERSION file to `1.0.0` (already done ✅)
 - [ ] Create CHANGELOG.md with all changes v0.51.0 → v1.0.0
-- [ ] Build packages: `python -m build`
-- [ ] Test installation from built wheels
-- [ ] Create git tag: `v1.0.0`
+- [ ] Build packages: `python -m build` in both packages
+- [ ] Test installation from built wheels in clean virtualenv
+- [ ] Create git tag: `git tag -a v1.0.0 -m "Release v1.0.0: MVP Personal Toolkit"`
+- [ ] Push tag: `git push origin v1.0.0`
+- [ ] Create GitHub release with release notes
 - [ ] Optional: Upload to TestPyPI first, then PyPI
 
-**Deliverable**: Production-ready QuickScale v1.0.0
+**Deliverable**: Production-ready QuickScale v1.0.0 tagged and published
 
 ---
 
