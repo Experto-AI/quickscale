@@ -1,9 +1,10 @@
 [tool.poetry]
 name = "quickscale-core"
-version = "0.57.0"
+version = "0.57.2"
 description = "Core scaffolding and utilities for QuickScale Django project generator"
 authors = ["Experto AI <victor@experto.ai>"]
 license = "Apache-2.0"
+readme = "README.md"
 keywords = ["django", "scaffolding", "project-generator", "saas"]
 homepage = "https://github.com/Experto-AI/quickscale"
 repository = "https://github.com/Experto-AI/quickscale"

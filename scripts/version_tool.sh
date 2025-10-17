@@ -11,7 +11,7 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 VERSION_FILE="$ROOT/VERSION"
 
-PYPROJECTS=("$ROOT/quickscale_core/pyproject.toml" "$ROOT/quickscale_cli/pyproject.toml")
+PYPROJECTS=("$ROOT/quickscale_core/pyproject.toml" "$ROOT/quickscale_cli/pyproject.toml" "$ROOT/quickscale/pyproject.toml")
 PACKAGES=("$ROOT/quickscale_core/src/quickscale_core" "$ROOT/quickscale_cli/src/quickscale_cli")
 
 read_version() {

@@ -182,6 +182,7 @@ htmlcov/
 .vscode/
 .claude/
 .github/
+.github/prompts/roadmap-plan-review-and-update.prompt.md
 
 # LEGACY
 # symlink, not directory
@@ -197,3 +198,10 @@ quickscale_cli/messagetest/
 quickscale_cli/*_test_*/
 quickscale_core/testproject*/
 quickscale_core/*_test_*/
+
+# Temporary README.md copies for PyPI packaging
+# The build script copies README.md to each package directory temporarily
+# to satisfy Poetry's requirement that readme files be within the package
+quickscale_core/README.md
+quickscale_cli/README.md
+quickscale/README.md
