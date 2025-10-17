@@ -7,19 +7,19 @@ import sys
 def check_dependencies():
     """Check if required dependencies are installed and provide helpful error messages."""
     missing_deps = []
-    
+
     # Check for python-decouple (required by settings)
     try:
         import decouple  # noqa: F401
     except ImportError:
         missing_deps.append("python-decouple")
-    
+
     # Check for Django
     try:
         import django  # noqa: F401
     except ImportError:
         missing_deps.append("Django")
-    
+
     if missing_deps:
         deps_list = ", ".join(missing_deps)
         raise ImportError(
@@ -39,11 +39,11 @@ def main():
     """Run administrative tasks."""
     # Check dependencies FIRST before anything else
     check_dependencies()
-    
+
     os.environ.setdefault("DJANGO_SETTINGS_MODULE", "{{ project_name }}.settings.local")
-    
+
     from django.core.management import execute_from_command_line
-    
+
     execute_from_command_line(sys.argv)
 
 

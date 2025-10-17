@@ -1,4 +1,5 @@
-"""QuickScale Core - Version information for the core package.
+"""
+QuickScale Core - Version information for the core package.
 
 This module reads the canonical version from the repository-level `VERSION` file
 so the release version can be set in a single place and consumed by all packages.
@@ -7,7 +8,6 @@ so the release version can be set in a single place and consumed by all packages
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Tuple
 
 __author__ = "Experto AI"
 __email__ = "victor@experto.ai"
@@ -29,7 +29,7 @@ except Exception:
 # Version tuple for programmatic access
 # Extract numeric parts to handle pre-release versions (e.g., "0.52.0-alpha")
 version_core = __version__.split("-")[0].split(".")
-VERSION: Tuple[int, int, int] = (
+VERSION: tuple[int, int, int] = (
     int(version_core[0]) if len(version_core) > 0 else 0,
     int(version_core[1]) if len(version_core) > 1 else 0,
     int(version_core[2]) if len(version_core) > 2 else 0,

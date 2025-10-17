@@ -84,7 +84,7 @@ Running `quickscale init myapp` generates a **production-ready Django project** 
 - ✅ **Security** best practices (SECRET_KEY, ALLOWED_HOSTS, etc.)
 - ✅ **Testing** infrastructure (pytest + factory_boy)
 - ✅ **CI/CD** pipeline (GitHub Actions)
-- ✅ **Code quality** hooks (black, ruff, isort)
+- ✅ **Code quality** hooks (ruff format + ruff check)
 - ✅ **Poetry** for dependency management
 
 **See the complete project structure:** [scaffolding.md - Generated Project Output](./docs/technical/scaffolding.md#5-generated-project-output)

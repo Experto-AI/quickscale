@@ -399,7 +399,7 @@ For canonical guidance on backend extension patterns, see the [backend extension
 schema_version: 1
 project:
   name: my-enterprise-saas
-  version: 0.56.2
+  version: 0.57.0
 
 theme: starter
 backend_extensions: myenterprise.extensions

@@ -23,18 +23,22 @@ services:
       context: .
       dockerfile: Dockerfile
     container_name: {{ project_name }}_web
-    command: python manage.py runserver 0.0.0.0:8000
+    command: python manage.py runserver 0.0.0.0:${PORT:-8000}
+    # Run as root in development to avoid permission issues with mounted volumes
+    # Production deployments should use the Dockerfile's non-root user
+    user: root
     volumes:
       - .:/app
       - static_volume:/app/staticfiles
       - media_volume:/app/media
     ports:
-      - "8000:8000"
+      - "${PORT:-8000}:${PORT:-8000}"
     env_file:
       - .env
     environment:
       - DJANGO_SETTINGS_MODULE={{ project_name }}.settings.local
       - DATABASE_URL=postgresql://postgres:postgres@db:5432/{{ project_name }}
+      - PORT=${PORT:-8000}
     depends_on:
       db:
         condition: service_healthy

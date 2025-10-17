@@ -22,8 +22,9 @@ class ProjectGenerator:
         if template_dir is None:
             # Try to find templates in development environment first
             import quickscale_core
+
             package_dir = Path(quickscale_core.__file__).parent
-            
+
             # Check if we're in development (source directory exists)
             dev_template_dir = package_dir / "generator" / "templates"
             if dev_template_dir.exists():
@@ -31,7 +32,7 @@ class ProjectGenerator:
             else:
                 # Fall back to package templates (should be included)
                 template_dir = package_dir / "templates"
-                
+
                 # If package templates don't exist, try to find source templates
                 # by walking up from the current file location
                 if not template_dir.exists():
@@ -40,9 +41,14 @@ class ProjectGenerator:
                     possible_paths = [
                         current_file.parent / "templates",  # Same directory
                         current_file.parent.parent / "generator" / "templates",  # Parent
-                        Path.cwd() / "quickscale_core" / "src" / "quickscale_core" / "generator" / "templates",  # From repo root
+                        Path.cwd()
+                        / "quickscale_core"
+                        / "src"
+                        / "quickscale_core"
+                        / "generator"
+                        / "templates",  # From repo root
                     ]
-                    
+
                     for path in possible_paths:
                         if path.exists():
                             template_dir = path
@@ -122,6 +128,7 @@ class ProjectGenerator:
         # Format: (template_path, output_path, executable)
         file_mappings = [
             # Root level files
+            ("README.md.j2", "README.md", False),
             ("manage.py.j2", "manage.py", True),
             ("pyproject.toml.j2", "pyproject.toml", False),
             ("poetry.lock.j2", "poetry.lock", False),

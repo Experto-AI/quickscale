@@ -15,9 +15,9 @@ REQUIRED ENVIRONMENT VARIABLES:
 - SENTRY_DSN: (optional) Sentry error tracking DSN
 """
 
-from .base import *  # noqa: F403
-
 from decouple import config
+
+from .base import *  # noqa: F403
 
 # SECURITY: DEBUG must be False in production
 DEBUG = False
@@ -84,8 +84,8 @@ DEFAULT_FROM_EMAIL = config("DEFAULT_FROM_EMAIL", default="noreply@{{ project_na
 SERVER_EMAIL = config("SERVER_EMAIL", default="server@{{ project_name }}.com")
 
 # Static files - WhiteNoise for efficient serving
+# STATIC_ROOT and STORAGES are inherited from base.py
 STATIC_ROOT = BASE_DIR / "staticfiles"  # noqa: F405
-STATICFILES_STORAGE = "whitenoise.storage.CompressedManifestStaticFilesStorage"
 
 # Media files - consider using cloud storage (S3, GCS) in production
 # MEDIA_URL = config("MEDIA_URL", default="/media/")

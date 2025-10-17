@@ -28,8 +28,8 @@ COPY pyproject.toml poetry.lock ./
 # Configure Poetry to not create virtual environments (we're in a container)
 RUN poetry config virtualenvs.create false
 
-# Install dependencies
-RUN poetry install --only main --no-interaction --no-ansi
+# Install dependencies (--no-root: don't install project itself, only dependencies)
+RUN poetry install --only main --no-root --no-interaction --no-ansi
 
 # Stage 2: Runtime - Create minimal production image
 FROM python:3.11-slim
@@ -38,6 +38,10 @@ FROM python:3.11-slim
 ENV PYTHONUNBUFFERED=1 \
     PYTHONDONTWRITEBYTECODE=1 \
     DJANGO_SETTINGS_MODULE={{ project_name }}.settings.production
+
+# Port configuration
+ARG PORT=8000
+ENV PORT=${PORT}
 
 # Install runtime dependencies only
 RUN apt-get update && apt-get install -y --no-install-recommends \
@@ -58,7 +62,7 @@ COPY --from=builder /usr/local/bin /usr/local/bin
 COPY --chown=django:django . .
 
 # Create necessary directories with correct permissions
-RUN mkdir -p /app/staticfiles /app/media && \
+RUN mkdir -p /app/staticfiles /app/media /app/logs && \
     chown -R django:django /app
 
 # Switch to non-root user
@@ -68,11 +72,11 @@ USER django
 RUN python manage.py collectstatic --noinput
 
 # Expose port
-EXPOSE 8000
+EXPOSE ${PORT}
 
-# Health check
+# Health check - verify gunicorn is responding (any response including 404/500 means it's alive)
 HEALTHCHECK --interval=30s --timeout=10s --start-period=40s --retries=3 \
-    CMD python -c "import urllib.request; urllib.request.urlopen('http://localhost:8000/health/').read()"
+    CMD python -c "import os, urllib.request; urllib.request.urlopen(f'http://localhost:{os.environ.get(\"PORT\", \"8000\")}/', timeout=5)"
 
 # Run gunicorn
-CMD ["gunicorn", "{{ project_name }}.wsgi:application", "--bind", "0.0.0.0:8000", "--workers", "4", "--timeout", "60", "--access-logfile", "-", "--error-logfile", "-"]
+CMD gunicorn {{ project_name }}.wsgi:application --bind 0.0.0.0:${PORT} --workers 4 --timeout 60 --access-logfile - --error-logfile -

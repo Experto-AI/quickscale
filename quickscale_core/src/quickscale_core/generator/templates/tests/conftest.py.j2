@@ -19,10 +19,12 @@ def user_data():
 @pytest.fixture
 def create_user(db, user_data):
     """Factory fixture to create test users"""
+
     def _create_user(**kwargs):
         data = user_data.copy()
         data.update(kwargs)
         return User.objects.create_user(**data)
+
     return _create_user
 
 
