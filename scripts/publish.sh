@@ -139,7 +139,7 @@ check_version_consistency() {
     if "$VERSION_TOOL" check; then
         log_success "All versions are consistent"
     else
-        log_error "Version mismatch detected. Run 'scripts/version_tool.sh sync --apply' to fix."
+        log_error "Version mismatch detected. Run 'scripts/version_tool.sh update' to fix."
         exit 1
     fi
 }

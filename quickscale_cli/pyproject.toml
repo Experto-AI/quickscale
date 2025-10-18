@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "quickscale-cli"
-version = "0.57.2"
+version = "0.58.0"
 description = "Command-line interface for QuickScale Django project generator"
 authors = ["Experto AI <victor@experto.ai>"]
 license = "Apache-2.0"
@@ -26,7 +26,7 @@ packages = [{include = "quickscale_cli", from = "src"}]
 [tool.poetry.dependencies]
 python = "^3.10"
 click = "^8.1.0"
-quickscale-core = "^0.57.2"
+quickscale-core = "^0.58.0"
 
 [tool.poetry.group.dev.dependencies]
 pytest = "^7.4.0"

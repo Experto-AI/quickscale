@@ -48,6 +48,25 @@ update_pyproject() {
   fi
 }
 
+update_internal_dependencies() {
+  local version="$1"
+  local path="$2"
+  if [[ ! -f "$path" ]]; then
+    return 1
+  fi
+  local before; before=$(cat "$path")
+  # Update quickscale-core dependency constraint
+  sed -E -i "s|^(quickscale-core[[:space:]]*=[[:space:]]*)\"\^[0-9]+\.[0-9]+\.[0-9]+\"|\1\"^${version}\"|" "$path"
+  # Update quickscale-cli dependency constraint
+  sed -E -i "s|^(quickscale-cli[[:space:]]*=[[:space:]]*)\"\^[0-9]+\.[0-9]+\.[0-9]+\"|\1\"^${version}\"|" "$path"
+  local after; after=$(cat "$path")
+  if [[ "$before" != "$after" ]]; then
+    echo "  UPDATED DEPS: $path"
+    return 0
+  fi
+  return 2
+}
+
 find_yaml_docs() {
   local out=()
   if [[ -d "$ROOT/docs" ]]; then
@@ -116,56 +135,49 @@ cmd_check() {
   return $ok
 }
 
-cmd_sync() {
-  local apply=false
-  if [[ "${1:-}" == "--apply" ]]; then apply=true; fi
+cmd_update() {
   local version; version=$(read_version)
-  echo "Repository VERSION: ${version}"
-  local any=false
+  echo "Updating all files to version ${version}..."
+
+  # Update pyproject.toml files
   for p in "${PYPROJECTS[@]}"; do
-    if [[ "$apply" == true ]]; then
-      update_pyproject "$p" "$version" || true
-    else
-      echo "$p: will-update (dry-run) if version differs"
-    fi
+    update_pyproject "$p" "$version" || true
+    update_internal_dependencies "$version" "$p" || true
   done
 
+  # Update YAML docs
   mapfile -t yamls < <(find_yaml_docs)
   if [[ ${#yamls[@]} -gt 0 ]]; then
-    if [[ "$apply" == true ]]; then
-      update_yaml_versions "$version" "${yamls[@]}"
-    else
-      echo "Found ${#yamls[@]} docs with version fields (dry-run):"
-      for p in "${yamls[@]}"; do echo " - $p"; done
-    fi
-  else
-    echo "No docs with version fields found"
+    update_yaml_versions "$version" "${yamls[@]}"
   fi
-  return 0
-}
 
-cmd_embed() {
-  local version; version=$(read_version)
+  # Embed into _version.py files
   embed_version_into_packages "$version"
+
+  echo ""
+  echo "✅ All files updated to version ${version}"
+  return 0
 }
 
 usage() {
   cat <<EOF
-Usage: $0 <command> [--apply]
+Usage: $0 <command>
 
 Commands:
-  check           Verify VERSION matches pyproject.toml versions and list docs
-  sync [--apply]  Sync pyproject.toml/docs from VERSION (dry-run unless --apply)
-  embed           Embed VERSION into package-level _version.py files
-  apply           Run sync --apply then embed
+  check    Verify VERSION matches all pyproject.toml versions
+  update   Update all files (pyproject.toml, dependencies, _version.py, docs) to VERSION
 
 Examples:
-  $0 check
-  $0 sync --apply
-  $0 embed
-  $0 apply
+  # After editing VERSION file, update everything:
+  $0 update
 
-After adding this file make it executable: chmod +x $0
+  # Verify everything is in sync:
+  $0 check
+
+Workflow:
+  1. Edit VERSION file with new version
+  2. Run: $0 update
+  3. Build/publish your packages
 EOF
 }
 
@@ -175,13 +187,8 @@ main() {
   case "$cmd" in
     check)
       cmd_check || exit $? ;;
-    sync)
-      cmd_sync "$@" || exit $? ;;
-    embed)
-      cmd_embed || exit $? ;;
-    apply)
-      cmd_sync --apply || exit $? ;
-      cmd_embed || exit $? ;;
+    update)
+      cmd_update || exit $? ;;
     -h|--help|help)
       usage ;;
     *)

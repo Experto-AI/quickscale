@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "quickscale-core"
-version = "0.57.2"
+version = "0.58.0"
 description = "Core scaffolding and utilities for QuickScale Django project generator"
 authors = ["Experto AI <victor@experto.ai>"]
 license = "Apache-2.0"
@@ -33,6 +33,10 @@ Jinja2 = "^3.1.0"
 [tool.poetry.group.dev.dependencies]
 pytest = "^7.4.0"
 pytest-cov = "^4.1.0"
+pytest-docker = "^3.1.0"
+pytest-playwright = "^0.4.0"
+psycopg2-binary = "^2.9.0"
+pyyaml = "^6.0.0"
 ruff = "^0.6.0"
 mypy = "^1.8.0"
 
@@ -51,7 +55,10 @@ addopts = [
     "--cov=quickscale_core",
     "--cov-report=term-missing",
     "--cov-report=html",
+    "-m", "not e2e",  # Skip E2E tests by default (run with: pytest -m e2e)
 ]
+# Playwright configuration
+base_url = "http://localhost:8000"
 
 [tool.coverage.run]
 omit = [

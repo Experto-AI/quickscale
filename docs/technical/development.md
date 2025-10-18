@@ -143,7 +143,7 @@ poetry run pytest
 # Expected: 5/5 tests passing
 ```
 
-**Total time: 10-15 minutes** ✅
+**Total time: some minutes** ✅
 
 ---
 

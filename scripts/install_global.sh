@@ -85,6 +85,6 @@ remove_readme "$ROOT/quickscale_cli"
 # Install both packages globally
 echo "📦 Installing globally with pip..."
 pip install "$ROOT/quickscale_core/dist/quickscale_core-"*.whl
-pip install "$ROOT/quickscale_cli/dist/quickscale_cli-"*.whl
+pip install --force-reinstall --no-deps "$ROOT/quickscale_cli/dist/quickscale_cli-"*.whl
 
 echo "✅ QuickScale installed globally. You can now run 'quickscale' from any directory."

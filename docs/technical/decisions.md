@@ -250,6 +250,40 @@ Other documents (README.md, roadmap.md, scaffolding.md, commercial.md) MUST refe
 - ✅ File generation tests: Use `pytest.tmp_path` or `pytest.tmpdir` fixtures
 - ✅ Integration tests: Use temporary directories (`tempfile.mkdtemp()`)
 
+### E2E Testing Policy
+
+**Purpose**: Validate complete user workflows with real database and browser automation before releases.
+
+**Requirements:**
+- ✅ PostgreSQL 16 container via pytest-docker
+- ✅ Playwright browser automation (Chromium)
+- ✅ Full project lifecycle testing (generate → install → migrate → serve → browse)
+- ✅ Separate from fast CI using pytest markers (`@pytest.mark.e2e`)
+
+**When Required:**
+- Pre-release validation
+- Production-readiness verification
+- Frontend regression testing
+- Docker/database integration verification
+- After generator template changes
+
+**Tech Stack:**
+- `pytest-docker`: Container orchestration for PostgreSQL
+- `pytest-playwright`: Browser automation for frontend testing
+- `docker-compose.test.yml`: Test infrastructure definition (PostgreSQL 16 with health checks)
+- Playwright Chromium: Headless/headed browser for UI testing
+
+**Execution Time**: 5-10 minutes for full suite (acceptable for release gates, excludes from fast CI)
+
+**CI Strategy:**
+- ✅ Fast CI (daily): Excludes E2E (`pytest -m "not e2e"`)
+- ✅ Release CI (pre-release): Includes E2E (`pytest -m e2e`)
+- ✅ Separate workflows ensure fast feedback for daily development
+
+**Test Organization**: See [scaffolding.md §13](./scaffolding.md#13-e2e-test-infrastructure) for structure details.
+
+**Usage**: See [user_manual.md §2.1](./user_manual.md#21-end-to-end-e2e-tests) for running instructions.
+
 ## Architecture (Post-MVP Vision)
 
 **Library-Style Backend Modules:**

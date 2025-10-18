@@ -69,10 +69,12 @@ class ProjectGenerator:
         Generate Django project from templates
 
         Args:
+        ----
             project_name: Name of the project (must be valid Python identifier)
             output_path: Path where project will be created
 
         Raises:
+        ------
             ValueError: If project_name is invalid
             FileExistsError: If output_path already exists
             PermissionError: If output_path is not writable
@@ -161,6 +163,7 @@ class ProjectGenerator:
             ("templates/index.html.j2", "templates/index.html", False),
             # Static files
             ("static/css/style.css.j2", "static/css/style.css", False),
+            ("static/images/favicon.svg.j2", "static/images/favicon.svg", False),
             # CI/CD and quality tools
             ("github/workflows/ci.yml.j2", ".github/workflows/ci.yml", False),
             (".pre-commit-config.yaml.j2", ".pre-commit-config.yaml", False),

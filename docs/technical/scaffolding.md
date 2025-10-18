@@ -686,6 +686,60 @@ Backward compatibility stance: Config migrations tracked under `schemas/migratio
  - Keep `backend_extensions.py` minimal—users own its content, so minimize regeneration risk (no destructive overwrites). Note: the MVP CLI will not generate this file automatically; Post‑MVP generators may offer an optional template.
 
 ---
+## 13. E2E Test Infrastructure
+
+**Purpose**: End-to-end testing infrastructure for validating complete project lifecycle with real database and browser automation.
+
+**Structure**:
+```
+quickscale_core/tests/
+├── test_e2e_full_workflow.py      # Main E2E test suite
+│   ├── TestFullE2EWorkflow        # Complete lifecycle tests
+│   ├── TestDockerIntegration      # Docker/compose validation
+│   └── TestProductionReadiness    # Security/environment tests
+├── docker-compose.test.yml        # PostgreSQL 16 test service definition
+└── conftest.py                    # E2E fixtures (postgres_url, page, browser)
+```
+
+**Tech Stack**:
+- `pytest-docker`: Manages PostgreSQL containers during test execution
+- `pytest-playwright`: Browser automation for frontend UI testing
+- Docker Compose: Defines test infrastructure (PostgreSQL service with health checks)
+- Playwright: Chromium browser for end-to-end frontend tests
+
+**Fixtures Provided** (in `conftest.py`):
+- `postgres_service`: Session-scoped PostgreSQL container info (host, port, credentials)
+- `postgres_url`: Full PostgreSQL connection URL for generated projects
+- `page`, `browser`, `context`: Playwright browser automation fixtures
+- `browser_context_args`: Custom browser configuration (viewport, HTTPS handling)
+
+**Test Organization**:
+```python
+@pytest.mark.e2e
+class TestFullE2EWorkflow:
+    """Complete lifecycle: generate → install → migrate → serve → browse"""
+    def test_complete_project_lifecycle(tmp_path, postgres_url, page):
+        # Phase 1: Generate project
+        # Phase 2: Install dependencies
+        # Phase 3: Run migrations
+        # Phase 4: Start dev server
+        # Phase 5: Browser tests
+```
+
+**Key Patterns**:
+- Test isolation via `tmp_path` (no codebase pollution)
+- Atomic cleanup in `finally` blocks
+- Server process management with timeout handling
+- Screenshot capture on test failures
+- Separate marker (`@pytest.mark.e2e`) for CI filtering
+
+**CI Strategy**:
+- Fast CI excludes E2E: `pytest -m "not e2e"`
+- Release CI includes E2E: `pytest -m e2e`
+
+For usage instructions, see [user_manual.md §2.1](./user_manual.md#21-end-to-end-e2e-tests).
+
+---
 **Status Legend (for ROADMAP correlation)**:
 - Implemented: Update this file & ROADMAP
 - Planned: Listed here, open tasks in ROADMAP

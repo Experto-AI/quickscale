@@ -16,7 +16,7 @@ __email__ = "victor@experto.ai"
 try:
     # This import is local to package; it will work in installed wheels if the
     # build step wrote src/quickscale_core/_version.py
-    from ._version import __version__  # type: ignore
+    from ._version import __version__
 except Exception:
     # Fallback to reading the repository-level VERSION file (development)
     _root = Path(__file__).resolve().parents[3]

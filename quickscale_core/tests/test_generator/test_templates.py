@@ -513,7 +513,9 @@ class TestDevOpsTemplateRendering:
         assert output is not None
         assert len(output) > 0
         assert "testproject" in output
-        assert "version:" in output
+        # Note: 'version:' field is obsolete in docker-compose v2+, so we don't check for it
+        assert "services:" in output
+        assert "db:" in output
 
     def test_dockerignore_renders(
         self, jinja_env: Environment, test_context: dict[str, str]

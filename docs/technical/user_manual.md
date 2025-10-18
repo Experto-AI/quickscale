@@ -66,6 +66,48 @@ If you prefer to run a single test file or test function, use pytest patterns, f
 poetry run pytest tests/test_cli.py -q
 ```
 
+### 2.1) End-to-End (E2E) Tests
+
+E2E tests validate the complete project lifecycle with real PostgreSQL and browser automation. These tests are slower (5-10 minutes) and require Docker.
+
+**Prerequisites**:
+- Docker installed and running
+- Playwright browsers installed (one-time setup below)
+
+**First-time E2E setup**:
+```bash
+cd quickscale_core
+poetry install --with dev
+
+# Install Playwright Chromium browser (one-time)
+poetry run playwright install chromium --with-deps
+```
+
+**Running E2E tests**:
+```bash
+# Run E2E tests only
+pytest -m e2e
+
+# Run E2E with visible browser (for debugging)
+pytest -m e2e --headed
+
+# Run all tests EXCEPT E2E (fast, for daily development)
+pytest -m "not e2e"
+
+# Use helper script
+./scripts/test_e2e.sh              # Standard run
+./scripts/test_e2e.sh --headed     # Show browser
+./scripts/test_e2e.sh --verbose    # Detailed output
+```
+
+**When to run E2E tests**:
+- Pre-release validation
+- After making generator template changes
+- Before tagging a new version
+- Manual testing of complete workflows
+
+E2E tests are excluded from fast CI and run separately on release workflows.
+
 ## 3) Linters and code quality checks
 
 Use the repository lint script to run all code quality checks:
