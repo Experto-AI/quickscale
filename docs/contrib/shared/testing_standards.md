@@ -476,7 +476,7 @@ def test_user_registration_creates_credit_account(dynamic_project_generator):
 docker-compose -f tests/docker-compose.test.yml up -d test-db
 
 # Run tests
-./scripts/test-all.sh
+./scripts/test_all.sh
 
 # Cleanup
 docker-compose -f tests/docker-compose.test.yml down

@@ -76,7 +76,7 @@ TOTAL                               57     10    82%
 
 ### Full Test Suite
 ```bash
-$ ./scripts/test-all.sh
+$ ./scripts/test_all.sh
 📦 Testing quickscale_core...
 133 passed in 1.06s
 
@@ -113,7 +113,7 @@ quickscale init testproject  # Should show directory exists error
 
 # Run full test suite
 cd /path/to/quickscale
-./scripts/test-all.sh
+./scripts/test_all.sh
 ./scripts/lint.sh
 ```
 

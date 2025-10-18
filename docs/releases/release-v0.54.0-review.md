@@ -359,7 +359,7 @@ except Exception as e:
 ✅ MyPy: Success - no issues found in 6 source files
 ```
 
-**Testing (test-all.sh):**
+**Testing (test_all.sh):**
 ```
 ✅ quickscale_core: 133 passed in 1.12s (94% coverage)
 ✅ quickscale_cli: 5 passed in 0.05s (96% coverage)

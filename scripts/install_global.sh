@@ -88,3 +88,6 @@ pip install "$ROOT/quickscale_core/dist/quickscale_core-"*.whl
 pip install --force-reinstall --no-deps "$ROOT/quickscale_cli/dist/quickscale_cli-"*.whl
 
 echo "✅ QuickScale installed globally. You can now run 'quickscale' from any directory."
+echo ""
+echo "🔄 To use the new version in this terminal session, run:"
+echo "   hash -r && quickscale --version"

@@ -105,7 +105,7 @@ poetry show
 ### 4. Run Tests (3-5 minutes)
 ```bash
 # Run all tests with coverage
-./scripts/test-all.sh
+./scripts/test_all.sh
 
 # Or run with Poetry directly
 poetry run pytest
@@ -207,7 +207,7 @@ poetry run pre-commit run --all-files
 1. Create feature branch: `git checkout -b feature/my-feature`
 2. Make code changes in `quickscale_core/src/` or `quickscale_cli/src/`
 3. Add tests in corresponding `tests/` directory
-4. Run tests: `./scripts/test-all.sh`
+4. Run tests: `./scripts/test_all.sh`
 5. Run linters: `./scripts/lint.sh`
 6. Commit changes: `git commit -m "feat: description"`
 7. Push and create PR: `git push origin feature/my-feature`
@@ -240,7 +240,7 @@ quickscale/
 │   └── releases/             # Release notes
 ├── scripts/                  # Helper scripts
 │   ├── bootstrap.sh          # Development setup
-│   ├── test-all.sh           # Run all tests
+│   ├── test_all.sh           # Run all tests
 │   └── lint.sh               # Run all linters
 └── pyproject.toml            # Root workspace config
 ```
@@ -432,7 +432,7 @@ quickscale --version
 **Commands Quick Reference:**
 - Bootstrap: `./scripts/bootstrap.sh`
 - Install: `poetry install`
-- Tests: `./scripts/test-all.sh` or `poetry run pytest`
+- Tests: `./scripts/test_all.sh` or `poetry run pytest`
 - Linters: `./scripts/lint.sh`
 - CLI: `poetry run quickscale --help`
 
@@ -454,7 +454,7 @@ quickscale --version
 You have a working development environment when:
 
 - ✅ `poetry run quickscale --version` shows version number
-- ✅ `./scripts/test-all.sh` passes with >80% coverage
+- ✅ `./scripts/test_all.sh` passes with >80% coverage
 - ✅ `./scripts/lint.sh` passes all checks
 - ✅ `quickscale init testproject` generates working Django project
 - ✅ Can make changes, run tests, and see results in <2 minutes

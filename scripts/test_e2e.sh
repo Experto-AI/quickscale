@@ -114,7 +114,7 @@ echo -e "${GREEN}✓ Docker is running${NC}"
 echo ""
 
 # Step 2: Install Playwright browsers
-echo -e "${BLUE}[2/3] Installing Playwright browsers...${NC}"
+echo -e "${BLUE}[2/4] Installing Playwright browsers...${NC}"
 cd "$CORE_DIR"
 if ! poetry run playwright install chromium --with-deps > /dev/null 2>&1; then
     echo -e "${YELLOW}Warning: Playwright browser installation had issues${NC}"
@@ -123,8 +123,8 @@ fi
 echo -e "${GREEN}✓ Playwright browsers ready${NC}"
 echo ""
 
-# Step 3: Run E2E tests (pytest-docker will manage PostgreSQL)
-echo -e "${BLUE}[3/3] Running E2E tests...${NC}"
+# Step 3: Run Core E2E tests (pytest-docker will manage PostgreSQL)
+echo -e "${BLUE}[3/4] Running Core E2E tests...${NC}"
 echo -e "${YELLOW}Note: pytest-docker will automatically start PostgreSQL${NC}"
 echo -e "${YELLOW}This may take some minutes (includes installing project dependencies)...${NC}"
 echo ""
@@ -144,26 +144,67 @@ if [ -n "$PYTEST_ARGS" ]; then
     PYTEST_CMD="$PYTEST_CMD $PYTEST_ARGS"
 fi
 
-# Run tests
+# Run Core E2E tests
 echo -e "${BLUE}Command: $PYTEST_CMD${NC}"
 echo ""
 
+CORE_TESTS_PASSED=false
 if eval "$PYTEST_CMD"; then
-    echo ""
+    echo -e "${GREEN}✓ Core E2E tests passed${NC}"
+    CORE_TESTS_PASSED=true
+else
+    echo -e "${RED}✗ Core E2E tests failed${NC}"
+fi
+
+echo ""
+
+# Step 4: Run CLI E2E tests
+echo -e "${BLUE}[4/4] Running CLI E2E tests...${NC}"
+echo -e "${YELLOW}Testing development commands with real Docker containers...${NC}"
+echo ""
+
+CLI_DIR="$PROJECT_ROOT/quickscale_cli"
+cd "$CLI_DIR"
+
+CLI_PYTEST_CMD="poetry run pytest -m e2e"
+
+if [ -n "$VERBOSE" ]; then
+    CLI_PYTEST_CMD="$CLI_PYTEST_CMD $VERBOSE"
+fi
+
+if [ -n "$PYTEST_ARGS" ]; then
+    CLI_PYTEST_CMD="$CLI_PYTEST_CMD $PYTEST_ARGS"
+fi
+
+echo -e "${BLUE}Command: $CLI_PYTEST_CMD${NC}"
+echo ""
+
+CLI_TESTS_PASSED=false
+if eval "$CLI_PYTEST_CMD"; then
+    echo -e "${GREEN}✓ CLI E2E tests passed${NC}"
+    CLI_TESTS_PASSED=true
+else
+    echo -e "${RED}✗ CLI E2E tests failed${NC}"
+fi
+
+echo ""
+
+# Final results
+if [ "$CORE_TESTS_PASSED" = true ] && [ "$CLI_TESTS_PASSED" = true ]; then
     echo -e "${GREEN}╔════════════════════════════════════════╗${NC}"
     echo -e "${GREEN}║   ✓ All E2E Tests Passed!              ║${NC}"
     echo -e "${GREEN}╚════════════════════════════════════════╝${NC}"
     exit 0
 else
-    echo ""
     echo -e "${RED}╔════════════════════════════════════════╗${NC}"
     echo -e "${RED}║   ✗ E2E Tests Failed                   ║${NC}"
     echo -e "${RED}╚════════════════════════════════════════╝${NC}"
     echo ""
     echo -e "${YELLOW}Debugging tips:${NC}"
-    echo "  • Run with --headed to see browser actions"
+    echo "  • Run with --headed to see browser actions (Core tests)"
     echo "  • Run with --verbose for detailed output"
     echo "  • Run with --no-cleanup to inspect containers"
     echo "  • Check screenshots in failed test output"
+    echo "  • Ensure Docker is running and accessible"
     exit 1
 fi

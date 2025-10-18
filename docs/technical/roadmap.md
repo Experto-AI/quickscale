@@ -45,8 +45,8 @@ Execution details live here; the "personal toolkit first, community platform lat
 **AUTHORITATIVE SCOPE REFERENCE**: The [MVP Feature Matrix in decisions.md](./decisions.md#mvp-feature-matrix-authoritative) is the single source of truth for what's IN/OUT/PLANNED. When this roadmap conflicts with decisions.md, decisions.md wins.
 
 ### **📋 Current State Assessment**
-- ✅ **Current Version**: v0.58.0 (Released - E2E Testing Infrastructure)
-- 🔄 **Next Release**: v0.59.0+ - Post-MVP Evolution (Module extraction based on real usage)
+- ✅ **Current Version**: v0.59.0 (Released - CLI Development Commands)
+- 🔄 **Next Release**: v0.60.0 - Railway Deployment + CLI Git Subtree Wrappers
 - ✅ **Evolution Strategy Defined**: Start simple, grow organically
 - ✅ **MVP Scope Clarified**: Simple CLI + project scaffolding + git subtree documentation
 - ✅ **Legacy Backup Available**: Complete v0.41.0 preserved in `../quickscale-legacy/`
@@ -63,7 +63,8 @@ Each minor version (0.x.0) delivers a verifiable improvement that builds toward 
 - **v0.56.0**: Quality & testing (comprehensive test suite) ✅
 - **v0.57.0**: MVP release (production-ready personal toolkit) ✅ 
 - **v0.58.0**: E2E testing infrastructure (PostgreSQL 16, Playwright, full lifecycle validation) ✅
-- **v0.59.0+**: Post-MVP features (modules, themes, automation) 🎯 **NEXT**
+- **v0.59.0**: CLI development commands (Docker/Django operation wrappers) ✅
+- **v0.60.0+**: Post-MVP features (Railway deployment, git subtree helpers, modules, themes) 🎯 **NEXT**
 
 > Note: For clarity across project documentation, the releases **v0.52 through v0.57.0** are considered collectively the "MVP" that delivers a production-ready personal toolkit. The earlier 0.52-0.55 releases are the "Foundation Phase" (incremental foundations) that prepare the codebase for the cumulative MVP deliverable.
 
@@ -94,6 +95,7 @@ MVP delivered a production-ready Django project generator with Docker, PostgreSQ
 - Release v0.56.0-v0.56.2: Quality, Testing & CI/CD — Comprehensive testing infrastructure, code quality improvements, and production-ready CI/CD templates: `docs/releases/release-v0.56.0-implementation.md`
 - Release v0.57.0: MVP Launch — Production-ready personal toolkit with comprehensive documentation: `docs/releases/release-v0.57.0-implementation.md`
 - Release v0.58.0: E2E Testing Infrastructure — Complete lifecycle validation with PostgreSQL 16 and Playwright browser automation: `docs/releases/release-v0.58.0-implementation.md`
+- Release v0.59.0: CLI Development Commands — User-friendly wrappers for Docker/Django operations: `docs/releases/release-v0.59.0-implementation.md`
 
 ---
 
@@ -121,24 +123,310 @@ MVP delivered a production-ready Django project generator with Docker, PostgreSQ
 - ✅ Identified repeated patterns worth extracting
 - ✅ Git subtree workflow working smoothly
 
-### **v0.59.0 - v0.6x.0: Pattern Extraction & Module Development**
+### **v0.59.0 - v0.6x.0: CLI Usability & Pattern Extraction**
 
-Each release adds one proven module or significant improvement based on real needs.
+**Priority Shift**: Developer experience (CLI usability) is prerequisite for all future work. Build solid tooling foundation before modules.
 
-**Example Release Sequence** (aligned with competitive priorities):
+**Revised Release Sequence**:
 
-- **v0.59.0**: `quickscale_modules.auth` - django-allauth integration (P1 - Critical for SaaS)
-- **v0.60.0**: `quickscale_modules.billing` - dj-stripe subscriptions (P1 - Core monetization)
-- **v0.61.0**: `quickscale_modules.teams` - Multi-tenancy patterns (P1 - B2B requirement) 🎯 **SAAS FEATURE PARITY MILESTONE**
-- **v0.62.0**: `quickscale_modules.notifications` - Email infrastructure (P2 - Common need)
-- **v0.63.0 (conditional) or v1.0.0**: CLI git subtree helpers (implement lightweight helpers in v0.63.0 if manual workflow proves painful; v1.0.0 reserved for richer orchestration/automation if demand justifies it)
-- **v0.64.0**: HTMX frontend variant template (P2 - Differentiation)
-- **v0.65.0**: React frontend variant template (P2 - SPA option)
+- **v0.59.0**: CLI Development Commands (P0 - Developer Experience) ✅ **COMPLETE** - See `docs/releases/release-v0.59.0-implementation.md`
+- **v0.60.0**: Railway Deployment + CLI Git Subtree Wrappers (P0 - Core Workflow) 🎯 **CURRENT**
+- **v0.61.0**: Update Workflow Validation (P0 - Core Workflow)
+- **v0.62.0**: `quickscale_modules.auth` - django-allauth integration (P1 - Critical for SaaS)
+- **v0.63.0**: `quickscale_modules.billing` - dj-stripe subscriptions (P1 - Core monetization)
+- **v0.64.0**: `quickscale_modules.teams` - Multi-tenancy patterns (P1 - B2B requirement) 🎯 **SAAS FEATURE PARITY MILESTONE**
+- **v0.65.0**: `quickscale_modules.notifications` - Email infrastructure (P2 - Common need)
+- **v0.66.0**: HTMX frontend variant template (P2 - Differentiation)
+- **v0.67.0**: React frontend variant template (P2 - SPA option)
 - **v0.6x.0**: Additional modules based on real client needs
 
-**🎯 Competitive Parity Goal (v0.61.0)**: At this point, QuickScale matches SaaS Pegasus on core features (auth, billing, teams) while offering superior architecture (composability, shared updates). See [competitive_analysis.md Timeline](../overview/competitive_analysis.md#timeline-reality-check).
+**🎯 Competitive Parity Goal (v0.64.0)**: At this point, QuickScale matches SaaS Pegasus on core features (auth, billing, teams) while offering superior architecture (composability, shared updates). See [competitive_analysis.md Timeline](../overview/competitive_analysis.md#timeline-reality-check).
 
-**Note**: Prioritization is based on competitive analysis. Adjust based on YOUR actual client needs.
+**Rationale**: CLI usability fixes (v0.59-v0.61) eliminate manual Docker/git commands and enable production deployments, improving developer experience for all future module development.
+
+---
+
+### **v0.59.0: CLI Development Commands** ✅ **COMPLETE**
+
+**Release v0.59.0**: User-friendly CLI commands that replace complex Docker and docker-compose syntax with simple, memorable commands. Delivered 6 new commands (up, down, shell, manage, logs, ps) with 73% test coverage and comprehensive error handling.
+
+**For complete implementation details**, see: `docs/releases/release-v0.59.0-implementation.md`
+
+---
+
+### **v0.60.0: Railway Deployment + CLI Git Subtree Wrappers**
+
+**Objective**: Enable production deployment to Railway and provide simple CLI wrappers for git subtree workflow.
+
+**Timeline**: After v0.59.0
+
+**Success Criteria**:
+- Railway deployment works with generated projects out-of-the-box
+- Complete deployment documentation and guides
+- Users never see `git subtree` syntax
+- Updates pull only `quickscale_core/` directory changes
+- User's `templates/` and `static/` directories never touched by updates
+
+#### **Phase 1: Railway Deployment Support**
+
+**1. Documentation**:
+- Complete `docs/deployment/railway.md` - Railway deployment guide
+  - Prerequisites (Railway account, CLI)
+  - Initial deployment steps
+  - Environment variable configuration
+  - Database setup (Railway PostgreSQL)
+  - Static files configuration
+  - Deployment troubleshooting
+
+**2. Testing**:
+- Manual Railway deployment validation
+- Test with newly generated project
+- Document deployment workflow with screenshots
+- Capture lessons learned and common issues
+
+#### **Phase 2: Git Subtree Wrapper Commands**
+
+**Technical Implementation Notes**:
+
+**1. Repository Configuration**:
+
+Create `~/.quickscale/config.yml` for repository settings:
+```yaml
+# Default QuickScale repository
+default_remote: https://github.com/<org>/quickscale.git
+default_branch: main
+
+# User's fork (optional)
+fork_remote: null
+fork_branch: null
+
+# Subtree configuration
+subtree_prefix: quickscale_core
+squash: true  # Use --squash by default for clean history
+```
+
+**2. Git Subtree Commands**:
+
+`quickscale embed` - Embed quickscale_core via git subtree
+- **Implementation**: Wrapper for `git subtree add --prefix=quickscale_core <remote> <branch> --squash`
+- **Technical details**:
+  - Check if current directory is git repository
+  - Verify no existing `quickscale_core/` directory
+  - Prompt for remote URL (default: official QuickScale repo)
+  - Prompt for branch (default: main)
+  - Confirm operation before executing
+  - Add remote as `quickscale` (for future updates)
+  - Show success message with next steps
+- **Safety checks**:
+  - Working directory must be clean (no uncommitted changes)
+  - Must be run from project root
+  - Existing files won't be overwritten
+- **Example**:
+```bash
+cd myproject/
+quickscale embed
+# Prompts:
+# Remote URL [https://github.com/<org>/quickscale.git]:
+# Branch [main]:
+# This will add quickscale_core/ directory. Continue? (y/N):
+```
+
+`quickscale update` - Pull latest QuickScale updates
+- **Implementation**: Wrapper for `git subtree pull --prefix=quickscale_core <remote> <branch> --squash`
+- **Technical details**:
+  - Detect existing subtree configuration (from git log)
+  - Verify working directory is clean
+  - Show diff summary of what will change
+  - Confirm before pulling
+  - Handle merge conflicts gracefully
+  - Show summary of changes after update
+- **Safety checks**:
+  - Must have existing subtree (from `quickscale embed`)
+  - Working directory must be clean
+  - Verify only `quickscale_core/` will be affected
+- **Conflict handling**:
+  - If user modified `quickscale_core/`, show conflict resolution guide
+  - Option to abort and stash changes
+- **Example**:
+```bash
+cd myproject/
+quickscale update
+# Output:
+# Fetching updates from QuickScale repository...
+# Changes to quickscale_core/:
+#   - Improved Docker configuration
+#   - Updated security settings template
+#   - Bug fixes in generator
+#
+# Your templates/ and static/ directories will NOT be affected.
+# Continue? (y/N):
+```
+
+`quickscale push` - Push improvements back to QuickScale
+- **Implementation**: Wrapper for `git subtree push --prefix=quickscale_core <remote> <branch>`
+- **Technical details**:
+  - Verify user has write access to remote
+  - Show diff of changes in `quickscale_core/`
+  - Prompt for branch name (default: feature/<description>)
+  - Push to feature branch (not main)
+  - Provide URL to create pull request
+- **Safety checks**:
+  - Only changes in `quickscale_core/` will be pushed
+  - Confirm before pushing
+  - Requires authentication to remote
+- **Example**:
+```bash
+cd myproject/
+quickscale push
+# Output:
+# Changes in quickscale_core/:
+#   - Fixed typo in template
+#   - Improved error message
+#
+# Branch name [feature/template-fixes]:
+# Push to https://github.com/<org>/quickscale.git? (y/N):
+#
+# Pushed successfully!
+# Create pull request: https://github.com/<org>/quickscale/compare/feature/template-fixes
+```
+
+**3. Implementation Details**:
+
+`quickscale_cli/commands/subtree_commands.py`:
+```python
+class EmbedCommand(Command):
+    """Embed quickscale_core via git subtree add."""
+
+    def execute(self, remote: str = None, branch: str = "main") -> None:
+        # 1. Validate git repository
+        if not self._is_git_repo():
+            raise ValidationError("Not a git repository")
+
+        # 2. Check for existing subtree
+        if self._has_subtree():
+            raise ValidationError("quickscale_core already embedded")
+
+        # 3. Verify working directory clean
+        if not self._is_working_directory_clean():
+            raise ValidationError("Uncommitted changes detected")
+
+        # 4. Get remote URL (prompt if not provided)
+        remote = remote or self._prompt_remote()
+
+        # 5. Confirm operation
+        if not self._confirm_embed(remote, branch):
+            return
+
+        # 6. Execute git subtree add
+        self._run_subtree_add(remote, branch)
+
+        # 7. Save configuration
+        self._save_subtree_config(remote, branch)
+
+        # 8. Show success message
+        self._show_success_message()
+```
+
+`quickscale_cli/utils/git_utils.py`:
+```python
+def is_git_repo() -> bool:
+    """Check if current directory is a git repository."""
+
+def is_working_directory_clean() -> bool:
+    """Check if there are uncommitted changes."""
+
+def has_subtree(prefix: str) -> bool:
+    """Check if subtree exists by examining git log."""
+
+def get_subtree_config(prefix: str) -> dict:
+    """Extract subtree remote/branch from git log."""
+
+def run_git_command(args: list) -> subprocess.CompletedProcess:
+    """Execute git command with error handling."""
+```
+
+#### **Implementation Tasks (v0.60.0)**
+
+**Railway Deployment**:
+- [ ] Manual Railway deployment validation with generated project
+- [ ] Document deployment workflow with screenshots
+- [ ] Test database migrations on Railway
+- [ ] Verify static files serving
+- [ ] Test SSL certificate configuration
+- [ ] Document common deployment issues and solutions
+
+#### **Implementation Tasks (v0.60.0 - Git Subtree)**
+
+**Git Subtree Wrappers**:
+- [ ] Implement `quickscale embed` command
+- [ ] Implement `quickscale update` command
+- [ ] Implement `quickscale push` command
+- [ ] Create `git_utils.py` helpers
+- [ ] Add repository configuration (`~/.quickscale/config.yml`)
+- [ ] Implement safety checks (clean working directory, etc.)
+- [ ] Add interactive confirmation prompts
+- [ ] Add unit tests for git operations
+- [ ] Add integration tests (with test git repos)
+
+**Update Safety Features**:
+- [ ] Pre-update diff preview
+- [ ] Verify only `quickscale_core/` affected
+- [ ] Conflict detection and handling
+- [ ] Rollback/abort functionality
+- [ ] Post-update summary of changes
+
+**Documentation**:
+- [ ] Update `user_manual.md` with git subtree commands
+- [ ] Update `user_manual.md` with Railway deployment guide
+- [ ] Update `decisions.md` CLI Command Matrix (mark Phase 2 as IN)
+- [ ] Create "Safe Updates" guide
+- [ ] Document conflict resolution workflow
+- [ ] Add troubleshooting for common git issues
+
+**Testing**:
+- [ ] Unit tests for subtree commands (70% coverage per file)
+- [ ] Integration tests with test git repositories
+- [ ] E2E test: embed → update → verify isolation
+- [ ] Test conflict scenarios
+- [ ] Test error handling (not a git repo, dirty working directory, etc.)
+- [ ] Automated test: verify templates/ never modified by update
+
+---
+
+### **v0.61.0: Update Workflow Validation**
+
+**Objective**: Validate that QuickScale updates work safely and don't affect user content.
+
+**Timeline**: After v0.60.0
+
+**Success Criteria**:
+- Automated tests verify `templates/` and `static/` never modified by updates
+- Update workflow documented with real project examples
+- Safety features prevent accidental content modification
+- Rollback procedure documented
+
+**Implementation Tasks**:
+
+**Update Safety Validation**:
+- [ ] Create test project with custom content
+- [ ] Embed quickscale_core using `quickscale embed`
+- [ ] Make test improvements to QuickScale monorepo
+- [ ] Run `quickscale update` and verify user content unchanged
+- [ ] Automated test: verify templates/ never modified by update
+- [ ] Automated test: verify static/ never modified by update
+- [ ] Document safe update workflow with examples
+
+**Testing**:
+- [ ] E2E test: embed → update → verify content isolation
+- [ ] Test conflict scenarios and resolution
+- [ ] Test rollback functionality
+- [ ] Test error handling (dirty working directory, etc.)
+
+**Documentation**:
+- [ ] Create "Safe Updates" guide
+- [ ] Document update workflow with screenshots
+- [ ] Add conflict resolution examples
+- [ ] Document rollback procedure
 
 ---
 

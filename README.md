@@ -41,6 +41,7 @@ QuickScale is a **composable Django framework** designed for **solo developers a
 **Start here for your needs:**
 - 📖 **New user?** You're in the right place. This README shows you what QuickScale is and how to get started.
 - 🔧 **Need commands?** See [user_manual.md](./docs/technical/user_manual.md) for all commands and workflows
+- 🚀 **Deploying to Railway?** See [railway.md](./docs/deployment/railway.md) for Railway deployment guide
 - 📋 **Planning a feature?** Check [decisions.md](./docs/technical/decisions.md) for the authoritative MVP scope and technical rules
 - 🗓️ **Timeline & tasks?** See [roadmap.md](./docs/technical/roadmap.md)
 - 🏗️ **Project structure?** See [scaffolding.md](./docs/technical/scaffolding.md) for complete directory layouts
@@ -122,6 +123,28 @@ poetry run python manage.py runserver
 ```
 
 **That's it!** Visit http://localhost:8000 to see your new Django project.
+
+### Development Workflow with Docker
+
+QuickScale includes convenient CLI commands for Docker-based development:
+
+```bash
+# Start all services (web + database)
+quickscale up
+
+# View logs
+quickscale logs -f web
+
+# Run Django commands
+quickscale manage migrate
+quickscale manage createsuperuser
+
+# Open a shell in the container
+quickscale shell
+
+# Stop services
+quickscale down
+```
 
 **For complete command reference and workflows**, see the [user_manual.md](./docs/technical/user_manual.md).
 

@@ -156,7 +156,7 @@ pytest quickscale_core/tests/test_generator/test_generator.py -v
 # Output: 19 passed
 
 # Run all tests
-./scripts/test-all.sh
+./scripts/test_all.sh
 # Output: ✅ All tests passed!
 
 # Verify generated Python files are valid

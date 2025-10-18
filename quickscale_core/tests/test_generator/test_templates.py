@@ -633,8 +633,8 @@ class TestDockerfileContent:
         """Test Dockerfile uses multi-stage build pattern."""
         template = jinja_env.get_template("Dockerfile.j2")
         output = template.render(test_context)
-        assert "FROM python:3.11-slim as builder" in output
-        assert "FROM python:3.11-slim" in output
+        assert "FROM python:3.12-slim as builder" in output
+        assert "FROM python:3.12-slim" in output
 
     def test_non_root_user(self, jinja_env: Environment, test_context: dict[str, str]) -> None:
         """Test Dockerfile creates and uses non-root user."""

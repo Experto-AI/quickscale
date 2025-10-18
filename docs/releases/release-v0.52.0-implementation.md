@@ -69,7 +69,7 @@ All validation criteria met:
 - Development scripts:
   - `scripts/bootstrap.sh` - One-command environment setup
   - `scripts/lint.sh` - Code quality checks
-  - `scripts/test-all.sh` - Run all tests
+  - `scripts/test_all.sh` - Run all tests
 - `.pre-commit-config.yaml` for git hooks
 - Updated ruff configuration to use modern lint.* sections
 - All scripts executable and tested
@@ -99,7 +99,7 @@ quickscale/
 ├── scripts/
 │   ├── bootstrap.sh
 │   ├── lint.sh
-│   └── test-all.sh
+│   └── test_all.sh
 ├── docs/legacy/
 │   └── analysis.md
 ├── docs/
@@ -147,7 +147,7 @@ quickscale init <project>
 poetry install
 
 # Run all tests
-./scripts/test-all.sh
+./scripts/test_all.sh
 
 # Run linting
 ./scripts/lint.sh

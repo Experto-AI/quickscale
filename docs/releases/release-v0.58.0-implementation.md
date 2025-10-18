@@ -77,7 +77,7 @@ This is the first Post-MVP release, focusing on quality infrastructure rather th
 
 ### Scripts
 - `scripts/test_e2e.sh` (new) - E2E test runner with --headed, --verbose modes
-- `scripts/test-all.sh` → `scripts/test_all.sh` (renamed) - Snake case consistency
+- `scripts/test_all.sh` → `scripts/test_all.sh` (renamed) - Snake case consistency
 
 ### Documentation
 - `docs/technical/user_manual.md` - Added §2.1 E2E Tests (usage instructions)

@@ -391,7 +391,7 @@ $ ./scripts/lint.sh
 
 ### Testing Validation: ✅ PASS
 
-**Command**: `./scripts/test-all.sh`
+**Command**: `./scripts/test_all.sh`
 
 **Results**:
 ```

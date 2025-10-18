@@ -221,7 +221,7 @@ def test_init_command_creates_project(cli_runner):
 - ✅ No `sys.modules` modifications
 - ✅ No shared mutable state between tests
 - ✅ Each test uses isolated filesystem
-- ✅ Tests pass individually and as suite (verified via test-all.sh)
+- ✅ Tests pass individually and as suite (verified via test_all.sh)
 
 ### 4.2 Implementation-First Testing: ✅ CONFIRMED
 
@@ -372,7 +372,7 @@ Added test artifact patterns to prevent accidental commits of test-generated pro
 ### 6.1 Test Suite Validation
 
 ```bash
-$ ./scripts/test-all.sh
+$ ./scripts/test_all.sh
 📦 Testing quickscale_core...
 133 passed in 1.41s
 

@@ -51,7 +51,7 @@ TARGET AUDIENCE: Maintainers, core contributors, community package developers, C
 - ❌ NO Black, NO Flake8, NO requirements.txt, NO setup.py
 
 **Key Constraints:**
-- 70% test coverage minimum (CI enforced)
+- 70% unit test coverage minimum per file (CI enforced)
 - decisions.md is authoritative (update FIRST, never contradict)
 - Sub-packages MUST NOT have README.md (use root README only)
 - Settings: Standalone by default (NO automatic inheritance)
@@ -143,7 +143,8 @@ Other documents (README.md, roadmap.md, scaffolding.md, commercial.md) MUST refe
 | Generate Django starter (manage.py, settings.py, urls.py, wsgi/asgi, templates, pyproject.toml) | IN | Starter uses `pyproject.toml` (Poetry). Generated projects include a `pyproject.toml` and `poetry.lock` by default; `requirements.txt` is not generated. |
 | `quickscale_core` package (monolithic, src layout) | IN | Treat `quickscale_core` as a regular monolithic package in MVP (explicit `__init__.py`). See Section: "Core package shape" in this file. |
 | `quickscale_core` embedding via git-subtree (manual documented workflow) | IN (manual) | Manual subtree commands are documented and supported; embedding is opt-in and advanced. |
-| CLI git-subtree wrapper commands (`embed-core`, `update-core`, `sync-push`) | PLANNED | Post-MVP backlog; implement only after manual workflows demonstrate sustained demand. |
+| CLI development commands (`up`, `down`, `shell`, `manage`, `logs`, `ps`) | IN (v0.59.0) | User-friendly wrappers for Docker/Django operations to improve developer experience. |
+| CLI git-subtree wrapper commands (`embed`, `update`, `push`) | PLANNED (v0.60.0) | Simplified wrappers to replace complex manual git subtree syntax. |
 | Settings inheritance from `quickscale_core` into generated project | OPTIONAL | Default generated project uses standalone `settings.py`. If user explicitly embeds `quickscale_core`, optional settings inheritance is allowed and documented. |
 | **PRODUCTION-READY FOUNDATIONS (Competitive Requirement)** | | **See [competitive_analysis.md §1-3](../overview/competitive_analysis.md#-critical-for-mvp-viability-must-have)** |
 | Docker setup (Dockerfile + docker-compose.yml) | IN | Production-ready multi-stage Dockerfile + local dev docker-compose with PostgreSQL & Redis services. Match Cookiecutter quality. |
@@ -197,10 +198,20 @@ Other documents (README.md, roadmap.md, scaffolding.md, commercial.md) MUST refe
 **MVP (v0.56-v0.57.0):**
 - ✅ `quickscale init <project>` - ONLY command (no flags, single starter template)
 
-**Post-MVP (Planned):**
-- 📋 `quickscale embed-core` - Wrapper for git subtree add
-- 📋 `quickscale update-core` - Wrapper for git subtree pull
-- 📋 `quickscale sync-push` - Wrapper for git subtree push
+**v0.59.0 - Development Commands (Phase 1):**
+- ✅ `quickscale up` - Start Docker services (wrapper for docker-compose up)
+- ✅ `quickscale down` - Stop Docker services (wrapper for docker-compose down)
+- ✅ `quickscale shell` - Interactive bash shell in container
+- ✅ `quickscale manage <cmd>` - Run Django management commands
+- ✅ `quickscale logs [service]` - View Docker logs
+- ✅ `quickscale ps` - Show service status
+
+**v0.60.0 - Git Subtree Wrappers (Phase 2):**
+- 📋 `quickscale embed` - Embed quickscale_core via git subtree add
+- 📋 `quickscale update` - Pull QuickScale updates via git subtree pull
+- 📋 `quickscale push` - Push improvements back via git subtree push
+
+**Post-MVP (Future):**
 - 📋 `quickscale init --template=<name>` - Multiple template support
 - ❌ `quickscale validate` - YAML configuration validation (requires config system)
 - ❌ `quickscale generate` - Generate from config (requires config system)
@@ -218,9 +229,10 @@ Other documents (README.md, roadmap.md, scaffolding.md, commercial.md) MUST refe
 ## Testing Standards
 
 **Coverage Targets:**
-- ✅ 70% minimum: `quickscale_core`, `quickscale_cli`, modules, themes
-- ✅ CI fails if below threshold
+- ✅ 70% minimum unit test coverage per file: `quickscale_core`, `quickscale_cli`, modules, themes
+- ✅ CI fails if any file falls below threshold
 - ✅ Coverage reports on every CI run
+- ℹ️ Note: 70% threshold applies to unit tests only, measured per file (not overall mean)
 
 **Test Requirements:**
 - ✅ New features: Tests required

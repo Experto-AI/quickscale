@@ -21,7 +21,7 @@ Keep this doc short and actionable. When in doubt, link to the authoritative doc
 
 ## Quick orientation
 
-- Repository scripts are in `scripts/` (for example `./scripts/bootstrap.sh`, `./scripts/test-all.sh`, `./scripts/lint.sh`). Inspect them if you need to confirm exact actions.
+- Repository scripts are in `scripts/` (for example `./scripts/bootstrap.sh`, `./scripts/test_all.sh`, `./scripts/lint.sh`). Inspect them if you need to confirm exact actions.
 - The primary CLI provided by this repository is the `quickscale` command (installed by the `quickscale_cli` package).
 - For dependency management we recommend Poetry — see `docs/technical/poetry_user_manual.md` for full Poetry usage. This manual focuses on QuickScale commands, not Poetry details.
 
@@ -50,7 +50,7 @@ You can run the full test suite using the repository script or Poetry:
 
 ```bash
 # Run all tests (script)
-./scripts/test-all.sh
+./scripts/test_all.sh
 
 # Or run pytest via Poetry
 poetry run pytest
@@ -149,6 +149,89 @@ poetry run python manage.py runserver
 
 The generated project is meant to be fully owned by the user — templates and guidance are in `scaffolding.md` and generated README files.
 
+### 4.1) Development Commands (v0.59.0 - Planned)
+
+> **Status**: Planned for v0.59.0
+>
+> The following commands will simplify Docker and Django operations, eliminating the need to remember complex docker-compose and docker exec syntax.
+
+**Docker Service Management**:
+```bash
+# Start Docker services
+quickscale up
+# Equivalent to: docker-compose up -d
+
+# Stop Docker services
+quickscale down
+# Equivalent to: docker-compose down
+
+# View service logs
+quickscale logs           # All services
+quickscale logs web       # Web service only
+quickscale logs db        # Database only
+# Equivalent to: docker-compose logs [service]
+
+# Check service status
+quickscale ps
+# Equivalent to: docker-compose ps
+```
+
+**Development Tools**:
+```bash
+# Interactive bash shell in web container
+quickscale shell
+# Equivalent to: docker exec -it <container> /bin/bash
+
+# Run Django management commands
+quickscale manage migrate
+quickscale manage createsuperuser
+quickscale manage collectstatic
+# Equivalent to: docker exec <container> python manage.py <command>
+```
+
+**Typical Development Workflow** (after v0.59.0):
+```bash
+quickscale init myapp
+cd myapp
+
+# Start services with new commands
+quickscale up                    # Start Docker services
+quickscale manage migrate        # Run migrations
+quickscale manage createsuperuser  # Create admin user
+
+# Development
+quickscale logs web              # Monitor logs
+quickscale shell                 # Access container shell
+quickscale manage test           # Run tests
+
+# Shutdown
+quickscale down                  # Stop services
+```
+
+See [Roadmap v0.59.0](./roadmap.md#v0590-cli-development-commands--railway-deployment-) for complete implementation details.
+
+### 4.2) Git Subtree Commands (v0.60.0 - Planned)
+
+> **Status**: Planned for v0.60.0
+>
+> These commands will replace complex manual git subtree operations with simple CLI wrappers.
+
+```bash
+# Embed quickscale_core in your project
+quickscale embed
+# Equivalent to: git subtree add --prefix=quickscale_core <remote> main --squash
+
+# Pull QuickScale updates
+quickscale update
+# Equivalent to: git subtree pull --prefix=quickscale_core <remote> main --squash
+
+# Push improvements back to QuickScale
+quickscale push
+# Equivalent to: git subtree push --prefix=quickscale_core <remote> feature-branch
+```
+
+See [Roadmap v0.60.0](./roadmap.md#v0600-cli-git-subtree-wrappers--update-workflow-validation) for complete implementation details.
+
 ### Docker deployment
 
 Generated projects include Docker support for both development and production. After generating a project:
@@ -174,7 +257,7 @@ The `Dockerfile` uses multi-stage builds (builder + runtime) for production effi
 ## 5) Development helper scripts
 
 - `./scripts/bootstrap.sh` — initial environment/setup steps (inspect to confirm behavior)
-- `./scripts/test-all.sh` — runs the full test matrix for the repo
+- `./scripts/test_all.sh` — runs the full test matrix for the repo
 - `./scripts/lint.sh` — runs configured linters and formatters
 
 Run these scripts from the repository root.
@@ -188,12 +271,29 @@ Run these scripts from the repository root.
 
 ## 7) Commands quick reference
 
+**Repository Commands**:
 - Bootstrapping: `./scripts/bootstrap.sh`
 - Install deps (Poetry): `poetry install`
-- Tests: `./scripts/test-all.sh`
+- Tests: `./scripts/test_all.sh`
+- E2E tests: `pytest -m e2e`
 - Lint: `./scripts/lint.sh`
+
+**CLI Commands (Current)**:
 - CLI help: `quickscale --help`
 - Create project: `quickscale init <name>`
+
+**CLI Commands (v0.59.0 - Planned)**:
+- Start services: `quickscale up`
+- Stop services: `quickscale down`
+- View logs: `quickscale logs [service]`
+- Service status: `quickscale ps`
+- Container shell: `quickscale shell`
+- Django commands: `quickscale manage <cmd>`
+
+**CLI Commands (v0.60.0 - Planned)**:
+- Embed core: `quickscale embed`
+- Update core: `quickscale update`
+- Push changes: `quickscale push`
 
 ## Poetry — quick commands
 
@@ -241,6 +341,10 @@ poetry publish --build
 ```
 
 ## 8) Git Subtree Workflow (Advanced)
+
+> **Note**: v0.60.0 will add CLI wrapper commands (`quickscale embed`, `quickscale update`, `quickscale push`) that simplify this workflow. See [section 4.2](#42-git-subtree-commands-v0600---planned) for the planned simplified commands.
+>
+> The manual commands documented below will continue to work and are useful for understanding how git subtree works under the hood.
 
 QuickScale supports embedding `quickscale_core` into your project using git subtree for advanced workflows. This section documents when and how to use this feature.
 

@@ -91,7 +91,7 @@ tests/test_cli.py::test_init_command_basic PASSED
 ### All Tests Summary
 
 ```bash
-$ ./scripts/test-all.sh
+$ ./scripts/test_all.sh
 🧪 Running all tests...
 
 📦 Testing quickscale_core...
@@ -144,7 +144,7 @@ cd /home/victor/Code/quickscale
 # Expected: All checks pass (ruff format, ruff check, mypy)
 
 # 3. All Tests
-./scripts/test-all.sh
+./scripts/test_all.sh
 # Expected: 110 tests pass across both packages
 
 # 4. Verify Template Files Exist

@@ -6,6 +6,7 @@ import click
 
 import quickscale_cli
 import quickscale_core
+from quickscale_cli.commands.development_commands import down, logs, manage, ps, shell, up
 from quickscale_core.generator import ProjectGenerator
 
 
@@ -21,6 +22,15 @@ def version() -> None:
     """Show version information for CLI and core packages."""
     click.echo(f"QuickScale CLI v{quickscale_cli.__version__}")
     click.echo(f"QuickScale Core v{quickscale_core.__version__}")
+
+
+# Register development commands
+cli.add_command(up)
+cli.add_command(down)
+cli.add_command(shell)
+cli.add_command(manage)
+cli.add_command(logs)
+cli.add_command(ps)
 
 
 @cli.command()

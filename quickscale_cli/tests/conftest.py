@@ -14,3 +14,8 @@ def cli_runner() -> CliRunner:
 def sample_project_name() -> str:
     """Provide a sample project name for testing."""
     return "testproject"
+
+
+def pytest_configure(config):
+    """Register custom markers."""
+    config.addinivalue_line("markers", "e2e: mark test as full end-to-end test (requires Docker)")

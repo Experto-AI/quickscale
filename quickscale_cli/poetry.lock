@@ -437,19 +437,17 @@ testing = ["fields", "hunter", "process-tests", "pytest-xdist", "six", "virtuale
 
 [[package]]
 name = "quickscale-core"
-version = "0.52.0"
+version = "0.58.0"
 description = "Core scaffolding and utilities for QuickScale Django project generator"
 optional = false
-python-versions = "^3.10"
-files = []
-develop = true
+python-versions = "<4.0,>=3.10"
+files = [
+    {file = "quickscale_core-0.58.0-py3-none-any.whl", hash = "sha256:4c8a0063b0a60d121687674361b4d4ef54fddfcc8f31e1cc053c7e3d389ea9d2"},
+    {file = "quickscale_core-0.58.0.tar.gz", hash = "sha256:e36477b05df2b122793997c977889e541428940722eafcf78d17285688d393ac"},
+]
 
 [package.dependencies]
-Jinja2 = "^3.1.0"
-
-[package.source]
-type = "directory"
-url = "../quickscale_core"
+Jinja2 = ">=3.1.0,<4.0.0"
 
 [[package]]
 name = "ruff"
@@ -543,4 +541,4 @@ files = [
 [metadata]
 lock-version = "2.0"
 python-versions = "^3.10"
-content-hash = "fe0c0d887253dfd8288437199ba8d5c55919415ffc506ff7c92563b05f09187c"
+content-hash = "741a2b5f986214351fcc0989517186bfdc93481dcb8fdc46387bb9319f949e56"

@@ -77,7 +77,7 @@ All changes are explicitly listed in the roadmap task 0.58.0:
 
 **Scripts (In-Scope)**:
 - `test_e2e.sh` (new) - E2E test runner
-- `test-all.sh` → `test_all.sh` (renamed for consistency)
+- `test_all.sh` → `test_all.sh` (renamed for consistency)
 - `version_tool.sh` - Updated to handle dependencies
 - `install_global.sh` - Force reinstall CLI
 - `publish.sh` - Updated error message

@@ -32,7 +32,7 @@ This release delivers comprehensive testing infrastructure, code quality improve
 - [x] Maintained 82% coverage for `quickscale_cli` (exceeds 75% target)
 - [x] Added test for parent directory creation scenario
 - [x] All code quality checks passing: `./scripts/lint.sh` ✓
-- [x] All tests passing: `./scripts/test-all.sh` ✓
+- [x] All tests passing: `./scripts/test_all.sh` ✓
 
 **Coverage Results**:
 ```
@@ -130,7 +130,7 @@ quickscale_cli:
 
 ### Test Coverage
 ```bash
-./scripts/test-all.sh
+./scripts/test_all.sh
 ```
 **Result**: ✅ All tests passed
 - quickscale_core: 96% coverage (target: >80%)
