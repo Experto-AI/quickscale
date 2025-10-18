@@ -119,6 +119,32 @@ Before contributing, familiarize yourself with these key project documents:
 
 ---
 
+## Release Documentation Policy
+
+When a roadmap release or major roadmap item is implemented, maintainers MUST create a release document under `docs/releases/` and remove the corresponding detailed release section from the roadmap. This keeps the roadmap focused on upcoming work and preserves completed release artifacts as standalone documents.
+
+### Required Release Documentation Conventions
+
+- **Implementation filename**: `docs/releases/release-<version>-implementation.md` (e.g. `release-v0.52.0-implementation.md`)
+- **Review filename**: `docs/releases/release-<version>-review.md` (e.g. `release-v0.52.0-review.md`)
+- **Minimum content (implementation)**: release title, release date, summary of verifiable improvements, completed tasks checklist, validation commands, and a short "Next steps" list
+- **Minimum content (review)**: comprehensive quality assessment, scope compliance check, code quality validation, testing review, approval status
+- Link back to the roadmap and to `decisions.md` where appropriate
+
+### Release Documentation Process
+
+Follow these steps after completing a release:
+
+1. Create `docs/releases/release-<version>-implementation.md` with implementation details, test results, and validation
+2. (Optional) Create `docs/releases/release-<version>-review.md` with quality assessment and approval status
+3. Commit the release documentation
+4. Remove the completed release section from `docs/technical/roadmap.md` (or replace it with a one-line pointer to the release docs)
+5. Update indexes/README links if necessary
+
+This policy ensures completed work is archived in a discoverable place and the roadmap remains current and actionable.
+
+---
+
 ## GitHub Prompts
 
 QuickScale uses structured prompts for automated development workflows:

@@ -72,66 +72,14 @@ Need the narrative backdrop? Jump to [`quickscale.md`](../overview/quickscale.md
 
 ---
 
-## **MVP Roadmap: v0.51.0 → v0.57.0**
+## **MVP Roadmap: v0.51.0 → v0.57.0** - ✅ **COMPLETE**
 
-**🎯 Objective**: Build a simple project generator that creates **production-ready** Django starter projects you can use for client work immediately.
+MVP delivered a production-ready Django project generator with Docker, PostgreSQL, pytest, CI/CD, and security best practices. Generated projects are standalone (no forced dependencies) and deployable to production. Git subtree workflow is documented for advanced users.
 
-**MVP Scope**: Minimal CLI + production-ready scaffolding. Git subtree is the ONLY MVP distribution mechanism (documented manual workflow). CLI wrapper helpers for subtree operations are deferred to Post-MVP.
-
-**Success Criteria (v0.57.0)**:
-- `quickscale init myapp` generates **production-ready** Django project in < 30 seconds
-- Generated project includes Docker, PostgreSQL, pytest, CI/CD, security best practices
-- Generated project runs with `python manage.py runserver` immediately
-- Generated project is 100% owned by user (no QuickScale dependencies by default)
-- Generated project is **deployable to production** without major reconfiguration
-- Git subtree workflow is documented for advanced users who want code sharing
-- Can build a real client project using the generated starter
-
-**🎯 Competitive Positioning**: Match competitors (SaaS Pegasus, Cookiecutter) on production-ready foundations while maintaining QuickScale's unique composability advantage. See [competitive_analysis.md "What Must Be Incorporated"](../overview/competitive_analysis.md#what-quickscale-must-incorporate-from-competitors) for detailed rationale.
-
-**IMPORTANT SCOPE CLARIFICATIONS** (from decisions.md):
-- ✅ Generated projects use standalone `settings.py` (NO automatic inheritance from quickscale_core)
-- ✅ Git subtree is documented but MANUAL (no CLI wrapper commands in MVP)
-- ✅ `quickscale_modules/` extraction is optional/personal-monorepo pattern (NOT auto-generated)
-- ✅ **Production-ready foundations**: Docker, PostgreSQL, .env, security, pytest, CI/CD (competitive requirement)
-- ❌ NO `backend_extensions.py` auto-generation (users add manually if needed)
-- ❌ NO YAML configuration system
-- ❌ NO CLI commands beyond `quickscale init`
-
-**Competitive Insight**: Every competitor (SaaS Pegasus, Cookiecutter, Apptension) provides production-ready defaults. Without these, QuickScale won't be taken seriously by agencies and professional developers. See [competitive_analysis.md §1-3](../overview/competitive_analysis.md#-critical-for-mvp-viability-must-have) for P0 requirements.
-
-**Integration Note**: See [Personal Toolkit workflow in decisions.md](./decisions.md#integration-note-personal-toolkit-git-subtree) for the canonical git subtree commands and CLI wrapper roadmap.
-
-**NOT in MVP** (see [MVP Feature Matrix](./decisions.md#mvp-feature-matrix-authoritative) for authoritative list):
-- ❌ Module packages (auth, payments, billing)
-- ❌ Theme packages
-- ❌ YAML configuration system
-- ❌ PyPI distribution
-- ❌ Marketplace features
-- ❌ Multiple template options
-- ❌ CLI wrapper commands for git subtree
-
----
-
-## Release documentation policy
-
-When a roadmap release or major roadmap item is implemented, maintainers MUST create a release document under `docs/releases/` and remove the corresponding detailed release section from this roadmap. This keeps the roadmap focused on upcoming work and preserves completed release artifacts as standalone documents.
-
-Required release documentation conventions:
-- **Implementation filename**: `docs/releases/release-<version>-implementation.md` (e.g. `release-v0.52.0-implementation.md`)
-- **Review filename**: `docs/releases/release-<version>-review.md` (e.g. `release-v0.52.0-review.md`)
-- Minimum content (implementation): release title, release date, summary of verifiable improvements, completed tasks checklist, validation commands, and a short "Next steps" list
-- Minimum content (review): comprehensive quality assessment, scope compliance check, code quality validation, testing review, approval status
-- Link back to this roadmap and to `decisions.md` where appropriate
-
-Process (post-implementation):
-1. Create `docs/releases/release-<version>-implementation.md` with implementation details, test results, and validation
-2. (Optional) Create `docs/releases/release-<version>-review.md` with quality assessment and approval status
-3. Commit the release documentation
-4. Remove the completed release section from `docs/technical/roadmap.md` (or replace it with a one-line pointer to the release docs)
-5. Update indexes/README links if necessary
-
-This policy ensures completed work is archived in a discoverable place and the roadmap remains current and actionable.
+**For complete MVP details**, see:
+- [Release v0.57.0 Implementation](../releases/release-v0.57.0-implementation.md) - MVP launch details
+- [decisions.md MVP Feature Matrix](./decisions.md#mvp-feature-matrix-authoritative) - Authoritative scope reference
+- [competitive_analysis.md](../overview/competitive_analysis.md) - Competitive positioning rationale
 
 ---
 
@@ -446,19 +394,6 @@ If YAML config proves useful in Phase 2:
 
 ---
 
-### **🎯 MVP Focus**
-
-- Single command CLI: `quickscale init myapp`
-- Standalone generated projects (no forced dependencies)
-- Git subtree documented but manual (no CLI automation)
-- One starter template (no variants)
-- Clear path to working Django projects
-- Validation with real client project
-
-This roadmap can be implemented incrementally, with each task building on the previous ones, leading to a working MVP that validates the architecture before adding complexity.
-
----
-
 ### **Appendix: Quick Reference**
 
 ### **Key Documents**
@@ -467,6 +402,7 @@ This roadmap can be implemented incrementally, with each task building on the pr
 - **Directory Structures**: [scaffolding.md](./scaffolding.md)
 - **Strategic Vision**: [quickscale.md](../overview/quickscale.md#evolution-strategy-personal-toolkit-first)
 - **Commercial Models**: [commercial.md](../overview/commercial.md)
+- **Release Documentation Policy**: [contributing.md Release Documentation Policy](../contrib/contributing.md#release-documentation-policy)
 > For the authoritative Version → Feature mapping and competitive milestone table, see [docs/overview/competitive_analysis.md#version-→-feature-mapping](../overview/competitive_analysis.md#version-%E2%86%92-feature-mapping).
 
-**Maintainers**: Update this roadmap as tasks are completed. Mark completed tasks with ✅. When technical scope changes, update decisions.md first, then update this roadmap to reflect those decisions.
+**Maintainers**: Update this roadmap as tasks are completed. Mark completed tasks with ✅. When technical scope changes, update decisions.md first, then update this roadmap to reflect those decisions. Follow the [Release Documentation Policy](../contrib/contributing.md#release-documentation-policy) when archiving completed releases.
