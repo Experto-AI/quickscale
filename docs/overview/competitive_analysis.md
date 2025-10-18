@@ -816,7 +816,7 @@ The table below consolidates the repository's release-to-feature mapping and com
 | v0.57.0 | MVP release (production-ready personal toolkit) | MVP Launch | Starter parity (production-ready starter) | Starter parity (full stack) | Starter parity (core SaaS features) | Starter parity (Stripe, Docker) |
 | v0.58.0 | E2E Testing Infrastructure (PostgreSQL 16, Playwright) | Testing infrastructure | Comprehensive test suite | E2E testing parity | Testing infrastructure parity | E2E testing coverage |
 | v0.59.0 | CLI Development Commands (Docker/Django wrappers) | Developer experience | N/A (cookiecutter-driven) | CLI experience improvement | Developer UX parity | CLI helper commands |
-| v0.60.0 | Railway Deployment Testing | Production deployment | Deployment documentation | Cloud deployment parity | Railway deployment parity | PaaS deployment support |
+| v0.60.0 | Railway Deployment Support (`quickscale deploy railway`) | Production deployment CLI | Deployment automation | Cloud deployment CLI parity | Railway deployment automation | PaaS deployment CLI command |
 | v0.61.0 | CLI Git Subtree Wrappers | Core workflow automation | N/A | CLI update workflow | Update workflow parity | Update command automation |
 | v0.62.0 | Update Workflow Validation | Update safety | N/A | Safe updates validated | Update safety parity | Update isolation verified |
 | v0.63.0 | Auth Module (`quickscale_modules.auth`) | Closing feature gap | django-allauth + custom user (parity) | Social OAuth/2FA support parity | Matches Pegasus auth (social login, email verification) | Matches Ready SaaS auth features |
