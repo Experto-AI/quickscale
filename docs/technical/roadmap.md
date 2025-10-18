@@ -46,13 +46,14 @@ Execution details live here; the "personal toolkit first, community platform lat
 
 ### **📋 Current State Assessment**
 - ✅ **Current Version**: v0.59.0 (Released - CLI Development Commands)
-- 🔄 **Next Release**: v0.60.0 - Railway Deployment + CLI Git Subtree Wrappers
+- 🔄 **Next Release**: v0.60.0 - Railway Deployment Testing
 - ✅ **Evolution Strategy Defined**: Start simple, grow organically
 - ✅ **MVP Scope Clarified**: Simple CLI + project scaffolding + git subtree documentation
 - ✅ **Legacy Backup Available**: Complete v0.41.0 preserved in `../quickscale-legacy/`
 - ✅ **Post-MVP Path Clear**: Module/theme packages when proven necessary
 - ✅ **MVP Validated**: v0.56.2 successfully generates minimal running Django projects
 - ✅ **E2E Infrastructure**: v0.58.0 delivers comprehensive end-to-end testing with PostgreSQL 16 and Playwright
+- ✅ **CLI Developer Experience**: v0.59.0 delivers user-friendly Docker/Django command wrappers
 
 ### **🎯 Release Strategy**
 Each minor version (0.x.0) delivers a verifiable improvement that builds toward MVP:
@@ -61,10 +62,11 @@ Each minor version (0.x.0) delivers a verifiable improvement that builds toward 
 - **v0.54.0**: Project generator (can generate Django projects) ✅
 - **v0.55.0**: CLI implementation (`quickscale init` command works) ✅
 - **v0.56.0**: Quality & testing (comprehensive test suite) ✅
-- **v0.57.0**: MVP release (production-ready personal toolkit) ✅ 
+- **v0.57.0**: MVP release (production-ready personal toolkit) ✅
 - **v0.58.0**: E2E testing infrastructure (PostgreSQL 16, Playwright, full lifecycle validation) ✅
 - **v0.59.0**: CLI development commands (Docker/Django operation wrappers) ✅
-- **v0.60.0+**: Post-MVP features (Railway deployment, git subtree helpers, modules, themes) 🎯 **NEXT**
+- **v0.60.0**: Railway deployment testing & validation 🎯 **NEXT**
+- **v0.61.0+**: Post-MVP features (git subtree helpers, modules, themes)
 
 > Note: For clarity across project documentation, the releases **v0.52 through v0.57.0** are considered collectively the "MVP" that delivers a production-ready personal toolkit. The earlier 0.52-0.55 releases are the "Foundation Phase" (incremental foundations) that prepare the codebase for the cumulative MVP deliverable.
 
@@ -130,19 +132,20 @@ MVP delivered a production-ready Django project generator with Docker, PostgreSQ
 **Revised Release Sequence**:
 
 - **v0.59.0**: CLI Development Commands (P0 - Developer Experience) ✅ **COMPLETE** - See `docs/releases/release-v0.59.0-implementation.md`
-- **v0.60.0**: Railway Deployment + CLI Git Subtree Wrappers (P0 - Core Workflow) 🎯 **CURRENT**
-- **v0.61.0**: Update Workflow Validation (P0 - Core Workflow)
-- **v0.62.0**: `quickscale_modules.auth` - django-allauth integration (P1 - Critical for SaaS)
-- **v0.63.0**: `quickscale_modules.billing` - dj-stripe subscriptions (P1 - Core monetization)
-- **v0.64.0**: `quickscale_modules.teams` - Multi-tenancy patterns (P1 - B2B requirement) 🎯 **SAAS FEATURE PARITY MILESTONE**
-- **v0.65.0**: `quickscale_modules.notifications` - Email infrastructure (P2 - Common need)
-- **v0.66.0**: HTMX frontend variant template (P2 - Differentiation)
-- **v0.67.0**: React frontend variant template (P2 - SPA option)
+- **v0.60.0**: Railway Deployment Testing (P0 - Production Deployment) 🎯 **CURRENT**
+- **v0.61.0**: CLI Git Subtree Wrappers (P0 - Core Workflow)
+- **v0.62.0**: Update Workflow Validation (P0 - Core Workflow)
+- **v0.63.0**: `quickscale_modules.auth` - django-allauth integration (P1 - Critical for SaaS)
+- **v0.64.0**: `quickscale_modules.billing` - dj-stripe subscriptions (P1 - Core monetization)
+- **v0.65.0**: `quickscale_modules.teams` - Multi-tenancy patterns (P1 - B2B requirement) 🎯 **SAAS FEATURE PARITY MILESTONE**
+- **v0.66.0**: `quickscale_modules.notifications` - Email infrastructure (P2 - Common need)
+- **v0.67.0**: HTMX frontend variant template (P2 - Differentiation)
+- **v0.68.0**: React frontend variant template (P2 - SPA option)
 - **v0.6x.0**: Additional modules based on real client needs
 
-**🎯 Competitive Parity Goal (v0.64.0)**: At this point, QuickScale matches SaaS Pegasus on core features (auth, billing, teams) while offering superior architecture (composability, shared updates). See [competitive_analysis.md Timeline](../overview/competitive_analysis.md#timeline-reality-check).
+**🎯 Competitive Parity Goal (v0.65.0)**: At this point, QuickScale matches SaaS Pegasus on core features (auth, billing, teams) while offering superior architecture (composability, shared updates). See [competitive_analysis.md Timeline](../overview/competitive_analysis.md#timeline-reality-check).
 
-**Rationale**: CLI usability fixes (v0.59-v0.61) eliminate manual Docker/git commands and enable production deployments, improving developer experience for all future module development.
+**Rationale**: CLI usability fixes (v0.59) and production deployment capability (v0.60-v0.62) eliminate manual Docker/git commands and enable production deployments, improving developer experience for all future module development.
 
 ---
 
@@ -154,39 +157,89 @@ MVP delivered a production-ready Django project generator with Docker, PostgreSQ
 
 ---
 
-### **v0.60.0: Railway Deployment + CLI Git Subtree Wrappers**
+### **v0.60.0: Railway Deployment Testing**
 
-**Objective**: Enable production deployment to Railway and provide simple CLI wrappers for git subtree workflow.
+**Objective**: Validate Railway deployment with real-world testing and update documentation based on actual deployment experience.
 
 **Timeline**: After v0.59.0
 
 **Success Criteria**:
-- Railway deployment works with generated projects out-of-the-box
-- Complete deployment documentation and guides
+- Successfully deploy generated project to Railway
+- Database migrations work correctly on Railway
+- Static files serve properly via WhiteNoise
+- Environment variables configured correctly
+- SSL/HTTPS working out-of-the-box
+- Documentation updated with real deployment screenshots and troubleshooting
+- Deployment validation checklist created
+
+#### **Implementation Tasks**
+
+**1. Railway Deployment Validation**:
+- [ ] Generate fresh QuickScale project using `quickscale init`
+- [ ] Initialize Railway project (`railway init`)
+- [ ] Add PostgreSQL database service
+- [ ] Configure environment variables (SECRET_KEY, ALLOWED_HOSTS, DEBUG, etc.)
+- [ ] Deploy to Railway (`railway up`)
+- [ ] Verify application starts successfully
+- [ ] Test database connectivity
+
+**2. Database and Migrations**:
+- [ ] Run database migrations on Railway
+- [ ] Create superuser account
+- [ ] Test admin interface access
+- [ ] Verify PostgreSQL 16 compatibility
+- [ ] Test DATABASE_URL auto-detection
+
+**3. Static Files and Assets**:
+- [ ] Verify WhiteNoise serves static files correctly
+- [ ] Test admin static files (CSS, JS)
+- [ ] Check static file compression
+- [ ] Verify collectstatic runs during deployment
+
+**4. SSL and HTTPS**:
+- [ ] Verify SSL certificate auto-provisioning
+- [ ] Test HTTPS access
+- [ ] Check SECURE_SSL_REDIRECT setting
+- [ ] Verify HSTS headers
+
+**5. Production Configuration**:
+- [ ] Test production settings module
+- [ ] Verify DEBUG=False works correctly
+- [ ] Check ALLOWED_HOSTS configuration
+- [ ] Test error pages (404, 500)
+- [ ] Verify logging configuration
+
+**6. Documentation Updates**:
+- [ ] Update `docs/deployment/railway.md` with real deployment screenshots
+- [ ] Document actual environment variable setup process
+- [ ] Add troubleshooting section based on real issues encountered
+- [ ] Create deployment validation checklist
+- [ ] Document common errors and solutions
+- [ ] Add performance optimization tips
+
+**7. Testing Multiple Scenarios**:
+- [ ] Test deployment with custom domain
+- [ ] Test with different Railway regions
+- [ ] Verify health checks work correctly
+- [ ] Test application restart/recovery
+- [ ] Document rollback procedure
+
+---
+
+### **v0.61.0: CLI Git Subtree Wrappers**
+
+**Objective**: Provide simple CLI wrappers for git subtree workflow, hiding complex git syntax from users.
+
+**Timeline**: After v0.60.0
+
+**Success Criteria**:
 - Users never see `git subtree` syntax
 - Updates pull only `quickscale_core/` directory changes
 - User's `templates/` and `static/` directories never touched by updates
+- Clear error messages guide users through git operations
+- Safe by default with confirmation prompts
 
-#### **Phase 1: Railway Deployment Support**
-
-**1. Documentation**:
-- Complete `docs/deployment/railway.md` - Railway deployment guide
-  - Prerequisites (Railway account, CLI)
-  - Initial deployment steps
-  - Environment variable configuration
-  - Database setup (Railway PostgreSQL)
-  - Static files configuration
-  - Deployment troubleshooting
-
-**2. Testing**:
-- Manual Railway deployment validation
-- Test with newly generated project
-- Document deployment workflow with screenshots
-- Capture lessons learned and common issues
-
-#### **Phase 2: Git Subtree Wrapper Commands**
-
-**Technical Implementation Notes**:
+#### **Technical Implementation Notes**
 
 **1. Repository Configuration**:
 
@@ -345,17 +398,7 @@ def run_git_command(args: list) -> subprocess.CompletedProcess:
     """Execute git command with error handling."""
 ```
 
-#### **Implementation Tasks (v0.60.0)**
-
-**Railway Deployment**:
-- [ ] Manual Railway deployment validation with generated project
-- [ ] Document deployment workflow with screenshots
-- [ ] Test database migrations on Railway
-- [ ] Verify static files serving
-- [ ] Test SSL certificate configuration
-- [ ] Document common deployment issues and solutions
-
-#### **Implementation Tasks (v0.60.0 - Git Subtree)**
+#### **Implementation Tasks**
 
 **Git Subtree Wrappers**:
 - [ ] Implement `quickscale embed` command
@@ -377,7 +420,6 @@ def run_git_command(args: list) -> subprocess.CompletedProcess:
 
 **Documentation**:
 - [ ] Update `user_manual.md` with git subtree commands
-- [ ] Update `user_manual.md` with Railway deployment guide
 - [ ] Update `decisions.md` CLI Command Matrix (mark Phase 2 as IN)
 - [ ] Create "Safe Updates" guide
 - [ ] Document conflict resolution workflow
@@ -393,11 +435,11 @@ def run_git_command(args: list) -> subprocess.CompletedProcess:
 
 ---
 
-### **v0.61.0: Update Workflow Validation**
+### **v0.62.0: Update Workflow Validation**
 
 **Objective**: Validate that QuickScale updates work safely and don't affect user content.
 
-**Timeline**: After v0.60.0
+**Timeline**: After v0.61.0
 
 **Success Criteria**:
 - Automated tests verify `templates/` and `static/` never modified by updates
@@ -520,16 +562,16 @@ The admin module scope has been defined in [decisions.md Admin Module Scope Defi
 
 ---
 
-### **Git Subtree Workflow Refinement (v0.63.0 conditional / Post-MVP)**
+### **Git Subtree Workflow Refinement (v0.64.0 conditional / Post-MVP)**
 
 Based on MVP usage feedback, improve code sharing workflow:
 
-**Evaluate CLI Automation** (target: v0.63.0 conditional; defer to v1.0.0 if tied to marketplace automation):
+**Evaluate CLI Automation** (target: v0.64.0 conditional; defer to v1.0.0 if tied to marketplace automation):
 - [ ] **Assess demand for CLI helpers**
   - [ ] Survey how often you use git subtree manually
   - [ ] Document pain points with manual workflow
   - [ ] Determine if automation would save significant time
-- [ ] **If justified, add CLI commands (target v0.63.0; conditional)**:
+- [ ] **If justified, add CLI commands (target v0.64.0; conditional)**:
   - [ ] `quickscale embed-core <project>` - Embed quickscale_core via git subtree
   - [ ] `quickscale update-core <project>` - Pull updates from monorepo
   - [ ] `quickscale sync-push <project>` - Push improvements back to monorepo

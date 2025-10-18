@@ -2,6 +2,7 @@
 
 See docs/releases/ for detailed release notes.
 
+v0.59.0 — 2025-10-18 — CLI Development Commands (Docker/Django operation wrappers)
 v0.58.0 — 2025-10-18 — Comprehensive E2E testing infrastructure with Playwright and PostgreSQL
 v0.57.0 — 2025-10-15 — MVP Launch: Production-Ready Personal Toolkit
 v0.56.0 — 2025-10-13 — Quality, Testing & CI/CD
