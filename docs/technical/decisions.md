@@ -195,18 +195,19 @@ Other documents (README.md, roadmap.md, scaffolding.md, commercial.md) MUST refe
 
 ### CLI Commands {#cli-command-matrix}
 
-**MVP (v0.56-v0.57.0):**
 - ✅ `quickscale init <project>` - ONLY command (no flags, single starter template)
-
-**v0.59.0 - Development Commands (Phase 1):**
 - ✅ `quickscale up` - Start Docker services (wrapper for docker-compose up)
 - ✅ `quickscale down` - Stop Docker services (wrapper for docker-compose down)
 - ✅ `quickscale shell` - Interactive bash shell in container
 - ✅ `quickscale manage <cmd>` - Run Django management commands
 - ✅ `quickscale logs [service]` - View Docker logs
 - ✅ `quickscale ps` - Show service status
+- ✅ `quickscale deploy railway` - Automated Railway deployment with PostgreSQL setup
+- ✅ `quickscale deploy railway --skip-migrations` - Deploy without running migrations
+- ✅ `quickscale deploy railway --skip-collectstatic` - Deploy without collecting static files
+- ✅ `quickscale deploy railway --project-name <name>` - Specify project name
 
-**v0.60.0 - Git Subtree Wrappers (Phase 2):**
+**v0.61.0 - Git Subtree Wrappers (Phase 2):**
 - 📋 `quickscale embed` - Embed quickscale_core via git subtree add
 - 📋 `quickscale update` - Pull QuickScale updates via git subtree pull
 - 📋 `quickscale push` - Push improvements back via git subtree push

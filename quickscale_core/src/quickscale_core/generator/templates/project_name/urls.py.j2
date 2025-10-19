@@ -19,10 +19,22 @@ Including another URLconf
 from django.conf import settings
 from django.conf.urls.static import static
 from django.contrib import admin
+from django.http import HttpResponse
 from django.urls import include, path
 from django.views.generic import TemplateView
 
+
+def healthcheck(request):
+    """Simple healthcheck endpoint for Railway and other monitoring services.
+
+    Returns HTTP 200 OK without requiring database access or HTTPS redirect.
+    This endpoint is exempt from SECURE_SSL_REDIRECT in production settings.
+    """
+    return HttpResponse("OK", content_type="text/plain", status=200)
+
+
 urlpatterns = [
+    path("healthcheck/", healthcheck, name="healthcheck"),
     path("admin/", admin.site.urls),
     path("", TemplateView.as_view(template_name="index.html"), name="home"),
 ]

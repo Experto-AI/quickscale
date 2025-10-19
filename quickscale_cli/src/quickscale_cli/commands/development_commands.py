@@ -8,6 +8,7 @@ import click
 from quickscale_cli.utils.docker_utils import (
     get_docker_compose_command,
     is_docker_running,
+    is_interactive,
 )
 from quickscale_cli.utils.project_manager import get_web_container_name, is_in_quickscale_project
 
@@ -111,12 +112,22 @@ def shell(cmd: str | None) -> None:
         container_name = get_web_container_name()
 
         if cmd:
-            # Run single command
+            # Run single command (non-interactive)
             docker_cmd = ["docker", "exec", container_name, "bash", "-c", cmd]
-            subprocess.run(docker_cmd, check=True)
+            if is_interactive():
+                subprocess.run(docker_cmd, check=True)
+            else:
+                result = subprocess.run(docker_cmd, capture_output=True, text=True, check=True)
+                if result.stdout:
+                    click.echo(result.stdout, nl=False)
+                if result.stderr:
+                    click.echo(result.stderr, nl=False, err=True)
         else:
-            # Interactive shell
-            docker_cmd = ["docker", "exec", "-it", container_name, "bash"]
+            # Interactive shell - only use -it if we have a TTY
+            docker_cmd = ["docker", "exec"]
+            if is_interactive():
+                docker_cmd.append("-it")
+            docker_cmd.extend([container_name, "bash"])
             subprocess.run(docker_cmd, check=True)
 
     except subprocess.CalledProcessError as e:
@@ -152,8 +163,24 @@ def manage(args: tuple) -> None:
 
     try:
         container_name = get_web_container_name()
-        docker_cmd = ["docker", "exec", "-it", container_name, "python", "manage.py"] + list(args)
-        subprocess.run(docker_cmd, check=True)
+        docker_cmd = ["docker", "exec"]
+
+        # Only use -it flags if we have an interactive terminal (TTY)
+        if is_interactive():
+            docker_cmd.append("-it")
+
+        docker_cmd.extend([container_name, "python", "manage.py"] + list(args))
+
+        # In interactive mode, let subprocess inherit stdio
+        # In non-interactive mode (tests), capture and echo output for Click
+        if is_interactive():
+            subprocess.run(docker_cmd, check=True)
+        else:
+            result = subprocess.run(docker_cmd, capture_output=True, text=True, check=True)
+            if result.stdout:
+                click.echo(result.stdout, nl=False)
+            if result.stderr:
+                click.echo(result.stderr, nl=False, err=True)
 
     except subprocess.CalledProcessError as e:
         if e.returncode == 1:

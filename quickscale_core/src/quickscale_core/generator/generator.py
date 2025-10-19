@@ -140,6 +140,8 @@ class ProjectGenerator:
             (".env.example.j2", ".env.example", False),
             ("Dockerfile.j2", "Dockerfile", False),
             ("docker-compose.yml.j2", "docker-compose.yml", False),
+            ("railway.json.j2", "railway.json", False),
+            ("start.sh.j2", "start.sh", False),
             # Project package files
             ("project_name/__init__.py.j2", f"{project_name}/__init__.py", False),
             ("project_name/urls.py.j2", f"{project_name}/urls.py", False),

@@ -4,12 +4,42 @@ import subprocess
 from unittest.mock import Mock, patch
 
 from quickscale_cli.utils.docker_utils import (
+    exec_in_container,
     find_docker_compose,
     get_container_status,
     get_docker_compose_command,
     get_running_containers,
     is_docker_running,
+    is_interactive,
 )
+
+
+class TestIsInteractive:
+    """Tests for is_interactive function."""
+
+    def test_interactive_terminal(self):
+        """Test when running in interactive terminal."""
+        with patch("sys.stdout.isatty", return_value=True):
+            with patch("sys.stdin.isatty", return_value=True):
+                assert is_interactive() is True
+
+    def test_non_interactive_stdout(self):
+        """Test when stdout is not a TTY."""
+        with patch("sys.stdout.isatty", return_value=False):
+            with patch("sys.stdin.isatty", return_value=True):
+                assert is_interactive() is False
+
+    def test_non_interactive_stdin(self):
+        """Test when stdin is not a TTY."""
+        with patch("sys.stdout.isatty", return_value=True):
+            with patch("sys.stdin.isatty", return_value=False):
+                assert is_interactive() is False
+
+    def test_non_interactive_both(self):
+        """Test when both stdout and stdin are not TTYs."""
+        with patch("sys.stdout.isatty", return_value=False):
+            with patch("sys.stdin.isatty", return_value=False):
+                assert is_interactive() is False
 
 
 class TestIsDockerRunning:
@@ -103,6 +133,53 @@ class TestGetContainerStatus:
             mock_run.side_effect = subprocess.CalledProcessError(1, "docker")
             result = get_container_status("test-container")
             assert result is None
+
+
+class TestExecInContainer:
+    """Tests for exec_in_container function."""
+
+    def test_exec_command_successfully(self):
+        """Test executing command in container successfully."""
+        with patch("subprocess.run") as mock_run:
+            mock_run.return_value = Mock(returncode=0)
+            result = exec_in_container("test-container", ["ls", "-la"])
+            assert result == 0
+
+    def test_exec_command_with_interactive_flag(self):
+        """Test executing command with interactive flag."""
+        with patch("subprocess.run") as mock_run:
+            mock_run.return_value = Mock(returncode=0)
+            result = exec_in_container("test-container", ["bash"], interactive=True)
+
+            # Verify -it flag was added
+            call_args = mock_run.call_args[0][0]
+            assert "-it" in call_args
+            assert result == 0
+
+    def test_exec_command_without_interactive_flag(self):
+        """Test executing command without interactive flag."""
+        with patch("subprocess.run") as mock_run:
+            mock_run.return_value = Mock(returncode=0)
+            result = exec_in_container("test-container", ["ls"], interactive=False)
+
+            # Verify -it flag was not added
+            call_args = mock_run.call_args[0][0]
+            assert "-it" not in call_args
+            assert result == 0
+
+    def test_exec_command_failure(self):
+        """Test handling command execution failure."""
+        with patch("subprocess.run") as mock_run:
+            mock_run.return_value = Mock(returncode=1)
+            result = exec_in_container("test-container", ["failing-command"])
+            assert result == 1
+
+    def test_exec_command_subprocess_error(self):
+        """Test handling subprocess error."""
+        with patch("subprocess.run") as mock_run:
+            mock_run.side_effect = subprocess.SubprocessError("Error")
+            result = exec_in_container("test-container", ["command"])
+            assert result == 1
 
 
 class TestGetRunningContainers:

@@ -60,20 +60,70 @@ class TestGetProjectState:
         assert state["project_name"] is None
         assert state["containers"] == []
 
+    def test_get_state_with_os_error(self):
+        """Test getting project state when Path.cwd() raises OSError."""
+        with patch("pathlib.Path.cwd", side_effect=OSError("Permission denied")):
+            state = get_project_state()
+
+            assert state["has_project"] is False
+            assert state["project_dir"] is None
+            assert state["project_name"] is None
+            assert state["containers"] == []
+
 
 class TestContainerNames:
     """Tests for container name functions."""
 
-    def test_get_web_container_name(self, tmp_path, monkeypatch):
-        """Test getting web container name."""
+    def test_get_web_container_name_fallback(self, tmp_path, monkeypatch):
+        """Test getting web container name fallback when no containers running."""
         monkeypatch.chdir(tmp_path)
 
-        result = get_web_container_name()
-        assert result == f"{tmp_path.name}-web-1"
+        with patch(
+            "quickscale_cli.utils.project_manager.get_running_containers"
+        ) as mock_containers:
+            mock_containers.return_value = []
+            result = get_web_container_name()
+            assert result == f"{tmp_path.name}-web-1"
 
-    def test_get_db_container_name(self, tmp_path, monkeypatch):
-        """Test getting database container name."""
+    def test_get_web_container_name_found(self, monkeypatch):
+        """Test getting web container name when container is found."""
+        # Use a simple project name that doesn't contain 'web' or 'db'
+        with patch("pathlib.Path.cwd") as mock_cwd:
+            mock_cwd.return_value.name = "myproject"
+
+            with patch(
+                "quickscale_cli.utils.project_manager.get_running_containers"
+            ) as mock_containers:
+                mock_containers.return_value = [
+                    "myproject_web_1",
+                    "myproject_db_1",
+                ]
+                result = get_web_container_name()
+                assert result == "myproject_web_1"
+
+    def test_get_db_container_name_fallback(self, tmp_path, monkeypatch):
+        """Test getting database container name fallback when no containers running."""
         monkeypatch.chdir(tmp_path)
 
-        result = get_db_container_name()
-        assert result == f"{tmp_path.name}-db-1"
+        with patch(
+            "quickscale_cli.utils.project_manager.get_running_containers"
+        ) as mock_containers:
+            mock_containers.return_value = []
+            result = get_db_container_name()
+            assert result == f"{tmp_path.name}-db-1"
+
+    def test_get_db_container_name_found(self, monkeypatch):
+        """Test getting database container name when container is found."""
+        # Use a simple project name that doesn't contain 'web' or 'db'
+        with patch("pathlib.Path.cwd") as mock_cwd:
+            mock_cwd.return_value.name = "myproject"
+
+            with patch(
+                "quickscale_cli.utils.project_manager.get_running_containers"
+            ) as mock_containers:
+                mock_containers.return_value = [
+                    "myproject_web_1",
+                    "myproject_db_1",
+                ]
+                result = get_db_container_name()
+                assert result == "myproject_db_1"

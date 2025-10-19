@@ -1,0 +1,56 @@
+#!/usr/bin/env bash
+# Railway deployment startup script
+# This script runs migrations and starts the Gunicorn server
+
+set -e  # Exit on error
+set -u  # Exit on undefined variable
+
+# Disable Python output buffering to see logs immediately
+export PYTHONUNBUFFERED=1
+
+echo "========================================"
+echo "🚀 Starting deployment..."
+echo "========================================"
+echo ""
+
+echo "📋 Step 1/5: Environment check"
+echo "Checking critical environment variables..."
+env | grep -E '(DATABASE_URL|SECRET_KEY|DEBUG|DJANGO_SETTINGS_MODULE|ALLOWED_HOSTS|PORT)' || echo "⚠️  Some variables may be missing"
+echo ""
+
+echo "📋 Step 2/5: Python environment"
+python --version
+echo "Python location: $(which python)"
+echo "Installed packages:"
+pip list | grep -E '(Django|gunicorn|psycopg|dj-database-url|whitenoise)' || echo "⚠️  Some packages may be missing"
+echo ""
+echo "Django configuration check:"
+python -c "from django.conf import settings; print(f'ALLOWED_HOSTS: {settings.ALLOWED_HOSTS}')" || echo "⚠️  Could not load Django settings"
+echo ""
+
+echo "📋 Step 3/5: Database migrations"
+echo "Running migrations..."
+python manage.py migrate --noinput
+echo "✅ Migrations completed successfully"
+echo ""
+
+echo "📋 Step 4/5: WSGI application check"
+python -c "from {{ project_name }}.wsgi import application; print(f'✅ WSGI app loaded: {type(application).__name__}')"
+echo ""
+
+echo "📋 Step 5/5: Starting Gunicorn"
+echo "Binding to 0.0.0.0:${PORT:-8000} with 4 workers"
+echo "Gunicorn will log all requests below..."
+echo "========================================"
+echo ""
+
+# Start Gunicorn with detailed logging
+exec gunicorn {{ project_name }}.wsgi:application \
+    --bind "0.0.0.0:${PORT:-8000}" \
+    --workers 4 \
+    --timeout 60 \
+    --log-level info \
+    --access-logfile - \
+    --error-logfile - \
+    --capture-output \
+    --enable-stdio-inheritance

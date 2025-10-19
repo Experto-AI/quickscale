@@ -23,14 +23,22 @@ from .base import *  # noqa: F403
 DEBUG = False
 
 # SECURITY: Restrict allowed hosts
-ALLOWED_HOSTS = config(
+# Parse comma-separated ALLOWED_HOSTS from environment
+_allowed_hosts = config(
     "ALLOWED_HOSTS",
     default="",
     cast=lambda v: [s.strip() for s in v.split(",") if s.strip()],
 )
 
+# Railway healthchecks come from healthcheck.railway.app - always allow this
+# See: https://docs.railway.com/guides/healthchecks
+# Use list(set(...)) to avoid duplicates if healthcheck.railway.app is already in env var
+ALLOWED_HOSTS = list(set(_allowed_hosts + ["healthcheck.railway.app"]))
+
 # SECURITY: Require HTTPS in production
 SECURE_SSL_REDIRECT = config("SECURE_SSL_REDIRECT", default=True, cast=bool)
+# Exempt healthcheck endpoint from HTTPS redirect (Railway healthchecks use HTTP)
+SECURE_REDIRECT_EXEMPT = [r"^healthcheck/$"]
 SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
 
 # SECURITY: Cookie security
@@ -50,28 +58,32 @@ SECURE_BROWSER_XSS_FILTER = True
 X_FRAME_OPTIONS = "DENY"
 
 # Database - PostgreSQL for production
-# Use DATABASE_URL environment variable for easy deployment
-DATABASES = {
-    "default": {
-        "ENGINE": "django.db.backends.postgresql",
-        "NAME": config("DB_NAME", default="{{ project_name }}_db"),
-        "USER": config("DB_USER", default="postgres"),
-        "PASSWORD": config("DB_PASSWORD", default=""),
-        "HOST": config("DB_HOST", default="localhost"),
-        "PORT": config("DB_PORT", default="5432"),
-        "CONN_MAX_AGE": config("DB_CONN_MAX_AGE", default=600, cast=int),
-    }
-}
+# Use DATABASE_URL environment variable for Railway deployment
+import dj_database_url
+import sys
 
-# Alternative: Use DATABASE_URL (requires dj-database-url)
-# import dj_database_url
-# DATABASES = {
-#     "default": dj_database_url.config(
-#         default=config("DATABASE_URL"),
-#         conn_max_age=600,
-#         conn_health_checks=True,
-#     )
-# }
+# Validate DATABASE_URL is set in production
+database_url = config("DATABASE_URL", default=None)
+
+if database_url is None:
+    # Only raise error for production commands that need database
+    # Allow collectstatic and other non-DB commands to run
+    if "collectstatic" not in sys.argv and "compilemessages" not in sys.argv:
+        raise ValueError(
+            "DATABASE_URL environment variable is not set. "
+            "Railway requires DATABASE_URL to connect to PostgreSQL. "
+            "Ensure the database service is linked to your app service in Railway dashboard."
+        )
+    # Provide a dummy URL for collectstatic to work
+    database_url = "postgresql://dummy:dummy@localhost:5432/dummy"
+
+DATABASES = {
+    "default": dj_database_url.config(
+        default=database_url,
+        conn_max_age=600,
+        conn_health_checks=True,
+    )
+}
 
 # Email configuration
 EMAIL_BACKEND = "django.core.mail.backends.smtp.EmailBackend"
@@ -121,7 +133,7 @@ STATIC_ROOT = BASE_DIR / "staticfiles"  # noqa: F405
 #         environment=config("ENVIRONMENT", default="production"),
 #     )
 
-# Logging - production-grade configuration
+# Logging - production configuration (console only for Railway/cloud deployments)
 LOGGING = {
     "version": 1,
     "disable_existing_loggers": False,
@@ -145,21 +157,6 @@ LOGGING = {
             "class": "logging.StreamHandler",
             "formatter": "verbose",
         },
-        "file": {
-            "class": "logging.handlers.RotatingFileHandler",
-            "filename": BASE_DIR / "logs" / "django.log",  # noqa: F405
-            "maxBytes": 1024 * 1024 * 10,  # 10 MB
-            "backupCount": 10,
-            "formatter": "verbose",
-        },
-        "error_file": {
-            "class": "logging.handlers.RotatingFileHandler",
-            "filename": BASE_DIR / "logs" / "django_error.log",  # noqa: F405
-            "maxBytes": 1024 * 1024 * 10,  # 10 MB
-            "backupCount": 10,
-            "formatter": "verbose",
-            "level": "ERROR",
-        },
         "mail_admins": {
             "level": "ERROR",
             "class": "django.utils.log.AdminEmailHandler",
@@ -168,22 +165,22 @@ LOGGING = {
         },
     },
     "root": {
-        "handlers": ["console", "file"],
+        "handlers": ["console"],
         "level": "INFO",
     },
     "loggers": {
         "django": {
-            "handlers": ["console", "file", "error_file"],
+            "handlers": ["console"],
             "level": "INFO",
             "propagate": False,
         },
         "django.request": {
-            "handlers": ["mail_admins", "error_file"],
+            "handlers": ["console", "mail_admins"],
             "level": "ERROR",
             "propagate": False,
         },
         "{{ project_name }}": {
-            "handlers": ["console", "file", "error_file"],
+            "handlers": ["console"],
             "level": "INFO",
             "propagate": False,
         },

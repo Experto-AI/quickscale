@@ -6,6 +6,7 @@ import click
 
 import quickscale_cli
 import quickscale_core
+from quickscale_cli.commands.deployment_commands import deploy
 from quickscale_cli.commands.development_commands import down, logs, manage, ps, shell, up
 from quickscale_core.generator import ProjectGenerator
 
@@ -31,6 +32,9 @@ cli.add_command(shell)
 cli.add_command(manage)
 cli.add_command(logs)
 cli.add_command(ps)
+
+# Register deployment commands
+cli.add_command(deploy)
 
 
 @cli.command()

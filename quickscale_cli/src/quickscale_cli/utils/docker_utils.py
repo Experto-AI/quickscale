@@ -1,7 +1,13 @@
 """Docker interaction utilities for QuickScale CLI."""
 
 import subprocess
+import sys
 from pathlib import Path
+
+
+def is_interactive() -> bool:
+    """Check if running in an interactive terminal (has TTY)."""
+    return sys.stdout.isatty() and sys.stdin.isatty()
 
 
 def is_docker_running() -> bool:
