@@ -308,34 +308,74 @@ quickscale_core/
 ├── src/quickscale_core/
 │   ├── __init__.py
 │   ├── version.py
-│   ├── scaffold/
+│   ├── generator/
 │   │   ├── __init__.py
-│   │   ├── generator.py            # ProjectGenerator (simple!)
+│   │   ├── generator.py            # ProjectGenerator with theme support (v0.61.0+)
 │   │   └── templates/
-│   │       ├── manage.py.j2
-│   │       ├── settings.py.j2      # Basic Django settings
-│   │       ├── urls.py.j2
-│   │       ├── wsgi.py.j2
-│   │       ├── asgi.py.j2
-│   │       ├── pyproject.toml.j2    # Poetry pyproject metadata + dependencies
-│   │       └── templates/
-│   │           └── index.html.j2   # Simple homepage
+│   │       ├── common/             # Shared templates (all themes)
+│   │       │   ├── manage.py.j2
+│   │       │   ├── pyproject.toml.j2
+│   │       │   ├── Dockerfile.j2
+│   │       │   ├── docker-compose.yml.j2
+│   │       │   └── project_name/
+│   │       │       ├── __init__.py.j2
+│   │       │       ├── urls.py.j2
+│   │       │       ├── wsgi.py.j2
+│   │       │       ├── asgi.py.j2
+│   │       │       └── settings/
+│   │       │           ├── base.py.j2
+│   │       │           ├── local.py.j2
+│   │       │           └── production.py.j2
+│   │       └── themes/             # Theme-specific templates (v0.61.0+)
+│   │           ├── starter_html/   # Pure HTML/CSS theme (default)
+│   │           │   ├── templates/
+│   │           │   │   ├── base.html.j2
+│   │           │   │   └── index.html.j2
+│   │           │   └── static/
+│   │           │       ├── css/style.css.j2
+│   │           │       └── images/favicon.svg.j2
+│   │           ├── starter_htmx/   # HTMX + Alpine.js theme (v0.66.0)
+│   │           │   ├── templates/
+│   │           │   │   ├── base.html.j2
+│   │           │   │   └── index.html.j2
+│   │           │   ├── static/
+│   │           │   │   ├── css/
+│   │           │   │   └── js/
+│   │           │   └── package.json.j2  # Tailwind, Alpine.js
+│   │           └── starter_react/  # React + TypeScript theme (v0.67.0)
+│   │               ├── templates/  # Minimal Django templates (API only)
+│   │               │   └── index.html.j2  # React mount point
+│   │               └── frontend/
+│   │                   ├── src/
+│   │                   │   ├── main.tsx
+│   │                   │   └── App.tsx
+│   │                   ├── package.json.j2
+│   │                   └── vite.config.ts.j2
 │   └── utils/                      # Optional utilities (minimal)
 │       ├── __init__.py
 │       └── file_utils.py           # Basic file operations
 └── tests/
-    ├── test_scaffold/
+    ├── test_generator/
     │   ├── test_generator.py
+    │   ├── test_themes.py          # Theme selection tests (v0.61.0+)
     │   └── test_templates.py
     └── test_integration.py
 ```
+
+**v0.61.0 Enhancements:**
+- ✅ Theme system: `quickscale init myproject --template <name>`
+- ✅ Themes are one-time copy, user owns generated code
+- ✅ Default theme: `html` (backward compatible, no flag required)
+ - ✅ Default theme: `starter_html` (backward compatible, no flag required)
+- ✅ Backend templates in `common/` (theme-agnostic)
+- ✅ Frontend templates in `themes/{html,htmx,react}/` (theme-specific)
+ - ✅ Frontend templates in `themes/{starter_html,starter_htmx,starter_react}/` (theme-specific)
 
 **MVP Simplifications:**
 - ❌ NO config/ directory (no YAML/JSON configuration loading in MVP)
 - ❌ NO apps.py (not a Django app in MVP)
 - ❌ NO complex utils (just basics)
 - ❌ NO `backend_extensions.py` generation in MVP — see [backend_extensions.py policy](./decisions.md#backend-extensions-policy)
-- ❌ NO variants system (just one simple template)
 - ❌ NO automatic settings inheritance (standard Django `settings.py` only). Generated starters are standalone by default; optional inheritance patterns are documented for advanced users in `decisions.md`.
 
 ```
@@ -343,22 +383,40 @@ quickscale_cli/
 ├── pyproject.toml
 ├── src/quickscale_cli/
 │   ├── __init__.py
-│   ├── main.py                     # Ultra-simple CLI entry point
+│   ├── main.py                     # CLI entry point
 │   └── commands/
 │       ├── __init__.py
-│       └── init.py                 # Just 'quickscale init <name>'
+│       ├── init.py                 # 'quickscale init <name> --template <theme>'
+│       ├── module_commands.py      # Module management (v0.61.0+)
+│       │   ├── embed()            # 'quickscale embed --module <name>'
+│       │   ├── update()           # 'quickscale update'
+│       │   └── push()             # 'quickscale push --module <name>'
+│       ├── dev_commands.py         # Dev workflows (v0.59.0)
+│       │   ├── up()               # 'quickscale up'
+│       │   ├── down()             # 'quickscale down'
+│       │   ├── shell()            # 'quickscale shell'
+│       │   └── manage()           # 'quickscale manage <args>'
+│       └── deploy_commands.py      # Deployment (v0.60.0)
+│           └── railway()          # 'quickscale deploy railway'
+│   └── utils/
+│       ├── __init__.py
+│       └── git_utils.py            # Git subtree helpers (v0.61.0+)
+│           ├── run_git_subtree_add()
+│           ├── run_git_subtree_pull()
+│           └── run_git_subtree_push()
 └── tests/
-    └── test_cli.py
+    ├── test_init.py
+    ├── test_module_commands.py     # Module embed/update/push tests (v0.61.0+)
+    ├── test_dev_commands.py
+    └── test_deploy_commands.py
 
-**MVP Simplifications:**
-- ❌ NO automated CLI wrappers: manual `git subtree` commands remain the supported workflow in MVP (see the [canonical workflow in decisions.md](./decisions.md#integration-note-personal-toolkit-git-subtree)).
-- ❌ NO git/ directory (no automation in MVP)
-- ❌ NO validate/generate commands (Post-MVP)
-- ❌ NO complex IO (just basic print)
+**v0.61.0 Enhancements:**
+- ✅ Theme selection: `quickscale init myproject --template <name>`
+- ✅ Module management: `quickscale embed --module auth`, `quickscale update`, `quickscale push`
+- ✅ Git subtree automation for modules (split branch distribution)
+- ✅ `.quickscale/config.yml` tracking for installed modules
 
-**Philosophy**: One command. That's it. `quickscale init myapp`
-
-Note: Git subtree documentation is provided for users who want code sharing. Manual subtree commands are documented for transparency and advanced users. For the status of potential Post-MVP CLI wrapper helpers, defer to the [CLI command matrix in decisions.md](./decisions.md#cli-command-matrix).
+**Philosophy**: Simple, powerful commands for modern Django development.
 ```
 
 ---
@@ -465,34 +523,119 @@ quickscale_themes/starter/
 
 ---
 ## 5. Generated Project Output
-### 5.1 MVP (Ultra-Minimal Django Project)
+### 5.1 Base Project (Generated by `quickscale init`)
 ```
 myapp/
 ├── manage.py                    # Standard Django
 ├── myapp/
 │   ├── __init__.py
-│   ├── settings.py             # Basic Django settings
+│   ├── settings/                # Split settings (v0.53.0+)
+│   │   ├── __init__.py
+│   │   ├── base.py             # Base Django settings
+│   │   ├── local.py            # Local development settings
+│   │   └── production.py       # Production settings
 │   ├── urls.py                 # Minimal URL config
 │   ├── wsgi.py
 │   └── asgi.py
-├── templates/
-│   └── index.html              # Simple homepage
-├── static/
-│   └── css/
+├── templates/                   # Theme-specific templates (v0.61.0+)
+│   ├── base.html               # From selected theme (html/htmx/react)
+│   └── index.html              # Homepage
+├── static/                      # Theme-specific static files
+│   ├── css/
+│   │   └── style.css           # From selected theme
+│   └── images/
+│       └── favicon.svg
+├── Dockerfile                   # Production-ready Docker image
+├── docker-compose.yml           # Local dev environment (PostgreSQL, Redis)
 ├── pyproject.toml              # Poetry metadata and dependencies (generated)
 ├── poetry.lock                 # Deterministic lockfile generated from template
+├── .env.example                # Environment variable template
 ├── .gitignore
 └── README.md                   # Next steps guidance
 
-# Git subtree (ONLY MVP distribution mechanism)
-# Commands live in decisions.md to keep documentation single-sourced.
+# For React theme (v0.67.0+):
+├── frontend/                    # React + TypeScript + Vite
+│   ├── src/
+│   │   ├── main.tsx
+│   │   └── App.tsx
+│   ├── package.json
+│   └── vite.config.ts
 ```
 
 **What Users Get:**
 - Working Django project in 30 seconds
-- Runnable with `python manage.py runserver`
+ - Choice of frontend theme: `quickscale init myapp --template <starter_html|starter_htmx|starter_react>`
+- Runnable with `docker-compose up` (full stack) or `python manage.py runserver`
 - 100% theirs to customize
-- No QuickScale dependencies unless they want them
+- Production-ready Docker setup
+- No QuickScale runtime dependencies unless they embed modules
+
+### 5.2 With Embedded Modules (Optional, User Choice)
+```
+myapp/
+├── .quickscale/                 # Module configuration (v0.61.0+)
+│   └── config.yml              # Tracks installed modules
+├── modules/                     # Embedded modules (git subtrees)
+│   ├── auth/                   # From splits/auth-module
+│   │   ├── __init__.py
+│   │   ├── models.py
+│   │   ├── views.py
+│   │   ├── urls.py
+│   │   ├── templates/
+│   │   │   └── auth/          # Auth-specific templates (theme-aware)
+│   │   ├── migrations/
+│   │   └── tests/
+│   └── billing/                # From splits/billing-module
+│       ├── __init__.py
+│       ├── models.py
+│       ├── views.py
+│       └── ...
+├── manage.py
+├── myapp/
+│   ├── settings/
+│   │   └── base.py            # INSTALLED_APPS += ["modules.auth", "modules.billing"]
+│   └── urls.py                # include("modules.auth.urls"), include("modules.billing.urls")
+└── ... (rest of project structure)
+```
+
+**How Users Get Modules:**
+```bash
+# Generate base project
+quickscale init myapp --template starter_html
+
+# Embed modules (optional)
+cd myapp
+git init  # Must be a git repo
+quickscale embed --module auth
+quickscale embed --module billing
+
+# Update modules later
+quickscale update  # Updates only installed modules
+```
+
+**`.quickscale/config.yml` Example:**
+```yaml
+# QuickScale module configuration
+default_remote: https://github.com/<org>/quickscale.git
+
+modules:
+  auth:
+    prefix: modules/auth
+    branch: splits/auth-module
+    installed_version: v0.62.0
+    installed_at: 2025-10-23
+  billing:
+    prefix: modules/billing
+    branch: splits/billing-module
+    installed_version: v0.64.0
+    installed_at: 2025-10-25
+```
+
+**What Users Get with Modules:**
+- Reusable Django apps maintained by QuickScale
+- Theme-agnostic backend code (works with all themes)
+- Updatable over project lifetime via `quickscale update`
+- Can contribute improvements back via `quickscale push`
 
 ### MVP Settings (Standalone)
 

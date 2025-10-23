@@ -77,22 +77,23 @@ This strategy builds the theme system infrastructure upfront, delivers core modu
 
 **Phase 1: Foundation + Core Modules (HTML Theme Only)**
 - **v0.61.0**: Theme System Foundation - `--template` flag, theme abstraction layer, ships with HTML theme only 🎯 **NEXT**
-- **v0.62.0**: `quickscale_modules.auth` - django-allauth integration (basic auth, social providers) - HTML theme only
-- **v0.63.0**: `quickscale_modules.auth` - Email verification & production email flows - HTML theme only
-- **v0.64.0**: `quickscale_modules.billing` - dj-stripe subscriptions - HTML theme only
-- **v0.65.0**: `quickscale_modules.teams` - Multi-tenancy patterns - HTML theme only 🎯 **SAAS FEATURE PARITY MILESTONE**
+- **v0.62.0**: Split Branch Infrastructure - Module management commands (`embed/update/push`), GitHub Actions automation
+- **v0.63.0**: `quickscale_modules.auth` - django-allauth integration (basic auth, social providers) - HTML theme only
+- **v0.64.0**: `quickscale_modules.auth` - Email verification & production email flows - HTML theme only
+- **v0.65.0**: `quickscale_modules.billing` - dj-stripe subscriptions - HTML theme only
+- **v0.66.0**: `quickscale_modules.teams` - Multi-tenancy patterns - HTML theme only 🎯 **SAAS FEATURE PARITY MILESTONE**
 
 **Phase 2: Additional Themes (Port Existing Modules)**
-- **v0.66.0**: HTMX Theme - Port auth/billing/teams components to HTMX + Alpine.js
-- **v0.67.0**: React Theme - Port auth/billing/teams components to React + TypeScript SPA
+- **v0.67.0**: HTMX Theme - Port auth/billing/teams components to HTMX + Alpine.js
+- **v0.68.0**: React Theme - Port auth/billing/teams components to React + TypeScript SPA
 
 **Phase 3: Expand Features (All Themes)**
-- **v0.68.0**: `quickscale_modules.notifications` - Email infrastructure - All 3 themes
-- **v0.69.0**: CLI Git Subtree Wrappers - `quickscale embed/update/push` (P1 - Module Management)
-- **v0.70.0**: Update Workflow Validation (P1 - Module Management)
+- **v0.69.0**: `quickscale_modules.notifications` - Email infrastructure - All 3 themes
+- **v0.70.0**: Advanced Module Management Features - Batch operations, status, discovery commands
+- **v0.71.0**: Update Workflow Validation (P1 - Module Management)
 - **v0.7x.0**: Additional modules based on real client needs
 
-**🎯 Competitive Parity Goal (v0.65.0)**: At this point, QuickScale matches SaaS Pegasus on core features (auth, billing, teams) while offering superior architecture (composability, shared updates). See [competitive_analysis.md Timeline](../overview/competitive_analysis.md#timeline-reality-check).
+**🎯 Competitive Parity Goal (v0.66.0)**: At this point, QuickScale matches SaaS Pegasus on core features (auth, billing, teams) while offering superior architecture (composability, shared updates). See [competitive_analysis.md Timeline](../overview/competitive_analysis.md#timeline-reality-check).
 
 **Rationale - Hybrid Approach Benefits**:
 1. **Fast time-to-value**: Core modules delivered in 6-8 weeks (HTML only) vs. 17+ weeks (3 themes simultaneously)
@@ -106,33 +107,73 @@ This strategy builds the theme system infrastructure upfront, delivers core modu
 
 ### **v0.61.0: Theme System Foundation**
 
-**Objective**: Build theme system architecture to enable multiple frontend variants while maintaining a single backend. Ships with HTML theme only (current monolithic templates refactored into theme structure).
+**Objective**: Implement theme selection system with `--template` flag. Refactor existing templates into theme directory structure. Ships with HTML theme only, establishing foundation for future HTMX and React themes.
 
 **Timeline**: After v0.60.0
 
 **Status**: 🎯 **NEXT RELEASE** - Detailed implementation plan to be created before starting work.
 
 **Scope**:
-- Implement `--template` CLI flag (`quickscale init myproject --template html`)
-- Create theme directory structure in generator templates
-- Build theme abstraction layer (conditional template rendering)
-- Refactor current templates into `themes/html/` directory
-- Theme selection defaults to `html` if not specified (backward compatible)
+ - Implement `--template` CLI flag (`quickscale init myproject --template starter_html`)
+ - Create theme directory structure: `quickscale_core/generator/templates/themes/{starter_html,starter_htmx,starter_react}/`
+ - Build theme abstraction layer (conditional template rendering during init)
+ - Refactor current templates into `themes/starter_html/` directory
+ - Theme selection defaults to `starter_html` if not specified (backward compatible)
+ - Create placeholder directories for `themes/starter_htmx/` and `themes/starter_react/` (empty in v0.61.0)
+- **Important**: Themes are one-time copy, users own generated code, NO embed/update for themes
 
 **Success Criteria**:
 - `quickscale init myproject` works exactly as before (implicit HTML theme)
-- `quickscale init myproject --template html` works explicitly
-- Theme system ready for HTMX/React variants in future releases
+ - `quickscale init myproject --template starter_html` works explicitly
+ - `quickscale init myproject --template starter_htmx` shows clear error (theme not implemented yet)
+- `quickscale init myproject --template invalid` shows helpful error with available themes
+- Generated project structure matches v0.60.0 output exactly
 - Zero breaking changes for existing users
-- Documentation updated with theme concepts
 
 **Implementation Tasks**: TBD - Will be detailed in release planning phase following [Release Documentation Policy](../contrib/contributing.md#release-documentation-policy).
 
-**Key Insight**: Only ~30% of code needs theme variants (frontend templates/components). Backend code (models, views, auth, email, etc.) is 100% theme-agnostic and will be shared across all themes.
+**Architectural Principles**:
+- **Themes**: One-time generation templates, user owns code, no updates
+- Only ~30% of code needs theme variants (frontend templates/components)
+- Backend code (models, views, auth, email) is 100% theme-agnostic and shared across themes
 
 ---
 
-### **v0.62.0: `quickscale_modules.auth` - Authentication Module (Basic Auth)**
+### **v0.62.0: Split Branch Infrastructure (Module Management)**
+
+**Objective**: Build split branch distribution infrastructure for modules. Implement module management CLI commands (embed/update/push) and GitHub Actions automation for split branch creation.
+
+**Timeline**: After v0.61.0
+
+**Status**: Planned - Module management infrastructure (no actual modules yet, just the tooling)
+
+**Scope**:
+- GitHub Actions workflow for automatic `git subtree split` on releases
+- Create placeholder split branches: `splits/auth-module`, `splits/billing-module`, `splits/teams-module`
+- Implement `quickscale embed --module <name>` command (wraps `git subtree add`)
+- Implement `quickscale update` command (wraps `git subtree pull` for installed modules only)
+- Implement `quickscale push` command (wraps `git subtree push` for contributions)
+- Configuration tracking in `.quickscale/config.yml`
+- Git utilities module for subtree operations
+
+**Success Criteria**:
+- `quickscale embed --module auth` shows clear error explaining module is empty (placeholder in v0.62.0)
+- `quickscale update` runs without errors when no modules installed
+- `quickscale push --module auth` shows usage instructions
+- `.quickscale/config.yml` created in generated projects
+- GitHub Actions auto-creates split branches on release
+- Split branches contain placeholder READMEs explaining future functionality
+
+**Implementation Tasks**: TBD - Will be detailed in release planning phase following [Release Documentation Policy](../contrib/contributing.md#release-documentation-policy).
+
+**Architectural Principles**:
+- **Modules**: Split branches, embedded via subtree, updated over project lifetime
+- Modules (~70% backend) are theme-agnostic and work with all themes
+- Infrastructure ready for v0.63.0+ module implementations
+
+---
+
+### **v0.63.0: `quickscale_modules.auth` - Authentication Module (Basic Auth)**
 
 **Objective**: Create reusable authentication module wrapping django-allauth with social auth providers and custom User model patterns. HTML theme only.
 
@@ -154,9 +195,31 @@ See [Module Creation Guide](#module-creation-guide-for-v05x0-releases) and [comp
 
 ### **v0.63.0: `quickscale_modules.auth` - Email Verification & Production Email**
 
-**Objective**: Complete production-ready email authentication flows for the auth module. HTML theme only.
+### **v0.63.0: `quickscale_modules.auth` - Authentication Module (Basic Auth)**
+
+**Objective**: Create reusable authentication module wrapping django-allauth with social auth providers and custom User model patterns. HTML theme only.
 
 **Timeline**: After v0.62.0
+
+**Status**: Planned - Core auth flows (login/registration, social providers)
+
+**Scope**:
+- django-allauth integration with social providers (Google, GitHub)
+- Custom User model patterns
+- Account management views (HTML theme only)
+- Basic email flows (verification emails deferred to v0.64.0)
+
+See [Module Creation Guide](#module-creation-guide-for-v05x0-releases) and [competitive_analysis.md Auth Module Requirements](../overview/competitive_analysis.md#2-authentication-foundation) for detailed feature requirements.
+
+**Implementation Tasks**: TBD - Will be detailed in release planning phase.
+
+---
+
+### **v0.64.0: `quickscale_modules.auth` - Email Verification & Production Email**
+
+**Objective**: Complete production-ready email authentication flows for the auth module. HTML theme only.
+
+**Timeline**: After v0.63.0
 
 **Status**: Planned - Production email features for auth module
 
@@ -170,11 +233,11 @@ See [Module Creation Guide](#module-creation-guide-for-v05x0-releases) and [comp
 
 ---
 
-### **v0.64.0: `quickscale_modules.billing` - Billing Module**
+### **v0.65.0: `quickscale_modules.billing` - Billing Module**
 
 **Objective**: Create reusable billing module wrapping dj-stripe for Stripe subscriptions, plans, pricing tiers, webhook handling, and invoice management. HTML theme only.
 
-**Timeline**: After v0.63.0
+**Timeline**: After v0.64.0
 
 **Status**: Detailed implementation plan to be created before starting work.
 
@@ -184,11 +247,11 @@ See [Module Creation Guide](#module-creation-guide-for-v05x0-releases) and [comp
 
 ---
 
-### **v0.65.0: `quickscale_modules.teams` - Teams/Multi-tenancy Module**
+### **v0.66.0: `quickscale_modules.teams` - Teams/Multi-tenancy Module**
 
 **Objective**: Create reusable teams module with multi-tenancy patterns, role-based permissions, invitation system, and row-level security. HTML theme only.
 
-**Timeline**: After v0.64.0
+**Timeline**: After v0.65.0
 
 **Status**: 🎯 **SAAS FEATURE PARITY MILESTONE** - At this point QuickScale matches SaaS Pegasus on core features (auth, billing, teams).
 
@@ -198,16 +261,20 @@ See [Module Creation Guide](#module-creation-guide-for-v05x0-releases) and [comp
 
 ---
 
-### **v0.66.0: HTMX Frontend Theme**
+### **v0.67.0: HTMX Frontend Theme**
 
 **Objective**: Create HTMX + Alpine.js theme variant and port existing modules (auth, billing, teams) to this theme.
 
-**Timeline**: After v0.65.0
+### **v0.67.0: HTMX Frontend Theme**
+
+**Objective**: Create HTMX + Alpine.js theme variant and port existing modules (auth, billing, teams) to this theme.
+
+**Timeline**: After v0.66.0
 
 **Status**: Planned - Second theme variant for server-rendered, low-JS applications
 
 **Scope**:
-- Create `themes/htmx/` directory structure
+ - Create `themes/starter_htmx/` directory structure
 - HTMX + Alpine.js base templates
 - Port auth module components (login, signup, account management)
 - Port billing module components (subscription management, pricing pages)
@@ -216,7 +283,7 @@ See [Module Creation Guide](#module-creation-guide-for-v05x0-releases) and [comp
 - Progressive enhancement patterns
 
 **Success Criteria**:
-- `quickscale init myproject --template htmx` generates HTMX-based project
+ - `quickscale init myproject --template starter_htmx` generates HTMX-based project
 - All existing modules (auth/billing/teams) work with HTMX theme
 - Backend code remains unchanged (100% theme-agnostic)
 - Documentation includes HTMX theme examples
@@ -225,16 +292,16 @@ See [Module Creation Guide](#module-creation-guide-for-v05x0-releases) and [comp
 
 ---
 
-### **v0.67.0: React Frontend Theme**
+### **v0.68.0: React Frontend Theme**
 
 **Objective**: Create React + TypeScript SPA theme variant and port existing modules (auth, billing, teams) to this theme.
 
-**Timeline**: After v0.66.0
+**Timeline**: After v0.67.0
 
 **Status**: Planned - Third theme variant for modern SPA applications
 
 **Scope**:
-- Create `themes/react/` directory structure
+ - Create `themes/starter_react/` directory structure
 - React + TypeScript + Vite base setup
 - Django REST Framework API endpoints for auth/billing/teams
 - Port auth module components (login, signup, account management)
@@ -244,7 +311,7 @@ See [Module Creation Guide](#module-creation-guide-for-v05x0-releases) and [comp
 - State management (React Query, Zustand, or similar)
 
 **Success Criteria**:
-- `quickscale init myproject --template react` generates React SPA project
+ - `quickscale init myproject --template starter_react` generates React SPA project
 - All existing modules (auth/billing/teams) work with React theme
 - Backend code remains unchanged (100% theme-agnostic)
 - API endpoints auto-generated or clearly documented
@@ -254,11 +321,11 @@ See [Module Creation Guide](#module-creation-guide-for-v05x0-releases) and [comp
 
 ---
 
-### **v0.68.0: `quickscale_modules.notifications` - Notifications Module**
+### **v0.69.0: `quickscale_modules.notifications` - Notifications Module**
 
 **Objective**: Create reusable notifications module wrapping django-anymail for multiple email backends, transactional templates, and async email via Celery. All 3 themes supported (HTML, HTMX, React).
 
-**Timeline**: After v0.67.0
+**Timeline**: After v0.68.0
 
 **Status**: Detailed implementation plan to be created before starting work.
 
@@ -268,160 +335,178 @@ See [Module Creation Guide](#module-creation-guide-for-v05x0-releases) and [comp
 
 ---
 
-### **v0.69.0: CLI Git Subtree Wrappers**
+### **v0.70.0: Advanced Module Management Features**
 
-**Objective**: Provide simple CLI wrappers for git subtree workflow, hiding complex git syntax from users.
+**Objective**: Enhance module management with batch operations and advanced features.
 
-**Timeline**: After v0.68.0 (after modules and themes exist to embed/update)
+**Timeline**: After v0.69.0
 
-**Rationale**: Deferred until modules and themes exist. These commands enable embedding and updating modules in client projects - they don't make sense before modules are available.
+**Rationale**: Basic embed/update/push commands implemented in v0.62.0. This release adds convenience features based on real usage patterns.
+
+**Scope**:
+- Batch operations: `quickscale update --all` (update all installed modules)
+- Status command: `quickscale status` (show installed modules and versions)
+- Module discovery: `quickscale list-modules` (show available modules)
+- Enhanced conflict resolution workflows
+- Improved diff previews and change summaries
 
 **Success Criteria**:
-- Users never see `git subtree` syntax
-- Updates pull only `quickscale_core/` directory changes
-- User's `templates/` and `static/` directories never touched by updates
-- Clear error messages guide users through git operations
-- Safe by default with confirmation prompts
+- Batch updates work safely across multiple modules
+- Clear status overview of module versions
+- Easy discovery of new available modules
+- Better UX for handling merge conflicts
 
-#### **Technical Implementation Notes**
+**Implementation Tasks**: TBD - Will be detailed in release planning phase.
 
-**1. Repository Configuration**:
+---
 
-Create `~/.quickscale/config.yml` for repository settings:
-```yaml
-# Default QuickScale repository
-default_remote: https://github.com/<org>/quickscale.git
-default_branch: main
+#### **Technical Implementation Notes (v0.62.0 Split Branch Foundation)**
 
-# User's fork (optional)
-fork_remote: null
-fork_branch: null
+**1. Split Branch Architecture**:
 
-# Subtree configuration
-subtree_prefix: quickscale_core
-squash: true  # Use --squash by default for clean history
+QuickScale monorepo maintains split branches for each module:
+```
+Branches:
+├── main                       # All development happens here
+├── splits/auth-module         # Auto-generated from quickscale_modules/auth/
+├── splits/billing-module      # Auto-generated from quickscale_modules/billing/
+└── splits/teams-module        # Auto-generated from quickscale_modules/teams/
 ```
 
-**2. Git Subtree Commands**:
+**2. GitHub Actions Auto-Split Workflow**:
 
-`quickscale embed` - Embed quickscale_core via git subtree
-- **Implementation**: Wrapper for `git subtree add --prefix=quickscale_core <remote> <branch> --squash`
+```yaml
+# .github/workflows/split-modules.yml
+name: Split Module Branches
+on:
+  push:
+    tags:
+      - 'v*'
+
+jobs:
+  split:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+        with:
+          fetch-depth: 0  # Full history for split
+
+      - name: Split auth module
+        run: |
+          git subtree split --prefix=quickscale_modules/auth -b splits/auth-module --rejoin
+          git push origin splits/auth-module
+
+      - name: Split billing module
+        run: |
+          git subtree split --prefix=quickscale_modules/billing -b splits/billing-module --rejoin
+          git push origin splits/billing-module
+```
+
+**3. Module Configuration Tracking**:
+
+Created in user's project at `.quickscale/config.yml`:
+```yaml
+# QuickScale module configuration
+default_remote: https://github.com/<org>/quickscale.git
+
+# Installed modules
+modules:
+  auth:
+    prefix: modules/auth
+    branch: splits/auth-module
+    installed_version: v0.62.0
+    installed_at: 2025-10-23
+  billing:
+    prefix: modules/billing
+    branch: splits/billing-module
+    installed_version: v0.64.0
+    installed_at: 2025-10-25
+```
+
+**4. Core Commands (Implemented in v0.61.0)**:
+
+`quickscale embed --module auth` - Embed module via split branch
+- **Implementation**: `git subtree add --prefix=modules/auth <remote> splits/auth-module --squash`
 - **Technical details**:
-  - Check if current directory is git repository
-  - Verify no existing `quickscale_core/` directory
-  - Prompt for remote URL (default: official QuickScale repo)
-  - Prompt for branch (default: main)
-  - Confirm operation before executing
-  - Add remote as `quickscale` (for future updates)
-  - Show success message with next steps
-- **Safety checks**:
-  - Working directory must be clean (no uncommitted changes)
-  - Must be run from project root
-  - Existing files won't be overwritten
+  - Check if git repository
+  - Verify module exists (check remote branch)
+  - Verify no existing `modules/auth/` directory
+  - Add subtree from split branch
+  - Update `.quickscale/config.yml` with module metadata
+  - Show success message with INSTALLED_APPS instructions
 - **Example**:
 ```bash
 cd myproject/
-quickscale embed
-# Prompts:
-# Remote URL [https://github.com/<org>/quickscale.git]:
-# Branch [main]:
-# This will add quickscale_core/ directory. Continue? (y/N):
+quickscale embed --module auth
+# Output:
+# Embedding auth module from splits/auth-module...
+# Module installed to: modules/auth/
+#
+# Next steps:
+# 1. Add to INSTALLED_APPS in settings/base.py:
+#    INSTALLED_APPS = [..., "modules.auth"]
+# 2. Run migrations: python manage.py migrate
 ```
 
-`quickscale update` - Pull latest QuickScale updates
-- **Implementation**: Wrapper for `git subtree pull --prefix=quickscale_core <remote> <branch> --squash`
+`quickscale update` - Update all installed modules
+- **Implementation**: Read `.quickscale/config.yml`, run `git subtree pull` for each module
 - **Technical details**:
-  - Detect existing subtree configuration (from git log)
-  - Verify working directory is clean
-  - Show diff summary of what will change
-  - Confirm before pulling
-  - Handle merge conflicts gracefully
-  - Show summary of changes after update
-- **Safety checks**:
-  - Must have existing subtree (from `quickscale embed`)
-  - Working directory must be clean
-  - Verify only `quickscale_core/` will be affected
-- **Conflict handling**:
-  - If user modified `quickscale_core/`, show conflict resolution guide
-  - Option to abort and stash changes
+  - Read installed modules from config
+  - For each module: `git subtree pull --prefix=modules/{name} <remote> splits/{name}-module --squash`
+  - Show diff summary before pulling
+  - Handle conflicts per module
+  - Update version in config
 - **Example**:
 ```bash
 cd myproject/
 quickscale update
 # Output:
-# Fetching updates from QuickScale repository...
-# Changes to quickscale_core/:
-#   - Improved Docker configuration
-#   - Updated security settings template
-#   - Bug fixes in generator
+# Found 2 installed modules: auth, billing
 #
-# Your templates/ and static/ directories will NOT be affected.
+# Updating auth module...
+#   - Fixed email verification bug
+#   - Added Google OAuth provider
+#
+# Updating billing module...
+#   - Updated Stripe API to latest version
+#
 # Continue? (y/N):
 ```
 
-`quickscale push` - Push improvements back to QuickScale
-- **Implementation**: Wrapper for `git subtree push --prefix=quickscale_core <remote> <branch>`
+`quickscale push` - Contribute improvements to specific module
+- **Implementation**: `git subtree push --prefix=modules/auth <remote> feature/my-improvement`
 - **Technical details**:
-  - Verify user has write access to remote
-  - Show diff of changes in `quickscale_core/`
-  - Prompt for branch name (default: feature/<description>)
-  - Push to feature branch (not main)
-  - Provide URL to create pull request
-- **Safety checks**:
-  - Only changes in `quickscale_core/` will be pushed
-  - Confirm before pushing
-  - Requires authentication to remote
+  - Detect which module has changes
+  - Push to feature branch in main repo (not split branch)
+  - Maintainer merges to main, auto-split updates split branch
 - **Example**:
 ```bash
 cd myproject/
-quickscale push
+quickscale push --module auth
 # Output:
-# Changes in quickscale_core/:
-#   - Fixed typo in template
-#   - Improved error message
+# Detected changes in modules/auth/
+# Branch name [feature/auth-improvements]:
+# Pushing to https://github.com/<org>/quickscale.git...
 #
-# Branch name [feature/template-fixes]:
-# Push to https://github.com/<org>/quickscale.git? (y/N):
-#
-# Pushed successfully!
-# Create pull request: https://github.com/<org>/quickscale/compare/feature/template-fixes
+# Create PR: https://github.com/<org>/quickscale/pull/new/feature/auth-improvements
 ```
 
-**3. Implementation Details**:
+**5. Implementation Structure (v0.61.0)**:
 
-`quickscale_cli/commands/subtree_commands.py`:
+`quickscale_cli/commands/module_commands.py`:
 ```python
-class EmbedCommand(Command):
-    """Embed quickscale_core via git subtree add."""
+class ModuleEmbedCommand(Command):
+    """Embed module via git subtree from split branch."""
 
-    def execute(self, remote: str = None, branch: str = "main") -> None:
+    def execute(self, module_name: str, remote: str = None) -> None:
         # 1. Validate git repository
-        if not self._is_git_repo():
-            raise ValidationError("Not a git repository")
-
-        # 2. Check for existing subtree
-        if self._has_subtree():
-            raise ValidationError("quickscale_core already embedded")
-
-        # 3. Verify working directory clean
-        if not self._is_working_directory_clean():
-            raise ValidationError("Uncommitted changes detected")
-
-        # 4. Get remote URL (prompt if not provided)
-        remote = remote or self._prompt_remote()
-
-        # 5. Confirm operation
-        if not self._confirm_embed(remote, branch):
-            return
-
-        # 6. Execute git subtree add
-        self._run_subtree_add(remote, branch)
-
-        # 7. Save configuration
-        self._save_subtree_config(remote, branch)
-
-        # 8. Show success message
-        self._show_success_message()
+        # 2. Check module exists on remote
+        # 3. Verify no existing modules/{module_name}/
+        # 4. Verify working directory clean
+        # 5. Execute: git subtree add --prefix=modules/{module_name}
+        #             {remote} splits/{module_name}-module --squash
+        # 6. Update .quickscale/config.yml
+        # 7. Show success message with INSTALLED_APPS instructions
 ```
 
 `quickscale_cli/utils/git_utils.py`:
@@ -432,89 +517,104 @@ def is_git_repo() -> bool:
 def is_working_directory_clean() -> bool:
     """Check if there are uncommitted changes."""
 
-def has_subtree(prefix: str) -> bool:
-    """Check if subtree exists by examining git log."""
+def check_remote_branch_exists(remote: str, branch: str) -> bool:
+    """Check if branch exists on remote."""
 
-def get_subtree_config(prefix: str) -> dict:
-    """Extract subtree remote/branch from git log."""
+def run_git_subtree_add(prefix: str, remote: str, branch: str) -> None:
+    """Execute git subtree add with error handling."""
 
-def run_git_command(args: list) -> subprocess.CompletedProcess:
-    """Execute git command with error handling."""
+def run_git_subtree_pull(prefix: str, remote: str, branch: str) -> None:
+    """Execute git subtree pull with error handling."""
 ```
 
-#### **Implementation Tasks**
+#### **Implementation Tasks (v0.61.0)**
 
-**Git Subtree Wrappers**:
-- [ ] Implement `quickscale embed` command
-- [ ] Implement `quickscale update` command
-- [ ] Implement `quickscale push` command
-- [ ] Create `git_utils.py` helpers
-- [ ] Add repository configuration (`~/.quickscale/config.yml`)
-- [ ] Implement safety checks (clean working directory, etc.)
-- [ ] Add interactive confirmation prompts
-- [ ] Add unit tests for git operations
-- [ ] Add integration tests (with test git repos)
+**Module Management Commands**:
+- [ ] Implement `quickscale embed --module <name>` command
+- [ ] Implement `quickscale update` command (updates installed modules only)
+- [ ] Implement `quickscale push --module <name>` command
+- [ ] Create `module_commands.py` with embed/update/push logic
+- [ ] Create `git_utils.py` with subtree helpers
+- [ ] Add `.quickscale/config.yml` configuration tracking
+- [ ] Implement safety checks (clean working directory, module exists, etc.)
+- [ ] Add interactive confirmation prompts with diff previews
 
-**Update Safety Features**:
-- [ ] Pre-update diff preview
-- [ ] Verify only `quickscale_core/` affected
-- [ ] Conflict detection and handling
+**GitHub Actions - Split Branch Automation**:
+- [ ] Create `.github/workflows/split-modules.yml`
+- [ ] Auto-split on version tags (v0.*)
+- [ ] Split each module: auth, billing, teams, notifications
+- [ ] Push splits to `splits/{module}-module` branches
+- [ ] Add workflow tests to verify splits work
+
+**Module Safety Features**:
+- [ ] Pre-update diff preview (per module)
+- [ ] Verify only `modules/*` affected by updates
+- [ ] Conflict detection and handling (per module)
 - [ ] Rollback/abort functionality
 - [ ] Post-update summary of changes
 
 **Documentation**:
-- [ ] Update `user_manual.md` with git subtree commands
-- [ ] Update `decisions.md` CLI Command Matrix (mark Phase 2 as IN)
-- [ ] Create "Safe Updates" guide
+- [ ] Update `user_manual.md` with module embed/update workflow
+- [ ] Update `decisions.md` CLI Command Matrix (mark v0.61.0 commands as IN)
+- [ ] Document split branch architecture
+- [ ] Create "Module Management Guide"
 - [ ] Document conflict resolution workflow
 - [ ] Add troubleshooting for common git issues
 
 **Testing**:
-- [ ] Unit tests for subtree commands (70% coverage per file)
-- [ ] Integration tests with test git repositories
-- [ ] E2E test: embed → update → verify isolation
+- [ ] Unit tests for module commands (70% coverage per file)
+- [ ] Integration tests with test git repositories and split branches
+- [ ] E2E test: embed module → update → verify isolation
 - [ ] Test conflict scenarios
-- [ ] Test error handling (not a git repo, dirty working directory, etc.)
-- [ ] Automated test: verify templates/ never modified by update
+- [ ] Test error handling (not a git repo, dirty working directory, module doesn't exist)
+- [ ] Automated test: verify user's templates/ and project code never modified by module updates
 
 ---
 
-### **v0.70.0: Update Workflow Validation**
+### **v0.70.0: Module Workflow Validation & Real-World Testing**
 
-**Objective**: Validate that QuickScale updates work safely and don't affect user content.
+**Objective**: Validate that module updates work safely in real client projects and don't affect user's custom code.
 
 **Timeline**: After v0.69.0
 
-**Rationale**: Deferred until CLI git subtree commands (v0.69.0) are implemented. This release validates those commands work safely.
+**Rationale**: Module embed/update commands implemented in v0.61.0. This release validates those commands work safely in production after real usage across multiple client projects.
 
 **Success Criteria**:
-- Automated tests verify `templates/` and `static/` never modified by updates
-- Update workflow documented with real project examples
-- Safety features prevent accidental content modification
-- Rollback procedure documented
+- Automated tests verify user's `templates/`, `static/`, and project code never modified by module updates
+- Module update workflow documented with real project examples
+- Safety features prevent accidental code modification
+- Rollback procedure documented and tested
+- Case studies from 3+ client projects using modules
 
 **Implementation Tasks**:
 
-**Update Safety Validation**:
-- [ ] Create test project with custom content
-- [ ] Embed quickscale_core using `quickscale embed`
-- [ ] Make test improvements to QuickScale monorepo
-- [ ] Run `quickscale update` and verify user content unchanged
-- [ ] Automated test: verify templates/ never modified by update
-- [ ] Automated test: verify static/ never modified by update
-- [ ] Document safe update workflow with examples
+**Real-World Validation**:
+- [ ] Embed modules in 3+ client projects
+- [ ] Test module updates across different project structures
+- [ ] Document edge cases and conflicts discovered in production
+- [ ] Create migration guides for module version upgrades
+- [ ] Validate split branch workflow scales with multiple modules
+
+**Safety Validation**:
+- [ ] Automated test: verify user's templates/ never modified by module updates
+- [ ] Automated test: verify user's static/ never modified by module updates
+- [ ] Automated test: verify user's project code never modified by module updates
+- [ ] Test module updates don't break custom user modifications
+- [ ] Document safe update workflow with real examples
 
 **Testing**:
-- [ ] E2E test: embed → update → verify content isolation
-- [ ] Test conflict scenarios and resolution
+- [ ] E2E test: embed multiple modules → update → verify isolation
+- [ ] Test conflict scenarios (user modified module code) and resolution
 - [ ] Test rollback functionality
-- [ ] Test error handling (dirty working directory, etc.)
+- [ ] Test module updates across different Django versions
+- [ ] Performance testing: update speed with 5+ modules
 
 **Documentation**:
-- [ ] Create "Safe Updates" guide
-- [ ] Document update workflow with screenshots
-- [ ] Add conflict resolution examples
+- [ ] Create "Safe Module Updates" guide with screenshots
+- [ ] Document conflict resolution workflows with examples
 - [ ] Document rollback procedure
+- [ ] Create case studies from client projects
+- [ ] Add troubleshooting guide for common module update issues
 
 ---
 
@@ -608,20 +708,17 @@ The admin module scope has been defined in [decisions.md Admin Module Scope Defi
 
 ---
 
-### **Git Subtree Workflow Refinement (Post v0.69.0 / Future)**
+### **Module Management Enhancements (Post v0.69.0 / Future)**
 
-**Note**: Basic git subtree CLI commands (`quickscale embed/update/push`) are planned for **v0.69.0**. This section discusses potential future enhancements beyond the basics.
+**Note**: Basic module management commands (`quickscale embed --module <name>`, `quickscale update`, `quickscale push`) are implemented in **v0.61.0**. Advanced features planned for **v0.69.0**. This section discusses potential future enhancements beyond v0.69.0.
 
 Based on usage feedback after v0.69.0 implementation, consider these enhancements:
 
-**Future Enhancements** (evaluate after v0.69.0 ships and gets real usage):
-- [ ] **Batch operations**
-  - [ ] `quickscale update-all` - Update all embedded modules in one command
-  - [ ] `quickscale status` - Show status of all embedded modules
-- [ ] **Advanced module management**
-  - [ ] `quickscale embed --module auth` - Embed specific module instead of full core
-  - [ ] `quickscale list-modules` - Show available modules to embed
-  - [ ] Update [CLI Command Matrix](./decisions.md#cli-command-matrix) with implementation status
+**Future Enhancements** (evaluate after v0.69.0 ships and gets real usage in production):
+- [ ] **Module versioning and compatibility**
+  - [ ] `quickscale embed --module auth@v0.62.0` - Pin specific module version
+  - [ ] Semantic versioning compatibility checks
+  - [ ] Automatic migration scripts for breaking changes
 - [ ] **Document versioning strategy**
   - [ ] Git tags for stable snapshots (e.g., `core-v0.57.0`)
   - [ ] Semantic versioning for modules
