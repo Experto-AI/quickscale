@@ -144,7 +144,7 @@ Other documents (README.md, roadmap.md, scaffolding.md, commercial.md) MUST refe
 | `quickscale_core` package (monolithic, src layout) | IN | Treat `quickscale_core` as a regular monolithic package in MVP (explicit `__init__.py`). See Section: "Core package shape" in this file. |
 | `quickscale_core` embedding via git-subtree (manual documented workflow) | IN (manual) | Manual subtree commands are documented and supported; embedding is opt-in and advanced. |
 | CLI development commands (`up`, `down`, `shell`, `manage`, `logs`, `ps`) | IN (v0.59.0) | User-friendly wrappers for Docker/Django operations to improve developer experience. |
-| CLI git-subtree wrapper commands (`embed`, `update`, `push`) | PLANNED (v0.60.0) | Simplified wrappers to replace complex manual git subtree syntax. |
+| CLI git-subtree wrapper commands (`embed`, `update`, `push`) | PLANNED (v0.66.0) | Simplified wrappers to replace complex manual git subtree syntax. |
 | Settings inheritance from `quickscale_core` into generated project | OPTIONAL | Default generated project uses standalone `settings.py`. If user explicitly embeds `quickscale_core`, optional settings inheritance is allowed and documented. |
 | **PRODUCTION-READY FOUNDATIONS (Competitive Requirement)** | | **See [competitive_analysis.md §1-3](../overview/competitive_analysis.md#-critical-for-mvp-viability-must-have)** |
 | Docker setup (Dockerfile + docker-compose.yml) | IN | Production-ready multi-stage Dockerfile + local dev docker-compose with PostgreSQL & Redis services. Match Cookiecutter quality. |
@@ -207,8 +207,15 @@ Other documents (README.md, roadmap.md, scaffolding.md, commercial.md) MUST refe
 - ✅ `quickscale deploy railway --skip-collectstatic` - Deploy without collecting static files
 - ✅ `quickscale deploy railway --project-name <name>` - Specify project name
 
-**v0.61.0 - Git Subtree Wrappers (Phase 2):**
-- 📋 `quickscale embed` - Embed quickscale_core via git subtree add
+**v0.61.0-v0.65.0 - Module Development:**
+- 📋 `quickscale_modules.auth` - Authentication module core (v0.61.0)
+- 📋 `quickscale_modules.auth` - Email verification & production email (v0.62.0)
+- 📋 `quickscale_modules.billing` - Billing module (v0.63.0)
+- 📋 `quickscale_modules.teams` - Teams/multi-tenancy module (v0.64.0)
+- 📋 `quickscale_modules.notifications` - Notifications module (v0.65.0)
+
+**v0.66.0 - Git Subtree Wrappers (Module Management):**
+- 📋 `quickscale embed` - Embed quickscale_core/modules via git subtree add
 - 📋 `quickscale update` - Pull QuickScale updates via git subtree pull
 - 📋 `quickscale push` - Push improvements back via git subtree push
 

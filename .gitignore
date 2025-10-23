@@ -205,3 +205,6 @@ quickscale_core/*_test_*/
 quickscale_core/README.md
 quickscale_cli/README.md
 quickscale/README.md
+
+# Marketing content drafts (generated content not tracked in repo)
+marketing/

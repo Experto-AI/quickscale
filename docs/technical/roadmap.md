@@ -46,7 +46,7 @@ Execution details live here; the "personal toolkit first, community platform lat
 
 ### **📋 Current State Assessment**
 - ✅ **Current Version**: v0.60.0 (Released - Railway Deployment Support)
-- 🔄 **Next Release**: v0.61.0 - CLI Git Subtree Wrappers (`quickscale embed/update/push`)
+- 🔄 **Next Release**: v0.61.0 - Theme System Foundation
 
 ### **Evolution Context Reference**
 Need the narrative backdrop? Jump to [`quickscale.md`](../overview/quickscale.md#evolution-strategy-personal-toolkit-first) and come back here for the tasks.
@@ -71,27 +71,210 @@ Need the narrative backdrop? Jump to [`quickscale.md`](../overview/quickscale.md
 
 ### Revised Next Release Sequence:
 
-- **v0.61.0**: CLI Git Subtree Wrappers - `quickscale embed/update/push` (P0 - Core Workflow) 🎯 **NEXT**
-- **v0.62.0**: Update Workflow Validation (P0 - Core Workflow)
-- **v0.63.0**: `quickscale_modules.auth` - django-allauth integration (P1 - Critical for SaaS)
-- **v0.64.0**: `quickscale_modules.billing` - dj-stripe subscriptions (P1 - Core monetization)
-- **v0.65.0**: `quickscale_modules.teams` - Multi-tenancy patterns (P1 - B2B requirement) 🎯 **SAAS FEATURE PARITY MILESTONE**
-- **v0.66.0**: `quickscale_modules.notifications` - Email infrastructure (P2 - Common need)
-- **v0.67.0**: HTMX frontend variant template (P2 - Differentiation)
-- **v0.68.0**: React frontend variant template (P2 - SPA option)
-- **v0.6x.0**: Additional modules based on real client needs
+**Hybrid Approach: Theme Architecture First, Modules Fast, Themes Expand**
+
+This strategy builds the theme system infrastructure upfront, delivers core modules quickly in HTML theme, then expands to additional themes. This avoids 3x development overhead while maintaining future flexibility.
+
+**Phase 1: Foundation + Core Modules (HTML Theme Only)**
+- **v0.61.0**: Theme System Foundation - `--template` flag, theme abstraction layer, ships with HTML theme only 🎯 **NEXT**
+- **v0.62.0**: `quickscale_modules.auth` - django-allauth integration (basic auth, social providers) - HTML theme only
+- **v0.63.0**: `quickscale_modules.auth` - Email verification & production email flows - HTML theme only
+- **v0.64.0**: `quickscale_modules.billing` - dj-stripe subscriptions - HTML theme only
+- **v0.65.0**: `quickscale_modules.teams` - Multi-tenancy patterns - HTML theme only 🎯 **SAAS FEATURE PARITY MILESTONE**
+
+**Phase 2: Additional Themes (Port Existing Modules)**
+- **v0.66.0**: HTMX Theme - Port auth/billing/teams components to HTMX + Alpine.js
+- **v0.67.0**: React Theme - Port auth/billing/teams components to React + TypeScript SPA
+
+**Phase 3: Expand Features (All Themes)**
+- **v0.68.0**: `quickscale_modules.notifications` - Email infrastructure - All 3 themes
+- **v0.69.0**: CLI Git Subtree Wrappers - `quickscale embed/update/push` (P1 - Module Management)
+- **v0.70.0**: Update Workflow Validation (P1 - Module Management)
+- **v0.7x.0**: Additional modules based on real client needs
 
 **🎯 Competitive Parity Goal (v0.65.0)**: At this point, QuickScale matches SaaS Pegasus on core features (auth, billing, teams) while offering superior architecture (composability, shared updates). See [competitive_analysis.md Timeline](../overview/competitive_analysis.md#timeline-reality-check).
 
-**Rationale**: CLI usability improvements (v0.59-v0.62) eliminate manual Docker/git/deployment commands, enabling smooth development workflows and production deployments. This solid developer experience foundation is prerequisite for all future module development.
+**Rationale - Hybrid Approach Benefits**:
+1. **Fast time-to-value**: Core modules delivered in 6-8 weeks (HTML only) vs. 17+ weeks (3 themes simultaneously)
+2. **Architecture future-proof**: Theme system exists from v0.61.0, no refactoring needed later
+3. **Lower risk**: Validate module design once before porting to additional themes
+4. **Backend reuse**: ~70% of module code (Django models, views, auth) is theme-agnostic
+5. **No breaking changes**: Existing users on HTML theme, new users pick theme upfront
+6. **Proven pattern**: Matches Laravel Breeze (Blade → React/Vue later) and Rails Devise approaches
 
 ---
 
-### **v0.61.0: CLI Git Subtree Wrappers**
+### **v0.61.0: Theme System Foundation**
+
+**Objective**: Build theme system architecture to enable multiple frontend variants while maintaining a single backend. Ships with HTML theme only (current monolithic templates refactored into theme structure).
+
+**Timeline**: After v0.60.0
+
+**Status**: 🎯 **NEXT RELEASE** - Detailed implementation plan to be created before starting work.
+
+**Scope**:
+- Implement `--template` CLI flag (`quickscale init myproject --template html`)
+- Create theme directory structure in generator templates
+- Build theme abstraction layer (conditional template rendering)
+- Refactor current templates into `themes/html/` directory
+- Theme selection defaults to `html` if not specified (backward compatible)
+
+**Success Criteria**:
+- `quickscale init myproject` works exactly as before (implicit HTML theme)
+- `quickscale init myproject --template html` works explicitly
+- Theme system ready for HTMX/React variants in future releases
+- Zero breaking changes for existing users
+- Documentation updated with theme concepts
+
+**Implementation Tasks**: TBD - Will be detailed in release planning phase following [Release Documentation Policy](../contrib/contributing.md#release-documentation-policy).
+
+**Key Insight**: Only ~30% of code needs theme variants (frontend templates/components). Backend code (models, views, auth, email, etc.) is 100% theme-agnostic and will be shared across all themes.
+
+---
+
+### **v0.62.0: `quickscale_modules.auth` - Authentication Module (Basic Auth)**
+
+**Objective**: Create reusable authentication module wrapping django-allauth with social auth providers and custom User model patterns. HTML theme only.
+
+**Timeline**: After v0.61.0
+
+**Status**: Planned - Core auth flows (login/registration, social providers)
+
+**Scope**:
+- django-allauth integration with social providers (Google, GitHub)
+- Custom User model patterns
+- Account management views (HTML theme only)
+- Basic email flows (verification emails deferred to v0.63.0)
+
+See [Module Creation Guide](#module-creation-guide-for-v05x0-releases) and [competitive_analysis.md Auth Module Requirements](../overview/competitive_analysis.md#2-authentication-foundation) for detailed feature requirements.
+
+**Implementation Tasks**: TBD - Will be detailed in release planning phase.
+
+---
+
+### **v0.63.0: `quickscale_modules.auth` - Email Verification & Production Email**
+
+**Objective**: Complete production-ready email authentication flows for the auth module. HTML theme only.
+
+**Timeline**: After v0.62.0
+
+**Status**: Planned - Production email features for auth module
+
+**Scope**:
+- Email verification templates and flows
+- Password reset email templates
+- Email delivery/provider configuration
+- Deliverability tests
+
+**Implementation Tasks**: TBD - Will be detailed in release planning phase.
+
+---
+
+### **v0.64.0: `quickscale_modules.billing` - Billing Module**
+
+**Objective**: Create reusable billing module wrapping dj-stripe for Stripe subscriptions, plans, pricing tiers, webhook handling, and invoice management. HTML theme only.
+
+**Timeline**: After v0.63.0
+
+**Status**: Detailed implementation plan to be created before starting work.
+
+**Scope**: See [Module Creation Guide](#module-creation-guide-for-v05x0-releases) and [competitive_analysis.md Billing Requirements](../overview/competitive_analysis.md#4-stripe-integration--subscription-management).
+
+**Implementation Tasks**: TBD - Will be detailed in release planning phase.
+
+---
+
+### **v0.65.0: `quickscale_modules.teams` - Teams/Multi-tenancy Module**
+
+**Objective**: Create reusable teams module with multi-tenancy patterns, role-based permissions, invitation system, and row-level security. HTML theme only.
+
+**Timeline**: After v0.64.0
+
+**Status**: 🎯 **SAAS FEATURE PARITY MILESTONE** - At this point QuickScale matches SaaS Pegasus on core features (auth, billing, teams).
+
+**Scope**: See [Module Creation Guide](#module-creation-guide-for-v05x0-releases) and [competitive_analysis.md Teams Requirements](../overview/competitive_analysis.md#6-teammulti-tenancy-pattern).
+
+**Implementation Tasks**: TBD - Will be detailed in release planning phase.
+
+---
+
+### **v0.66.0: HTMX Frontend Theme**
+
+**Objective**: Create HTMX + Alpine.js theme variant and port existing modules (auth, billing, teams) to this theme.
+
+**Timeline**: After v0.65.0
+
+**Status**: Planned - Second theme variant for server-rendered, low-JS applications
+
+**Scope**:
+- Create `themes/htmx/` directory structure
+- HTMX + Alpine.js base templates
+- Port auth module components (login, signup, account management)
+- Port billing module components (subscription management, pricing pages)
+- Port teams module components (team dashboard, invitations, roles)
+- Tailwind CSS or similar modern CSS framework
+- Progressive enhancement patterns
+
+**Success Criteria**:
+- `quickscale init myproject --template htmx` generates HTMX-based project
+- All existing modules (auth/billing/teams) work with HTMX theme
+- Backend code remains unchanged (100% theme-agnostic)
+- Documentation includes HTMX theme examples
+
+**Implementation Tasks**: TBD - Will be detailed in release planning phase.
+
+---
+
+### **v0.67.0: React Frontend Theme**
+
+**Objective**: Create React + TypeScript SPA theme variant and port existing modules (auth, billing, teams) to this theme.
+
+**Timeline**: After v0.66.0
+
+**Status**: Planned - Third theme variant for modern SPA applications
+
+**Scope**:
+- Create `themes/react/` directory structure
+- React + TypeScript + Vite base setup
+- Django REST Framework API endpoints for auth/billing/teams
+- Port auth module components (login, signup, account management)
+- Port billing module components (subscription management, pricing pages)
+- Port teams module components (team dashboard, invitations, roles)
+- Modern component library (Shadcn/UI or similar)
+- State management (React Query, Zustand, or similar)
+
+**Success Criteria**:
+- `quickscale init myproject --template react` generates React SPA project
+- All existing modules (auth/billing/teams) work with React theme
+- Backend code remains unchanged (100% theme-agnostic)
+- API endpoints auto-generated or clearly documented
+- Documentation includes React theme examples
+
+**Implementation Tasks**: TBD - Will be detailed in release planning phase.
+
+---
+
+### **v0.68.0: `quickscale_modules.notifications` - Notifications Module**
+
+**Objective**: Create reusable notifications module wrapping django-anymail for multiple email backends, transactional templates, and async email via Celery. All 3 themes supported (HTML, HTMX, React).
+
+**Timeline**: After v0.67.0
+
+**Status**: Detailed implementation plan to be created before starting work.
+
+**Scope**: See [Module Creation Guide](#module-creation-guide-for-v05x0-releases) and [competitive_analysis.md Email Requirements](../overview/competitive_analysis.md#8-email-infrastructure--templates).
+
+**Implementation Tasks**: TBD - Will be detailed in release planning phase.
+
+---
+
+### **v0.69.0: CLI Git Subtree Wrappers**
 
 **Objective**: Provide simple CLI wrappers for git subtree workflow, hiding complex git syntax from users.
 
-**Timeline**: After v0.60.0
+**Timeline**: After v0.68.0 (after modules and themes exist to embed/update)
+
+**Rationale**: Deferred until modules and themes exist. These commands enable embedding and updating modules in client projects - they don't make sense before modules are available.
 
 **Success Criteria**:
 - Users never see `git subtree` syntax
@@ -296,11 +479,13 @@ def run_git_command(args: list) -> subprocess.CompletedProcess:
 
 ---
 
-### **v0.62.0: Update Workflow Validation**
+### **v0.70.0: Update Workflow Validation**
 
 **Objective**: Validate that QuickScale updates work safely and don't affect user content.
 
-**Timeline**: After v0.61.0
+**Timeline**: After v0.69.0
+
+**Rationale**: Deferred until CLI git subtree commands (v0.69.0) are implemented. This release validates those commands work safely.
 
 **Success Criteria**:
 - Automated tests verify `templates/` and `static/` never modified by updates
@@ -369,28 +554,28 @@ def run_git_command(args: list) -> subprocess.CompletedProcess:
 
 **Phase 2 Priorities** (see [competitive_analysis.md Module Roadmap](../overview/competitive_analysis.md#phase-2-post-mvp-v1---saas-essentials)):
 
-1. **🔴 P1: `quickscale_modules.auth`** (First module)
-   - Wraps django-allauth with social auth providers
-   - Custom User model patterns
-   - Email verification workflows
-   - Account management views
+1. **🔴 P1: `quickscale_modules.auth`** (First module - split across v0.62.0 and v0.63.0)
+   - v0.62.0: Core django-allauth integration with social auth providers (Google, GitHub)
+   - v0.62.0: Custom User model patterns and account management views
+   - v0.63.0: Production email verification workflows and deliverability
    - **Rationale**: Every SaaS needs auth; Pegasus proves django-allauth is correct choice
+   - **Delivery Phasing**: Split to validate module patterns (v0.62.0) then complete production email (v0.63.0)
 
-2. **🔴 P1: `quickscale_modules.billing`** (Second module)
+2. **🔴 P1: `quickscale_modules.billing`** (v0.64.0)
    - Wraps dj-stripe for Stripe subscriptions
    - Plans, pricing tiers, trials
    - Webhook handling with logging
    - Invoice management
    - **Rationale**: Core SaaS monetization; Stripe-only reduces complexity
 
-3. **🔴 P1: `quickscale_modules.teams`** (Third module)
+3. **🔴 P1: `quickscale_modules.teams`** (v0.65.0)
    - Multi-tenancy patterns (User → Team → Resources)
    - Role-based permissions (Owner, Admin, Member)
    - Invitation system with email tokens
    - Row-level security query filters
    - **Rationale**: Most B2B SaaS requires team functionality
 
-4. **🟡 P2: `quickscale_modules.notifications`** (Fourth module)
+4. **🟡 P2: `quickscale_modules.notifications`** (v0.68.0)
    - Wraps django-anymail for multiple email backends
    - Transactional email templates
    - Async email via Celery
@@ -423,19 +608,19 @@ The admin module scope has been defined in [decisions.md Admin Module Scope Defi
 
 ---
 
-### **Git Subtree Workflow Refinement (v0.64.0 conditional / Post-MVP)**
+### **Git Subtree Workflow Refinement (Post v0.69.0 / Future)**
 
-Based on MVP usage feedback, improve code sharing workflow:
+**Note**: Basic git subtree CLI commands (`quickscale embed/update/push`) are planned for **v0.69.0**. This section discusses potential future enhancements beyond the basics.
 
-**Evaluate CLI Automation** (target: v0.64.0 conditional; defer to v1.0.0 if tied to marketplace automation):
-- [ ] **Assess demand for CLI helpers**
-  - [ ] Survey how often you use git subtree manually
-  - [ ] Document pain points with manual workflow
-  - [ ] Determine if automation would save significant time
-- [ ] **If justified, add CLI commands (target v0.64.0; conditional)**:
-  - [ ] `quickscale embed-core <project>` - Embed quickscale_core via git subtree
-  - [ ] `quickscale update-core <project>` - Pull updates from monorepo
-  - [ ] `quickscale sync-push <project>` - Push improvements back to monorepo
+Based on usage feedback after v0.69.0 implementation, consider these enhancements:
+
+**Future Enhancements** (evaluate after v0.69.0 ships and gets real usage):
+- [ ] **Batch operations**
+  - [ ] `quickscale update-all` - Update all embedded modules in one command
+  - [ ] `quickscale status` - Show status of all embedded modules
+- [ ] **Advanced module management**
+  - [ ] `quickscale embed --module auth` - Embed specific module instead of full core
+  - [ ] `quickscale list-modules` - Show available modules to embed
   - [ ] Update [CLI Command Matrix](./decisions.md#cli-command-matrix) with implementation status
 - [ ] **Document versioning strategy**
   - [ ] Git tags for stable snapshots (e.g., `core-v0.57.0`)
