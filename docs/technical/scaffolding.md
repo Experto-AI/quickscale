@@ -363,7 +363,7 @@ quickscale_core/
 ```
 
 **v0.61.0 Enhancements:**
-- ✅ Theme system: `quickscale init myproject --template <name>`
+- ✅ Theme system: `quickscale init myproject --theme <name>`
 - ✅ Themes are one-time copy, user owns generated code
 - ✅ Default theme: `starter_html` (backward compatible, no flag required)
 - ✅ Backend templates in `common/` (theme-agnostic)
@@ -384,7 +384,7 @@ quickscale_cli/
 │   ├── main.py                     # CLI entry point
 │   └── commands/
 │       ├── __init__.py
-│       ├── init.py                 # 'quickscale init <name> --template <theme>'
+│       ├── init.py                 # 'quickscale init <name> --theme <theme>'
 │       ├── module_commands.py      # Module management (v0.61.0+)
 │       │   ├── embed()            # 'quickscale embed --module <name>'
 │       │   ├── update()           # 'quickscale update'
@@ -409,7 +409,7 @@ quickscale_cli/
     └── test_deploy_commands.py
 
 **v0.61.0 Enhancements:**
-- ✅ Theme selection: `quickscale init myproject --template <name>`
+- ✅ Theme selection: `quickscale init myproject --theme <name>`
 - ✅ Module management: `quickscale embed --module auth`, `quickscale update`, `quickscale push`
 - ✅ Git subtree automation for modules (split branch distribution)
 - ✅ `.quickscale/config.yml` tracking for installed modules
@@ -427,7 +427,7 @@ quickscale_cli/
 **Configuration & Setup:**
 - ❌ `quickscale.yml` or any YAML/JSON config files
 - ❌ `config/` directory for configuration loading
-- ❌ Multiple template variants or `--template` flag support
+- ❌ Multiple theme variants or `--theme` flag support (v0.61.0+ only)
 - ❌ `backend_extensions.py` generation (users add manually if needed)
 - ❌ Automatic settings inheritance from `quickscale_core` (standalone settings.py only)
 
@@ -562,7 +562,7 @@ myapp/
 
 **What Users Get:**
 - Working Django project in 30 seconds
- - Choice of frontend theme: `quickscale init myapp --template <starter_html|starter_htmx|starter_react>`
+ - Choice of frontend theme: `quickscale init myapp --theme <starter_html|starter_htmx|starter_react>`
 - Runnable with `docker-compose up` (full stack) or `python manage.py runserver`
 - 100% theirs to customize
 - Production-ready Docker setup
@@ -599,7 +599,7 @@ myapp/
 **How Users Get Modules:**
 ```bash
 # Generate base project
-quickscale init myapp --template starter_html
+quickscale init myapp --theme starter_html
 
 # Embed modules (optional)
 cd myapp

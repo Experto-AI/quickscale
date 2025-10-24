@@ -76,7 +76,7 @@ Need the narrative backdrop? Jump to [`quickscale.md`](../overview/quickscale.md
 This strategy builds the theme system infrastructure upfront, delivers core modules quickly in HTML theme, then expands to additional themes. This avoids 3x development overhead while maintaining future flexibility.
 
 **Phase 1: Foundation + Core Modules (HTML Theme Only)**
-- **v0.61.0**: Theme System Foundation - `--template` flag, theme abstraction layer, ships with HTML theme only 🎯 **NEXT**
+- **v0.61.0**: Theme System Foundation - `--theme` flag, theme abstraction layer, ships with HTML theme only 🎯 **NEXT**
 - **v0.62.0**: Split Branch Infrastructure - Module management commands (`embed/update/push`), GitHub Actions automation
 - **v0.63.0**: `quickscale_modules.auth` - django-allauth integration (basic auth, social providers) - HTML theme only
 - **v0.64.0**: `quickscale_modules.auth` - Email verification & production email flows - HTML theme only
@@ -107,7 +107,7 @@ This strategy builds the theme system infrastructure upfront, delivers core modu
 
 ### **v0.61.0: Theme System Foundation**
 
-**Objective**: Implement theme selection system with `--template` flag. Refactor existing templates into theme directory structure. Ships with HTML theme only, establishing foundation for future HTMX and React themes.
+**Objective**: Implement theme selection system with `--theme` flag. Refactor existing templates into theme directory structure. Ships with HTML theme only, establishing foundation for future HTMX and React themes.
 
 **Timeline**: After v0.60.0
 
@@ -119,7 +119,7 @@ This strategy builds the theme system infrastructure upfront, delivers core modu
 - ✅ No conflicts with other in-progress work
 
 **Scope**:
- - Implement `--template` CLI flag (`quickscale init myproject --template starter_html`)
+ - Implement `--theme` CLI flag (`quickscale init myproject --theme starter_html`)
  - Create theme directory structure: `quickscale_core/generator/templates/themes/{starter_html,starter_htmx,starter_react}/`
  - Build theme abstraction layer (conditional template rendering during init)
  - Refactor current templates into `themes/starter_html/` directory
@@ -129,9 +129,9 @@ This strategy builds the theme system infrastructure upfront, delivers core modu
 
 **Success Criteria**:
 - `quickscale init myproject` works exactly as before (implicit HTML theme)
- - `quickscale init myproject --template starter_html` works explicitly
- - `quickscale init myproject --template starter_htmx` shows clear error (theme not implemented yet)
-- `quickscale init myproject --template invalid` shows helpful error with available themes
+ - `quickscale init myproject --theme starter_html` works explicitly
+ - `quickscale init myproject --theme starter_htmx` shows clear error (theme not implemented yet)
+- `quickscale init myproject --theme invalid` shows helpful error with available themes
 - Generated project structure matches v0.60.0 output exactly
 - Zero breaking changes for existing users
 
@@ -140,9 +140,9 @@ This strategy builds the theme system infrastructure upfront, delivers core modu
 ### Phase 1: CLI Infrastructure (quickscale_cli)
 **File**: `quickscale_cli/src/quickscale_cli/commands/init.py`
 
-- [ ] Add `--template` argument to init command
-  - **Acceptance criteria**: `quickscale init myproject --template starter_html` parsed correctly
-  - **Deliverable**: Updated `init.py` with template argument handling
+- [ ] Add `--theme` argument to init command
+  - **Acceptance criteria**: `quickscale init myproject --theme starter_html` parsed correctly
+  - **Deliverable**: Updated `init.py` with theme argument handling
   
 - [ ] Implement theme validation
   - **Acceptance criteria**: Invalid theme names show helpful error with available options
@@ -157,7 +157,7 @@ This strategy builds the theme system infrastructure upfront, delivers core modu
   - **Deliverable**: Updated command docstrings and help text
 
 **Tests**: `quickscale_cli/tests/commands/test_init.py`
-- [ ] Test explicit theme selection (`--template starter_html`)
+- [ ] Test explicit theme selection (`--theme starter_html`)
 - [ ] Test default theme (no flag provided)
 - [ ] Test invalid theme error handling
 - [ ] Test helpful error messages
@@ -240,16 +240,16 @@ This strategy builds the theme system infrastructure upfront, delivers core modu
 **Files**: `quickscale_core/tests/test_integration.py`, `quickscale_cli/tests/test_cli.py`
 
 - [ ] E2E test: Generate project with explicit theme
-  - **Acceptance criteria**: `quickscale init testapp --template starter_html` generates complete project
+  - **Acceptance criteria**: `quickscale init testapp --theme starter_html` generates complete project
   - **Command**: Run full init workflow, verify all files created
   
 - [ ] E2E test: Generate project with default theme
-  - **Acceptance criteria**: `quickscale init testapp` generates identical output to explicit `--template starter_html`
+  - **Acceptance criteria**: `quickscale init testapp` generates identical output to explicit `--theme starter_html`
   - **Command**: Compare file structures and content
   
 - [ ] E2E test: Theme validation errors
   - **Acceptance criteria**: Invalid theme name shows helpful error, exits cleanly
-  - **Command**: Test with `--template invalid`, verify error message quality
+  - **Command**: Test with `--theme invalid`, verify error message quality
   
 - [ ] Regression test: Compare v0.61.0 output vs v0.60.0 output
   - **Acceptance criteria**: Generated project structure is identical between versions (when using default theme)
@@ -272,7 +272,7 @@ This strategy builds the theme system infrastructure upfront, delivers core modu
   
 - [ ] Update user manual
   - **File**: `docs/technical/user_manual.md`
-  - **Acceptance criteria**: Document `--template` flag with examples
+  - **Acceptance criteria**: Document `--theme` flag with examples
   - **Deliverable**: Section showing theme selection usage
   
 - [ ] Update decisions.md CLI Command Matrix
@@ -288,7 +288,7 @@ This strategy builds the theme system infrastructure upfront, delivers core modu
 - [ ] Update README.md with theme examples
   - **File**: `README.md`
   - **Acceptance criteria**: Quick start section mentions theme options (brief mention only)
-  - **Deliverable**: One-line note: "Choose themes in future releases with `--template` flag"
+  - **Deliverable**: One-line note: "Choose themes in future releases with `--theme` flag"
 
 **Coverage target**: All documentation updates complete before release
 
@@ -486,7 +486,7 @@ See [Module Creation Guide](#module-creation-guide-for-v05x0-releases) and [comp
 - Progressive enhancement patterns
 
 **Success Criteria**:
- - `quickscale init myproject --template starter_htmx` generates HTMX-based project
+ - `quickscale init myproject --theme starter_htmx` generates HTMX-based project
 - All existing modules (auth/billing/teams) work with HTMX theme
 - Backend code remains unchanged (100% theme-agnostic)
 - Documentation includes HTMX theme examples
@@ -514,7 +514,7 @@ See [Module Creation Guide](#module-creation-guide-for-v05x0-releases) and [comp
 - State management (React Query, Zustand, or similar)
 
 **Success Criteria**:
- - `quickscale init myproject --template starter_react` generates React SPA project
+ - `quickscale init myproject --theme starter_react` generates React SPA project
 - All existing modules (auth/billing/teams) work with React theme
 - Backend code remains unchanged (100% theme-agnostic)
 - API endpoints auto-generated or clearly documented

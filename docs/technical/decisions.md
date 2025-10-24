@@ -154,7 +154,7 @@ myproject/
 
 **Distribution Strategy:**
 1. Store themes in `quickscale_core/generator/templates/themes/{starter_html,starter_htmx,starter_react}/`
-2. User selects theme during init: `quickscale init myproject --template starter_react`
+2. User selects theme during init: `quickscale init myproject --theme starter_react`
 3. Generator copies theme files to user's project (Jinja2 rendering)
 4. User owns generated code completely, customizes immediately
 5. **NO embed/update for themes** - one-time scaffolding only
@@ -162,7 +162,7 @@ myproject/
 **Workflow:**
 ```bash
 # User generates project with React theme
-quickscale init myproject --template starter_react
+quickscale init myproject --theme starter_react
 # Copies themes/starter_react/ → myproject/
 # User owns code, no git tracking
 
@@ -206,7 +206,7 @@ quickscale_core/generator/templates/
 | Aspect | Modules | Themes |
 |--------|---------|--------|
 | **Distribution** | Split branches (git subtree) | Generator templates (Jinja2) |
-| **User Command** | `quickscale embed --module auth` | `quickscale init --template starter_react` |
+| **User Command** | `quickscale embed --module auth` | `quickscale init --theme starter_react` |
 | **Updates** | `quickscale update` (ongoing) | N/A (user owns code) |
 | **Lifecycle** | Runtime dependency | One-time scaffolding |
 | **Ownership** | Shared (can push back) | User owns completely |
@@ -253,7 +253,7 @@ Other documents (README.md, roadmap.md, scaffolding.md, commercial.md) MUST refe
 | `quickscale_core` package (monolithic, src layout) | IN | Treat `quickscale_core` as a regular monolithic package in MVP (explicit `__init__.py`). See Section: "Core package shape" in this file. |
 | `quickscale_core` embedding via git-subtree (manual documented workflow) | IN (manual) | Manual subtree commands are documented and supported; embedding is opt-in and advanced. |
 | CLI development commands (`up`, `down`, `shell`, `manage`, `logs`, `ps`) | IN (v0.59.0) | User-friendly wrappers for Docker/Django operations to improve developer experience. |
-| `quickscale init --template <name>` flag | IN (v0.61.0) | Theme selection during init (starter_html/starter_htmx/starter_react). Themes are one-time copy, not embedded. |
+| `quickscale init --theme <name>` flag | IN (v0.61.0) | Theme selection during init (starter_html/starter_htmx/starter_react). Themes are one-time copy, not embedded. |
 | CLI module management commands (`embed --module`, `update`, `push`) | IN (v0.62.0) | Module embed/update via split branches. See split branch architecture below. |
 | Settings inheritance from `quickscale_core` into generated project | OPTIONAL | Default generated project uses standalone `settings.py`. If user explicitly embeds `quickscale_core`, optional settings inheritance is allowed and documented. |
 | **PRODUCTION-READY FOUNDATIONS (Competitive Requirement)** | | **See [competitive_analysis.md §1-3](../overview/competitive_analysis.md#-critical-for-mvp-viability-must-have)** |
@@ -318,7 +318,7 @@ Other documents (README.md, roadmap.md, scaffolding.md, commercial.md) MUST refe
 - ✅ `quickscale deploy railway --project-name <name>` - Specify project name
 
 **v0.61.0 - Theme System Foundation:**
-- 📋 `quickscale init --template <name>` - Theme selection (starter_html/starter_htmx/starter_react)
+- 📋 `quickscale init --theme <name>` - Theme selection (starter_html/starter_htmx/starter_react)
 - 📋 Theme directory structure in generator templates
 - 📋 Refactor existing templates into `themes/starter_html/` directory
 - 📋 Placeholder directories for `themes/starter_htmx/` and `themes/starter_react/`
