@@ -106,24 +106,6 @@ This strategy builds the theme system infrastructure upfront, delivers core modu
 
 ---
 
-### **v0.61.0: Theme System Foundation** ✅
-
-**Status**: ✅ COMPLETED (Released October 24, 2025)
-
-**Summary**: Implemented theme selection system with `--theme` CLI flag and refactored existing templates into theme directory structure. Ships with production-ready `starter_html` theme and establishes foundation for future HTMX (v0.67.0) and React (v0.68.0) themes.
-
-**Key Achievements**:
-- ✅ CLI `--theme` flag with validation and helpful error messages
-- ✅ Theme abstraction layer in generator with path resolution
-- ✅ Template migration to `themes/starter_html/` directory structure
-- ✅ 100% backward compatibility maintained (371 tests passing)
-- ✅ Comprehensive testing (22 new tests, 89% core coverage, 85% CLI coverage)
-- ✅ Complete documentation (user manual, README, decisions.md, scaffolding.md)
-
-**Documentation**: See [release-v0.61.0-implementation.md](../releases/release-v0.61.0-implementation.md) for complete implementation details, test results, and validation commands.
-
----
-
 ### **v0.62.0: Split Branch Infrastructure (Module Management)**
 
 **Objective**: Build split branch distribution infrastructure for modules. Implement module management CLI commands (embed/update/push) and GitHub Actions automation for split branch creation.
@@ -149,7 +131,152 @@ This strategy builds the theme system infrastructure upfront, delivers core modu
 - GitHub Actions auto-creates split branches on release
 - Split branches contain placeholder READMEs explaining future functionality
 
-**Implementation Tasks**: TBD - Will be detailed in release planning phase following [Release Documentation Policy](../contrib/contributing.md#release-documentation-policy).
+**Implementation Tasks**:
+
+#### Task 1: Git Utilities Module
+**Deliverables:**
+- `quickscale_core/src/quickscale_core/utils/git_utils.py` - Git subtree wrapper functions
+- Functions: `subtree_add()`, `subtree_pull()`, `subtree_push()`, `get_remote_branches()`
+
+**Acceptance Criteria:**
+- All functions handle git command failures with clear error messages
+- Functions validate git repository existence before operations
+- Unit tests with mocked subprocess calls (70% coverage minimum)
+
+**Dependencies:** None
+
+---
+
+#### Task 2: Module Configuration Management
+**Deliverables:**
+- `quickscale_core/src/quickscale_core/config/module_config.py` - YAML config reader/writer
+- Schema: See decisions.md Module Configuration Tracking section
+- `.quickscale/config.yml` template in generator templates
+
+**Acceptance Criteria:**
+- Config created in generated projects by default (empty modules list)
+- Config tracks: module name, prefix, branch, installed_version, installed_at
+- YAML validation with pydantic or similar
+- Unit tests for read/write operations (70% coverage minimum)
+
+**Dependencies:** None
+
+---
+
+#### Task 3: CLI `embed` Command
+**Deliverables:**
+- `quickscale_cli/src/quickscale_cli/commands/module_embed.py` - Embed command implementation
+- Update `quickscale_cli/src/quickscale_cli/main.py` - Register embed command
+
+**Acceptance Criteria:**
+- `quickscale embed --module auth` validates module exists on remote
+- Shows clear error: "Module 'auth' is not yet implemented. The 'auth' module infrastructure is ready but contains only placeholder files. Full implementation coming in v0.63.0."
+- For unrecognized modules, lists available modules
+- Validates no existing `modules/{name}/` directory before embed
+- Updates `.quickscale/config.yml` after successful embed
+- Integration tests with real git operations (temp repos)
+
+**Dependencies:** Task 1 (git_utils), Task 2 (module_config)
+
+---
+
+#### Task 4: CLI `update` Command
+**Deliverables:**
+- `quickscale_cli/src/quickscale_cli/commands/module_update.py` - Update command implementation
+- Update `quickscale_cli/src/quickscale_cli/main.py` - Register update command
+
+**Acceptance Criteria:**
+- `quickscale update` reads `.quickscale/config.yml` for installed modules
+- Updates ONLY installed modules (no ALL modules behavior in v0.62.0)
+- When no modules installed: "✅ No modules installed. Nothing to update."
+- Shows diff preview before updating (optional --no-preview flag)
+- Updates `installed_version` in config after successful update
+- Integration tests with simulated module updates
+
+**Dependencies:** Task 1 (git_utils), Task 2 (module_config)
+
+---
+
+#### Task 5: CLI `push` Command
+**Deliverables:**
+- `quickscale_cli/src/quickscale_cli/commands/module_push.py` - Push command implementation
+- Update `quickscale_cli/src/quickscale_cli/main.py` - Register push command
+
+**Acceptance Criteria:**
+- `quickscale push --module auth` validates module is installed
+- Shows usage instructions: "This command pushes your local changes to a feature branch. You'll need to create a pull request manually."
+- Validates git working directory is clean (no uncommitted changes)
+- Guides user through branch naming (e.g., `feature/auth-improvements`)
+- Executes `git subtree push` with proper prefix
+- Integration tests with mock remote repositories
+
+**Dependencies:** Task 1 (git_utils), Task 2 (module_config)
+
+---
+
+#### Task 6: GitHub Actions Workflow
+**Deliverables:**
+- `.github/workflows/split-modules.yml` - Auto-split on release tags
+- Placeholder split branches: `splits/auth-module`, `splits/billing-module`, `splits/teams-module`
+- Placeholder README.md in each split branch
+
+**Acceptance Criteria:**
+- Workflow triggers on tags matching `v*` pattern
+- Splits `quickscale_modules/auth/` → `splits/auth-module` branch
+- Splits `quickscale_modules/billing/` → `splits/billing-module` branch
+- Splits `quickscale_modules/teams/` → `splits/teams-module` branch
+- Each split branch contains README explaining it's a placeholder for future release
+- Workflow runs successfully on test tag
+
+**Dependencies:** None (can run in parallel with CLI tasks)
+
+---
+
+#### Task 7: Integration Testing
+**Deliverables:**
+- `quickscale_cli/tests/test_module_workflow_e2e.py` - End-to-end module workflow test
+- Test matrix: Python 3.10-3.12, multiple git versions
+
+**Acceptance Criteria:**
+- E2E test: init project → embed module → update module → verify config
+- E2E test: embed non-existent module → verify error message
+- E2E test: update with no modules → verify friendly message
+- CI passes on all supported Python versions
+
+**Dependencies:** All CLI tasks (3, 4, 5)
+
+---
+
+#### Task 8: Documentation Updates
+**Deliverables:**
+- Update `docs/technical/user_manual.md` - Add module management commands section
+- Update `README.md` - Add module management quick reference
+- Update CLI help text for all new commands
+
+**Acceptance Criteria:**
+- User manual includes: embed/update/push command examples
+- User manual includes: troubleshooting section for common git issues
+- README includes: Quick example of module workflow
+- All CLI commands have comprehensive `--help` text
+
+**Dependencies:** CLI tasks (3, 4, 5)
+
+---
+
+**Test Strategy**:
+- **Unit Tests**: Git utilities, config management (mocked subprocess, 70% coverage minimum)
+- **Integration Tests**: CLI commands with real git operations in temporary repositories
+- **E2E Tests**: Full module lifecycle (init → embed → update) in isolated test projects
+- **Manual Validation**: GitHub Actions workflow on test tag before release
+
+**Quality Gates**:
+- ✅ All tests pass (pytest)
+- ✅ Ruff format + check (zero violations)
+- ✅ MyPy type checking (strict mode, zero errors)
+- ✅ 70% test coverage minimum for all new code
+- ✅ GitHub Actions workflow runs successfully on test tag
+- ✅ CLI commands show helpful error messages for edge cases
+- ✅ Documentation updated and reviewed
 
 **Architectural Principles**:
 - **Modules**: Split branches, embedded via subtree, updated over project lifetime
@@ -162,37 +289,7 @@ This strategy builds the theme system infrastructure upfront, delivers core modu
 
 **Objective**: Create reusable authentication module wrapping django-allauth with social auth providers and custom User model patterns. HTML theme only.
 
-**Timeline**: After v0.61.0
-
-**Status**: Planned - Core auth flows (login/registration, social providers)
-
-**Scope**:
-- django-allauth integration with social providers (Google, GitHub)
-- Custom User model patterns
-- Account management views (HTML theme only)
-- Basic email flows (verification emails deferred to v0.63.0)
-
-See [Module Creation Guide](#module-creation-guide-for-v05x0-releases) and [competitive_analysis.md Auth Module Requirements](../overview/competitive_analysis.md#2-authentication-foundation) for detailed feature requirements.
-
-**Implementation Tasks**: TBD - Will be detailed in release planning phase.
-
----
-
-### **v0.63.0: `quickscale_modules.auth` - Email Verification & Production Email**
-
-### **v0.63.0: `quickscale_modules.auth` - Authentication Module (Basic Auth)**
-
-**Objective**: Create reusable authentication module wrapping django-allauth with social auth providers and custom User model patterns. HTML theme only.
-
 **Timeline**: After v0.62.0
-
-**Status**: Planned - Core auth flows (login/registration, social providers)
-
-**Scope**:
-- django-allauth integration with social providers (Google, GitHub)
-- Custom User model patterns
-- Account management views (HTML theme only)
-- Basic email flows (verification emails deferred to v0.64.0)
 
 See [Module Creation Guide](#module-creation-guide-for-v05x0-releases) and [competitive_analysis.md Auth Module Requirements](../overview/competitive_analysis.md#2-authentication-foundation) for detailed feature requirements.
 
