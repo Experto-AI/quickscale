@@ -61,10 +61,43 @@ def test_init_command_creates_project(cli_runner):
 
 
 def test_init_command_missing_argument(cli_runner):
-    """Test init command without project name shows error"""
+    """Test init command without project name shows helpful error with usage examples"""
     result = cli_runner.invoke(cli, ["init"])
     assert result.exit_code != 0
-    assert "Error" in result.output or "Missing argument" in result.output
+
+    # Verify helpful error message is shown
+    assert "PROJECT_NAME is required" in result.output
+    assert "Usage examples" in result.output
+    assert "quickscale init myapp" in result.output
+
+    # Verify help pointer is included
+    assert "quickscale init --help" in result.output
+
+
+def test_init_command_missing_argument_with_theme_flag(cli_runner):
+    """Test init command with theme flag but no project name shows helpful error"""
+    result = cli_runner.invoke(cli, ["init", "--theme", "starter_html"])
+    assert result.exit_code != 0
+
+    # Verify helpful error message is shown
+    assert "PROJECT_NAME is required" in result.output
+    assert "Usage examples" in result.output
+    assert "quickscale init myapp" in result.output
+
+
+def test_init_command_help_shows_examples(cli_runner):
+    """Test init command help shows usage examples for new users"""
+    result = cli_runner.invoke(cli, ["init", "--help"])
+    assert result.exit_code == 0
+
+    # Verify examples are shown
+    assert "Examples:" in result.output
+    assert "quickscale init myapp" in result.output
+
+    # Verify theme information is shown
+    assert "starter_html" in result.output
+    assert "starter_htmx" in result.output
+    assert "starter_react" in result.output
 
 
 def test_init_command_invalid_project_name(cli_runner):
@@ -96,6 +129,84 @@ def test_init_command_existing_directory(cli_runner):
         assert result.exit_code != 0
         assert "already exists" in result.output
         assert "different name" in result.output
+
+
+def test_init_command_comprehensive_error_scenarios(cli_runner):
+    """
+    Comprehensive test for all error scenarios a new user might encounter.
+
+    This test documents the exact user experience scenarios reported in the issue:
+    1. Running 'quickscale init' without arguments
+    2. Running 'quickscale init --theme starter_html' without project name
+    3. Running 'quickscale init --theme starter_htmx' without project name
+    4. Running 'quickscale init --theme starter_react' without project name
+    
+    All should show helpful error messages with usage examples.
+    """
+    # Scenario 1: No arguments at all
+    result = cli_runner.invoke(cli, ["init"])
+    assert result.exit_code == 2
+    assert "PROJECT_NAME is required" in result.output
+    assert "quickscale init myapp" in result.output
+    assert "Usage examples:" in result.output
+    assert "quickscale init --help" in result.output
+
+    # Scenario 2: Theme flag with starter_html but no project name
+    result = cli_runner.invoke(cli, ["init", "--theme", "starter_html"])
+    assert result.exit_code == 2
+    assert "PROJECT_NAME is required" in result.output
+    assert "quickscale init myapp" in result.output
+
+    # Scenario 3: Theme flag with starter_htmx but no project name
+    result = cli_runner.invoke(cli, ["init", "--theme", "starter_htmx"])
+    assert result.exit_code == 2
+    assert "PROJECT_NAME is required" in result.output
+    assert "quickscale init myapp" in result.output
+
+    # Scenario 4: Theme flag with starter_react but no project name
+    result = cli_runner.invoke(cli, ["init", "--theme", "starter_react"])
+    assert result.exit_code == 2
+    assert "PROJECT_NAME is required" in result.output
+    assert "quickscale init myapp" in result.output
+
+    # Verify --help works and shows examples
+    result = cli_runner.invoke(cli, ["init", "--help"])
+    assert result.exit_code == 0
+    assert "Examples:" in result.output
+    assert "quickscale init myapp" in result.output
+    assert "Generate a new Django project" in result.output
+
+
+def test_init_command_unimplemented_themes(cli_runner):
+    """Test init command rejects unimplemented themes with clean error message.
+    
+    This test ensures that when users try to use themes that are not yet implemented,
+    they get a helpful error message without the "Unexpected error" bug.
+    
+    Regression test for: Issue where click.Abort() was caught by generic Exception handler,
+    resulting in "❌ Unexpected error: " message with no actual error text.
+    """
+    # Test starter_htmx theme (planned for v0.67.0)
+    result = cli_runner.invoke(cli, ["init", "testproj1", "--theme", "starter_htmx"])
+    assert result.exit_code == 1
+    assert "not yet implemented" in result.output
+    assert "starter_htmx: Coming in v0.67.0" in result.output
+    # Verify no spurious "Unexpected error:" message appears
+    assert "Unexpected error:" not in result.output
+
+    # Test starter_react theme (planned for v0.68.0)
+    result = cli_runner.invoke(cli, ["init", "testproj2", "--theme", "starter_react"])
+    assert result.exit_code == 1
+    assert "not yet implemented" in result.output
+    assert "starter_react: Coming in v0.68.0" in result.output
+    # Verify no spurious "Unexpected error:" message appears
+    assert "Unexpected error:" not in result.output
+
+    # Test that the default theme still works
+    with cli_runner.isolated_filesystem():
+        result = cli_runner.invoke(cli, ["init", "testproj3", "--theme", "starter_html"], catch_exceptions=False)
+        assert result.exit_code == 0
+        assert "Created project: testproj3" in result.output
 
 
 def test_init_command_with_underscores(cli_runner):

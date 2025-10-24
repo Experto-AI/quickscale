@@ -1,0 +1,30 @@
+{%raw%}{% extends "base.html" %}
+{% load static %}
+
+{% block title %}Welcome to {% endraw %}{{ project_name }}{%raw%}{% endblock %}
+
+{% block content %}{%endraw%}
+<div class="welcome-container">
+    <h1>Welcome to {{ project_name }}</h1>
+    <p>Your Django project has been successfully generated with QuickScale!</p>
+    
+    <div class="next-steps">
+        <h2>Next Steps:</h2>
+        <ul>
+            <li>Customize your settings in <code>{{ project_name }}/settings/</code></li>
+            <li>Create your Django apps with <code>python manage.py startapp</code></li>
+            <li>Add your models and run <code>python manage.py makemigrations</code></li>
+            <li>Set up your database with <code>python manage.py migrate</code></li>
+            <li>Create a superuser with <code>python manage.py createsuperuser</code></li>
+        </ul>
+    </div>
+
+    <div class="resources">
+        <h2>Resources:</h2>
+        <ul>
+            <li><a href="https://docs.djangoproject.com/" target="_blank">Django Documentation</a></li>
+            <li><a href="https://github.com/Experto-AI/quickscale" target="_blank">QuickScale Documentation</a></li>
+        </ul>
+    </div>
+</div>
+{%raw%}{% endblock %}{%endraw%}

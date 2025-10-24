@@ -303,6 +303,15 @@ Other documents (README.md, roadmap.md, scaffolding.md, commercial.md) MUST refe
 - ❌ NO Black (use Ruff format)
 - ❌ NO Flake8 (use Ruff check)
 
+**Scripts Reference (AI Assistant Guidance):**
+- `./scripts/install_global.sh` - Install Poetry globally using official installer (REQUIRED: avoids version conflicts)
+- `./scripts/bootstrap.sh` - Initial project setup (install dependencies, configure pre-commit hooks)
+- `./scripts/lint.sh` - Run Ruff format + check across all packages
+- `./scripts/test_all.sh` - Execute full test suite across quickscale_core, quickscale_cli, and all modules
+- `./scripts/release.py` - Automate version bumping and release workflow
+
+**AI Assistant Rule:** NEVER install Poetry via pip/pipx. ALWAYS use `./scripts/install_global.sh` first to avoid version conflicts.
+
 ### CLI Commands {#cli-command-matrix}
 
 - ✅ `quickscale init <project>` - ONLY command (no flags, single starter template)

@@ -136,10 +136,11 @@ quickscale/
 │   ├── technical/
 │   └── legacy/
 ├── scripts/
-│   ├── bootstrap.sh
-│   ├── lint.sh
-│   ├── test_all.sh
-│   └── release.py
+│   ├── bootstrap.sh                # Initial project setup (install deps, pre-commit hooks)
+│   ├── install_global.sh           # Install Poetry globally (avoids version conflicts)
+│   ├── lint.sh                     # Run Ruff format + check on all packages
+│   ├── test_all.sh                 # Run full test suite across all packages
+│   └── release.py                  # Version bump and release automation
 ├── tools/
 │   ├── codegen/
 │   └── quality/

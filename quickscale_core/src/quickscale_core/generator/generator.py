@@ -17,8 +17,30 @@ from quickscale_core.utils.file_utils import (
 class ProjectGenerator:
     """Generate Django projects from templates"""
 
-    def __init__(self, template_dir: Path | None = None):
-        """Initialize generator with template directory"""
+    def __init__(self, template_dir: Path | None = None, theme: str = "starter_html"):
+        """
+        Initialize generator with template directory and theme
+
+        Args:
+        ----
+            template_dir: Path to template directory (auto-detected if None)
+            theme: Theme name to use (default: starter_html)
+
+        Raises:
+        ------
+            ValueError: If theme is not available
+            FileNotFoundError: If template directory not found
+
+        """
+        self.theme = theme
+
+        # Validate theme
+        available_themes = ["starter_html", "starter_htmx", "starter_react"]
+        if theme not in available_themes:
+            raise ValueError(
+                f"Invalid theme '{theme}'. Available themes: {', '.join(available_themes)}"
+            )
+
         if template_dir is None:
             # Try to find templates in development environment first
             import quickscale_core
@@ -63,6 +85,47 @@ class ProjectGenerator:
             loader=FileSystemLoader(str(template_dir), followlinks=True),
             keep_trailing_newline=True,
         )
+
+        # Validate theme directory exists
+        theme_dir = self.template_dir / "themes" / self.theme
+        if not theme_dir.exists():
+            raise ValueError(
+                f"Theme directory not found: {theme_dir}. "
+                f"Theme '{self.theme}' is not yet implemented."
+            )
+
+    def _get_theme_template_path(self, template_name: str) -> str:
+        """
+        Resolve template path for current theme
+
+        Looks for template in theme-specific directory first,
+        falls back to common templates.
+
+        Args:
+        ----
+            template_name: Name of template file (e.g., 'base.html.j2')
+
+        Returns:
+        -------
+            str: Full path to template relative to template_dir
+
+        """
+        # Check theme-specific template first
+        theme_path = f"themes/{self.theme}/{template_name}"
+        theme_full_path = self.template_dir / "themes" / self.theme / template_name
+
+        if theme_full_path.exists():
+            return theme_path
+
+        # Fall back to common template
+        common_path = f"common/{template_name}"
+        common_full_path = self.template_dir / "common" / template_name
+
+        if common_full_path.exists():
+            return common_path
+
+        # Fall back to root template (for backward compatibility)
+        return template_name
 
     def generate(self, project_name: str, output_path: Path) -> None:
         """
@@ -160,12 +223,28 @@ class ProjectGenerator:
                 f"{project_name}/settings/production.py",
                 False,
             ),
-            # Template files
-            ("templates/base.html.j2", "templates/base.html", False),
-            ("templates/index.html.j2", "templates/index.html", False),
-            # Static files
-            ("static/css/style.css.j2", "static/css/style.css", False),
-            ("static/images/favicon.svg.j2", "static/images/favicon.svg", False),
+            # Template files (theme-specific)
+            (
+                self._get_theme_template_path("templates/base.html.j2"),
+                "templates/base.html",
+                False,
+            ),
+            (
+                self._get_theme_template_path("templates/index.html.j2"),
+                "templates/index.html",
+                False,
+            ),
+            # Static files (theme-specific)
+            (
+                self._get_theme_template_path("static/css/style.css.j2"),
+                "static/css/style.css",
+                False,
+            ),
+            (
+                self._get_theme_template_path("static/images/favicon.svg.j2"),
+                "static/images/favicon.svg",
+                False,
+            ),
             # CI/CD and quality tools
             ("github/workflows/ci.yml.j2", ".github/workflows/ci.yml", False),
             (".pre-commit-config.yaml.j2", ".pre-commit-config.yaml", False),

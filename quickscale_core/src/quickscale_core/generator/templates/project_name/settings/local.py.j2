@@ -15,8 +15,8 @@ from .base import *  # noqa: F403
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = True
 
-# Allow all hosts in development
-ALLOWED_HOSTS = ["localhost", "127.0.0.1", "[::1]"]
+# Allow all hosts in development (including Docker containers running on 0.0.0.0)
+ALLOWED_HOSTS = ["localhost", "127.0.0.1", "[::1]", "0.0.0.0", "*"]
 
 # Database - SQLite for quick local development
 # For local PostgreSQL, use: postgresql://user:password@localhost:5432/{{ project_name }}

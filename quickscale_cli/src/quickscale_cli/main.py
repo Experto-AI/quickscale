@@ -11,6 +11,24 @@ from quickscale_cli.commands.development_commands import down, logs, manage, ps,
 from quickscale_core.generator import ProjectGenerator
 
 
+class InitCommand(click.Command):
+    """Custom init command with enhanced error messages."""
+
+    def parse_args(self, ctx, args):
+        """Override parse_args to provide better error messages."""
+        try:
+            return super().parse_args(ctx, args)
+        except click.MissingParameter as e:
+            if "project_name" in str(e).lower() or "PROJECT_NAME" in str(e):
+                click.secho("\n❌ Error: PROJECT_NAME is required", fg="red", err=True)
+                click.echo("\n💡 Usage examples:", err=True)
+                click.echo("   quickscale init myapp", err=True)
+                click.echo("   quickscale init myapp --theme starter_html", err=True)
+                click.echo("\n📖 For more help, run: quickscale init --help", err=True)
+                ctx.exit(2)
+            raise
+
+
 @click.group()
 @click.version_option(version=quickscale_cli.__version__, prog_name="quickscale")
 def cli() -> None:
@@ -37,22 +55,51 @@ cli.add_command(ps)
 cli.add_command(deploy)
 
 
-@cli.command()
-@click.argument("project_name")
-def init(project_name: str) -> None:
-    """Generate a new Django project with production-ready configurations."""
+@cli.command(cls=InitCommand)
+@click.argument("project_name", required=True, metavar="PROJECT_NAME")
+@click.option(
+    "--theme",
+    type=click.Choice(["starter_html", "starter_htmx", "starter_react"], case_sensitive=False),
+    default="starter_html",
+    help="Theme to use for the project (default: starter_html)",
+)
+def init(project_name: str, theme: str) -> None:
+    """
+    Generate a new Django project with production-ready configurations.
+
+    \b
+    Examples:
+      quickscale init myapp                       # Create project with default HTML theme
+      quickscale init myapp --theme starter_html  # Explicitly specify HTML theme
+
+    \b
+    Choose from available themes:
+      - starter_html: Pure HTML + CSS (default, production-ready)
+      - starter_htmx: HTMX + Alpine.js (coming in v0.67.0)
+      - starter_react: React + TypeScript SPA (coming in v0.68.0)
+    """
     try:
-        # Initialize generator
-        generator = ProjectGenerator()
+        # Validate theme availability
+        if theme in ["starter_htmx", "starter_react"]:
+            click.secho(f"❌ Error: Theme '{theme}' is not yet implemented", fg="red", err=True)
+            click.echo(f"\n💡 The '{theme}' theme is planned for a future release:", err=True)
+            click.echo("   - starter_htmx: Coming in v0.67.0", err=True)
+            click.echo("   - starter_react: Coming in v0.68.0", err=True)
+            click.echo("\n📖 For now, use the default 'starter_html' theme", err=True)
+            raise click.Abort()
+
+        # Initialize generator with theme
+        generator = ProjectGenerator(theme=theme)
 
         # Generate project in current directory
         output_path = Path.cwd() / project_name
 
         click.echo(f"🚀 Generating project: {project_name}")
+        click.echo(f"🎨 Using theme: {theme}")
         generator.generate(project_name, output_path)
 
         # Success message
-        click.secho(f"\n✅ Created project: {project_name}", fg="green", bold=True)
+        click.secho(f"\n✅ Created project: {project_name} (theme: {theme})", fg="green", bold=True)
 
         # Next steps instructions
         click.echo("\n📋 Next steps:")
@@ -63,6 +110,9 @@ def init(project_name: str) -> None:
         click.echo("  poetry run python manage.py runserver")
         click.echo("\n📖 See README.md for more details")
 
+    except click.Abort:
+        # Re-raise click.Abort without catching it as a generic exception
+        raise
     except ValueError as e:
         # Invalid project name
         click.secho(f"❌ Error: {e}", fg="red", err=True)

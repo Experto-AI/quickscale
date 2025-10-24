@@ -135,9 +135,35 @@ quickscale --version
 
 # Create a new Django project (primary MVP command)
 quickscale init <project_name>
+
+# Create a project with a specific theme (v0.61.0+)
+quickscale init <project_name> --theme <theme_name>
 ```
 
-Typical flow to create and run a generated project:
+**Theme Selection (v0.61.0+)**:
+
+QuickScale supports multiple frontend themes. Choose your theme during project initialization:
+
+```bash
+# Default HTML theme (production-ready)
+quickscale init myapp
+quickscale init myapp --theme starter_html
+
+# HTMX theme (planned for v0.67.0)
+quickscale init myapp --theme starter_htmx
+
+# React theme (planned for v0.68.0)
+quickscale init myapp --theme starter_react
+```
+
+**Available themes**:
+- `starter_html` - Pure HTML + CSS (default, production-ready)
+- `starter_htmx` - HTMX + Alpine.js (coming in v0.67.0)
+- `starter_react` - React + TypeScript SPA (coming in v0.68.0)
+
+**Important**: Theme selection is one-time during project generation. Generated code is yours to own and customize - no updates or tracking after initialization.
+
+**Typical flow** to create and run a generated project:
 
 ```bash
 quickscale init myapp

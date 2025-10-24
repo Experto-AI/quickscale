@@ -23,6 +23,10 @@ class TestProjectGeneratorInit:
         custom_dir = tmp_path / "custom_templates"
         custom_dir.mkdir()
 
+        # Create required themes directory structure
+        themes_dir = custom_dir / "themes" / "starter_html"
+        themes_dir.mkdir(parents=True)
+
         generator = ProjectGenerator(template_dir=custom_dir)
 
         assert generator.template_dir == custom_dir

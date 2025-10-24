@@ -437,13 +437,13 @@ testing = ["fields", "hunter", "process-tests", "pytest-xdist", "six", "virtuale
 
 [[package]]
 name = "quickscale-core"
-version = "0.58.0"
+version = "0.60.0"
 description = "Core scaffolding and utilities for QuickScale Django project generator"
 optional = false
 python-versions = "<4.0,>=3.10"
 files = [
-    {file = "quickscale_core-0.58.0-py3-none-any.whl", hash = "sha256:4c8a0063b0a60d121687674361b4d4ef54fddfcc8f31e1cc053c7e3d389ea9d2"},
-    {file = "quickscale_core-0.58.0.tar.gz", hash = "sha256:e36477b05df2b122793997c977889e541428940722eafcf78d17285688d393ac"},
+    {file = "quickscale_core-0.60.0-py3-none-any.whl", hash = "sha256:4a70a5a075b9c11b21d9238986281dd27231c45647b648bf28140c2d20d97d0f"},
+    {file = "quickscale_core-0.60.0.tar.gz", hash = "sha256:6cfd39b9eb2371c4c7ca550a8c24da32b2c28058e7a37219fde6db3e7abd4600"},
 ]
 
 [package.dependencies]
@@ -541,4 +541,4 @@ files = [
 [metadata]
 lock-version = "2.0"
 python-versions = "^3.10"
-content-hash = "741a2b5f986214351fcc0989517186bfdc93481dcb8fdc46387bb9319f949e56"
+content-hash = "26549f0b2104fadbea518d0976581448cc7ddbc78234da90489860cb6c1b2622"

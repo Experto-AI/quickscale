@@ -1,0 +1,32 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{%raw%}{% block title %}{% endraw %}{{ project_name }}{%raw%}{% endblock %}{%endraw%}</title>
+    {%raw%}{% load static %}
+    <link rel="icon" type="image/svg+xml" href="{% static 'images/favicon.svg' %}">
+    {% block extra_css %}
+    <link rel="stylesheet" href="{% static 'css/style.css' %}">
+    {% endblock %}{%endraw%}
+</head>
+<body>
+    <header>
+        <nav>
+            <h1>{{ project_name }}</h1>
+        </nav>
+    </header>
+
+    <main>
+        {%raw%}{% block content %}
+        {% endblock %}{%endraw%}
+    </main>
+
+    <footer>
+        <p>&copy; {%raw%}{% now "Y" %} {% endraw %}{{ project_name }}. Built with QuickScale.</p>
+    </footer>
+
+    {%raw%}{% block extra_js %}
+    {% endblock %}{%endraw%}
+</body>
+</html>

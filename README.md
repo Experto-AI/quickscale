@@ -118,6 +118,11 @@ See [competitive_analysis.md](./docs/overview/competitive_analysis.md) for detai
 # Create your first project
 quickscale init myapp
 cd myapp
+
+# Or choose a specific theme (v0.61.0+)
+# quickscale init myapp --theme starter_html  # Default HTML theme
+# quickscale init myapp --theme starter_htmx  # HTMX theme (coming in v0.67.0)
+# quickscale init myapp --theme starter_react # React theme (coming in v0.68.0)
 ```
 
 **Choose your development workflow:**

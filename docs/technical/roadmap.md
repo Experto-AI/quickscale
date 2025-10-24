@@ -45,8 +45,8 @@ Execution details live here; the "personal toolkit first, community platform lat
 **AUTHORITATIVE SCOPE REFERENCE**: The [MVP Feature Matrix in decisions.md](./decisions.md#mvp-feature-matrix-authoritative) is the single source of truth for what's IN/OUT/PLANNED. When this roadmap conflicts with decisions.md, decisions.md wins.
 
 ### **📋 Current State Assessment**
-- ✅ **Current Version**: v0.60.0 (Released - Railway Deployment Support)
-- 🔄 **Next Release**: v0.61.0 - Theme System Foundation
+- ✅ **Current Version**: v0.61.0 (Released - Theme System Foundation)
+- 🔄 **Next Release**: v0.62.0 - Split Branch Infrastructure
 
 ### **Evolution Context Reference**
 Need the narrative backdrop? Jump to [`quickscale.md`](../overview/quickscale.md#evolution-strategy-personal-toolkit-first) and come back here for the tasks.
@@ -66,6 +66,7 @@ Need the narrative backdrop? Jump to [`quickscale.md`](../overview/quickscale.md
 - Release v0.58.0: E2E Testing Infrastructure — Complete lifecycle validation with PostgreSQL 16 and Playwright browser automation: `docs/releases/release-v0.58.0-implementation.md`
 - Release v0.59.0: CLI Development Commands — User-friendly wrappers for Docker/Django operations: `docs/releases/release-v0.59.0-implementation.md`
 - Release v0.60.0: Railway Deployment Support — Automated Railway deployment via `quickscale deploy railway` CLI command: `docs/releases/release-v0.60.0-implementation.md`
+- Release v0.61.0: Theme System Foundation — `--theme` CLI flag, theme abstraction layer, ships with HTML theme only: `docs/releases/release-v0.61.0-implementation.md`
 
 ---
 
@@ -76,8 +77,8 @@ Need the narrative backdrop? Jump to [`quickscale.md`](../overview/quickscale.md
 This strategy builds the theme system infrastructure upfront, delivers core modules quickly in HTML theme, then expands to additional themes. This avoids 3x development overhead while maintaining future flexibility.
 
 **Phase 1: Foundation + Core Modules (HTML Theme Only)**
-- **v0.61.0**: Theme System Foundation - `--theme` flag, theme abstraction layer, ships with HTML theme only 🎯 **NEXT**
-- **v0.62.0**: Split Branch Infrastructure - Module management commands (`embed/update/push`), GitHub Actions automation
+- ✅ **v0.61.0**: Theme System Foundation - `--theme` flag, theme abstraction layer, ships with HTML theme only (Released October 24, 2025)
+- **v0.62.0**: Split Branch Infrastructure - Module management commands (`embed/update/push`), GitHub Actions automation 🎯 **NEXT**
 - **v0.63.0**: `quickscale_modules.auth` - django-allauth integration (basic auth, social providers) - HTML theme only
 - **v0.64.0**: `quickscale_modules.auth` - Email verification & production email flows - HTML theme only
 - **v0.65.0**: `quickscale_modules.billing` - dj-stripe subscriptions - HTML theme only
@@ -105,240 +106,21 @@ This strategy builds the theme system infrastructure upfront, delivers core modu
 
 ---
 
-### **v0.61.0: Theme System Foundation**
+### **v0.61.0: Theme System Foundation** ✅
 
-**Objective**: Implement theme selection system with `--theme` flag. Refactor existing templates into theme directory structure. Ships with HTML theme only, establishing foundation for future HTMX and React themes.
+**Status**: ✅ COMPLETED (Released October 24, 2025)
 
-**Timeline**: After v0.60.0
+**Summary**: Implemented theme selection system with `--theme` CLI flag and refactored existing templates into theme directory structure. Ships with production-ready `starter_html` theme and establishes foundation for future HTMX (v0.67.0) and React (v0.68.0) themes.
 
-**Status**: 🎯 **NEXT RELEASE** - Detailed implementation plan ready for execution.
+**Key Achievements**:
+- ✅ CLI `--theme` flag with validation and helpful error messages
+- ✅ Theme abstraction layer in generator with path resolution
+- ✅ Template migration to `themes/starter_html/` directory structure
+- ✅ 100% backward compatibility maintained (371 tests passing)
+- ✅ Comprehensive testing (22 new tests, 89% core coverage, 85% CLI coverage)
+- ✅ Complete documentation (user manual, README, decisions.md, scaffolding.md)
 
-**Dependencies**:
-- ✅ v0.60.0 Railway Deployment Support (completed October 19, 2025)
-- ✅ No blocking external dependencies
-- ✅ No conflicts with other in-progress work
-
-**Scope**:
- - Implement `--theme` CLI flag (`quickscale init myproject --theme starter_html`)
- - Create theme directory structure: `quickscale_core/generator/templates/themes/{starter_html,starter_htmx,starter_react}/`
- - Build theme abstraction layer (conditional template rendering during init)
- - Refactor current templates into `themes/starter_html/` directory
- - Theme selection defaults to `starter_html` if not specified (backward compatible)
- - Create placeholder directories for `themes/starter_htmx/` and `themes/starter_react/` (empty in v0.61.0)
-- **Important**: Themes are one-time copy, users own generated code, NO embed/update for themes
-
-**Success Criteria**:
-- `quickscale init myproject` works exactly as before (implicit HTML theme)
- - `quickscale init myproject --theme starter_html` works explicitly
- - `quickscale init myproject --theme starter_htmx` shows clear error (theme not implemented yet)
-- `quickscale init myproject --theme invalid` shows helpful error with available themes
-- Generated project structure matches v0.60.0 output exactly
-- Zero breaking changes for existing users
-
-**Implementation Tasks**:
-
-### Phase 1: CLI Infrastructure (quickscale_cli)
-**File**: `quickscale_cli/src/quickscale_cli/commands/init.py`
-
-- [ ] Add `--theme` argument to init command
-  - **Acceptance criteria**: `quickscale init myproject --theme starter_html` parsed correctly
-  - **Deliverable**: Updated `init.py` with theme argument handling
-  
-- [ ] Implement theme validation
-  - **Acceptance criteria**: Invalid theme names show helpful error with available options
-  - **Deliverable**: `validate_theme()` function with error messaging
-  
-- [ ] Add backward compatibility logic
-  - **Acceptance criteria**: `quickscale init myproject` (no flag) defaults to `starter_html`
-  - **Deliverable**: Default template logic in init command
-  
-- [ ] Update CLI help text
-  - **Acceptance criteria**: `quickscale init --help` shows theme selection documentation
-  - **Deliverable**: Updated command docstrings and help text
-
-**Tests**: `quickscale_cli/tests/commands/test_init.py`
-- [ ] Test explicit theme selection (`--theme starter_html`)
-- [ ] Test default theme (no flag provided)
-- [ ] Test invalid theme error handling
-- [ ] Test helpful error messages
-
-**Coverage target**: 70% minimum per file
-
----
-
-### Phase 2: Generator Infrastructure (quickscale_core)
-**File**: `quickscale_core/src/quickscale_core/generator/generator.py`
-
-- [ ] Add theme parameter to `ProjectGenerator.__init__()`
-  - **Acceptance criteria**: Generator accepts theme name parameter
-  - **Deliverable**: Updated `__init__` signature and attribute
-  
-- [ ] Implement theme template path resolution
-  - **Acceptance criteria**: Generator correctly resolves `templates/themes/{theme_name}/` paths
-  - **Deliverable**: `_get_theme_template_path()` method
-  
-- [ ] Add theme validation in generator
-  - **Acceptance criteria**: Generator raises clear error if theme directory doesn't exist
-  - **Deliverable**: Theme existence check with error handling
-  
-- [ ] Update template rendering to use theme-specific paths
-  - **Acceptance criteria**: Templates rendered from correct theme subdirectory
-  - **Deliverable**: Modified `_render_template()` logic for theme paths
-  
-- [ ] Preserve backward compatibility for existing templates
-  - **Acceptance criteria**: Common templates (manage.py, pyproject.toml, etc.) still work
-  - **Deliverable**: Fallback logic for common vs theme-specific templates
-
-**Tests**: `quickscale_core/tests/generator/test_themes.py` (NEW FILE)
-- [ ] Test theme path resolution for all themes
-- [ ] Test theme validation (existing vs non-existing)
-- [ ] Test template rendering with theme-specific paths
-- [ ] Test backward compatibility (common templates)
-- [ ] Test generated project structure matches v0.60.0 output
-
-**Coverage target**: 70% minimum per file
-
----
-
-### Phase 3: Template Migration
-**Directory**: `quickscale_core/src/quickscale_core/generator/templates/`
-
-- [ ] Create new directory structure
-  - **Acceptance criteria**: `templates/themes/` directory exists with subdirectories
-  - **Deliverable**: Directory structure matching scaffolding.md lines 329-345
-  
-- [ ] Create `templates/common/` directory
-  - **Acceptance criteria**: Common templates (backend code) moved to `common/`
-  - **Deliverable**: `common/` directory with Django project templates
-  
-- [ ] Move backend templates to `common/`
-  - Files to move: `manage.py.j2`, `pyproject.toml.j2`, `Dockerfile.j2`, `docker-compose.yml.j2`, `project_name/**/*.j2` (settings, urls, wsgi, asgi)
-  - **Acceptance criteria**: All backend templates in `common/`, no duplication
-  - **Deliverable**: Migrated template files
-  
-- [ ] Create `templates/themes/starter_html/` directory
-  - **Acceptance criteria**: `themes/starter_html/` structure matches scaffolding.md
-  - **Deliverable**: `starter_html/templates/` and `starter_html/static/` directories
-  
-- [ ] Move frontend templates to `themes/starter_html/`
-  - Files to move: `templates/base.html.j2`, `templates/index.html.j2`, `static/**/*`
-  - **Acceptance criteria**: All frontend templates in `starter_html/`, original locations removed
-  - **Deliverable**: Migrated frontend template files
-  
-- [ ] Create placeholder directories for future themes
-  - **Acceptance criteria**: `themes/starter_htmx/` and `themes/starter_react/` exist with README.md placeholders
-  - **Deliverable**: Empty directories with "Coming in vX.XX.X" README files
-
-**Tests**: `quickscale_core/tests/generator/test_templates.py`
-- [ ] Update existing template tests for new paths
-- [ ] Test template discovery in new structure
-- [ ] Test no missing templates (all migrated)
-
----
-
-### Phase 4: Integration Testing
-**Files**: `quickscale_core/tests/test_integration.py`, `quickscale_cli/tests/test_cli.py`
-
-- [ ] E2E test: Generate project with explicit theme
-  - **Acceptance criteria**: `quickscale init testapp --theme starter_html` generates complete project
-  - **Command**: Run full init workflow, verify all files created
-  
-- [ ] E2E test: Generate project with default theme
-  - **Acceptance criteria**: `quickscale init testapp` generates identical output to explicit `--theme starter_html`
-  - **Command**: Compare file structures and content
-  
-- [ ] E2E test: Theme validation errors
-  - **Acceptance criteria**: Invalid theme name shows helpful error, exits cleanly
-  - **Command**: Test with `--theme invalid`, verify error message quality
-  
-- [ ] Regression test: Compare v0.61.0 output vs v0.60.0 output
-  - **Acceptance criteria**: Generated project structure is identical between versions (when using default theme)
-  - **Command**: Diff generated projects from v0.60.0 and v0.61.0
-  
-- [ ] Backward compatibility test
-  - **Acceptance criteria**: Existing projects can still be generated without changes
-  - **Command**: Run existing test suite, verify 100% pass rate
-
-**Coverage target**: All integration tests must pass
-
----
-
-### Phase 5: Documentation
-**Files**: Multiple documentation files
-
-- [ ] Update CLI help documentation
-  - **File**: `quickscale_cli/src/quickscale_cli/commands/init.py` (docstrings)
-  - **Acceptance criteria**: Command help shows theme selection options clearly
-  
-- [ ] Update user manual
-  - **File**: `docs/technical/user_manual.md`
-  - **Acceptance criteria**: Document `--theme` flag with examples
-  - **Deliverable**: Section showing theme selection usage
-  
-- [ ] Update decisions.md CLI Command Matrix
-  - **File**: `docs/technical/decisions.md` lines 319-326
-  - **Acceptance criteria**: Mark v0.61.0 theme commands as ✅ IN (implemented)
-  - **Deliverable**: Change 📋 to ✅ for theme selection commands
-  
-- [ ] Create theme selection guide
-  - **File**: `docs/technical/themes.md` (NEW FILE, optional for v0.61.0)
-  - **Acceptance criteria**: Document theme architecture and selection process
-  - **Deliverable**: Guide explaining themes vs modules distinction
-  
-- [ ] Update README.md with theme examples
-  - **File**: `README.md`
-  - **Acceptance criteria**: Quick start section mentions theme options (brief mention only)
-  - **Deliverable**: One-line note: "Choose themes in future releases with `--theme` flag"
-
-**Coverage target**: All documentation updates complete before release
-
----
-
-### Phase 6: Release Preparation
-**Files**: Version files and release documentation
-
-- [ ] Update version numbers
-  - **Files**: `VERSION`, `pyproject.toml` (all packages)
-  - **Acceptance criteria**: All version references show 0.61.0
-  - **Command**: `./scripts/version_tool.sh bump minor`
-  
-- [ ] Create release documentation
-  - **File**: `docs/releases/release-v0.61.0-implementation.md`
-  - **Acceptance criteria**: Follow release template format
-  - **Deliverable**: Complete release documentation per contributing.md policy
-  
-- [ ] Update roadmap status
-  - **File**: `docs/technical/roadmap.md`
-  - **Acceptance criteria**: Mark v0.61.0 as completed, update current state to v0.62.0
-  - **Deliverable**: Updated roadmap with v0.61.0 in completed releases section
-  
-- [ ] Run full test suite
-  - **Command**: `./scripts/test_all.sh`
-  - **Acceptance criteria**: 100% pass rate, 70%+ coverage per file
-  
-- [ ] Run E2E smoke test
-  - **Command**: Generate fresh project, verify it runs
-  - **Acceptance criteria**: Generated project starts successfully with Docker
-
-**Coverage target**: All quality gates passed
-
----
-
-**Quality Gates**:
-- [ ] All unit tests passing (70%+ coverage per file)
-- [ ] All integration tests passing
-- [ ] E2E test: Generated project matches v0.60.0 output (backward compatibility)
-- [ ] No regressions in existing functionality
-- [ ] Documentation complete and reviewed
-- [ ] Code review approved by maintainer
-- [ ] Manual smoke test: Generate project with default theme, verify it runs
-- [ ] Manual smoke test: Generate project with explicit theme, verify it runs
-- [ ] Manual smoke test: Test invalid theme error handling
-
-**Architectural Principles**:
-- **Themes**: One-time generation templates, user owns code, no updates
-- Only ~30% of code needs theme variants (frontend templates/components)
-- Backend code (models, views, auth, email) is 100% theme-agnostic and shared across themes
+**Documentation**: See [release-v0.61.0-implementation.md](../releases/release-v0.61.0-implementation.md) for complete implementation details, test results, and validation commands.
 
 ---
 
