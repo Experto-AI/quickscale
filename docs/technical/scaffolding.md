@@ -365,11 +365,9 @@ quickscale_core/
 **v0.61.0 Enhancements:**
 - ✅ Theme system: `quickscale init myproject --template <name>`
 - ✅ Themes are one-time copy, user owns generated code
-- ✅ Default theme: `html` (backward compatible, no flag required)
- - ✅ Default theme: `starter_html` (backward compatible, no flag required)
+- ✅ Default theme: `starter_html` (backward compatible, no flag required)
 - ✅ Backend templates in `common/` (theme-agnostic)
-- ✅ Frontend templates in `themes/{html,htmx,react}/` (theme-specific)
- - ✅ Frontend templates in `themes/{starter_html,starter_htmx,starter_react}/` (theme-specific)
+- ✅ Frontend templates in `themes/{starter_html,starter_htmx,starter_react}/` (theme-specific)
 
 **MVP Simplifications:**
 - ❌ NO config/ directory (no YAML/JSON configuration loading in MVP)
