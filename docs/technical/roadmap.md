@@ -67,6 +67,7 @@ Need the narrative backdrop? Jump to [`quickscale.md`](../overview/quickscale.md
 - Release v0.59.0: CLI Development Commands — User-friendly wrappers for Docker/Django operations: `docs/releases/release-v0.59.0-implementation.md`
 - Release v0.60.0: Railway Deployment Support — Automated Railway deployment via `quickscale deploy railway` CLI command: `docs/releases/release-v0.60.0-implementation.md`
 - Release v0.61.0: Theme System Foundation — `--theme` CLI flag, theme abstraction layer, ships with HTML theme only: `docs/releases/release-v0.61.0-implementation.md`
+- Release v0.62.0 (2025-10-25): Module management CLI commands (`embed`, `update`, `push`), git utilities, module configuration tracking, GitHub Actions automation for split branch creation: `docs/releases/release-v0.62.0-implementation.md`
 
 ---
 
@@ -78,9 +79,9 @@ This strategy builds the theme system infrastructure upfront, delivers core modu
 
 **Phase 1: Foundation + Core Modules (HTML Theme Only)**
 - ✅ **v0.61.0**: Theme System Foundation - `--theme` flag, theme abstraction layer, ships with HTML theme only (Released October 24, 2025)
-- **v0.62.0**: Split Branch Infrastructure - Module management commands (`embed/update/push`), GitHub Actions automation 🎯 **NEXT**
-- **v0.63.0**: `quickscale_modules.auth` - django-allauth integration (basic auth, social providers) - HTML theme only
-- **v0.64.0**: `quickscale_modules.auth` - Email verification & production email flows - HTML theme only
+- ✅ **v0.62.0**: Split Branch Infrastructure - Module management commands (`embed/update/push`), GitHub Actions automation (Released October 25, 2025)
+- **v0.63.0**: `quickscale_modules.auth` - django-allauth integration (basic auth, NO social providers) - HTML theme only 🎯 **NEXT**
+- **v0.64.0**: `quickscale_modules.auth` - Email verification, social auth providers, production email flows - HTML theme only
 - **v0.65.0**: `quickscale_modules.billing` - dj-stripe subscriptions - HTML theme only
 - **v0.66.0**: `quickscale_modules.teams` - Multi-tenancy patterns - HTML theme only 🎯 **SAAS FEATURE PARITY MILESTONE**
 
@@ -106,21 +107,240 @@ This strategy builds the theme system infrastructure upfront, delivers core modu
 
 ---
 
-### **v0.62.0: Split Branch Infrastructure**
-
-Release v0.62.0 (2025-10-25): Module management CLI commands (`embed`, `update`, `push`), git utilities, module configuration tracking, GitHub Actions automation for split branch creation. See `docs/releases/release-v0.62.0-implementation.md` for details.
-
----
-
 ### **v0.63.0: `quickscale_modules.auth` - Authentication Module (Basic Auth)**
 
-**Objective**: Create reusable authentication module wrapping django-allauth with social auth providers and custom User model patterns. HTML theme only.
+**Objective**: Create reusable authentication module wrapping django-allauth with custom User model patterns. HTML theme only. Basic authentication flows without social providers.
 
-**Timeline**: After v0.62.0
+**Timeline**: After v0.62.0 (Target: 2-3 weeks)
 
-See [Module Creation Guide](#module-creation-guide-for-v05x0-releases) and [competitive_analysis.md Auth Module Requirements](../overview/competitive_analysis.md#2-authentication-foundation) for detailed feature requirements.
+**Status**: Ready for implementation - Infrastructure validated in v0.62.0
 
-**Implementation Tasks**: TBD - Will be detailed in release planning phase.
+**Scope Boundaries** (Strict - No Feature Creep):
+- ✅ **IN**: django-allauth integration (email/password only)
+- ✅ **IN**: Custom User model scaffold (AbstractUser extension)
+- ✅ **IN**: Basic auth views (login, logout, signup)
+- ✅ **IN**: Password management (change password, reset password)
+- ✅ **IN**: Account management (profile view/edit, account deletion)
+- ✅ **IN**: HTML theme templates only
+- ❌ **OUT**: Social auth providers (Google, GitHub, Facebook) → v0.64.0
+- ❌ **OUT**: Email verification workflows → v0.64.0
+- ❌ **OUT**: Production email configuration → v0.64.0
+- ❌ **OUT**: HTMX/React theme variants → v0.67.0/v0.68.0
+- ❌ **OUT**: 2FA/MFA → Future release
+- ❌ **OUT**: Advanced permissions → teams module (v0.66.0)
+
+**Competitive Context**: Matches SaaS Pegasus auth foundation without email verification. Validates module architecture before expanding features.
+
+**Module Structure** (Per scaffolding.md §4):
+```
+quickscale_modules/auth/
+├── pyproject.toml              # Module packaging config
+├── README.md                   # Module documentation
+├── src/quickscale_modules/auth/
+│   ├── __init__.py
+│   ├── apps.py                 # AppConfig with app_label
+│   ├── models.py               # Custom User model (AbstractUser)
+│   ├── forms.py                # django-allauth form overrides
+│   ├── views.py                # Account management views
+│   ├── urls.py                 # Auth URL patterns
+│   ├── adapters.py             # django-allauth adapter customizations
+│   ├── signals.py              # Post-registration signals
+│   ├── templates/quickscale_modules_auth/
+│   │   ├── account/
+│   │   │   ├── login.html      # Login page (HTML theme)
+│   │   │   ├── signup.html     # Signup page
+│   │   │   ├── logout.html     # Logout confirmation
+│   │   │   ├── password_change.html
+│   │   │   ├── password_reset.html
+│   │   │   ├── password_reset_done.html
+│   │   │   ├── password_reset_confirm.html
+│   │   │   ├── password_reset_complete.html
+│   │   │   ├── profile.html    # Profile view/edit
+│   │   │   └── account_inactive.html
+│   │   └── base.html           # Auth template base
+│   ├── static/quickscale_modules_auth/
+│   │   ├── css/
+│   │   │   └── auth.css        # Auth-specific styles
+│   │   └── js/
+│   │       └── auth.js         # Client-side validation
+│   └── migrations/
+│       └── 0001_initial.py     # Custom User model migration
+└── tests/
+    ├── conftest.py             # Test fixtures
+    ├── test_models.py          # User model tests
+    ├── test_views.py           # Auth view tests
+    ├── test_forms.py           # Form validation tests
+    ├── test_signals.py         # Signal handler tests
+    └── test_adapters.py        # Allauth adapter tests
+```
+
+**Implementation Tasks** (11 Task Groups):
+
+**1. Module Scaffolding & Configuration** (Foundation)
+- [ ] Create `pyproject.toml` for auth module (Poetry config, dependencies)
+- [ ] Add django-allauth to module dependencies (specify version range)
+- [ ] Create `apps.py` with `QuickscaleAuthConfig(AppConfig)` and `app_label = "quickscale_modules_auth"`
+- [ ] Create `__init__.py` with `default_app_config` and module version
+- [ ] Update module README.md with installation instructions and usage examples
+
+**2. Custom User Model** (Core Data Layer)
+- [ ] Create `models.py` with `User(AbstractUser)` extending Django's AbstractUser
+- [ ] Add custom fields to User model (if any baseline fields needed beyond AbstractUser)
+- [ ] Override `USERNAME_FIELD` if using email-only auth (decision: keep username or email-only?)
+- [ ] Add `get_absolute_url()` method for profile URLs
+- [ ] Add `get_full_name()` and `get_short_name()` overrides (if customized)
+- [ ] Create initial migration (`0001_initial.py`)
+- [ ] Add model docstrings following Google style (functionality only, no args/returns)
+
+**3. django-allauth Integration** (Auth Backend)
+- [ ] Create `adapters.py` with `DefaultAccountAdapter` override
+- [ ] Implement `is_open_for_signup()` method (configurable signup enable/disable)
+- [ ] Implement `save_user()` method for custom user creation logic
+- [ ] Configure allauth settings in module (SESSION_COOKIE_AGE, etc.)
+- [ ] Create `signals.py` for post-registration signal handlers (e.g., create user profile)
+- [ ] Document allauth settings that must be added to project settings.py
+
+**4. Authentication Forms** (UI Data Layer)
+- [ ] Create `forms.py` with custom SignupForm (override allauth default)
+- [ ] Create custom LoginForm with validation (email normalization, etc.)
+- [ ] Create PasswordChangeForm with strength validation
+- [ ] Create PasswordResetForm with email validation
+- [ ] Create ProfileUpdateForm for account management
+- [ ] Add form docstrings (Google style)
+
+**5. Authentication Views** (Business Logic)
+- [ ] Create `views.py` with ProfileView (display user profile)
+- [ ] Implement ProfileUpdateView (edit profile with form validation)
+- [ ] Implement AccountDeleteView (soft delete or hard delete, with confirmation)
+- [ ] Add proper permission checks (`LoginRequiredMixin`, user ownership validation)
+- [ ] Add success messages using Django messages framework
+- [ ] Add view docstrings (Google style)
+
+**6. URL Configuration** (Routing)
+- [ ] Create `urls.py` with auth URL patterns
+- [ ] Include django-allauth account URLs (`allauth.urls`)
+- [ ] Add custom URLs: profile, profile-edit, account-delete
+- [ ] Use namespaced URLs (`app_name = "auth"`)
+- [ ] Document URL patterns in module README
+
+**7. HTML Theme Templates** (Presentation Layer - HTML Only)
+- [ ] Create `templates/quickscale_modules_auth/base.html` (auth template base)
+- [ ] Create `account/login.html` (email/password login form)
+- [ ] Create `account/signup.html` (registration form)
+- [ ] Create `account/logout.html` (logout confirmation)
+- [ ] Create `account/password_change.html` (change password form)
+- [ ] Create `account/password_reset.html` (request password reset)
+- [ ] Create `account/password_reset_done.html` (reset email sent confirmation)
+- [ ] Create `account/password_reset_confirm.html` (set new password form)
+- [ ] Create `account/password_reset_complete.html` (reset complete confirmation)
+- [ ] Create `account/profile.html` (view profile)
+- [ ] Create `account/profile_edit.html` (edit profile form)
+- [ ] Create `account/account_delete.html` (delete account confirmation)
+- [ ] Add basic CSS styling in `static/quickscale_modules_auth/css/auth.css`
+- [ ] Add client-side validation in `static/quickscale_modules_auth/js/auth.js`
+- [ ] Ensure all templates extend from base template with proper blocks
+- [ ] Add CSRF tokens to all forms
+- [ ] Add form error display following Django conventions
+
+**8. Testing** (Quality Assurance - 70% coverage minimum per file)
+- [ ] Create `tests/conftest.py` with auth fixtures (user factory, authenticated client)
+- [ ] Create `tests/test_models.py`:
+  - [ ] Test User.objects.create_user() with valid data
+  - [ ] Test User.objects.create_superuser() creates staff/superuser
+  - [ ] Test custom User model fields
+  - [ ] Test `get_absolute_url()` returns correct profile URL
+  - [ ] Test `__str__()` representation
+- [ ] Create `tests/test_views.py`:
+  - [ ] Test login view GET/POST (valid/invalid credentials)
+  - [ ] Test signup view GET/POST (valid/invalid data, duplicate email)
+  - [ ] Test logout view
+  - [ ] Test password change view (authenticated user required)
+  - [ ] Test password reset flow (all steps)
+  - [ ] Test profile view (requires authentication)
+  - [ ] Test profile update view (requires authentication, validation)
+  - [ ] Test account delete view (requires authentication, confirmation)
+  - [ ] Test permission checks (unauthenticated users redirected)
+- [ ] Create `tests/test_forms.py`:
+  - [ ] Test SignupForm validation (email format, password strength)
+  - [ ] Test LoginForm validation
+  - [ ] Test PasswordChangeForm validation
+  - [ ] Test PasswordResetForm validation
+  - [ ] Test ProfileUpdateForm validation
+- [ ] Create `tests/test_signals.py`:
+  - [ ] Test post-registration signal fires correctly
+  - [ ] Test signal handlers execute expected actions
+- [ ] Create `tests/test_adapters.py`:
+  - [ ] Test `is_open_for_signup()` respects configuration
+  - [ ] Test `save_user()` creates users correctly
+- [ ] Add integration test: Full signup → login → profile edit → logout flow
+- [ ] Run coverage report: Verify 70%+ per file (CI enforced)
+
+**9. Documentation** (User & Developer Guides)
+- [ ] Update `README.md` with complete installation instructions:
+  - [ ] `quickscale embed --module auth` command
+  - [ ] Add `quickscale_modules.auth` to INSTALLED_APPS
+  - [ ] Add allauth to INSTALLED_APPS
+  - [ ] Required settings.py configuration (AUTHENTICATION_BACKENDS, etc.)
+  - [ ] Include `auth.urls` in project URLs
+  - [ ] Run migrations: `python manage.py migrate`
+- [ ] Document configuration options (signup enabled/disabled, session timeout, etc.)
+- [ ] Add usage examples (how to require login, how to customize User model further)
+- [ ] Document template customization approach (override templates in project)
+- [ ] Add troubleshooting section (common issues, solutions)
+- [ ] Link to django-allauth documentation for advanced features
+
+**10. Module Distribution** (Split Branch Integration)
+- [ ] Ensure module directory structure matches scaffolding.md §4
+- [ ] Verify pyproject.toml has correct package name (`quickscale-module-auth`)
+- [ ] Test manual git subtree split: `git subtree split --prefix=quickscale_modules/auth -b splits/auth-module`
+- [ ] Verify GitHub Actions workflow will auto-split on release tag
+- [ ] Test `quickscale embed --module auth` command in clean test project
+- [ ] Verify embedded module works in user project (INSTALLED_APPS, migrations, URLs)
+
+**11. Quality Gates** (Pre-Release Validation)
+- [ ] Run `./scripts/lint.sh` - All Ruff checks pass
+- [ ] Run `./scripts/test_all.sh` - All tests pass
+- [ ] Check coverage report - 70%+ per file achieved
+- [ ] Test in generated project: `quickscale init test-auth-project`
+- [ ] Embed auth module: `cd test-auth-project && quickscale embed --module auth`
+- [ ] Add to INSTALLED_APPS, configure allauth, run migrations
+- [ ] Manual smoke test: Signup → Login → Profile Edit → Logout flow works end-to-end
+- [ ] Verify templates render correctly in HTML theme
+- [ ] Verify form validation works (client-side and server-side)
+- [ ] Verify error messages display correctly
+- [ ] Test account deletion flow (confirmation, actual deletion)
+- [ ] Verify no impact on existing generated projects (backward compatibility)
+
+**Success Criteria** (Acceptance Gates):
+- ✅ Module embeds successfully via `quickscale embed --module auth`
+- ✅ All authentication flows work: signup, login, logout, password reset, profile management
+- ✅ 70%+ test coverage per file (CI enforced)
+- ✅ HTML theme templates render correctly and are theme-consistent
+- ✅ No breaking changes to existing generated projects
+- ✅ Documentation complete (README, installation, usage, troubleshooting)
+- ✅ Module distributes correctly via split branch (GitHub Actions workflow)
+- ✅ Code quality passes: Ruff format/check, MyPy strict mode
+- ✅ Manual QA passes: Full auth flows tested in real generated project
+
+**Deliverables**:
+1. Production-ready auth module in `quickscale_modules/auth/`
+2. Auto-split branch: `splits/auth-module`
+3. Complete test suite (70%+ coverage)
+4. HTML theme templates (12+ template files)
+5. Updated module README.md
+6. Release documentation: `docs/releases/release-v0.63.0-implementation.md`
+
+**Dependencies & Prerequisites**:
+- django-allauth (latest stable version)
+- Django 4.2+ or 5.0+
+- v0.62.0 split branch infrastructure complete
+- HTML theme from v0.61.0
+
+**Known Limitations** (Documented in README):
+- Social auth providers deferred to v0.64.0
+- Email verification deferred to v0.64.0
+- HTMX/React themes deferred to v0.67.0/v0.68.0
+- 2FA/MFA not included (future release)
 
 ---
 
