@@ -215,14 +215,15 @@ replace_path_deps() {
     case "$pkg_name" in
         "quickscale_cli")
             # Replace: quickscale-core = {path = "../quickscale_core", develop = true}
+            # Or:      quickscale-core = {path = "../quickscale_core"}
             # With:    quickscale-core = "^VERSION"
-            sed -i "s|quickscale-core = {path = \"../quickscale_core\", develop = true}|quickscale-core = \"^${version}\"|" "$pyproject"
+            sed -i "s|quickscale-core = {path = \"../quickscale_core\"[^}]*}|quickscale-core = \"^${version}\"|" "$pyproject"
             log_success "Replaced quickscale-core path dependency"
             ;;
         "quickscale")
-            # Replace both dependencies
-            sed -i "s|quickscale-core = {path = \"../quickscale_core\", develop = true}|quickscale-core = \"^${version}\"|" "$pyproject"
-            sed -i "s|quickscale-cli = {path = \"../quickscale_cli\", develop = true}|quickscale-cli = \"^${version}\"|" "$pyproject"
+            # Replace both dependencies (with or without develop = true)
+            sed -i "s|quickscale-core = {path = \"../quickscale_core\"[^}]*}|quickscale-core = \"^${version}\"|" "$pyproject"
+            sed -i "s|quickscale-cli = {path = \"../quickscale_cli\"[^}]*}|quickscale-cli = \"^${version}\"|" "$pyproject"
             log_success "Replaced quickscale-core and quickscale-cli path dependencies"
             ;;
         "quickscale_core")

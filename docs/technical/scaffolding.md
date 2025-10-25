@@ -136,11 +136,14 @@ quickscale/
 │   ├── technical/
 │   └── legacy/
 ├── scripts/
-│   ├── bootstrap.sh                # Initial project setup (install deps, pre-commit hooks)
-│   ├── install_global.sh           # Install Poetry globally (avoids version conflicts)
-│   ├── lint.sh                     # Run Ruff format + check on all packages
-│   ├── test_all.sh                 # Run full test suite across all packages
-│   └── release.py                  # Version bump and release automation
+│   ├── bootstrap.sh                # Initial project setup - installs dependencies, configures pre-commit hooks
+│   ├── install_global.sh           # Install Poetry globally - use this FIRST to avoid version conflicts (DO NOT use pip install poetry)
+│   ├── lint.sh                     # Format and lint - runs Ruff format + check across all packages (replaces Black + Flake8)
+│   ├── test_all.sh                 # Test all packages - runs full test suite across quickscale_core, quickscale_cli, and modules
+│   ├── test_e2e.sh                 # End-to-end tests - runs E2E tests with PostgreSQL and browser automation
+│   ├── publish.sh                  # Publish packages - automates package publishing to PyPI (Post-MVP for modules)
+│   ├── version_tool.sh             # Version management - bumps version numbers across packages
+│   └── quickscale_legacy_symlink.sh # Legacy compatibility - manages symlinks for legacy QuickScale installations
 ├── tools/
 │   ├── codegen/
 │   └── quality/

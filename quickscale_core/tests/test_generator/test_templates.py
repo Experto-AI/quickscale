@@ -745,38 +745,44 @@ class TestEnvExampleContent:
         output = template.render(test_context)
         assert "ALLOWED_HOSTS=" in output
 
-    def test_allowed_hosts_includes_docker_address(self, jinja_env: Environment, test_context: dict[str, str]) -> None:
-        """Test that ALLOWED_HOSTS in .env.example includes 0.0.0.0 for Docker.
-        
+    def test_allowed_hosts_includes_docker_address(
+        self, jinja_env: Environment, test_context: dict[str, str]
+    ) -> None:
+        """
+        Test that ALLOWED_HOSTS in .env.example includes 0.0.0.0 for Docker.
+
         Regression test for: DisallowedHost error when accessing Django on 0.0.0.0:8000
         """
         template = jinja_env.get_template(".env.example.j2")
         output = template.render(test_context)
-        
+
         # Check that 0.0.0.0 is included for Docker compatibility
-        assert "0.0.0.0" in output, (
-            ".env.example should include 0.0.0.0 in ALLOWED_HOSTS for Docker containers"
-        )
+        assert (
+            "0.0.0.0" in output
+        ), ".env.example should include 0.0.0.0 in ALLOWED_HOSTS for Docker containers"
         # Verify standard localhost entries are also present
         assert "localhost" in output, ".env.example should include localhost"
         assert "127.0.0.1" in output, ".env.example should include 127.0.0.1"
 
-    def test_local_settings_includes_docker_address(self, jinja_env: Environment, test_context: dict[str, str]) -> None:
-        """Test that local.py settings includes 0.0.0.0 for Docker.
-        
+    def test_local_settings_includes_docker_address(
+        self, jinja_env: Environment, test_context: dict[str, str]
+    ) -> None:
+        """
+        Test that local.py settings includes 0.0.0.0 for Docker.
+
         Regression test for: DisallowedHost error when accessing Django on 0.0.0.0:8000
         """
         template = jinja_env.get_template("project_name/settings/local.py.j2")
         output = template.render(test_context)
-        
+
         # Check that 0.0.0.0 is included in ALLOWED_HOSTS for Docker compatibility
-        assert "0.0.0.0" in output, (
-            "local.py should include 0.0.0.0 in ALLOWED_HOSTS for Docker containers"
-        )
+        assert (
+            "0.0.0.0" in output
+        ), "local.py should include 0.0.0.0 in ALLOWED_HOSTS for Docker containers"
         # Also check for the catch-all wildcard for development flexibility
-        assert '"*"' in output or "'*'" in output, (
-            "local.py should allow all hosts (* wildcard) for development"
-        )
+        assert (
+            '"*"' in output or "'*'" in output
+        ), "local.py should allow all hosts (* wildcard) for development"
 
     def test_database_url(self, jinja_env: Environment, test_context: dict[str, str]) -> None:
         """Test .env.example includes DATABASE_URL with PostgreSQL."""

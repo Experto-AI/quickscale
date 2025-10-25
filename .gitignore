@@ -181,8 +181,9 @@ htmlcov/
 
 .vscode/
 .claude/
-.github/
-.github/prompts/roadmap-plan-review-and-update.prompt.md
+
+# Ignore AI prompts but keep workflows tracked
+.github/prompts/
 
 # LEGACY
 # symlink, not directory

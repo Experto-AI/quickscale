@@ -1,0 +1,60 @@
+name: Split Module Branches
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+jobs:
+  split-modules:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # Full history required for subtree split
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Configure git
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+      - name: Split auth module
+        run: |
+          if [ -d "quickscale_modules/auth" ]; then
+            git subtree split --prefix=quickscale_modules/auth -b splits/auth-module --rejoin
+            git push origin splits/auth-module --force
+            echo "✅ Split auth module to splits/auth-module"
+          else
+            echo "⚠️ quickscale_modules/auth directory not found, skipping"
+          fi
+
+      - name: Split billing module
+        run: |
+          if [ -d "quickscale_modules/billing" ]; then
+            git subtree split --prefix=quickscale_modules/billing -b splits/billing-module --rejoin
+            git push origin splits/billing-module --force
+            echo "✅ Split billing module to splits/billing-module"
+          else
+            echo "⚠️ quickscale_modules/billing directory not found, skipping"
+          fi
+
+      - name: Split teams module
+        run: |
+          if [ -d "quickscale_modules/teams" ]; then
+            git subtree split --prefix=quickscale_modules/teams -b splits/teams-module --rejoin
+            git push origin splits/teams-module --force
+            echo "✅ Split teams module to splits/teams-module"
+          else
+            echo "⚠️ quickscale_modules/teams directory not found, skipping"
+          fi
+
+      - name: Summary
+        run: |
+          echo "�� Module split complete!"
+          echo "Split branches created:"
+          git branch -r | grep "splits/" || echo "No split branches found"

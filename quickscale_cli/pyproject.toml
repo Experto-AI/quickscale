@@ -1,10 +1,9 @@
 [tool.poetry]
 name = "quickscale-cli"
-version = "0.61.0"
+version = "0.62.0"
 description = "Command-line interface for QuickScale Django project generator"
 authors = ["Experto AI <victor@experto.ai>"]
 license = "Apache-2.0"
-readme = "README.md"
 keywords = ["django", "cli", "project-generator", "saas"]
 homepage = "https://github.com/Experto-AI/quickscale"
 repository = "https://github.com/Experto-AI/quickscale"
@@ -26,7 +25,7 @@ packages = [{include = "quickscale_cli", from = "src"}]
 [tool.poetry.dependencies]
 python = "^3.10"
 click = "^8.1.0"
-quickscale-core = "^0.61.0"
+quickscale-core = {path = "../quickscale_core"}
 
 [tool.poetry.group.dev.dependencies]
 pytest = "^7.4.0"
@@ -105,5 +104,9 @@ show_error_codes = true
 module = "tests.*"
 disallow_untyped_defs = false
 check_untyped_defs = false
+
+[[tool.mypy.overrides]]
+module = "quickscale_core.*"
+ignore_missing_imports = true
 
 

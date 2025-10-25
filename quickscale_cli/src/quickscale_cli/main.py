@@ -8,13 +8,14 @@ import quickscale_cli
 import quickscale_core
 from quickscale_cli.commands.deployment_commands import deploy
 from quickscale_cli.commands.development_commands import down, logs, manage, ps, shell, up
+from quickscale_cli.commands.module_commands import embed, push, update
 from quickscale_core.generator import ProjectGenerator
 
 
 class InitCommand(click.Command):
     """Custom init command with enhanced error messages."""
 
-    def parse_args(self, ctx, args):
+    def parse_args(self, ctx: click.Context, args: list[str]) -> list[str]:
         """Override parse_args to provide better error messages."""
         try:
             return super().parse_args(ctx, args)
@@ -54,6 +55,11 @@ cli.add_command(ps)
 # Register deployment commands
 cli.add_command(deploy)
 
+# Register module management commands
+cli.add_command(embed)
+cli.add_command(update)
+cli.add_command(push)
+
 
 @cli.command(cls=InitCommand)
 @click.argument("project_name", required=True, metavar="PROJECT_NAME")
@@ -64,7 +70,7 @@ cli.add_command(deploy)
     help="Theme to use for the project (default: starter_html)",
 )
 def init(project_name: str, theme: str) -> None:
-    """
+    r"""
     Generate a new Django project with production-ready configurations.
 
     \b

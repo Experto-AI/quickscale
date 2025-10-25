@@ -1,0 +1,175 @@
+name: E2E Tests
+
+on:
+  # Manual trigger
+  workflow_dispatch:
+
+  # Run on release tags
+  push:
+    tags:
+      - 'v*'
+
+  # Optionally run on PRs to main (can be disabled)
+  pull_request:
+    branches: [ main ]
+    paths:
+      - 'quickscale_core/**'
+      - 'quickscale_cli/**'
+      - '.github/workflows/e2e.yml'
+
+jobs:
+  e2e-tests:
+    name: Full E2E Tests (PostgreSQL + Playwright)
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_DB: test_db
+          POSTGRES_USER: test_user
+          POSTGRES_PASSWORD: test_password
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Set up Python 3.12
+      uses: actions/setup-python@v5
+      with:
+        python-version: "3.12"
+
+    - name: Install Poetry
+      uses: snok/install-poetry@v1
+      with:
+        version: latest
+        virtualenvs-create: true
+        virtualenvs-in-project: true
+
+    - name: Install system dependencies
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y \
+          postgresql-client \
+          docker-compose
+
+    - name: Cache Poetry dependencies
+      uses: actions/cache@v4
+      with:
+        path: |
+          ~/.cache/pypoetry
+          .venv
+        key: ${{ runner.os }}-poetry-e2e-${{ hashFiles('**/poetry.lock') }}
+        restore-keys: |
+          ${{ runner.os }}-poetry-e2e-
+
+    - name: Install dependencies (quickscale_core)
+      working-directory: ./quickscale_core
+      run: |
+        poetry install --with dev
+
+    - name: Install Playwright browsers
+      working-directory: ./quickscale_core
+      run: |
+        poetry run playwright install --with-deps chromium
+
+    - name: Verify PostgreSQL connection
+      run: |
+        PGPASSWORD=test_password psql -h localhost -U test_user -d test_db -c "SELECT version();"
+
+    - name: Run E2E tests
+      working-directory: ./quickscale_core
+      env:
+        # Playwright configuration
+        PLAYWRIGHT_BROWSERS_PATH: ~/.cache/ms-playwright
+      run: |
+        poetry run pytest -m e2e \
+          --verbose \
+          --tb=short \
+          --maxfail=3 \
+          --cov=quickscale_core \
+          --cov-report=xml \
+          --cov-report=term-missing
+
+    - name: Upload E2E test screenshots
+      if: failure()
+      uses: actions/upload-artifact@v4
+      with:
+        name: e2e-screenshots
+        path: |
+          **/screenshots/
+          **/*screenshot*.png
+        retention-days: 7
+
+    - name: Upload E2E coverage
+      uses: codecov/codecov-action@v4
+      if: always()
+      with:
+        files: ./quickscale_core/coverage.xml
+        flags: e2e
+        name: codecov-e2e
+      env:
+        CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
+      continue-on-error: true
+
+    - name: Upload test results
+      if: always()
+      uses: actions/upload-artifact@v4
+      with:
+        name: e2e-test-results
+        path: |
+          quickscale_core/htmlcov/
+          quickscale_core/coverage.xml
+        retention-days: 30
+
+  docker-build-test:
+    name: Test Generated Project Docker Build
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Set up Python 3.12
+      uses: actions/setup-python@v5
+      with:
+        python-version: "3.12"
+
+    - name: Install Poetry
+      uses: snok/install-poetry@v1
+
+    - name: Install QuickScale
+      working-directory: ./quickscale_cli
+      run: |
+        poetry install
+
+    - name: Generate test project
+      run: |
+        cd /tmp
+        poetry -C $GITHUB_WORKSPACE/quickscale_cli run quickscale init test_docker_project
+
+    - name: Verify Dockerfile exists
+      run: |
+        test -f /tmp/test_docker_project/Dockerfile
+        test -f /tmp/test_docker_project/docker-compose.yml
+
+    - name: Validate docker-compose configuration
+      working-directory: /tmp/test_docker_project
+      run: |
+        docker-compose config
+
+    - name: Build Docker image (no push)
+      working-directory: /tmp/test_docker_project
+      run: |
+        docker build -t test_docker_project:test .
+
+    - name: Verify image was created
+      run: |
+        docker images | grep test_docker_project

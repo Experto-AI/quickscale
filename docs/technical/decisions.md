@@ -304,13 +304,21 @@ Other documents (README.md, roadmap.md, scaffolding.md, commercial.md) MUST refe
 - ❌ NO Flake8 (use Ruff check)
 
 **Scripts Reference (AI Assistant Guidance):**
-- `./scripts/install_global.sh` - Install Poetry globally using official installer (REQUIRED: avoids version conflicts)
-- `./scripts/bootstrap.sh` - Initial project setup (install dependencies, configure pre-commit hooks)
-- `./scripts/lint.sh` - Run Ruff format + check across all packages
-- `./scripts/test_all.sh` - Execute full test suite across quickscale_core, quickscale_cli, and all modules
-- `./scripts/release.py` - Automate version bumping and release workflow
+- `./scripts/install_global.sh` - **Install Poetry globally** - use official installer (REQUIRED FIRST: avoids version conflicts, DO NOT use pip/pipx)
+- `./scripts/bootstrap.sh` - **Initial setup** - installs all dependencies and configures pre-commit hooks (run after install_global.sh)
+- `./scripts/lint.sh` - **Format and lint** - runs Ruff format + check across all packages (replaces Black + Flake8)
+- `./scripts/test_all.sh` - **Test all packages** - executes full test suite across quickscale_core, quickscale_cli, and modules
+- `./scripts/test_e2e.sh` - **End-to-end tests** - runs E2E tests with PostgreSQL container and browser automation (slow, for release validation)
+- `./scripts/publish.sh` - **Publish to PyPI** - automates package publishing workflow (Post-MVP for modules)
+- `./scripts/version_tool.sh` - **Version management** - bumps version numbers across all packages consistently
+- `./scripts/quickscale_legacy_symlink.sh` - **Legacy compatibility** - manages symlinks for legacy QuickScale installations
 
-**AI Assistant Rule:** NEVER install Poetry via pip/pipx. ALWAYS use `./scripts/install_global.sh` first to avoid version conflicts.
+**AI Assistant Rules:**
+- ✅ ALWAYS use `./scripts/install_global.sh` FIRST (never pip install poetry / pipx install poetry)
+- ✅ Use `./scripts/lint.sh` for formatting (DO NOT use black or flake8 directly)
+- ✅ Use `./scripts/test_all.sh` for running tests (DO NOT use pytest directly on individual packages without coordination)
+- ✅ Use `./scripts/test_e2e.sh` for E2E validation before releases (DO NOT skip for production releases)
+- ❌ NEVER install Poetry via pip/pipx (causes version conflicts with system Poetry)
 
 ### CLI Commands {#cli-command-matrix}
 

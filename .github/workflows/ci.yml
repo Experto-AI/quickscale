@@ -1,0 +1,114 @@
+name: CI
+
+on:
+  push:
+    branches: [ main, develop ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  test:
+    name: Run Tests (Unit + Integration)
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python-version: ["3.12"]
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Set up Python ${{ matrix.python-version }}
+      uses: actions/setup-python@v5
+      with:
+        python-version: ${{ matrix.python-version }}
+
+    - name: Install Poetry
+      uses: snok/install-poetry@v1
+      with:
+        version: latest
+        virtualenvs-create: true
+        virtualenvs-in-project: true
+
+    - name: Cache Poetry dependencies
+      uses: actions/cache@v4
+      with:
+        path: |
+          ~/.cache/pypoetry
+          .venv
+        key: ${{ runner.os }}-poetry-${{ hashFiles('**/poetry.lock') }}
+        restore-keys: |
+          ${{ runner.os }}-poetry-
+
+    - name: Install dependencies (quickscale_core)
+      working-directory: ./quickscale_core
+      run: |
+        poetry install --with dev
+
+    - name: Install dependencies (quickscale_cli)
+      working-directory: ./quickscale_cli
+      run: |
+        poetry install --with dev
+
+    - name: Run linting (ruff)
+      working-directory: ./quickscale_core
+      run: |
+        poetry run ruff check .
+        poetry run ruff format --check .
+
+    - name: Run type checking (mypy)
+      working-directory: ./quickscale_core
+      run: |
+        poetry run mypy src/
+
+    - name: Run tests (quickscale_core) - Unit & Integration only
+      working-directory: ./quickscale_core
+      run: |
+        poetry run pytest -m "not e2e" --cov=quickscale_core --cov-report=xml --cov-report=term
+
+    - name: Run tests (quickscale_cli)
+      working-directory: ./quickscale_cli
+      run: |
+        poetry run pytest --cov=quickscale_cli --cov-report=xml --cov-report=term
+
+    - name: Upload coverage reports
+      uses: codecov/codecov-action@v4
+      if: always()
+      with:
+        files: ./quickscale_core/coverage.xml,./quickscale_cli/coverage.xml
+        flags: unittests,integration
+        name: codecov-umbrella
+      env:
+        CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
+      continue-on-error: true
+
+  lint-cli:
+    name: Lint CLI Package
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Set up Python 3.12
+      uses: actions/setup-python@v5
+      with:
+        python-version: "3.12"
+
+    - name: Install Poetry
+      uses: snok/install-poetry@v1
+
+    - name: Install dependencies
+      working-directory: ./quickscale_cli
+      run: poetry install --with dev
+
+    - name: Run linting
+      working-directory: ./quickscale_cli
+      run: |
+        poetry run ruff check .
+        poetry run ruff format --check .
+
+    - name: Run type checking
+      working-directory: ./quickscale_cli
+      run: |
+        poetry run mypy src/

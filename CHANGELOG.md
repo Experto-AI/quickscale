@@ -2,6 +2,7 @@
 
 See docs/releases/ for detailed release notes.
 
+- v0.62.0 — 2025-10-25 — Split Branch Infrastructure (module management CLI commands, GitHub Actions automation)
 - v0.61.0 — 2025-10-24 — Theme System Foundation (--theme CLI flag, theme abstraction layer, HTML theme)
 - v0.60.0 — 2025-10-19 — Railway Deployment Support (automated deployment via quickscale deploy railway)
 - v0.59.0 — 2025-10-18 — CLI Development Commands (Docker/Django operation wrappers)

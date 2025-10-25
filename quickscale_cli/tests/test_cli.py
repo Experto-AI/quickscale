@@ -140,7 +140,7 @@ def test_init_command_comprehensive_error_scenarios(cli_runner):
     2. Running 'quickscale init --theme starter_html' without project name
     3. Running 'quickscale init --theme starter_htmx' without project name
     4. Running 'quickscale init --theme starter_react' without project name
-    
+
     All should show helpful error messages with usage examples.
     """
     # Scenario 1: No arguments at all
@@ -178,11 +178,12 @@ def test_init_command_comprehensive_error_scenarios(cli_runner):
 
 
 def test_init_command_unimplemented_themes(cli_runner):
-    """Test init command rejects unimplemented themes with clean error message.
-    
+    """
+    Test init command rejects unimplemented themes with clean error message.
+
     This test ensures that when users try to use themes that are not yet implemented,
     they get a helpful error message without the "Unexpected error" bug.
-    
+
     Regression test for: Issue where click.Abort() was caught by generic Exception handler,
     resulting in "❌ Unexpected error: " message with no actual error text.
     """
@@ -204,7 +205,9 @@ def test_init_command_unimplemented_themes(cli_runner):
 
     # Test that the default theme still works
     with cli_runner.isolated_filesystem():
-        result = cli_runner.invoke(cli, ["init", "testproj3", "--theme", "starter_html"], catch_exceptions=False)
+        result = cli_runner.invoke(
+            cli, ["init", "testproj3", "--theme", "starter_html"], catch_exceptions=False
+        )
         assert result.exit_code == 0
         assert "Created project: testproj3" in result.output
 
