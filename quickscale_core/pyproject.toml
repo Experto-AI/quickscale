@@ -39,6 +39,7 @@ psycopg2-binary = "^2.9.0"
 pyyaml = "^6.0.0"
 ruff = "^0.6.0"
 mypy = "^1.8.0"
+types-pyyaml = "^6.0.0"
 
 [build-system]
 requires = ["poetry-core"]
@@ -116,4 +117,3 @@ show_error_codes = true
 module = "tests.*"
 disallow_untyped_defs = false
 check_untyped_defs = false
-
