@@ -80,8 +80,8 @@ This strategy builds the theme system infrastructure upfront, delivers core modu
 **Phase 1: Foundation + Core Modules (HTML Theme Only)**
 - ✅ **v0.61.0**: Theme System Foundation - `--theme` flag, theme abstraction layer, ships with HTML theme only (Released October 24, 2025)
 - ✅ **v0.62.0**: Split Branch Infrastructure - Module management commands (`embed/update/push`), GitHub Actions automation (Released October 25, 2025)
-- **v0.63.0**: `quickscale_modules.auth` - django-allauth integration (basic auth, NO social providers) - HTML theme only 🎯 **NEXT**
-- **v0.64.0**: `quickscale_modules.auth` - Email verification, social auth providers, production email flows - HTML theme only
+- **v0.63.0**: `quickscale_modules.auth` - django-allauth integration (basic auth only) - HTML theme only 🎯 **NEXT**
+- **v0.64.0**: `quickscale_modules.auth` - Email verification & production email flows - HTML theme only
 - **v0.65.0**: `quickscale_modules.billing` - dj-stripe subscriptions - HTML theme only
 - **v0.66.0**: `quickscale_modules.teams` - Multi-tenancy patterns - HTML theme only 🎯 **SAAS FEATURE PARITY MILESTONE**
 
@@ -107,6 +107,137 @@ This strategy builds the theme system infrastructure upfront, delivers core modu
 
 ---
 
+## 🔧 Module Configuration Strategy (v0.63.0+)
+
+### Overview
+Modules require configuration when embedded (e.g., auth signup enabled/disabled, billing plan defaults). QuickScale uses a **two-phase approach** for module configuration:
+
+- **Phase 1 (MVP: v0.63.0-v0.66.0)**: Interactive prompts during `embed` command
+- **Phase 2 (Post-MVP: v1.0.0+)**: Optional YAML configuration file support
+
+This balances MVP simplicity (no YAML overhead) with good UX (not forcing manual settings editing).
+
+### Phase 1: Interactive Embed Configuration (MVP, v0.63.0+)
+
+**When**: Immediately, starting with v0.63.0 auth module
+
+**How it works**:
+```bash
+$ quickscale embed --module auth
+📦 Embedding auth module from splits/auth-module...
+
+# Interactive prompts based on module requirements
+? Enable user registration? (y/n) [y]: y
+? Email verification required? (y/n) [n]: n
+? Custom User model fields? (y/n) [n]: n
+
+✅ Module 'auth' embedded successfully!
+
+Automatic changes made:
+  ✅ Added 'modules.auth' to INSTALLED_APPS
+  ✅ Added allauth configuration to settings
+  ✅ Added auth URLs to urls.py
+  ✅ Created initial migration
+  
+Next steps:
+  1. Review module code in modules/auth/
+  2. Run migrations: python manage.py migrate
+  3. Visit http://localhost:8000/accounts/login
+```
+
+**Benefits**:
+- ✅ No manual settings editing required
+- ✅ All configuration choices documented automatically
+- ✅ Works for 2-3 modules without feeling tedious
+- ✅ MVP-aligned (no YAML complexity)
+- ✅ Clear, self-documenting UX
+
+**Scalability**: Works well up to ~3-5 modules. Beyond that, YAML becomes valuable (Post-MVP).
+
+### Phase 2: YAML Configuration (Post-MVP, v1.0.0+)
+
+**When**: After 5+ modules with complex interactions; optional convenience feature
+
+**Why defer to Post-MVP**:
+- 📋 MVP focuses on core 3 modules (auth, billing, teams) — interactive prompts work fine
+- 🎯 Complexity threshold not reached until v0.67.0+ with multiple themes
+- 🚀 Faster to ship MVP with simple interactive UX than build YAML system
+- 🔄 Interactive approach creates foundation for YAML (same config options)
+
+**Future workflow** (v1.0.0 example):
+```yaml
+# quickscale.yml (v1.0.0+)
+version: "1.0"
+project_name: "myapp"
+theme: "starter_react"
+
+# One-time init with config file
+modules:
+  auth:
+    enabled: true
+    config:
+      ACCOUNT_ALLOW_REGISTRATION: true
+      ACCOUNT_EMAIL_VERIFICATION: "optional"
+  
+  billing:
+    enabled: true
+    config:
+      STRIPE_API_KEY: "${STRIPE_API_KEY}"  # From .env
+      BILLING_CURRENCY: "usd"
+
+# Usage: quickscale init myproject --config quickscale.yml
+```
+
+**Then**: Existing `embed` command still works interactively for adding modules post-init.
+
+### Implementation Notes for Module Developers
+
+**In v0.63.0+, when creating a module's embed handler**:
+
+1. **Define configuration options** as a list of click.confirm/click.prompt questions
+2. **Store configuration state** in `.quickscale/config.yml` (module tracking)
+3. **Apply configuration** to:
+   - `INSTALLED_APPS` (add module)
+   - `settings/*.py` (module-specific settings)
+   - `urls.py` (include module URLs)
+   - Django migrations (run initial migration)
+4. **Document all options** in module README.md
+5. **Make defaults sensible** (e.g., "Allow registration? [y]" defaults to yes)
+
+**Example: Auth module v0.63.0 configuration**
+```python
+# quickscale_cli/commands/module_commands.py (auth-specific logic)
+
+def embed_auth_module(remote: str) -> None:
+    # Interactive prompts
+    allow_signup = click.confirm("Enable user registration?", default=True)
+    email_verification = click.confirm("Email verification required?", default=False)
+    custom_fields = click.confirm("Add custom User fields?", default=False)
+    
+    # Run git subtree
+    run_git_subtree_add(...)
+    
+    # Update settings.py automatically
+    settings_updates = {
+        "ACCOUNT_ALLOW_REGISTRATION": allow_signup,
+        "ACCOUNT_EMAIL_VERIFICATION": "mandatory" if email_verification else "none",
+    }
+    apply_settings_updates(settings_updates)
+    
+    # Track in config
+    add_module("auth", config=settings_updates)
+    
+    # Run migrations
+    run_migrations()
+```
+
+### Decision Reference
+- 📄 [decisions.md: Module & Theme Architecture](./decisions.md#module-theme-architecture)
+- 📄 [decisions.md: MVP Feature Matrix](./decisions.md#mvp-feature-matrix-authoritative) — YAML explicitly OUT (Post-MVP)
+- 📄 [scaffolding.md: Post-MVP YAML Config](./scaffolding.md#post-mvp-structure)
+
+---
+
 ### **v0.63.0: `quickscale_modules.auth` - Authentication Module (Basic Auth)**
 
 **Objective**: Create reusable authentication module wrapping django-allauth with custom User model patterns. HTML theme only. Basic authentication flows without social providers.
@@ -122,11 +253,9 @@ This strategy builds the theme system infrastructure upfront, delivers core modu
 - ✅ **IN**: Password management (change password, reset password)
 - ✅ **IN**: Account management (profile view/edit, account deletion)
 - ✅ **IN**: HTML theme templates only
-- ❌ **OUT**: Social auth providers (Google, GitHub, Facebook) → v0.64.0
 - ❌ **OUT**: Email verification workflows → v0.64.0
 - ❌ **OUT**: Production email configuration → v0.64.0
 - ❌ **OUT**: HTMX/React theme variants → v0.67.0/v0.68.0
-- ❌ **OUT**: 2FA/MFA → Future release
 - ❌ **OUT**: Advanced permissions → teams module (v0.66.0)
 
 **Competitive Context**: Matches SaaS Pegasus auth foundation without email verification. Validates module architecture before expanding features.
@@ -174,14 +303,23 @@ quickscale_modules/auth/
     └── test_adapters.py        # Allauth adapter tests
 ```
 
-**Implementation Tasks** (11 Task Groups):
+**Implementation Tasks** (12 Task Groups):
 
 **1. Module Scaffolding & Configuration** (Foundation)
 - [ ] Create `pyproject.toml` for auth module (Poetry config, dependencies)
 - [ ] Add django-allauth to module dependencies (specify version range)
 - [ ] Create `apps.py` with `QuickscaleAuthConfig(AppConfig)` and `app_label = "quickscale_modules_auth"`
 - [ ] Create `__init__.py` with `default_app_config` and module version
-- [ ] Update module README.md with installation instructions and usage examples
+- [ ] Update module README.md with installation instructions, usage examples, and configuration options
+- [ ] **NEW (Interactive Config)**: Implement auth-specific embed handler in `quickscale_cli/commands/module_commands.py`
+  - [ ] Define interactive prompts: "Enable registration?", "Email verification required?", "Custom User fields?"
+  - [ ] Implement configuration to automatically update:
+    - [ ] Add `modules.auth` to INSTALLED_APPS in settings.py
+    - [ ] Add allauth settings based on user responses (ACCOUNT_ALLOW_REGISTRATION, ACCOUNT_EMAIL_VERIFICATION, etc.)
+    - [ ] Include allauth URLs in urls.py (`django.contrib.sites`, `allauth.urls`)
+    - [ ] Track configuration in `.quickscale/config.yml` (module version, embed date, user choices)
+  - [ ] Automatically run initial migrations after embedding
+  - [ ] Provide clear success message with next steps
 
 **2. Custom User Model** (Core Data Layer)
 - [ ] Create `models.py` with `User(AbstractUser)` extending Django's AbstractUser
@@ -337,10 +475,8 @@ quickscale_modules/auth/
 - HTML theme from v0.61.0
 
 **Known Limitations** (Documented in README):
-- Social auth providers deferred to v0.64.0
 - Email verification deferred to v0.64.0
 - HTMX/React themes deferred to v0.67.0/v0.68.0
-- 2FA/MFA not included (future release)
 
 ---
 
@@ -783,12 +919,12 @@ def run_git_subtree_pull(prefix: str, remote: str, branch: str) -> None:
 
 **Phase 2 Priorities** (see [competitive_analysis.md Module Roadmap](../overview/competitive_analysis.md#phase-2-post-mvp-v1---saas-essentials)):
 
-1. **🔴 P1: `quickscale_modules.auth`** (First module - split across v0.62.0 and v0.63.0)
-   - v0.62.0: Core django-allauth integration with social auth providers (Google, GitHub)
-   - v0.62.0: Custom User model patterns and account management views
-   - v0.63.0: Production email verification workflows and deliverability
+1. **🔴 P1: `quickscale_modules.auth`** (First module - core features only)
+   - v0.63.0: Core django-allauth integration (email/password auth only)
+   - v0.63.0: Custom User model patterns and account management views
+   - v0.64.0: Production email verification workflows and deliverability
    - **Rationale**: Every SaaS needs auth; Pegasus proves django-allauth is correct choice
-   - **Delivery Phasing**: Split to validate module patterns (v0.62.0) then complete production email (v0.63.0)
+   - **Delivery Phasing**: Validate basic auth patterns (v0.63.0) then add email (v0.64.0)
 
 2. **🔴 P1: `quickscale_modules.billing`** (v0.64.0)
    - Wraps dj-stripe for Stripe subscriptions

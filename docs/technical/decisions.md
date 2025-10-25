@@ -217,6 +217,98 @@ quickscale_core/generator/templates/
 
 ---
 
+### Module Configuration Strategy {#module-configuration-strategy}
+
+**Architectural Decision (v0.63.0):** Modules require configuration when embedded. QuickScale uses a **two-phase approach**:
+
+#### **Phase 1 (MVP): Interactive Prompts During Embed**
+
+**When**: v0.63.0 through v0.66.0 (core 3 modules)
+
+**How**:
+- `quickscale embed --module auth` → asks interactive questions → applies configuration automatically
+- User does NOT manually edit settings.py, urls.py, or INSTALLED_APPS
+- Configuration is tracked in `.quickscale/config.yml`
+
+**Example**:
+```bash
+$ quickscale embed --module auth
+? Enable user registration? (y/n) [y]: y
+? Email verification required? (y/n) [n]: n
+
+✅ Module 'auth' embedded successfully!
+Automatic changes made:
+  ✅ Added 'modules.auth' to INSTALLED_APPS
+  ✅ Added allauth configuration to settings
+  ✅ Added auth URLs to urls.py
+  ✅ Ran initial migrations
+```
+
+**Benefits for MVP**:
+- ✅ Simple, self-documenting UX (no YAML complexity)
+- ✅ Scales well for 2-3 modules (auth, billing, teams)
+- ✅ No manual settings editing required
+- ✅ Creates foundation for YAML (same config options)
+
+**Constraints**:
+- ❌ NOT suitable for 10+ modules with many options (complexity threshold ~5 modules)
+- ❌ NOT suitable for batch initialization (one module at a time)
+
+**Implementation Requirements**:
+1. Each module defines configuration prompts (via click.confirm/click.prompt)
+2. Embed handler automatically updates:
+   - INSTALLED_APPS in settings.py
+   - Module-specific settings (e.g., ACCOUNT_ALLOW_REGISTRATION)
+   - urls.py (include module URLs)
+   - Runs initial migration (`python manage.py migrate`)
+3. Configuration state stored in `.quickscale/config.yml` for tracking/updates
+
+**When to Use Interactive Config** (MVP guidance):
+- ✅ Simple yes/no options (enable registration, require verification)
+- ✅ 1-3 modules being embedded
+- ✅ User wants "quick setup" without thinking about config
+
+---
+
+#### **Phase 2 (Post-MVP): YAML Configuration (Optional)**
+
+**When**: v1.0.0+ (optional convenience feature)
+
+**Why Defer**:
+- 📋 MVP MVP focuses on 3 core modules — interactive prompts work fine
+- 🎯 Complexity threshold not reached until 5+ modules
+- 🚀 Faster to ship MVP with simple interactive UX
+- 🔄 Interactive approach creates foundation for YAML
+
+**Future workflow** (v1.0.0+):
+```yaml
+# quickscale.yml (optional, v1.0.0+)
+version: "1.0"
+modules:
+  auth:
+    ACCOUNT_ALLOW_REGISTRATION: true
+    ACCOUNT_EMAIL_VERIFICATION: "optional"
+  billing:
+    STRIPE_API_KEY: "${STRIPE_API_KEY}"
+    BILLING_CURRENCY: "usd"
+
+# Usage: quickscale embed --config quickscale.yml
+# OR: quickscale init myproject --config quickscale.yml
+```
+
+**Backward Compatibility**:
+- Interactive prompts always work (even after YAML support added)
+- YAML is optional convenience, not required
+- Existing `embed` commands continue unchanged
+
+**Decision Rule**:
+- **MVP (v0.63.0-v0.66.0)**: Interactive prompts ONLY, no YAML
+- **Post-MVP (v1.0.0+)**: YAML support optional, interactive prompts unchanged
+
+**Authoritative Reference**: [roadmap.md §Module Configuration Strategy](./roadmap.md#-module-configuration-strategy-v06300)
+
+---
+
 **Post-MVP (v1.0.0+):**
 - 📦 `quickscale_modules/*`: Optional PyPI packages (for easier installation)
 - 📦 `quickscale_themes/*`: Optional PyPI packages (alternative to generator templates)
@@ -254,7 +346,8 @@ Other documents (README.md, roadmap.md, scaffolding.md, commercial.md) MUST refe
 | `quickscale_core` embedding via git-subtree (manual documented workflow) | IN (manual) | Manual subtree commands are documented and supported; embedding is opt-in and advanced. |
 | CLI development commands (`up`, `down`, `shell`, `manage`, `logs`, `ps`) | IN (v0.59.0) | User-friendly wrappers for Docker/Django operations to improve developer experience. |
 | `quickscale init --theme <name>` flag | IN (v0.61.0) | Theme selection during init (starter_html/starter_htmx/starter_react). Themes are one-time copy, not embedded. |
-| CLI module management commands (`embed --module`, `update`, `push`) | IN (v0.62.0) | Module embed/update via split branches. See split branch architecture below. |
+| CLI module management commands (`embed --module`, `update`, `push`) | IN (v0.62.0) | Module embed/update via split branches. **Starting v0.63.0**: Interactive prompts for module configuration (user doesn't manually edit settings.py). See [§Module Configuration Strategy](#module-configuration-strategy). |
+| Module configuration (interactive prompts, not YAML) | IN (v0.63.0+) | Modules configured via interactive questions during embed (`--module auth`). YAML support deferred to Post-MVP (v1.0.0+). See [§Module Configuration Strategy](#module-configuration-strategy). |
 | Settings inheritance from `quickscale_core` into generated project | OPTIONAL | Default generated project uses standalone `settings.py`. If user explicitly embeds `quickscale_core`, optional settings inheritance is allowed and documented. |
 | **PRODUCTION-READY FOUNDATIONS (Competitive Requirement)** | | **See [competitive_analysis.md §1-3](../overview/competitive_analysis.md#-critical-for-mvp-viability-must-have)** |
 | Docker setup (Dockerfile + docker-compose.yml) | IN | Production-ready multi-stage Dockerfile + local dev docker-compose with PostgreSQL & Redis services. Match Cookiecutter quality. |
@@ -271,7 +364,7 @@ Other documents (README.md, roadmap.md, scaffolding.md, commercial.md) MUST refe
 | `quickscale_modules/` (split branch distribution) | IN (v0.62.0+) | Modules distributed via git subtree split branches. Embed with `quickscale embed --module <name>`. |
 | Themes (HTML, HTMX, React) | IN (v0.61.0+) | Generator templates, one-time copy during init. User owns generated code, no updates. |
 | `quickscale_themes/` packaged themes | OUT (Post-MVP) | Themes as PyPI packages is Post-MVP. Current: generator templates only. |
-| YAML declarative configuration (`quickscale.yml`) | OUT (Post-MVP) | Deferred. |
+| YAML declarative configuration (`quickscale.yml`) | OUT (Post-MVP) | **v0.63.0-v0.66.0**: Use interactive prompts instead. **v1.0.0+**: YAML optional convenience feature. See [§Module Configuration Strategy](#module-configuration-strategy). |
 | PyPI / private-registry distribution for commercial modules | OUT (Post-MVP) | Commercial distribution is Post-MVP (see commercial.md). |
 
 **Notes:**

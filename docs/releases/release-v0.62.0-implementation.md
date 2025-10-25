@@ -284,8 +284,7 @@ jobs:
 **Coming in**: v0.63.0
 
 **Planned Features**:
-- django-allauth integration
-- Social auth providers (Google, GitHub, Facebook)
+- django-allauth integration (email/password auth only)
 - Custom User model patterns
 - Account management views
 - Email verification workflows

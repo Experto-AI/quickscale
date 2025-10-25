@@ -347,7 +347,7 @@ These are table-stakes features that every competitor has. Without them, QuickSc
 **Priority**: P0 - Core SaaS requirement
 
 **Must incorporate:**
-- ✅ **django-allauth integration** - Social auth, email verification, password reset workflows
+- ✅ **django-allauth integration** - Email/password authentication, password reset workflows
 - ✅ **Custom User model scaffold** - Best practices from django-cookiecutter (AbstractUser extension)
 - ✅ **Email confirmation flow** - Production-ready email verification with templates
 - ✅ **Account management** - Profile editing, password change, account deletion
@@ -595,7 +595,6 @@ quickscale init myapp
 quickscale_modules/
 ├── auth/                    # P1 - First module
 │   ├── django-allauth integration
-│   ├── social auth providers (Google, GitHub)
 │   ├── email verification workflows
 │   └── account management views
 │
@@ -819,7 +818,7 @@ The table below consolidates the repository's release-to-feature mapping and com
 | v0.60.0 | Railway Deployment Support (`quickscale deploy railway`) | Production deployment CLI | Deployment automation | Cloud deployment CLI parity | Railway deployment automation | PaaS deployment CLI command |
 | v0.61.0 | CLI Git Subtree Wrappers | Core workflow automation | N/A | CLI update workflow | Update workflow parity | Update command automation |
 | v0.62.0 | Update Workflow Validation | Update safety | N/A | Safe updates validated | Update safety parity | Update isolation verified |
-| v0.63.0 | Auth Module (`quickscale_modules.auth`) | Closing feature gap | django-allauth + custom user (parity) | Social OAuth/2FA support parity | Matches Pegasus auth (social login, email verification) | Matches Ready SaaS auth features |
+| v0.63.0 | Auth Module (`quickscale_modules.auth`) | Closing feature gap | django-allauth + custom user (parity) | Email verification parity | Matches Pegasus auth (email verification) | Matches Ready SaaS auth features |
 | v0.64.0 | Billing Module (`quickscale_modules.billing`) | Near parity | Billing scaffolding (Stripe via dj-stripe) | Full Stripe subscriptions & management parity | Matches Pegasus billing (dj-stripe, webhooks) | Matches Ready SaaS billing (Stripe) |
 | v0.65.0 | Teams Module (`quickscale_modules.teams`) | 🎯 SaaS Feature Parity | Teams/roles patterns (if required) | Multi-tenancy & roles parity | Matches Pegasus teams (invitations, roles, tenant patterns) | Matches Ready SaaS team features |
 | v0.66.0+ | Additional Modules | Differentiation & ecosystem growth | Optional integrations: Celery, Anymail, storage | Email templates, scheduling, Storybook parity | Notifications, API scaffolding parity | Notifications/email parity |
