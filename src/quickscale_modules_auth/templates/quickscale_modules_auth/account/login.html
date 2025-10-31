@@ -1,0 +1,48 @@
+{% extends "quickscale_modules_auth/base.html" %}
+
+{% block title %}Sign In - QuickScale{% endblock %}
+
+{% block header %}Sign In{% endblock %}
+
+{% block content %}
+<div class="auth-form-container">
+    <h2>Welcome Back</h2>
+    <p class="auth-subtitle">Sign in to your account</p>
+
+    <form method="post" class="auth-form" novalidate>
+        {% csrf_token %}
+
+        {% if form.non_field_errors %}
+        <div class="form-errors">
+            {% for error in form.non_field_errors %}
+            <p class="error">{{ error }}</p>
+            {% endfor %}
+        </div>
+        {% endif %}
+
+        {% for field in form %}
+        <div class="form-group {% if field.errors %}has-error{% endif %}">
+            <label for="{{ field.id_for_label }}">{{ field.label }}</label>
+            {{ field }}
+            {% if field.errors %}
+                {% for error in field.errors %}
+                <span class="error-message">{{ error }}</span>
+                {% endfor %}
+            {% endif %}
+            {% if field.help_text %}
+            <small class="form-text">{{ field.help_text }}</small>
+            {% endif %}
+        </div>
+        {% endfor %}
+
+        <div class="form-actions">
+            <button type="submit" class="btn btn-primary">Sign In</button>
+        </div>
+    </form>
+
+    <div class="auth-links">
+        <p><a href="{% url 'account_reset_password' %}">Forgot your password?</a></p>
+        <p>Don't have an account? <a href="{% url 'account_signup' %}">Sign up</a></p>
+    </div>
+</div>
+{% endblock %}
