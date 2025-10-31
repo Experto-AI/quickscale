@@ -61,7 +61,7 @@ Guiding principles:
 > - ❌ NOT part of generated user projects
 > - ✅ OPTIONAL personal monorepo convention only
 > - ✅ Used by maintainers for code organization
-> 
+>
 > **When generating code:** DO NOT create `quickscale_modules/` directory unless:
 > 1. User explicitly maintains a personal monorepo, AND
 > 2. User explicitly requests module extraction, AND
@@ -207,7 +207,7 @@ quickscale/ (your private repo)
 │       │       └── pyproject.toml.j2
 │       └── utils/
 ├── quickscale_cli/                  # Minimal CLI for `quickscale init` (CLI source for maintainers)
-│   
+│
 │   └── src/quickscale_cli/
 │       ├── main.py
 │       └── commands/init.py

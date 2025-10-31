@@ -824,7 +824,7 @@ The table below consolidates the repository's release-to-feature mapping and com
 | v0.66.0+ | Additional Modules | Differentiation & ecosystem growth | Optional integrations: Celery, Anymail, storage | Email templates, scheduling, Storybook parity | Notifications, API scaffolding parity | Notifications/email parity |
 | v1.0.0+ | Community Platform | Optional marketplace capabilities | N/A (Cookiecutter not a marketplace) | N/A (Apptension not marketplace) | Community/marketplace parity (if pursued) | N/A |
 
-Notes: rows mark where QuickScale aims to provide comparable functionality; exact scope may vary (e.g., we intentionally avoid Wagtail integration for MVP while matching core SaaS features). 
+Notes: rows mark where QuickScale aims to provide comparable functionality; exact scope may vary (e.g., we intentionally avoid Wagtail integration for MVP while matching core SaaS features).
 
 ## See Also
 
@@ -832,5 +832,3 @@ Notes: rows mark where QuickScale aims to provide comparable functionality; exac
 - [decisions.md](../technical/decisions.md) - Technical architecture decisions
 - [roadmap.md](../technical/roadmap.md) - Development timeline
 - [commercial.md](../overview/commercial.md) - Commercial extension strategy
-
-

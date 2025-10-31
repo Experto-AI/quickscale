@@ -1,8 +1,8 @@
 # Review Report: v0.61.0 - Theme System Foundation
 
 **Task**: Implement theme selection system with `--theme` flag. Refactor existing templates into theme directory structure. Ships with HTML theme only, establishing foundation for future HTMX and React themes.
-**Release**: v0.61.0  
-**Review Date**: 2025-10-24  
+**Release**: v0.61.0
+**Review Date**: 2025-10-24
 **Reviewer**: AI Code Assistant
 
 ---
@@ -277,7 +277,7 @@ if template_dir is None:
     # Try to find templates in development environment first
     import quickscale_core
     package_dir = Path(quickscale_core.__file__).parent
-    
+
     # Check if we're in development (source directory exists)
     dev_template_dir = package_dir / "generator" / "templates"
     if dev_template_dir.exists():
@@ -445,9 +445,9 @@ def test_generate_with_default_theme(self, tmp_path):
     generator = ProjectGenerator()
     project_name = "testproject"
     output_path = tmp_path / project_name
-    
+
     generator.generate(project_name, output_path)
-    
+
     # Verify frontend templates exist
     assert (output_path / "templates" / "base.html").exists()
 ```
@@ -513,9 +513,9 @@ def test_generated_output_matches_v060(self, tmp_path):
     generator = ProjectGenerator(theme="starter_html")
     project_name = "testproject"
     output_path = tmp_path / project_name
-    
+
     generator.generate(project_name, output_path)
-    
+
     # List of files that should exist (from v0.60.0)
     expected_files = [
         "README.md",
@@ -523,7 +523,7 @@ def test_generated_output_matches_v060(self, tmp_path):
         "pyproject.toml",
         # ... (complete list)
     ]
-    
+
     for file_path in expected_files:
         assert (output_path / file_path).exists(), f"Missing file: {file_path}"
 ```
@@ -1029,16 +1029,16 @@ def _resolve_template_directory(self) -> Path:
 1. **Update User Manual** (`docs/technical/user_manual.md`):
    ```markdown
    ## Theme Selection
-   
+
    Choose a theme when initializing your project:
-   
+
    ```bash
    # Use default HTML theme
    quickscale init myproject
-   
+
    # Explicitly select HTML theme
    quickscale init myproject --theme starter_html
-   
+
    # Future themes (coming soon)
    quickscale init myproject --theme starter_htmx  # v0.67.0
    quickscale init myproject --theme starter_react # v0.68.0
@@ -1048,11 +1048,11 @@ def _resolve_template_directory(self) -> Path:
 2. **Update README.md** (Quick Start section):
    ```markdown
    ## Quick Start
-   
+
    ```bash
    # Create your first project
    quickscale init myapp
-   
+
    # Or choose a theme (coming soon: starter_htmx, starter_react)
    quickscale init myapp --theme starter_html
    ```
@@ -1134,6 +1134,6 @@ def _resolve_template_directory(self) -> Path:
 
 ---
 
-**Reviewed by**: AI Code Assistant  
-**Review Prompt**: roadmap-task-review.prompt.md  
+**Reviewed by**: AI Code Assistant
+**Review Prompt**: roadmap-task-review.prompt.md
 **Review Completed**: 2025-10-24

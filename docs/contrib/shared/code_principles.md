@@ -94,14 +94,14 @@ class Rectangle(Shape):
     def __init__(self, width, height):
         self.width = width
         self.height = height
-        
+
     def area(self):
         return self.width * self.height
 
 class Square(Shape):
     def __init__(self, side):
         self.side = side
-        
+
     def area(self):
         return self.side * self.side
 ```
@@ -139,10 +139,10 @@ class Sleepable:
 class Human(Workable, Eatable, Sleepable):
     def work(self):
         # Work implementation
-    
+
     def eat(self):
         # Eat implementation
-    
+
     def sleep(self):
         # Sleep implementation
 
@@ -185,7 +185,7 @@ class SMSNotifier(NotificationService):
 class UserManager:
     def __init__(self, notifier: NotificationService):
         self.notifier = notifier  # Depends on abstraction
-    
+
     def change_password(self, user, new_password):
         # Change password logic
         self.notifier.send_notification("Password changed")
@@ -289,10 +289,10 @@ def initialize_database(config_path):
         raise ConfigurationError(f"Database configuration file not found: {config_path}")
     except JSONDecodeError:
         raise ConfigurationError(f"Invalid JSON in database configuration: {config_path}")
-        
+
     if 'connection_string' not in config:
         raise ConfigurationError("Missing required 'connection_string' in database config")
-        
+
     return connect_to_database(config['connection_string'])
 ```
 
@@ -342,4 +342,4 @@ class ProductValidator(DataValidator):
 
 #### Debugging Application
 - Look for over-abstraction as a source of bugs
-- Check if premature optimization is causing issues 
+- Check if premature optimization is causing issues

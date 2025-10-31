@@ -1,12 +1,12 @@
 # Release Implementation Template
 
-<!-- 
+<!--
 release_implementation_template.md - Standard Release Implementation Documentation Template
 
 PURPOSE: Provides a consistent structure for documenting QuickScale release implementations in docs/releases/
 
-USAGE: Copy this template when creating a new release implementation document. Fill in all sections 
-       with release-specific details. Save as release-v[VERSION]-implementation.md in docs/releases/. 
+USAGE: Copy this template when creating a new release implementation document. Fill in all sections
+       with release-specific details. Save as release-v[VERSION]-implementation.md in docs/releases/.
        See examples in docs/releases/ for reference.
 
 TARGET AUDIENCE: Maintainers, contributors, users reviewing release history

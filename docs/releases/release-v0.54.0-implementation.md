@@ -51,7 +51,7 @@ This release implements **Roadmap Task 0.54** (Project Generator), which provide
 ### Package: quickscale_core
 - **Tests**: 133 passing
 - **Coverage**: 94% (generator.py: 89%, file_utils.py: 100%)
-- **Test Files**: 
+- **Test Files**:
   - `test_file_utils.py` (14 tests)
   - `test_generator/test_generator.py` (19 tests)
   - `test_integration.py` (3 tests)
@@ -141,7 +141,7 @@ with tempfile.TemporaryDirectory() as tmpdir:
     gen = ProjectGenerator()
     output_path = Path(tmpdir) / 'testproject'
     gen.generate('testproject', output_path)
-    
+
     # Verify structure
     assert (output_path / 'manage.py').exists()
     assert (output_path / 'testproject' / 'settings' / 'base.py').exists()

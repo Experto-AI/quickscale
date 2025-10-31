@@ -1,6 +1,6 @@
 # QuickScale Commercial Extensions
 
-<!-- 
+<!--
 commercial.md - Commercial Extensions and Business Model
 
 PURPOSE: This document outlines how solo developers and agencies can commercialize QuickScale extensions, create subscription models for premium modules/themes, and build community ecosystems while maintaining open source foundations.
@@ -399,14 +399,14 @@ For canonical guidance on backend extension patterns, see the [backend extension
 schema_version: 1
 project:
   name: my-enterprise-saas
-  version: 0.62.0
+  version: 0.63.0
 
 theme: starter
 backend_extensions: myenterprise.extensions
 
 modules:
   auth: {}                    # Open source - no special config needed
-  payments: {}               # Open source - no special config needed  
+  payments: {}               # Open source - no special config needed
   commercial_saas: {}        # Commercial - requires subscription
 
 commercial:
@@ -431,7 +431,7 @@ class EnterpriseUser(starter_models.User):
     """Extended user model with enterprise features"""
     department = models.CharField(max_length=100)
     employee_id = models.CharField(max_length=50)
-    
+
     class Meta:
         app_label = 'myenterprise'
 

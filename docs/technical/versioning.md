@@ -90,4 +90,3 @@ git tag "v$(cat VERSION)"
 git push && git push --tags
 ./scripts/publish.sh full
 ```
-

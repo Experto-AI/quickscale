@@ -838,14 +838,16 @@ class TestVerifyRailwayDependencies:
         """Test all required dependencies are present."""
         monkeypatch.chdir(tmp_path)
         pyproject = tmp_path / "pyproject.toml"
-        pyproject.write_text("""
+        pyproject.write_text(
+            """
 [tool.poetry.dependencies]
 python = "^3.12"
 gunicorn = "^21.0"
 psycopg2-binary = "^2.9"
 dj-database-url = "^2.1"
 whitenoise = "^6.6"
-        """)
+        """
+        )
 
         all_present, missing = verify_railway_dependencies()
         assert all_present is True
@@ -855,11 +857,13 @@ whitenoise = "^6.6"
         """Test missing required dependencies."""
         monkeypatch.chdir(tmp_path)
         pyproject = tmp_path / "pyproject.toml"
-        pyproject.write_text("""
+        pyproject.write_text(
+            """
 [tool.poetry.dependencies]
 python = "^3.12"
 gunicorn = "^21.0"
-        """)
+        """
+        )
 
         all_present, missing = verify_railway_dependencies()
         assert all_present is False

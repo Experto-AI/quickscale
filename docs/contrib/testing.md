@@ -50,22 +50,22 @@ Organize tests in well-structured files and classes:
 # test_user_service.py
 class TestUserRegistration:
     """Tests for user registration functionality."""
-    
+
     def test_successful_registration(self):
         """Test successful user registration with valid data."""
         # Test implementation
-        
+
     def test_duplicate_email(self):
         """Test registration with an email that already exists."""
         # Test implementation
-        
+
     def test_invalid_email_format(self):
         """Test registration with an invalid email format."""
         # Test implementation
-        
+
 class TestUserAuthentication:
     """Tests for user authentication functionality."""
-    
+
     def test_successful_login(self):
         """Test successful login with valid credentials."""
         # Test implementation
@@ -84,10 +84,10 @@ def test_user_password_validation():
         require_uppercase=True,
         require_digit=True
     )
-    
+
     # Act - perform the action being tested
     result = password_validator.validate("Passw0rd")
-    
+
     # Assert - verify the outcome
     assert result.is_valid is True
     assert len(result.errors) == 0
@@ -105,10 +105,10 @@ def test_order_total_calculation():
     order = Order()
     order.add_item(Product(name="Item 1", price=10.00), quantity=2)
     order.add_item(Product(name="Item 2", price=15.50), quantity=1)
-    
+
     # Act
     total = order.calculate_total()
-    
+
     # Assert
     assert total == 35.50
 ```
@@ -119,7 +119,7 @@ def test_order_implementation_details():
     """Test that breaks if implementation changes."""
     order = Order()
     order.add_item(Product(name="Item 1", price=10.00), quantity=2)
-    
+
     # Testing internal implementation details
     assert len(order._items) == 1
     assert order._items[0]["product"].price == 10.00
@@ -137,20 +137,20 @@ def test_payment_processing(self):
     # Arrange
     payment_gateway_mock = Mock()
     payment_gateway_mock.process_payment.return_value = PaymentResult(
-        success=True, 
+        success=True,
         transaction_id="tx123"
     )
-    
+
     payment_service = PaymentService(payment_gateway=payment_gateway_mock)
     order = Order(id="order123", amount=100.00)
-    
+
     # Act
     result = payment_service.process_order_payment(order)
-    
+
     # Assert
     assert result.success is True
     payment_gateway_mock.process_payment.assert_called_once_with(
-        amount=100.00, 
+        amount=100.00,
         order_id="order123"
     )
 ```
@@ -193,25 +193,25 @@ def valid_user():
         last_name="User",
         role="customer"
     )
-    
+
 @pytest.fixture
 def product_factory():
     """Fixture providing a factory for creating test products."""
     def _create_product(name="Test Product", price=10.00, category="default"):
         return Product(name=name, price=price, category=category)
     return _create_product
-    
+
 def test_order_with_products(valid_user, product_factory):
     """Test creating an order with products."""
     # Arrange
     order = Order(user=valid_user)
     product1 = product_factory(name="Product 1", price=10.00)
     product2 = product_factory(name="Product 2", price=15.00)
-    
+
     # Act
     order.add_item(product1, quantity=2)
     order.add_item(product2, quantity=1)
-    
+
     # Assert
     assert order.total == 35.00
 ```
@@ -245,34 +245,34 @@ def test_calculate_discount_with_negative_percent():
     # Arrange
     price = 100
     negative_discount = -20
-    
+
     # Act
     result = calculate_discount(price, negative_discount)
-    
+
     # Assert
     assert result == 100  # No discount should be applied
-    
+
 def test_calculate_discount_with_valid_percent():
     """Test that valid discount percentages work correctly."""
     # Arrange
     price = 100
     discount = 20
-    
+
     # Act
     result = calculate_discount(price, discount)
-    
+
     # Assert
     assert result == 80  # 20% discount should be applied
-    
+
 def test_calculate_discount_over_100_percent():
     """Test that discount over 100% is handled correctly."""
     # Arrange
     price = 100
     excessive_discount = 150
-    
+
     # Act
     result = calculate_discount(price, excessive_discount)
-    
+
     # Assert
     assert result == 0  # Price cannot go negative
 ```
@@ -287,14 +287,14 @@ class TestProperIsolation(TestCase):
         """Set up fresh state for each test."""
         self.user = User(name='test_user')
         self.temp_files = []
-    
+
     def tearDown(self):
         """Clean up after each test."""
         # Clean up temporary files
         for temp_file in self.temp_files:
             if os.path.exists(temp_file):
                 os.remove(temp_file)
-    
+
     def test_user_creation(self):
         """Test should not depend on other tests."""
         self.assertEqual(self.user.name, 'test_user')
@@ -307,12 +307,12 @@ class TestEnvironmentVariables(TestCase):
     def setUp(self):
         """Store original environment state."""
         self.original_env = os.environ.copy()
-    
+
     def tearDown(self):
         """Restore original environment state."""
         os.environ.clear()
         os.environ.update(self.original_env)
-    
+
     def test_with_env_var(self):
         os.environ['TEST_VAR'] = 'test_value'
         # Test implementation
@@ -344,10 +344,10 @@ def test_init_command_creates_project_structure(mock_copytree, mock_makedirs):
     """Test that init command creates proper project structure."""
     # Arrange
     project_name = "test_project"
-    
+
     # Act
     result = run_init_command(project_name)
-    
+
     # Assert
     assert result.success is True
     mock_makedirs.assert_called_once()
@@ -382,10 +382,10 @@ def test_user_registration_creates_credit_account(dynamic_project_generator):
     """Test that user registration automatically creates credit account."""
     # Arrange - Generate real QuickScale project
     project_dir = dynamic_project_generator.generate_project("test_auth_credits")
-    
+
     # Set up Django environment for the generated project
     setup_django_for_project(project_dir)
-    
+
     # Act - Use real Django test client
     client = Client()
     response = client.post('/accounts/signup/', {
@@ -393,7 +393,7 @@ def test_user_registration_creates_credit_account(dynamic_project_generator):
         'password1': 'testpass123',
         'password2': 'testpass123'
     })
-    
+
     # Assert - Check real database state
     user = User.objects.get(email='test@example.com')
     credit_account = CreditAccount.objects.get(user=user)
