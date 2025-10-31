@@ -558,4 +558,3 @@ git branch -r  # Shows remote branches
 - Roadmap and release milestones: [roadmap.md](./roadmap.md)
 - Generator templates (look under `quickscale_core/src/quickscale_core/scaffold/templates/`)
 - Top-level README for newcomer guidance: [README.md](../../README.md)
-

@@ -28,6 +28,27 @@ from quickscale_core.generator import ProjectGenerator
 class TestDevelopmentCommandsE2E:
     """End-to-end tests for development commands with real Docker containers."""
 
+    @pytest.fixture(autouse=True)
+    def cleanup_before_test(self):
+        """Ensure all e2e_cli_test containers are stopped before each test."""
+        try:
+            # Stop and remove any existing containers with our test project name
+            subprocess.run(
+                ["docker", "ps", "-a", "-q", "--filter", "name=e2e_cli_test"],
+                capture_output=True,
+                text=True,
+            )
+            # Force remove all containers with our project name
+            subprocess.run(
+                ["docker", "rm", "-f", "e2e_cli_test_web", "e2e_cli_test_db"],
+                capture_output=True,
+                timeout=10,
+            )
+            # Wait a moment for ports to be released
+            time.sleep(1)
+        except Exception:
+            pass  # Best effort cleanup
+
     @pytest.fixture
     def test_project(self, tmp_path):
         """Generate a test project and return its path."""

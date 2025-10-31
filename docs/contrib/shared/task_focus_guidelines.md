@@ -123,8 +123,8 @@ When working on any task, ensure you:
 
 ### Good Focus Example
 ```python
-# Request: Add input validation to the create_user function to check that the email 
-# parameter is a valid email format. Don't modify any other parameters or 
+# Request: Add input validation to the create_user function to check that the email
+# parameter is a valid email format. Don't modify any other parameters or
 # the function's return type.
 
 # Original function
@@ -150,23 +150,23 @@ def create_user(email, password, role="user", profile=None):  # Changed signatur
     # Added unrequested validation
     if not is_valid_email(email):
         raise ValueError("Invalid email format")
-    
+
     # Added unrequested password validation
     if not is_strong_password(password):
         raise ValueError("Password too weak")
-    
+
     # Added unrequested role validation
     if role not in ["user", "admin", "moderator"]:
         raise ValueError("Invalid role")
-    
+
     # Added unrequested profile handling
     if profile:
         user = User(email=email, password=hash_password(password), role=role, profile=profile)
     else:
         user = User(email=email, password=hash_password(password), role=role)
-    
+
     # Added unrequested logging
     logger.info(f"Created user: {email} with role: {role}")
-    
+
     return user.id  # Changed return type
-``` 
+```

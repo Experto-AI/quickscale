@@ -1,6 +1,6 @@
 # decisions.md
 
-<!-- 
+<!--
 decisions.md - Authoritative Technical Specification
 
 PURPOSE: This document is the single source of truth for all architectural decisions, technical implementation rules, and development standards for QuickScale.
@@ -283,7 +283,7 @@ Automatic changes made:
 **Future workflow** (v1.0.0+):
 ```yaml
 # quickscale.yml (optional, v1.0.0+)
-version: "1.0"
+version: 0.63.0
 modules:
   auth:
     ACCOUNT_ALLOW_REGISTRATION: true

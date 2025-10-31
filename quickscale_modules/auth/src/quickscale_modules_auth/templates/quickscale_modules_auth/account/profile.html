@@ -1,0 +1,19 @@
+{% extends "quickscale_modules_auth/base.html" %}
+{% block title %}Profile - QuickScale{% endblock %}
+{% block header %}Your Profile{% endblock %}
+{% block content %}
+<div class="auth-form-container">
+    <h2>{{ profile_user.get_display_name }}</h2>
+    <div class="profile-info">
+        <p><strong>Username:</strong> {{ profile_user.username }}</p>
+        <p><strong>Email:</strong> {{ profile_user.email }}</p>
+        <p><strong>Name:</strong> {{ profile_user.get_full_name|default:"Not set" }}</p>
+        <p><strong>Member since:</strong> {{ profile_user.date_joined|date:"F d, Y" }}</p>
+    </div>
+    <div class="profile-actions">
+        <a href="{% url 'quickscale_auth:profile-edit' %}" class="btn btn-primary">Edit Profile</a>
+        <a href="{% url 'account_change_password' %}" class="btn btn-secondary">Change Password</a>
+        <a href="{% url 'quickscale_auth:account-delete' %}" class="btn btn-danger">Delete Account</a>
+    </div>
+</div>
+{% endblock %}

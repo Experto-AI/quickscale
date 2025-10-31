@@ -61,7 +61,7 @@ class EmailNotifier(NotificationService):
 class UserManager:
     def __init__(self, notifier: NotificationService):
         self.notifier = notifier  # Depends on abstraction
-    
+
     def change_password(self, user, new_password):
         # Change password logic
         self.notifier.send_notification("Password changed")
@@ -114,10 +114,10 @@ def initialize_database(config_path):
         raise ConfigurationError(f"Database configuration file not found: {config_path}")
     except JSONDecodeError:
         raise ConfigurationError(f"Invalid JSON in database configuration: {config_path}")
-        
+
     if 'connection_string' not in config:
         raise ConfigurationError("Missing required 'connection_string' in database config")
-        
+
     return connect_to_database(config['connection_string'])
 ```
 
@@ -136,15 +136,15 @@ def validate_user_input(user_input):
     if contains_prohibited_characters(user_input):
         return False
     return True
-    
+
 def is_valid_format(text):
     """Check if the text matches the required format."""
     # Simple format validation
-    
+
 def meets_length_requirements(text):
     """Check if the text meets length requirements."""
     # Simple length validation
-    
+
 def contains_prohibited_characters(text):
     """Check if the text contains prohibited characters."""
     # Simple character validation
@@ -160,7 +160,7 @@ def contains_prohibited_characters(text):
 
 # users/
 #   __init__.py
-#   models.py          # User data models 
+#   models.py          # User data models
 #   service.py         # User business logic
 #   repository.py      # User data access
 ```
@@ -182,19 +182,19 @@ When organizing code, consider the relationship between functions:
 # Prefer: Related functions grouped in a class
 class UserManager:
     """Manages user operations and state."""
-    
+
     def __init__(self, db_connection):
         self.db = db_connection
         self._cache = {}
-    
+
     def get_user(self, user_id):
         """Retrieve user from cache or database."""
         # Implementation with shared cache state
-    
+
     def update_user(self, user_id, data):
         """Update user data and invalidate cache."""
         # Implementation with shared cache state
-    
+
     def delete_user(self, user_id):
         """Delete user and clean up cache."""
         # Implementation with shared cache state
@@ -202,10 +202,10 @@ class UserManager:
 # Avoid: Loose functions that should be grouped
 def get_user(db, cache, user_id):
     # Function with external dependencies
-    
+
 def update_user(db, cache, user_id, data):
     # Function with external dependencies
-    
+
 def delete_user(db, cache, user_id):
     # Function with external dependencies
 ```
@@ -241,7 +241,7 @@ def calculate_total_price(items):
 
 class OrderProcessor:
     """Processes customer orders."""
-    
+
 MAX_RETRY_ATTEMPTS = 3
 ```
 
@@ -339,18 +339,18 @@ logger = logging.getLogger(__name__)
 def process_order(order_id: str, user_id: str) -> bool:
     """Process a customer order."""
     logger.info(f"Processing order {order_id} for user {user_id}")
-    
+
     try:
         order = get_order(order_id)
         if not order:
             logger.warning(f"Order {order_id} not found")
             return False
-            
+
         result = payment_service.charge(order.amount, order.payment_method)
         if not result.success:
             logger.error(f"Payment failed for order {order_id}: {result.error}")
             return False
-            
+
         logger.info(f"Successfully processed order {order_id}")
         return True
     except Exception as e:
@@ -376,7 +376,7 @@ class SubscriptionService:
     """Business logic for subscriptions."""
     def __init__(self, repository):
         self.repository = repository
-        
+
     def create_subscription(self, user_id, plan_id):
         # Business logic
 
@@ -500,4 +500,4 @@ After completing implementation:
 1. Proceed to [review.md](review.md) for quality control
 2. Write tests using [testing.md](testing.md)
 3. Verify adherence to all standards
-4. Ensure documentation is complete 
+4. Ensure documentation is complete

@@ -102,4 +102,4 @@ result = cache.get(key) or expensive_calculation(key)
 ### Debugging Stage
 - Use documentation to understand existing code behavior
 - Check if missing documentation is causing confusion
-- Update documentation when fixing bugs that reveal unclear behavior 
+- Update documentation when fixing bugs that reveal unclear behavior

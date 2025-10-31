@@ -17,14 +17,14 @@ def register_user(email, password):
     # Validate inputs
     if not is_valid_email(email):
         return RegistrationResult(success=False, error="Invalid email format")
-    
+
     if not is_strong_password(password):
         return RegistrationResult(success=False, error="Password too weak")
-    
+
     # Check for existing user
     if user_exists(email):
         return RegistrationResult(success=False, error="Email already registered")
-    
+
     # Create the user
     user_id = create_user_in_database(email, hash_password(password))
     return RegistrationResult(success=True, user_id=user_id)
@@ -36,7 +36,7 @@ def test_user_registration():
     result = register_user("test@example.com", "password")
     assert result.success is True
     assert result.user_id is not None
-    
+
     # Test invalid email
     result = register_user("invalid-email", "password")
     assert result.success is False
@@ -55,26 +55,26 @@ def test_user_registration():
 # test_user_service.py
 class TestUserRegistration:
     """Tests for user registration functionality."""
-    
+
     def test_successful_registration(self):
         """Test successful user registration with valid data."""
         # Test implementation
-        
+
     def test_duplicate_email(self):
         """Test registration with an email that already exists."""
         # Test implementation
-        
+
     def test_invalid_email_format(self):
         """Test registration with an invalid email format."""
         # Test implementation
-        
+
 class TestUserAuthentication:
     """Tests for user authentication functionality."""
-    
+
     def test_successful_login(self):
         """Test successful login with valid credentials."""
         # Test implementation
-        
+
     def test_invalid_password(self):
         """Test login with invalid password."""
         # Test implementation
@@ -95,10 +95,10 @@ def test_order_total_calculation():
     order = Order()
     order.add_item(Product(name="Item 1", price=10.00), quantity=2)
     order.add_item(Product(name="Item 2", price=15.50), quantity=1)
-    
+
     # Act
     total = order.calculate_total()
-    
+
     # Assert
     assert total == 35.50
 ```
@@ -109,7 +109,7 @@ def test_order_implementation_details():
     """Test that breaks if implementation changes."""
     order = Order()
     order.add_item(Product(name="Item 1", price=10.00), quantity=2)
-    
+
     # Testing implementation details
     assert len(order._items) == 1
     assert order._items[0]["product"].price == 10.00
@@ -131,20 +131,20 @@ def test_payment_processing(self):
     # Arrange
     payment_gateway_mock = Mock()
     payment_gateway_mock.process_payment.return_value = PaymentResult(
-        success=True, 
+        success=True,
         transaction_id="tx123"
     )
-    
+
     payment_service = PaymentService(payment_gateway=payment_gateway_mock)
     order = Order(id="order123", amount=100.00)
-    
+
     # Act
     result = payment_service.process_order_payment(order)
-    
+
     # Assert
     assert result.success is True
     payment_gateway_mock.process_payment.assert_called_once_with(
-        amount=100.00, 
+        amount=100.00,
         order_id="order123"
     )
 ```
@@ -166,10 +166,10 @@ def test_user_password_validation():
         require_uppercase=True,
         require_digit=True
     )
-    
+
     # Act - perform the action being tested
     result = password_validator.validate("Passw0rd")
-    
+
     # Assert - verify the outcome
     assert result.is_valid is True
     assert len(result.errors) == 0
@@ -193,25 +193,25 @@ def valid_user():
         last_name="User",
         role="customer"
     )
-    
+
 @pytest.fixture
 def product_factory():
     """Fixture providing a factory for creating test products."""
     def _create_product(name="Test Product", price=10.00, category="default"):
         return Product(name=name, price=price, category=category)
     return _create_product
-    
+
 def test_order_with_products(valid_user, product_factory):
     """Test creating an order with products."""
     # Arrange
     order = Order(user=valid_user)
     product1 = product_factory(name="Product 1", price=10.00)
     product2 = product_factory(name="Product 2", price=15.00)
-    
+
     # Act
     order.add_item(product1, quantity=2)
     order.add_item(product2, quantity=1)
-    
+
     # Assert
     assert order.total == 35.00
 ```
@@ -255,22 +255,22 @@ def test_calculate_discount_with_negative_percent():
     # Arrange
     price = 100
     negative_discount = -20
-    
+
     # Act
     result = calculate_discount(price, negative_discount)
-    
+
     # Assert
     assert result == 100  # No discount should be applied
-    
+
 def test_calculate_discount_with_valid_percent():
     """Test that valid discount percentages work correctly."""
     # Arrange
     price = 100
     discount = 20
-    
+
     # Act
     result = calculate_discount(price, discount)
-    
+
     # Assert
     assert result == 80  # 20% discount should be applied
 ```
@@ -371,10 +371,10 @@ def test_init_command_creates_project_structure(mock_copytree, mock_makedirs):
     """Test that init command creates proper project structure."""
     # Arrange
     project_name = "test_project"
-    
+
     # Act
     result = run_init_command(project_name)
-    
+
     # Assert
     assert result.success is True
     mock_makedirs.assert_called_once()
@@ -386,15 +386,15 @@ def test_init_command_creates_project_structure(mock_copytree, mock_makedirs):
 # tests/django_functionality/credit_system/test_credit_models.py
 class TestCreditModel(TestCase):
     """Unit tests for Credit model behavior."""
-    
+
     def test_credit_consumption_calculation(self):
         """Test credit consumption calculation logic."""
         # Arrange
         credit = Credit(amount=100, used=30)
-        
+
         # Act
         remaining = credit.get_remaining()
-        
+
         # Assert
         assert remaining == 70
 ```
@@ -403,7 +403,7 @@ class TestCreditModel(TestCase):
 **Purpose**: Test how multiple components work together using real QuickScale projects.
 
 **When to Use**:
-- Authentication flows requiring Django URL resolution  
+- Authentication flows requiring Django URL resolution
 - Complete payment workflows with Stripe integration
 - Cross-system interactions (auth + credits + payments)
 - Features requiring full Django project structure
@@ -428,10 +428,10 @@ def test_user_registration_creates_credit_account(dynamic_project_generator):
     """Test that user registration automatically creates credit account."""
     # Arrange - Generate real QuickScale project
     project_dir = dynamic_project_generator.generate_project("test_auth_credits")
-    
+
     # Set up Django environment for the generated project
     setup_django_for_project(project_dir)
-    
+
     # Act - Use real Django test client
     client = Client()
     response = client.post('/accounts/signup/', {
@@ -439,7 +439,7 @@ def test_user_registration_creates_credit_account(dynamic_project_generator):
         'password1': 'testpass123',
         'password2': 'testpass123'
     })
-    
+
     # Assert - Check real database state
     user = User.objects.get(email='test@example.com')
     credit_account = CreditAccount.objects.get(user=user)
@@ -466,8 +466,8 @@ def test_user_registration_creates_credit_account(dynamic_project_generator):
 
 **PostgreSQL Test Database**: All tests use PostgreSQL via Docker for consistency with production.
 
-**Unit Tests**: Use `tests/docker-compose.test.yml` with PostgreSQL container  
-**Integration Tests**: Real projects use PostgreSQL via dynamic project generation  
+**Unit Tests**: Use `tests/docker-compose.test.yml` with PostgreSQL container
+**Integration Tests**: Real projects use PostgreSQL via dynamic project generation
 **E2E Tests**: Full Docker environment with PostgreSQL
 
 **Test Database Setup**:
@@ -489,16 +489,16 @@ def test_complete_subscription_workflow(docker_environment):
     """Test complete user journey from signup to service usage."""
     # Arrange - Real Docker environment
     base_url = docker_environment.get_base_url()
-    
+
     # Act & Assert - Real browser automation
     with selenium_driver() as driver:
         # User signs up
         driver.get(f"{base_url}/accounts/signup/")
         # ... complete browser workflow
-        
+
         # User purchases credits
         # ... real Stripe payment flow
-        
+
         # User consumes credits
         # ... real service usage
 ```
@@ -507,7 +507,7 @@ def test_complete_subscription_workflow(docker_environment):
 
 **ALWAYS use `quickscale init` for**:
 - Tests requiring Django URL resolution
-- Template rendering requiring full Django context  
+- Template rendering requiring full Django context
 - Cross-app functionality tests
 - Admin interface tests
 
@@ -519,7 +519,7 @@ def test_complete_subscription_workflow(docker_environment):
 
 ### Testing Application by Stage
 
-### Planning Stage  
+### Planning Stage
 - **Identify test category**: Use decision tree above
 - Plan for testable code design
 - Consider test data requirements
@@ -619,17 +619,17 @@ class TestWithGlobalMocking(TestCase):
         """Store original modules before mocking."""
         super().setUpClass()
         cls.original_modules = {}
-        
+
         # Store original modules
         modules_to_mock = ['module1', 'module2', 'module3']
         for module_name in modules_to_mock:
             cls.original_modules[module_name] = sys.modules.get(module_name)
-        
+
         # Create mocks
         sys.modules['module1'] = MagicMock()
         sys.modules['module2'] = MagicMock()
         sys.modules['module3'] = MagicMock()
-    
+
     @classmethod
     def tearDownClass(cls):
         """MANDATORY: Restore original modules."""
@@ -665,18 +665,18 @@ class TestProperIsolation(TestCase):
         """Set up fresh state for each test."""
         self.user = User(name='test_user')
         self.temp_files = []
-    
+
     def tearDown(self):
         """Clean up after each test."""
         # Clean up temporary files
         for temp_file in self.temp_files:
             if os.path.exists(temp_file):
                 os.remove(temp_file)
-        
+
         # Reset any modified settings
         if hasattr(self, 'original_setting'):
             settings.SOME_SETTING = self.original_setting
-    
+
     def test_user_creation(self):
         """Test should not depend on other tests."""
         # Fresh setup in setUp() ensures isolation
@@ -690,12 +690,12 @@ class TestEnvironmentVariables(TestCase):
     def setUp(self):
         """Store original environment state."""
         self.original_env = os.environ.copy()
-    
+
     def tearDown(self):
         """Restore original environment state."""
         os.environ.clear()
         os.environ.update(self.original_env)
-    
+
     def test_with_env_var(self):
         os.environ['TEST_VAR'] = 'test_value'
         # Test implementation
@@ -711,7 +711,7 @@ from django.test import TestCase, TransactionTestCase
 
 class TestUserModel(TestCase):
     """TestCase automatically handles database transactions."""
-    
+
     def test_user_creation(self):
         user = User.objects.create(email='test@example.com')
         self.assertEqual(user.email, 'test@example.com')
@@ -719,11 +719,11 @@ class TestUserModel(TestCase):
 
 class TestWithTransactions(TransactionTestCase):
     """For tests requiring real database transactions."""
-    
+
     def setUp(self):
         """Create test data."""
         self.user = User.objects.create(email='test@example.com')
-    
+
     def tearDown(self):
         """Clean up test data."""
         User.objects.all().delete()
@@ -740,16 +740,16 @@ class TestFileOperations(TestCase):
     def setUp(self):
         """Create temporary directory."""
         self.temp_dir = tempfile.mkdtemp()
-    
+
     def tearDown(self):
         """Remove temporary directory."""
         shutil.rmtree(self.temp_dir)
-    
+
     def test_file_creation(self):
         file_path = os.path.join(self.temp_dir, 'test.txt')
         with open(file_path, 'w') as f:
             f.write('test content')
-        
+
         self.assertTrue(os.path.exists(file_path))
         # tearDown will clean up the entire temp_dir
 ```
@@ -788,4 +788,4 @@ class TestFileOperations(TestCase):
 
 **Every test should pass whether run in isolation or as part of the full suite. If it doesn't, you have contamination that needs to be fixed.**
 
-**When in doubt:** Use local patching with decorators or context managers instead of global modifications. 
+**When in doubt:** Use local patching with decorators or context managers instead of global modifications.

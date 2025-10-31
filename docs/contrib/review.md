@@ -119,7 +119,7 @@ def test_order_total_calculation():
     order = Order()
     order.add_item(Product(name="Item 1", price=10.00), quantity=2)
     order.add_item(Product(name="Item 2", price=15.50), quantity=1)
-    
+
     total = order.calculate_total()
     assert total == 35.50
 
@@ -128,7 +128,7 @@ def test_order_implementation_details():
     """Test that breaks if implementation changes."""
     order = Order()
     order.add_item(Product(name="Item 1", price=10.00), quantity=2)
-    
+
     # Testing implementation details
     assert len(order._items) == 1
     assert order._items[0]["product"].price == 10.00
@@ -280,4 +280,4 @@ Before considering implementation complete, verify:
 After completing quality control:
 1. Proceed to [debug.md](debug.md) if issues are found
 2. If quality standards are met, the implementation is ready for use
-3. Document any lessons learned for future improvements 
+3. Document any lessons learned for future improvements

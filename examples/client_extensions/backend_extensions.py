@@ -27,7 +27,9 @@ def register() -> None:
         from django.contrib.auth import get_user_model
         from django.db.models.signals import post_save
 
-        def _on_user_save(sender: Any, instance: Any, created: bool, **kwargs: Any) -> None:
+        def _on_user_save(
+            sender: Any, instance: Any, created: bool, **kwargs: Any
+        ) -> None:
             """Handle user creation events for onboarding tasks."""
             if created:
                 # Perform lightweight onboarding tasks

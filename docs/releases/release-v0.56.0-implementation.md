@@ -1,7 +1,7 @@
 # Release v0.56.0: Quality, Testing & CI/CD
 
-**Release Date**: October 13, 2025  
-**Type**: Minor Release  
+**Release Date**: October 13, 2025
+**Type**: Minor Release
 **Status**: ✅ Complete
 
 ---

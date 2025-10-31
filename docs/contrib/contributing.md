@@ -181,11 +181,11 @@ Each stage has a focused guide that tells you exactly what to do and what rules 
 
 **AI assistants don't follow big files with many rules.** This structure provides:
 
-✅ **Focused, digestible guides** - Each stage file is ~200-400 lines maximum  
-✅ **Clear workflow enforcement** - Stages must be followed in order  
-✅ **Single source of truth** - Shared principles referenced, not duplicated  
-✅ **Flexible prompts** - Each prompt references only the stages it needs  
-✅ **Scalable** - Easy to add new stages or prompts without bloating existing files  
+✅ **Focused, digestible guides** - Each stage file is ~200-400 lines maximum
+✅ **Clear workflow enforcement** - Stages must be followed in order
+✅ **Single source of truth** - Shared principles referenced, not duplicated
+✅ **Flexible prompts** - Each prompt references only the stages it needs
+✅ **Scalable** - Easy to add new stages or prompts without bloating existing files
 
 ---
 

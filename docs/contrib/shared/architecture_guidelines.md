@@ -26,10 +26,10 @@ def fix_database_connection():
     # Identify and fix the actual configuration issue
     if not os.environ.get("DATABASE_URL"):
         raise ConfigError("DATABASE_URL is not set in environment")
-    
+
     # Validate connection parameters
     validate_db_config(os.environ.get("DATABASE_URL"))
-    
+
     # Proper fix maintaining the technical stack
     return connect_with_retry(max_retries=3)
 ```
@@ -73,7 +73,7 @@ class SubscriptionService:
     """Business logic for subscriptions."""
     def __init__(self, repository):
         self.repository = repository
-        
+
     def create_subscription(self, user_id, plan_id):
         # Business logic
 
@@ -92,10 +92,10 @@ def create_subscription_endpoint():
 def create_subscription():
     # Directly mixing database operations in API layer
     db.execute("INSERT INTO subscriptions VALUES (...)")
-    
+
     # Sending emails from the API controller
     send_confirmation_email(user_email)
-    
+
     # Bypassing service layer entirely
 ```
 
@@ -123,4 +123,4 @@ def create_subscription():
 - Check if architectural violations are causing bugs
 - Verify that layer boundaries are respected in fixes
 - Ensure bug fixes don't introduce architectural violations
-- Use architectural understanding to trace issues across layers 
+- Use architectural understanding to trace issues across layers

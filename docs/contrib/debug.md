@@ -43,10 +43,10 @@ def update_user_permissions(user_id, permissions):
     user = get_user(user_id)
     user.permissions = permissions
     db.save(user)
-    
+
     # Workaround: Deleting cache instead of fixing race condition
     cache.delete(f"user_perms:{user_id}")
-    
+
     # Workaround: Adding retry logic that doesn't fix underlying issue
     for _ in range(3):
         try:
@@ -119,7 +119,7 @@ def test_authentication_with_unicode_characters():
         {"username": "maría", "password": "secure123", "should_pass": True},
         {"username": "andré", "password": "secure123", "should_pass": True}
     ]
-    
+
     # Measure results
     results = []
     for user in test_users:
@@ -130,7 +130,7 @@ def test_authentication_with_unicode_characters():
             "actual": result,
             "passed": result == user["should_pass"]
         })
-        
+
     # Log measurements
     logger.info(f"Authentication test results: {results}")
     return results
@@ -228,19 +228,19 @@ When debugging test failures, use specialized output modes to focus on actual is
 def process_transaction(transaction_id):
     """Process a financial transaction."""
     logger.info(f"Starting transaction {transaction_id}")
-    
+
     try:
         transaction = get_transaction(transaction_id)
         logger.debug(f"Transaction data: {transaction}")
-        
+
         # Processing steps with logging
         result = payment_gateway.process(transaction)
         logger.info(f"Gateway response: {result}")
-        
+
         if not result.success:
             logger.error(f"Transaction failed: {result.error_code} - {result.message}")
             # Analyze error patterns, don't just retry blindly
-            
+
         return result
     except Exception as e:
         logger.exception(f"Exception in transaction {transaction_id}")
@@ -254,16 +254,16 @@ def process_transaction(transaction_id):
 def process_transaction(transaction_id):
     """Process a financial transaction."""
     # No logging of inputs or context
-    
+
     try:
         transaction = get_transaction(transaction_id)
         result = payment_gateway.process(transaction)
-        
+
         # Superficial error handling with no debugging info
         if not result.success:
             print(f"Error: {result}")  # Temporary print statement
             return retry_transaction(transaction_id)  # Retry without understanding why
-            
+
         return result
     except:
         # Swallow exception without logging details
@@ -287,13 +287,13 @@ def withdraw(user_id, amount):
     """Withdraw money from user account with proper validation."""
     with db.transaction():  # Ensure atomic operation
         user = db.get_user(user_id, for_update=True)  # Lock row
-        
+
         if user.balance < amount:
             return OperationResult(success=False, error="Insufficient funds")
-            
+
         user.balance -= amount
         db.update_user(user)
-        
+
     return OperationResult(success=True)
 ```
 
@@ -306,12 +306,12 @@ def withdraw(user_id, amount):
 # Bad fix: Just prevent negative values without addressing concurrency
 def withdraw(user_id, amount):
     user = db.get_user(user_id)  # No locking
-    
+
     # Just prevents negative values but doesn't fix race condition
     new_balance = max(0, user.balance - amount)
     user.balance = new_balance
     db.update_user(user)
-    
+
     # Masks the problem instead of fixing it
 ```
 
@@ -343,22 +343,22 @@ def test_calculate_discount_with_negative_percent():
     # Arrange
     price = 100
     negative_discount = -20
-    
+
     # Act
     result = calculate_discount(price, negative_discount)
-    
+
     # Assert
     assert result == 100  # No discount should be applied
-    
+
 def test_calculate_discount_with_valid_percent():
     """Test that valid discount percentages work correctly."""
     # Arrange
     price = 100
     discount = 20
-    
+
     # Act
     result = calculate_discount(price, discount)
-    
+
     # Assert
     assert result == 80  # 20% discount should be applied
 ```
@@ -409,21 +409,21 @@ def process_data(data, normalize=True, validate=True):
     # Fixed the reported bug
     if data is None:
         return None
-        
+
     # Unrequested validation feature
     if validate and not isinstance(data, str):
         raise TypeError("Input must be a string")
-        
+
     # Unrequested normalization options
     result = data.strip()
     if normalize:
         result = result.lower()
         result = re.sub(r'\s+', ' ', result)
         result = unicodedata.normalize('NFKC', result)
-        
+
     # Added unrequested caching
     cache.set(f"processed:{hash(data)}", result, timeout=3600)
-    
+
     return result
 ```
 
@@ -478,4 +478,4 @@ After completing debugging:
 1. Return to [review.md](review.md) to verify the fix meets quality standards
 2. Update tests to prevent regression
 3. Document lessons learned for future prevention
-4. Consider if the debugging revealed systemic issues that need broader fixes 
+4. Consider if the debugging revealed systemic issues that need broader fixes

@@ -67,13 +67,13 @@ def withdraw(user_id, amount):
     """Withdraw money from user account with proper validation."""
     with db.transaction():  # Ensure atomic operation
         user = db.get_user(user_id, for_update=True)  # Lock row
-        
+
         if user.balance < amount:
             return OperationResult(success=False, error="Insufficient funds")
-            
+
         user.balance -= amount
         db.update_user(user)
-        
+
     return OperationResult(success=True)
 ```
 
@@ -86,12 +86,12 @@ def withdraw(user_id, amount):
 # Bad fix: Just prevent negative values without addressing concurrency
 def withdraw(user_id, amount):
     user = db.get_user(user_id)  # No locking
-    
+
     # Just prevents negative values but doesn't fix race condition
     new_balance = max(0, user.balance - amount)
     user.balance = new_balance
     db.update_user(user)
-    
+
     # Masks the problem instead of fixing it
 ```
 
@@ -149,4 +149,4 @@ def withdraw(user_id, amount):
 - [ ] Minimize code changes
 - [ ] Add regression tests
 - [ ] Document the fix
-- [ ] Always investigate concurrency, edge cases, and error conditions 
+- [ ] Always investigate concurrency, edge cases, and error conditions

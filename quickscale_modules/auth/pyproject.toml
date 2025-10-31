@@ -1,0 +1,55 @@
+[tool.poetry]
+name = "quickscale-module-auth"
+version = "0.63.0"
+description = "QuickScale authentication module with django-allauth integration"
+authors = ["Experto-AI <contact@experto.ai>"]
+license = "MIT"
+readme = "README.md"
+packages = [{include = "quickscale_modules_auth", from = "src"}]
+
+[tool.poetry.dependencies]
+python = "^3.11"
+Django = ">=4.2,<6.0"
+django-allauth = "^0.63.0"
+
+[tool.poetry.group.dev.dependencies]
+pytest = "^8.0.0"
+pytest-django = "^4.7.0"
+pytest-cov = "^4.1.0"
+factory-boy = "^3.3.0"
+ruff = "^0.3.0"
+mypy = "^1.8.0"
+django-stubs = "^4.2.0"
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "N", "W", "UP"]
+ignore = ["E501"]
+
+[tool.mypy]
+python_version = "3.11"
+warn_return_any = true
+warn_unused_configs = true
+disallow_untyped_defs = true
+plugins = ["mypy_django_plugin.main"]
+
+[[tool.mypy.overrides]]
+module = "allauth.*"
+ignore_missing_imports = true
+
+[tool.django-stubs]
+django_settings_module = "tests.settings"
+
+[tool.pytest.ini_options]
+DJANGO_SETTINGS_MODULE = "tests.settings"
+python_files = ["test_*.py"]
+python_paths = ["."]
+testpaths = ["tests"]
+addopts = "-v --cov=src/quickscale_modules_auth --cov-report=html --cov-report=term-missing --cov-fail-under=70"

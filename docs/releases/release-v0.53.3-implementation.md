@@ -60,7 +60,7 @@ This release continues the template system foundation started in v0.53.1 and v0.
 ```bash
 $ cd quickscale_core && poetry run pytest tests/test_generator/test_templates.py -v
 =================================== test session starts ====================================
-collected 102 items                                                                        
+collected 102 items
 
 tests/test_generator/test_templates.py::TestTemplateLoading::test_manage_py_loads PASSED
 tests/test_generator/test_templates.py::TestTemplateLoading::test_project_init_loads PASSED
@@ -77,7 +77,7 @@ tests/test_generator/test_templates.py::TestEditorconfigContent::test_python_ind
 ```bash
 $ cd quickscale_cli && poetry run pytest -v
 =================================== test session starts ====================================
-collected 5 items                                                                          
+collected 5 items
 
 tests/test_cli.py::test_cli_help PASSED
 tests/test_cli.py::test_cli_version_flag PASSED
@@ -182,7 +182,7 @@ From roadmap Task 0.53.3:
   - [x] whitenoise (static files in production)
   - [x] gunicorn (production WSGI server)
   - [x] Development dependencies (pytest, ruff, mypy, etc.)
-  
+
 - [x] **Create Docker templates**
   - [x] **`Dockerfile.j2`** - Production-ready multi-stage build
     - [x] Python 3.11 slim base image
@@ -194,14 +194,14 @@ From roadmap Task 0.53.3:
     - [x] PostgreSQL 16 service with persistent volume
     - [x] Service health checks and dependencies
   - [x] **`.dockerignore.j2`** - Exclude unnecessary files
-  
+
 - [x] **Create `.env.example.j2` template**
   - [x] SECRET_KEY with project name
   - [x] DEBUG flag
   - [x] DATABASE_URL with PostgreSQL connection string
   - [x] ALLOWED_HOSTS
   - [x] Helpful comments explaining each variable
-  
+
 - [x] **Create `.gitignore.j2` template**
   - [x] Python artifacts (__pycache__, *.py[cod])
   - [x] Virtual environments (.venv/, venv/, env/)
@@ -210,7 +210,7 @@ From roadmap Task 0.53.3:
   - [x] Environment files (.env, .env.local)
   - [x] Testing artifacts (.pytest_cache/, .coverage)
   - [x] Docker volumes
-  
+
 - [x] **Create `.editorconfig.j2` template**
   - [x] Consistent editor settings (indent, line endings, charset)
   - [x] Python-specific settings (4-space indent)

@@ -82,14 +82,14 @@ Before planning any implementation, thoroughly understand the project by consult
            self.name = name
            self.price = price
            self.features = features
-   
+
     2. Then implement the service layer
    class SubscriptionService:
        """Handles subscription management operations."""
        def subscribe_user(self, user_id, plan_id):
            """Subscribe a user to a specific plan."""
            # Implementation
-   
+
     3. Finally add the API endpoints
    @app.route('/subscriptions', methods=['POST'])
    def create_subscription():
@@ -171,4 +171,4 @@ After completing the planning stage:
 1. Proceed to [code.md](code.md) for implementation
 2. Follow the planned steps without deviation
 3. Maintain focus on the defined task boundaries
-4. Apply the planned quality standards during implementation 
+4. Apply the planned quality standards during implementation

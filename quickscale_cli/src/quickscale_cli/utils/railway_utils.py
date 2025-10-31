@@ -24,7 +24,8 @@ def get_railway_cli_version() -> str | None:
     """
     Get the current Railway CLI version string.
 
-    Returns:
+    Returns
+    -------
         Version string (e.g., "4.0.0") or None if not installed or error
 
     """
@@ -51,7 +52,8 @@ def install_railway_cli() -> bool:
     """
     Install Railway CLI via npm.
 
-    Returns:
+    Returns
+    -------
         True if installation successful, False otherwise
 
     """
@@ -71,7 +73,8 @@ def upgrade_railway_cli() -> bool:
     """
     Upgrade Railway CLI to the latest version via npm.
 
-    Returns:
+    Returns
+    -------
         True if upgrade successful, False otherwise
 
     """
@@ -93,7 +96,8 @@ def login_railway_cli_browserless() -> bool:
 
     This will prompt the user to visit a URL and enter a pairing code.
 
-    Returns:
+    Returns
+    -------
         True if login successful, False otherwise
 
     """
@@ -207,11 +211,13 @@ def run_railway_command(
     Execute Railway CLI command with error handling.
 
     Args:
+    ----
         args: Command arguments to pass to railway CLI
         timeout: Command timeout in seconds
         interactive: If True, run command interactively without capturing output
 
     Returns:
+    -------
         CompletedProcess result
 
     """
@@ -247,6 +253,7 @@ def set_railway_variable(key: str, value: str, service: str | None = None) -> bo
     Set Railway environment variable.
 
     Args:
+    ----
         key: Environment variable name
         value: Environment variable value
         service: Service name to set variable for (optional)
@@ -272,10 +279,12 @@ def set_railway_variables_batch(
     triggering a deployment for each variable.
 
     Args:
+    ----
         variables: Dictionary of environment variable names and values
         service: Service name to set variables for (optional)
 
     Returns:
+    -------
         Tuple of (success, failed_keys)
         - success: True if all variables were set successfully
         - failed_keys: List of variable keys that failed to set
@@ -327,9 +336,11 @@ def get_deployment_url(service: str | None = None) -> str | None:
     Get deployment URL from Railway project.
 
     Args:
+    ----
         service: Service name (unused - kept for compatibility)
 
     Note:
+    ----
         Railway CLI v4's `status` command does not accept --service flag.
         This function returns the first deployment URL found.
 
@@ -356,9 +367,11 @@ def get_app_service_name(project_name: str | None = None) -> str:
     Determine the app service name for Railway deployment.
 
     Args:
+    ----
         project_name: Project name (defaults to current directory name)
 
     Returns:
+    -------
         Service name to use for the app
 
     """
@@ -376,9 +389,11 @@ def generate_railway_domain(service: str) -> str | None:
     Generate Railway public domain for a service.
 
     Args:
+    ----
         service: Service name to generate domain for
 
     Returns:
+    -------
         Generated domain URL or None if failed
 
     """
@@ -412,7 +427,8 @@ def check_uncommitted_changes() -> tuple[bool, str]:
     """
     Check if there are uncommitted changes in the Git repository.
 
-    Returns:
+    Returns
+    -------
         Tuple of (has_changes, status_output)
         - has_changes: True if there are uncommitted changes
         - status_output: Git status output string
@@ -438,7 +454,8 @@ def verify_railway_json() -> tuple[bool, str]:
     """
     Verify that railway.json exists and is valid JSON.
 
-    Returns:
+    Returns
+    -------
         Tuple of (is_valid, error_message)
         - is_valid: True if file exists and is valid JSON
         - error_message: Error description if validation fails, empty string otherwise
@@ -463,7 +480,8 @@ def verify_dockerfile() -> tuple[bool, str]:
     """
     Verify that Dockerfile exists in the project root.
 
-    Returns:
+    Returns
+    -------
         Tuple of (exists, error_message)
         - exists: True if Dockerfile exists
         - error_message: Error description if check fails, empty string otherwise
@@ -487,7 +505,8 @@ def verify_railway_dependencies() -> tuple[bool, list[str]]:
     - dj-database-url (Database URL parsing)
     - whitenoise (Static file serving)
 
-    Returns:
+    Returns
+    -------
         Tuple of (all_present, missing_deps)
         - all_present: True if all required dependencies are present
         - missing_deps: List of missing dependency names
@@ -520,7 +539,8 @@ def check_poetry_lock_consistency() -> tuple[bool, str]:
     """
     Check if poetry.lock is consistent with pyproject.toml.
 
-    Returns:
+    Returns
+    -------
         Tuple of (is_consistent, message)
         - is_consistent: True if poetry.lock is consistent with pyproject.toml
         - message: Status message
@@ -557,7 +577,8 @@ def fix_poetry_lock() -> tuple[bool, str]:
     """
     Fix poetry.lock by running poetry lock --no-update.
 
-    Returns:
+    Returns
+    -------
         Tuple of (success, message)
         - success: True if lock file was fixed successfully
         - message: Status message
@@ -586,9 +607,11 @@ def get_railway_variables(service: str | None = None) -> dict[str, str] | None:
     Get all environment variables for a Railway service.
 
     Args:
+    ----
         service: Service name (optional)
 
     Returns:
+    -------
         Dictionary of variable names and values, or None if failed
 
     """
@@ -625,9 +648,11 @@ def link_database_to_service(service: str) -> tuple[bool, str]:
     This creates a DATABASE_URL reference variable that points to the PostgreSQL service.
 
     Args:
+    ----
         service: App service name to link database to
 
     Returns:
+    -------
         Tuple of (success, message)
         - success: True if link was created successfully
         - message: Status or error message

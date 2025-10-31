@@ -28,6 +28,25 @@ poetry run pytest tests/ -q --tb=native --cov=src/ --cov-report=term-missing --c
 cd ..
 
 echo ""
+echo "📦 Testing quickscale_modules (if any)..."
+# Auto-detect modules and run their tests
+if [ -d "quickscale_modules" ]; then
+  for mod in quickscale_modules/*; do
+    if [ -d "$mod" ]; then
+      mod_name=$(basename "$mod")
+      echo "  → Testing module: $mod_name"
+      if [ -d "$mod/tests" ]; then
+        cd "$mod"
+        PYTHONPATH=. poetry run pytest tests/ -q --tb=native --cov=src/ --cov-report=term-missing --cov-report=html || EXIT_CODE=$?
+        cd - > /dev/null
+      else
+        echo "    → Skipping $mod_name (no tests/ directory)"
+      fi
+    fi
+  done
+fi
+
+echo ""
 if [ $EXIT_CODE -eq 0 ]; then
     echo "✅ All tests passed!"
 else

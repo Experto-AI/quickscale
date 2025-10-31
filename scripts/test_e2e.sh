@@ -92,6 +92,14 @@ cleanup() {
         # pytest-docker automatically cleans up containers, but we'll ensure any orphaned containers are removed
         cd "$CORE_DIR/tests"
         docker-compose -f docker-compose.test.yml down -v 2>/dev/null || true
+
+        # Cleanup any test containers that might be lingering
+        docker ps -a | grep -E '(test|e2e_cli_test).*_(db|web|postgres)' | awk '{print $1}' | xargs -r docker rm -f 2>/dev/null || true
+
+        # Stop containers on test ports
+        docker ps | grep -E ':(8000|5432)->' | awk '{print $1}' | xargs -r docker stop 2>/dev/null || true
+        docker ps -a | grep -E ':(8000|5432)->' | awk '{print $1}' | xargs -r docker rm -f 2>/dev/null || true
+
         echo -e "${GREEN}✓ Cleanup complete${NC}"
     else
         echo -e "\n${YELLOW}Skipping cleanup (--no-cleanup specified)${NC}"
@@ -156,6 +164,18 @@ else
     echo -e "${RED}✗ Core E2E tests failed${NC}"
 fi
 
+echo ""
+
+# Cleanup core test containers before running CLI tests
+echo -e "${BLUE}Cleaning up Core E2E test containers...${NC}"
+# Stop any containers from core E2E tests (pytest-docker containers)
+docker ps -a | grep -E 'test.*_(db|web|postgres)' | awk '{print $1}' | xargs -r docker rm -f 2>/dev/null || true
+# Also stop any containers on ports 8000 and 5432
+docker ps | grep -E ':(8000|5432)->' | awk '{print $1}' | xargs -r docker stop 2>/dev/null || true
+docker ps -a | grep -E ':(8000|5432)->' | awk '{print $1}' | xargs -r docker rm -f 2>/dev/null || true
+# Wait for ports to be released
+sleep 2
+echo -e "${GREEN}✓ Core test containers cleaned up${NC}"
 echo ""
 
 # Step 4: Run CLI E2E tests

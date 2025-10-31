@@ -1,13 +1,13 @@
 # 🚀 QuickScale
 
-<!-- 
+<!--
 README.md - User-Focused Introduction
 
 PURPOSE: This file serves as the first contact point for users, developers, and evaluators visiting the QuickScale project.
 
 CONTENT GUIDELINES:
 - Keep content user-facing and accessible to newcomers
-- Focus on "what" and "how to get started" rather than "why" or technical details  
+- Focus on "what" and "how to get started" rather than "why" or technical details
 - Include quick examples and development workflows
 - Avoid deep architectural explanations (those belong in DECISIONS.md)
 - Avoid competitive analysis or strategic context (those belong in QUICKSCALE.md)
@@ -176,4 +176,3 @@ poetry run python manage.py runserver
 - **[roadmap.md](./docs/technical/roadmap.md)** - Development roadmap and implementation plan
 - **[user_manual.md](./docs/technical/user_manual.md)** - Commands and workflows
 - **[contributing.md](./docs/contrib/contributing.md)** - Development workflow and coding standards
-

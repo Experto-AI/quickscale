@@ -295,7 +295,7 @@ quickscale shell
 quickscale manage migrate
 ```
 
-**Improvement**: 
+**Improvement**:
 - ✅ No need to remember docker-compose syntax
 - ✅ No need to know container naming conventions
 - ✅ Clear error messages guide users to solutions
