@@ -50,6 +50,11 @@ addopts = [
     "--cov-report=html",
     "-m", "not e2e",  # Skip E2E tests by default (run with: pytest -m e2e)
 ]
+markers = [
+    "integration: integration tests (slower, require external dependencies)",
+    "slow: slow tests that take significant time to run",
+    "e2e: end-to-end tests",
+]
 
 # Ruff and mypy configurations centralized in root ruff.toml and mypy.ini
 # Package-specific isort override

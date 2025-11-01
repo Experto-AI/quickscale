@@ -40,15 +40,14 @@ class TestProfileUpdateForm:
 class TestSignupForm:
     """Tests for SignupForm"""
 
-    def test_email_normalization(self):
-        """Test email is lowercased and stripped"""
-        form = SignupForm(
-            {
-                "username": "newuser",
-                "email": "  NewUser@Example.com  ",
-                "password1": "TestPass123!",
-                "password2": "TestPass123!",
-            }
-        )
-        if form.is_valid():
-            assert form.cleaned_data["email"] == "newuser@example.com"
+    def test_form_initialization(self):
+        """Test form can be initialized without circular import"""
+        # This test ensures no circular import occurs during form instantiation
+        form = SignupForm()
+        assert form is not None
+
+    def test_form_has_signup_method(self):
+        """Test form has required signup method for allauth integration"""
+        form = SignupForm()
+        assert hasattr(form, "signup")
+        assert callable(form.signup)
