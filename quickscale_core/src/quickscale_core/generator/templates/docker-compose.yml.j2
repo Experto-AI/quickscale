@@ -8,8 +8,11 @@ services:
       POSTGRES_PASSWORD: postgres
     volumes:
       - postgres_data:/var/lib/postgresql/data
-    ports:
-      - "5432:5432"
+    # Port mapping removed to avoid conflicts with system PostgreSQL
+    # The web service can still access the database via the internal Docker network
+    # If you need to access PostgreSQL from your host, uncomment the next 2 lines:
+    # ports:
+    #   - "5433:5432"  # Maps to host port 5433 to avoid conflict with system PostgreSQL
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U postgres"]
       interval: 10s
