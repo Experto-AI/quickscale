@@ -14,7 +14,9 @@ class TestSignals:
     def test_user_signed_up_signal(self):
         """Test user_signed_up signal fires without errors"""
         # Create user and trigger signal
-        user = User.objects.create_user(username="newuser", email="new@test.com", password="pass")
+        user = User.objects.create_user(
+            username="newuser", email="new@test.com", password="pass"
+        )
 
         # Signal handler should not raise errors
         user_signed_up.send(sender=User, request=None, user=user)

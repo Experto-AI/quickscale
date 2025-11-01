@@ -62,7 +62,9 @@ class ProjectGenerator:
                     # Try common development layouts
                     possible_paths = [
                         current_file.parent / "templates",  # Same directory
-                        current_file.parent.parent / "generator" / "templates",  # Parent
+                        current_file.parent.parent
+                        / "generator"
+                        / "templates",  # Parent
                         Path.cwd()
                         / "quickscale_core"
                         / "src"
@@ -161,7 +163,9 @@ class ProjectGenerator:
             try:
                 ensure_directory(parent)
             except (OSError, PermissionError) as e:
-                raise PermissionError(f"Cannot create parent directory {parent}: {e}") from e
+                raise PermissionError(
+                    f"Cannot create parent directory {parent}: {e}"
+                ) from e
 
         if not os.access(parent, os.W_OK):
             raise PermissionError(f"Parent directory is not writable: {parent}")
@@ -216,8 +220,16 @@ class ProjectGenerator:
                 f"{project_name}/settings/__init__.py",
                 False,
             ),
-            ("project_name/settings/base.py.j2", f"{project_name}/settings/base.py", False),
-            ("project_name/settings/local.py.j2", f"{project_name}/settings/local.py", False),
+            (
+                "project_name/settings/base.py.j2",
+                f"{project_name}/settings/base.py",
+                False,
+            ),
+            (
+                "project_name/settings/local.py.j2",
+                f"{project_name}/settings/local.py",
+                False,
+            ),
             (
                 "project_name/settings/production.py.j2",
                 f"{project_name}/settings/production.py",

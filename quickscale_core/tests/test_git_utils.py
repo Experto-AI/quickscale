@@ -112,7 +112,9 @@ class TestRunGitSubtreeAdd:
     def test_subtree_add_without_squash(self, mock_run: MagicMock) -> None:
         """Test git subtree add without squash"""
         mock_run.return_value = MagicMock(returncode=0)
-        run_git_subtree_add("modules/auth", "https://github.com/repo.git", "main", squash=False)
+        run_git_subtree_add(
+            "modules/auth", "https://github.com/repo.git", "main", squash=False
+        )
         args = mock_run.call_args[0][0]
         assert "--squash" not in args
 
@@ -131,7 +133,9 @@ class TestRunGitSubtreePull:
     def test_successful_subtree_pull(self, mock_run: MagicMock) -> None:
         """Test successful git subtree pull"""
         mock_run.return_value = MagicMock(stdout="Changes summary", returncode=0)
-        output = run_git_subtree_pull("modules/auth", "https://github.com/repo.git", "main")
+        output = run_git_subtree_pull(
+            "modules/auth", "https://github.com/repo.git", "main"
+        )
         assert output == "Changes summary"
         mock_run.assert_called_once()
 
@@ -150,7 +154,9 @@ class TestRunGitSubtreePush:
     def test_successful_subtree_push(self, mock_run: MagicMock) -> None:
         """Test successful git subtree push"""
         mock_run.return_value = MagicMock(returncode=0)
-        run_git_subtree_push("modules/auth", "https://github.com/repo.git", "feature/branch")
+        run_git_subtree_push(
+            "modules/auth", "https://github.com/repo.git", "feature/branch"
+        )
         mock_run.assert_called_once()
         args = mock_run.call_args[0][0]
         assert "subtree" in args
@@ -161,7 +167,9 @@ class TestRunGitSubtreePush:
         """Test handling git subtree push failure"""
         mock_run.side_effect = subprocess.CalledProcessError(1, "git", stderr="error")
         with pytest.raises(GitError, match="Failed to push git subtree"):
-            run_git_subtree_push("modules/auth", "https://github.com/repo.git", "feature/branch")
+            run_git_subtree_push(
+                "modules/auth", "https://github.com/repo.git", "feature/branch"
+            )
 
 
 class TestGetRemoteUrl:

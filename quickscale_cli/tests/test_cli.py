@@ -206,7 +206,9 @@ def test_init_command_unimplemented_themes(cli_runner):
     # Test that the default theme still works
     with cli_runner.isolated_filesystem():
         result = cli_runner.invoke(
-            cli, ["init", "testproj3", "--theme", "showcase_html"], catch_exceptions=False
+            cli,
+            ["init", "testproj3", "--theme", "showcase_html"],
+            catch_exceptions=False,
         )
         assert result.exit_code == 0
         assert "Created project: testproj3" in result.output
@@ -348,9 +350,15 @@ def test_generated_project_settings_imports(cli_runner):
         project_path = Path(project_name)
 
         # Read settings files
-        base_settings = (project_path / project_name / "settings" / "base.py").read_text()
-        local_settings = (project_path / project_name / "settings" / "local.py").read_text()
-        prod_settings = (project_path / project_name / "settings" / "production.py").read_text()
+        base_settings = (
+            project_path / project_name / "settings" / "base.py"
+        ).read_text()
+        local_settings = (
+            project_path / project_name / "settings" / "local.py"
+        ).read_text()
+        prod_settings = (
+            project_path / project_name / "settings" / "production.py"
+        ).read_text()
 
         # Read pyproject.toml to get declared dependencies
         pyproject_content = (project_path / "pyproject.toml").read_text()

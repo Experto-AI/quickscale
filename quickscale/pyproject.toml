@@ -4,7 +4,6 @@ version = "0.64.0"
 description = "Meta-package that installs quickscale-core and quickscale-cli together"
 authors = ["Experto AI <victor@experto.ai>"]
 license = "Apache-2.0"
-readme = "README.md"
 homepage = "https://github.com/Experto-AI/quickscale"
 repository = "https://github.com/Experto-AI/quickscale"
 documentation = "https://github.com/Experto-AI/quickscale/tree/main/docs"

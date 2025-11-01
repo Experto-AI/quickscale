@@ -7,7 +7,14 @@ import click
 import quickscale_cli
 import quickscale_core
 from quickscale_cli.commands.deployment_commands import deploy
-from quickscale_cli.commands.development_commands import down, logs, manage, ps, shell, up
+from quickscale_cli.commands.development_commands import (
+    down,
+    logs,
+    manage,
+    ps,
+    shell,
+    up,
+)
 from quickscale_cli.commands.module_commands import embed, push, update
 from quickscale_core.generator import ProjectGenerator
 
@@ -65,7 +72,9 @@ cli.add_command(push)
 @click.argument("project_name", required=True, metavar="PROJECT_NAME")
 @click.option(
     "--theme",
-    type=click.Choice(["showcase_html", "showcase_htmx", "showcase_react"], case_sensitive=False),
+    type=click.Choice(
+        ["showcase_html", "showcase_htmx", "showcase_react"], case_sensitive=False
+    ),
     default="showcase_html",
     help="Theme to use for the project (default: showcase_html)",
 )
@@ -87,8 +96,12 @@ def init(project_name: str, theme: str) -> None:
     try:
         # Validate theme availability
         if theme in ["showcase_htmx", "showcase_react"]:
-            click.secho(f"❌ Error: Theme '{theme}' is not yet implemented", fg="red", err=True)
-            click.echo(f"\n💡 The '{theme}' theme is planned for a future release:", err=True)
+            click.secho(
+                f"❌ Error: Theme '{theme}' is not yet implemented", fg="red", err=True
+            )
+            click.echo(
+                f"\n💡 The '{theme}' theme is planned for a future release:", err=True
+            )
             click.echo("   - showcase_htmx: Coming in v0.67.0", err=True)
             click.echo("   - showcase_react: Coming in v0.68.0", err=True)
             click.echo("\n📖 For now, use the default 'showcase_html' theme", err=True)
@@ -105,7 +118,11 @@ def init(project_name: str, theme: str) -> None:
         generator.generate(project_name, output_path)
 
         # Success message
-        click.secho(f"\n✅ Created project: {project_name} (theme: {theme})", fg="green", bold=True)
+        click.secho(
+            f"\n✅ Created project: {project_name} (theme: {theme})",
+            fg="green",
+            bold=True,
+        )
 
         # Next steps instructions
         click.echo("\n📋 Next steps:")
@@ -133,13 +150,17 @@ def init(project_name: str, theme: str) -> None:
         # Directory already exists
         click.secho(f"❌ Error: {e}", fg="red", err=True)
         click.echo(
-            "\n💡 Tip: Choose a different project name or remove the existing directory", err=True
+            "\n💡 Tip: Choose a different project name or remove the existing directory",
+            err=True,
         )
         raise click.Abort()
     except PermissionError as e:
         # Permission issues
         click.secho(f"❌ Error: {e}", fg="red", err=True)
-        click.echo("\n💡 Tip: Check directory permissions or try a different location", err=True)
+        click.echo(
+            "\n💡 Tip: Check directory permissions or try a different location",
+            err=True,
+        )
         raise click.Abort()
     except Exception as e:
         # Unexpected errors

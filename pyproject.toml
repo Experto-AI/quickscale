@@ -1,12 +1,33 @@
 [tool.poetry]
 name = "quickscale-monorepo"
 version = "0.0.0"
-description = "Repository-level helper project that installs the quickscale meta-package for local development"
+description = "Repository-level helper project for local development with centralized dependencies"
 authors = ["Experto AI <victor@experto.ai>"]
+package-mode = false
 
 [tool.poetry.dependencies]
-python = ">=3.10,<4.0"
+python = "^3.11"
 quickscale = {path = "./quickscale", develop = true}
+quickscale-core = {path = "./quickscale_core", develop = true}
+quickscale-cli = {path = "./quickscale_cli", develop = true}
+quickscale-module-auth = {path = "./quickscale_modules/auth", develop = true}
+
+[tool.poetry.group.dev.dependencies]
+# Testing frameworks
+pytest = "^8.0"
+pytest-cov = "^4.1.0"
+pytest-docker = "^3.1.0"
+pytest-playwright = "^0.4.0"
+pytest-django = "^4.7.0"
+# Code quality tools
+ruff = "^0.14.0"
+mypy = "^1.18.0"
+# Type stubs
+types-pyyaml = "^6.0.0"
+django-stubs = "^5.1.0"
+# Testing utilities
+factory-boy = "^3.3.0"
+psycopg2-binary = "^2.9.0"
 
 [build-system]
 requires = ["poetry-core"]

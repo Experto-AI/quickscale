@@ -25,7 +25,9 @@ class TestProfileUpdateForm:
 
     def test_form_duplicate_email(self, user, db):
         """Test form rejects duplicate email"""
-        User.objects.create_user(username="other", email="other@test.com", password="pass")
+        User.objects.create_user(
+            username="other", email="other@test.com", password="pass"
+        )
         form = ProfileUpdateForm(
             {"first_name": "Test", "last_name": "User", "email": "other@test.com"},
             instance=user,

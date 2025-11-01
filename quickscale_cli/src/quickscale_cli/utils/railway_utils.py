@@ -241,7 +241,9 @@ def run_railway_command(
             )
         return result
     except subprocess.TimeoutExpired as e:
-        raise TimeoutError(f"Railway command timed out after {timeout}s: {' '.join(cmd)}") from e
+        raise TimeoutError(
+            f"Railway command timed out after {timeout}s: {' '.join(cmd)}"
+        ) from e
     except FileNotFoundError as e:
         raise FileNotFoundError(
             "Railway CLI not found. Install with: npm install -g @railway/cli"
@@ -663,7 +665,13 @@ def link_database_to_service(service: str) -> tuple[bool, str]:
         # Format: railway variables --set "DATABASE_URL=${{Postgres.DATABASE_URL}}"
         # --service <service>
         result = run_railway_command(
-            ["variables", "--set", "DATABASE_URL=${{Postgres.DATABASE_URL}}", "--service", service],
+            [
+                "variables",
+                "--set",
+                "DATABASE_URL=${{Postgres.DATABASE_URL}}",
+                "--service",
+                service,
+            ],
             timeout=30,
         )
 

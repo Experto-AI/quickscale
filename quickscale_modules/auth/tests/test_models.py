@@ -62,8 +62,12 @@ class TestUserModel:
 
     def test_user_ordering(self, db):
         """Test users are ordered by date_joined descending"""
-        user1 = User.objects.create_user(username="user1", email="user1@test.com", password="pass")
-        user2 = User.objects.create_user(username="user2", email="user2@test.com", password="pass")
+        user1 = User.objects.create_user(
+            username="user1", email="user1@test.com", password="pass"
+        )
+        user2 = User.objects.create_user(
+            username="user2", email="user2@test.com", password="pass"
+        )
 
         users = list(User.objects.all())
         assert users[0] == user2  # Most recent first

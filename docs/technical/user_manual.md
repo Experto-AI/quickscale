@@ -32,13 +32,15 @@ Purpose: get a development environment ready to run tests and use the CLI.
 Recommended sequence:
 
 ```bash
-# 1. Ensure prerequisites are installed (Python 3.10+, Git, and Poetry)
+# 1. Ensure prerequisites are installed (Python 3.11+, Git, and Poetry)
 # 2. Run the repository bootstrap script
 ./scripts/bootstrap.sh
 
-# 3. Use Poetry to install dependencies
+# 3. Use Poetry to install all dependencies from repository root
 poetry install
 ```
+
+**Note**: QuickScale uses a monorepo with centralized dev dependencies. Running `poetry install` from the root installs all packages (core, cli, modules) plus shared dev tools (pytest, ruff, mypy).
 
 Notes:
 - Inspect `./scripts/bootstrap.sh` before running if you want to know exactly what it does on your system.
@@ -116,6 +118,8 @@ Use the repository lint script to run all code quality checks:
 # Run lint script (includes ruff format, ruff check, and mypy)
 ./scripts/lint.sh
 ```
+
+**Note**: Linting rules are centralized in `ruff.toml` and `mypy.ini` at the repository root. All packages share these configurations automatically.
 
 Pre-commit hooks are configured in `.pre-commit-config.yaml`. After bootstrapping you may want to run:
 
@@ -328,6 +332,7 @@ Minimal, project-focused Poetry commands you will use with this repo:
 First-time / bootstrap
 ```bash
 # From repo root (after ./scripts/bootstrap.sh)
+# Installs all packages + centralized dev dependencies
 poetry install
 ```
 
@@ -349,14 +354,17 @@ poetry run ruff check .
 
 Dependency management
 ```bash
-# Add prod dep
-poetry add <package>
-
-# Add dev dep
+# Add dev dependency (centralized at root)
+cd /path/to/quickscale
 poetry add --group dev <package>
 
-# Update dependencies (refresh lock)
-poetry update
+# Add production dependency (package-specific)
+cd quickscale_core  # or quickscale_cli, etc.
+poetry add <package>
+
+# Update dependencies
+poetry lock --no-update
+poetry install
 ```
 
 Build & publish

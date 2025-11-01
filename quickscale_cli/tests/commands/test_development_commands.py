@@ -5,7 +5,14 @@ from unittest.mock import Mock, patch
 
 from click.testing import CliRunner
 
-from quickscale_cli.commands.development_commands import down, logs, manage, ps, shell, up
+from quickscale_cli.commands.development_commands import (
+    down,
+    logs,
+    manage,
+    ps,
+    shell,
+    up,
+)
 
 
 class TestUpCommand:
@@ -446,7 +453,9 @@ class TestErrorHandling:
                         mock_in_project.return_value = True
                         mock_docker.return_value = True
                         mock_cmd.return_value = ["docker-compose"]
-                        mock_run.side_effect = subprocess.CalledProcessError(1, "docker-compose")
+                        mock_run.side_effect = subprocess.CalledProcessError(
+                            1, "docker-compose"
+                        )
 
                         result = runner.invoke(up)
 
@@ -470,7 +479,9 @@ class TestErrorHandling:
                         mock_in_project.return_value = True
                         mock_docker.return_value = True
                         mock_cmd.return_value = ["docker-compose"]
-                        mock_run.side_effect = subprocess.CalledProcessError(1, "docker-compose")
+                        mock_run.side_effect = subprocess.CalledProcessError(
+                            1, "docker-compose"
+                        )
 
                         result = runner.invoke(down)
 
@@ -494,7 +505,9 @@ class TestErrorHandling:
                         mock_in_project.return_value = True
                         mock_docker.return_value = True
                         mock_container.return_value = "myproject-web-1"
-                        mock_run.side_effect = subprocess.CalledProcessError(1, "docker")
+                        mock_run.side_effect = subprocess.CalledProcessError(
+                            1, "docker"
+                        )
 
                         result = runner.invoke(shell)
 
@@ -518,7 +531,9 @@ class TestErrorHandling:
                         mock_in_project.return_value = True
                         mock_docker.return_value = True
                         mock_container.return_value = "myproject-web-1"
-                        mock_run.side_effect = subprocess.CalledProcessError(1, "docker")
+                        mock_run.side_effect = subprocess.CalledProcessError(
+                            1, "docker"
+                        )
 
                         result = runner.invoke(manage, ["migrate"])
 
@@ -541,7 +556,9 @@ class TestErrorHandling:
                         mock_in_project.return_value = True
                         mock_docker.return_value = True
                         mock_cmd.return_value = ["docker-compose"]
-                        mock_run.side_effect = subprocess.CalledProcessError(1, "docker-compose")
+                        mock_run.side_effect = subprocess.CalledProcessError(
+                            1, "docker-compose"
+                        )
 
                         result = runner.invoke(logs)
 
@@ -565,7 +582,9 @@ class TestErrorHandling:
                         mock_in_project.return_value = True
                         mock_docker.return_value = True
                         mock_cmd.return_value = ["docker-compose"]
-                        mock_run.side_effect = subprocess.CalledProcessError(1, "docker-compose")
+                        mock_run.side_effect = subprocess.CalledProcessError(
+                            1, "docker-compose"
+                        )
 
                         result = runner.invoke(ps)
 

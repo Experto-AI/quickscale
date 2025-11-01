@@ -42,7 +42,8 @@ class TestProductionSettingsValidation:
             # Verify key validation logic is present in template
             assert "DATABASE_URL" in template_content
             assert (
-                "database_url = config(" in template_content or "DATABASE_URL" in template_content
+                "database_url = config(" in template_content
+                or "DATABASE_URL" in template_content
             )
             assert "ValueError" in template_content
             assert "Railway" in template_content

@@ -18,4 +18,6 @@ def sample_project_name() -> str:
 
 def pytest_configure(config):
     """Register custom markers."""
-    config.addinivalue_line("markers", "e2e: mark test as full end-to-end test (requires Docker)")
+    config.addinivalue_line(
+        "markers", "e2e: mark test as full end-to-end test (requires Docker)"
+    )

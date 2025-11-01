@@ -52,7 +52,10 @@ def apply_auth_configuration(project_path: Path, config: dict[str, Any]) -> None
     pyproject_path = project_path / "pyproject.toml"
 
     if not settings_path.exists():
-        click.secho("⚠️  Warning: settings.py not found, skipping auto-configuration", fg="yellow")
+        click.secho(
+            "⚠️  Warning: settings.py not found, skipping auto-configuration",
+            fg="yellow",
+        )
         return
 
     # Read settings.py
@@ -81,7 +84,10 @@ def apply_auth_configuration(project_path: Path, config: dict[str, Any]) -> None
                     err=True,
                 )
                 click.echo(f"Expected file: {auth_pyproject_path}", err=True)
-                click.echo("This indicates the auth module was not embedded correctly.", err=True)
+                click.echo(
+                    "This indicates the auth module was not embedded correctly.",
+                    err=True,
+                )
                 raise click.Abort()
 
             # Extract django-allauth version using regex
@@ -189,11 +195,13 @@ SITE_ID = 1
         installed_apps_addition += "ACCOUNT_USERNAME_REQUIRED = True\n"
         installed_apps_addition += "ACCOUNT_EMAIL_REQUIRED = True\n"
 
-    installed_apps_addition += f'ACCOUNT_EMAIL_VERIFICATION = "{config["email_verification"]}"\n'
-    installed_apps_addition += f"ACCOUNT_ALLOW_REGISTRATION = {config['allow_registration']}\n"
     installed_apps_addition += (
-        'ACCOUNT_ADAPTER = "quickscale_modules_auth.adapters.QuickscaleAccountAdapter"\n'
+        f'ACCOUNT_EMAIL_VERIFICATION = "{config["email_verification"]}"\n'
     )
+    installed_apps_addition += (
+        f"ACCOUNT_ALLOW_REGISTRATION = {config['allow_registration']}\n"
+    )
+    installed_apps_addition += 'ACCOUNT_ADAPTER = "quickscale_modules_auth.adapters.QuickscaleAccountAdapter"\n'
     installed_apps_addition += (
         'ACCOUNT_SIGNUP_FORM_CLASS = "quickscale_modules_auth.forms.SignupForm"\n'
     )
@@ -230,7 +238,9 @@ SITE_ID = 1
 
     # Show configuration summary
     click.echo("\n📋 Configuration applied:")
-    click.echo(f"  • Registration: {'Enabled' if config['allow_registration'] else 'Disabled'}")
+    click.echo(
+        f"  • Registration: {'Enabled' if config['allow_registration'] else 'Disabled'}"
+    )
     click.echo(f"  • Email verification: {config['email_verification']}")
     click.echo(f"  • Authentication: {config['authentication_method']}")
 
@@ -275,20 +285,31 @@ def embed(module: str, remote: str) -> None:
         # Validate git repository
         if not is_git_repo():
             click.secho("❌ Error: Not a git repository", fg="red", err=True)
-            click.echo("\n💡 Tip: Run 'git init' to initialize a git repository", err=True)
+            click.echo(
+                "\n💡 Tip: Run 'git init' to initialize a git repository", err=True
+            )
             raise click.Abort()
 
         # Check working directory is clean
         if not is_working_directory_clean():
-            click.secho("❌ Error: Working directory has uncommitted changes", fg="red", err=True)
-            click.echo("\n💡 Tip: Commit or stash your changes before embedding modules", err=True)
+            click.secho(
+                "❌ Error: Working directory has uncommitted changes",
+                fg="red",
+                err=True,
+            )
+            click.echo(
+                "\n💡 Tip: Commit or stash your changes before embedding modules",
+                err=True,
+            )
             raise click.Abort()
 
         # Check if module already exists
         module_path = Path.cwd() / "modules" / module
         if module_path.exists():
             click.secho(
-                f"❌ Error: Module '{module}' already exists at {module_path}", fg="red", err=True
+                f"❌ Error: Module '{module}' already exists at {module_path}",
+                fg="red",
+                err=True,
             )
             click.echo("\n💡 Tip: Remove the existing module directory first", err=True)
             raise click.Abort()
@@ -309,7 +330,9 @@ def embed(module: str, remote: str) -> None:
                 err=True,
             )
             click.echo("   Full implementation coming in v0.63.0+", err=True)
-            click.echo(f"\n📖 Branch '{branch}' does not exist on remote: {remote}", err=True)
+            click.echo(
+                f"\n📖 Branch '{branch}' does not exist on remote: {remote}", err=True
+            )
             raise click.Abort()
 
         # Interactive module configuration (v0.63.0+)
@@ -365,12 +388,15 @@ def embed(module: str, remote: str) -> None:
                 click.secho("  ✅ Dependencies installed successfully", fg="green")
             except subprocess.CalledProcessError as e:
                 click.secho(
-                    f"⚠️  Warning: Failed to install dependencies automatically: {e}", fg="yellow"
+                    f"⚠️  Warning: Failed to install dependencies automatically: {e}",
+                    fg="yellow",
                 )
                 click.echo("  💡 You may need to run 'poetry install' manually")
 
         # Success message
-        click.secho(f"\n✅ Module '{module}' embedded successfully!", fg="green", bold=True)
+        click.secho(
+            f"\n✅ Module '{module}' embedded successfully!", fg="green", bold=True
+        )
         click.echo(f"   Location: {module_path}")
         click.echo(f"   Branch: {branch}")
 
@@ -426,13 +452,22 @@ def update(no_preview: bool) -> None:
         # Validate git repository
         if not is_git_repo():
             click.secho("❌ Error: Not a git repository", fg="red", err=True)
-            click.echo("\n💡 Tip: This command must be run from a git repository", err=True)
+            click.echo(
+                "\n💡 Tip: This command must be run from a git repository", err=True
+            )
             raise click.Abort()
 
         # Check working directory is clean
         if not is_working_directory_clean():
-            click.secho("❌ Error: Working directory has uncommitted changes", fg="red", err=True)
-            click.echo("\n💡 Tip: Commit or stash your changes before updating modules", err=True)
+            click.secho(
+                "❌ Error: Working directory has uncommitted changes",
+                fg="red",
+                err=True,
+            )
+            click.echo(
+                "\n💡 Tip: Commit or stash your changes before updating modules",
+                err=True,
+            )
             raise click.Abort()
 
         # Load configuration
@@ -440,7 +475,9 @@ def update(no_preview: bool) -> None:
 
         if not config.modules:
             click.secho("✅ No modules installed. Nothing to update.", fg="green")
-            click.echo("\n💡 Tip: Install modules with 'quickscale embed --module <name>'")
+            click.echo(
+                "\n💡 Tip: Install modules with 'quickscale embed --module <name>'"
+            )
             return
 
         # Show installed modules
@@ -537,7 +574,9 @@ def push(module: str, branch: str, remote: str) -> None:
         # Check if module is installed
         config = load_config()
         if module not in config.modules:
-            click.secho(f"❌ Error: Module '{module}' is not installed", fg="red", err=True)
+            click.secho(
+                f"❌ Error: Module '{module}' is not installed", fg="red", err=True
+            )
             click.echo(
                 f"\n💡 Tip: Install the module first with 'quickscale embed --module {module}'",
                 err=True,
@@ -575,7 +614,9 @@ def push(module: str, branch: str, remote: str) -> None:
 
     except GitError as e:
         click.secho(f"❌ Git error: {e}", fg="red", err=True)
-        click.echo("\n💡 Tip: Make sure you have write access to the repository", err=True)
+        click.echo(
+            "\n💡 Tip: Make sure you have write access to the repository", err=True
+        )
         raise click.Abort()
     except Exception as e:
         click.secho(f"❌ Unexpected error: {e}", fg="red", err=True)

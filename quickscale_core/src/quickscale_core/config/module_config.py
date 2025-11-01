@@ -54,7 +54,8 @@ class ModuleConfig:
     def from_dict(cls, data: dict) -> "ModuleConfig":
         """Create from dictionary loaded from YAML"""
         modules = {
-            name: ModuleInfo.from_dict(info) for name, info in data.get("modules", {}).items()
+            name: ModuleInfo.from_dict(info)
+            for name, info in data.get("modules", {}).items()
         }
         return cls(default_remote=data["default_remote"], modules=modules)
 
@@ -71,7 +72,9 @@ def load_config(project_path: Path | None = None) -> ModuleConfig:
 
     if not config_path.exists():
         # Return default config if file doesn't exist
-        return ModuleConfig(default_remote="https://github.com/Experto-AI/quickscale.git")
+        return ModuleConfig(
+            default_remote="https://github.com/Experto-AI/quickscale.git"
+        )
 
     with open(config_path) as f:
         data = yaml.safe_load(f)
@@ -119,7 +122,9 @@ def remove_module(module_name: str, project_path: Path | None = None) -> None:
         save_config(config, project_path)
 
 
-def update_module_version(module_name: str, version: str, project_path: Path | None = None) -> None:
+def update_module_version(
+    module_name: str, version: str, project_path: Path | None = None
+) -> None:
     """Update the installed version of a module"""
     config = load_config(project_path)
 

@@ -144,7 +144,10 @@ class TestFullE2EWorkflow:
             cwd=project_path,
             capture_output=True,
             text=True,
-            env={**os.environ, "DJANGO_SETTINGS_MODULE": f"{project_name}.settings.test_e2e"},
+            env={
+                **os.environ,
+                "DJANGO_SETTINGS_MODULE": f"{project_name}.settings.test_e2e",
+            },
         )
 
         # Generated project tests should pass
@@ -246,9 +249,13 @@ class TestFullE2EWorkflow:
             text=True,
             timeout=180,  # 3 minutes timeout for installation
         )
-        assert install_result.returncode == 0, f"Poetry install failed: {install_result.stderr}"
+        assert (
+            install_result.returncode == 0
+        ), f"Poetry install failed: {install_result.stderr}"
 
-    def _configure_test_database(self, project_path: Path, project_name: str, postgres_url: str):
+    def _configure_test_database(
+        self, project_path: Path, project_name: str, postgres_url: str
+    ):
         """Configure generated project to use test PostgreSQL database."""
         # Create a test settings file that uses the test database
         test_settings = project_path / project_name / "settings" / "test_e2e.py"
@@ -316,7 +323,10 @@ LOGGING = {{
             cwd=project_path,
             capture_output=True,
             text=True,
-            env={**os.environ, "DJANGO_SETTINGS_MODULE": f"{project_path.name}.settings.test_e2e"},
+            env={
+                **os.environ,
+                "DJANGO_SETTINGS_MODULE": f"{project_path.name}.settings.test_e2e",
+            },
         )
         assert result.returncode == 0, f"Django checks failed: {result.stderr}"
 
@@ -327,7 +337,10 @@ LOGGING = {{
             cwd=project_path,
             capture_output=True,
             text=True,
-            env={**os.environ, "DJANGO_SETTINGS_MODULE": f"{project_path.name}.settings.test_e2e"},
+            env={
+                **os.environ,
+                "DJANGO_SETTINGS_MODULE": f"{project_path.name}.settings.test_e2e",
+            },
         )
         assert result.returncode == 0, f"Migrations failed: {result.stderr}"
 
@@ -338,7 +351,10 @@ LOGGING = {{
             cwd=project_path,
             capture_output=True,
             text=True,
-            env={**os.environ, "DJANGO_SETTINGS_MODULE": f"{project_path.name}.settings.test_e2e"},
+            env={
+                **os.environ,
+                "DJANGO_SETTINGS_MODULE": f"{project_path.name}.settings.test_e2e",
+            },
         )
         assert result.returncode == 0, f"collectstatic failed: {result.stderr}"
 
@@ -350,7 +366,10 @@ LOGGING = {{
             cwd=project_path,
             stdout=subprocess.PIPE,
             stderr=subprocess.STDOUT,  # Merge stderr into stdout for easier debugging
-            env={**os.environ, "DJANGO_SETTINGS_MODULE": f"{project_path.name}.settings.test_e2e"},
+            env={
+                **os.environ,
+                "DJANGO_SETTINGS_MODULE": f"{project_path.name}.settings.test_e2e",
+            },
             text=True,
             bufsize=1,  # Line buffered
         )

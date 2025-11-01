@@ -188,7 +188,9 @@ class TestGetRunningContainers:
     def test_get_multiple_containers(self):
         """Test getting list of running containers."""
         with patch("subprocess.run") as mock_run:
-            mock_run.return_value = Mock(returncode=0, stdout="container1\ncontainer2\ncontainer3")
+            mock_run.return_value = Mock(
+                returncode=0, stdout="container1\ncontainer2\ncontainer3"
+            )
             result = get_running_containers()
             assert result == ["container1", "container2", "container3"]
 

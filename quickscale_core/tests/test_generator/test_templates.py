@@ -97,7 +97,9 @@ class TestTemplateLoading:
 class TestTemplateRendering:
     """Verify templates render correctly with sample context data."""
 
-    def test_manage_py_renders(self, jinja_env: Environment, test_context: dict[str, str]) -> None:
+    def test_manage_py_renders(
+        self, jinja_env: Environment, test_context: dict[str, str]
+    ) -> None:
         """Test manage.py renders with project name and shebang."""
         template = jinja_env.get_template("manage.py.j2")
         output = template.render(test_context)
@@ -133,28 +135,36 @@ class TestTemplateRendering:
         assert output is not None
         assert "testproject" in output
 
-    def test_urls_renders(self, jinja_env: Environment, test_context: dict[str, str]) -> None:
+    def test_urls_renders(
+        self, jinja_env: Environment, test_context: dict[str, str]
+    ) -> None:
         """Test URL configuration renders with project name."""
         template = jinja_env.get_template("project_name/urls.py.j2")
         output = template.render(test_context)
         assert output is not None
         assert "testproject" in output
 
-    def test_wsgi_renders(self, jinja_env: Environment, test_context: dict[str, str]) -> None:
+    def test_wsgi_renders(
+        self, jinja_env: Environment, test_context: dict[str, str]
+    ) -> None:
         """Test WSGI configuration renders with project name."""
         template = jinja_env.get_template("project_name/wsgi.py.j2")
         output = template.render(test_context)
         assert output is not None
         assert "testproject" in output
 
-    def test_asgi_renders(self, jinja_env: Environment, test_context: dict[str, str]) -> None:
+    def test_asgi_renders(
+        self, jinja_env: Environment, test_context: dict[str, str]
+    ) -> None:
         """Test ASGI configuration renders with project name."""
         template = jinja_env.get_template("project_name/asgi.py.j2")
         output = template.render(test_context)
         assert output is not None
         assert "testproject" in output
 
-    def test_base_html_renders(self, jinja_env: Environment, test_context: dict[str, str]) -> None:
+    def test_base_html_renders(
+        self, jinja_env: Environment, test_context: dict[str, str]
+    ) -> None:
         """Test base HTML template renders with project name."""
         template = jinja_env.get_template("templates/base.html.j2")
         output = template.render(test_context)
@@ -162,7 +172,9 @@ class TestTemplateRendering:
         assert "testproject" in output
         assert "<!DOCTYPE html>" in output
 
-    def test_index_html_renders(self, jinja_env: Environment, test_context: dict[str, str]) -> None:
+    def test_index_html_renders(
+        self, jinja_env: Environment, test_context: dict[str, str]
+    ) -> None:
         """Test index HTML template renders with project name."""
         template = jinja_env.get_template("templates/index.html.j2")
         output = template.render(test_context)
@@ -170,7 +182,9 @@ class TestTemplateRendering:
         assert "testproject" in output
         assert "Welcome to" in output
 
-    def test_style_css_renders(self, jinja_env: Environment, test_context: dict[str, str]) -> None:
+    def test_style_css_renders(
+        self, jinja_env: Environment, test_context: dict[str, str]
+    ) -> None:
         """Test CSS stylesheet template renders with project name."""
         template = jinja_env.get_template("static/css/style.css.j2")
         output = template.render(test_context)
@@ -214,19 +228,25 @@ class TestPythonSyntaxValidity:
         output = template.render(test_context)
         ast.parse(output)
 
-    def test_urls_valid_python(self, jinja_env: Environment, test_context: dict[str, str]) -> None:
+    def test_urls_valid_python(
+        self, jinja_env: Environment, test_context: dict[str, str]
+    ) -> None:
         """Test rendered URL configuration produces valid Python syntax."""
         template = jinja_env.get_template("project_name/urls.py.j2")
         output = template.render(test_context)
         ast.parse(output)
 
-    def test_wsgi_valid_python(self, jinja_env: Environment, test_context: dict[str, str]) -> None:
+    def test_wsgi_valid_python(
+        self, jinja_env: Environment, test_context: dict[str, str]
+    ) -> None:
         """Test rendered WSGI configuration produces valid Python syntax."""
         template = jinja_env.get_template("project_name/wsgi.py.j2")
         output = template.render(test_context)
         ast.parse(output)
 
-    def test_asgi_valid_python(self, jinja_env: Environment, test_context: dict[str, str]) -> None:
+    def test_asgi_valid_python(
+        self, jinja_env: Environment, test_context: dict[str, str]
+    ) -> None:
         """Test rendered ASGI configuration produces valid Python syntax."""
         template = jinja_env.get_template("project_name/asgi.py.j2")
         output = template.render(test_context)
@@ -281,7 +301,9 @@ class TestProductionReadyFeatures:
         assert "SecurityMiddleware" in output
         assert "WhiteNoiseMiddleware" in output
 
-    def test_logging_configured(self, jinja_env: Environment, test_context: dict[str, str]) -> None:
+    def test_logging_configured(
+        self, jinja_env: Environment, test_context: dict[str, str]
+    ) -> None:
         """Test logging with rotating file handler is configured in base settings."""
         template = jinja_env.get_template("project_name/settings/base.py.j2")
         output = template.render(test_context)
@@ -307,13 +329,17 @@ class TestProductionReadyFeatures:
         output = template.render(test_context)
         assert "postgresql" in output
 
-    def test_whitenoise_in_base(self, jinja_env: Environment, test_context: dict[str, str]) -> None:
+    def test_whitenoise_in_base(
+        self, jinja_env: Environment, test_context: dict[str, str]
+    ) -> None:
         """Test WhiteNoise static file serving is configured in base settings."""
         template = jinja_env.get_template("project_name/settings/base.py.j2")
         output = template.render(test_context)
         assert "whitenoise" in output.lower()
 
-    def test_decouple_used(self, jinja_env: Environment, test_context: dict[str, str]) -> None:
+    def test_decouple_used(
+        self, jinja_env: Environment, test_context: dict[str, str]
+    ) -> None:
         """Test python-decouple is used for environment-based configuration."""
         template = jinja_env.get_template("project_name/settings/base.py.j2")
         output = template.render(test_context)
@@ -369,7 +395,9 @@ class TestHTMLTemplateStructure:
         # Read the raw template file to check extends directive
         import pathlib
 
-        template_path = pathlib.Path(jinja_env.loader.searchpath[0]) / "templates" / "index.html.j2"
+        template_path = (
+            pathlib.Path(jinja_env.loader.searchpath[0]) / "templates" / "index.html.j2"
+        )
         source = template_path.read_text()
         assert "{% extends" in source or "{%raw%}{% extends" in source
         assert "base.html" in source
@@ -495,7 +523,9 @@ class TestDevOpsTemplateRendering:
         assert "testproject" in output
         assert "[tool.poetry]" in output
 
-    def test_dockerfile_renders(self, jinja_env: Environment, test_context: dict[str, str]) -> None:
+    def test_dockerfile_renders(
+        self, jinja_env: Environment, test_context: dict[str, str]
+    ) -> None:
         """Test Dockerfile renders with project name."""
         template = jinja_env.get_template("Dockerfile.j2")
         output = template.render(test_context)
@@ -539,7 +569,9 @@ class TestDevOpsTemplateRendering:
         assert "testproject" in output
         assert "SECRET_KEY=" in output
 
-    def test_gitignore_renders(self, jinja_env: Environment, test_context: dict[str, str]) -> None:
+    def test_gitignore_renders(
+        self, jinja_env: Environment, test_context: dict[str, str]
+    ) -> None:
         """Test .gitignore renders correctly."""
         template = jinja_env.get_template(".gitignore.j2")
         output = template.render(test_context)
@@ -563,20 +595,26 @@ class TestDevOpsTemplateRendering:
 class TestPyprojectTomlContent:
     """Verify pyproject.toml contains required production dependencies and configuration."""
 
-    def test_django_dependency(self, jinja_env: Environment, test_context: dict[str, str]) -> None:
+    def test_django_dependency(
+        self, jinja_env: Environment, test_context: dict[str, str]
+    ) -> None:
         """Test pyproject.toml includes Django dependency."""
         template = jinja_env.get_template("pyproject.toml.j2")
         output = template.render(test_context)
         assert "Django" in output
         assert ">=5.0,<6.0" in output
 
-    def test_postgresql_driver(self, jinja_env: Environment, test_context: dict[str, str]) -> None:
+    def test_postgresql_driver(
+        self, jinja_env: Environment, test_context: dict[str, str]
+    ) -> None:
         """Test pyproject.toml includes PostgreSQL driver."""
         template = jinja_env.get_template("pyproject.toml.j2")
         output = template.render(test_context)
         assert "psycopg2-binary" in output
 
-    def test_environment_config(self, jinja_env: Environment, test_context: dict[str, str]) -> None:
+    def test_environment_config(
+        self, jinja_env: Environment, test_context: dict[str, str]
+    ) -> None:
         """Test pyproject.toml includes environment configuration library."""
         template = jinja_env.get_template("pyproject.toml.j2")
         output = template.render(test_context)
@@ -590,13 +628,17 @@ class TestPyprojectTomlContent:
         output = template.render(test_context)
         assert "whitenoise" in output
 
-    def test_gunicorn_server(self, jinja_env: Environment, test_context: dict[str, str]) -> None:
+    def test_gunicorn_server(
+        self, jinja_env: Environment, test_context: dict[str, str]
+    ) -> None:
         """Test pyproject.toml includes Gunicorn production server."""
         template = jinja_env.get_template("pyproject.toml.j2")
         output = template.render(test_context)
         assert "gunicorn" in output
 
-    def test_dev_dependencies(self, jinja_env: Environment, test_context: dict[str, str]) -> None:
+    def test_dev_dependencies(
+        self, jinja_env: Environment, test_context: dict[str, str]
+    ) -> None:
         """Test pyproject.toml includes development dependencies."""
         template = jinja_env.get_template("pyproject.toml.j2")
         output = template.render(test_context)
@@ -615,7 +657,9 @@ class TestPyprojectTomlContent:
         assert "[tool.pytest.ini_options]" in output
         assert "DJANGO_SETTINGS_MODULE" in output
 
-    def test_ruff_configuration(self, jinja_env: Environment, test_context: dict[str, str]) -> None:
+    def test_ruff_configuration(
+        self, jinja_env: Environment, test_context: dict[str, str]
+    ) -> None:
         """Test pyproject.toml includes ruff formatter and linter configuration."""
         template = jinja_env.get_template("pyproject.toml.j2")
         output = template.render(test_context)
@@ -629,14 +673,18 @@ class TestPyprojectTomlContent:
 class TestDockerfileContent:
     """Verify Dockerfile contains production-ready multi-stage build configuration."""
 
-    def test_multi_stage_build(self, jinja_env: Environment, test_context: dict[str, str]) -> None:
+    def test_multi_stage_build(
+        self, jinja_env: Environment, test_context: dict[str, str]
+    ) -> None:
         """Test Dockerfile uses multi-stage build pattern."""
         template = jinja_env.get_template("Dockerfile.j2")
         output = template.render(test_context)
         assert "FROM python:3.12-slim as builder" in output
         assert "FROM python:3.12-slim" in output
 
-    def test_non_root_user(self, jinja_env: Environment, test_context: dict[str, str]) -> None:
+    def test_non_root_user(
+        self, jinja_env: Environment, test_context: dict[str, str]
+    ) -> None:
         """Test Dockerfile creates and uses non-root user."""
         template = jinja_env.get_template("Dockerfile.j2")
         output = template.render(test_context)
@@ -652,7 +700,9 @@ class TestDockerfileContent:
         output = template.render(test_context)
         assert "poetry" in output.lower()
 
-    def test_optimized_layers(self, jinja_env: Environment, test_context: dict[str, str]) -> None:
+    def test_optimized_layers(
+        self, jinja_env: Environment, test_context: dict[str, str]
+    ) -> None:
         """Test Dockerfile optimizes layer caching with dependency files first."""
         template = jinja_env.get_template("Dockerfile.j2")
         output = template.render(test_context)
@@ -665,13 +715,17 @@ class TestDockerfileContent:
         copy_app_idx = next(i for i, line in enumerate(lines) if "COPY --chown" in line)
         assert poetry_install_idx < copy_app_idx
 
-    def test_healthcheck(self, jinja_env: Environment, test_context: dict[str, str]) -> None:
+    def test_healthcheck(
+        self, jinja_env: Environment, test_context: dict[str, str]
+    ) -> None:
         """Test Dockerfile includes health check."""
         template = jinja_env.get_template("Dockerfile.j2")
         output = template.render(test_context)
         assert "HEALTHCHECK" in output
 
-    def test_gunicorn_command(self, jinja_env: Environment, test_context: dict[str, str]) -> None:
+    def test_gunicorn_command(
+        self, jinja_env: Environment, test_context: dict[str, str]
+    ) -> None:
         """Test Dockerfile runs Gunicorn production server."""
         template = jinja_env.get_template("Dockerfile.j2")
         output = template.render(test_context)
@@ -682,7 +736,9 @@ class TestDockerfileContent:
 class TestDockerComposeContent:
     """Verify docker-compose.yml contains complete development environment."""
 
-    def test_postgres_service(self, jinja_env: Environment, test_context: dict[str, str]) -> None:
+    def test_postgres_service(
+        self, jinja_env: Environment, test_context: dict[str, str]
+    ) -> None:
         """Test docker-compose.yml includes PostgreSQL service."""
         template = jinja_env.get_template("docker-compose.yml.j2")
         output = template.render(test_context)
@@ -690,14 +746,18 @@ class TestDockerComposeContent:
         assert "postgres:" in output
         assert "POSTGRES_DB" in output
 
-    def test_web_service(self, jinja_env: Environment, test_context: dict[str, str]) -> None:
+    def test_web_service(
+        self, jinja_env: Environment, test_context: dict[str, str]
+    ) -> None:
         """Test docker-compose.yml includes web service."""
         template = jinja_env.get_template("docker-compose.yml.j2")
         output = template.render(test_context)
         assert "web:" in output
         assert "build:" in output
 
-    def test_persistent_volumes(self, jinja_env: Environment, test_context: dict[str, str]) -> None:
+    def test_persistent_volumes(
+        self, jinja_env: Environment, test_context: dict[str, str]
+    ) -> None:
         """Test docker-compose.yml defines persistent volumes."""
         template = jinja_env.get_template("docker-compose.yml.j2")
         output = template.render(test_context)
@@ -706,7 +766,9 @@ class TestDockerComposeContent:
         assert "static_volume:" in output
         assert "media_volume:" in output
 
-    def test_healthchecks(self, jinja_env: Environment, test_context: dict[str, str]) -> None:
+    def test_healthchecks(
+        self, jinja_env: Environment, test_context: dict[str, str]
+    ) -> None:
         """Test docker-compose.yml includes healthchecks."""
         template = jinja_env.get_template("docker-compose.yml.j2")
         output = template.render(test_context)
@@ -726,20 +788,26 @@ class TestDockerComposeContent:
 class TestEnvExampleContent:
     """Verify .env.example contains all required environment variables."""
 
-    def test_secret_key(self, jinja_env: Environment, test_context: dict[str, str]) -> None:
+    def test_secret_key(
+        self, jinja_env: Environment, test_context: dict[str, str]
+    ) -> None:
         """Test .env.example includes SECRET_KEY."""
         template = jinja_env.get_template(".env.example.j2")
         output = template.render(test_context)
         assert "SECRET_KEY=" in output
         assert "testproject" in output
 
-    def test_debug_flag(self, jinja_env: Environment, test_context: dict[str, str]) -> None:
+    def test_debug_flag(
+        self, jinja_env: Environment, test_context: dict[str, str]
+    ) -> None:
         """Test .env.example includes DEBUG flag."""
         template = jinja_env.get_template(".env.example.j2")
         output = template.render(test_context)
         assert "DEBUG=" in output
 
-    def test_allowed_hosts(self, jinja_env: Environment, test_context: dict[str, str]) -> None:
+    def test_allowed_hosts(
+        self, jinja_env: Environment, test_context: dict[str, str]
+    ) -> None:
         """Test .env.example includes ALLOWED_HOSTS."""
         template = jinja_env.get_template(".env.example.j2")
         output = template.render(test_context)
@@ -784,7 +852,9 @@ class TestEnvExampleContent:
             '"*"' in output or "'*'" in output
         ), "local.py should allow all hosts (* wildcard) for development"
 
-    def test_database_url(self, jinja_env: Environment, test_context: dict[str, str]) -> None:
+    def test_database_url(
+        self, jinja_env: Environment, test_context: dict[str, str]
+    ) -> None:
         """Test .env.example includes DATABASE_URL with PostgreSQL."""
         template = jinja_env.get_template(".env.example.j2")
         output = template.render(test_context)
@@ -792,7 +862,9 @@ class TestEnvExampleContent:
         assert "postgresql://" in output
         assert "testproject" in output
 
-    def test_helpful_comments(self, jinja_env: Environment, test_context: dict[str, str]) -> None:
+    def test_helpful_comments(
+        self, jinja_env: Environment, test_context: dict[str, str]
+    ) -> None:
         """Test .env.example includes explanatory comments."""
         template = jinja_env.get_template(".env.example.j2")
         output = template.render(test_context)
@@ -803,7 +875,9 @@ class TestEnvExampleContent:
 class TestGitignoreContent:
     """Verify .gitignore excludes appropriate files and directories."""
 
-    def test_python_artifacts(self, jinja_env: Environment, test_context: dict[str, str]) -> None:
+    def test_python_artifacts(
+        self, jinja_env: Environment, test_context: dict[str, str]
+    ) -> None:
         """Test .gitignore excludes Python artifacts."""
         template = jinja_env.get_template(".gitignore.j2")
         output = template.render(test_context)
@@ -819,7 +893,9 @@ class TestGitignoreContent:
         assert ".venv" in output
         assert "venv/" in output
 
-    def test_django_artifacts(self, jinja_env: Environment, test_context: dict[str, str]) -> None:
+    def test_django_artifacts(
+        self, jinja_env: Environment, test_context: dict[str, str]
+    ) -> None:
         """Test .gitignore excludes Django-specific files."""
         template = jinja_env.get_template(".gitignore.j2")
         output = template.render(test_context)
@@ -827,20 +903,26 @@ class TestGitignoreContent:
         assert "/media" in output
         assert "/staticfiles" in output
 
-    def test_environment_files(self, jinja_env: Environment, test_context: dict[str, str]) -> None:
+    def test_environment_files(
+        self, jinja_env: Environment, test_context: dict[str, str]
+    ) -> None:
         """Test .gitignore excludes environment variable files."""
         template = jinja_env.get_template(".gitignore.j2")
         output = template.render(test_context)
         assert ".env" in output
 
-    def test_ide_files(self, jinja_env: Environment, test_context: dict[str, str]) -> None:
+    def test_ide_files(
+        self, jinja_env: Environment, test_context: dict[str, str]
+    ) -> None:
         """Test .gitignore excludes IDE-specific files."""
         template = jinja_env.get_template(".gitignore.j2")
         output = template.render(test_context)
         assert ".vscode/" in output
         assert ".idea/" in output
 
-    def test_testing_artifacts(self, jinja_env: Environment, test_context: dict[str, str]) -> None:
+    def test_testing_artifacts(
+        self, jinja_env: Environment, test_context: dict[str, str]
+    ) -> None:
         """Test .gitignore excludes testing artifacts."""
         template = jinja_env.get_template(".gitignore.j2")
         output = template.render(test_context)
@@ -851,25 +933,33 @@ class TestGitignoreContent:
 class TestEditorconfigContent:
     """Verify .editorconfig defines consistent editor settings."""
 
-    def test_root_declaration(self, jinja_env: Environment, test_context: dict[str, str]) -> None:
+    def test_root_declaration(
+        self, jinja_env: Environment, test_context: dict[str, str]
+    ) -> None:
         """Test .editorconfig declares root = true."""
         template = jinja_env.get_template(".editorconfig.j2")
         output = template.render(test_context)
         assert "root = true" in output
 
-    def test_charset_setting(self, jinja_env: Environment, test_context: dict[str, str]) -> None:
+    def test_charset_setting(
+        self, jinja_env: Environment, test_context: dict[str, str]
+    ) -> None:
         """Test .editorconfig sets UTF-8 charset."""
         template = jinja_env.get_template(".editorconfig.j2")
         output = template.render(test_context)
         assert "charset = utf-8" in output
 
-    def test_line_endings(self, jinja_env: Environment, test_context: dict[str, str]) -> None:
+    def test_line_endings(
+        self, jinja_env: Environment, test_context: dict[str, str]
+    ) -> None:
         """Test .editorconfig sets line endings."""
         template = jinja_env.get_template(".editorconfig.j2")
         output = template.render(test_context)
         assert "end_of_line" in output
 
-    def test_python_indent(self, jinja_env: Environment, test_context: dict[str, str]) -> None:
+    def test_python_indent(
+        self, jinja_env: Environment, test_context: dict[str, str]
+    ) -> None:
         """Test .editorconfig sets Python indentation to 4 spaces."""
         template = jinja_env.get_template(".editorconfig.j2")
         output = template.render(test_context)

@@ -224,7 +224,10 @@ class TestRunRailwayCommand:
             assert result.returncode == 0
             # Verify subprocess.run was called without capture_output
             call_kwargs = mock_run.call_args[1]
-            assert "capture_output" not in call_kwargs or call_kwargs["capture_output"] is False
+            assert (
+                "capture_output" not in call_kwargs
+                or call_kwargs["capture_output"] is False
+            )
 
     def test_command_timeout_raises_error(self):
         """Test that timeout raises TimeoutError."""
@@ -255,7 +258,9 @@ class TestRunRailwayCommand:
     def test_failed_command_returns_error_code(self):
         """Test that failed command returns non-zero exit code."""
         with patch("subprocess.run") as mock_run:
-            mock_run.return_value = Mock(returncode=1, stdout="", stderr="Error message")
+            mock_run.return_value = Mock(
+                returncode=1, stdout="", stderr="Error message"
+            )
             result = run_railway_command(["invalid-command"])
 
             assert result.returncode == 1
@@ -325,7 +330,9 @@ class TestSetRailwayVariablesBatch:
         with patch("subprocess.run") as mock_run:
             mock_run.return_value = Mock(returncode=0)
             variables = {"KEY1": "value1", "KEY2": "value2"}
-            success, failed = set_railway_variables_batch(variables, service="my-service")
+            success, failed = set_railway_variables_batch(
+                variables, service="my-service"
+            )
 
             assert success is True
             assert failed == []
@@ -742,7 +749,9 @@ class TestCheckUncommittedChanges:
     def test_has_uncommitted_changes(self):
         """Test detection of uncommitted changes."""
         with patch("subprocess.run") as mock_run:
-            mock_run.return_value = Mock(returncode=0, stdout=" M file1.py\n?? file2.py")
+            mock_run.return_value = Mock(
+                returncode=0, stdout=" M file1.py\n?? file2.py"
+            )
             has_changes, output = check_uncommitted_changes()
             assert has_changes is True
             assert "file1.py" in output
@@ -771,7 +780,9 @@ class TestVerifyRailwayJson:
         """Test valid railway.json file."""
         monkeypatch.chdir(tmp_path)
         railway_json = tmp_path / "railway.json"
-        railway_json.write_text('{"$schema": "https://railway.app/railway.schema.json"}')
+        railway_json.write_text(
+            '{"$schema": "https://railway.app/railway.schema.json"}'
+        )
 
         is_valid, error_msg = verify_railway_json()
         assert is_valid is True
@@ -1035,7 +1046,9 @@ class TestLinkDatabaseToService:
 
     def test_successful_link_with_postgres_name(self):
         """Test successful DATABASE_URL link using Postgres service name."""
-        with patch("quickscale_cli.utils.railway_utils.run_railway_command") as mock_run:
+        with patch(
+            "quickscale_cli.utils.railway_utils.run_railway_command"
+        ) as mock_run:
             mock_run.return_value = Mock(returncode=0, stdout="", stderr="")
             success, message = link_database_to_service("myapp")
 
@@ -1055,7 +1068,9 @@ class TestLinkDatabaseToService:
 
     def test_fallback_to_postgresql_name(self):
         """Test fallback to PostgreSQL service name when Postgres fails."""
-        with patch("quickscale_cli.utils.railway_utils.run_railway_command") as mock_run:
+        with patch(
+            "quickscale_cli.utils.railway_utils.run_railway_command"
+        ) as mock_run:
             # First call (Postgres) fails, second call (PostgreSQL) succeeds
             mock_run.side_effect = [
                 Mock(returncode=1, stdout="", stderr="Service not found"),
@@ -1073,7 +1088,9 @@ class TestLinkDatabaseToService:
 
     def test_link_fails_both_attempts(self):
         """Test when both Postgres and PostgreSQL link attempts fail."""
-        with patch("quickscale_cli.utils.railway_utils.run_railway_command") as mock_run:
+        with patch(
+            "quickscale_cli.utils.railway_utils.run_railway_command"
+        ) as mock_run:
             mock_run.side_effect = [
                 Mock(returncode=1, stdout="", stderr="Service not found"),
                 Mock(returncode=1, stdout="", stderr="Service not found"),
@@ -1086,7 +1103,9 @@ class TestLinkDatabaseToService:
 
     def test_link_with_exception(self):
         """Test when an exception occurs during linking."""
-        with patch("quickscale_cli.utils.railway_utils.run_railway_command") as mock_run:
+        with patch(
+            "quickscale_cli.utils.railway_utils.run_railway_command"
+        ) as mock_run:
             mock_run.side_effect = Exception("Network error")
             success, message = link_database_to_service("myapp")
 
@@ -1096,7 +1115,9 @@ class TestLinkDatabaseToService:
 
     def test_link_with_different_service_name(self):
         """Test linking with a different service name."""
-        with patch("quickscale_cli.utils.railway_utils.run_railway_command") as mock_run:
+        with patch(
+            "quickscale_cli.utils.railway_utils.run_railway_command"
+        ) as mock_run:
             mock_run.return_value = Mock(returncode=0, stdout="", stderr="")
             success, message = link_database_to_service("custom-app-123")
 
