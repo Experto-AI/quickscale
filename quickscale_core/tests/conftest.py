@@ -4,11 +4,19 @@ from pathlib import Path
 
 import pytest
 
+from quickscale_core.generator.generator import ProjectGenerator
+
 
 @pytest.fixture
 def sample_project_name() -> str:
     """Provide a sample project name for testing."""
     return "testproject"
+
+
+@pytest.fixture
+def project_name(sample_project_name: str) -> str:
+    """Alias for sample_project_name for backwards compatibility."""
+    return sample_project_name
 
 
 @pytest.fixture
@@ -20,6 +28,25 @@ def sample_project_config() -> dict[str, str]:
         "email": "test@example.com",
         "description": "A test Django project",
     }
+
+
+@pytest.fixture
+def generated_project_path(tmp_path: Path, sample_project_name: str) -> Path:
+    """Generate a test project and return its path.
+
+    This fixture creates a temporary project using the ProjectGenerator
+    and cleans it up after the test completes.
+    """
+    output_path = tmp_path / sample_project_name
+
+    # Generate project
+    generator = ProjectGenerator(theme="showcase_html")
+    generator.generate(sample_project_name, output_path)
+
+    # Return path for test assertions
+    yield output_path
+
+    # Cleanup is automatic with tmp_path
 
 
 def pytest_configure(config):

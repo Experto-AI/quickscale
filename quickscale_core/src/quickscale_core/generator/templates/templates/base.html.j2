@@ -4,11 +4,11 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>{%raw%}{% block title %}{% endraw %}{{ project_name }}{%raw%}{% endblock %}{%endraw%}</title>
-    {%raw%}{% load static %}
-    <link rel="icon" type="image/svg+xml" href="{% static 'images/favicon.svg' %}">
-    {% block extra_css %}
-    <link rel="stylesheet" href="{% static 'css/style.css' %}">
-    {% endblock %}{%endraw%}
+    {%raw%}{% load static %}{% endraw%}
+    <link rel="icon" type="image/svg+xml" href="{%raw%}{% static 'images/favicon.svg' %}{%endraw%}">
+    {%raw%}{% block extra_css %}{%endraw%}
+    <link rel="stylesheet" href="{%raw%}{% static 'css/style.css' %}{%endraw%}">
+    {%raw%}{% endblock %}{%endraw%}
 </head>
 <body>
     <header>

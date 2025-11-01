@@ -212,6 +212,7 @@ class ProjectGenerator:
             # Project package files
             ("project_name/__init__.py.j2", f"{project_name}/__init__.py", False),
             ("project_name/urls.py.j2", f"{project_name}/urls.py", False),
+            ("project_name/views.py.j2", f"{project_name}/views.py", False),
             ("project_name/wsgi.py.j2", f"{project_name}/wsgi.py", False),
             ("project_name/asgi.py.j2", f"{project_name}/asgi.py", False),
             # Settings files
@@ -246,6 +247,9 @@ class ProjectGenerator:
                 "templates/index.html",
                 False,
             ),
+            # Error page templates (shared across all themes)
+            ("templates/404.html.j2", "templates/404.html", False),
+            ("templates/500.html.j2", "templates/500.html", False),
             # Static files (theme-specific)
             (
                 self._get_theme_template_path("static/css/style.css.j2"),
