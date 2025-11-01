@@ -66,7 +66,9 @@ class ProfileUpdateForm(forms.ModelForm):
         if email:
             email = email.lower().strip()
             # Check if email is already taken by another user
-            existing_user = User.objects.filter(email=email).exclude(pk=self.instance.pk).first()
+            existing_user = (
+                User.objects.filter(email=email).exclude(pk=self.instance.pk).first()
+            )
             if existing_user:
                 raise forms.ValidationError("This email address is already in use.")
         return str(email)

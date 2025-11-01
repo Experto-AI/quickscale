@@ -17,9 +17,16 @@ def dummy_password_change(request):
 urlpatterns = [
     path("", home_view, name="home"),
     # Add dummy URL for allauth password change (for template rendering in tests)
-    path("accounts/password/change/", dummy_password_change, name="account_change_password"),
+    path(
+        "accounts/password/change/",
+        dummy_password_change,
+        name="account_change_password",
+    ),
     path(
         "accounts/",
-        include(("quickscale_modules_auth.urls", "quickscale_auth"), namespace="quickscale_auth"),
+        include(
+            ("quickscale_modules_auth.urls", "quickscale_auth"),
+            namespace="quickscale_auth",
+        ),
     ),
 ]
