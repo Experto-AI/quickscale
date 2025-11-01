@@ -8,10 +8,10 @@ echo ""
 
 echo "📦 Checking quickscale_core..."
 cd quickscale_core
-echo "  → Running ruff format..."
-poetry run ruff format .
 echo "  → Running ruff check..."
-poetry run ruff check src/ tests/ --fix
+poetry run ruff check --fix src/ tests/
+echo "  → Running ruff format..."
+poetry run ruff format src/ tests/
 echo "  → Running mypy..."
 poetry run mypy src/
 cd ..
@@ -19,10 +19,10 @@ cd ..
 echo ""
 echo "📦 Checking quickscale_cli..."
 cd quickscale_cli
-echo "  → Running ruff format..."
-poetry run ruff format .
 echo "  → Running ruff check..."
-poetry run ruff check src/ tests/ --fix
+poetry run ruff check --fix src/ tests/
+echo "  → Running ruff format..."
+poetry run ruff format src/ tests/
 echo "  → Running mypy..."
 poetry run mypy src/
 cd ..
@@ -36,10 +36,10 @@ if [ -d "quickscale_modules" ]; then
 			echo "  → Found module: $(basename "$mod")"
 			if [ -d "$mod/src" ]; then
 				cd "$mod"
-				echo "    → Running ruff format..."
-				poetry run ruff format src/ || true
 				echo "    → Running ruff check..."
-				poetry run ruff check src/ tests/ --fix || true
+				poetry run ruff check --fix src/ tests/ || true
+				echo "    → Running ruff format..."
+				poetry run ruff format src/ tests/ || true
 				echo "    → Running mypy..."
 				poetry run mypy src/ || true
 				cd - > /dev/null
@@ -84,3 +84,10 @@ fi
 
 echo ""
 echo "✅ All code quality checks passed!"
+echo ""
+echo "💡 Tip: Run this script twice to ensure all fixes are applied:"
+echo "   ./scripts/lint.sh && git add -A && ./scripts/lint.sh && git add -A && git commit"
+echo ""
+echo "   Or use this shortcut:"
+echo "   ./scripts/lint.sh && git add -A && git commit"
+echo "   (If pre-commit makes changes, just run: git add -A && git commit --amend --no-edit)"

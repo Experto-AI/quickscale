@@ -7,7 +7,6 @@ authors = ["Experto AI <victor@experto.ai>"]
 [tool.poetry.dependencies]
 python = ">=3.10,<4.0"
 quickscale = {path = "./quickscale", develop = true}
-black = "^25.9.0"
 
 [build-system]
 requires = ["poetry-core"]

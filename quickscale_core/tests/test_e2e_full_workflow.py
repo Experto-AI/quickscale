@@ -178,7 +178,18 @@ class TestFullE2EWorkflow:
 
     def _ensure_port_free(self, port: int = 8000):
         """Ensure the specified port is free before starting server."""
-        # Find PIDs using the port
+        import socket
+
+        # First, check if port is already free
+        try:
+            with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+                s.bind(("127.0.0.1", port))
+                print(f"✓ Port {port} is already free")
+                return
+        except OSError:
+            pass  # Port is in use, try to free it
+
+        # Try to kill any processes using the port
         result = subprocess.run(
             ["lsof", "-ti", f":{port}"],
             capture_output=True,
@@ -193,6 +204,27 @@ class TestFullE2EWorkflow:
                     print(f"✓ Killed process {pid} on port {port}")
                 except subprocess.CalledProcessError:
                     pass  # Process may have already terminated
+
+        # Wait for port to actually be free (with timeout)
+        max_wait = 10  # seconds (increased from 5)
+        wait_interval = 0.2
+        elapsed = 0
+
+        while elapsed < max_wait:
+            try:
+                # Try to bind to the port to verify it's free
+                with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+                    s.bind(("127.0.0.1", port))
+                    # If we can bind, the port is free
+                    print(f"✓ Port {port} is now free")
+                    return
+            except OSError:
+                # Port is still in use, wait a bit
+                time.sleep(wait_interval)
+                elapsed += wait_interval
+
+        # If we get here, port is still not free - raise an error
+        raise RuntimeError(f"Port {port} is still in use after {max_wait} seconds")
 
     def _install_project_dependencies(self, project_path: Path):
         """Install dependencies in the generated project using poetry."""

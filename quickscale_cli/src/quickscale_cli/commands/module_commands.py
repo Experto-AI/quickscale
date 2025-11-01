@@ -155,6 +155,11 @@ INSTALLED_APPS += [
     "quickscale_modules_auth",
 ]
 
+# Allauth Middleware (must be added to MIDDLEWARE)
+MIDDLEWARE += [
+    "allauth.account.middleware.AccountMiddleware",
+]
+
 # Authentication Configuration
 AUTHENTICATION_BACKENDS = [
     "django.contrib.auth.backends.ModelBackend",
@@ -185,7 +190,7 @@ SITE_ID = 1
         installed_apps_addition += "ACCOUNT_EMAIL_REQUIRED = True\n"
 
     installed_apps_addition += f'ACCOUNT_EMAIL_VERIFICATION = "{config["email_verification"]}"\n'
-    installed_apps_addition += f'ACCOUNT_ALLOW_REGISTRATION = {config["allow_registration"]}\n'
+    installed_apps_addition += f"ACCOUNT_ALLOW_REGISTRATION = {config['allow_registration']}\n"
     installed_apps_addition += (
         'ACCOUNT_ADAPTER = "quickscale_modules_auth.adapters.QuickscaleAccountAdapter"\n'
     )
@@ -207,10 +212,11 @@ SITE_ID = 1
         with open(urls_path) as f:
             urls_content = f.read()
 
-        if "quickscale_modules_auth" not in urls_content:
+        if "allauth" not in urls_content:
             # Find urlpatterns and add auth URLs
             if "urlpatterns = [" in urls_content:
                 urls_addition = (
+                    '    path("accounts/", include("allauth.urls")),\n'
                     '    path("accounts/", include("quickscale_modules_auth.urls")),  # Auth URLs\n'
                 )
                 urls_content = urls_content.replace(
@@ -338,6 +344,17 @@ def embed(module: str, remote: str) -> None:
             try:
                 import subprocess
 
+                # Install the auth module
+                subprocess.run(
+                    ["poetry", "add", "./modules/auth"],
+                    cwd=project_root,
+                    capture_output=True,
+                    text=True,
+                    check=True,
+                )
+                click.secho("  ✅ Auth module installed successfully", fg="green")
+
+                # Install dependencies
                 subprocess.run(
                     ["poetry", "install"],
                     cwd=project_root,

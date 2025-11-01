@@ -17,21 +17,20 @@ classifiers = [
     "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",
     "Framework :: Django",
-    "Framework :: Django :: 4.2",
     "Framework :: Django :: 5.0",
 ]
 packages = [{include = "quickscale_cli", from = "src"}]
 
 [tool.poetry.dependencies]
 python = "^3.10"
-click = "^8.1.0"
+click = "^8.3.0"
 quickscale-core = {path = "../quickscale_core"}
 
 [tool.poetry.group.dev.dependencies]
-pytest = "^7.4.0"
+pytest = "^8.0"
 pytest-cov = "^4.1.0"
-ruff = "^0.6.0"
-mypy = "^1.8.0"
+ruff = "^0.14.0"
+mypy = "^1.18.0"
 
 [tool.poetry.scripts]
 quickscale = "quickscale_cli.main:cli"

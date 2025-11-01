@@ -9,17 +9,17 @@ packages = [{include = "quickscale_modules_auth", from = "src"}]
 
 [tool.poetry.dependencies]
 python = "^3.11"
-Django = ">=4.2,<6.0"
-django-allauth = "^0.63.0"
+Django = ">=5.0,<6.0"
+django-allauth = "^65.12.0"
 
 [tool.poetry.group.dev.dependencies]
-pytest = "^8.0.0"
+pytest = "^8.0"
 pytest-django = "^4.7.0"
 pytest-cov = "^4.1.0"
 factory-boy = "^3.3.0"
-ruff = "^0.3.0"
-mypy = "^1.8.0"
-django-stubs = "^4.2.0"
+ruff = "^0.14.0"
+mypy = "^1.18.0"
+django-stubs = "^5.1.0"
 
 [build-system]
 requires = ["poetry-core"]
