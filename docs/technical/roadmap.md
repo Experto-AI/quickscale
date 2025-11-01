@@ -172,7 +172,7 @@ Next steps:
 **Future workflow** (v1.0.0 example):
 ```yaml
 # quickscale.yml (v1.0.0+)
-version: 0.64.0
+version: 0.65.0
 project_name: "myapp"
 theme: "showcase_react"
 
