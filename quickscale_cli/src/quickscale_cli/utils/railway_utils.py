@@ -329,8 +329,27 @@ def generate_django_secret_key() -> str:
         import secrets
         import string
 
+        # Ensure we include at least one of each required character type
         chars = string.ascii_letters + string.digits + "!@#$%^&*(-_=+)"
-        return "".join(secrets.choice(chars) for _ in range(50))
+
+        # Generate a key with guaranteed character diversity
+        key_chars = []
+
+        # Add at least one lowercase
+        key_chars.append(secrets.choice(string.ascii_lowercase))
+        # Add at least one uppercase
+        key_chars.append(secrets.choice(string.ascii_uppercase))
+        # Add at least one digit
+        key_chars.append(secrets.choice(string.digits))
+
+        # Fill the rest randomly
+        for _ in range(47):  # 50 - 3 = 47
+            key_chars.append(secrets.choice(chars))
+
+        # Shuffle to avoid predictable pattern
+        secrets.SystemRandom().shuffle(key_chars)
+
+        return "".join(key_chars)
 
 
 def get_deployment_url(service: str | None = None) -> str | None:

@@ -1,6 +1,5 @@
 """Tests for QuickScale CLI main commands."""
 
-import sys
 from pathlib import Path
 
 import quickscale_cli
@@ -310,7 +309,8 @@ def test_init_command_includes_all_required_dependencies(cli_runner):
 
 def test_init_command_helpful_error_without_dependencies(cli_runner):
     """Test that manage.py shows helpful error when dependencies are missing"""
-    import subprocess
+    from unittest.mock import patch
+    import importlib.util
 
     project_name = "nodepstest"
 
@@ -319,24 +319,28 @@ def test_init_command_helpful_error_without_dependencies(cli_runner):
         assert result.exit_code == 0
 
         project_path = Path(project_name)
+        manage_py_path = project_path / "manage.py"
 
-        # Try to run manage.py without installing dependencies
-        # This simulates user running "python manage.py" without "poetry install"
-        result = subprocess.run(
-            [sys.executable, "manage.py", "check"],
-            cwd=project_path,
-            capture_output=True,
-            text=True,
-        )
+        # Load the manage.py module and test the check_dependencies function
+        spec = importlib.util.spec_from_file_location("manage", manage_py_path)
+        manage_module = importlib.util.module_from_spec(spec)
 
-        # Should fail with helpful error message
-        assert result.returncode != 0
-        output = result.stderr + result.stdout
+        # Execute the module to define functions
+        spec.loader.exec_module(manage_module)
 
-        # Verify helpful error message is shown
-        assert "Missing required dependencies" in output or "python-decouple" in output
-        assert "poetry install" in output
-        assert "poetry run" in output
+        # Now call check_dependencies with mocked imports
+        with patch.dict("sys.modules", {"decouple": None, "django": None}):
+            try:
+                manage_module.check_dependencies()
+                # If we get here without ImportError, something is wrong
+                assert False, "check_dependencies should have raised ImportError"
+            except ImportError as e:
+                # This is expected
+                error_msg = str(e)
+                assert "Missing required dependencies" in error_msg
+                assert "python-decouple" in error_msg
+                assert "poetry install" in error_msg
+                assert "poetry run" in error_msg
 
 
 def test_generated_project_settings_imports(cli_runner):

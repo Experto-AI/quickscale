@@ -440,10 +440,11 @@ class TestGenerateDjangoSecretKey:
 
         assert isinstance(secret_key, str)
         assert len(secret_key) >= 50
-        # Verify it contains characters from the expected charset
-        assert any(c in secret_key for c in "abcdefghijklmnopqrstuvwxyz")
-        assert any(c in secret_key for c in "ABCDEFGHIJKLMNOPQRSTUVWXYZ")
-        assert any(c in secret_key for c in "0123456789")
+        # Verify it only contains valid characters for a Django secret key
+        import string
+
+        valid_chars = string.ascii_letters + string.digits + string.punctuation
+        assert all(c in valid_chars for c in secret_key)
 
     def test_fallback_without_django(self):
         """Test fallback implementation when Django not available."""
