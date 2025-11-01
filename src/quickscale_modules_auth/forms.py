@@ -2,8 +2,6 @@
 
 from typing import Any
 
-from allauth.account.forms import LoginForm as AllauthLoginForm  # type: ignore[import-untyped]
-from allauth.account.forms import SignupForm as AllauthSignupForm  # type: ignore[import-untyped]
 from django import forms
 from django.contrib.auth import get_user_model
 from django.contrib.auth.forms import PasswordChangeForm as DjangoPasswordChangeForm
@@ -11,8 +9,15 @@ from django.contrib.auth.forms import PasswordChangeForm as DjangoPasswordChange
 User = get_user_model()
 
 
-class SignupForm(AllauthSignupForm):  # type: ignore[misc]
-    """Custom signup form extending django-allauth SignupForm"""
+class SignupForm(forms.Form):
+    """Custom signup form for django-allauth integration
+
+    WARNING: Do NOT inherit from allauth.account.forms.SignupForm directly.
+    This causes a circular import because allauth loads this form during initialization
+    before its own forms module is fully loaded.
+
+    Instead, define form fields directly and let allauth handle the integration.
+    """
 
     def __init__(self, *args: Any, **kwargs: Any) -> None:
         super().__init__(*args, **kwargs)
@@ -20,22 +25,10 @@ class SignupForm(AllauthSignupForm):  # type: ignore[misc]
         for field_name, field in self.fields.items():
             field.widget.attrs["class"] = "form-control"
 
-    def clean_email(self) -> str:
-        """Validate and normalize email"""
-        email = self.cleaned_data.get("email", "")
-        if email:
-            email = email.lower().strip()
-        return str(email)
-
-
-class LoginForm(AllauthLoginForm):  # type: ignore[misc]
-    """Custom login form extending django-allauth LoginForm"""
-
-    def __init__(self, *args: Any, **kwargs: Any) -> None:
-        super().__init__(*args, **kwargs)
-        # Add custom CSS classes for styling
-        for field_name, field in self.fields.items():
-            field.widget.attrs["class"] = "form-control"
+    def signup(self, request: Any, user: Any) -> None:
+        """Called by allauth after user creation"""
+        # Add any custom post-signup logic here
+        pass
 
 
 class PasswordChangeForm(DjangoPasswordChangeForm):
