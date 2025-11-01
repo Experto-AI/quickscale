@@ -145,21 +145,21 @@ quickscale init <project_name> --theme <theme_name>
 QuickScale supports multiple frontend themes. Choose your theme during project initialization:
 
 ```bash
-# Default HTML theme (production-ready)
+# Default Showcase HTML theme (production-ready)
 quickscale init myapp
-quickscale init myapp --theme starter_html
+quickscale init myapp --theme showcase_html
 
 # HTMX theme (planned for v0.67.0)
-quickscale init myapp --theme starter_htmx
+quickscale init myapp --theme showcase_htmx
 
 # React theme (planned for v0.68.0)
-quickscale init myapp --theme starter_react
+quickscale init myapp --theme showcase_react
 ```
 
 **Available themes**:
-- `starter_html` - Pure HTML + CSS (default, production-ready)
-- `starter_htmx` - HTMX + Alpine.js (coming in v0.67.0)
-- `starter_react` - React + TypeScript SPA (coming in v0.68.0)
+- `showcase_html` - Pure HTML + CSS (default, production-ready, renamed from starter_html in v0.64.0)
+- `showcase_htmx` - HTMX + Alpine.js (coming in v0.67.0, renamed from starter_htmx in v0.64.0)
+- `showcase_react` - React + TypeScript SPA (coming in v0.68.0, renamed from starter_react in v0.64.0)
 
 **Important**: Theme selection is one-time during project generation. Generated code is yours to own and customize - no updates or tracking after initialization.
 

@@ -163,7 +163,7 @@ grep -n "starter_html" docs/technical/decisions.md
 **Example change**:
 ```diff
 -1. Store themes in `quickscale_core/generator/templates/themes/{starter_html,starter_htmx,starter_react}/`
-+1. Store themes in `quickscale_core/generator/templates/themes/{showcase_html,starter_htmx,starter_react}/`
++1. Store themes in `quickscale_core/generator/templates/themes/{showcase_html,showcase_htmx,showcase_react}/`
 ```
 
 ---
@@ -225,7 +225,7 @@ grep -n "starter_html" README.md
 # Or choose a specific theme (v0.61.0+)
 -# quickscale init myapp --theme starter_html  # Default HTML theme
 +# quickscale init myapp --theme showcase_html  # Default Showcase HTML theme
- # quickscale init myapp --theme starter_htmx  # HTMX theme (coming in v0.67.0)
+ # quickscale init myapp --theme showcase_htmx  # HTMX theme (coming in v0.67.0)
 ```
 
 ---
@@ -297,7 +297,7 @@ rm -rf testproject2
 ```bash
 quickscale init testproject3 --theme starter_html
 # Should fail with error: Theme 'starter_html' not found
-# Error message should suggest: Available themes: showcase_html, starter_htmx, starter_react
+# Error message should suggest: Available themes: showcase_html, showcase_htmx, showcase_react
 ```
 
 **Test 4: Generated project runs**

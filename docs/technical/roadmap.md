@@ -45,8 +45,8 @@ Execution details live here; the "personal toolkit first, community platform lat
 **AUTHORITATIVE SCOPE REFERENCE**: The [MVP Feature Matrix in decisions.md](./decisions.md#mvp-feature-matrix-authoritative) is the single source of truth for what's IN/OUT/PLANNED. When this roadmap conflicts with decisions.md, decisions.md wins.
 
 ### **📋 Current State Assessment**
-- ✅ **Current Version**: v0.63.0 (Released - Auth Module with django-allauth)
-- 🔄 **Next Release**: v0.64.0 - Theme Rename (`starter_html` → `showcase_html`)
+- ✅ **Current Version**: v0.64.0 (Released - Theme Rename to `showcase_html`)
+- 🔄 **Next Release**: v0.65.0 - Showcase Architecture (landing page, preview pages)
 
 ### **Evolution Context Reference**
 Need the narrative backdrop? Jump to [`quickscale.md`](../overview/quickscale.md#evolution-strategy-personal-toolkit-first) and come back here for the tasks.
@@ -69,6 +69,7 @@ Need the narrative backdrop? Jump to [`quickscale.md`](../overview/quickscale.md
 - Release v0.61.0: Theme System Foundation — `--theme` CLI flag, theme abstraction layer, ships with HTML theme only: `docs/releases/release-v0.61.0-implementation.md`
 - Release v0.62.0 (2025-10-25): Module management CLI commands (`embed`, `update`, `push`), git utilities, module configuration tracking, GitHub Actions automation for split branch creation: `docs/releases/release-v0.62.0-implementation.md`
 - Release v0.63.0 (2025-10-29): Authentication Module — Production-ready django-allauth integration with custom User model, interactive embed configuration, HTML theme templates: `docs/releases/release-v0.63.0-implementation.md`
+- Release v0.64.0 (2025-10-31): Theme Rename — Atomic rename from `starter_html` to `showcase_html` across all code, templates, tests, and documentation. Breaking change with no backward compatibility: `docs/releases/release-v0.64.0-implementation.md`
 
 ---
 
@@ -82,7 +83,7 @@ This strategy builds the theme system infrastructure upfront, delivers core modu
 - ✅ **v0.61.0**: Theme System Foundation - `--theme` flag, theme abstraction layer, ships with HTML theme only (Released October 24, 2025)
 - ✅ **v0.62.0**: Split Branch Infrastructure - Module management commands (`embed/update/push`), GitHub Actions automation (Released October 25, 2025)
 - ✅ **v0.63.0**: `quickscale_modules.auth` - django-allauth integration (basic auth only) - HTML theme only (Released October 29, 2025)
-- **v0.64.0**: Theme Rename - Atomic rename from `starter_html` to `showcase_html` across all code, templates, tests, and docs
+- ✅ **v0.64.0**: Theme Rename - Atomic rename from `starter_html` to `showcase_html` across all code, templates, tests, and docs (Released October 31, 2025)
 - **v0.65.0**: Showcase Architecture - Module showcase landing page, preview pages, module detection - Showcase HTML theme
 - **v0.66.0**: `quickscale_modules.auth` - Email verification & production email flows - Showcase HTML theme
 - **v0.67.0**: `quickscale_modules.billing` - dj-stripe subscriptions - Showcase HTML theme
@@ -171,9 +172,9 @@ Next steps:
 **Future workflow** (v1.0.0 example):
 ```yaml
 # quickscale.yml (v1.0.0+)
-version: 0.63.0
+version: 0.64.0
 project_name: "myapp"
-theme: "starter_react"
+theme: "showcase_react"
 
 # One-time init with config file
 modules:
@@ -727,91 +728,9 @@ When releasing a new module, complete these showcase tasks:
 ---
 
 ### **v0.64.0: Theme Rename (`starter_html` → `showcase_html`)**
+**Release v0.64.0**: Theme Rename — Atomic rename from `starter_*` to `showcase_*`. See `docs/releases/release-v0.64.0-implementation.md` for details and migration notes.
 
-**Objective**: Atomic, coordinated rename of theme from `starter_html` to `showcase_html` across all code, templates, tests, and documentation. Establishes the "Showcase" branding before adding showcase features in v0.65.0.
-
-**Status**: 🔄 Ready for implementation - Clean atomic rename
-
-**Rationale**:
-- **Brand clarity**: "Showcase HTML" better reflects the theme's purpose (demonstrating module capabilities)
-- **Future-proof**: Establishes naming before v0.65.0 adds actual showcase features
-- **Low risk**: Single-purpose release, easy to test and rollback if needed
-- **Clean history**: Separates rename from feature work for clearer git history
-
-**Scope Boundaries**:
-- ✅ **IN**: Rename filesystem directory: `themes/starter_html/` → `themes/showcase_html/`
-- ✅ **IN**: Update generator defaults and theme resolution logic
-- ✅ **IN**: Update all authoritative docs (decisions.md, scaffolding.md, user_manual.md, README.md)
-- ✅ **IN**: Update CLI tests and generator tests
-- ✅ **IN**: Add backward compatibility shim (`starter_html` as alias)
-- ✅ **IN**: Single atomic commit with all changes
-- ❌ **OUT**: Showcase features (landing page, preview pages) - deferred to v0.65.0
-- ❌ **OUT**: Auth module changes (stable from v0.63.0)
-- ❌ **OUT**: New modules or theme variants
-
-**Implementation Tasks** (Single Atomic Commit):
-
-**Task Group 1: Filesystem Rename**
-- [ ] Rename template directory: `quickscale_core/src/quickscale_core/generator/templates/themes/starter_html/` → `.../themes/showcase_html/`
-- [ ] Verify all subdirectories and files moved correctly (templates/, static/, etc.)
-
-**Task Group 2: Code Updates**
-- [ ] Update `ProjectGenerator.__init__()` default: `theme="starter_html"` → `theme="showcase_html"`
-- [ ] Update theme resolution logic in `_get_theme_template_path()` or equivalent
-- [ ] Add backward compatibility shim: Accept `starter_html` as alias for `showcase_html`
-- [ ] Search for hardcoded `starter_html` strings in:
-  - [ ] `quickscale_core/src/quickscale_core/generator/*.py`
-  - [ ] `quickscale_cli/src/quickscale_cli/commands/*.py`
-  - [ ] Any configuration or constants files
-
-**Task Group 3: Test Updates**
-- [ ] Update `quickscale_cli/tests/test_cli.py`: Replace `starter_html` → `showcase_html`
-- [ ] Update `quickscale_core/tests/test_generator.py`: Adjust template paths if hardcoded
-- [ ] Update any E2E tests referencing theme name
-- [ ] Run full test suite and fix any breakages: `poetry run pytest`
-
-**Task Group 4: Documentation Updates (Authoritative)**
-- [ ] `docs/technical/decisions.md`: Replace all `starter_html` examples with `showcase_html`
-- [ ] `docs/technical/scaffolding.md`: Update theme directory structure examples
-- [ ] `docs/technical/user_manual.md`: Update `--theme` CLI examples
-- [ ] `README.md`: Update theme selection examples in Quick Start section
-- [ ] Search for any remaining `starter_html` references: `grep -r "starter_html" docs/`
-
-**Task Group 5: Validation & Quality Gates**
-- [ ] Run linting: `poetry run ruff format . && poetry run ruff check .`
-- [ ] Run type checking: `poetry run mypy src/`
-- [ ] Run full test suite: `poetry run pytest` (all tests must pass)
-- [ ] Manual smoke test: `quickscale init testproject` → verify uses `showcase_html`
-- [ ] Manual smoke test: `quickscale init testproject --theme showcase_html` → works
-- [ ] Manual smoke test: `quickscale init testproject --theme starter_html` → works (backward compat)
-
-**Success Criteria**:
-- ✅ Generator default uses `showcase_html` theme
-- ✅ `quickscale init` produces projects with `showcase_html` theme
-- ✅ `quickscale init --theme showcase_html` works explicitly
-- ✅ `quickscale init --theme starter_html` works (backward compatibility alias)
-- ✅ All generator tests pass (template loading, file creation)
-- ✅ All CLI tests pass (command parsing, theme validation)
-- ✅ All docs consistently use `showcase_html` (decisions.md, scaffolding.md, user_manual.md, README.md)
-- ✅ No hardcoded `starter_html` strings remain in source code
-- ✅ Code quality passes: Ruff format/check, MyPy
-
-**Deliverables**:
-1. Renamed theme directory: `themes/showcase_html/`
-2. Updated generator code with new default and backward compat
-3. Updated test suite (all passing)
-4. Updated authoritative documentation (4 files)
-5. Release documentation: `docs/releases/release-v0.64.0-implementation.md`
-
-**Dependencies**:
-- v0.63.0 auth module (stable, no changes)
-
-**Migration Path**:
-- **Existing v0.61.0-v0.63.0 users**: Projects continue working unchanged (no action needed)
-- **New projects**: Automatically use `showcase_html` theme
-- **Scripts using `--theme starter_html`**: Continue working via backward compat alias
-- **Documentation**: Historical release docs preserved with `starter_html` for accuracy
-
+---
 ---
 
 ### **v0.65.0: Showcase Architecture - Module Discovery & Preview System**
@@ -941,7 +860,7 @@ When releasing a new module, complete these showcase tasks:
 **Status**: Planned - Second theme variant for server-rendered, low-JS applications
 
 **Scope**:
-- Create `themes/starter_htmx/` directory structure
+- Create `themes/showcase_htmx/` directory structure
 - HTMX + Alpine.js base templates
 - **Create module showcase landing page** (HTMX version with dynamic loading)
 - Port auth module components (login, signup, account management)
@@ -959,7 +878,7 @@ When releasing a new module, complete these showcase tasks:
 - [ ] Reuse module detection context processor from HTML theme
 
 **Success Criteria**:
- - `quickscale init myproject --theme starter_htmx` generates HTMX-based project
+ - `quickscale init myproject --theme showcase_htmx` generates HTMX-based project
 - All existing modules (auth/billing/teams) work with HTMX theme
 - Backend code remains unchanged (100% theme-agnostic)
 - Documentation includes HTMX theme examples
@@ -977,7 +896,7 @@ When releasing a new module, complete these showcase tasks:
 **Status**: Planned - Third theme variant for modern SPA applications
 
 **Scope**:
-- Create `themes/starter_react/` directory structure
+- Create `themes/showcase_react/` directory structure
 - React + TypeScript + Vite base setup
 - **Create module showcase landing page** (React SPA with routing)
 - Django REST Framework API endpoints for auth/billing/teams
@@ -998,7 +917,7 @@ When releasing a new module, complete these showcase tasks:
 - [ ] Responsive design with Tailwind CSS or similar
 
 **Success Criteria**:
-- `quickscale init myproject --theme starter_react` generates React SPA project
+- `quickscale init myproject --theme showcase_react` generates React SPA project
 - Module showcase works dynamically (shows installed vs available modules)
 - All existing modules (auth/billing/teams) work with React theme
 - Backend code remains unchanged (100% theme-agnostic)

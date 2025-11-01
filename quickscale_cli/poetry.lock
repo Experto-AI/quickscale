@@ -519,7 +519,7 @@ files = [
 
 [[package]]
 name = "quickscale-core"
-version = "0.62.0"
+version = "0.63.0"
 description = "Core scaffolding and utilities for QuickScale Django project generator"
 optional = false
 python-versions = "^3.10"

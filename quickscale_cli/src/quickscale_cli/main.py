@@ -24,7 +24,7 @@ class InitCommand(click.Command):
                 click.secho("\n❌ Error: PROJECT_NAME is required", fg="red", err=True)
                 click.echo("\n💡 Usage examples:", err=True)
                 click.echo("   quickscale init myapp", err=True)
-                click.echo("   quickscale init myapp --theme starter_html", err=True)
+                click.echo("   quickscale init myapp --theme showcase_html", err=True)
                 click.echo("\n📖 For more help, run: quickscale init --help", err=True)
                 ctx.exit(2)
             raise
@@ -65,9 +65,9 @@ cli.add_command(push)
 @click.argument("project_name", required=True, metavar="PROJECT_NAME")
 @click.option(
     "--theme",
-    type=click.Choice(["starter_html", "starter_htmx", "starter_react"], case_sensitive=False),
-    default="starter_html",
-    help="Theme to use for the project (default: starter_html)",
+    type=click.Choice(["showcase_html", "showcase_htmx", "showcase_react"], case_sensitive=False),
+    default="showcase_html",
+    help="Theme to use for the project (default: showcase_html)",
 )
 def init(project_name: str, theme: str) -> None:
     r"""
@@ -75,23 +75,23 @@ def init(project_name: str, theme: str) -> None:
 
     \b
     Examples:
-      quickscale init myapp                       # Create project with default HTML theme
-      quickscale init myapp --theme starter_html  # Explicitly specify HTML theme
+      quickscale init myapp                        # Create project with default Showcase HTML theme
+      quickscale init myapp --theme showcase_html  # Explicitly specify Showcase HTML theme
 
     \b
     Choose from available themes:
-      - starter_html: Pure HTML + CSS (default, production-ready)
-      - starter_htmx: HTMX + Alpine.js (coming in v0.67.0)
-      - starter_react: React + TypeScript SPA (coming in v0.68.0)
+      - showcase_html: Pure HTML + CSS (default, production-ready)
+      - showcase_htmx: HTMX + Alpine.js (coming in v0.67.0)
+      - showcase_react: React + TypeScript SPA (coming in v0.68.0)
     """
     try:
         # Validate theme availability
-        if theme in ["starter_htmx", "starter_react"]:
+        if theme in ["showcase_htmx", "showcase_react"]:
             click.secho(f"❌ Error: Theme '{theme}' is not yet implemented", fg="red", err=True)
             click.echo(f"\n💡 The '{theme}' theme is planned for a future release:", err=True)
-            click.echo("   - starter_htmx: Coming in v0.67.0", err=True)
-            click.echo("   - starter_react: Coming in v0.68.0", err=True)
-            click.echo("\n📖 For now, use the default 'starter_html' theme", err=True)
+            click.echo("   - showcase_htmx: Coming in v0.67.0", err=True)
+            click.echo("   - showcase_react: Coming in v0.68.0", err=True)
+            click.echo("\n📖 For now, use the default 'showcase_html' theme", err=True)
             raise click.Abort()
 
         # Initialize generator with theme
@@ -110,10 +110,12 @@ def init(project_name: str, theme: str) -> None:
         # Next steps instructions
         click.echo("\n📋 Next steps:")
         click.echo(f"  cd {project_name}")
-        click.echo("  # Recommended: use Poetry for dependency management")
+        click.echo("  # Install dependencies")
         click.echo("  poetry install")
         click.echo("  poetry run python manage.py migrate")
-        click.echo("  poetry run python manage.py runserver")
+        click.echo("  # Start development server:")
+        click.echo("  #   • With Docker: quickscale up")
+        click.echo("  #   • Without Docker: poetry run python manage.py runserver")
         click.echo("\n📖 See README.md for more details")
 
     except click.Abort:

@@ -9,14 +9,14 @@ class TestThemeInitialization:
     """Test theme parameter initialization"""
 
     def test_default_theme(self, tmp_path):
-        """Generator should use starter_html as default theme"""
+        """Generator should use showcase_html as default theme"""
         generator = ProjectGenerator()
-        assert generator.theme == "starter_html"
+        assert generator.theme == "showcase_html"
 
     def test_explicit_theme(self, tmp_path):
         """Generator should accept explicit theme parameter"""
-        generator = ProjectGenerator(theme="starter_html")
-        assert generator.theme == "starter_html"
+        generator = ProjectGenerator(theme="showcase_html")
+        assert generator.theme == "showcase_html"
 
     def test_invalid_theme_name(self, tmp_path):
         """Generator should reject invalid theme names"""
@@ -32,24 +32,24 @@ class TestThemeInitialization:
 class TestThemeValidation:
     """Test theme directory validation"""
 
-    def test_starter_html_theme_exists(self):
-        """starter_html theme directory should exist"""
-        generator = ProjectGenerator(theme="starter_html")
-        theme_dir = generator.template_dir / "themes" / "starter_html"
+    def test_showcase_html_theme_exists(self):
+        """showcase_html theme directory should exist"""
+        generator = ProjectGenerator(theme="showcase_html")
+        theme_dir = generator.template_dir / "themes" / "showcase_html"
         assert theme_dir.exists()
 
     def test_htmx_theme_placeholder_exists(self):
-        """starter_htmx should have placeholder directory"""
-        generator = ProjectGenerator(theme="starter_html")
-        theme_dir = generator.template_dir / "themes" / "starter_htmx"
+        """showcase_htmx should have placeholder directory"""
+        generator = ProjectGenerator(theme="showcase_html")
+        theme_dir = generator.template_dir / "themes" / "showcase_htmx"
         assert theme_dir.exists()
         readme = theme_dir / "README.md"
         assert readme.exists()
 
     def test_react_theme_placeholder_exists(self):
-        """starter_react should have placeholder directory"""
-        generator = ProjectGenerator(theme="starter_html")
-        theme_dir = generator.template_dir / "themes" / "starter_react"
+        """showcase_react should have placeholder directory"""
+        generator = ProjectGenerator(theme="showcase_html")
+        theme_dir = generator.template_dir / "themes" / "showcase_react"
         assert theme_dir.exists()
         readme = theme_dir / "README.md"
         assert readme.exists()
@@ -60,23 +60,23 @@ class TestThemeTemplateResolution:
 
     def test_theme_template_path_resolution(self):
         """_get_theme_template_path should resolve theme-specific templates"""
-        generator = ProjectGenerator(theme="starter_html")
+        generator = ProjectGenerator(theme="showcase_html")
 
         # Theme-specific template
         path = generator._get_theme_template_path("templates/base.html.j2")
-        assert "themes/starter_html" in path
+        assert "themes/showcase_html" in path
 
     def test_theme_static_path_resolution(self):
         """_get_theme_template_path should resolve theme-specific static files"""
-        generator = ProjectGenerator(theme="starter_html")
+        generator = ProjectGenerator(theme="showcase_html")
 
         # Theme-specific static file
         path = generator._get_theme_template_path("static/css/style.css.j2")
-        assert "themes/starter_html" in path
+        assert "themes/showcase_html" in path
 
     def test_common_template_fallback(self):
         """_get_theme_template_path should fall back to common templates"""
-        generator = ProjectGenerator(theme="starter_html")
+        generator = ProjectGenerator(theme="showcase_html")
 
         # This should fall back to root (backend templates)
         path = generator._get_theme_template_path("manage.py.j2")
@@ -108,8 +108,8 @@ class TestProjectGenerationWithTheme:
         assert (output_path / "pyproject.toml").exists()
 
     def test_generate_with_explicit_theme(self, tmp_path):
-        """Generate project with explicit starter_html theme"""
-        generator = ProjectGenerator(theme="starter_html")
+        """Generate project with explicit showcase_html theme"""
+        generator = ProjectGenerator(theme="showcase_html")
         project_name = "testproject"
         output_path = tmp_path / project_name
 
@@ -122,7 +122,7 @@ class TestProjectGenerationWithTheme:
 
     def test_generated_output_matches_v060(self, tmp_path):
         """Generated project structure should match v0.60.0 output"""
-        generator = ProjectGenerator(theme="starter_html")
+        generator = ProjectGenerator(theme="showcase_html")
         project_name = "testproject"
         output_path = tmp_path / project_name
 
@@ -173,7 +173,7 @@ class TestBackwardCompatibility:
 
     def test_generated_templates_identical_to_v060(self, tmp_path):
         """Generated templates should be identical to v0.60.0"""
-        generator = ProjectGenerator(theme="starter_html")
+        generator = ProjectGenerator(theme="showcase_html")
         project_name = "testproject"
         output_path = tmp_path / project_name
 

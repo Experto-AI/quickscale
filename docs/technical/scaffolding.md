@@ -331,14 +331,14 @@ quickscale_core/
 │   │       │           ├── local.py.j2
 │   │       │           └── production.py.j2
 │   │       └── themes/             # Theme-specific templates (v0.61.0+)
-│   │           ├── starter_html/   # Pure HTML/CSS theme (default)
+│   │           ├── showcase_html/  # Pure HTML/CSS theme (default)
 │   │           │   ├── templates/
 │   │           │   │   ├── base.html.j2
 │   │           │   │   └── index.html.j2
 │   │           │   └── static/
 │   │           │       ├── css/style.css.j2
 │   │           │       └── images/favicon.svg.j2
-│   │           ├── starter_htmx/   # HTMX + Alpine.js theme (v0.66.0)
+│   │           ├── showcase_htmx/   # HTMX + Alpine.js theme (v0.66.0)
 │   │           │   ├── templates/
 │   │           │   │   ├── base.html.j2
 │   │           │   │   └── index.html.j2
@@ -346,7 +346,7 @@ quickscale_core/
 │   │           │   │   ├── css/
 │   │           │   │   └── js/
 │   │           │   └── package.json.j2  # Tailwind, Alpine.js
-│   │           └── starter_react/  # React + TypeScript theme (v0.67.0)
+│   │           └── showcase_react/  # React + TypeScript theme (v0.67.0)
 │   │               ├── templates/  # Minimal Django templates (API only)
 │   │               │   └── index.html.j2  # React mount point
 │   │               └── frontend/
@@ -369,9 +369,9 @@ quickscale_core/
 **v0.61.0 Enhancements:**
 - ✅ Theme system: `quickscale init myproject --theme <name>`
 - ✅ Themes are one-time copy, user owns generated code
-- ✅ Default theme: `starter_html` (backward compatible, no flag required)
+- ✅ Default theme: `showcase_html`
 - ✅ Backend templates in `common/` (theme-agnostic)
-- ✅ Frontend templates in `themes/{starter_html,starter_htmx,starter_react}/` (theme-specific)
+- ✅ Frontend templates in `themes/{showcase_html,showcase_htmx,showcase_react}/` (theme-specific)
 
 **MVP Simplifications:**
 - ❌ NO config/ directory (no YAML/JSON configuration loading in MVP)
@@ -566,7 +566,7 @@ myapp/
 
 **What Users Get:**
 - Working Django project in 30 seconds
- - Choice of frontend theme: `quickscale init myapp --theme <starter_html|starter_htmx|starter_react>`
+ - Choice of frontend theme: `quickscale init myapp --theme <showcase_html|showcase_htmx|showcase_react>`
 - Runnable with `docker-compose up` (full stack) or `python manage.py runserver`
 - 100% theirs to customize
 - Production-ready Docker setup
@@ -603,7 +603,7 @@ myapp/
 **How Users Get Modules:**
 ```bash
 # Generate base project
-quickscale init myapp --theme starter_html
+quickscale init myapp --theme showcase_html
 
 # Embed modules (optional)
 cd myapp

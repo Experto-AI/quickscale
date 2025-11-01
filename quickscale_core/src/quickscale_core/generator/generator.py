@@ -17,14 +17,14 @@ from quickscale_core.utils.file_utils import (
 class ProjectGenerator:
     """Generate Django projects from templates"""
 
-    def __init__(self, template_dir: Path | None = None, theme: str = "starter_html"):
+    def __init__(self, template_dir: Path | None = None, theme: str = "showcase_html"):
         """
         Initialize generator with template directory and theme
 
         Args:
         ----
             template_dir: Path to template directory (auto-detected if None)
-            theme: Theme name to use (default: starter_html)
+            theme: Theme name to use (default: showcase_html)
 
         Raises:
         ------
@@ -35,7 +35,7 @@ class ProjectGenerator:
         self.theme = theme
 
         # Validate theme
-        available_themes = ["starter_html", "starter_htmx", "starter_react"]
+        available_themes = ["showcase_html", "showcase_htmx", "showcase_react"]
         if theme not in available_themes:
             raise ValueError(
                 f"Invalid theme '{theme}'. Available themes: {', '.join(available_themes)}"

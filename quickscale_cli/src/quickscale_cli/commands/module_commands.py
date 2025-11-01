@@ -46,8 +46,10 @@ def configure_auth_module() -> dict[str, Any]:
 
 def apply_auth_configuration(project_path: Path, config: dict[str, Any]) -> None:
     """Apply auth module configuration to project settings"""
-    settings_path = project_path / "settings.py"
-    urls_path = project_path / "urls.py"
+    # QuickScale uses settings/base.py and project_name/urls.py structure
+    settings_path = project_path / f"{project_path.name}" / "settings" / "base.py"
+    urls_path = project_path / f"{project_path.name}" / "urls.py"
+    pyproject_path = project_path / "pyproject.toml"
 
     if not settings_path.exists():
         click.secho("⚠️  Warning: settings.py not found, skipping auto-configuration", fg="yellow")
@@ -61,6 +63,87 @@ def apply_auth_configuration(project_path: Path, config: dict[str, Any]) -> None
     if "quickscale_modules_auth" in settings_content:
         click.echo("ℹ️  Auth module already configured in settings.py")
         return
+
+    # Add django-allauth dependency to pyproject.toml
+    if pyproject_path.exists():
+        with open(pyproject_path) as f:
+            pyproject_content = f.read()
+
+        if "django-allauth" not in pyproject_content:
+            # Read django-allauth version from the embedded auth module
+            auth_pyproject_path = project_path / "modules" / "auth" / "pyproject.toml"
+
+            if not auth_pyproject_path.exists():
+                click.secho(
+                    "❌ Error: Auth module pyproject.toml not found. "
+                    "Cannot determine django-allauth version requirement.",
+                    fg="red",
+                    err=True,
+                )
+                click.echo(f"Expected file: {auth_pyproject_path}", err=True)
+                click.echo("This indicates the auth module was not embedded correctly.", err=True)
+                raise click.Abort()
+
+            # Extract django-allauth version using regex
+            try:
+                with open(auth_pyproject_path) as f:
+                    auth_pyproject_content = f.read()
+                import re
+
+                version_match = re.search(
+                    r'django-allauth\s*=\s*["\']([^"\']+)["\']', auth_pyproject_content
+                )
+                if not version_match:
+                    click.secho(
+                        "❌ Error: Cannot find django-allauth version in auth module's "
+                        "pyproject.toml",
+                        fg="red",
+                        err=True,
+                    )
+                    click.echo(f"File: {auth_pyproject_path}", err=True)
+                    click.echo('Expected format: django-allauth = "^x.x.x"', err=True)
+                    click.echo("Please check the auth module's dependencies.", err=True)
+                    raise click.Abort()
+                django_allauth_version = version_match.group(1)
+            except (FileNotFoundError, AttributeError) as e:
+                click.secho(
+                    f"❌ Error: Failed to parse django-allauth version from auth module: {e}",
+                    fg="red",
+                    err=True,
+                )
+                click.echo(f"File: {auth_pyproject_path}", err=True)
+                click.echo(
+                    "Please ensure the auth module is properly embedded and its "
+                    "pyproject.toml is valid.",
+                    err=True,
+                )
+                raise click.Abort()
+
+            # Try to add to [tool.poetry.dependencies] section
+            dependencies_pattern = r"(\[tool\.poetry\.dependencies\][^\[]*)"
+            match = re.search(dependencies_pattern, pyproject_content, re.DOTALL)
+            if match:
+                dependencies_section = match.group(1)
+                # Add django-allauth after the python version line
+                updated_dependencies = re.sub(
+                    r'(python = "[^"]*")',
+                    rf'\1\ndjango-allauth = "{django_allauth_version}"',
+                    dependencies_section,
+                )
+                pyproject_content = pyproject_content.replace(
+                    dependencies_section, updated_dependencies
+                )
+
+                with open(pyproject_path, "w") as f:
+                    f.write(pyproject_content)
+
+                click.secho("  ✅ Added django-allauth to pyproject.toml", fg="green")
+            else:
+                click.secho(
+                    "⚠️  Warning: Could not find [tool.poetry.dependencies] section in "
+                    "pyproject.toml",
+                    fg="yellow",
+                )
 
     # Add required apps to INSTALLED_APPS
     installed_apps_addition = """
@@ -249,6 +332,26 @@ def embed(module: str, remote: str) -> None:
             project_root = Path.cwd()
             applier(project_root, config)
 
+        # Install dependencies if pyproject.toml was modified
+        if module == "auth":
+            click.echo("📦 Installing dependencies...")
+            try:
+                import subprocess
+
+                subprocess.run(
+                    ["poetry", "install"],
+                    cwd=project_root,
+                    capture_output=True,
+                    text=True,
+                    check=True,
+                )
+                click.secho("  ✅ Dependencies installed successfully", fg="green")
+            except subprocess.CalledProcessError as e:
+                click.secho(
+                    f"⚠️  Warning: Failed to install dependencies automatically: {e}", fg="yellow"
+                )
+                click.echo("  💡 You may need to run 'poetry install' manually")
+
         # Success message
         click.secho(f"\n✅ Module '{module}' embedded successfully!", fg="green", bold=True)
         click.echo(f"   Location: {module_path}")
@@ -258,9 +361,14 @@ def embed(module: str, remote: str) -> None:
         click.echo("\n📋 Next steps:")
         if module == "auth":
             click.echo(f"  1. Review module code in modules/{module}/")
-            click.echo("  2. Run migrations: python manage.py migrate")
-            click.echo("  3. Create superuser (optional): python manage.py createsuperuser")
-            click.echo("  4. Visit http://localhost:8000/accounts/login/")
+            click.echo("  2. Run migrations: poetry run python manage.py migrate")
+            click.echo(
+                "  3. Create superuser (optional): poetry run python manage.py createsuperuser"
+            )
+            click.echo("  4. Start development server:")
+            click.echo("     • With Docker: quickscale up")
+            click.echo("     • Without Docker: poetry run python manage.py runserver")
+            click.echo("  5. Visit http://localhost:8000/accounts/login/")
             click.echo("\n� Documentation: modules/auth/README.md")
         else:
             click.echo(f"  1. Review the module code in modules/{module}/")
