@@ -76,7 +76,7 @@ def test_init_command_missing_argument(cli_runner):
 
 def test_init_command_missing_argument_with_theme_flag(cli_runner):
     """Test init command with theme flag but no project name shows helpful error"""
-    result = cli_runner.invoke(cli, ["init", "--theme", "starter_html"])
+    result = cli_runner.invoke(cli, ["init", "--theme", "showcase_html"])
     assert result.exit_code != 0
 
     # Verify helpful error message is shown
@@ -95,9 +95,9 @@ def test_init_command_help_shows_examples(cli_runner):
     assert "quickscale init myapp" in result.output
 
     # Verify theme information is shown
-    assert "starter_html" in result.output
-    assert "starter_htmx" in result.output
-    assert "starter_react" in result.output
+    assert "showcase_html" in result.output
+    assert "showcase_htmx" in result.output
+    assert "showcase_react" in result.output
 
 
 def test_init_command_invalid_project_name(cli_runner):
@@ -137,9 +137,9 @@ def test_init_command_comprehensive_error_scenarios(cli_runner):
 
     This test documents the exact user experience scenarios reported in the issue:
     1. Running 'quickscale init' without arguments
-    2. Running 'quickscale init --theme starter_html' without project name
-    3. Running 'quickscale init --theme starter_htmx' without project name
-    4. Running 'quickscale init --theme starter_react' without project name
+    2. Running 'quickscale init --theme showcase_html' without project name
+    3. Running 'quickscale init --theme showcase_htmx' without project name
+    4. Running 'quickscale init --theme showcase_react' without project name
 
     All should show helpful error messages with usage examples.
     """
@@ -151,20 +151,20 @@ def test_init_command_comprehensive_error_scenarios(cli_runner):
     assert "Usage examples:" in result.output
     assert "quickscale init --help" in result.output
 
-    # Scenario 2: Theme flag with starter_html but no project name
-    result = cli_runner.invoke(cli, ["init", "--theme", "starter_html"])
+    # Scenario 2: Theme flag with showcase_html but no project name
+    result = cli_runner.invoke(cli, ["init", "--theme", "showcase_html"])
     assert result.exit_code == 2
     assert "PROJECT_NAME is required" in result.output
     assert "quickscale init myapp" in result.output
 
-    # Scenario 3: Theme flag with starter_htmx but no project name
-    result = cli_runner.invoke(cli, ["init", "--theme", "starter_htmx"])
+    # Scenario 3: Theme flag with showcase_htmx but no project name
+    result = cli_runner.invoke(cli, ["init", "--theme", "showcase_htmx"])
     assert result.exit_code == 2
     assert "PROJECT_NAME is required" in result.output
     assert "quickscale init myapp" in result.output
 
-    # Scenario 4: Theme flag with starter_react but no project name
-    result = cli_runner.invoke(cli, ["init", "--theme", "starter_react"])
+    # Scenario 4: Theme flag with showcase_react but no project name
+    result = cli_runner.invoke(cli, ["init", "--theme", "showcase_react"])
     assert result.exit_code == 2
     assert "PROJECT_NAME is required" in result.output
     assert "quickscale init myapp" in result.output
@@ -187,26 +187,28 @@ def test_init_command_unimplemented_themes(cli_runner):
     Regression test for: Issue where click.Abort() was caught by generic Exception handler,
     resulting in "❌ Unexpected error: " message with no actual error text.
     """
-    # Test starter_htmx theme (planned for v0.67.0)
-    result = cli_runner.invoke(cli, ["init", "testproj1", "--theme", "starter_htmx"])
+    # Test showcase_htmx theme (planned for v0.67.0)
+    result = cli_runner.invoke(cli, ["init", "testproj1", "--theme", "showcase_htmx"])
     assert result.exit_code == 1
     assert "not yet implemented" in result.output
-    assert "starter_htmx: Coming in v0.67.0" in result.output
+    assert "showcase_htmx: Coming in v0.67.0" in result.output
     # Verify no spurious "Unexpected error:" message appears
     assert "Unexpected error:" not in result.output
 
-    # Test starter_react theme (planned for v0.68.0)
-    result = cli_runner.invoke(cli, ["init", "testproj2", "--theme", "starter_react"])
+    # Test showcase_react theme (planned for v0.68.0)
+    result = cli_runner.invoke(cli, ["init", "testproj2", "--theme", "showcase_react"])
     assert result.exit_code == 1
     assert "not yet implemented" in result.output
-    assert "starter_react: Coming in v0.68.0" in result.output
+    assert "showcase_react: Coming in v0.68.0" in result.output
     # Verify no spurious "Unexpected error:" message appears
     assert "Unexpected error:" not in result.output
 
     # Test that the default theme still works
     with cli_runner.isolated_filesystem():
         result = cli_runner.invoke(
-            cli, ["init", "testproj3", "--theme", "starter_html"], catch_exceptions=False
+            cli,
+            ["init", "testproj3", "--theme", "showcase_html"],
+            catch_exceptions=False,
         )
         assert result.exit_code == 0
         assert "Created project: testproj3" in result.output
@@ -348,9 +350,15 @@ def test_generated_project_settings_imports(cli_runner):
         project_path = Path(project_name)
 
         # Read settings files
-        base_settings = (project_path / project_name / "settings" / "base.py").read_text()
-        local_settings = (project_path / project_name / "settings" / "local.py").read_text()
-        prod_settings = (project_path / project_name / "settings" / "production.py").read_text()
+        base_settings = (
+            project_path / project_name / "settings" / "base.py"
+        ).read_text()
+        local_settings = (
+            project_path / project_name / "settings" / "local.py"
+        ).read_text()
+        prod_settings = (
+            project_path / project_name / "settings" / "production.py"
+        ).read_text()
 
         # Read pyproject.toml to get declared dependencies
         pyproject_content = (project_path / "pyproject.toml").read_text()
@@ -370,3 +378,24 @@ def test_generated_project_settings_imports(cli_runner):
                 assert (
                     dep_name in pyproject_content
                 ), f"Settings import '{import_name}' but '{dep_name}' not in pyproject.toml"
+
+
+def test_init_command_with_setup_flag_shows_setup_message(cli_runner):
+    """Test init command with --setup flag shows setup in progress message"""
+    project_name = "setuptest"
+
+    with cli_runner.isolated_filesystem():
+        result = cli_runner.invoke(cli, ["init", project_name, "--setup"])
+
+        # Should show dependency checking
+        assert "Checking system dependencies" in result.output
+
+        # Should show project creation
+        assert "Created project: setuptest" in result.output
+
+        # Should show setup attempt (may fail or succeed depending on environment)
+        assert (
+            "Running automatic setup" in result.output
+            or "Cannot use --setup flag" in result.output
+            or result.exit_code == 0
+        )

@@ -45,8 +45,8 @@ Execution details live here; the "personal toolkit first, community platform lat
 **AUTHORITATIVE SCOPE REFERENCE**: The [MVP Feature Matrix in decisions.md](./decisions.md#mvp-feature-matrix-authoritative) is the single source of truth for what's IN/OUT/PLANNED. When this roadmap conflicts with decisions.md, decisions.md wins.
 
 ### **📋 Current State Assessment**
-- ✅ **Current Version**: v0.63.0 (Released - Auth Module with django-allauth)
-- 🔄 **Next Release**: v0.64.0 - Starter HTML Theme Showcase Architecture
+- ✅ **Current Version**: v0.64.0 (Released - Theme Rename to `showcase_html`)
+- 🔄 **Next Release**: v0.65.0 - Showcase Architecture (landing page, preview pages)
 
 ### **Evolution Context Reference**
 Need the narrative backdrop? Jump to [`quickscale.md`](../overview/quickscale.md#evolution-strategy-personal-toolkit-first) and come back here for the tasks.
@@ -69,6 +69,7 @@ Need the narrative backdrop? Jump to [`quickscale.md`](../overview/quickscale.md
 - Release v0.61.0: Theme System Foundation — `--theme` CLI flag, theme abstraction layer, ships with HTML theme only: `docs/releases/release-v0.61.0-implementation.md`
 - Release v0.62.0 (2025-10-25): Module management CLI commands (`embed`, `update`, `push`), git utilities, module configuration tracking, GitHub Actions automation for split branch creation: `docs/releases/release-v0.62.0-implementation.md`
 - Release v0.63.0 (2025-10-29): Authentication Module — Production-ready django-allauth integration with custom User model, interactive embed configuration, HTML theme templates: `docs/releases/release-v0.63.0-implementation.md`
+- Release v0.64.0 (2025-10-31): Theme Rename — Atomic rename from `starter_html` to `showcase_html` across all code, templates, tests, and documentation. Breaking change with no backward compatibility: `docs/releases/release-v0.64.0-implementation.md`
 
 ---
 
@@ -78,26 +79,27 @@ Need the narrative backdrop? Jump to [`quickscale.md`](../overview/quickscale.md
 
 This strategy builds the theme system infrastructure upfront, delivers core modules quickly in HTML theme, then expands to additional themes. This avoids 3x development overhead while maintaining future flexibility.
 
-**Phase 1: Foundation + Core Modules (HTML Theme Only)**
+**Phase 1: Foundation + Core Modules (Showcase HTML Theme Only)**
 - ✅ **v0.61.0**: Theme System Foundation - `--theme` flag, theme abstraction layer, ships with HTML theme only (Released October 24, 2025)
 - ✅ **v0.62.0**: Split Branch Infrastructure - Module management commands (`embed/update/push`), GitHub Actions automation (Released October 25, 2025)
 - ✅ **v0.63.0**: `quickscale_modules.auth` - django-allauth integration (basic auth only) - HTML theme only (Released October 29, 2025)
-- **v0.64.0**: Starter HTML Theme Showcase - Module showcase landing page, preview pages, module detection - HTML theme only
-- **v0.65.0**: `quickscale_modules.auth` - Email verification & production email flows - HTML theme only
-- **v0.66.0**: `quickscale_modules.billing` - dj-stripe subscriptions - HTML theme only
-- **v0.67.0**: `quickscale_modules.teams` - Multi-tenancy patterns - HTML theme only 🎯 **SAAS FEATURE PARITY MILESTONE**
+- ✅ **v0.64.0**: Theme Rename - Atomic rename from `starter_html` to `showcase_html` across all code, templates, tests, and docs (Released October 31, 2025)
+- **v0.65.0**: Showcase Architecture - Module showcase landing page, preview pages, module detection - Showcase HTML theme
+- **v0.66.0**: `quickscale_modules.auth` - Email verification & production email flows - Showcase HTML theme
+- **v0.67.0**: `quickscale_modules.billing` - dj-stripe subscriptions - Showcase HTML theme
+- **v0.68.0**: `quickscale_modules.teams` - Multi-tenancy patterns - Showcase HTML theme 🎯 **SAAS FEATURE PARITY MILESTONE**
 
 **Phase 2: Additional Themes (Port Existing Modules)**
-- **v0.68.0**: HTMX Theme - Port auth/billing/teams components to HTMX + Alpine.js
-- **v0.69.0**: React Theme - Port auth/billing/teams components to React + TypeScript SPA
+- **v0.69.0**: HTMX Theme - Port auth/billing/teams components to HTMX + Alpine.js
+- **v0.70.0**: React Theme - Port auth/billing/teams components to React + TypeScript SPA
 
 **Phase 3: Expand Features (All Themes)**
-- **v0.70.0**: `quickscale_modules.notifications` - Email infrastructure - All 3 themes
-- **v0.71.0**: Advanced Module Management Features - Batch operations, status, discovery commands
-- **v0.72.0**: Update Workflow Validation (P1 - Module Management)
+- **v0.71.0**: `quickscale_modules.notifications` - Email infrastructure - All 3 themes
+- **v0.72.0**: Advanced Module Management Features - Batch operations, status, discovery commands
+- **v0.73.0**: Update Workflow Validation (P1 - Module Management)
 - **v0.7x.0**: Additional modules based on real client needs
 
-**🎯 Competitive Parity Goal (v0.66.0)**: At this point, QuickScale matches SaaS Pegasus on core features (auth, billing, teams) while offering superior architecture (composability, shared updates). See [competitive_analysis.md Timeline](../overview/competitive_analysis.md#timeline-reality-check).
+**🎯 Competitive Parity Goal (v0.67.0)**: At this point, QuickScale matches SaaS Pegasus on core features (auth, billing, teams) while offering superior architecture (composability, shared updates). See [competitive_analysis.md Timeline](../overview/competitive_analysis.md#timeline-reality-check).
 
 **Rationale - Hybrid Approach Benefits**:
 1. **Fast time-to-value**: Core modules delivered in 6-8 weeks (HTML only) vs. 17+ weeks (3 themes simultaneously)
@@ -106,6 +108,7 @@ This strategy builds the theme system infrastructure upfront, delivers core modu
 4. **Backend reuse**: ~70% of module code (Django models, views, auth) is theme-agnostic
 5. **No breaking changes**: Existing users on HTML theme, new users pick theme upfront
 6. **Proven pattern**: Matches Laravel Breeze (Blade → React/Vue later) and Rails Devise approaches
+7. **Clean rename first**: v0.64.0 handles atomic theme rename, establishing `showcase_html` branding before showcase features
 
 ---
 
@@ -169,9 +172,9 @@ Next steps:
 **Future workflow** (v1.0.0 example):
 ```yaml
 # quickscale.yml (v1.0.0+)
-version: 0.63.0
+version: 0.64.0
 project_name: "myapp"
-theme: "starter_react"
+theme: "showcase_react"
 
 # One-time init with config file
 modules:
@@ -240,9 +243,9 @@ def embed_auth_module(remote: str) -> None:
 
 ---
 
-### **🎨 Starter HTML Theme: Module Showcase Architecture**
+### **🎨 Showcase HTML Theme: Module Showcase Architecture**
 
-**Strategic Decision (v0.63.0+)**: The starter HTML theme serves as a **living showcase** for all QuickScale modules, demonstrating capabilities whether modules are installed or not.
+**Strategic Decision (v0.63.0+)**: The Showcase HTML theme serves as a **living showcase** for all QuickScale modules, demonstrating capabilities whether modules are installed or not.
 
 **Rationale**:
 - **Marketing**: New users see what QuickScale offers immediately
@@ -328,11 +331,11 @@ Every module release (v0.63.0+) MUST include:
 
 ## Module Showcase Implementation Guide (All Modules v0.63.0+)
 
-**MANDATORY REQUIREMENTS**: Every module release MUST update the starter HTML theme showcase. This section defines the standard pattern.
+**MANDATORY REQUIREMENTS**: Every module release MUST update the Showcase HTML theme showcase. This section defines the standard pattern.
 
 ### 1. Module Card Specification
 
-Each module MUST have a card in `themes/starter_html/templates/index.html.j2`:
+Each module MUST have a card in `themes/showcase_html/templates/index.html.j2`:
 
 ```html
 <div class="module-card {% if module_installed %}installed{% else %}available{% endif %}">
@@ -375,7 +378,7 @@ Each module MUST have a card in `themes/starter_html/templates/index.html.j2`:
 
 ### 2. Preview Page Specification
 
-Each module MUST create a preview page template: `themes/starter_html/templates/{module}_preview.html.j2`
+Each module MUST create a preview page template: `themes/showcase_html/templates/{module}_preview.html.j2`
 
 **Structure**:
 ```html
@@ -474,7 +477,7 @@ TEMPLATES = [
 
 ### 4. CSS Styles for Showcase (Required Additions)
 
-**File**: `themes/starter_html/static/css/style.css.j2` (append these styles)
+**File**: `themes/showcase_html/static/css/style.css.j2` (append these styles)
 
 ```css
 /* Module Showcase Styles */
@@ -663,13 +666,13 @@ TEMPLATES = [
 
 When releasing a new module, complete these showcase tasks:
 
-- [ ] **Add module card** to `themes/starter_html/templates/index.html.j2`:
+- [ ] **Add module card** to `themes/showcase_html/templates/index.html.j2`:
   - [ ] Choose appropriate emoji icon
   - [ ] Write compelling one-liner description
   - [ ] List 3-5 key features
   - [ ] Configure demo/preview URL
   - [ ] Add installation command
-- [ ] **Create preview page** `themes/starter_html/templates/{module}_preview.html.j2`:
+- [ ] **Create preview page** `themes/showcase_html/templates/{module}_preview.html.j2`:
   - [ ] Write expanded module description
   - [ ] Create 2-4 feature showcase sections
   - [ ] Add mockup images or descriptions
@@ -689,7 +692,7 @@ When releasing a new module, complete these showcase tasks:
   - [ ] Verify links now point to functional pages
 - [ ] **Screenshot/mockups** (if applicable):
   - [ ] Create mockup images for key features
-  - [ ] Save to `themes/starter_html/static/images/previews/`
+  - [ ] Save to `themes/showcase_html/static/images/previews/`
   - [ ] Optimize images (compress, appropriate size)
 
 ### 6. Module-Specific Examples
@@ -724,15 +727,19 @@ When releasing a new module, complete these showcase tasks:
 
 ---
 
-### **v0.64.0: Starter HTML Theme Showcase Architecture**
+### **v0.64.0: Theme Rename (`starter_html` → `showcase_html`)**
+**Release v0.64.0**: Theme Rename — Atomic rename from `starter_*` to `showcase_*`. See `docs/releases/release-v0.64.0-implementation.md` for details and migration notes.
 
-**Objective**: Transform starter HTML theme into a living showcase for all QuickScale modules. Establish the showcase pattern that all future modules will follow.
+---
+---
 
-**Timeline**: After v0.63.0 (Target: 1 week)
+### **v0.65.0: Showcase Architecture - Module Discovery & Preview System**
 
-**Status**: 🔄 Ready for implementation - Upgrade path from v0.63.0
+**Objective**: Transform the Showcase HTML theme into a living demonstration platform for all QuickScale modules. Establish the showcase pattern that all future modules will follow.
 
-**Rationale**: v0.63.0 delivered production-ready auth module with 89% test coverage. v0.64.0 adds the showcase layer that demonstrates QuickScale's composability and helps users discover available modules.
+**Status**: 🔄 Planned - Builds on v0.64.0 theme rename
+
+**Rationale**: With `showcase_html` branding established in v0.64.0, this release adds the actual showcase functionality: module cards, preview pages, and dynamic detection. This demonstrates QuickScale's composability and helps users discover available modules.
 
 **Scope Boundaries**:
 - ✅ **IN**: Showcase landing page (`index.html.j2`) with module cards
@@ -741,85 +748,32 @@ When releasing a new module, complete these showcase tasks:
 - ✅ **IN**: Module detection context processor for dynamic status
 - ✅ **IN**: Showcase CSS styles (responsive grid, status badges)
 - ✅ **IN**: Preview page URL routing for all modules
-- ❌ **OUT**: Auth module code changes (already complete in v0.63.0)
-- ❌ **OUT**: Email verification (deferred to v0.65.0)
-- ❌ **OUT**: New modules (billing/teams remain v0.66.0+)
+- ✅ **IN**: Minimum 70% test coverage for new components
+- ❌ **OUT**: Auth module code changes (stable from v0.63.0)
+- ❌ **OUT**: Email verification (deferred to v0.66.0)
+- ❌ **OUT**: New modules (billing/teams remain v0.67.0+)
 
-**Implementation Tasks** (6 Task Groups):
-
-See [Module Showcase Implementation Guide](#module-showcase-implementation-guide-all-modules-v0630) above for complete specifications.
-
-**Task Group 1: Showcase Landing Page (index.html.j2)**
-- [ ] Replace welcome content with hero section + tagline
-- [ ] Add modules showcase grid layout
-- [ ] Create auth module card (🔐 Authentication) with features list
-- [ ] Add placeholder cards for billing (💳), teams (👥), notifications (🔔)
-- [ ] Add template logic for module detection (installed vs available)
-
-**Task Group 2: Auth Preview Page Template**
-- [ ] Create `auth_preview.html.j2` with auth features showcase
-- [ ] Add installation status check (success alert if installed)
-- [ ] Create 4 feature showcase sections (login/signup, password mgmt, profile, security)
-- [ ] Add installation instructions section
-- [ ] Add footer with documentation link
-
-**Task Group 3: Context Processor for Module Detection**
-- [ ] Create `quickscale_core/context_processors.py`
-- [ ] Implement `installed_modules()` function
-- [ ] Return dict with boolean flags for auth/billing/teams/notifications
-- [ ] Update generated project settings template to register processor
-
-**Task Group 4: Showcase CSS Styles**
-- [ ] Add module showcase grid styles (responsive)
-- [ ] Add module card styles (base, hover, installed/available states)
-- [ ] Add preview page styles (header, alerts, feature sections)
-- [ ] Add responsive breakpoints (mobile/tablet/desktop)
-
-**Task Group 5: Preview Page URL Configuration**
-- [ ] Create `views.py.j2` with preview views (auth, billing, teams, notifications)
-- [ ] Update `urls.py.j2` to include preview routes
-- [ ] Create placeholder preview templates for billing, teams, notifications
-
-**Task Group 6: Testing & Validation**
-- [ ] Test fresh project without modules (showcase shows "Available")
-- [ ] Test project with auth module (showcase shows "Installed")
-- [ ] Test preview pages work for all modules
-- [ ] Test responsive design (mobile/tablet/desktop)
-- [ ] Automated tests for context processor and views
+**Implementation Tasks**: See detailed plan in `docs/releases/release-v0.65.0-plan.md` (to be created from current v0.64.0-plan.md).
 
 **Success Criteria**:
 - ✅ Fresh project shows showcase landing page with 4 module cards
 - ✅ Module cards display correct status (installed vs available)
 - ✅ Preview pages work for all modules
 - ✅ Auth card updates to "Installed" when auth module embedded
-- ✅ Responsive design works on all screen sizes
-- ✅ All existing auth module tests still pass (89% coverage maintained)
-- ✅ Code quality passes: Ruff format/check
-
-**Deliverables**:
-1. Updated `index.html.j2` with showcase landing page
-2. New `auth_preview.html.j2` template
-3. Placeholder preview templates for billing, teams, notifications
-4. New `context_processors.py` for module detection
-5. Updated `style.css.j2` with showcase styles
-6. Updated `views.py.j2` and `urls.py.j2` templates
-7. Test suite for showcase components
-8. Release documentation: `docs/releases/release-v0.64.0-implementation.md`
+- ✅ Responsive design works on mobile/tablet/desktop
+- ✅ Minimum 70% test coverage for context processor and views
 
 **Dependencies**:
-- v0.63.0 auth module (already complete)
-- HTML theme from v0.61.0
-
-**Migration Path from v0.63.0**:
-Existing v0.63.0 projects continue working unchanged. New projects generated with v0.64.0+ get showcase automatically. Users can manually update their v0.63.0 projects by copying new theme templates if desired (optional, not required).
+- v0.64.0 theme rename (showcase_html established)
+- v0.63.0 auth module (stable)
 
 ---
 
-### **v0.65.0: `quickscale_modules.auth` - Email Verification & Production Email**
+### **v0.66.0: `quickscale_modules.auth` - Email Verification & Production Email**
 
-**Objective**: Complete production-ready email authentication flows for the auth module. HTML theme only. **INCLUDES**: Showcase updates for email features.
+**Objective**: Complete production-ready email authentication flows for the auth module. Showcase HTML theme only. **INCLUDES**: Showcase updates for email features.
 
-**Timeline**: After v0.64.0
+**Timeline**: After v0.65.0 (showcase architecture)
 
 **Status**: Planned - Production email features for auth module
 
@@ -840,11 +794,11 @@ Existing v0.63.0 projects continue working unchanged. New projects generated wit
 
 ---
 
-### **v0.66.0: `quickscale_modules.billing` - Billing Module**
+### **v0.67.0: `quickscale_modules.billing` - Billing Module**
 
-**Objective**: Create reusable billing module wrapping dj-stripe for Stripe subscriptions, plans, pricing tiers, webhook handling, and invoice management. HTML theme only. **INCLUDES**: Showcase integration for billing features.
+**Objective**: Create reusable billing module wrapping dj-stripe for Stripe subscriptions, plans, pricing tiers, webhook handling, and invoice management. Showcase HTML theme only. **INCLUDES**: Showcase integration for billing features.
 
-**Timeline**: After v0.65.0 (email verification)
+**Timeline**: After v0.66.0 (email verification)
 
 **Status**: Detailed implementation plan to be created before starting work.
 
@@ -868,11 +822,11 @@ Existing v0.63.0 projects continue working unchanged. New projects generated wit
 
 ---
 
-### **v0.67.0: `quickscale_modules.teams` - Teams/Multi-tenancy Module**
+### **v0.68.0: `quickscale_modules.teams` - Teams/Multi-tenancy Module**
 
-**Objective**: Create reusable teams module with multi-tenancy patterns, role-based permissions, invitation system, and row-level security. HTML theme only. **INCLUDES**: Showcase integration for teams features.
+**Objective**: Create reusable teams module with multi-tenancy patterns, role-based permissions, invitation system, and row-level security. Showcase HTML theme only. **INCLUDES**: Showcase integration for teams features.
 
-**Timeline**: After v0.66.0 (billing)
+**Timeline**: After v0.67.0 (billing)
 
 **Status**: 🎯 **SAAS FEATURE PARITY MILESTONE** - At this point QuickScale matches SaaS Pegasus on core features (auth, billing, teams).
 
@@ -897,20 +851,16 @@ Existing v0.63.0 projects continue working unchanged. New projects generated wit
 
 ---
 
-### **v0.67.0: HTMX Frontend Theme**
-
-**Objective**: Create HTMX + Alpine.js theme variant and port existing modules (auth, billing, teams) to this theme.
-
-### **v0.68.0: HTMX Frontend Theme**
+### **v0.69.0: HTMX Frontend Theme**
 
 **Objective**: Create HTMX + Alpine.js theme variant and port existing modules (auth, billing, teams) to this theme. **INCLUDES**: Module showcase for HTMX theme.
 
-**Timeline**: After v0.67.0 (teams)
+**Timeline**: After v0.68.0 (teams)
 
 **Status**: Planned - Second theme variant for server-rendered, low-JS applications
 
 **Scope**:
-- Create `themes/starter_htmx/` directory structure
+- Create `themes/showcase_htmx/` directory structure
 - HTMX + Alpine.js base templates
 - **Create module showcase landing page** (HTMX version with dynamic loading)
 - Port auth module components (login, signup, account management)
@@ -928,7 +878,7 @@ Existing v0.63.0 projects continue working unchanged. New projects generated wit
 - [ ] Reuse module detection context processor from HTML theme
 
 **Success Criteria**:
- - `quickscale init myproject --theme starter_htmx` generates HTMX-based project
+ - `quickscale init myproject --theme showcase_htmx` generates HTMX-based project
 - All existing modules (auth/billing/teams) work with HTMX theme
 - Backend code remains unchanged (100% theme-agnostic)
 - Documentation includes HTMX theme examples
@@ -937,7 +887,7 @@ Existing v0.63.0 projects continue working unchanged. New projects generated wit
 
 ---
 
-### **v0.69.0: React Frontend Theme**
+### **v0.70.0: React Frontend Theme**
 
 **Objective**: Create React + TypeScript SPA theme variant and port existing modules (auth, billing, teams) to this theme. **INCLUDES**: Module showcase for React theme.
 
@@ -946,7 +896,7 @@ Existing v0.63.0 projects continue working unchanged. New projects generated wit
 **Status**: Planned - Third theme variant for modern SPA applications
 
 **Scope**:
-- Create `themes/starter_react/` directory structure
+- Create `themes/showcase_react/` directory structure
 - React + TypeScript + Vite base setup
 - **Create module showcase landing page** (React SPA with routing)
 - Django REST Framework API endpoints for auth/billing/teams
@@ -967,7 +917,7 @@ Existing v0.63.0 projects continue working unchanged. New projects generated wit
 - [ ] Responsive design with Tailwind CSS or similar
 
 **Success Criteria**:
-- `quickscale init myproject --theme starter_react` generates React SPA project
+- `quickscale init myproject --theme showcase_react` generates React SPA project
 - Module showcase works dynamically (shows installed vs available modules)
 - All existing modules (auth/billing/teams) work with React theme
 - Backend code remains unchanged (100% theme-agnostic)
@@ -978,11 +928,11 @@ Existing v0.63.0 projects continue working unchanged. New projects generated wit
 
 ---
 
-### **v0.70.0: `quickscale_modules.notifications` - Notifications Module**
+### **v0.71.0: `quickscale_modules.notifications` - Notifications Module**
 
-**Objective**: Create reusable notifications module wrapping django-anymail for multiple email backends, transactional templates, and async email via Celery. All 3 themes supported (HTML, HTMX, React).
+**Objective**: Create reusable notifications module wrapping django-anymail for multiple email backends, transactional templates, and async email via Celery. All 3 themes supported (Showcase HTML, HTMX, React).
 
-**Timeline**: After v0.69.0 (React theme)
+**Timeline**: After v0.70.0 (React theme)
 
 **Status**: Detailed implementation plan to be created before starting work.
 
@@ -992,11 +942,11 @@ Existing v0.63.0 projects continue working unchanged. New projects generated wit
 
 ---
 
-### **v0.71.0: Advanced Module Management Features**
+### **v0.72.0: Advanced Module Management Features**
 
 **Objective**: Enhance module management with batch operations and advanced features.
 
-**Timeline**: After v0.70.0 (notifications)
+**Timeline**: After v0.71.0 (notifications)
 
 **Rationale**: Basic embed/update/push commands implemented in v0.62.0. This release adds convenience features based on real usage patterns.
 

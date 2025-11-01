@@ -51,6 +51,8 @@ docker-compose exec web python manage.py createsuperuser
 
 Visit http://127.0.0.1:8000 to see your application.
 
+> **Note:** The PostgreSQL container does not expose port 5432 to your host machine by default to avoid conflicts with system PostgreSQL installations. The Django application connects to the database via Docker's internal network. If you need to access PostgreSQL from your host (e.g., for database GUI tools), uncomment the `ports` section in `docker-compose.yml`.
+
 ## 📋 What's Included
 
 This project comes pre-configured with:

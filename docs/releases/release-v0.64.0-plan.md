@@ -1,633 +1,469 @@
-# Release v0.64.0: Starter HTML Theme Showcase Architecture
+# Release v0.64.0: Theme Rename (`starter_html` → `showcase_html`)
 
-**Release Date**: October 31, 2025
+**Release Date**: October 31, 2025 (Target)
 **Status**: 🔄 READY FOR IMPLEMENTATION
-**Objective**: Add module showcase architecture to starter HTML theme - establishes pattern for all future modules
+**Objective**: Atomic, coordinated rename of theme from `starter_html` to `showcase_html` across all code, templates, tests, and documentation
 
 ---
 
-## Why v0.64.0 (Showcase as Separate Release)?
+## Why v0.64.0 (Theme Rename First)?
 
-**v0.63.0 Status**: Production-ready authentication module with 89% test coverage and complete auth flows. Released October 29, 2025.
+**Strategic Decision**: The theme rename is MANDATORY and must happen before showcase features are added in v0.65.0.
 
-**v0.64.0 Focus**: The starter HTML theme currently shows a basic "Next Steps" page. This release transforms it into a **module showcase architecture** that demonstrates QuickScale's composability.
+**Rationale**:
+1. **Brand Clarity**: "Showcase HTML" better reflects the theme's purpose (demonstrating module capabilities)
+2. **Future-Proof**: Establishes naming before v0.65.0 adds actual showcase features
+3. **Low Risk**: Single-purpose release, easy to test and rollback if needed
+4. **Clean History**: Separates rename from feature work for clearer git history
+5. **Atomic Operation**: All renames happen together in one commit, avoiding partial state
 
-**Strategic Importance**: The showcase architecture is critical for:
-1. **Marketing**: Users immediately see what QuickScale offers
-2. **Discovery**: Users understand what modules to install next
-3. **Education**: Clear demonstrations of each module's capabilities
-4. **Proof of concept**: Visual validation of QuickScale's modular architecture
-
-**Decision**: Keep v0.63.0 as-is (auth module complete), add showcase in v0.64.0 as a clean upgrade path. This allows:
-- ✅ Review v0.63.0 independently (auth module quality validation)
-- ✅ Test showcase separately without risk to auth module
-- ✅ Users on v0.63.0 can upgrade incrementally (optional, not required)
-- ✅ Establishes showcase pattern before v0.65.0 (email verification)
+**Approach**: This is a **surgical refactoring release** - no feature changes, only renaming for consistency.
 
 ---
 
-## What v0.64.0 Adds (No Auth Module Changes)
+## Scope Boundaries
 
-### ✅ Keeping (No Changes - v0.63.0 Complete)
-- Auth module code in `quickscale_modules/auth/` (89% test coverage, already validated)
-- django-allauth integration with custom User model (production-ready)
-- All authentication flows (login, logout, signup, password reset, profile)
-- Interactive embed configuration
-- Module templates and static files
-- Test suite (13 passing tests)
-- Module README and documentation
+### ✅ IN SCOPE (v0.64.0)
+- Rename filesystem directory: `themes/starter_html/` → `themes/showcase_html/`
+- Update generator defaults and theme resolution logic
+- Update all authoritative docs (decisions.md, scaffolding.md, user_manual.md, README.md)
+- Update CLI tests and generator tests
+- Single atomic commit with all changes together
 
-**Key Point**: v0.64.0 does NOT touch auth module code at all. That remains stable from v0.63.0.
-
-### 🆕 Adding (New in v0.64.0 - Theme Layer Only)
-- **Starter HTML Theme Showcase Landing Page** (`themes/starter_html/templates/index.html.j2`)
-  - Module showcase grid layout
-  - Auth module card (🔐 Authentication)
-  - Placeholder cards for billing, teams, notifications (marked "Available")
-  - Status indicators (Installed vs Available)
-- **Auth Preview Page** (`themes/starter_html/templates/auth_preview.html.j2`)
-  - Detailed auth features showcase
-  - Works WITHOUT auth module installed
-  - Shows installation instructions
-  - Links to functional pages when installed
-- **Module Detection Context Processor** (`quickscale_core/context_processors.py`)
-  - Provides `modules` dict to all templates
-  - Enables dynamic showcase behavior
-- **Showcase CSS Styles** (`themes/starter_html/static/css/style.css.j2`)
-  - Module card styles with hover effects
-  - Responsive grid layout
-  - Status badges (installed/available)
-  - Preview page styles
-- **Updated Base Template** (`themes/starter_html/templates/base.html.j2`)
-  - Navigation with "Modules" section
-  - Dynamic links based on installation status
+### ❌ OUT OF SCOPE (Deferred)
+- Showcase features (landing page, module cards, preview pages) → v0.65.0
+- Auth module changes (stable from v0.63.0)
+- New modules or theme variants
+- Email verification (v0.66.0)
+- Any functional changes beyond renaming
 
 ---
 
-## Implementation Tasks (v0.64.0 - Theme Layer Only)
+## Implementation Tasks (Atomic Commit)
 
-**IMPORTANT**: All existing auth module code remains unchanged. v0.64.0 tasks focus ONLY on the starter HTML theme showcase layer.
+Execute all tasks in sequence, then commit as single atomic change.
 
-### Task Group 1: Showcase Landing Page (index.html.j2)
+### Task Group 1: Filesystem Rename
+- [ ] **Backup current state**: Create git branch `v64-theme-rename`
+- [ ] **Rename directory**:
+  ```bash
+  cd quickscale_core/src/quickscale_core/generator/templates/themes/
+  mv starter_html showcase_html
+  ```
+- [ ] **Verify structure**: Ensure all subdirectories moved correctly
+  - [ ] `showcase_html/templates/` exists
+  - [ ] `showcase_html/static/` exists
+  - [ ] All `.html.j2` files present
 
-**File**: `quickscale_core/src/quickscale_core/generator/templates/themes/starter_html/templates/index.html.j2`
+**Files affected**: All files under `themes/starter_html/` moved to `themes/showcase_html/`
 
-**Current State**: Basic "Next Steps" list with Django documentation links
+---
 
-**Target State**: Module showcase with cards for all available modules
+### Task Group 2: Generator Code Updates
 
-**Tasks**:
-- [ ] Replace welcome content with hero section:
-  - [ ] H1: "Welcome to {{ project_name }}"
-  - [ ] Tagline: "Built with QuickScale - Compose your Django SaaS"
-- [ ] Add modules showcase section:
-  - [ ] Section header: "Available Modules"
-  - [ ] Grid layout for module cards (CSS Grid, responsive)
-- [ ] Create auth module card:
-  - [ ] Icon: 🔐
-  - [ ] Title: "Authentication"
-  - [ ] Description: "User authentication with django-allauth"
-  - [ ] Features list: Email/password login, Password reset flows, Profile management
-  - [ ] Demo button: "View Features" (links to /auth/preview/)
-  - [ ] Status badge: Shows "✓ Installed" if auth module embedded, else "Install with: quickscale embed --module auth"
-  - [ ] Conditional CSS classes: `.installed` or `.available`
-- [ ] Create placeholder cards for future modules:
-  - [ ] **Billing** (💳): Stripe integration, subscriptions, invoices
-  - [ ] **Teams** (👥): Multi-tenancy, permissions, invitations
-  - [ ] **Notifications** (🔔): Email infrastructure, in-app notifications
-  - [ ] All marked as `.available` with installation commands
-- [ ] Add template logic for module detection:
-  - [ ] Use `{% if modules.auth %}` from context processor
-  - [ ] Dynamically set CSS classes and status text
-  - [ ] Show appropriate button text and links
+**File**: `quickscale_core/src/quickscale_core/generator/generator.py` (or equivalent)
 
-**Example Structure**:
-```html
-{%raw%}{% extends "base.html" %}
-{% load static %}
+- [ ] **Update default theme**:
+  ```python
+  # OLD
+  def __init__(self, project_name: str, theme: str = "starter_html"):
 
-{% block title %}Welcome to {% endraw %}{{ project_name }}{%raw%}{% endblock %}
+  # NEW
+  def __init__(self, project_name: str, theme: str = "showcase_html"):
+  ```
 
-{% block content %}
-<!-- Hero Section -->
-<div class="hero">
-  <h1>Welcome to {% endraw %}{{ project_name }}{%raw%}</h1>
-  <p class="tagline">Built with QuickScale - Compose your Django SaaS</p>
-</div>
+- [ ] **Update theme path resolution**:
 
-<!-- Modules Showcase -->
-<section class="modules-showcase">
-  <h2>Available Modules</h2>
-  <div class="module-grid">
+- [ ] **Search for other occurrences**:
+  ```bash
+  cd quickscale_core/src
+  grep -r "starter_html" . | grep -v ".pyc" | grep -v "__pycache__"
+  # Fix all occurrences found
+  ```
 
-    <!-- Auth Module Card -->
-    <div class="module-card {% if modules.auth %}installed{% else %}available{% endif %}">
-      <h3>🔐 Authentication</h3>
-      <p class="module-description">User authentication with django-allauth</p>
-      <ul class="features">
-        <li>Email/password login</li>
-        <li>Password reset flows</li>
-        <li>Profile management</li>
-      </ul>
-      {% if modules.auth %}
-        <a href="/accounts/login/" class="btn-demo">View Features</a>
-        <span class="status installed">✓ Installed</span>
-      {% else %}
-        <a href="{% url 'auth_preview' %}" class="btn-demo">Preview Demo</a>
-        <span class="status available">Install with: <code>quickscale embed --module auth</code></span>
-      {% endif %}
-    </div>
+**Expected changes**: 3-5 lines in generator.py, possible changes in template loader
 
-    <!-- Billing Module Card (placeholder) -->
-    <div class="module-card available">
-      <h3>💳 Billing & Subscriptions</h3>
-      <p class="module-description">Stripe integration with subscription management</p>
-      <ul class="features">
-        <li>Multiple pricing tiers</li>
-        <li>Usage tracking</li>
-        <li>Invoice management</li>
-      </ul>
-      <a href="{% url 'billing_preview' %}" class="btn-demo">Preview Demo</a>
-      <span class="status available">Coming in v0.65.0 - <code>quickscale embed --module billing</code></span>
-    </div>
+---
 
-    <!-- Teams Module Card (placeholder) -->
-    <div class="module-card available">
-      <h3>👥 Teams & Multi-tenancy</h3>
-      <p class="module-description">Collaborative workspaces with role-based permissions</p>
-      <ul class="features">
-        <li>Team creation & management</li>
-        <li>Member invitations</li>
-        <li>Role-based permissions</li>
-      </ul>
-      <a href="{% url 'teams_preview' %}" class="btn-demo">Preview Demo</a>
-      <span class="status available">Coming in v0.66.0 - <code>quickscale embed --module teams</code></span>
-    </div>
+### Task Group 3: CLI Code Updates
 
-    <!-- Notifications Module Card (placeholder) -->
-    <div class="module-card available">
-      <h3>🔔 Notifications</h3>
-      <p class="module-description">Email infrastructure and in-app notifications</p>
-      <ul class="features">
-        <li>Transactional emails</li>
-        <li>In-app notifications</li>
-        <li>Notification preferences</li>
-      </ul>
-      <a href="{% url 'notifications_preview' %}" class="btn-demo">Preview Demo</a>
-      <span class="status available">Coming in v0.69.0 - <code>quickscale embed --module notifications</code></span>
-    </div>
+**File**: `quickscale_cli/src/quickscale_cli/commands/init.py` (or equivalent)
 
-  </div>
-</section>
+- [ ] **Check for hardcoded theme references**:
+  ```bash
+  cd quickscale_cli/src
+  grep -r "starter_html" .
+  ```
 
-<!-- Resources Section (keep existing) -->
-<section class="resources">
-  <h2>Resources</h2>
-  <ul>
-    <li><a href="https://docs.djangoproject.com/" target="_blank">Django Documentation</a></li>
-    <li><a href="https://github.com/Experto-AI/quickscale" target="_blank">QuickScale Documentation</a></li>
-  </ul>
-</section>
-{% endblock %}{%endraw%}
+- [ ] **Update any CLI-specific theme validation** (if exists)
+- [ ] **Update help text** for `--theme` flag if it lists themes
+
+**Expected changes**: 0-2 lines (CLI likely delegates to generator)
+
+---
+
+### Task Group 4: Test Updates
+
+**Files to update**:
+- `quickscale_core/tests/test_generator.py`
+- `quickscale_core/tests/test_generator_templates.py`
+- `quickscale_cli/tests/test_cli.py`
+- `quickscale_core/tests/test_e2e_full_workflow.py` (if exists)
+
+**Search and replace**:
+```bash
+cd quickscale_core/tests
+grep -r "starter_html" . | grep -v ".pyc" | grep -v "__pycache__"
+
+cd quickscale_cli/tests
+grep -r "starter_html" . | grep -v ".pyc" | grep -v "__pycache__"
 ```
 
----
+**For each test file**:
+- [ ] Replace `"starter_html"` with `"showcase_html"` in:
+  - [ ] Test fixtures
+  - [ ] Assertion expectations
+  - [ ] Path validations
+  - [ ] CLI command invocations
 
-### Task Group 2: Auth Preview Page Template
-
-**File**: `quickscale_core/src/quickscale_core/generator/templates/themes/starter_html/templates/auth_preview.html.j2`
-
-**Purpose**: Show auth module features WITHOUT requiring the module to be installed. Works as marketing/demo page.
-
-**Tasks**:
-- [ ] Create new template file
-- [ ] Extend base.html
-- [ ] Add preview header:
-  - [ ] Title: "🔐 Authentication Module"
-  - [ ] Tagline: "Complete user authentication flows with django-allauth"
-- [ ] Add installation status check:
-  - [ ] If installed: Success alert with link to /accounts/login/
-  - [ ] If not installed: Info alert with installation command
-- [ ] Create feature showcases (4 sections):
-  - [ ] **Section 1: Login & Signup**
-    - [ ] Description of email/password authentication
-    - [ ] Mockup or description of login/signup forms
-  - [ ] **Section 2: Password Management**
-    - [ ] Description of password reset flows
-    - [ ] Email-based password recovery
-  - [ ] **Section 3: Profile Management**
-    - [ ] User profile viewing and editing
-    - [ ] Account settings
-  - [ ] **Section 4: Account Security**
-    - [ ] Account deletion
-    - [ ] Session management
-- [ ] Add installation instructions section:
-  - [ ] Step 1: Run `quickscale embed --module auth`
-  - [ ] Step 2: Answer configuration prompts
-  - [ ] Step 3: Restart development server
-  - [ ] Step 4: Visit /accounts/login/
-- [ ] Add footer with documentation link
-
-**Example Structure**:
-```html
-{%raw%}{% extends "base.html" %}
-{% load static %}
-
-{% block title %}Authentication Module - Preview{% endblock %}
-
-{% block content %}
-<div class="preview-container">
-  <header class="preview-header">
-    <h1>🔐 Authentication Module</h1>
-    <p class="tagline">Complete user authentication flows with django-allauth</p>
-  </header>
-
-  {% if modules.auth %}
-    <div class="alert success">
-      ✓ Authentication module is installed. <a href="/accounts/login/">Go to Login</a>
-    </div>
-  {% else %}
-    <div class="alert info">
-      This is a preview. Install with: <code>quickscale embed --module auth</code>
-    </div>
-  {% endif %}
-
-  <section class="feature-showcase">
-    <h2>Login & Signup Flows</h2>
-    <div class="feature-demo">
-      <p>Secure email/password authentication powered by django-allauth:</p>
-      <ul>
-        <li>Email-based login (or username, configurable)</li>
-        <li>Registration with validation</li>
-        <li>Automatic session management</li>
-        <li>Remember me functionality</li>
-      </ul>
-    </div>
-  </section>
-
-  <section class="feature-showcase">
-    <h2>Password Management</h2>
-    <div class="feature-demo">
-      <p>Complete password recovery and security features:</p>
-      <ul>
-        <li>Email-based password reset</li>
-        <li>Secure token generation</li>
-        <li>Password change for logged-in users</li>
-        <li>Password strength validation</li>
-      </ul>
-    </div>
-  </section>
-
-  <section class="feature-showcase">
-    <h2>Profile Management</h2>
-    <div class="feature-demo">
-      <p>User profile viewing and editing:</p>
-      <ul>
-        <li>View user profile</li>
-        <li>Edit profile information</li>
-        <li>Custom User model (extends AbstractUser)</li>
-        <li>Easy to extend with additional fields</li>
-      </ul>
-    </div>
-  </section>
-
-  <section class="feature-showcase">
-    <h2>Account Security</h2>
-    <div class="feature-demo">
-      <p>Account management and security features:</p>
-      <ul>
-        <li>Account deletion with confirmation</li>
-        <li>Session management</li>
-        <li>Logout functionality</li>
-        <li>Account inactive handling</li>
-      </ul>
-    </div>
-  </section>
-
-  <section class="installation">
-    <h2>Installation</h2>
-    <ol>
-      <li>Run: <code>quickscale embed --module auth</code></li>
-      <li>Answer configuration prompts:
-        <ul>
-          <li>Enable user registration? [Y/n]</li>
-          <li>Email verification [none/optional/mandatory]</li>
-          <li>Authentication method [email/username/both]</li>
-        </ul>
-      </li>
-      <li>Restart your development server</li>
-      <li>Visit <code>/accounts/login/</code> to start using authentication</li>
-    </ol>
-  </section>
-
-  <footer class="preview-footer">
-    <a href="/modules/auth/README.md" class="btn">View Full Documentation</a>
-  </footer>
-</div>
-{% endblock %}{%endraw%}
-```
-
----
-
-### Task Group 3: Context Processor for Module Detection
-
-**File**: `quickscale_core/src/quickscale_core/context_processors.py` (NEW FILE)
-
-**Purpose**: Provide module installation status to all templates for dynamic showcase behavior.
-
-**Tasks**:
-- [ ] Create new file in `quickscale_core/src/quickscale_core/`
-- [ ] Implement `installed_modules()` function
-- [ ] Check `settings.INSTALLED_APPS` for module presence
-- [ ] Return dict with boolean flags for each module
-- [ ] Add QuickScale version info
-- [ ] Add docstrings following Google style
-- [ ] Add type hints
-
-**Implementation**:
+**Example changes**:
 ```python
-"""Context processors for QuickScale themes."""
+# OLD
+def test_default_theme():
+    assert generator.theme == "starter_html"
 
-from django.conf import settings
-from django.http import HttpRequest
-from typing import Dict, Any
-
-
-def installed_modules(request: HttpRequest) -> Dict[str, Any]:
-    """Provide module installation status to all templates
-
-    This context processor checks which QuickScale modules are installed
-    and makes that information available to all templates for dynamic
-    showcase behavior and navigation.
-    """
-    installed_apps = settings.INSTALLED_APPS
-
-    return {
-        'modules': {
-            'auth': 'modules.auth' in installed_apps,
-            'billing': 'modules.billing' in installed_apps,
-            'teams': 'modules.teams' in installed_apps,
-            'notifications': 'modules.notifications' in installed_apps,
-        },
-        'quickscale_version': getattr(settings, 'QUICKSCALE_VERSION', 'unknown'),
-    }
+# NEW
+def test_default_theme():
+    assert generator.theme == "showcase_html"
 ```
 
-**Integration Task**:
-- [ ] Update generated project settings template to include context processor:
-  - [ ] File: `quickscale_core/src/quickscale_core/generator/templates/project_name/settings/base.py.j2`
-  - [ ] Add to `TEMPLATES[0]['OPTIONS']['context_processors']`:
-    ```python
-    'quickscale_core.context_processors.installed_modules',
-    ```
+**Expected changes**: 10-20 lines across test files
 
 ---
 
-### Task Group 4: Showcase CSS Styles
+### Task Group 5: Documentation Updates (Authoritative)
 
-**File**: `quickscale_core/src/quickscale_core/generator/templates/themes/starter_html/static/css/style.css.j2`
+All documentation must be updated in the SAME commit as code changes.
 
-**Current State**: Basic styles for header, main, footer
+#### File 1: `docs/technical/decisions.md`
 
-**Tasks**:
-- [ ] Add hero section styles
-- [ ] Add modules showcase grid styles (CSS Grid, responsive)
-- [ ] Add module card styles:
-  - [ ] Base card: border, padding, border-radius
-  - [ ] Hover effects: shadow, transform, border color change
-  - [ ] Installed state: green border, light green background
-  - [ ] Available state: blue border, light blue background
-- [ ] Add module card content styles:
-  - [ ] Title (h3) with icon
-  - [ ] Description paragraph
-  - [ ] Features list with checkmarks
-  - [ ] Demo button (primary blue)
-  - [ ] Status badge (installed green / available blue)
-- [ ] Add preview page styles:
-  - [ ] Preview container: max-width, padding
-  - [ ] Preview header: centered, large title
-  - [ ] Alert boxes: success (green), info (blue)
-  - [ ] Feature showcase sections
-  - [ ] Installation instructions section
-  - [ ] Footer with CTA button
-- [ ] Add responsive breakpoints:
-  - [ ] Mobile: 1 column
-  - [ ] Tablet: 2 columns
-  - [ ] Desktop: 3-4 columns
+**Search for occurrences**:
+```bash
+grep -n "starter_html" docs/technical/decisions.md
+```
 
-**Full CSS** (see roadmap.md "Module Showcase Implementation Guide §4" for complete styles)
+**Update sections**:
+- [ ] Line 156: Theme directory structure examples
+- [ ] Line 181: Theme tree structure
+- [ ] Line 348: MVP Feature Matrix theme CLI flag
+- [ ] Line 365: Themes IN scope table
+- [ ] Line 431: CLI commands reference
+- [ ] Line 433: Template refactoring notes
+
+**Example change**:
+```diff
+-1. Store themes in `quickscale_core/generator/templates/themes/{starter_html,starter_htmx,starter_react}/`
++1. Store themes in `quickscale_core/generator/templates/themes/{showcase_html,showcase_htmx,showcase_react}/`
+```
 
 ---
 
-### Task Group 5: Preview Page URL Configuration
+#### File 2: `docs/technical/scaffolding.md`
 
-**Files**:
-- `quickscale_core/src/quickscale_core/generator/templates/project_name/views.py.j2` (NEW FILE)
-- `quickscale_core/src/quickscale_core/generator/templates/project_name/urls.py.j2` (UPDATE)
+**Search for occurrences**:
+```bash
+grep -n "starter_html" docs/technical/scaffolding.md
+```
 
-**Tasks**:
-- [ ] Create `views.py.j2` template with preview views:
-  ```python
-  from django.shortcuts import render
-  from django.http import HttpRequest, HttpResponse
+**Update sections**:
+- Theme directory structure examples
+- Post-MVP structure diagrams
+- Generated project references
 
-  def auth_preview(request: HttpRequest) -> HttpResponse:
-      """Show authentication module preview page"""
-      return render(request, 'auth_preview.html')
-
-  def billing_preview(request: HttpRequest) -> HttpResponse:
-      """Show billing module preview page"""
-      return render(request, 'billing_preview.html')
-
-  def teams_preview(request: HttpRequest) -> HttpResponse:
-      """Show teams module preview page"""
-      return render(request, 'teams_preview.html')
-
-  def notifications_preview(request: HttpRequest) -> HttpResponse:
-      """Show notifications module preview page"""
-      return render(request, 'notifications_preview.html')
-  ```
-
-- [ ] Update `urls.py.j2` to include preview routes:
-  ```python
-  from {{ project_name }} import views
-
-  urlpatterns = [
-      # ... existing patterns
-
-      # Module preview pages
-      path('auth/preview/', views.auth_preview, name='auth_preview'),
-      path('billing/preview/', views.billing_preview, name='billing_preview'),
-      path('teams/preview/', views.teams_preview, name='teams_preview'),
-      path('notifications/preview/', views.notifications_preview, name='notifications_preview'),
-  ]
-  ```
+**Note**: Do NOT update historical release document references (preserve accuracy)
 
 ---
 
-### Task Group 6: Base Template Updates (Optional)
+#### File 3: `docs/technical/user_manual.md`
 
-**File**: `quickscale_core/src/quickscale_core/generator/templates/themes/starter_html/templates/base.html.j2`
+**Search for occurrences**:
+```bash
+grep -n "starter_html" docs/technical/user_manual.md
+```
 
-**Current State**: Basic header with project name, no navigation
+**Update sections**:
+- [ ] Theme selection CLI examples
+- [ ] Available themes list
+- [ ] Quick start examples
 
-**Optional Enhancement** (Can defer to v0.64.0):
-- [ ] Add navigation menu with "Modules" dropdown
-- [ ] Show installed modules with links to functional pages
-- [ ] Show available modules with links to preview pages
-- [ ] Add visual indicators (✓ for installed, ⚠ for available)
-
-**Decision**: Defer to keep scope focused. Landing page showcase is sufficient for v0.63.0 re-implementation.
-
----
-
-## Testing & Validation
-
-### Manual Testing Checklist
-
-**Scenario 1: Fresh project without modules**
-- [ ] Run `quickscale init testproject`
-- [ ] Start development server
-- [ ] Visit http://localhost:8000/
-- [ ] Verify showcase landing page renders correctly
-- [ ] Verify all 4 module cards show "Available" status
-- [ ] Click "Preview Demo" on auth card
-- [ ] Verify auth preview page loads
-- [ ] Verify installation instructions are shown
-
-**Scenario 2: Project with auth module embedded**
-- [ ] Run `quickscale embed --module auth`
-- [ ] Answer configuration prompts
-- [ ] Restart development server
-- [ ] Visit http://localhost:8000/
-- [ ] Verify auth module card shows "Installed" status (✓ Installed)
-- [ ] Verify auth card button says "View Features" (not "Preview Demo")
-- [ ] Click "View Features" button
-- [ ] Verify it links to /accounts/login/ (functional page)
-- [ ] Visit http://localhost:8000/auth/preview/
-- [ ] Verify preview page shows success alert: "Authentication module is installed"
-
-**Scenario 3: Preview pages for unimplemented modules**
-- [ ] Visit http://localhost:8000/billing/preview/
-- [ ] Verify placeholder preview page renders (even though billing module doesn't exist yet)
-- [ ] Same for teams and notifications preview pages
-
-**Scenario 4: Responsive design**
-- [ ] Test on mobile viewport (320px-480px)
-- [ ] Verify module cards stack in 1 column
-- [ ] Test on tablet viewport (768px-1024px)
-- [ ] Verify module cards display in 2 columns
-- [ ] Test on desktop viewport (1280px+)
-- [ ] Verify module cards display in 3-4 columns
-
-### Automated Testing
-
-**Test Coverage Requirements**:
-- Context processor: Test `installed_modules()` returns correct dict
-- Preview views: Test each preview view returns 200 status
-- Template rendering: Test showcase renders without errors
-- Module detection: Test template logic for installed/available states
-
-**Test Files**:
-- [ ] `quickscale_core/tests/test_context_processors.py` (NEW)
-- [ ] `quickscale_core/tests/test_showcase_views.py` (NEW)
-- [ ] `quickscale_core/tests/test_showcase_templates.py` (NEW)
+**Example change**:
+```diff
+-# Default HTML theme (production-ready)
+-quickscale init myapp
+-quickscale init myapp --theme starter_html
++# Default Showcase HTML theme (production-ready)
++quickscale init myapp
++quickscale init myapp --theme showcase_html
+```
 
 ---
 
-## Success Criteria (v0.64.0)
+#### File 4: `README.md`
 
-### Functional Requirements
-- ✅ Fresh project shows showcase landing page with 4 module cards
-- ✅ Module cards display correct status (installed vs available)
-- ✅ Preview pages work for all modules (auth, billing, teams, notifications)
-- ✅ Auth preview page shows installation instructions when not installed
-- ✅ Auth preview page shows success message when installed
-- ✅ Module cards link to preview pages when not installed
-- ✅ Module cards link to functional pages when installed
+**Search for occurrences**:
+```bash
+grep -n "starter_html" README.md
+```
 
-### Quality Requirements
-- ✅ All existing auth module tests still pass (13 tests, 89% coverage)
-- ✅ New context processor has 100% test coverage
-- ✅ Preview views have 100% test coverage
-- ✅ CSS passes validation (no errors)
-- ✅ HTML templates pass validation
-- ✅ Responsive design works on mobile, tablet, desktop
-- ✅ Code quality passes: Ruff format/check
+**Update sections**:
+- [ ] Quick Start theme selection examples
+- [ ] Development Flow section
+- [ ] Available themes list
 
-### Documentation Requirements
-- ✅ Roadmap updated with Module Showcase Implementation Guide
-- ✅ All future module releases reference showcase requirements
-- ✅ This re-implementation plan documents the changes
-- ✅ Updated release-v0.63.0-implementation.md reflects showcase additions
+**Example change**:
+```diff
+# Or choose a specific theme (v0.61.0+)
+-# quickscale init myapp --theme starter_html  # Default HTML theme
++# quickscale init myapp --theme showcase_html  # Default Showcase HTML theme
+ # quickscale init myapp --theme showcase_htmx  # HTMX theme (coming in v0.67.0)
+```
 
 ---
 
-## Deliverables (v0.64.0)
+### Task Group 6: Validation & Quality Gates
 
-### Code Changes
-1. ✅ Updated `index.html.j2` with showcase landing page
-2. ✅ New `auth_preview.html.j2` template
-3. ✅ New `context_processors.py` for module detection
-4. ✅ Updated `style.css.j2` with showcase styles
-5. ✅ New `views.py.j2` with preview views
-6. ✅ Updated `urls.py.j2` with preview routes
-7. ✅ Updated settings template to register context processor
+**Run all quality checks BEFORE committing**:
 
-### Testing
-1. ✅ New context processor tests
-2. ✅ New preview view tests
-3. ✅ Manual QA checklist completed
-4. ✅ All existing tests still pass
+#### Linting
+```bash
+cd quickscale_core
+poetry run ruff format .
+poetry run ruff check .
+
+cd ../quickscale_cli
+poetry run ruff format .
+poetry run ruff check .
+```
+
+#### Type Checking
+```bash
+cd quickscale_core
+poetry run mypy src/
+
+cd ../quickscale_cli
+poetry run mypy src/
+```
+
+#### Test Suite
+```bash
+# Run generator tests
+cd quickscale_core
+poetry run pytest -v
+
+# Run CLI tests
+cd ../quickscale_cli
+poetry run pytest -v
+
+# Run full test suite
+cd ..
+./scripts/test_all.sh
+```
+
+**All tests MUST pass before committing**
 
 ---
 
-## Timeline Estimate
+#### Manual Smoke Tests
 
-**Total Effort**: 6-8 hours
+**Test 1: Default theme works**
+```bash
+quickscale init testproject1
+cd testproject1
+ls -la  # Verify project created
+cd ..
+rm -rf testproject1
+```
 
-**Breakdown**:
-- Task Group 1 (Landing Page): 2 hours
-- Task Group 2 (Preview Page): 1.5 hours
-- Task Group 3 (Context Processor): 1 hour
-- Task Group 4 (CSS Styles): 1.5 hours
-- Task Group 5 (URL Configuration): 0.5 hours
-- Testing & Validation: 1.5 hours
-- Documentation: 1 hour
+**Test 2: Explicit showcase_html works**
+```bash
+quickscale init testproject2 --theme showcase_html
+cd testproject2
+ls -la  # Verify project created
+cd ..
+rm -rf testproject2
+```
 
-**Target Completion**: Same day (October 31, 2025)
+**Test 3: Invalid theme fails gracefully**
+```bash
+quickscale init testproject3 --theme starter_html
+# Should fail with error: Theme 'starter_html' not found
+# Error message should suggest: Available themes: showcase_html, showcase_htmx, showcase_react
+```
+
+**Test 4: Generated project runs**
+```bash
+quickscale init testproject4
+cd testproject4
+poetry install
+poetry run python manage.py migrate
+poetry run python manage.py runserver &
+sleep 3
+curl http://localhost:8000/  # Should return HTML
+kill %1
+cd ..
+rm -rf testproject4
+```
+
+---
+
+## Success Criteria (All Must Pass)
+
+### Code Quality
+- [ ] ✅ All linting checks pass (Ruff format + check)
+- [ ] ✅ All type checks pass (MyPy)
+- [ ] ✅ No hardcoded `starter_html` strings remain in source code
+
+### Test Suite
+- [ ] ✅ All generator tests pass
+- [ ] ✅ All CLI tests pass
+- [ ] ✅ Full test suite passes (`./scripts/test_all.sh`)
+
+### Manual Testing
+- [ ] ✅ `quickscale init` uses `showcase_html` by default
+- [ ] ✅ `quickscale init --theme showcase_html` works
+- [ ] ✅ `quickscale init --theme starter_html` fails with clear error message
+- [ ] ✅ Generated project runs successfully (manage.py runserver)
+
+### Documentation
+- [ ] ✅ decisions.md updated and consistent
+- [ ] ✅ scaffolding.md updated and consistent
+- [ ] ✅ user_manual.md updated and consistent
+- [ ] ✅ README.md updated and consistent
+- [ ] ✅ No `starter_html` references in docs (except historical releases)
+
+### Git Hygiene
+- [ ] ✅ Single atomic commit with descriptive message
+- [ ] ✅ All changes in one commit (no partial state)
+- [ ] ✅ Commit message follows convention
+
+---
+
+## Deliverables
+
+1. **Renamed theme directory**: `themes/showcase_html/` (filesystem)
+2. **Updated generator code**: Default theme changed to `showcase_html`
+3. **Updated test suite**: All tests passing with new theme name
+4. **Updated authoritative docs**: decisions.md, scaffolding.md, user_manual.md, README.md
+5. **Release documentation**: `docs/releases/release-v0.64.0-implementation.md`
+
+---
+
+## Migration Path
+
+### For Existing Users (v0.61.0-v0.63.0)
+- ✅ **Existing generated projects continue working unchanged** (they don't depend on QuickScale after generation)
+- ⚠️  **BREAKING**: `--theme starter_html` flag no longer works
+- ✅ Users must use `--theme showcase_html` for new projects
+
+### For New Users (v0.64.0+)
+- ✅ `quickscale init` uses `showcase_html` theme by default
+- ✅ Documentation shows `showcase_html` in all examples
+- ✅ Only valid theme name is `showcase_html` (and future themes)
+
+### For Scripts/Automation
+- ⚠️  **BREAKING**: Scripts using `--theme starter_html` will fail
+- ✅ Update scripts to use `--theme showcase_html`
+- ✅ Scripts using default theme (no `--theme` flag) work automatically
+
+---
+
+## Commit Message Template
+
+```
+Release v0.64.0: Rename theme from starter_html to showcase_html
+
+BREAKING CHANGE: Theme renamed from starter_html to showcase_html.
+
+Changes:
+- Renamed themes/starter_html/ → themes/showcase_html/
+- Updated generator default from starter_html to showcase_html
+- Updated all authoritative docs (decisions.md, scaffolding.md, user_manual.md, README.md)
+- Updated all tests to use showcase_html
+
+Breaking Changes:
+- --theme starter_html no longer works (use --theme showcase_html)
+- Scripts using --theme starter_html must be updated
+- Existing generated projects unaffected (no QuickScale dependency after generation)
+
+Migration:
+- Existing projects: No action required (continue working unchanged)
+- New projects: Automatically use showcase_html
+- Scripts: Update --theme starter_html → --theme showcase_html
+
+Rationale: Establishes "Showcase" branding before v0.65.0 adds actual
+showcase features (module cards, preview pages). Clean breaking change
+without backward compatibility cruft.
+
+Tested: All tests passing, manual smoke tests completed
+```
 
 ---
 
 ## Next Steps
 
-1. ✅ Review this v0.64.0 implementation plan
-2. ⏳ Implement Task Groups 1-6 (showcase architecture)
-3. ⏳ Run manual testing checklist
-4. ⏳ Write automated tests for new components
-5. ⏳ Create release-v0.64.0-implementation.md documenting completion
-6. ⏳ Commit with message: "Release v0.64.0: Add module showcase architecture to starter HTML theme"
-7. ⏳ Proceed to v0.65.0 planning (auth email verification)
+### After v0.64.0 Release
+1. ✅ Commit theme rename with message above
+2. ✅ Create `docs/releases/release-v0.64.0-implementation.md` documenting completion
+3. ✅ Update roadmap: Move v0.64.0 to "Completed Releases" section
+4. ⏭️  Plan v0.65.0 (Showcase Architecture implementation)
+
+### v0.65.0 Planning
+- Use `showcase_html` theme name throughout
+- Add module showcase features (landing page, preview pages)
+- Reference v0.64.0 theme rename as prerequisite
 
 ---
 
-## Migration Path from v0.63.0
+## Risk Assessment
 
-**For existing v0.63.0 projects**:
-- ✅ Continue working unchanged - showcase is optional
-- ✅ Auth module remains fully functional
-- ✅ No breaking changes
-- 🔧 To upgrade: Copy new theme templates manually (optional)
+### Low Risk Items ✅
+- Filesystem rename (straightforward, reversible)
+- Generator default change (single line)
+- Documentation updates (no code impact)
+- Test updates (straightforward search/replace)
 
-**For new projects**:
-- ✅ Generate with v0.64.0+ to get showcase automatically
-- ✅ Showcase works whether modules installed or not
+### Medium Risk Items ⚠️
+- Potential hardcoded paths in templates (need verification)
+- Breaking change for users with scripts using `--theme starter_html`
+
+### Mitigation Strategies
+1. **Single atomic commit**: Makes rollback easy if issues found
+2. **Clear error messages**: Guide users to use `showcase_html` instead
+3. **Comprehensive testing**: Manual + automated tests catch issues
+4. **Documentation updates**: All docs clearly show new theme name
+
+---
+
+## Timeline Estimate
+
+**Total effort**: 2-3 hours
+
+**Breakdown**:
+- Task Group 1 (Filesystem): 15 minutes
+- Task Group 2 (Generator Code): 30 minutes
+- Task Group 3 (CLI Code): 15 minutes
+- Task Group 4 (Tests): 45 minutes
+- Task Group 5 (Documentation): 45 minutes
+- Task Group 6 (Validation): 30 minutes
+
+**Target completion**: Same day (October 31, 2025)
 
 ---
 
 ## References
 
-- **v0.63.0 Implementation**: `docs/releases/release-v0.63.0-implementation.md` (auth module complete)
-- **Roadmap**: `docs/technical/roadmap.md` (Module Showcase Implementation Guide, v0.64.0 section)
-- **Architecture**: `docs/technical/decisions.md` (Module & Theme Architecture)
-- **Scaffolding**: `docs/technical/scaffolding.md` (Theme Structure)
+- **Roadmap**: `docs/technical/roadmap.md` (v0.64.0 section)
+- **Architecture**: `docs/technical/decisions.md` (Theme & Module Architecture)
+- **Structure**: `docs/technical/scaffolding.md` (Theme Directory Layout)
+- **Previous Release**: `docs/releases/release-v0.63.0-implementation.md` (Auth Module)
+- **Next Release**: `docs/releases/release-v0.65.0-plan.md` (Showcase Architecture)

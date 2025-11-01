@@ -47,7 +47,9 @@ def test_version_fallback_to_version_file():
 
                 # Save original _version
                 original_version = (
-                    quickscale_core._version if hasattr(quickscale_core, "_version") else None
+                    quickscale_core._version
+                    if hasattr(quickscale_core, "_version")
+                    else None
                 )
 
                 try:

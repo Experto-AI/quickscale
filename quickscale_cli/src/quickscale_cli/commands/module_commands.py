@@ -46,11 +46,16 @@ def configure_auth_module() -> dict[str, Any]:
 
 def apply_auth_configuration(project_path: Path, config: dict[str, Any]) -> None:
     """Apply auth module configuration to project settings"""
-    settings_path = project_path / "settings.py"
-    urls_path = project_path / "urls.py"
+    # QuickScale uses settings/base.py and project_name/urls.py structure
+    settings_path = project_path / f"{project_path.name}" / "settings" / "base.py"
+    urls_path = project_path / f"{project_path.name}" / "urls.py"
+    pyproject_path = project_path / "pyproject.toml"
 
     if not settings_path.exists():
-        click.secho("⚠️  Warning: settings.py not found, skipping auto-configuration", fg="yellow")
+        click.secho(
+            "⚠️  Warning: settings.py not found, skipping auto-configuration",
+            fg="yellow",
+        )
         return
 
     # Read settings.py
@@ -62,6 +67,90 @@ def apply_auth_configuration(project_path: Path, config: dict[str, Any]) -> None
         click.echo("ℹ️  Auth module already configured in settings.py")
         return
 
+    # Add django-allauth dependency to pyproject.toml
+    if pyproject_path.exists():
+        with open(pyproject_path) as f:
+            pyproject_content = f.read()
+
+        if "django-allauth" not in pyproject_content:
+            # Read django-allauth version from the embedded auth module
+            auth_pyproject_path = project_path / "modules" / "auth" / "pyproject.toml"
+
+            if not auth_pyproject_path.exists():
+                click.secho(
+                    "❌ Error: Auth module pyproject.toml not found. "
+                    "Cannot determine django-allauth version requirement.",
+                    fg="red",
+                    err=True,
+                )
+                click.echo(f"Expected file: {auth_pyproject_path}", err=True)
+                click.echo(
+                    "This indicates the auth module was not embedded correctly.",
+                    err=True,
+                )
+                raise click.Abort()
+
+            # Extract django-allauth version using regex
+            try:
+                with open(auth_pyproject_path) as f:
+                    auth_pyproject_content = f.read()
+                import re
+
+                version_match = re.search(
+                    r'django-allauth\s*=\s*["\']([^"\']+)["\']', auth_pyproject_content
+                )
+                if not version_match:
+                    click.secho(
+                        "❌ Error: Cannot find django-allauth version in auth module's "
+                        "pyproject.toml",
+                        fg="red",
+                        err=True,
+                    )
+                    click.echo(f"File: {auth_pyproject_path}", err=True)
+                    click.echo('Expected format: django-allauth = "^x.x.x"', err=True)
+                    click.echo("Please check the auth module's dependencies.", err=True)
+                    raise click.Abort()
+                django_allauth_version = version_match.group(1)
+            except (FileNotFoundError, AttributeError) as e:
+                click.secho(
+                    f"❌ Error: Failed to parse django-allauth version from auth module: {e}",
+                    fg="red",
+                    err=True,
+                )
+                click.echo(f"File: {auth_pyproject_path}", err=True)
+                click.echo(
+                    "Please ensure the auth module is properly embedded and its "
+                    "pyproject.toml is valid.",
+                    err=True,
+                )
+                raise click.Abort()
+
+            # Try to add to [tool.poetry.dependencies] section
+            dependencies_pattern = r"(\[tool\.poetry\.dependencies\][^\[]*)"
+            match = re.search(dependencies_pattern, pyproject_content, re.DOTALL)
+            if match:
+                dependencies_section = match.group(1)
+                # Add django-allauth after the python version line
+                updated_dependencies = re.sub(
+                    r'(python = "[^"]*")',
+                    rf'\1\ndjango-allauth = "{django_allauth_version}"',
+                    dependencies_section,
+                )
+                pyproject_content = pyproject_content.replace(
+                    dependencies_section, updated_dependencies
+                )
+
+                with open(pyproject_path, "w") as f:
+                    f.write(pyproject_content)
+
+                click.secho("  ✅ Added django-allauth to pyproject.toml", fg="green")
+            else:
+                click.secho(
+                    "⚠️  Warning: Could not find [tool.poetry.dependencies] section in "
+                    "pyproject.toml",
+                    fg="yellow",
+                )
+
     # Add required apps to INSTALLED_APPS
     installed_apps_addition = """
 # QuickScale Auth Module - Added by quickscale embed
@@ -70,6 +159,11 @@ INSTALLED_APPS += [
     "allauth",
     "allauth.account",
     "quickscale_modules_auth",
+]
+
+# Allauth Middleware (must be added to MIDDLEWARE)
+MIDDLEWARE += [
+    "allauth.account.middleware.AccountMiddleware",
 ]
 
 # Authentication Configuration
@@ -101,11 +195,13 @@ SITE_ID = 1
         installed_apps_addition += "ACCOUNT_USERNAME_REQUIRED = True\n"
         installed_apps_addition += "ACCOUNT_EMAIL_REQUIRED = True\n"
 
-    installed_apps_addition += f'ACCOUNT_EMAIL_VERIFICATION = "{config["email_verification"]}"\n'
-    installed_apps_addition += f'ACCOUNT_ALLOW_REGISTRATION = {config["allow_registration"]}\n'
     installed_apps_addition += (
-        'ACCOUNT_ADAPTER = "quickscale_modules_auth.adapters.QuickscaleAccountAdapter"\n'
+        f'ACCOUNT_EMAIL_VERIFICATION = "{config["email_verification"]}"\n'
     )
+    installed_apps_addition += (
+        f"ACCOUNT_ALLOW_REGISTRATION = {config['allow_registration']}\n"
+    )
+    installed_apps_addition += 'ACCOUNT_ADAPTER = "quickscale_modules_auth.adapters.QuickscaleAccountAdapter"\n'
     installed_apps_addition += (
         'ACCOUNT_SIGNUP_FORM_CLASS = "quickscale_modules_auth.forms.SignupForm"\n'
     )
@@ -124,10 +220,11 @@ SITE_ID = 1
         with open(urls_path) as f:
             urls_content = f.read()
 
-        if "quickscale_modules_auth" not in urls_content:
+        if "allauth" not in urls_content:
             # Find urlpatterns and add auth URLs
             if "urlpatterns = [" in urls_content:
                 urls_addition = (
+                    '    path("accounts/", include("allauth.urls")),\n'
                     '    path("accounts/", include("quickscale_modules_auth.urls")),  # Auth URLs\n'
                 )
                 urls_content = urls_content.replace(
@@ -141,7 +238,9 @@ SITE_ID = 1
 
     # Show configuration summary
     click.echo("\n📋 Configuration applied:")
-    click.echo(f"  • Registration: {'Enabled' if config['allow_registration'] else 'Disabled'}")
+    click.echo(
+        f"  • Registration: {'Enabled' if config['allow_registration'] else 'Disabled'}"
+    )
     click.echo(f"  • Email verification: {config['email_verification']}")
     click.echo(f"  • Authentication: {config['authentication_method']}")
 
@@ -186,20 +285,31 @@ def embed(module: str, remote: str) -> None:
         # Validate git repository
         if not is_git_repo():
             click.secho("❌ Error: Not a git repository", fg="red", err=True)
-            click.echo("\n💡 Tip: Run 'git init' to initialize a git repository", err=True)
+            click.echo(
+                "\n💡 Tip: Run 'git init' to initialize a git repository", err=True
+            )
             raise click.Abort()
 
         # Check working directory is clean
         if not is_working_directory_clean():
-            click.secho("❌ Error: Working directory has uncommitted changes", fg="red", err=True)
-            click.echo("\n💡 Tip: Commit or stash your changes before embedding modules", err=True)
+            click.secho(
+                "❌ Error: Working directory has uncommitted changes",
+                fg="red",
+                err=True,
+            )
+            click.echo(
+                "\n💡 Tip: Commit or stash your changes before embedding modules",
+                err=True,
+            )
             raise click.Abort()
 
         # Check if module already exists
         module_path = Path.cwd() / "modules" / module
         if module_path.exists():
             click.secho(
-                f"❌ Error: Module '{module}' already exists at {module_path}", fg="red", err=True
+                f"❌ Error: Module '{module}' already exists at {module_path}",
+                fg="red",
+                err=True,
             )
             click.echo("\n💡 Tip: Remove the existing module directory first", err=True)
             raise click.Abort()
@@ -220,7 +330,9 @@ def embed(module: str, remote: str) -> None:
                 err=True,
             )
             click.echo("   Full implementation coming in v0.63.0+", err=True)
-            click.echo(f"\n📖 Branch '{branch}' does not exist on remote: {remote}", err=True)
+            click.echo(
+                f"\n📖 Branch '{branch}' does not exist on remote: {remote}", err=True
+            )
             raise click.Abort()
 
         # Interactive module configuration (v0.63.0+)
@@ -249,8 +361,42 @@ def embed(module: str, remote: str) -> None:
             project_root = Path.cwd()
             applier(project_root, config)
 
+        # Install dependencies if pyproject.toml was modified
+        if module == "auth":
+            click.echo("📦 Installing dependencies...")
+            try:
+                import subprocess
+
+                # Install the auth module
+                subprocess.run(
+                    ["poetry", "add", "./modules/auth"],
+                    cwd=project_root,
+                    capture_output=True,
+                    text=True,
+                    check=True,
+                )
+                click.secho("  ✅ Auth module installed successfully", fg="green")
+
+                # Install dependencies
+                subprocess.run(
+                    ["poetry", "install"],
+                    cwd=project_root,
+                    capture_output=True,
+                    text=True,
+                    check=True,
+                )
+                click.secho("  ✅ Dependencies installed successfully", fg="green")
+            except subprocess.CalledProcessError as e:
+                click.secho(
+                    f"⚠️  Warning: Failed to install dependencies automatically: {e}",
+                    fg="yellow",
+                )
+                click.echo("  💡 You may need to run 'poetry install' manually")
+
         # Success message
-        click.secho(f"\n✅ Module '{module}' embedded successfully!", fg="green", bold=True)
+        click.secho(
+            f"\n✅ Module '{module}' embedded successfully!", fg="green", bold=True
+        )
         click.echo(f"   Location: {module_path}")
         click.echo(f"   Branch: {branch}")
 
@@ -258,9 +404,14 @@ def embed(module: str, remote: str) -> None:
         click.echo("\n📋 Next steps:")
         if module == "auth":
             click.echo(f"  1. Review module code in modules/{module}/")
-            click.echo("  2. Run migrations: python manage.py migrate")
-            click.echo("  3. Create superuser (optional): python manage.py createsuperuser")
-            click.echo("  4. Visit http://localhost:8000/accounts/login/")
+            click.echo("  2. Run migrations: poetry run python manage.py migrate")
+            click.echo(
+                "  3. Create superuser (optional): poetry run python manage.py createsuperuser"
+            )
+            click.echo("  4. Start development server:")
+            click.echo("     • With Docker: quickscale up")
+            click.echo("     • Without Docker: poetry run python manage.py runserver")
+            click.echo("  5. Visit http://localhost:8000/accounts/login/")
             click.echo("\n� Documentation: modules/auth/README.md")
         else:
             click.echo(f"  1. Review the module code in modules/{module}/")
@@ -301,13 +452,22 @@ def update(no_preview: bool) -> None:
         # Validate git repository
         if not is_git_repo():
             click.secho("❌ Error: Not a git repository", fg="red", err=True)
-            click.echo("\n💡 Tip: This command must be run from a git repository", err=True)
+            click.echo(
+                "\n💡 Tip: This command must be run from a git repository", err=True
+            )
             raise click.Abort()
 
         # Check working directory is clean
         if not is_working_directory_clean():
-            click.secho("❌ Error: Working directory has uncommitted changes", fg="red", err=True)
-            click.echo("\n💡 Tip: Commit or stash your changes before updating modules", err=True)
+            click.secho(
+                "❌ Error: Working directory has uncommitted changes",
+                fg="red",
+                err=True,
+            )
+            click.echo(
+                "\n💡 Tip: Commit or stash your changes before updating modules",
+                err=True,
+            )
             raise click.Abort()
 
         # Load configuration
@@ -315,7 +475,9 @@ def update(no_preview: bool) -> None:
 
         if not config.modules:
             click.secho("✅ No modules installed. Nothing to update.", fg="green")
-            click.echo("\n💡 Tip: Install modules with 'quickscale embed --module <name>'")
+            click.echo(
+                "\n💡 Tip: Install modules with 'quickscale embed --module <name>'"
+            )
             return
 
         # Show installed modules
@@ -412,7 +574,9 @@ def push(module: str, branch: str, remote: str) -> None:
         # Check if module is installed
         config = load_config()
         if module not in config.modules:
-            click.secho(f"❌ Error: Module '{module}' is not installed", fg="red", err=True)
+            click.secho(
+                f"❌ Error: Module '{module}' is not installed", fg="red", err=True
+            )
             click.echo(
                 f"\n💡 Tip: Install the module first with 'quickscale embed --module {module}'",
                 err=True,
@@ -450,7 +614,9 @@ def push(module: str, branch: str, remote: str) -> None:
 
     except GitError as e:
         click.secho(f"❌ Git error: {e}", fg="red", err=True)
-        click.echo("\n💡 Tip: Make sure you have write access to the repository", err=True)
+        click.echo(
+            "\n💡 Tip: Make sure you have write access to the repository", err=True
+        )
         raise click.Abort()
     except Exception as e:
         click.secho(f"❌ Unexpected error: {e}", fg="red", err=True)

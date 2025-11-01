@@ -11,7 +11,9 @@ from quickscale_cli.commands.deployment_commands import railway
 @contextmanager
 def mock_preflight_checks(has_changes=False, all_valid=True):
     """Context manager to mock all pre-flight check functions."""
-    with patch("quickscale_cli.commands.deployment_commands.check_uncommitted_changes") as mock_git:
+    with patch(
+        "quickscale_cli.commands.deployment_commands.check_uncommitted_changes"
+    ) as mock_git:
         with patch(
             "quickscale_cli.commands.deployment_commands.verify_railway_json"
         ) as mock_railway_json:
@@ -26,9 +28,18 @@ def mock_preflight_checks(has_changes=False, all_valid=True):
                     ) as mock_poetry_lock:
                         # Configure defaults
                         mock_git.return_value = (has_changes, "")
-                        mock_railway_json.return_value = (all_valid, "" if all_valid else "Error")
-                        mock_dockerfile.return_value = (all_valid, "" if all_valid else "Error")
-                        mock_deps.return_value = (all_valid, [] if all_valid else ["missing"])
+                        mock_railway_json.return_value = (
+                            all_valid,
+                            "" if all_valid else "Error",
+                        )
+                        mock_dockerfile.return_value = (
+                            all_valid,
+                            "" if all_valid else "Error",
+                        )
+                        mock_deps.return_value = (
+                            all_valid,
+                            [] if all_valid else ["missing"],
+                        )
                         mock_poetry_lock.return_value = (True, "consistent")
 
                         yield {
@@ -121,9 +132,7 @@ class TestRailwayCommand:
                                         )
                                         mock_batch_set.return_value = (True, [])
                                         mock_secret.return_value = "test-secret-key"
-                                        mock_domain.return_value = (
-                                            "https://myapp-production-abc123.up.railway.app"
-                                        )
+                                        mock_domain.return_value = "https://myapp-production-abc123.up.railway.app"
 
                                         result = runner.invoke(railway)
 
@@ -133,7 +142,8 @@ class TestRailwayCommand:
                                             in result.output
                                         )
                                         assert (
-                                            "Railway project already initialized" in result.output
+                                            "Railway project already initialized"
+                                            in result.output
                                         )
 
     def test_railway_initializes_new_project(self):
@@ -172,14 +182,15 @@ class TestRailwayCommand:
                                         )
                                         mock_batch_set.return_value = (True, [])
                                         mock_secret.return_value = "test-secret-key"
-                                        mock_domain.return_value = (
-                                            "https://myapp-production-abc123.up.railway.app"
-                                        )
+                                        mock_domain.return_value = "https://myapp-production-abc123.up.railway.app"
 
                                         result = runner.invoke(railway, input="\n")
 
                                         assert result.exit_code == 0
-                                        assert "Railway project initialized" in result.output
+                                        assert (
+                                            "Railway project initialized"
+                                            in result.output
+                                        )
 
     def test_railway_with_project_name_option(self):
         """Test railway command with --project-name option."""
@@ -217,9 +228,7 @@ class TestRailwayCommand:
                                         )
                                         mock_batch_set.return_value = (True, [])
                                         mock_secret.return_value = "test-secret-key"
-                                        mock_domain.return_value = (
-                                            "https://myapp-production-abc123.up.railway.app"
-                                        )
+                                        mock_domain.return_value = "https://myapp-production-abc123.up.railway.app"
 
                                         result = runner.invoke(
                                             railway,
@@ -266,15 +275,15 @@ class TestRailwayCommand:
                                         mock_project_init.return_value = True
                                         mock_batch_set.return_value = (True, [])
                                         mock_secret.return_value = "test-secret-key"
-                                        mock_domain.return_value = (
-                                            "https://myapp-production-abc123.up.railway.app"
-                                        )
+                                        mock_domain.return_value = "https://myapp-production-abc123.up.railway.app"
 
                                         # Call sequence: postgres service check, app service
                                         # check, deployment (fails)
                                         mock_run.side_effect = [
                                             Mock(
-                                                returncode=0, stdout="postgres", stderr=""
+                                                returncode=0,
+                                                stdout="postgres",
+                                                stderr="",
                                             ),  # postgres service check
                                             Mock(
                                                 returncode=0, stdout="", stderr=""
@@ -283,7 +292,9 @@ class TestRailwayCommand:
                                                 returncode=0, stdout="", stderr=""
                                             ),  # app service creation
                                             Mock(
-                                                returncode=1, stdout="", stderr="Build failed"
+                                                returncode=1,
+                                                stdout="",
+                                                stderr="Build failed",
                                             ),  # deployment fails
                                         ]
 
@@ -319,7 +330,9 @@ class TestRailwayCommand:
                             result = runner.invoke(railway, input="\n")
 
                             assert result.exit_code == 1
-                            assert "Failed to initialize Railway project" in result.output
+                            assert (
+                                "Failed to initialize Railway project" in result.output
+                            )
 
     def test_railway_sets_environment_variables_in_batch(self):
         """Test railway command sets all required environment variables in batch."""
@@ -357,9 +370,7 @@ class TestRailwayCommand:
                                         )
                                         mock_batch_set.return_value = (True, [])
                                         mock_secret.return_value = "test-secret-key"
-                                        mock_domain.return_value = (
-                                            "https://myapp-production-abc123.up.railway.app"
-                                        )
+                                        mock_domain.return_value = "https://myapp-production-abc123.up.railway.app"
 
                                         result = runner.invoke(railway)
 
@@ -381,7 +392,9 @@ class TestRailwayCommand:
                                         )
 
                                         # Verify this triggers only ONE deployment
-                                        assert "triggers ONE deployment" in result.output
+                                        assert (
+                                            "triggers ONE deployment" in result.output
+                                        )
 
     def test_railway_handles_timeout(self):
         """Test railway command handles deployment timeout gracefully."""
@@ -414,15 +427,15 @@ class TestRailwayCommand:
                                         mock_project_init.return_value = True
                                         mock_batch_set.return_value = (True, [])
                                         mock_secret.return_value = "test-secret-key"
-                                        mock_domain.return_value = (
-                                            "https://myapp-production-abc123.up.railway.app"
-                                        )
+                                        mock_domain.return_value = "https://myapp-production-abc123.up.railway.app"
 
                                         # Call sequence: postgres check, app service check,
                                         # app service creation, deployment times out
                                         mock_run.side_effect = [
                                             Mock(
-                                                returncode=0, stdout="postgres", stderr=""
+                                                returncode=0,
+                                                stdout="postgres",
+                                                stderr="",
                                             ),  # postgres service check
                                             Mock(
                                                 returncode=0, stdout="", stderr=""
@@ -437,7 +450,10 @@ class TestRailwayCommand:
 
                                         result = runner.invoke(railway)
 
-                                        assert "Deployment command timed out" in result.output
+                                        assert (
+                                            "Deployment command timed out"
+                                            in result.output
+                                        )
 
     def test_railway_uncommitted_changes_user_cancels(self):
         """Test railway command when user cancels deployment due to uncommitted changes."""
@@ -465,7 +481,10 @@ class TestRailwayCommand:
                 "quickscale_cli.commands.deployment_commands.verify_railway_json"
             ) as mock_railway_json:
                 mock_git.return_value = (False, "")
-                mock_railway_json.return_value = (False, "railway.json not found in project root")
+                mock_railway_json.return_value = (
+                    False,
+                    "railway.json not found in project root",
+                )
 
                 result = runner.invoke(railway)
 
@@ -487,7 +506,10 @@ class TestRailwayCommand:
                 ) as mock_dockerfile:
                     mock_git.return_value = (False, "")
                     mock_railway_json.return_value = (True, "")
-                    mock_dockerfile.return_value = (False, "Dockerfile not found in project root")
+                    mock_dockerfile.return_value = (
+                        False,
+                        "Dockerfile not found in project root",
+                    )
 
                     result = runner.invoke(railway)
 
@@ -513,7 +535,10 @@ class TestRailwayCommand:
                         mock_git.return_value = (False, "")
                         mock_railway_json.return_value = (True, "")
                         mock_dockerfile.return_value = (True, "")
-                        mock_deps.return_value = (False, ["gunicorn", "psycopg2-binary"])
+                        mock_deps.return_value = (
+                            False,
+                            ["gunicorn", "psycopg2-binary"],
+                        )
 
                         result = runner.invoke(railway, input="n\n")
 
@@ -571,12 +596,14 @@ class TestRailwayCommand:
                                                     stderr="",
                                                 )
                                                 mock_batch_set.return_value = (True, [])
-                                                mock_secret.return_value = "test-secret-key"
-                                                mock_domain.return_value = (
-                                                    "https://myapp-production-abc123.up.railway.app"
+                                                mock_secret.return_value = (
+                                                    "test-secret-key"
                                                 )
+                                                mock_domain.return_value = "https://myapp-production-abc123.up.railway.app"
 
-                                                result = runner.invoke(railway, input="y\n")
+                                                result = runner.invoke(
+                                                    railway, input="y\n"
+                                                )
 
                                                 assert result.exit_code == 0
                                                 assert (
@@ -644,10 +671,10 @@ class TestRailwayCommand:
                                                     stderr="",
                                                 )
                                                 mock_batch_set.return_value = (True, [])
-                                                mock_secret.return_value = "test-secret-key"
-                                                mock_domain.return_value = (
-                                                    "https://myapp-production-abc123.up.railway.app"
+                                                mock_secret.return_value = (
+                                                    "test-secret-key"
                                                 )
+                                                mock_domain.return_value = "https://myapp-production-abc123.up.railway.app"
 
                                                 result = runner.invoke(railway)
 
@@ -703,14 +730,21 @@ class TestRailwayCommand:
                                                     )
                                                     mock_upgrade.return_value = True
                                                     mock_auth.return_value = True
-                                                    mock_project_init.return_value = True
+                                                    mock_project_init.return_value = (
+                                                        True
+                                                    )
                                                     mock_run.return_value = Mock(
                                                         returncode=0,
                                                         stdout="postgres available",
                                                         stderr="",
                                                     )
-                                                    mock_batch_set.return_value = (True, [])
-                                                    mock_secret.return_value = "test-secret-key"
+                                                    mock_batch_set.return_value = (
+                                                        True,
+                                                        [],
+                                                    )
+                                                    mock_secret.return_value = (
+                                                        "test-secret-key"
+                                                    )
                                                     mock_domain.return_value = "https://myapp-production-abc123.up.railway.app"
 
                                                     result = runner.invoke(railway)
@@ -753,9 +787,7 @@ class TestRailwayCommand:
                                         mock_project_init.return_value = True
                                         mock_batch_set.return_value = (True, [])
                                         mock_secret.return_value = "test-secret-key"
-                                        mock_domain.return_value = (
-                                            "https://myapp-production-abc123.up.railway.app"
-                                        )
+                                        mock_domain.return_value = "https://myapp-production-abc123.up.railway.app"
 
                                         # Call sequence: postgres check (not found), add postgres,
                                         # app service check, app service creation, deployment
@@ -772,13 +804,17 @@ class TestRailwayCommand:
                                             Mock(
                                                 returncode=0, stdout="", stderr=""
                                             ),  # app service creation
-                                            Mock(returncode=0, stdout="", stderr=""),  # deployment
+                                            Mock(
+                                                returncode=0, stdout="", stderr=""
+                                            ),  # deployment
                                         ]
 
                                         result = runner.invoke(railway)
 
                                         assert result.exit_code == 0
-                                        assert "PostgreSQL service added" in result.output
+                                        assert (
+                                            "PostgreSQL service added" in result.output
+                                        )
 
     def test_railway_batch_variables_fallback_to_individual(self):
         """Test railway command falls back to individual variable setting when batch fails."""
@@ -817,9 +853,7 @@ class TestRailwayCommand:
                                         # Batch setting fails with some variables
                                         mock_batch_set.return_value = (False, ["DEBUG"])
                                         mock_secret.return_value = "test-secret-key"
-                                        mock_domain.return_value = (
-                                            "https://myapp-production-abc123.up.railway.app"
-                                        )
+                                        mock_domain.return_value = "https://myapp-production-abc123.up.railway.app"
 
                                         result = runner.invoke(railway)
 
@@ -870,9 +904,7 @@ class TestRailwayCommand:
                                             )
                                             mock_batch_set.return_value = (True, [])
                                             mock_secret.return_value = "test-secret-key"
-                                            mock_domain.return_value = (
-                                                "https://myapp-production-abc123.up.railway.app"
-                                            )
+                                            mock_domain.return_value = "https://myapp-production-abc123.up.railway.app"
 
                                             result = runner.invoke(railway)
 
@@ -926,9 +958,7 @@ class TestRailwayCommand:
                                             )
                                             mock_batch_set.return_value = (True, [])
                                             mock_secret.return_value = "test-secret-key"
-                                            mock_domain.return_value = (
-                                                "https://myapp-production-abc123.up.railway.app"
-                                            )
+                                            mock_domain.return_value = "https://myapp-production-abc123.up.railway.app"
 
                                             result = runner.invoke(
                                                 railway, ["--project-name", "myapp"]
@@ -986,12 +1016,16 @@ class TestRailwayCommand:
                                             )
                                             mock_batch_set.return_value = (True, [])
                                             mock_secret.return_value = "test-secret-key"
-                                            mock_domain.return_value = (
-                                                "https://myapp-production-abc123.up.railway.app"
-                                            )
+                                            mock_domain.return_value = "https://myapp-production-abc123.up.railway.app"
 
                                             result = runner.invoke(railway)
 
                                             assert result.exit_code == 0
-                                            assert "Failed to link DATABASE_URL" in result.output
-                                            assert "link DATABASE_URL manually" in result.output
+                                            assert (
+                                                "Failed to link DATABASE_URL"
+                                                in result.output
+                                            )
+                                            assert (
+                                                "link DATABASE_URL manually"
+                                                in result.output
+                                            )

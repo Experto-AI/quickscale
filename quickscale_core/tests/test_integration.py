@@ -62,7 +62,9 @@ class TestProjectGenerationIntegration:
             assert project_module is not None
 
             # Try to import settings module
-            settings_module = __import__(f"{project_name}.settings", fromlist=["settings"])
+            settings_module = __import__(
+                f"{project_name}.settings", fromlist=["settings"]
+            )
             assert settings_module is not None
 
         finally:

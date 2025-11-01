@@ -1,0 +1,157 @@
+{%raw%}{% extends "base.html" %}
+
+{% block title %}Page Not Found (404) - {% endraw %}{{ project_name }}{%raw%}{% endblock %}
+
+{% block extra_css %}
+{{ block.super }}
+<style>
+    .error-container {
+        max-width: 600px;
+        margin: 4rem auto;
+        padding: 2rem;
+        text-align: center;
+    }
+
+    .error-code {
+        font-size: 6rem;
+        font-weight: bold;
+        color: #e74c3c;
+        margin: 0;
+        line-height: 1;
+    }
+
+    .error-title {
+        font-size: 2rem;
+        margin: 1rem 0;
+        color: #2c3e50;
+    }
+
+    .error-message {
+        font-size: 1.1rem;
+        color: #555;
+        margin: 1.5rem 0;
+        line-height: 1.6;
+    }
+
+    .error-help {
+        background: #f8f9fa;
+        border-left: 4px solid #3498db;
+        padding: 1.5rem;
+        margin: 2rem 0;
+        text-align: left;
+        border-radius: 4px;
+    }
+
+    .error-help h3 {
+        margin-top: 0;
+        color: #2c3e50;
+    }
+
+    .error-help ul {
+        margin: 1rem 0;
+        padding-left: 1.5rem;
+    }
+
+    .error-help li {
+        margin: 0.5rem 0;
+    }
+
+    .error-help code {
+        background: #fff;
+        padding: 0.2rem 0.5rem;
+        border-radius: 3px;
+        font-family: 'Courier New', monospace;
+        color: #e74c3c;
+    }
+
+    .error-actions {
+        margin-top: 2rem;
+    }
+
+    .btn {
+        display: inline-block;
+        padding: 0.75rem 1.5rem;
+        background: #3498db;
+        color: white;
+        text-decoration: none;
+        border-radius: 4px;
+        margin: 0.5rem;
+        transition: background 0.3s;
+    }
+
+    .btn:hover {
+        background: #2980b9;
+    }
+
+    .module-hint {
+        background: #fff3cd;
+        border-left: 4px solid #ffc107;
+        padding: 1rem;
+        margin: 1rem 0;
+        border-radius: 4px;
+        text-align: left;
+    }
+
+    .module-hint strong {
+        color: #856404;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="error-container">
+    <h1 class="error-code">404</h1>
+    <h2 class="error-title">Page Not Found</h2>
+    <p class="error-message">
+        The page you're looking for doesn't exist or has been moved.
+    </p>
+
+    {% if request_path and 'accounts/' in request_path %}
+    <div class="module-hint">
+        <strong>⚠️ Looking for authentication?</strong>
+        <p>It looks like you're trying to access authentication URLs, but the auth module isn't installed yet.</p>
+    </div>
+
+    <div class="error-help">
+        <h3>�� Install the QuickScale Auth Module</h3>
+        <p>To enable user authentication, install the auth module:</p>
+        <pre><code>quickscale embed --module auth</code></pre>
+        <p>This will add login, signup, password reset, and profile management to your project.</p>
+    </div>
+    {% elif request_path and 'billing/' in request_path %}
+    <div class="module-hint">
+        <strong>⚠️ Looking for billing features?</strong>
+        <p>The billing module isn't installed in this project yet.</p>
+    </div>
+
+    <div class="error-help">
+        <h3>📦 Install the QuickScale Billing Module</h3>
+        <pre><code>quickscale embed --module billing</code></pre>
+    </div>
+    {% elif request_path and 'teams/' in request_path %}
+    <div class="module-hint">
+        <strong>⚠️ Looking for team management?</strong>
+        <p>The teams module isn't installed in this project yet.</p>
+    </div>
+
+    <div class="error-help">
+        <h3>📦 Install the QuickScale Teams Module</h3>
+        <pre><code>quickscale embed --module teams</code></pre>
+    </div>
+    {% else %}
+    <div class="error-help">
+        <h3>What you can do:</h3>
+        <ul>
+            <li>Check the URL for typos</li>
+            <li>Return to the <a href="/">homepage</a></li>
+            <li>Check if you need to install a QuickScale module</li>
+            <li>Review your URL configuration in <code>urls.py</code></li>
+        </ul>
+    </div>
+    {% endif %}
+
+    <div class="error-actions">
+        <a href="/" class="btn">← Go to Homepage</a>
+    </div>
+</div>
+{% endblock %}{%endraw%}

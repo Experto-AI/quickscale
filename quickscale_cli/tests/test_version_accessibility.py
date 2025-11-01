@@ -34,7 +34,9 @@ def test_version_string_matches_tuple():
     """Test that __version__ string and VERSION tuple are consistent."""
     import quickscale_cli
 
-    version_str = quickscale_cli.__version__.split("-")[0]  # Remove any pre-release suffix
+    version_str = quickscale_cli.__version__.split("-")[
+        0
+    ]  # Remove any pre-release suffix
     parts = version_str.split(".")
 
     # VERSION tuple should match the numeric parts of __version__

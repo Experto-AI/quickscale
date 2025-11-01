@@ -2,8 +2,8 @@
 
 **Target**: New contributor can clone repository and run tests successfully in <15 minutes.
 
-**Last Updated**: October 15, 2025
-**Tested On**: Ubuntu 22.04, Python 3.10-3.12
+**Last Updated**: November 1, 2025
+**Tested On**: Ubuntu 22.04, Python 3.11-3.12
 
 ---
 
@@ -13,10 +13,10 @@ Before starting, ensure you have these tools installed:
 
 ### Required Tools
 
-1. **Python 3.10 or higher**
+1. **Python 3.11 or higher**
    ```bash
    python3 --version
-   # Should show 3.10.x, 3.11.x, or 3.12.x
+   # Should show 3.11.x or 3.12.x
    ```
 
 2. **Git 2.25+**
@@ -35,9 +35,9 @@ Before starting, ensure you have these tools installed:
 
 **Ubuntu/Debian:**
 ```bash
-# Python 3.10+ (if not already installed)
+# Python 3.11+ (if not already installed)
 sudo apt update
-sudo apt install python3.10 python3.10-venv python3-pip
+sudo apt install python3.11 python3.11-venv python3-pip
 
 # Git
 sudo apt install git
@@ -50,8 +50,8 @@ export PATH="$HOME/.local/bin:$PATH"
 
 **macOS:**
 ```bash
-# Python 3.10+ via Homebrew
-brew install python@3.10
+# Python 3.11+ via Homebrew
+brew install python@3.11
 
 # Git (usually pre-installed)
 brew install git
@@ -234,6 +234,8 @@ quickscale/
 │   ├── src/quickscale_cli/   # Source code
 │   ├── tests/                # Tests
 │   └── pyproject.toml        # Package config
+├── quickscale_modules/       # Installable modules
+│   └── auth/                 # Authentication module
 ├── docs/                     # Documentation
 │   ├── technical/            # Technical specs
 │   ├── contrib/              # Contributing guides
@@ -242,13 +244,21 @@ quickscale/
 │   ├── bootstrap.sh          # Development setup
 │   ├── test_all.sh           # Run all tests
 │   └── lint.sh               # Run all linters
-└── pyproject.toml            # Root workspace config
+├── pyproject.toml            # Root config (centralized dev dependencies)
+├── ruff.toml                 # Centralized Ruff configuration
+└── mypy.ini                  # Centralized mypy configuration
 ```
 
 **Important locations:**
 - Generated project templates: `quickscale_core/src/quickscale_core/generator/templates/`
 - CLI command implementations: `quickscale_cli/src/quickscale_cli/commands/`
 - Tests parallel source structure: `quickscale_core/tests/` mirrors `src/quickscale_core/`
+
+**Centralized Configuration:**
+- All dev dependencies are centralized in root `pyproject.toml`
+- Shared Ruff config: `ruff.toml` (linting rules)
+- Shared mypy config: `mypy.ini` (type checking)
+- Run `poetry install` from root to install all packages + dev tools
 
 ---
 
@@ -340,7 +350,7 @@ poetry install
 
 ### Issue: Python version mismatch
 
-**Cause**: System Python version doesn't match project requirements (3.10+)
+**Cause**: System Python version doesn't match project requirements (3.11+)
 
 **Solution:**
 ```bash
@@ -348,10 +358,10 @@ poetry install
 python3 --version
 
 # Install specific version (Ubuntu)
-sudo apt install python3.10 python3.10-venv
+sudo apt install python3.11 python3.11-venv
 
 # Tell Poetry to use specific version
-poetry env use python3.10
+poetry env use python3.11
 
 # Verify
 poetry run python --version

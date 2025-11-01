@@ -14,10 +14,14 @@ def test_version_fallback_import_error():
             import importlib.util
 
             # Get the path to version.py
-            version_file = Path(__file__).parent.parent / "src" / "quickscale_core" / "version.py"
+            version_file = (
+                Path(__file__).parent.parent / "src" / "quickscale_core" / "version.py"
+            )
 
             # Load the module with a unique name to avoid cache
-            spec = importlib.util.spec_from_file_location("test_version_module", version_file)
+            spec = importlib.util.spec_from_file_location(
+                "test_version_module", version_file
+            )
             test_module = importlib.util.module_from_spec(spec)
 
             # Temporarily block the _version import
@@ -46,7 +50,9 @@ def test_version_fallback_no_version_file():
     import importlib.util
 
     # Get the path to version.py
-    version_file = Path(__file__).parent.parent / "src" / "quickscale_core" / "version.py"
+    version_file = (
+        Path(__file__).parent.parent / "src" / "quickscale_core" / "version.py"
+    )
 
     # Load the module with a unique name
     spec = importlib.util.spec_from_file_location("test_version_no_file", version_file)
@@ -78,7 +84,9 @@ def test_version_tuple_creation():
     """Test VERSION tuple is created correctly from version string."""
     import importlib.util
 
-    version_file = Path(__file__).parent.parent / "src" / "quickscale_core" / "version.py"
+    version_file = (
+        Path(__file__).parent.parent / "src" / "quickscale_core" / "version.py"
+    )
     spec = importlib.util.spec_from_file_location("test_version_tuple", version_file)
     test_module = importlib.util.module_from_spec(spec)
 

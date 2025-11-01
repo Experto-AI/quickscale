@@ -17,14 +17,14 @@ from quickscale_core.utils.file_utils import (
 class ProjectGenerator:
     """Generate Django projects from templates"""
 
-    def __init__(self, template_dir: Path | None = None, theme: str = "starter_html"):
+    def __init__(self, template_dir: Path | None = None, theme: str = "showcase_html"):
         """
         Initialize generator with template directory and theme
 
         Args:
         ----
             template_dir: Path to template directory (auto-detected if None)
-            theme: Theme name to use (default: starter_html)
+            theme: Theme name to use (default: showcase_html)
 
         Raises:
         ------
@@ -35,7 +35,7 @@ class ProjectGenerator:
         self.theme = theme
 
         # Validate theme
-        available_themes = ["starter_html", "starter_htmx", "starter_react"]
+        available_themes = ["showcase_html", "showcase_htmx", "showcase_react"]
         if theme not in available_themes:
             raise ValueError(
                 f"Invalid theme '{theme}'. Available themes: {', '.join(available_themes)}"
@@ -62,7 +62,9 @@ class ProjectGenerator:
                     # Try common development layouts
                     possible_paths = [
                         current_file.parent / "templates",  # Same directory
-                        current_file.parent.parent / "generator" / "templates",  # Parent
+                        current_file.parent.parent
+                        / "generator"
+                        / "templates",  # Parent
                         Path.cwd()
                         / "quickscale_core"
                         / "src"
@@ -161,7 +163,9 @@ class ProjectGenerator:
             try:
                 ensure_directory(parent)
             except (OSError, PermissionError) as e:
-                raise PermissionError(f"Cannot create parent directory {parent}: {e}") from e
+                raise PermissionError(
+                    f"Cannot create parent directory {parent}: {e}"
+                ) from e
 
         if not os.access(parent, os.W_OK):
             raise PermissionError(f"Parent directory is not writable: {parent}")
@@ -208,6 +212,7 @@ class ProjectGenerator:
             # Project package files
             ("project_name/__init__.py.j2", f"{project_name}/__init__.py", False),
             ("project_name/urls.py.j2", f"{project_name}/urls.py", False),
+            ("project_name/views.py.j2", f"{project_name}/views.py", False),
             ("project_name/wsgi.py.j2", f"{project_name}/wsgi.py", False),
             ("project_name/asgi.py.j2", f"{project_name}/asgi.py", False),
             # Settings files
@@ -216,8 +221,16 @@ class ProjectGenerator:
                 f"{project_name}/settings/__init__.py",
                 False,
             ),
-            ("project_name/settings/base.py.j2", f"{project_name}/settings/base.py", False),
-            ("project_name/settings/local.py.j2", f"{project_name}/settings/local.py", False),
+            (
+                "project_name/settings/base.py.j2",
+                f"{project_name}/settings/base.py",
+                False,
+            ),
+            (
+                "project_name/settings/local.py.j2",
+                f"{project_name}/settings/local.py",
+                False,
+            ),
             (
                 "project_name/settings/production.py.j2",
                 f"{project_name}/settings/production.py",
@@ -234,6 +247,9 @@ class ProjectGenerator:
                 "templates/index.html",
                 False,
             ),
+            # Error page templates (shared across all themes)
+            ("templates/404.html.j2", "templates/404.html", False),
+            ("templates/500.html.j2", "templates/500.html", False),
             # Static files (theme-specific)
             (
                 self._get_theme_template_path("static/css/style.css.j2"),

@@ -23,6 +23,8 @@ from django.http import HttpResponse
 from django.urls import include, path
 from django.views.generic import TemplateView
 
+from {{ project_name }}.views import custom_404_view
+
 
 def healthcheck(request):
     """Simple healthcheck endpoint for Railway and other monitoring services.
@@ -39,6 +41,10 @@ urlpatterns = [
     path("", TemplateView.as_view(template_name="index.html"), name="home"),
 ]
 
+# Custom error handlers with helpful module installation hints
+handler404 = "{{ project_name }}.views.custom_404_view"
+handler500 = "{{ project_name }}.views.custom_500_view"
+
 # Serve media files in development
 if settings.DEBUG:
     urlpatterns += static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)
@@ -52,3 +58,16 @@ if settings.DEBUG:
         ] + urlpatterns
     except ImportError:
         pass
+
+    # In DEBUG mode, show custom 404 page instead of Django's technical 404
+    # This provides helpful hints about installing QuickScale modules
+    from django.urls import re_path
+
+    urlpatterns += [
+        # Catch module-specific URLs first (more specific patterns)
+        re_path(r"^accounts/.*", custom_404_view),
+        re_path(r"^billing/.*", custom_404_view),
+        re_path(r"^teams/.*", custom_404_view),
+        # Catch-all for any other 404s (must be last)
+        re_path(r".*", custom_404_view),
+    ]

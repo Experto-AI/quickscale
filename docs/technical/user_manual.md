@@ -32,13 +32,15 @@ Purpose: get a development environment ready to run tests and use the CLI.
 Recommended sequence:
 
 ```bash
-# 1. Ensure prerequisites are installed (Python 3.10+, Git, and Poetry)
+# 1. Ensure prerequisites are installed (Python 3.11+, Git, and Poetry)
 # 2. Run the repository bootstrap script
 ./scripts/bootstrap.sh
 
-# 3. Use Poetry to install dependencies
+# 3. Use Poetry to install all dependencies from repository root
 poetry install
 ```
+
+**Note**: QuickScale uses a monorepo with centralized dev dependencies. Running `poetry install` from the root installs all packages (core, cli, modules) plus shared dev tools (pytest, ruff, mypy).
 
 Notes:
 - Inspect `./scripts/bootstrap.sh` before running if you want to know exactly what it does on your system.
@@ -117,6 +119,8 @@ Use the repository lint script to run all code quality checks:
 ./scripts/lint.sh
 ```
 
+**Note**: Linting rules are centralized in `ruff.toml` and `mypy.ini` at the repository root. All packages share these configurations automatically.
+
 Pre-commit hooks are configured in `.pre-commit-config.yaml`. After bootstrapping you may want to run:
 
 ```bash
@@ -145,21 +149,21 @@ quickscale init <project_name> --theme <theme_name>
 QuickScale supports multiple frontend themes. Choose your theme during project initialization:
 
 ```bash
-# Default HTML theme (production-ready)
+# Default Showcase HTML theme (production-ready)
 quickscale init myapp
-quickscale init myapp --theme starter_html
+quickscale init myapp --theme showcase_html
 
 # HTMX theme (planned for v0.67.0)
-quickscale init myapp --theme starter_htmx
+quickscale init myapp --theme showcase_htmx
 
 # React theme (planned for v0.68.0)
-quickscale init myapp --theme starter_react
+quickscale init myapp --theme showcase_react
 ```
 
 **Available themes**:
-- `starter_html` - Pure HTML + CSS (default, production-ready)
-- `starter_htmx` - HTMX + Alpine.js (coming in v0.67.0)
-- `starter_react` - React + TypeScript SPA (coming in v0.68.0)
+- `showcase_html` - Pure HTML + CSS (default, production-ready, renamed from starter_html in v0.64.0)
+- `showcase_htmx` - HTMX + Alpine.js (coming in v0.67.0, renamed from starter_htmx in v0.64.0)
+- `showcase_react` - React + TypeScript SPA (coming in v0.68.0, renamed from starter_react in v0.64.0)
 
 **Important**: Theme selection is one-time during project generation. Generated code is yours to own and customize - no updates or tracking after initialization.
 
@@ -328,6 +332,7 @@ Minimal, project-focused Poetry commands you will use with this repo:
 First-time / bootstrap
 ```bash
 # From repo root (after ./scripts/bootstrap.sh)
+# Installs all packages + centralized dev dependencies
 poetry install
 ```
 
@@ -349,14 +354,17 @@ poetry run ruff check .
 
 Dependency management
 ```bash
-# Add prod dep
-poetry add <package>
-
-# Add dev dep
+# Add dev dependency (centralized at root)
+cd /path/to/quickscale
 poetry add --group dev <package>
 
-# Update dependencies (refresh lock)
-poetry update
+# Add production dependency (package-specific)
+cd quickscale_core  # or quickscale_cli, etc.
+poetry add <package>
+
+# Update dependencies
+poetry lock --no-update
+poetry install
 ```
 
 Build & publish

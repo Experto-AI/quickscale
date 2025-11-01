@@ -3,11 +3,17 @@ Local development settings for {{ project_name }}.
 
 This file contains settings specific to local development:
 - DEBUG mode enabled
-- SQLite database for quick setup
+- SQLite database for quick setup (NOT for production!)
 - Django Debug Toolbar (optional)
 - Relaxed security settings
 
 DO NOT use these settings in production!
+
+⚠️  IMPORTANT: SQLite is ONLY for quick local testing.
+   For production-like development, use Docker with PostgreSQL:
+   $ quickscale up
+
+   Production REQUIRES PostgreSQL - no SQLite fallback is available.
 """
 
 from .base import *  # noqa: F403

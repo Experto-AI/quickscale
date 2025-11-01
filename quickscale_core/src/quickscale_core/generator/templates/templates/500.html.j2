@@ -1,0 +1,105 @@
+{%raw%}{% extends "base.html" %}
+
+{% block title %}Server Error (500) - {% endraw %}{{ project_name }}{%raw%}{% endblock %}
+
+{% block extra_css %}
+{{ block.super }}
+<style>
+    .error-container {
+        max-width: 600px;
+        margin: 4rem auto;
+        padding: 2rem;
+        text-align: center;
+    }
+
+    .error-code {
+        font-size: 6rem;
+        font-weight: bold;
+        color: #e74c3c;
+        margin: 0;
+        line-height: 1;
+    }
+
+    .error-title {
+        font-size: 2rem;
+        margin: 1rem 0;
+        color: #2c3e50;
+    }
+
+    .error-message {
+        font-size: 1.1rem;
+        color: #555;
+        margin: 1.5rem 0;
+        line-height: 1.6;
+    }
+
+    .error-help {
+        background: #f8f9fa;
+        border-left: 4px solid #e74c3c;
+        padding: 1.5rem;
+        margin: 2rem 0;
+        text-align: left;
+        border-radius: 4px;
+    }
+
+    .error-help h3 {
+        margin-top: 0;
+        color: #2c3e50;
+    }
+
+    .error-help ul {
+        margin: 1rem 0;
+        padding-left: 1.5rem;
+    }
+
+    .error-help li {
+        margin: 0.5rem 0;
+    }
+
+    .error-actions {
+        margin-top: 2rem;
+    }
+
+    .btn {
+        display: inline-block;
+        padding: 0.75rem 1.5rem;
+        background: #3498db;
+        color: white;
+        text-decoration: none;
+        border-radius: 4px;
+        margin: 0.5rem;
+        transition: background 0.3s;
+    }
+
+    .btn:hover {
+        background: #2980b9;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="error-container">
+    <h1 class="error-code">500</h1>
+    <h2 class="error-title">Server Error</h2>
+    <p class="error-message">
+        Something went wrong on our end. We're working to fix it.
+    </p>
+
+    <div class="error-help">
+        <h3>What happened?</h3>
+        <p>The server encountered an unexpected condition that prevented it from fulfilling your request.</p>
+
+        <h3>What you can do:</h3>
+        <ul>
+            <li>Try refreshing the page</li>
+            <li>Go back to the <a href="/">homepage</a></li>
+            <li>If the problem persists, contact support</li>
+        </ul>
+    </div>
+
+    <div class="error-actions">
+        <a href="/" class="btn">← Go to Homepage</a>
+        <a href="javascript:location.reload()" class="btn">↻ Refresh Page</a>
+    </div>
+</div>
+{% endblock %}{%endraw%}

@@ -42,7 +42,9 @@ def is_working_directory_clean(path: Path | None = None) -> bool:
         raise GitError(f"Failed to check git status: {e.stderr}")
 
 
-def check_remote_branch_exists(remote: str, branch: str, path: Path | None = None) -> bool:
+def check_remote_branch_exists(
+    remote: str, branch: str, path: Path | None = None
+) -> bool:
     """Check if branch exists on remote repository"""
     cwd = path or Path.cwd()
     try:
@@ -83,13 +85,17 @@ def run_git_subtree_pull(
         cmd.append("--squash")
 
     try:
-        result = subprocess.run(cmd, cwd=cwd, check=True, capture_output=True, text=True)
+        result = subprocess.run(
+            cmd, cwd=cwd, check=True, capture_output=True, text=True
+        )
         return result.stdout
     except subprocess.CalledProcessError as e:
         raise GitError(f"Failed to pull git subtree: {e.stderr}")
 
 
-def run_git_subtree_push(prefix: str, remote: str, branch: str, path: Path | None = None) -> None:
+def run_git_subtree_push(
+    prefix: str, remote: str, branch: str, path: Path | None = None
+) -> None:
     """Execute git subtree push with error handling"""
     cwd = path or Path.cwd()
     cmd = ["git", "subtree", "push", f"--prefix={prefix}", remote, branch]

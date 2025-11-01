@@ -10,7 +10,10 @@ from quickscale_cli.utils.docker_utils import (
     is_docker_running,
     is_interactive,
 )
-from quickscale_cli.utils.project_manager import get_web_container_name, is_in_quickscale_project
+from quickscale_cli.utils.project_manager import (
+    get_web_container_name,
+    is_in_quickscale_project,
+)
 
 
 @click.command()
@@ -20,7 +23,9 @@ def up(build: bool, no_cache: bool) -> None:
     """Start Docker services for development."""
     # Check if in QuickScale project
     if not is_in_quickscale_project():
-        click.secho("❌ Error: Not in a QuickScale project directory", fg="red", err=True)
+        click.secho(
+            "❌ Error: Not in a QuickScale project directory", fg="red", err=True
+        )
         click.echo(
             "💡 Tip: Navigate to a project directory or run 'quickscale init <name>' to create one",
             err=True,
@@ -50,9 +55,13 @@ def up(build: bool, no_cache: bool) -> None:
 
     except subprocess.CalledProcessError as e:
         click.secho(
-            f"❌ Error: Failed to start services (exit code: {e.returncode})", fg="red", err=True
+            f"❌ Error: Failed to start services (exit code: {e.returncode})",
+            fg="red",
+            err=True,
         )
-        click.echo("💡 Tip: Check Docker logs with 'quickscale logs' for details", err=True)
+        click.echo(
+            "💡 Tip: Check Docker logs with 'quickscale logs' for details", err=True
+        )
         sys.exit(1)
     except KeyboardInterrupt:
         click.echo("\n⚠️  Interrupted by user")
@@ -64,7 +73,9 @@ def up(build: bool, no_cache: bool) -> None:
 def down(volumes: bool) -> None:
     """Stop Docker services."""
     if not is_in_quickscale_project():
-        click.secho("❌ Error: Not in a QuickScale project directory", fg="red", err=True)
+        click.secho(
+            "❌ Error: Not in a QuickScale project directory", fg="red", err=True
+        )
         click.echo("💡 Tip: Navigate to a project directory", err=True)
         sys.exit(1)
 
@@ -86,7 +97,9 @@ def down(volumes: bool) -> None:
 
     except subprocess.CalledProcessError as e:
         click.secho(
-            f"❌ Error: Failed to stop services (exit code: {e.returncode})", fg="red", err=True
+            f"❌ Error: Failed to stop services (exit code: {e.returncode})",
+            fg="red",
+            err=True,
         )
         sys.exit(1)
     except KeyboardInterrupt:
@@ -95,11 +108,15 @@ def down(volumes: bool) -> None:
 
 
 @click.command()
-@click.option("-c", "--command", "cmd", help="Run a single command instead of interactive shell")
+@click.option(
+    "-c", "--command", "cmd", help="Run a single command instead of interactive shell"
+)
 def shell(cmd: str | None) -> None:
     """Open an interactive bash shell in the web container."""
     if not is_in_quickscale_project():
-        click.secho("❌ Error: Not in a QuickScale project directory", fg="red", err=True)
+        click.secho(
+            "❌ Error: Not in a QuickScale project directory", fg="red", err=True
+        )
         click.echo("💡 Tip: Navigate to a project directory", err=True)
         sys.exit(1)
 
@@ -117,7 +134,9 @@ def shell(cmd: str | None) -> None:
             if is_interactive():
                 subprocess.run(docker_cmd, check=True)
             else:
-                result = subprocess.run(docker_cmd, capture_output=True, text=True, check=True)
+                result = subprocess.run(
+                    docker_cmd, capture_output=True, text=True, check=True
+                )
                 if result.stdout:
                     click.echo(result.stdout, nl=False)
                 if result.stderr:
@@ -135,7 +154,11 @@ def shell(cmd: str | None) -> None:
             click.secho("❌ Error: Container not running", fg="red", err=True)
             click.echo("💡 Tip: Start services with 'quickscale up' first", err=True)
         else:
-            click.secho(f"❌ Error: Command failed (exit code: {e.returncode})", fg="red", err=True)
+            click.secho(
+                f"❌ Error: Command failed (exit code: {e.returncode})",
+                fg="red",
+                err=True,
+            )
         sys.exit(e.returncode)
     except KeyboardInterrupt:
         click.echo("\n⚠️  Exited shell")
@@ -147,7 +170,9 @@ def shell(cmd: str | None) -> None:
 def manage(args: tuple) -> None:
     """Run Django management commands in the web container."""
     if not is_in_quickscale_project():
-        click.secho("❌ Error: Not in a QuickScale project directory", fg="red", err=True)
+        click.secho(
+            "❌ Error: Not in a QuickScale project directory", fg="red", err=True
+        )
         click.echo("💡 Tip: Navigate to a project directory", err=True)
         sys.exit(1)
 
@@ -157,8 +182,12 @@ def manage(args: tuple) -> None:
         sys.exit(1)
 
     if not args:
-        click.secho("❌ Error: No Django management command specified", fg="red", err=True)
-        click.echo("💡 Tip: Run 'quickscale manage help' to see available commands", err=True)
+        click.secho(
+            "❌ Error: No Django management command specified", fg="red", err=True
+        )
+        click.echo(
+            "💡 Tip: Run 'quickscale manage help' to see available commands", err=True
+        )
         sys.exit(1)
 
     try:
@@ -176,7 +205,9 @@ def manage(args: tuple) -> None:
         if is_interactive():
             subprocess.run(docker_cmd, check=True)
         else:
-            result = subprocess.run(docker_cmd, capture_output=True, text=True, check=True)
+            result = subprocess.run(
+                docker_cmd, capture_output=True, text=True, check=True
+            )
             if result.stdout:
                 click.echo(result.stdout, nl=False)
             if result.stderr:
@@ -184,7 +215,9 @@ def manage(args: tuple) -> None:
 
     except subprocess.CalledProcessError as e:
         if e.returncode == 1:
-            click.secho("❌ Error: Container not running or command failed", fg="red", err=True)
+            click.secho(
+                "❌ Error: Container not running or command failed", fg="red", err=True
+            )
             click.echo("💡 Tip: Start services with 'quickscale up' first", err=True)
         sys.exit(e.returncode)
     except KeyboardInterrupt:
@@ -195,12 +228,16 @@ def manage(args: tuple) -> None:
 @click.command()
 @click.argument("service", required=False)
 @click.option("-f", "--follow", is_flag=True, help="Follow log output")
-@click.option("--tail", default=None, help="Number of lines to show from the end of the logs")
+@click.option(
+    "--tail", default=None, help="Number of lines to show from the end of the logs"
+)
 @click.option("--timestamps", is_flag=True, help="Show timestamps")
 def logs(service: str | None, follow: bool, tail: str | None, timestamps: bool) -> None:
     """View Docker service logs."""
     if not is_in_quickscale_project():
-        click.secho("❌ Error: Not in a QuickScale project directory", fg="red", err=True)
+        click.secho(
+            "❌ Error: Not in a QuickScale project directory", fg="red", err=True
+        )
         click.echo("💡 Tip: Navigate to a project directory", err=True)
         sys.exit(1)
 
@@ -229,7 +266,9 @@ def logs(service: str | None, follow: bool, tail: str | None, timestamps: bool) 
 
     except subprocess.CalledProcessError as e:
         click.secho(
-            f"❌ Error: Failed to retrieve logs (exit code: {e.returncode})", fg="red", err=True
+            f"❌ Error: Failed to retrieve logs (exit code: {e.returncode})",
+            fg="red",
+            err=True,
         )
         sys.exit(1)
     except KeyboardInterrupt:
@@ -241,7 +280,9 @@ def logs(service: str | None, follow: bool, tail: str | None, timestamps: bool) 
 def ps() -> None:
     """Show service status."""
     if not is_in_quickscale_project():
-        click.secho("❌ Error: Not in a QuickScale project directory", fg="red", err=True)
+        click.secho(
+            "❌ Error: Not in a QuickScale project directory", fg="red", err=True
+        )
         click.echo("💡 Tip: Navigate to a project directory", err=True)
         sys.exit(1)
 

@@ -11,7 +11,12 @@ def get_project_state() -> dict[str, Any]:
     try:
         current_dir = Path.cwd()
     except OSError:
-        return {"has_project": False, "project_dir": None, "project_name": None, "containers": []}
+        return {
+            "has_project": False,
+            "project_dir": None,
+            "project_name": None,
+            "containers": [],
+        }
 
     compose_file = find_docker_compose()
     has_project = compose_file is not None

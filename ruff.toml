@@ -1,0 +1,31 @@
+# Shared Ruff configuration for QuickScale monorepo
+# This configuration is used by all packages unless overridden
+
+line-length = 100
+target-version = "py310"
+
+[lint]
+select = [
+    "E",   # pycodestyle errors
+    "W",   # pycodestyle warnings
+    "F",   # pyflakes
+    "I",   # isort
+    "N",   # pep8-naming
+    "UP",  # pyupgrade
+    "D",   # docstring rules
+]
+ignore = [
+    "D100",  # Missing docstring in public module
+    "D101",  # Missing docstring in public class
+    "D102",  # Missing docstring in public method
+    "D103",  # Missing docstring in public function
+    "D105",  # Missing docstring in magic method
+    "D107",  # Missing docstring in __init__
+    "D203",  # 1 blank line required before class docstring (incompatible with D211)
+    "D212",  # Multi-line docstring summary should start at the first line (incompatible with D213)
+    "D400",  # First line should end with a period
+    "D415",  # First line should end with a period, question mark, or exclamation point
+]
+
+[lint.isort]
+known-first-party = ["quickscale_core", "quickscale_cli", "quickscale_modules_auth"]

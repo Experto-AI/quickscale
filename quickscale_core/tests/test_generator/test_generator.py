@@ -24,7 +24,7 @@ class TestProjectGeneratorInit:
         custom_dir.mkdir()
 
         # Create required themes directory structure
-        themes_dir = custom_dir / "themes" / "starter_html"
+        themes_dir = custom_dir / "themes" / "showcase_html"
         themes_dir.mkdir(parents=True)
 
         generator = ProjectGenerator(template_dir=custom_dir)

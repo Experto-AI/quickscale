@@ -29,7 +29,9 @@ def get_docker_compose_command() -> list[str]:
     """Get the appropriate docker compose command."""
     # Try docker-compose first, fall back to docker compose
     try:
-        subprocess.run(["docker-compose", "--version"], capture_output=True, check=True, timeout=2)
+        subprocess.run(
+            ["docker-compose", "--version"], capture_output=True, check=True, timeout=2
+        )
         return ["docker-compose"]
     except (subprocess.SubprocessError, FileNotFoundError, subprocess.TimeoutExpired):
         # Fall back to docker compose (newer Docker versions)
@@ -40,7 +42,15 @@ def get_container_status(container_name: str) -> str | None:
     """Get status of a specific container."""
     try:
         result = subprocess.run(
-            ["docker", "ps", "-a", "--filter", f"name={container_name}", "--format", "{{.Status}}"],
+            [
+                "docker",
+                "ps",
+                "-a",
+                "--filter",
+                f"name={container_name}",
+                "--format",
+                "{{.Status}}",
+            ],
             capture_output=True,
             text=True,
             check=True,
@@ -51,7 +61,9 @@ def get_container_status(container_name: str) -> str | None:
         return None
 
 
-def exec_in_container(container_name: str, command: list[str], interactive: bool = False) -> int:
+def exec_in_container(
+    container_name: str, command: list[str], interactive: bool = False
+) -> int:
     """Execute command in a container."""
     cmd = ["docker", "exec"]
     if interactive:
