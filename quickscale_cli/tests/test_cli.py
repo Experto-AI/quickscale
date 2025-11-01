@@ -380,22 +380,4 @@ def test_generated_project_settings_imports(cli_runner):
                 ), f"Settings import '{import_name}' but '{dep_name}' not in pyproject.toml"
 
 
-def test_init_command_with_setup_flag_shows_setup_message(cli_runner):
-    """Test init command with --setup flag shows setup in progress message"""
-    project_name = "setuptest"
-
-    with cli_runner.isolated_filesystem():
-        result = cli_runner.invoke(cli, ["init", project_name, "--setup"])
-
-        # Should show dependency checking
-        assert "Checking system dependencies" in result.output
-
-        # Should show project creation
-        assert "Created project: setuptest" in result.output
-
-        # Should show setup attempt (may fail or succeed depending on environment)
-        assert (
-            "Running automatic setup" in result.output
-            or "Cannot use --setup flag" in result.output
-            or result.exit_code == 0
-        )
+# Test removed: --setup flag removed in v0.65.0 because auth module must be embedded BEFORE migrations

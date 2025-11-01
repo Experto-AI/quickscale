@@ -1,5 +1,6 @@
 """Module management commands for QuickScale CLI."""
 
+import subprocess
 from pathlib import Path
 from typing import Any
 
@@ -18,6 +19,29 @@ from quickscale_core.utils.git_utils import (
 
 # Available modules
 AVAILABLE_MODULES = ["auth", "billing", "teams"]
+
+
+def has_migrations_been_run() -> bool:
+    """Check if Django migrations have been run in the current project"""
+    # Check for SQLite database file
+    if Path("db.sqlite3").exists():
+        return True
+
+    # Check for PostgreSQL database by running Django check
+    try:
+        result = subprocess.run(
+            ["python", "manage.py", "showmigrations", "--plan"],
+            capture_output=True,
+            text=True,
+            timeout=5,
+        )
+        # If we can run showmigrations and see any [X] marks, migrations have been applied
+        if result.returncode == 0 and "[X]" in result.stdout:
+            return True
+    except (subprocess.TimeoutExpired, FileNotFoundError):
+        pass
+
+    return False
 
 
 def configure_auth_module() -> dict[str, Any]:
@@ -181,19 +205,23 @@ SITE_ID = 1
 # Allauth Settings
 """
 
-    # Add configuration based on user choices
+    # Add configuration based on user choices (using new django-allauth 0.62+ format)
     if config["authentication_method"] == "email":
-        installed_apps_addition += 'ACCOUNT_AUTHENTICATION_METHOD = "email"\n'
-        installed_apps_addition += "ACCOUNT_USERNAME_REQUIRED = False\n"
-        installed_apps_addition += "ACCOUNT_EMAIL_REQUIRED = True\n"
+        # Email-only authentication (new format: ACCOUNT_LOGIN_METHODS)
+        installed_apps_addition += 'ACCOUNT_LOGIN_METHODS = {"email"}\n'
+        installed_apps_addition += (
+            'ACCOUNT_SIGNUP_FIELDS = ["email*", "password1*", "password2*"]\n'
+        )
     elif config["authentication_method"] == "username":
-        installed_apps_addition += 'ACCOUNT_AUTHENTICATION_METHOD = "username"\n'
-        installed_apps_addition += "ACCOUNT_USERNAME_REQUIRED = True\n"
-        installed_apps_addition += "ACCOUNT_EMAIL_REQUIRED = False\n"
+        # Username-only authentication
+        installed_apps_addition += 'ACCOUNT_LOGIN_METHODS = {"username"}\n'
+        installed_apps_addition += (
+            'ACCOUNT_SIGNUP_FIELDS = ["username*", "password1*", "password2*"]\n'
+        )
     else:  # both
-        installed_apps_addition += 'ACCOUNT_AUTHENTICATION_METHOD = "email"\n'
-        installed_apps_addition += "ACCOUNT_USERNAME_REQUIRED = True\n"
-        installed_apps_addition += "ACCOUNT_EMAIL_REQUIRED = True\n"
+        # Both email and username authentication
+        installed_apps_addition += 'ACCOUNT_LOGIN_METHODS = {"email", "username"}\n'
+        installed_apps_addition += 'ACCOUNT_SIGNUP_FIELDS = ["email*", "username*", "password1*", "password2*"]\n'
 
     installed_apps_addition += (
         f'ACCOUNT_EMAIL_VERIFICATION = "{config["email_verification"]}"\n'
@@ -334,6 +362,37 @@ def embed(module: str, remote: str) -> None:
                 f"\n📖 Branch '{branch}' does not exist on remote: {remote}", err=True
             )
             raise click.Abort()
+
+        # Check if migrations have already been run (only for auth module which changes User model)
+        if module == "auth" and has_migrations_been_run():
+            click.secho(
+                "\n⚠️  Warning: Django migrations have already been run!",
+                fg="yellow",
+                bold=True,
+            )
+            click.echo("\n❌ The auth module changes the User model (AUTH_USER_MODEL).")
+            click.echo(
+                "   Embedding it after running migrations will cause migration conflicts."
+            )
+            click.echo(
+                "\n🔧 To fix this, you need to reset your database and re-run migrations:"
+            )
+            click.echo("   1. Backup any important data")
+            click.echo(
+                "   2. Delete the database: rm db.sqlite3  (or drop PostgreSQL database)"
+            )
+            click.echo("   3. Run this embed command again")
+            click.echo("   4. Run migrations: poetry run python manage.py migrate")
+            click.echo(
+                "\n💡 Tip: For new projects, embed the auth module BEFORE running migrations."
+            )
+            click.echo(
+                "\n❓ Do you want to continue anyway? (You'll need to reset the database manually)"
+            )
+
+            if not click.confirm("Continue?", default=False):
+                click.echo("\n❌ Embedding cancelled")
+                raise click.Abort()
 
         # Interactive module configuration (v0.63.0+)
         config = {}

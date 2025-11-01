@@ -1,7 +1,5 @@
 """QuickScale CLI - Main entry point for project generation commands."""
 
-import os
-import subprocess
 from pathlib import Path
 
 import click
@@ -20,7 +18,6 @@ from quickscale_cli.commands.development_commands import (
 from quickscale_cli.commands.module_commands import embed, push, update
 from quickscale_cli.utils.dependency_utils import (
     check_all_dependencies,
-    verify_required_dependencies,
 )
 from quickscale_core.generator import ProjectGenerator
 
@@ -84,33 +81,24 @@ cli.add_command(push)
     default="showcase_html",
     help="Theme to use for the project (default: showcase_html)",
 )
-@click.option(
-    "--setup",
-    is_flag=True,
-    default=False,
-    help="Automatically run setup (poetry install + migrate) after project generation",
-)
-def init(project_name: str, theme: str, setup: bool) -> None:
-    r"""
+def init(project_name: str, theme: str) -> None:
+    """
     Generate a new Django project with production-ready configurations.
+
+    Creates a complete Django application with Docker, PostgreSQL, testing,
+    CI/CD, and security best practices. The generated project is yours to own
+    and customize.
 
     \b
     Examples:
-      quickscale init myapp                        # Create project with default Showcase HTML theme
-      quickscale init myapp --theme showcase_html  # Explicitly specify Showcase HTML theme
-      quickscale init myapp --setup                # Generate project and run setup automatically
+      quickscale init myapp
+      quickscale init myapp --theme showcase_html
 
     \b
-    Choose from available themes:
-      - showcase_html: Pure HTML + CSS (default, production-ready)
-      - showcase_htmx: HTMX + Alpine.js (coming in v0.67.0)
-      - showcase_react: React + TypeScript SPA (coming in v0.68.0)
-
-    \b
-    The --setup flag will automatically:
-      1. Run 'poetry install' to install dependencies
-      2. Run 'python manage.py migrate' to set up the database
-      Note: Does NOT start the server (use 'quickscale up' or 'poetry run python manage.py runserver')
+    Available themes:
+      showcase_html    Pure HTML + CSS (default, production-ready)
+      showcase_htmx    HTMX + Alpine.js (coming in v0.67.0)
+      showcase_react   React + TypeScript SPA (coming in v0.68.0)
     """
     # Step 1: Check system dependencies BEFORE generation
     click.echo("🔍 Checking system dependencies...")
@@ -146,15 +134,6 @@ def init(project_name: str, theme: str, setup: bool) -> None:
         click.echo("   Poetry: curl -sSL https://install.python-poetry.org | python3 -")
         raise click.Abort()
 
-    # Warn if --setup is used without Poetry
-    if setup:
-        all_required_ok, missing = verify_required_dependencies()
-        if not all_required_ok:
-            click.secho(
-                "\n❌ Cannot use --setup flag: required dependencies missing", fg="red"
-            )
-            raise click.Abort()
-
     click.echo("")
 
     try:
@@ -188,129 +167,31 @@ def init(project_name: str, theme: str, setup: bool) -> None:
             bold=True,
         )
 
-        # Run setup if requested
-        if setup:
-            click.echo("\n🔧 Running automatic setup...")
-
-            # Step 1: Configure Poetry to use in-project virtualenv and install dependencies
-            click.echo("📦 Installing dependencies (this may take a few minutes)...")
-            try:
-                # First, ensure Poetry creates virtualenv in project directory
-                config_result = subprocess.run(
-                    ["poetry", "config", "virtualenvs.in-project", "true", "--local"],
-                    cwd=output_path,
-                    capture_output=True,
-                    text=True,
-                    timeout=10,
-                )
-
-                if config_result.returncode != 0:
-                    click.secho(
-                        "⚠️  Warning: Could not configure Poetry virtualenv location",
-                        fg="yellow",
-                    )
-
-                # Then install dependencies
-                # Create a clean environment to prevent Poetry from using parent venv
-                install_env = os.environ.copy()
-                # Remove VIRTUAL_ENV to prevent Poetry from thinking it's in a virtualenv
-                install_env.pop("VIRTUAL_ENV", None)
-
-                install_result = subprocess.run(
-                    ["poetry", "install", "--no-interaction", "--no-ansi"],
-                    cwd=output_path,
-                    capture_output=True,
-                    text=True,
-                    env=install_env,
-                    timeout=300,  # 5 minutes timeout
-                )
-
-                if install_result.returncode != 0:
-                    click.secho("❌ Poetry install failed:", fg="red", err=True)
-                    click.echo(install_result.stderr, err=True)
-                    click.echo(
-                        f"\n💡 Try running manually: cd {project_name} && poetry install",
-                        err=True,
-                    )
-                    raise click.Abort()
-
-                click.secho("  ✅ Dependencies installed", fg="green")
-
-            except subprocess.TimeoutExpired:
-                click.secho(
-                    "❌ Poetry install timed out (>5 minutes)", fg="red", err=True
-                )
-                click.echo(
-                    f"\n💡 Try running manually: cd {project_name} && poetry install",
-                    err=True,
-                )
-                raise click.Abort()
-
-            # Step 2: Run migrations
-            click.echo("🗄️  Running database migrations...")
-            try:
-                # Use poetry run to execute in the virtual environment
-                migrate_result = subprocess.run(
-                    ["poetry", "run", "python", "manage.py", "migrate"],
-                    cwd=output_path,
-                    capture_output=True,
-                    text=True,
-                    timeout=60,  # 1 minute timeout
-                )
-
-                if migrate_result.returncode != 0:
-                    click.secho("❌ Migration failed:", fg="red", err=True)
-                    click.echo(migrate_result.stderr, err=True)
-                    click.echo(
-                        f"\n💡 Try running manually: cd {project_name} && poetry run python manage.py migrate",
-                        err=True,
-                    )
-                    raise click.Abort()
-
-                click.secho("  ✅ Database migrations complete", fg="green")
-
-            except subprocess.TimeoutExpired:
-                click.secho("❌ Migration timed out (>1 minute)", fg="red", err=True)
-                click.echo(
-                    f"\n💡 Try running manually: cd {project_name} && poetry run python manage.py migrate",
-                    err=True,
-                )
-                raise click.Abort()
-
-            # Success message for setup
-            click.secho(
-                "\n🎉 Project setup complete! Your project is ready to use.",
-                fg="green",
-                bold=True,
-            )
-            click.echo("\n📋 Next steps:")
-            click.echo(f"  cd {project_name}")
-            click.echo("  # Start development server:")
-            click.echo("  #   • With Docker + PostgreSQL: quickscale up")
-            click.echo(
-                "  #   • Without Docker (SQLite): poetry run python manage.py runserver"
-            )
-            click.echo(
-                "\n⚠️  Note: Default setup uses SQLite for quick local development."
-            )
-            click.echo(
-                "     For production-like environment, use Docker: quickscale up"
-            )
-            click.echo("\n📖 See README.md for more details")
-
-        else:
-            # Next steps instructions (manual setup)
-            click.echo("\n📋 Next steps:")
-            click.echo(f"  cd {project_name}")
-            click.echo("  # Install dependencies")
-            click.echo("  poetry install")
-            click.echo("  poetry run python manage.py migrate")
-            click.echo("  # Start development server:")
-            click.echo("  #   • With Docker + PostgreSQL: quickscale up")
-            click.echo(
-                "  #   • Without Docker (SQLite): poetry run python manage.py runserver"
-            )
-            click.echo("\n📖 See README.md for more details")
+        # Next steps instructions (manual setup)
+        click.echo("\n📋 Next steps:")
+        click.echo(f"  cd {project_name}")
+        click.echo(" ")
+        click.echo("  # Optional: Embed modules, example: auth")
+        click.echo(
+            "  # NOTE: requires git and must be done BEFORE poetry install + migrate"
+        )
+        click.echo("  git init")
+        click.echo("  git add -A")
+        click.echo(f"  git commit -m 'Initial {project_name} commit'")
+        click.echo("  quickscale embed --module auth")
+        click.echo(" ")
+        click.echo("  # Install dependencies")
+        click.echo("  poetry install")
+        click.echo("  poetry run python manage.py migrate")
+        click.echo(" ")
+        click.echo("  # Optional: Start development server with Docker and PostgreSQL:")
+        click.echo("  quickscale up")
+        click.echo(
+            "  # Optional (alternative): Start development server without Docker (using SQLite):"
+        )
+        click.echo("  poetry run python manage.py runserver")
+        click.echo(" ")
+        click.echo("\n📖 See README.md for more details")
 
     except click.Abort:
         # Re-raise click.Abort without catching it as a generic exception

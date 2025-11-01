@@ -83,10 +83,9 @@ AUTH_USER_MODEL = "quickscale_modules_auth.User"
 # Site ID (required by django.contrib.sites)
 SITE_ID = 1
 
-# Allauth settings
-ACCOUNT_AUTHENTICATION_METHOD = "email"
-ACCOUNT_EMAIL_REQUIRED = True
-ACCOUNT_USERNAME_REQUIRED = True
+# Allauth settings (django-allauth 0.62+ format)
+ACCOUNT_LOGIN_METHODS = {"email", "username"}
+ACCOUNT_SIGNUP_FIELDS = ["email*", "username*", "password1*", "password2*"]
 ACCOUNT_EMAIL_VERIFICATION = "none"  # "mandatory" or "optional" in v0.64.0
 ACCOUNT_ALLOW_REGISTRATION = True  # Set to False to disable signups
 ACCOUNT_ADAPTER = "quickscale_modules_auth.adapters.QuickscaleAccountAdapter"
@@ -208,17 +207,17 @@ ACCOUNT_ALLOW_REGISTRATION = False  # Disable signups
 ### Change Authentication Method
 
 ```python
-# Use email only (no username)
-ACCOUNT_AUTHENTICATION_METHOD = "email"
-ACCOUNT_USERNAME_REQUIRED = False
+# Use email only (no username) - django-allauth 0.62+ format
+ACCOUNT_LOGIN_METHODS = {"email"}
+ACCOUNT_SIGNUP_FIELDS = ["email*", "password1*", "password2*"]
 
 # Use username only
-ACCOUNT_AUTHENTICATION_METHOD = "username"
-ACCOUNT_EMAIL_REQUIRED = False
+ACCOUNT_LOGIN_METHODS = {"username"}
+ACCOUNT_SIGNUP_FIELDS = ["username*", "password1*", "password2*"]
 
 # Use both (default)
-ACCOUNT_AUTHENTICATION_METHOD = "email"
-ACCOUNT_USERNAME_REQUIRED = True
+ACCOUNT_LOGIN_METHODS = {"email", "username"}
+ACCOUNT_SIGNUP_FIELDS = ["email*", "username*", "password1*", "password2*"]
 ```
 
 ### Session Timeout

@@ -29,9 +29,9 @@ AUTH_USER_MODEL = "quickscale_modules_auth.User"
 
 SITE_ID = 1
 
-ACCOUNT_AUTHENTICATION_METHOD = "email"
-ACCOUNT_EMAIL_REQUIRED = True
-ACCOUNT_USERNAME_REQUIRED = True
+# django-allauth 0.62+ settings (new format)
+ACCOUNT_LOGIN_METHODS = {"email", "username"}
+ACCOUNT_SIGNUP_FIELDS = ["email*", "username*", "password1*", "password2*"]
 ACCOUNT_EMAIL_VERIFICATION = "none"
 ACCOUNT_ALLOW_REGISTRATION = True
 
