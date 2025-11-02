@@ -463,7 +463,14 @@ def embed(module: str, remote: str) -> None:
         click.echo("\n📋 Next steps:")
         if module == "auth":
             click.echo(f"  1. Review module code in modules/{module}/")
-            click.echo("  2. Run migrations: poetry run python manage.py migrate")
+            click.secho(
+                "  2. ⚠️  IMPORTANT: Run migrations (required before server start):",
+                fg="yellow",
+                bold=True,
+            )
+            click.secho(
+                "     poetry run python manage.py migrate", fg="cyan", bold=True
+            )
             click.echo(
                 "  3. Create superuser (optional): poetry run python manage.py createsuperuser"
             )

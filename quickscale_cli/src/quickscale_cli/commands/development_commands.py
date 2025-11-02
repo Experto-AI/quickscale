@@ -1,5 +1,6 @@
 """Development lifecycle commands for QuickScale projects."""
 
+import re
 import subprocess
 import sys
 
@@ -49,19 +50,48 @@ def up(build: bool, no_cache: bool) -> None:
             cmd.append("--no-cache")
 
         click.echo("🚀 Starting Docker services...")
-        subprocess.run(cmd, check=True)
+        subprocess.run(cmd, check=True, capture_output=True, text=True)
         click.secho("✅ Services started successfully!", fg="green", bold=True)
         click.echo("💡 Tip: Use 'quickscale logs' to view service logs")
 
     except subprocess.CalledProcessError as e:
-        click.secho(
-            f"❌ Error: Failed to start services (exit code: {e.returncode})",
-            fg="red",
-            err=True,
+        # Check for port conflict in error output
+        # Docker error format: "Bind for 0.0.0.0:8000 failed: port is already allocated"
+        # Check both stdout and stderr since docker-compose may output to either
+        error_output = e.stderr if e.stderr else ""
+        stdout_output = e.stdout if e.stdout else ""
+        full_output = error_output + stdout_output
+
+        port_conflict_match = re.search(
+            r"Bind for [\d.]+:(\d+) failed: port is already allocated",
+            full_output,
+            re.IGNORECASE,
         )
-        click.echo(
-            "💡 Tip: Check Docker logs with 'quickscale logs' for details", err=True
-        )
+
+        if port_conflict_match:
+            port = port_conflict_match.group(1)
+            click.secho(f"❌ Error: Port {port} is already in use", fg="red", err=True)
+            click.echo(
+                f"\n💡 To resolve this issue, try one of the following:\n"
+                f"   1. Stop existing containers: quickscale down\n"
+                f"   2. Remove orphaned containers: docker-compose down --remove-orphans\n"
+                f"   3. Find and kill the process: lsof -ti:{port} | xargs kill -9\n"
+                f"   4. Find process details: sudo lsof -i:{port}\n"
+                f"   5. Or use: sudo fuser -k {port}/tcp",
+                err=True,
+            )
+        else:
+            click.secho(
+                f"❌ Error: Failed to start services (exit code: {e.returncode})",
+                fg="red",
+                err=True,
+            )
+            if full_output:
+                click.echo(f"\nError output:\n{full_output}", err=True)
+            click.echo(
+                "💡 Tip: Check Docker logs with 'quickscale logs' for details",
+                err=True,
+            )
         sys.exit(1)
     except KeyboardInterrupt:
         click.echo("\n⚠️  Interrupted by user")

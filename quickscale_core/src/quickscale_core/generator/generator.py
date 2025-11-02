@@ -247,6 +247,13 @@ class ProjectGenerator:
                 "templates/index.html",
                 False,
             ),
+            (
+                self._get_theme_template_path(
+                    "templates/components/navigation.html.j2"
+                ),
+                "templates/components/navigation.html",
+                False,
+            ),
             # Error page templates (shared across all themes)
             ("templates/404.html.j2", "templates/404.html", False),
             ("templates/500.html.j2", "templates/500.html", False),

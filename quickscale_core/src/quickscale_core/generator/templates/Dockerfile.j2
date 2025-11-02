@@ -26,8 +26,14 @@ RUN echo "📦 Installing Poetry..." && \
 # Set working directory
 WORKDIR /app
 
-# Copy dependency files
+# Copy dependency files first for better caching
 COPY pyproject.toml poetry.lock ./
+
+# Copy application code (needed for path dependencies like embedded modules)
+# We copy early to ensure Poetry can resolve path dependencies in pyproject.toml
+# Note: This means code changes will invalidate the dependency cache, but it's
+# necessary for projects with embedded modules (path dependencies)
+COPY . .
 
 # Configure Poetry to not create virtual environments (we're in a container)
 RUN poetry config virtualenvs.create false

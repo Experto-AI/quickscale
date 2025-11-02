@@ -12,13 +12,21 @@
 </head>
 <body>
     <header>
-        <nav>
-            <h1>{{ project_name }}</h1>
-        </nav>
+        {%raw%}{% include "components/navigation.html" %}{%endraw%}
     </header>
 
     <main>
-        {%raw%}{% block content %}
+        {%raw%}{% if messages %}
+        <div class="messages-container">
+            {% for message in messages %}
+            <div class="alert alert-{{ message.tags }}">
+                {{ message }}
+            </div>
+            {% endfor %}
+        </div>
+        {% endif %}
+
+        {% block content %}
         {% endblock %}{%endraw%}
     </main>
 

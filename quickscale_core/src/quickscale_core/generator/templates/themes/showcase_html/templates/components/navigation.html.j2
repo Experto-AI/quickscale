@@ -1,0 +1,68 @@
+{%raw%}<nav class="site-nav">
+    <div class="nav-container">
+        <a href="/" class="nav-brand">{% endraw %}{{ project_name }}{%raw%}</a>
+        <ul class="nav-menu">
+            <li><a href="/">Home</a></li>
+
+            <!-- Auth Module Pages -->
+            <li class="nav-section">
+                <span class="nav-section-title">Authentication</span>
+                <ul class="nav-submenu">
+                    {% if user.is_authenticated %}
+                        <li><a href="{% url 'account_logout' %}">Logout</a></li>
+                        <li><a href="{% url 'quickscale_auth:profile' %}">Profile</a></li>
+                        <li><a href="{% url 'quickscale_auth:profile-edit' %}">Edit Profile</a></li>
+                        <li><a href="{% url 'account_change_password' %}">Change Password</a></li>
+                        <li><a href="{% url 'quickscale_auth:account-delete' %}">Delete Account</a></li>
+                    {% else %}
+                        <li><a href="{% url 'account_login' %}">Login</a></li>
+                        <li><a href="{% url 'account_signup' %}">Sign Up</a></li>
+                        <li><a href="{% url 'account_reset_password' %}">Reset Password</a></li>
+                    {% endif %}
+                </ul>
+            </li>
+
+            <!-- Billing Module Pages (if installed) -->
+            {% if 'quickscale_modules_billing' in settings.INSTALLED_APPS %}
+            <li class="nav-section">
+                <span class="nav-section-title">Billing</span>
+                <ul class="nav-submenu">
+                    <li><a href="#">Subscriptions</a></li>
+                    <li><a href="#">Payment Methods</a></li>
+                    <li><a href="#">Billing History</a></li>
+                </ul>
+            </li>
+            {% else %}
+            <li class="nav-section nav-disabled">
+                <span class="nav-section-title">Billing (Not Installed)</span>
+                <ul class="nav-submenu">
+                    <li><span class="nav-disabled-link">Subscriptions</span></li>
+                    <li><span class="nav-disabled-link">Payment Methods</span></li>
+                    <li><span class="nav-disabled-link">Billing History</span></li>
+                </ul>
+            </li>
+            {% endif %}
+
+            <!-- Teams Module Pages (if installed) -->
+            {% if 'quickscale_modules_teams' in settings.INSTALLED_APPS %}
+            <li class="nav-section">
+                <span class="nav-section-title">Teams</span>
+                <ul class="nav-submenu">
+                    <li><a href="#">My Teams</a></li>
+                    <li><a href="#">Create Team</a></li>
+                    <li><a href="#">Invitations</a></li>
+                </ul>
+            </li>
+            {% else %}
+            <li class="nav-section nav-disabled">
+                <span class="nav-section-title">Teams (Not Installed)</span>
+                <ul class="nav-submenu">
+                    <li><span class="nav-disabled-link">My Teams</span></li>
+                    <li><span class="nav-disabled-link">Create Team</span></li>
+                    <li><span class="nav-disabled-link">Invitations</span></li>
+                </ul>
+            </li>
+            {% endif %}
+        </ul>
+    </div>
+</nav>{%endraw%}

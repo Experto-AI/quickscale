@@ -1,61 +1,15 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>{% block title %}QuickScale Auth{% endblock %}</title>
-    {% load static %}
-    <link rel="stylesheet" href="{% static 'quickscale_modules_auth/css/auth.css' %}">
-    {% block extra_css %}{% endblock %}
-</head>
-<body>
-    <div class="auth-container">
-        <!-- Navigation -->
-        <nav class="auth-nav">
-            <div class="nav-container">
-                <div class="nav-content">
-                    <a href="{% url 'home' %}" class="nav-brand">QuickScale</a>
-                    <div class="nav-links">
-                        {% for module_name, module_info in modules.items %}
-                        {% if module_info.installed %}
-                        <a href="{% url module_info.url %}" class="{{ module_info.css_class }}">
-                            {{ module_info.icon }} {{ module_info.name }}
-                        </a>
-                        {% else %}
-                        <span class="{{ module_info.css_class }}">
-                            {{ module_info.icon }} {{ module_info.name }}
-                        </span>
-                        {% endif %}
-                        {% endfor %}
-                    </div>
-                </div>
-            </div>
-        </nav>
+{% extends "base.html" %}
+{% load static %}
 
-        <header class="auth-header">
-            <h1>{% block header %}QuickScale{% endblock %}</h1>
-        </header>
-
-        <main class="auth-main">
-            {% if messages %}
-            <div class="messages">
-                {% for message in messages %}
-                <div class="alert alert-{{ message.tags }}">
-                    {{ message }}
-                </div>
-                {% endfor %}
-            </div>
-            {% endif %}
-
-            {% block content %}{% endblock %}
-        </main>
-
-        <footer class="auth-footer">
-            <p>&copy; 2025 QuickScale. All rights reserved.</p>
-        </footer>
+{% block content %}
+<div class="auth-container">
+    <div class="auth-main">
+        {% block auth_content %}{% endblock %}
     </div>
+</div>
+{% endblock %}
 
-    {% block extra_js %}{% endblock %}
-    <script src="{% static 'quickscale_modules_auth/js/auth.js' %}"></script>
-</body>
-</html>
+{% block extra_js %}
+{{ block.super }}
+<script src="{% static 'quickscale_modules_auth/js/auth.js' %}"></script>
+{% endblock %}

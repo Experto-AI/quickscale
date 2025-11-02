@@ -180,7 +180,7 @@ def init(project_name: str, theme: str) -> None:
         click.echo(f"  git commit -m 'Initial {project_name} commit'")
         click.echo("  quickscale embed --module auth")
         click.echo(" ")
-        click.echo("  # Install dependencies")
+        click.echo("  # Install dependencies and run migrations")
         click.echo("  poetry install")
         click.echo("  poetry run python manage.py migrate")
         click.echo(" ")
