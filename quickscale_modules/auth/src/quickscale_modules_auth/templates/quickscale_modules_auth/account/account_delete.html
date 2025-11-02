@@ -1,16 +1,27 @@
 {% extends "quickscale_modules_auth/base.html" %}
 {% block title %}Delete Account - QuickScale{% endblock %}
-{% block header %}Delete Account{% endblock %}
+{% block header %}Delete Your Account{% endblock %}
 {% block content %}
 <div class="auth-form-container">
-    <h2>Delete Your Account</h2>
-    <p class="warning">⚠️ This action cannot be undone. All your data will be permanently deleted.</p>
+    <h2>Delete Account</h2>
+    <p class="auth-subtitle">Permanently remove your account and all data</p>
+
+    <div class="warning">
+        ⚠️ <strong>Warning:</strong> This action cannot be undone. All your data, including profile information, will be permanently deleted.
+    </div>
+
     <form method="post">
         {% csrf_token %}
-        <p>Are you absolutely sure you want to delete your account?</p>
+        <p style="text-align: center; margin: 2rem 0; color: var(--text-secondary);">
+            Are you absolutely sure you want to delete your account?
+        </p>
         <div class="form-actions">
-            <button type="submit" class="btn btn-danger">Yes, Delete My Account</button>
-            <a href="{% url 'quickscale_auth:profile' %}" class="btn btn-secondary">Cancel</a>
+            <button type="submit" class="btn btn-danger">
+                🗑️ Yes, Delete My Account
+            </button>
+            <a href="{% url 'quickscale_auth:profile' %}" class="btn btn-secondary">
+                ❌ Cancel
+            </a>
         </div>
     </form>
 </div>

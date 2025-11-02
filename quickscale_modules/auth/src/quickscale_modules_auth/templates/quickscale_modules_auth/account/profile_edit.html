@@ -1,21 +1,44 @@
 {% extends "quickscale_modules_auth/base.html" %}
 {% block title %}Edit Profile - QuickScale{% endblock %}
-{% block header %}Edit Profile{% endblock %}
+{% block header %}Edit Your Profile{% endblock %}
 {% block content %}
 <div class="auth-form-container">
-    <h2>Edit Your Profile</h2>
+    <h2>Edit Profile</h2>
+    <p class="auth-subtitle">Update your account information</p>
+
     <form method="post" class="auth-form">
         {% csrf_token %}
+
+        {% if form.non_field_errors %}
+        <div class="form-errors">
+            {% for error in form.non_field_errors %}
+            <p class="error">{{ error }}</p>
+            {% endfor %}
+        </div>
+        {% endif %}
+
         {% for field in form %}
         <div class="form-group {% if field.errors %}has-error{% endif %}">
             <label for="{{ field.id_for_label }}">{{ field.label }}</label>
             {{ field }}
-            {% for error in field.errors %}<span class="error-message">{{ error }}</span>{% endfor %}
+            {% if field.errors %}
+                {% for error in field.errors %}
+                <span class="error-message">{{ error }}</span>
+                {% endfor %}
+            {% endif %}
+            {% if field.help_text %}
+            <small class="form-text">{{ field.help_text }}</small>
+            {% endif %}
         </div>
         {% endfor %}
+
         <div class="form-actions">
-            <button type="submit" class="btn btn-primary">Save Changes</button>
-            <a href="{% url 'quickscale_auth:profile' %}" class="btn btn-secondary">Cancel</a>
+            <button type="submit" class="btn btn-primary">
+                💾 Save Changes
+            </button>
+            <a href="{% url 'quickscale_auth:profile' %}" class="btn btn-secondary">
+                ❌ Cancel
+            </a>
         </div>
     </form>
 </div>

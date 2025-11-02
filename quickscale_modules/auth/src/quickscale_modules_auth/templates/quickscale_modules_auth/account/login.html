@@ -2,12 +2,12 @@
 
 {% block title %}Sign In - QuickScale{% endblock %}
 
-{% block header %}Sign In{% endblock %}
+{% block header %}Welcome Back{% endblock %}
 
 {% block content %}
 <div class="auth-form-container">
-    <h2>Welcome Back</h2>
-    <p class="auth-subtitle">Sign in to your account</p>
+    <h2>Sign In</h2>
+    <p class="auth-subtitle">Welcome back! Please sign in to your account</p>
 
     <form method="post" class="auth-form" novalidate>
         {% csrf_token %}
@@ -36,13 +36,15 @@
         {% endfor %}
 
         <div class="form-actions">
-            <button type="submit" class="btn btn-primary">Sign In</button>
+            <button type="submit" class="btn btn-primary">
+                🚀 Sign In
+            </button>
         </div>
     </form>
 
     <div class="auth-links">
         <p><a href="{% url 'account_reset_password' %}">Forgot your password?</a></p>
-        <p>Don't have an account? <a href="{% url 'account_signup' %}">Sign up</a></p>
+        <p>Don't have an account? <a href="{% url 'account_signup' %}">Create one now</a></p>
     </div>
 </div>
 {% endblock %}
