@@ -2,12 +2,12 @@
 
 {% block title %}Sign Up - QuickScale{% endblock %}
 
-{% block header %}Sign Up{% endblock %}
+{% block header %}Join QuickScale{% endblock %}
 
 {% block content %}
 <div class="auth-form-container">
     <h2>Create Account</h2>
-    <p class="auth-subtitle">Sign up for a new account</p>
+    <p class="auth-subtitle">Get started with your new account today</p>
 
     <form method="post" class="auth-form" novalidate>
         {% csrf_token %}
@@ -36,12 +36,14 @@
         {% endfor %}
 
         <div class="form-actions">
-            <button type="submit" class="btn btn-primary">Sign Up</button>
+            <button type="submit" class="btn btn-primary">
+                ✨ Create Account
+            </button>
         </div>
     </form>
 
     <div class="auth-links">
-        <p>Already have an account? <a href="{% url 'account_login' %}">Sign in</a></p>
+        <p>Already have an account? <a href="{% url 'account_login' %}">Sign in here</a></p>
     </div>
 </div>
 {% endblock %}

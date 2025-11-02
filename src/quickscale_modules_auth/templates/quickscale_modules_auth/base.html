@@ -10,6 +10,28 @@
 </head>
 <body>
     <div class="auth-container">
+        <!-- Navigation -->
+        <nav class="auth-nav">
+            <div class="nav-container">
+                <div class="nav-content">
+                    <a href="{% url 'home' %}" class="nav-brand">QuickScale</a>
+                    <div class="nav-links">
+                        {% for module_name, module_info in modules.items %}
+                        {% if module_info.installed %}
+                        <a href="{% url module_info.url %}" class="{{ module_info.css_class }}">
+                            {{ module_info.icon }} {{ module_info.name }}
+                        </a>
+                        {% else %}
+                        <span class="{{ module_info.css_class }}">
+                            {{ module_info.icon }} {{ module_info.name }}
+                        </span>
+                        {% endif %}
+                        {% endfor %}
+                    </div>
+                </div>
+            </div>
+        </nav>
+
         <header class="auth-header">
             <h1>{% block header %}QuickScale{% endblock %}</h1>
         </header>

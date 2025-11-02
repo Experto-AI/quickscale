@@ -13,10 +13,25 @@ Production-ready authentication module for QuickScale projects using django-alla
 - **Custom User Model**: Extends Django's AbstractUser with custom fields support
 - **Authentication Views**: Login, logout, signup, password management
 - **Account Management**: Profile view/edit, account deletion
-- **HTML Theme**: Complete template set with responsive design
+- **Modern HTML Theme**: Beautiful, responsive design with gradients and animations
+- **Module Navigation**: Dynamic navigation showing installed/uninstalled modules
 - **Form Validation**: Client-side and server-side validation
 - **Security**: CSRF protection, password strength indicators
 - **Signals**: Post-registration hooks for custom logic
+
+## Navigation & Module Integration
+
+The auth module includes dynamic navigation that shows all available QuickScale modules:
+
+- **Installed modules**: Displayed as clickable links with icons
+- **Uninstalled modules**: Shown as disabled/grayed out with "Not installed" indicator
+- **Automatic detection**: Uses QuickScale's module configuration system
+- **Responsive design**: Navigation adapts to mobile screens
+
+Available modules in navigation:
+- 👤 **Authentication** - Current module (always enabled when installed)
+- 💳 **Billing** - Links to billing dashboard when installed
+- 👥 **Teams** - Links to teams dashboard when installed
 
 ### 🚧 Coming Soon
 
