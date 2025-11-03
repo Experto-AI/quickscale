@@ -1,6 +1,11 @@
 {% extends "base.html" %}
 {% load static %}
 
+{% block extra_css %}
+{{ block.super }}
+<link rel="stylesheet" href="{% static 'quickscale_modules_auth/css/auth.css' %}">
+{% endblock %}
+
 {% block content %}
 <div class="auth-container">
     <div class="auth-main">
