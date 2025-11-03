@@ -180,9 +180,9 @@ def apply_auth_configuration(project_path: Path, config: dict[str, Any]) -> None
 # QuickScale Auth Module - Added by quickscale embed
 INSTALLED_APPS += [
     "django.contrib.sites",  # Required by allauth
+    "quickscale_modules_auth",  # Must be before allauth.account for template overrides
     "allauth",
     "allauth.account",
-    "quickscale_modules_auth",
 ]
 
 # Allauth Middleware (must be added to MIDDLEWARE)
