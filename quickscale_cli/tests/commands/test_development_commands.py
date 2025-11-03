@@ -29,18 +29,22 @@ class TestUpCommand:
                 "quickscale_cli.commands.development_commands.is_docker_running"
             ) as mock_docker:
                 with patch(
-                    "quickscale_cli.commands.development_commands.get_docker_compose_command"
-                ) as mock_cmd:
-                    with patch("subprocess.run") as mock_run:
-                        mock_in_project.return_value = True
-                        mock_docker.return_value = True
-                        mock_cmd.return_value = ["docker-compose"]
-                        mock_run.return_value = Mock(returncode=0)
+                    "quickscale_cli.commands.development_commands.is_port_available"
+                ) as mock_port:
+                    with patch(
+                        "quickscale_cli.commands.development_commands.get_docker_compose_command"
+                    ) as mock_cmd:
+                        with patch("subprocess.run") as mock_run:
+                            mock_in_project.return_value = True
+                            mock_docker.return_value = True
+                            mock_port.return_value = True
+                            mock_cmd.return_value = ["docker-compose"]
+                            mock_run.return_value = Mock(returncode=0)
 
-                        result = runner.invoke(up)
+                            result = runner.invoke(up)
 
-                        assert result.exit_code == 0
-                        assert "Services started successfully!" in result.output
+                            assert result.exit_code == 0
+                            assert "Services started successfully!" in result.output
 
     def test_up_not_in_project(self):
         """Test up command when not in project directory."""
@@ -85,20 +89,24 @@ class TestUpCommand:
                 "quickscale_cli.commands.development_commands.is_docker_running"
             ) as mock_docker:
                 with patch(
-                    "quickscale_cli.commands.development_commands.get_docker_compose_command"
-                ) as mock_cmd:
-                    with patch("subprocess.run") as mock_run:
-                        mock_in_project.return_value = True
-                        mock_docker.return_value = True
-                        mock_cmd.return_value = ["docker-compose"]
-                        mock_run.return_value = Mock(returncode=0)
+                    "quickscale_cli.commands.development_commands.is_port_available"
+                ) as mock_port:
+                    with patch(
+                        "quickscale_cli.commands.development_commands.get_docker_compose_command"
+                    ) as mock_cmd:
+                        with patch("subprocess.run") as mock_run:
+                            mock_in_project.return_value = True
+                            mock_docker.return_value = True
+                            mock_port.return_value = True
+                            mock_cmd.return_value = ["docker-compose"]
+                            mock_run.return_value = Mock(returncode=0)
 
-                        result = runner.invoke(up, ["--build"])
+                            result = runner.invoke(up, ["--build"])
 
-                        assert result.exit_code == 0
-                        # Verify --build was passed to docker-compose
-                        call_args = mock_run.call_args[0][0]
-                        assert "--build" in call_args
+                            assert result.exit_code == 0
+                            # Verify --build was passed to docker-compose
+                            call_args = mock_run.call_args[0][0]
+                            assert "--build" in call_args
 
     def test_up_with_no_cache_flag(self):
         """Test up command with --no-cache flag."""
@@ -111,21 +119,25 @@ class TestUpCommand:
                 "quickscale_cli.commands.development_commands.is_docker_running"
             ) as mock_docker:
                 with patch(
-                    "quickscale_cli.commands.development_commands.get_docker_compose_command"
-                ) as mock_cmd:
-                    with patch("subprocess.run") as mock_run:
-                        mock_in_project.return_value = True
-                        mock_docker.return_value = True
-                        mock_cmd.return_value = ["docker-compose"]
-                        mock_run.return_value = Mock(returncode=0)
+                    "quickscale_cli.commands.development_commands.is_port_available"
+                ) as mock_port:
+                    with patch(
+                        "quickscale_cli.commands.development_commands.get_docker_compose_command"
+                    ) as mock_cmd:
+                        with patch("subprocess.run") as mock_run:
+                            mock_in_project.return_value = True
+                            mock_docker.return_value = True
+                            mock_port.return_value = True
+                            mock_cmd.return_value = ["docker-compose"]
+                            mock_run.return_value = Mock(returncode=0)
 
-                        result = runner.invoke(up, ["--no-cache"])
+                            result = runner.invoke(up, ["--no-cache"])
 
-                        assert result.exit_code == 0
-                        # Verify both --build and --no-cache were passed
-                        call_args = mock_run.call_args[0][0]
-                        assert "--build" in call_args
-                        assert "--no-cache" in call_args
+                            assert result.exit_code == 0
+                            # Verify --build and --no-cache were passed to docker-compose
+                            call_args = mock_run.call_args[0][0]
+                            assert "--build" in call_args
+                            assert "--no-cache" in call_args
 
 
 class TestDownCommand:
@@ -447,20 +459,24 @@ class TestErrorHandling:
                 "quickscale_cli.commands.development_commands.is_docker_running"
             ) as mock_docker:
                 with patch(
-                    "quickscale_cli.commands.development_commands.get_docker_compose_command"
-                ) as mock_cmd:
-                    with patch("subprocess.run") as mock_run:
-                        mock_in_project.return_value = True
-                        mock_docker.return_value = True
-                        mock_cmd.return_value = ["docker-compose"]
-                        mock_run.side_effect = subprocess.CalledProcessError(
-                            1, "docker-compose"
-                        )
+                    "quickscale_cli.commands.development_commands.is_port_available"
+                ) as mock_port:
+                    with patch(
+                        "quickscale_cli.commands.development_commands.get_docker_compose_command"
+                    ) as mock_cmd:
+                        with patch("subprocess.run") as mock_run:
+                            mock_in_project.return_value = True
+                            mock_docker.return_value = True
+                            mock_port.return_value = True
+                            mock_cmd.return_value = ["docker-compose"]
+                            mock_run.side_effect = subprocess.CalledProcessError(
+                                1, "docker-compose"
+                            )
 
-                        result = runner.invoke(up)
+                            result = runner.invoke(up)
 
-                        assert result.exit_code == 1
-                        assert "Failed to start services" in result.output
+                            assert result.exit_code == 1
+                            assert "Failed to start services" in result.output
 
     def test_down_docker_compose_fails(self):
         """Test down command when docker-compose fails."""

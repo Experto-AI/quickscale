@@ -4,7 +4,8 @@
         <ul class="nav-menu">
             <li><a href="/">Home</a></li>
 
-            <!-- Auth Module Pages -->
+            <!-- Auth Module Pages (if installed) -->
+            {% if 'quickscale_modules_auth' in settings.INSTALLED_APPS %}
             <li class="nav-section">
                 <span class="nav-section-title">Authentication</span>
                 <ul class="nav-submenu">
@@ -21,6 +22,7 @@
                     {% endif %}
                 </ul>
             </li>
+            {% endif %}
 
             <!-- Billing Module Pages (if installed) -->
             {% if 'quickscale_modules_billing' in settings.INSTALLED_APPS %}
