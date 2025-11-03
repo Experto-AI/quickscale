@@ -21,7 +21,7 @@ Keep this doc short and actionable. When in doubt, link to the authoritative doc
 
 ## Quick orientation
 
-- Repository scripts are in `scripts/` (for example `./scripts/bootstrap.sh`, `./scripts/test_all.sh`, `./scripts/lint.sh`). Inspect them if you need to confirm exact actions.
+- Repository scripts are in `scripts/` (for example `./scripts/bootstrap.sh`, `./scripts/test_all.sh`, `./scripts/lint.sh`, `./scripts/publish_module.sh`). Inspect them if you need to confirm exact actions.
 - The primary CLI provided by this repository is the `quickscale` command (installed by the `quickscale_cli` package).
 - For dependency management we recommend Poetry — see `docs/technical/poetry_user_manual.md` for full Poetry usage. This manual focuses on QuickScale commands, not Poetry details.
 
@@ -289,6 +289,7 @@ The `Dockerfile` uses multi-stage builds (builder + runtime) for production effi
 - `./scripts/bootstrap.sh` — initial environment/setup steps (inspect to confirm behavior)
 - `./scripts/test_all.sh` — runs the full test matrix for the repo
 - `./scripts/lint.sh` — runs configured linters and formatters
+- `./scripts/publish_module.sh` — publishes module changes to split branches
 
 Run these scripts from the repository root.
 

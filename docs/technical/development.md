@@ -243,7 +243,8 @@ quickscale/
 ├── scripts/                  # Helper scripts
 │   ├── bootstrap.sh          # Development setup
 │   ├── test_all.sh           # Run all tests
-│   └── lint.sh               # Run all linters
+│   ├── lint.sh               # Run all linters
+│   └── publish_module.sh     # Publish module changes to split branches
 ├── pyproject.toml            # Root config (centralized dev dependencies)
 ├── ruff.toml                 # Centralized Ruff configuration
 └── mypy.ini                  # Centralized mypy configuration
