@@ -8,8 +8,11 @@ import click
 
 from quickscale_cli.utils.docker_utils import (
     get_docker_compose_command,
+    get_port_from_env,
     is_docker_running,
     is_interactive,
+    is_port_available,
+    wait_for_port_release,
 )
 from quickscale_cli.utils.project_manager import (
     get_web_container_name,
@@ -37,6 +40,24 @@ def up(build: bool, no_cache: bool) -> None:
     if not is_docker_running():
         click.secho("❌ Error: Docker is not running", fg="red", err=True)
         click.echo("💡 Tip: Start Docker Desktop or the Docker daemon", err=True)
+        sys.exit(1)
+
+    # Check if required port is available BEFORE calling docker-compose
+    port = get_port_from_env()
+    if not is_port_available(port):
+        click.secho(f"❌ Error: Port {port} is already in use", fg="red", err=True)
+        click.echo(
+            f"\n💡 To resolve this issue, try one of the following:\n"
+            f"   1. If you just ran 'quickscale down': Wait 5-10 seconds for docker-proxy to release the port\n"
+            f"   2. Stop and cleanup: quickscale down && sleep 5 && quickscale up\n"
+            f"   3. Check for other containers: docker ps -a | grep {port}\n"
+            f"   4. Find and kill the process using the port:\n"
+            f"      • Check what's using it: sudo netstat -tulpn | grep :{port}\n"
+            f"      • If it's docker-proxy: wait a few seconds and try again\n"
+            f"      • If it's another process: sudo lsof -ti:{port} | xargs kill -9\n"
+            f"   5. Change the port in .env file: PORT=8001",
+            err=True,
+        )
         sys.exit(1)
 
     try:
@@ -69,15 +90,19 @@ def up(build: bool, no_cache: bool) -> None:
         )
 
         if port_conflict_match:
-            port = port_conflict_match.group(1)
-            click.secho(f"❌ Error: Port {port} is already in use", fg="red", err=True)
+            conflict_port = port_conflict_match.group(1)
+            click.secho(
+                f"❌ Error: Port {conflict_port} is already in use",
+                fg="red",
+                err=True,
+            )
             click.echo(
                 f"\n💡 To resolve this issue, try one of the following:\n"
                 f"   1. Stop existing containers: quickscale down\n"
                 f"   2. Remove orphaned containers: docker-compose down --remove-orphans\n"
-                f"   3. Find and kill the process: lsof -ti:{port} | xargs kill -9\n"
-                f"   4. Find process details: sudo lsof -i:{port}\n"
-                f"   5. Or use: sudo fuser -k {port}/tcp",
+                f"   3. Find and kill the process: lsof -ti:{conflict_port} | xargs kill -9\n"
+                f"   4. Find process details: sudo lsof -i:{conflict_port}\n"
+                f"   5. Or use: sudo fuser -k {conflict_port}/tcp",
                 err=True,
             )
         else:
@@ -116,13 +141,27 @@ def down(volumes: bool) -> None:
 
     try:
         compose_cmd = get_docker_compose_command()
-        cmd = compose_cmd + ["down"]
+        cmd = compose_cmd + ["down", "--remove-orphans"]
 
         if volumes:
             cmd.append("--volumes")
 
         click.echo("🛑 Stopping Docker services...")
         subprocess.run(cmd, check=True)
+
+        # Wait for Docker's proxy process to fully release ports
+        # docker-proxy can take a few seconds to release ports after containers stop
+        port = get_port_from_env()
+        click.echo(f"⏳ Waiting for port {port} to be released...")
+        if not wait_for_port_release(port, timeout=5.0):
+            click.echo(
+                f"⚠️  Warning: Port {port} still in use after 5 seconds. "
+                f"Wait a moment before running 'quickscale up'.",
+                err=True,
+            )
+        else:
+            click.echo(f"✅ Port {port} released")
+
         click.secho("✅ Services stopped successfully!", fg="green")
 
     except subprocess.CalledProcessError as e:

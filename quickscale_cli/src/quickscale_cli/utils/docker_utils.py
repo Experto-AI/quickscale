@@ -1,7 +1,9 @@
 """Docker interaction utilities for QuickScale CLI."""
 
+import socket
 import subprocess
 import sys
+import time
 from pathlib import Path
 
 
@@ -92,3 +94,66 @@ def get_running_containers() -> list[str]:
         return containers
     except (subprocess.SubprocessError, subprocess.TimeoutExpired):
         return []
+
+
+def is_port_available(port: int, host: str = "0.0.0.0") -> bool:
+    """Check if a port is available for binding.
+
+    This is more accurate than checking for listening processes because it
+    actually attempts to bind to the port, which is what Docker will do.
+
+    Args:
+        port: Port number to check
+        host: Host address (default: 0.0.0.0 to match Docker behavior)
+
+    Returns:
+        True if port is available, False if already in use
+    """
+    sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+
+    try:
+        sock.bind((host, port))
+        sock.close()
+        return True
+    except OSError:
+        # Port is already in use
+        sock.close()
+        return False
+
+
+def wait_for_port_release(
+    port: int, timeout: float = 5.0, interval: float = 0.2
+) -> bool:
+    """Wait for a port to become available.
+
+    Docker's proxy process may take a few seconds to fully release ports
+    after containers are stopped, especially on slower systems.
+
+    Args:
+        port: Port number to wait for
+        timeout: Maximum time to wait in seconds (default: 5.0 for docker-proxy cleanup)
+        interval: Time between checks in seconds
+
+    Returns:
+        True if port became available, False if timeout
+    """
+    elapsed = 0.0
+    while elapsed < timeout:
+        if is_port_available(port):
+            return True
+        time.sleep(interval)
+        elapsed += interval
+    return False
+
+
+def get_port_from_env() -> int:
+    """Get the port number from docker-compose.yml environment or default."""
+    import os
+
+    # Check PORT environment variable (matches docker-compose.yml)
+    port_str = os.environ.get("PORT", "8000")
+    try:
+        return int(port_str)
+    except ValueError:
+        return 8000

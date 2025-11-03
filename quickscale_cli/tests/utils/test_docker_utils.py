@@ -8,9 +8,12 @@ from quickscale_cli.utils.docker_utils import (
     find_docker_compose,
     get_container_status,
     get_docker_compose_command,
+    get_port_from_env,
     get_running_containers,
     is_docker_running,
     is_interactive,
+    is_port_available,
+    wait_for_port_release,
 )
 
 
@@ -207,3 +210,125 @@ class TestGetRunningContainers:
             mock_run.side_effect = subprocess.CalledProcessError(1, "docker")
             result = get_running_containers()
             assert result == []
+
+
+class TestIsPortAvailable:
+    """Tests for is_port_available function."""
+
+    def test_port_available(self):
+        """Test that an unused port is reported as available."""
+        # Use a high port number unlikely to be in use
+        result = is_port_available(54321)
+        assert result is True
+
+    def test_port_unavailable(self):
+        """Test that a port in use is reported as unavailable."""
+        import socket
+
+        # Bind to a port to make it unavailable
+        sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        sock.bind(("0.0.0.0", 54322))
+        sock.listen(1)
+
+        try:
+            result = is_port_available(54322)
+            assert result is False
+        finally:
+            sock.close()
+
+
+class TestWaitForPortRelease:
+    """Tests for wait_for_port_release function."""
+
+    def test_port_already_available(self):
+        """Test when port is already available."""
+        result = wait_for_port_release(54323, timeout=1.0)
+        assert result is True
+
+    def test_port_becomes_available(self):
+        """Test when port becomes available during wait."""
+        import socket
+        import threading
+
+        # Bind to port temporarily
+        sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        sock.bind(("0.0.0.0", 54324))
+        sock.listen(1)
+
+        # Release port after short delay
+        def release_port():
+            import time
+
+            time.sleep(0.5)
+            sock.close()
+
+        thread = threading.Thread(target=release_port)
+        thread.start()
+
+        # Wait for port to become available
+        result = wait_for_port_release(54324, timeout=2.0)
+        thread.join()
+
+        assert result is True
+
+    def test_port_timeout(self):
+        """Test timeout when port never becomes available."""
+        import socket
+
+        # Bind to port and keep it busy
+        sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        sock.bind(("0.0.0.0", 54325))
+        sock.listen(1)
+
+        try:
+            result = wait_for_port_release(54325, timeout=0.5)
+            assert result is False
+        finally:
+            sock.close()
+
+
+class TestGetPortFromEnv:
+    """Tests for get_port_from_env function."""
+
+    def test_default_port(self):
+        """Test that default port is 8000."""
+        import os
+
+        # Ensure PORT is not set
+        original = os.environ.pop("PORT", None)
+        try:
+            result = get_port_from_env()
+            assert result == 8000
+        finally:
+            if original is not None:
+                os.environ["PORT"] = original
+
+    def test_custom_port_from_env(self):
+        """Test reading custom port from environment."""
+        import os
+
+        original = os.environ.get("PORT")
+        try:
+            os.environ["PORT"] = "9000"
+            result = get_port_from_env()
+            assert result == 9000
+        finally:
+            if original is not None:
+                os.environ["PORT"] = original
+            else:
+                os.environ.pop("PORT", None)
+
+    def test_invalid_port_falls_back_to_default(self):
+        """Test that invalid port value falls back to 8000."""
+        import os
+
+        original = os.environ.get("PORT")
+        try:
+            os.environ["PORT"] = "invalid"
+            result = get_port_from_env()
+            assert result == 8000
+        finally:
+            if original is not None:
+                os.environ["PORT"] = original
+            else:
+                os.environ.pop("PORT", None)

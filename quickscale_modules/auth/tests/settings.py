@@ -1,5 +1,7 @@
 """Django settings for testing auth module"""
 
+import os
+
 SECRET_KEY = "test-secret-key-for-auth-module"
 
 INSTALLED_APPS = [
@@ -8,6 +10,7 @@ INSTALLED_APPS = [
     "django.contrib.sessions",
     "django.contrib.sites",
     "django.contrib.messages",
+    "django.contrib.staticfiles",
     "allauth",
     "allauth.account",
     "quickscale_modules_auth",
@@ -48,7 +51,7 @@ MIDDLEWARE = [
 TEMPLATES = [
     {
         "BACKEND": "django.template.backends.django.DjangoTemplates",
-        "DIRS": [],
+        "DIRS": [os.path.join(os.path.dirname(__file__), "templates")],
         "APP_DIRS": True,
         "OPTIONS": {
             "context_processors": [
@@ -56,6 +59,7 @@ TEMPLATES = [
                 "django.template.context_processors.request",
                 "django.contrib.auth.context_processors.auth",
                 "django.contrib.messages.context_processors.messages",
+                "django.template.context_processors.static",
             ],
         },
     },
