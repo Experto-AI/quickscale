@@ -33,6 +33,14 @@ def test_embed_auth_module_no_circular_import(tmp_path):
 
     # Step 2: Initialize git (required for embed)
     subprocess.run(["git", "init"], cwd=project_path, check=True)
+    subprocess.run(
+        ["git", "config", "user.name", "Test User"], cwd=project_path, check=True
+    )
+    subprocess.run(
+        ["git", "config", "user.email", "test@example.com"],
+        cwd=project_path,
+        check=True,
+    )
     subprocess.run(["git", "add", "-A"], cwd=project_path, check=True)
     subprocess.run(
         ["git", "commit", "-m", "Initial commit"],
@@ -99,6 +107,14 @@ def test_embed_auth_module_full_migration(tmp_path):
 
     # Initialize git
     subprocess.run(["git", "init"], cwd=project_path, check=True)
+    subprocess.run(
+        ["git", "config", "user.name", "Test User"], cwd=project_path, check=True
+    )
+    subprocess.run(
+        ["git", "config", "user.email", "test@example.com"],
+        cwd=project_path,
+        check=True,
+    )
     subprocess.run(["git", "add", "-A"], cwd=project_path, check=True)
     subprocess.run(["git", "commit", "-m", "Initial"], cwd=project_path, check=True)
 
@@ -144,6 +160,14 @@ def test_embed_auth_after_migrations_shows_warning(tmp_path):
 
     # Step 2: Initialize git (required for embed)
     subprocess.run(["git", "init"], cwd=project_path, check=True)
+    subprocess.run(
+        ["git", "config", "user.name", "Test User"], cwd=project_path, check=True
+    )
+    subprocess.run(
+        ["git", "config", "user.email", "test@example.com"],
+        cwd=project_path,
+        check=True,
+    )
     subprocess.run(["git", "add", "-A"], cwd=project_path, check=True)
     subprocess.run(
         ["git", "commit", "-m", "Initial commit"],

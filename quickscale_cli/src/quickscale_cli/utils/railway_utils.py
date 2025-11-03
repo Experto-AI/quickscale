@@ -319,7 +319,7 @@ def set_railway_variables_batch(
 def generate_django_secret_key() -> str:
     """Generate a secure Django SECRET_KEY."""
     try:
-        from django.core.management.utils import (  # type: ignore[import-not-found]
+        from django.core.management.utils import (
             get_random_secret_key,
         )
 

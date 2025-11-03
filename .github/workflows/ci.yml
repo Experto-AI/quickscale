@@ -24,11 +24,22 @@ jobs:
         python-version: ${{ matrix.python-version }}
 
     - name: Install Poetry
+      id: install-poetry
       uses: snok/install-poetry@v1
       with:
         version: latest
         virtualenvs-create: true
         virtualenvs-in-project: true
+      # Retry on SSL/network failures
+      continue-on-error: true
+
+    - name: Retry Poetry install (if failed)
+      if: steps.install-poetry.outcome == 'failure'
+      run: |
+        for i in {1..3}; do
+          curl -sSL https://install.python-poetry.org | python3 - && break || sleep 5
+        done
+        echo "$HOME/.local/bin" >> $GITHUB_PATH
 
     - name: Cache Poetry dependencies
       uses: actions/cache@v4
@@ -36,44 +47,39 @@ jobs:
         path: |
           ~/.cache/pypoetry
           .venv
-        key: ${{ runner.os }}-poetry-${{ hashFiles('**/poetry.lock') }}
+        key: ${{ runner.os }}-poetry-${{ hashFiles('poetry.lock') }}
         restore-keys: |
           ${{ runner.os }}-poetry-
 
-    - name: Install dependencies (quickscale_core)
-      working-directory: ./quickscale_core
-      run: |
-        poetry install --with dev
-
-    - name: Install dependencies (quickscale_cli)
-      working-directory: ./quickscale_cli
+    - name: Install dependencies
       run: |
         poetry install --with dev
 
     - name: Run linting (ruff)
-      working-directory: ./quickscale_core
       run: |
-        poetry run ruff check .
-        poetry run ruff format --check .
+        poetry run ruff check quickscale_core quickscale_cli
+        echo "Running ruff format on quickscale_core..."
+        poetry run ruff format quickscale_core
+        echo "Running ruff format on quickscale_cli..."
+        poetry run ruff format quickscale_cli
+        echo "Checking format..."
+        poetry run ruff format --check quickscale_core quickscale_cli
 
     - name: Run type checking (mypy)
-      working-directory: ./quickscale_core
       run: |
-        poetry run mypy src/
+        poetry run mypy quickscale_core/src/
 
     - name: Run tests (quickscale_core) - Unit & Integration only
-      working-directory: ./quickscale_core
       run: |
-        poetry run pytest -m "not e2e" --cov=quickscale_core --cov-report=xml --cov-report=term
+        poetry run pytest quickscale_core -m "not e2e" --cov=quickscale_core --cov-report=xml --cov-report=term
 
     - name: Run tests (quickscale_cli)
-      working-directory: ./quickscale_cli
       run: |
-        poetry run pytest --cov=quickscale_cli --cov-report=xml --cov-report=term
+        poetry run pytest quickscale_cli --cov=quickscale_cli --cov-report=xml --cov-report=term
 
     - name: Upload coverage reports
       uses: codecov/codecov-action@v4
-      if: always()
+      if: always() && github.ref == 'refs/heads/main'
       with:
         files: ./quickscale_core/coverage.xml,./quickscale_cli/coverage.xml
         flags: unittests,integration
@@ -96,19 +102,30 @@ jobs:
         python-version: "3.12"
 
     - name: Install Poetry
+      id: install-poetry-cli
       uses: snok/install-poetry@v1
+      # Retry on SSL/network failures
+      continue-on-error: true
+
+    - name: Retry Poetry install (if failed)
+      if: steps.install-poetry-cli.outcome == 'failure'
+      run: |
+        for i in {1..3}; do
+          curl -sSL https://install.python-poetry.org | python3 - && break || sleep 5
+        done
+        echo "$HOME/.local/bin" >> $GITHUB_PATH
 
     - name: Install dependencies
-      working-directory: ./quickscale_cli
       run: poetry install --with dev
 
     - name: Run linting
-      working-directory: ./quickscale_cli
       run: |
-        poetry run ruff check .
-        poetry run ruff format --check .
+        poetry run ruff check quickscale_cli
+        echo "Running ruff format on quickscale_cli..."
+        poetry run ruff format quickscale_cli
+        echo "Checking format..."
+        poetry run ruff format --check quickscale_cli
 
     - name: Run type checking
-      working-directory: ./quickscale_cli
       run: |
-        poetry run mypy src/
+        poetry run mypy quickscale_cli/src/

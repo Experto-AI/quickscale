@@ -18,6 +18,18 @@ lib/
 lib64/
 parts/
 sdist/
+dist/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
+
+# Poetry
+# Only root poetry.lock is tracked - individual packages use centralized deps
+quickscale_core/poetry.lock
+quickscale_cli/poetry.lock
+quickscale_modules/*/poetry.lock
 var/
 wheels/
 share/python-wheels/
