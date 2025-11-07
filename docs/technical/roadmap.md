@@ -59,119 +59,32 @@ QuickScale follows an evolution-aligned roadmap that starts as a personal toolki
 - **v0.69.0:** SaaS Feature Parity (auth, billing, teams) 🎯
 - **v1.0.0+:** Community platform (if demand exists)
 
-### Module Configuration Strategy (v0.65.0+)
+---
 
-### Overview
-Modules require configuration when embedded (e.g., auth signup enabled/disabled, billing plan defaults). QuickScale uses a **two-phase approach** for module configuration:
+## Module Showcase Architecture (Deferred to Post-v0.69.0)
 
-- **Phase 1 (MVP: v0.65.0-v0.69.0)**: Interactive prompts during `embed` command
-- **Phase 2 (Post-MVP: v1.0.0+)**: Optional YAML configuration file support
+**Status**: 🚧 **NOT YET IMPLEMENTED** - Deferred to post-v0.69.0
 
-This balances MVP simplicity (no YAML overhead) with good UX (not forcing manual settings editing).
+**Current Reality** (v0.66.0):
+- ✅ Basic context processor exists (`quickscale_core/context_processors.py`)
+- ❌ Showcase landing page with module cards: **NOT implemented**
+- ❌ Module preview pages: **NOT implemented**
+- ❌ Showcase CSS styles: **NOT implemented**
+- ❌ Current `index.html.j2`: Simple welcome page only
 
-### Phase 1: Interactive Embed Configuration (MVP, v0.65.0+)
+**Why Deferred**:
+- Focus on completing auth, billing, teams modules first (v0.66-v0.69)
+- Showcase architecture provides maximum value when multiple modules exist
+- Current simple welcome page is adequate for MVP
 
-**When**: Immediately, starting with v0.65.0 auth module
+**Implementation Plan**: After v0.69.0 (SaaS Feature Parity milestone), evaluate whether to implement showcase architecture or keep simple welcome page. Decision criteria:
+- Are 3+ modules complete and production-ready?
+- Is module discovery a user pain point?
+- Would showcase provide meaningful marketing value?
 
-**How it works**:
-```bash
-$ quickscale embed --module auth
-📦 Embedding auth module from splits/auth-module...
+**If Implemented**: See [decisions.md: Module Showcase Pattern](./decisions.md#module-showcase-pattern) for detailed specifications (module cards, preview pages, CSS styles, integration checklist).
 
-# Interactive prompts based on module requirements
-? Enable user registration? (y/n) [y]: y
-? Email verification required? (y/n) [n]: n
-? Custom User model fields? (y/n) [n]: n
-
-✅ Module 'auth' embedded successfully!
-
-Automatic changes made:
-  ✅ Added 'modules.auth' to INSTALLED_APPS
-  ✅ Added allauth configuration to settings
-  ✅ Added auth URLs to urls.py
-  ✅ Created initial migration
-
-Next steps:
-  1. Review module code in modules/auth/
-  2. Run migrations: python manage.py migrate
-  3. Visit http://localhost:8000/accounts/login
-```
-
-**Benefits**:
-- ✅ No manual settings editing required
-- ✅ All configuration choices documented automatically
-- ✅ Works for 2-3 modules without feeling tedious
-- ✅ MVP-aligned (no YAML complexity)
-- ✅ Clear, self-documenting UX
-
-**Scalability**: Works well up to ~3-5 modules. Beyond that, YAML becomes valuable (Post-MVP).
-
-### Phase 2: YAML Configuration (Post-MVP, v1.0.0+)
-
-**When**: After 5+ modules with complex interactions; optional convenience feature
-
-**Why defer to Post-MVP**:
-- 📋 MVP focuses on core 3 modules (auth, billing, teams) — interactive prompts work fine
-- 🎯 Complexity threshold not reached until v0.70.0+ with multiple themes
-- 🚀 Faster to ship MVP with simple interactive UX than build YAML system
-- 🔄 Interactive approach creates foundation for YAML (same config options)
-
-**Future workflow** (v1.0.0 example):
-```yaml
-# quickscale.yml (v1.0.0+)
-version: 0.66.0
-project_name: "myapp"
-theme: "showcase_react"
-
-# One-time init with config file
-modules:
-  auth:
-    enabled: true
-    config:
-      ACCOUNT_ALLOW_REGISTRATION: true
-      ACCOUNT_EMAIL_VERIFICATION: "optional"
-
-  billing:
-    enabled: true
-    config:
-      STRIPE_API_KEY: "${STRIPE_API_KEY}"  # From .env
-      BILLING_CURRENCY: "usd"
-
-# Usage: quickscale init myproject --config quickscale.yml
-```
-
-**Then**: Existing `embed` command still works interactively for adding modules post-init.
-
-### Implementation Notes for Module Developers
-
-**In v0.65.0+, when creating a module's embed handler**:
-
-1. **Define configuration options** as a list of click.confirm/click.prompt questions
-2. **Store configuration state** in `.quickscale/config.yml` (module tracking)
-3. **Apply configuration** to:
-   - `INSTALLED_APPS` (add module)
-   - `settings/*.py` (module-specific settings)
-   - `urls.py` (include module URLs)
-   - Django migrations (run initial migration)
-4. **Document all options** in module README.md
-5. **Make defaults sensible** (e.g., "Allow registration? [y]" defaults to yes)
-
-**Example: Auth module v0.65.0 configuration**
-```python
-# quickscale_cli/commands/module_commands.py (auth-specific logic)
-
-def embed_auth_module(remote: str) -> None:
-    # Interactive prompts
-    allow_signup = click.confirm("Enable user registration?", default=True)
-    email_verification = click.confirm("Email verification required?", default=False)
-
-    # Apply configuration
-    # ... (settings updates, INSTALLED_APPS, etc.)
-```
-
-- 📄 [decisions.md: Module & Theme Architecture](./decisions.md#module-theme-architecture)
-- 📄 [decisions.md: MVP Feature Matrix](./decisions.md#mvp-feature-matrix-authoritative) — YAML explicitly OUT (Post-MVP)
-- 📄 [scaffolding.md: Post-MVP YAML Config](./scaffolding.md#post-mvp-structure)
+---
 
 ## Notes and References
 
@@ -186,911 +99,194 @@ def embed_auth_module(remote: str) -> None:
 
 ## ROADMAP
 
-**Current Status:** v0.65.0 (Released November 1, 2025) — Authentication module delivered.
-**Next Release:** v0.66.0 - Wagtail Blog Module (`quickscale_modules.blog`)
+**Current Status:** v0.66.0 (In Development) — Blog module with Wagtail CMS integration.
+**Next Milestone:** v0.69.0 - SaaS Feature Parity (auth, billing, teams modules complete)
+**Completed Releases:** v0.61.0-v0.65.0 (Module management, git subtree automation, auth module)
 
+### v0.66.0: Blog Module (`quickscale_modules.blog`) — IN DEVELOPMENT
 
+**Status**: 🚧 In Development
 
-## Roadmap Releases
+**Blog Module Development**:
+- [ ] Integrate Wagtail CMS for blog functionality
+- [ ] Create blog models (Post, Category, Tag, Author)
+- [ ] Implement blog views and URL routing
+- [ ] Design blog templates for showcase_html theme
+- [ ] Add rich text editor integration
+- [ ] Implement image handling and media management
 
-### Current State Assessment
-- ✅ **Current Version**: v0.65.0 (Released November 1, 2025) — Authentication delivered (basic django-allauth integration; email delivery/setup not included). Development tooling and template improvements shipped alongside the auth work.
-- 🔄 **Next Release**: v0.66.0 - Wagtail Blog Module (`quickscale_modules.blog`) — Wagtail-based company site + blog (module-first). **Status**: Planned and prioritized as the immediate next task (module scaffold pending).
+**Module Configuration**:
+- [ ] Add interactive prompts for blog configuration during embed
+- [ ] Configure blog settings (posts per page, comment system, etc.)
+- [ ] Add blog URLs to generated project
+- [ ] Create initial blog migrations
 
-### Showcase HTML Theme: Module Showcase Architecture
+**Testing**:
+- [ ] Unit tests for blog models and views (70% coverage)
+- [ ] Integration tests for Wagtail integration
+- [ ] E2E tests for blog creation and publishing workflows
 
-**Strategic Decision (v0.65.0+)**: The Showcase HTML theme serves as a **living showcase** for all QuickScale modules, demonstrating capabilities whether modules are installed or not.
-
-**Rationale**:
-- **Marketing**: New users see what QuickScale offers immediately
-- **Educational**: Clear demonstrations of each module's features
-- **Composability**: Visual proof of QuickScale's modular architecture
-- **Discovery**: Users understand what modules to install next
-
-**Implementation Requirements** (All Module Releases):
-
-Every module release (v0.65.0+) MUST include:
-
-1. **Showcase Landing Page Updates**: Add module card to `index.html` with:
-   - Module name, description, and key features
-   - Installation status indicator (installed vs available)
-   - "Try Demo" link (works whether installed or not)
-   - "Install Module" instructions if not installed
-
-2. **Demo/Preview Pages**: Create static preview pages that work WITHOUT module installed:
-   - Show UI mockups/screenshots of module features
-   - Explain what the module does
-   - Link to installation instructions
-   - When module IS installed, link to actual functional pages
-
-3. **Navigation Integration**: Update base template navigation to include:
-   - "Modules" dropdown showing all available modules
-   - Visual indicators for installed vs available
-   - Links to demos/actual pages based on installation status
-
-**Landing Page Structure** (`index.html`):
-```html
-<section class="hero">
-  <h1>Welcome to {{ project_name }}</h1>
-  <p>Built with QuickScale - Compose your Django SaaS</p>
-</section>
-
-<section class="modules-showcase">
-  <h2>Available Modules</h2>
-
-  <!-- Auth Module Card -->
-  <div class="module-card installed">
-    <h3>🔐 Authentication</h3>
-    <p>User authentication with django-allauth</p>
-    <ul class="features">
-      <li>Email/password login</li>
-      <li>Password reset flows</li>
-      <li>Profile management</li>
-    </ul>
-    <a href="/auth/demo/" class="btn-demo">View Features</a>
-    <span class="status installed">✓ Installed</span>
-  </div>
-
-  <!-- Billing Module Card (example when NOT installed) -->
-  <div class="module-card available">
-    <h3>💳 Billing & Subscriptions</h3>
-    <p>Stripe integration with subscription management</p>
-    <ul class="features">
-      <li>Multiple pricing tiers</li>
-      <li>Usage tracking</li>
-      <li>Invoice management</li>
-    </ul>
-    <a href="/billing/preview/" class="btn-demo">Preview Features</a>
-    <span class="status available">Install with: quickscale embed --module billing</span>
-  </div>
-
-  <!-- More module cards... -->
-</section>
-```
-
-**Template Detection Pattern**:
-```django
-{% load static %}
-
-{# Check if module is installed #}
-{% if 'modules.auth' in settings.INSTALLED_APPS %}
-  <a href="{% url 'auth:login' %}">Go to Login</a>
-{% else %}
-  <a href="{% url 'auth_preview' %}">Preview Auth Features</a>
-  <p class="install-hint">Install: <code>quickscale embed --module auth</code></p>
-{% endif %}
-```
+**Documentation**:
+- [ ] Create blog module README with features and setup
+- [ ] Document blog configuration options
+- [ ] Add blog module to user manual
+- [ ] Create blog customization guide
 
 ---
 
-## Module Showcase Implementation Guide (All Modules v0.65.0+)
+### v0.67.0: HTMX Frontend Theme (Deferred)
 
-**MANDATORY REQUIREMENTS**: Every module release MUST update the Showcase HTML theme showcase. This section defines the standard pattern.
+**Status**: Deferred to post-v0.69.0 (after SaaS Feature Parity)
 
-### 1. Module Card Specification
+**Rationale**: Focus on completing core modules (auth, billing, teams) before adding new themes.
 
-Each module MUST have a card in `themes/showcase_html/templates/index.html.j2`:
+**See**: [user_manual.md Theme Selection](../technical/user_manual.md#theme-selection-v0610) for current theme architecture.
 
-```html
-<div class="module-card {% if module_installed %}installed{% else %}available{% endif %}">
-  <!-- Icon + Name -->
-  <h3>{{ module_icon }} {{ module_name }}</h3>
-
-  <!-- One-liner description -->
-  <p class="module-description">{{ short_description }}</p>
-
-  <!-- 3-5 key features -->
-  <ul class="features">
-    <li>{{ feature_1 }}</li>
-    <li>{{ feature_2 }}</li>
-    <li>{{ feature_3 }}</li>
-  </ul>
-
-  <!-- Action button -->
-  <a href="{{ demo_or_functional_url }}" class="btn-demo">
-    {% if module_installed %}View Features{% else %}Preview Demo{% endif %}
-  </a>
-
-  <!-- Status indicator -->
-  <span class="status {% if module_installed %}installed{% else %}available{% endif %}">
-    {% if module_installed %}
-      ✓ Installed
-    {% else %}
-      Install with: <code>quickscale embed --module {{ module_slug }}</code>
-    {% endif %}
-  </span>
-</div>
-```
-
-**Required Fields per Module**:
-- `module_icon`: Single emoji representing the module (🔐 for auth, 💳 for billing, 👥 for teams)
-- `module_name`: Display name (e.g., "Authentication", "Billing & Subscriptions")
-- `short_description`: One-line value proposition (max 80 chars)
-- `features`: 3-5 bullet points of key capabilities
-- `demo_or_functional_url`: `/auth/demo/` if installed, `/auth/preview/` if not
-- `module_slug`: CLI slug for embedding (e.g., "auth", "billing", "teams")
-
-### 2. Preview Page Specification
-
-Each module MUST create a preview page template: `themes/showcase_html/templates/{module}_preview.html.j2`
-
-**Structure**:
-```html
-{%raw%}{% extends "base.html" %}
-{% block title %}{{ module_name }} - Preview{% endblock %}
-
-{% block content %}
-<div class="preview-container">
-  <!-- Header -->
-  <header class="preview-header">
-    <h1>{{ module_icon }} {{ module_name }}</h1>
-    <p class="tagline">{{ expanded_description }}</p>
-  </header>
-
-  <!-- Installation Status Check -->
-  {% if module_installed %}
-    <div class="alert success">
-      ✓ This module is installed. <a href="{{ functional_url }}">Go to {{ module_name }}</a>
-    </div>
-  {% else %}
-    <div class="alert info">
-      This is a preview. Install with: <code>quickscale embed --module {{ module_slug }}</code>
-    </div>
-  {% endif %}
-
-  <!-- Feature Showcases (2-4 sections) -->
-  <section class="feature-showcase">
-    <h2>{{ feature_1_title }}</h2>
-    <div class="feature-demo">
-      <!-- Screenshot, mockup, or description -->
-      <img src="{% static 'images/previews/{{ module_slug }}_{{ feature_1_slug }}.png' %}" alt="{{ feature_1_title }}">
-      <p>{{ feature_1_description }}</p>
-    </div>
-  </section>
-
-  <!-- Repeat for features 2-4 -->
-
-  <!-- Installation Instructions -->
-  <section class="installation">
-    <h2>Installation</h2>
-    <ol>
-      <li>Run: <code>quickscale embed --module {{ module_slug }}</code></li>
-      <li>Answer configuration prompts</li>
-      <li>Restart your development server</li>
-      <li>Visit <code>{{ functional_url }}</code></li>
-    </ol>
-  </section>
-
-  <!-- Documentation Link -->
-  <footer class="preview-footer">
-    <a href="{{ module_docs_url }}" class="btn">View Full Documentation</a>
-  </footer>
-</div>
-{% endblock %}{%endraw%}
-```
-
-### 3. Context Processor for Module Detection
-
-**File**: `quickscale_core/src/quickscale_core/context_processors.py` (create if not exists)
-
-```python
-"""Context processors for QuickScale themes."""
-
-from django.conf import settings
-from typing import Dict, Any
-
-
-def installed_modules(request) -> Dict[str, Any]:
-    """Provide module installation status to all templates."""
-    installed_apps = settings.INSTALLED_APPS
-
-    return {
-        'modules': {
-            'auth': 'modules.auth' in installed_apps,
-            'billing': 'modules.billing' in installed_apps,
-            'teams': 'modules.teams' in installed_apps,
-            'notifications': 'modules.notifications' in installed_apps,
-        },
-        'quickscale_version': getattr(settings, 'QUICKSCALE_VERSION', 'unknown'),
-    }
-```
-
-**Register in generated project's settings**:
-```python
-TEMPLATES = [
-    {
-        'OPTIONS': {
-            'context_processors': [
-                # ... default processors
-                'quickscale_core.context_processors.installed_modules',
-            ],
-        },
-    },
-]
-```
-
-### 4. CSS Styles for Showcase (Required Additions)
-
-**File**: `themes/showcase_html/static/css/style.css.j2` (append these styles)
-
-```css
-/* Module Showcase Styles */
-.modules-showcase {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
-  gap: 2rem;
-  margin: 3rem 0;
-}
-
-.module-card {
-  background: #fff;
-  border: 2px solid #e5e7eb;
-  border-radius: 8px;
-  padding: 1.5rem;
-  transition: all 0.3s ease;
-}
-
-.module-card:hover {
-  border-color: #3b82f6;
-  box-shadow: 0 4px 12px rgba(0,0,0,0.1);
-  transform: translateY(-2px);
-}
-
-.module-card.installed {
-  border-color: #10b981;
-  background: #f0fdf4;
-}
-
-.module-card h3 {
-  margin: 0 0 0.5rem 0;
-  font-size: 1.5rem;
-}
-
-.module-card .module-description {
-  color: #6b7280;
-  margin: 0.5rem 0 1rem 0;
-}
-
-.module-card .features {
-  list-style: none;
-  padding: 0;
-  margin: 1rem 0;
-}
-
-.module-card .features li {
-  padding: 0.25rem 0;
-  padding-left: 1.5rem;
-  position: relative;
-}
-
-.module-card .features li:before {
-  content: "✓";
-  position: absolute;
-  left: 0;
-  color: #10b981;
-}
-
-.module-card .btn-demo {
-  display: inline-block;
-  background: #3b82f6;
-  color: white;
-  padding: 0.5rem 1rem;
-  border-radius: 4px;
-  text-decoration: none;
-  margin-top: 1rem;
-}
-
-.module-card .btn-demo:hover {
-  background: #2563eb;
-}
-
-.module-card .status {
-  display: block;
-  margin-top: 1rem;
-  padding: 0.5rem;
-  border-radius: 4px;
-  font-size: 0.875rem;
-}
-
-.module-card .status.installed {
-  background: #d1fae5;
-  color: #065f46;
-}
-
-.module-card .status.available {
-  background: #dbeafe;
-  color: #1e40af;
-}
-
-/* Preview Page Styles */
-.preview-container {
-  max-width: 900px;
-  margin: 0 auto;
-  padding: 2rem;
-}
-
-.preview-header {
-  text-align: center;
-  margin-bottom: 3rem;
-}
-
-.preview-header h1 {
-  font-size: 2.5rem;
-  margin-bottom: 0.5rem;
-}
-
-.preview-header .tagline {
-  font-size: 1.25rem;
-  color: #6b7280;
-}
-
-.alert {
-  padding: 1rem;
-  border-radius: 4px;
-  margin: 2rem 0;
-}
-
-.alert.success {
-  background: #d1fae5;
-  border: 1px solid #10b981;
-  color: #065f46;
-}
-
-.alert.info {
-  background: #dbeafe;
-  border: 1px solid #3b82f6;
-  color: #1e40af;
-}
-
-.feature-showcase {
-  margin: 3rem 0;
-}
-
-.feature-showcase h2 {
-  margin-bottom: 1rem;
-}
-
-.feature-demo img {
-  width: 100%;
-  border-radius: 8px;
-  margin-bottom: 1rem;
-  border: 1px solid #e5e7eb;
-}
-
-.installation {
-  background: #f9fafb;
-  padding: 2rem;
-  border-radius: 8px;
-  margin: 3rem 0;
-}
-
-.installation ol {
-  margin-left: 1.5rem;
-}
-
-.installation code {
-  background: #fff;
-  padding: 0.25rem 0.5rem;
-  border-radius: 4px;
-  font-family: monospace;
-  border: 1px solid #e5e7eb;
-}
-
-.preview-footer {
-  text-align: center;
-  margin-top: 3rem;
-}
-
-.preview-footer .btn {
-  display: inline-block;
-  background: #3b82f6;
-  color: white;
-  padding: 0.75rem 1.5rem;
-  border-radius: 4px;
-  text-decoration: none;
-  font-weight: 600;
-}
-
-.preview-footer .btn:hover {
-  background: #2563eb;
-}
-```
-
-### 5. Module Release Checklist (Showcase Updates)
-
-When releasing a new module, complete these showcase tasks:
-
-- [ ] **Add module card** to `themes/showcase_html/templates/index.html.j2`:
-  - [ ] Choose appropriate emoji icon
-  - [ ] Write compelling one-liner description
-  - [ ] List 3-5 key features
-  - [ ] Configure demo/preview URL
-  - [ ] Add installation command
-- [ ] **Create preview page** `themes/showcase_html/templates/{module}_preview.html.j2`:
-  - [ ] Write expanded module description
-  - [ ] Create 2-4 feature showcase sections
-  - [ ] Add mockup images or descriptions
-  - [ ] Include installation instructions
-  - [ ] Link to module documentation
-- [ ] **Update context processor** in `quickscale_core/context_processors.py`:
-  - [ ] Add module slug to `installed_modules()` dict
-- [ ] **Add preview route** to generated project's `urls.py` template:
-  - [ ] Create view returning preview page
-  - [ ] URL pattern: `/{module}/preview/`
-- [ ] **Test showcase**:
-  - [ ] Generate new project without module
-  - [ ] Verify module card shows "Available" status
-  - [ ] Verify preview page loads correctly
-  - [ ] Embed module via CLI
-  - [ ] Verify module card updates to "Installed"
-  - [ ] Verify links now point to functional pages
-- [ ] **Screenshot/mockups** (if applicable):
-  - [ ] Create mockup images for key features
-  - [ ] Save to `themes/showcase_html/static/images/previews/`
-  - [ ] Optimize images (compress, appropriate size)
-
-### 6. Module-Specific Examples
-
-**Auth Module (v0.65.0)**:
-- Icon: 🔐
-- Name: Authentication
-- Description: "User authentication with django-allauth"
-- Features: Email/password login, Password reset flows, Profile management
-- Preview URL: `/auth/preview/`
-- Functional URL: `/accounts/login/` (when installed)
-
-**Billing Module (v0.68.0)**:
-- Icon: 💳
-- Name: Billing & Subscriptions
-- Description: "Stripe integration with subscription management"
-- Features: Multiple pricing tiers, Usage tracking, Invoice management, Webhook handling
-- Preview URL: `/billing/preview/`
-- Functional URL: `/billing/plans/` (when installed)
-
-**Teams Module (v0.69.0)**:
-- Icon: 👥
-- Name: Teams & Multi-tenancy
-- Description: "Collaborative workspaces with role-based permissions"
-- Features: Team creation, Member invitations, Role management, Row-level security
-- Preview URL: `/teams/preview/`
-- Functional URL: `/teams/` (when installed)
-
----
-
-### v0.64.0: Theme Rename (`starter_html` → `showcase_html`)
-**: Theme Rename — Atomic rename from `starter_*` to `showcase_*`. See `docs/releases/release-v0.64.0-implementation.md` for details and migration notes.
-
----
----
-
-**: Authentication Module (basic) & Development Tooling — Delivered a django-allauth-based authentication integration and a set of development/tooling and template improvements. NOTE: email sending/delivery configuration was intentionally left out of the initial auth delivery and remains a follow-up task. See `docs/releases/release-v0.65.0-implementation.md` for implementation notes (if present) or the release plan document.
-
-**Note**: The originally planned "Showcase Architecture" work (module cards, preview pages) has been deferred to v0.67.0 to prioritize critical auth module fixes and development tooling improvements.
-
----
-
-### v0.67.0: Showcase Architecture - Module Discovery & Preview System
-
-**Objective**: Transform the Showcase HTML theme into a living demonstration platform for all QuickScale modules. Establish the showcase pattern that all future modules will follow.
-
-**Timeline**: After v0.66.0
-**Status**: Planned - Deferred from v0.65.0 to prioritize auth fixes
-
-**Scope Boundaries**:
-- ✅ **IN**: Showcase landing page (`index.html.j2`) with module cards
-- ✅ **IN**: Auth preview page (`auth_preview.html.j2`) with feature demonstrations
-- ✅ **IN**: Placeholder cards for billing, teams, notifications (marked "Coming Soon")
-- ✅ **IN**: Module detection context processor enhancements
-- ✅ **IN**: Showcase CSS styles (responsive grid, status badges)
-- ✅ **IN**: Preview page URL routing for all modules
-- ✅ **IN**: Minimum 70% test coverage for new components
-- ❌ **OUT**: New modules (billing/teams remain v0.68.0+)
-
-**Implementation Tasks**: See detailed plan in `docs/releases/release-v0.65.0-plan.md` (original scope for v0.65.0).
+**When Implemented**, tasks will include:
+- HTMX + Alpine.js base templates
+- Port auth, billing, teams modules to HTMX
+- Progressive enhancement patterns
 
 ---
 
 ### v0.68.0: `quickscale_modules.billing` - Billing Module
 
-**Objective**: Create reusable billing module wrapping dj-stripe for Stripe subscriptions, plans, pricing tiers, webhook handling, and invoice management. Showcase HTML theme only. **INCLUDES**: Showcase integration for billing features.
+**Stripe Integration**:
+- [ ] Set up dj-stripe for Stripe API integration
+- [ ] Configure webhook endpoints for payment events
+- [ ] Implement subscription lifecycle management
+- [ ] Add payment method handling (cards, etc.)
 
-**Timeline**: After v0.67.0 (showcase architecture)
+**Pricing & Plans**:
+- [ ] Create pricing tier models and admin
+- [ ] Implement plan creation and management
+- [ ] Add usage tracking and limits
+- [ ] Create pricing page templates
 
-**Status**: Planned - Billing module implementation
+**Subscription Management**:
+- [ ] Build subscription dashboard for users
+- [ ] Implement plan upgrades/downgrades
+- [ ] Add billing history and invoices
+- [ ] Create cancellation and pause functionality
 
-**Scope**: See [Module Creation Guide](#module-creation-guide-for-v05x0-releases) and [competitive_analysis.md Billing Requirements](../overview/competitive_analysis.md#4-stripe-integration--subscription-management).
-
-**Implementation Tasks**: TBD - Will be detailed in release planning phase.
-
-**Required Showcase Updates** (MANDATORY for this release):
-- [ ] Add billing module card to `index.html.j2` with:
-  - [ ] Module description: "Stripe integration with subscription management"
-  - [ ] Key features: Multiple pricing tiers, usage tracking, invoice management, webhook handling
-  - [ ] Demo link to billing preview page
-  - [ ] Installation status indicator
-- [ ] Create `billing_preview.html.j2` template showing:
-  - [ ] Pricing page mockup (Free, Pro, Enterprise tiers example)
-  - [ ] Subscription management dashboard mockup
-  - [ ] Invoice history mockup
-  - [ ] Installation instructions if not installed
-- [ ] Update `style.css.j2` for billing-specific showcase styles (if needed)
-- [ ] Update navigation menu to include billing demo link
+**Testing**:
+- [ ] Unit tests for billing models and logic
+- [ ] Integration tests with Stripe webhooks
+- [ ] E2E tests for subscription flows
 
 ---
 
 ### v0.69.0: `quickscale_modules.teams` - Teams/Multi-tenancy Module
 
-**Objective**: Create reusable teams module with multi-tenancy patterns, role-based permissions, invitation system, and row-level security. Showcase HTML theme only. **INCLUDES**: Showcase integration for teams features.
+**Team Management**:
+- [ ] Create team and membership models
+- [ ] Implement team creation and settings
+- [ ] Add member invitation system
+- [ ] Build team dashboard interface
 
-**Timeline**: After v0.68.0 (billing)
+**Role-Based Permissions**:
+- [ ] Define role hierarchy (Owner, Admin, Member)
+- [ ] Implement permission checking decorators
+- [ ] Add role assignment and management
+- [ ] Create permission-based UI elements
 
-**Status**: 🎯 **SAAS FEATURE PARITY MILESTONE** - At this point QuickScale matches SaaS Pegasus on core features (auth, billing, teams).
+**Multi-Tenancy**:
+- [ ] Implement row-level security patterns
+- [ ] Add team-scoped data isolation
+- [ ] Create tenant-aware querysets
+- [ ] Handle cross-team data access
 
-**Scope**: See [Module Creation Guide](#module-creation-guide-for-v05x0-releases) and [competitive_analysis.md Teams Requirements](../overview/competitive_analysis.md#6-teammulti-tenancy-pattern).
-
-**Implementation Tasks**: TBD - Will be detailed in release planning phase.
-
-**Required Showcase Updates** (MANDATORY for this release):
-- [ ] Add teams module card to `index.html.j2` with:
-  - [ ] Module description: "Multi-tenancy with team collaboration"
-  - [ ] Key features: Role-based permissions, team invitations, row-level security, member management
-  - [ ] Demo link to teams preview page
-  - [ ] Installation status indicator
-- [ ] Create `teams_preview.html.j2` template showing:
-  - [ ] Team dashboard mockup (team list, member count)
-  - [ ] Invitation flow mockup (send/accept invitations)
-  - [ ] Role management mockup (Owner, Admin, Member permissions)
-  - [ ] Installation instructions if not installed
-- [ ] Update `style.css.j2` for teams-specific showcase styles (if needed)
-- [ ] Update navigation menu to include teams demo link
-- [ ] **Showcase now complete**: All 3 core modules (auth, billing, teams) have showcase cards
+**Testing**:
+- [ ] Unit tests for team models and permissions
+- [ ] Integration tests for invitation flows
+- [ ] E2E tests for multi-tenancy scenarios
 
 ---
 
-### v0.70.0: HTMX Frontend Theme
+### v0.70.0: HTMX Frontend Theme (Deferred)
 
-**Objective**: Create HTMX + Alpine.js theme variant and port existing modules (auth, billing, teams) to this theme. **INCLUDES**: Module showcase for HTMX theme.
+**Status**: Deferred to post-v0.69.0 (after SaaS Feature Parity)
 
-**Timeline**: After v0.69.0 (teams)
+**Rationale**: Focus on completing core modules (auth, billing, teams) before adding new themes.
 
-**Status**: Planned - Second theme variant for server-rendered, low-JS applications
+**See**: [user_manual.md Theme Selection](../technical/user_manual.md#theme-selection-v0610) for current theme architecture.
 
-**Scope**:
-- Create `themes/showcase_htmx/` directory structure
+**When Implemented**, tasks will include:
 - HTMX + Alpine.js base templates
-- **Create module showcase landing page** (HTMX version with dynamic loading)
-- Port auth module components (login, signup, account management)
-- Port billing module components (subscription management, pricing pages)
-- Port teams module components (team dashboard, invitations, roles)
-- **Create preview pages for all 3 modules** (HTMX-enhanced)
-- Tailwind CSS or similar modern CSS framework
+- Port auth, billing, teams modules to HTMX
 - Progressive enhancement patterns
 
-**Showcase Requirements** (HTMX Theme):
-- [ ] Create `index.html.j2` for HTMX theme with module showcase
-- [ ] Use HTMX for dynamic module card loading (show installed vs available)
-- [ ] Create `auth_preview.html.j2`, `billing_preview.html.j2`, `teams_preview.html.j2` with HTMX interactions
-- [ ] Add Alpine.js for client-side interactivity (collapsible sections, tabs)
-- [ ] Reuse module detection context processor from HTML theme
+---
 
-**Success Criteria**:
- - `quickscale init myproject --theme showcase_htmx` generates HTMX-based project
-- All existing modules (auth/billing/teams) work with HTMX theme
-- Backend code remains unchanged (100% theme-agnostic)
-- Documentation includes HTMX theme examples
+### v0.71.0: React Frontend Theme (Deferred)
 
-**Implementation Tasks**: TBD - Will be detailed in release planning phase.
+**Status**: Deferred to post-v0.69.0 (after SaaS Feature Parity)
+
+**Rationale**: Focus on completing core modules (auth, billing, teams) before adding new themes.
+
+**See**: [user_manual.md Theme Selection](../technical/user_manual.md#theme-selection-v0610) for current theme architecture.
+
+**When Implemented**, tasks will include:
+- React + TypeScript + Vite setup
+- Django REST Framework API endpoints
+- Port auth, billing, teams modules to React
+- Responsive React interfaces
 
 ---
 
-### v0.71.0: React Frontend Theme
+### v0.72.0: `quickscale_modules.notifications` - Notifications Module (Deferred)
 
-**Objective**: Create React + TypeScript SPA theme variant and port existing modules (auth, billing, teams) to this theme. **INCLUDES**: Module showcase for React theme.
+**Email Backend Integration**:
+- [ ] Set up django-anymail for multiple email providers
+- [ ] Configure transactional email templates
+- [ ] Implement async email sending with Celery
+- [ ] Add email backend failover handling
 
-**Timeline**: After v0.70.0 (HTMX theme)
+**Notification System**:
+- [ ] Create notification models and admin
+- [ ] Implement email template management
+- [ ] Add notification scheduling and queuing
+- [ ] Create notification dashboard for users
 
-**Status**: Planned - Third theme variant for modern SPA applications
+**Multi-Theme Support**:
+- [ ] Port notifications to HTML theme
+- [ ] Port notifications to HTMX theme
+- [ ] Port notifications to React theme
+- [ ] Ensure theme-agnostic backend code
 
-**Scope**:
-- Create `themes/showcase_react/` directory structure
-- React + TypeScript + Vite base setup
-- **Create module showcase landing page** (React SPA with routing)
-- Django REST Framework API endpoints for auth/billing/teams
-- Port auth module components (login, signup, account management)
-- Port billing module components (subscription management, pricing pages)
-- Port teams module components (team dashboard, invitations, roles)
-- **Create preview pages for all 3 modules** (React components)
-- Modern component library (Shadcn/UI or similar)
-- State management (React Query, Zustand, or similar)
-
-**Showcase Requirements** (React Theme):
-- [ ] Create `App.tsx` with module showcase landing page
-- [ ] Use React Router for navigation (/, /auth/preview, /billing/preview, /teams/preview)
-- [ ] Create reusable `ModuleCard` component showing installation status
-- [ ] Create `AuthPreview.tsx`, `BillingPreview.tsx`, `TeamsPreview.tsx` components
-- [ ] Add API endpoint to check module installation status (`/api/modules/status/`)
-- [ ] Use React Query for fetching module status
-- [ ] Responsive design with Tailwind CSS or similar
-
-**Success Criteria**:
-- `quickscale init myproject --theme showcase_react` generates React SPA project
-- Module showcase works dynamically (shows installed vs available modules)
-- All existing modules (auth/billing/teams) work with React theme
-- Backend code remains unchanged (100% theme-agnostic)
-- API endpoints auto-generated or clearly documented
-- Documentation includes React theme examples
-
-**Implementation Tasks**: TBD - Will be detailed in release planning phase.
-
----
-
-### v0.72.0: `quickscale_modules.notifications` - Notifications Module
-
-**Objective**: Create reusable notifications module wrapping django-anymail for multiple email backends, transactional templates, and async email via Celery. All 3 themes supported (Showcase HTML, HTMX, React).
-
-**Timeline**: After v0.70.0 (React theme)
-
-**Status**: Detailed implementation plan to be created before starting work.
-
-**Scope**: See [Module Creation Guide](#module-creation-guide-for-v05x0-releases) and [competitive_analysis.md Email Requirements](../overview/competitive_analysis.md#8-email-infrastructure--templates).
-
-**Implementation Tasks**: TBD - Will be detailed in release planning phase.
+**Testing**:
+- [ ] Unit tests for email sending
+- [ ] Integration tests with email providers
+- [ ] Test async processing with Celery
+- [ ] Cross-theme compatibility testing
 
 ---
 
 ### v0.73.0: Advanced Module Management Features
 
-**Objective**: Enhance module management with batch operations and advanced features.
+**Batch Operations**:
+- [ ] Implement `quickscale update --all` command
+- [ ] Add batch conflict resolution
+- [ ] Create progress indicators for batch operations
+- [ ] Implement rollback for failed batch updates
 
-**Timeline**: After v0.72.0 (notifications)
+**Status & Discovery**:
+- [ ] Create `quickscale status` command
+- [ ] Implement `quickscale list-modules` command
+- [ ] Add module version tracking
+- [ ] Create module compatibility checking
 
-**Rationale**: Basic embed/update/push commands implemented in v0.62.0. This release adds convenience features based on real usage patterns.
-
-**Scope**:
-- Batch operations: `quickscale update --all` (update all installed modules)
-- Status command: `quickscale status` (show installed modules and versions)
-- Module discovery: `quickscale list-modules` (show available modules)
-- Enhanced conflict resolution workflows
-- Improved diff previews and change summaries
-
-**Success Criteria**:
-- Batch updates work safely across multiple modules
-- Clear status overview of module versions
-- Easy discovery of new available modules
-- Better UX for handling merge conflicts
-
-**Implementation Tasks**: TBD - Will be detailed in release planning phase.
-
----
-
-#### **Technical Implementation Notes (v0.62.0 Split Branch Foundation)**
-
-**1. Split Branch Architecture**:
-
-QuickScale monorepo maintains split branches for each module:
-```
-Branches:
-├── main                       # All development happens here
-├── splits/auth-module         # Auto-generated from quickscale_modules/auth/
-├── splits/billing-module      # Auto-generated from quickscale_modules/billing/
-└── splits/teams-module        # Auto-generated from quickscale_modules/teams/
-```
-
-**2. GitHub Actions Auto-Split Workflow**:
-
-```yaml
-# .github/workflows/split-modules.yml
-name: Split Module Branches
-on:
-  push:
-    tags:
-      - 'v*'
-
-jobs:
-  split:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v3
-        with:
-          fetch-depth: 0  # Full history for split
-
-      - name: Split auth module
-        run: |
-          git subtree split --prefix=quickscale_modules/auth -b splits/auth-module --rejoin
-          git push origin splits/auth-module
-
-      - name: Split billing module
-        run: |
-          git subtree split --prefix=quickscale_modules/billing -b splits/billing-module --rejoin
-          git push origin splits/billing-module
-```
-
-**3. Module Configuration Tracking**:
-
-Created in user's project at `.quickscale/config.yml`:
-```yaml
-# QuickScale module configuration
-default_remote: https://github.com/<org>/quickscale.git
-
-# Installed modules
-modules:
-  auth:
-    prefix: modules/auth
-    branch: splits/auth-module
-    installed_version: v0.62.0
-    installed_at: 2025-10-23
-  billing:
-    prefix: modules/billing
-    branch: splits/billing-module
-    installed_version: v0.64.0
-    installed_at: 2025-10-25
-```
-
-**4. Core Commands (Implemented in v0.61.0)**:
-
-`quickscale embed --module auth` - Embed module via split branch
-- **Implementation**: `git subtree add --prefix=modules/auth <remote> splits/auth-module --squash`
-- **Technical details**:
-  - Check if git repository
-  - Verify module exists (check remote branch)
-  - Verify no existing `modules/auth/` directory
-  - Add subtree from split branch
-  - Update `.quickscale/config.yml` with module metadata
-  - Show success message with INSTALLED_APPS instructions
-- **Example**:
-```bash
-cd myproject/
-quickscale embed --module auth
-# Output:
-# Embedding auth module from splits/auth-module...
-# Module installed to: modules/auth/
-#
-# Next steps:
-# 1. Add to INSTALLED_APPS in settings/base.py:
-#    INSTALLED_APPS = [..., "modules.auth"]
-# 2. Run migrations: python manage.py migrate
-```
-
-`quickscale update` - Update all installed modules
-- **Implementation**: Read `.quickscale/config.yml`, run `git subtree pull` for each module
-- **Technical details**:
-  - Read installed modules from config
-  - For each module: `git subtree pull --prefix=modules/{name} <remote> splits/{name}-module --squash`
-  - Show diff summary before pulling
-  - Handle conflicts per module
-  - Update version in config
-- **Example**:
-```bash
-cd myproject/
-quickscale update
-# Output:
-# Found 2 installed modules: auth, billing
-#
-# Updating auth module...
-#   - Fixed email verification bug
-#   - Added Google OAuth provider
-#
-# Updating billing module...
-#   - Updated Stripe API to latest version
-#
-# Continue? (y/N):
-```
-
-`quickscale push` - Contribute improvements to specific module
-- **Implementation**: `git subtree push --prefix=modules/auth <remote> feature/my-improvement`
-- **Technical details**:
-  - Detect which module has changes
-  - Push to feature branch in main repo (not split branch)
-  - Maintainer merges to main, auto-split updates split branch
-- **Example**:
-```bash
-cd myproject/
-quickscale push --module auth
-# Output:
-# Detected changes in modules/auth/
-# Branch name [feature/auth-improvements]:
-# Pushing to https://github.com/<org>/quickscale.git...
-#
-# Create PR: https://github.com/<org>/quickscale/pull/new/feature/auth-improvements
-```
-
-**5. Implementation Structure (v0.61.0)**:
-
-`quickscale_cli/commands/module_commands.py`:
-```python
-class ModuleEmbedCommand(Command):
-    """Embed module via git subtree from split branch."""
-
-    def execute(self, module_name: str, remote: str = None) -> None:
-        # 1. Validate git repository
-        # 2. Check module exists on remote
-        # 3. Verify no existing modules/{module_name}/
-        # 4. Verify working directory clean
-        # 5. Execute: git subtree add --prefix=modules/{module_name}
-        #             {remote} splits/{module_name}-module --squash
-        # 6. Update .quickscale/config.yml
-        # 7. Show success message with INSTALLED_APPS instructions
-```
-
-`quickscale_cli/utils/git_utils.py`:
-```python
-def is_git_repo() -> bool:
-    """Check if current directory is a git repository."""
-
-def is_working_directory_clean() -> bool:
-    """Check if there are uncommitted changes."""
-
-def check_remote_branch_exists(remote: str, branch: str) -> bool:
-    """Check if branch exists on remote."""
-
-def run_git_subtree_add(prefix: str, remote: str, branch: str) -> None:
-    """Execute git subtree add with error handling."""
-
-def run_git_subtree_pull(prefix: str, remote: str, branch: str) -> None:
-    """Execute git subtree pull with error handling."""
-```
-
-#### **Implementation Tasks (v0.61.0)**
-
-**Module Management Commands**:
-- [ ] Implement `quickscale embed --module <name>` command
-- [ ] Implement `quickscale update` command (updates installed modules only)
-- [ ] Implement `quickscale push --module <name>` command
-- [ ] Create `module_commands.py` with embed/update/push logic
-- [ ] Create `git_utils.py` with subtree helpers
-- [ ] Add `.quickscale/config.yml` configuration tracking
-- [ ] Implement safety checks (clean working directory, module exists, etc.)
-- [ ] Add interactive confirmation prompts with diff previews
-
-**GitHub Actions - Split Branch Automation**:
-- [ ] Create `.github/workflows/split-modules.yml`
-- [ ] Auto-split on version tags (v0.*)
-- [ ] Split each module: auth, billing, teams, notifications
-- [ ] Push splits to `splits/{module}-module` branches
-- [ ] Add workflow tests to verify splits work
-
-**Module Safety Features**:
-- [ ] Pre-update diff preview (per module)
-- [ ] Verify only `modules/*` affected by updates
-- [ ] Conflict detection and handling (per module)
-- [ ] Rollback/abort functionality
-- [ ] Post-update summary of changes
-
-**Documentation**:
-- [ ] Update `user_manual.md` with module embed/update workflow
-- [ ] Update `decisions.md` CLI Command Matrix (mark v0.61.0 commands as IN)
-- [ ] Document split branch architecture
-- [ ] Create "Module Management Guide"
-- [ ] Document conflict resolution workflow
-- [ ] Add troubleshooting for common git issues
+**Enhanced UX**:
+- [ ] Improve diff previews and summaries
+- [ ] Add interactive conflict resolution
+- [ ] Implement better error messages
+- [ ] Create progress bars and status updates
 
 **Testing**:
-- [ ] Unit tests for module commands (70% coverage per file)
-- [ ] Integration tests with test git repositories and split branches
-- [ ] E2E test: embed module → update → verify isolation
-- [ ] Test conflict scenarios
-- [ ] Test error handling (not a git repo, dirty working directory, module doesn't exist)
-- [ ] Automated test: verify user's templates/ and project code never modified by module updates
+- [ ] Test batch operations with multiple modules
+- [ ] Verify status and discovery commands
+- [ ] Test conflict resolution workflows
+- [ ] E2E testing of enhanced UX features
 
 ---
 
@@ -1387,5 +583,30 @@ If YAML config proves useful in Phase 2:
   - [ ] Preview generated project
 
 **IMPORTANT**: v1.0.0+ is OPTIONAL. Many successful solo developers and agencies never need a community platform. Evaluate carefully before investing in marketplace features.
+
+---
+
+## REFERENCE MATERIAL
+
+This section contains implementation guides, patterns, and reference documentation for module development and configuration.
+
+---
+
+### Module Configuration Strategy
+
+**Status**: Implemented in v0.63.0+ (Interactive Prompts)
+
+Modules require configuration when embedded (e.g., auth signup enabled/disabled, billing plan defaults). QuickScale uses a **two-phase approach**:
+
+- **Phase 1 (MVP: v0.63.0-v0.69.0)**: Interactive prompts during `embed` command (IMPLEMENTED)
+- **Phase 2 (Post-MVP: v1.0.0+)**: Optional YAML configuration file support (DEFERRED)
+
+**For complete specifications**, see [decisions.md: Module Configuration Strategy](./decisions.md#module-configuration-strategy), which includes:
+- Interactive prompt workflow examples
+- Configuration state tracking (`.quickscale/config.yml`)
+- YAML configuration schema (Post-MVP)
+- Implementation notes for module developers
+
+**Why this is in decisions.md**: Configuration strategy affects multiple modules and is an architectural decision that must remain consistent across the codebase.
 
 ---
