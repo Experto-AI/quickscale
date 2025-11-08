@@ -121,8 +121,8 @@ cd myapp
 
 # Or choose a specific theme (v0.61.0+)
 # quickscale init myapp --theme showcase_html # Default Showcase HTML theme
-# quickscale init myapp --theme showcase_htmx  # HTMX theme (coming in v0.67.0)
-# quickscale init myapp --theme showcase_react # React theme (coming in v0.68.0)
+# quickscale init myapp --theme showcase_htmx  # HTMX theme (coming in v0.70.0)
+# quickscale init myapp --theme showcase_react # React theme (coming in v0.71.0)
 ```
 
 **Choose your development workflow:**

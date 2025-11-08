@@ -38,7 +38,7 @@ class TestCLIThemeSelection:
             )
             assert result.exit_code == 1
             assert "Theme 'showcase_htmx' is not yet implemented" in result.output
-            assert "Coming in v0.67.0" in result.output
+            assert "Coming in v0.70.0" in result.output
 
     def test_init_with_react_theme_shows_error(self, tmp_path):
         """Init command should show helpful error for unimplemented react theme"""
@@ -49,7 +49,7 @@ class TestCLIThemeSelection:
             )
             assert result.exit_code == 1
             assert "Theme 'showcase_react' is not yet implemented" in result.output
-            assert "Coming in v0.68.0" in result.output
+            assert "Coming in v0.71.0" in result.output
 
     def test_init_with_invalid_theme(self, tmp_path):
         """Init command should reject completely invalid theme names"""

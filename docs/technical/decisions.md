@@ -440,23 +440,29 @@ Other documents (README.md, roadmap.md, scaffolding.md, commercial.md) MUST refe
 - 📋 GitHub Actions for automatic split branch creation
 - 📋 `.quickscale/config.yml` module tracking
 
-**v0.63.0-v0.66.0 - Module Development:**
-- 📋 `quickscale_modules.auth` - Authentication module core (v0.63.0)
-- 📋 `quickscale_modules.auth` - Email verification & production email (v0.64.0)
-- 📋 `quickscale_modules.billing` - Billing module (v0.65.0)
-- 📋 `quickscale_modules.teams` - Teams/multi-tenancy module (v0.66.0)
+**v0.63.0-v0.69.0 - Core Module Track:**
+- ✅ `quickscale_modules.auth` - Authentication module core (v0.63.0)
+- � `quickscale_modules.blog` - Wagtail-powered blog module (v0.66.0, in development)
+- 📋 `quickscale_modules.billing` - Stripe billing module (v0.68.0)
+- 📋 `quickscale_modules.teams` - Teams/multi-tenancy module (v0.69.0)
 
-**v0.67.0-v0.68.0 - Additional Themes:**
-- 📋 HTMX theme variant with auth/billing/teams components (v0.67.0)
-- 📋 React theme variant with auth/billing/teams components (v0.68.0)
+**v0.70.0-v0.71.0 - Additional Themes:**
+- 📋 HTMX theme variant with auth/billing/teams components (v0.70.0)
+- 📋 React theme variant with auth/billing/teams components (v0.71.0)
 
-**v0.69.0 - Cross-Theme Module:**
-- 📋 `quickscale_modules.notifications` - Email infrastructure for all 3 themes (v0.69.0)
+**v0.72.0 - Cross-Theme Module:**
+- 📋 `quickscale_modules.notifications` - Email infrastructure for all 3 themes (v0.72.0)
 
-**v0.70.0 - Advanced Module Management:**
+**v0.73.0 - Advanced Module Management:**
 - 📋 `quickscale update --all` - Batch update all modules
 - 📋 `quickscale status` - Show installed module versions
 - 📋 `quickscale list-modules` - Discover available modules
+- 📋 Enhanced conflict handling and progress indicators
+
+**v0.74.0 - Module Workflow Validation:**
+- 📋 Real-world validation of module updates across multiple projects
+- 📋 Safety automation to ensure user code is untouched during updates
+- 📋 Documented rollback procedures and case studies
 
 **Post-MVP (Future):**
 - ❌ `quickscale validate` - YAML configuration validation (requires config system)

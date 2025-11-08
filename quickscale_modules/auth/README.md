@@ -37,8 +37,8 @@ Available modules in navigation:
 
 - **Email Verification** (v0.64.0): Production email workflows
 - **Social Providers** (Post-MVP): Google, GitHub, Facebook authentication
-- **HTMX Theme** (v0.67.0): HTMX + Alpine.js theme variant
-- **React Theme** (v0.68.0): React + TypeScript SPA theme variant
+- **HTMX Theme** (v0.70.0): HTMX + Alpine.js theme variant
+- **React Theme** (v0.71.0): React + TypeScript SPA theme variant
 
 ## Installation
 

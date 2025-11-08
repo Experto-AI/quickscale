@@ -338,7 +338,7 @@ quickscale_core/
 │   │           │   └── static/
 │   │           │       ├── css/style.css.j2
 │   │           │       └── images/favicon.svg.j2
-│   │           ├── showcase_htmx/   # HTMX + Alpine.js theme (v0.66.0)
+│   │           ├── showcase_htmx/   # HTMX + Alpine.js theme (v0.70.0)
 │   │           │   ├── templates/
 │   │           │   │   ├── base.html.j2
 │   │           │   │   └── index.html.j2
@@ -346,7 +346,7 @@ quickscale_core/
 │   │           │   │   ├── css/
 │   │           │   │   └── js/
 │   │           │   └── package.json.j2  # Tailwind, Alpine.js
-│   │           └── showcase_react/  # React + TypeScript theme (v0.67.0)
+│   │           └── showcase_react/  # React + TypeScript theme (v0.71.0)
 │   │               ├── templates/  # Minimal Django templates (API only)
 │   │               │   └── index.html.j2  # React mount point
 │   │               └── frontend/
@@ -555,7 +555,7 @@ myapp/
 ├── .gitignore
 └── README.md                   # Next steps guidance
 
-# For React theme (v0.67.0+):
+# For React theme (v0.71.0+):
 ├── frontend/                    # React + TypeScript + Vite
 │   ├── src/
 │   │   ├── main.tsx

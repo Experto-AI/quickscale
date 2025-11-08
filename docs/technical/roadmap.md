@@ -66,11 +66,15 @@ QuickScale follows an evolution-aligned roadmap that starts as a personal toolki
 - **v0.69.0:** SaaS Feature Parity (auth, billing, teams) 🎯
 - **v1.0.0+:** Community platform (if demand exists)
 
+**Status:**
+- **Current Status:** v0.66.0 (In Development) — Blog module with Wagtail CMS integration.
+- **Next Milestone:** v0.69.0 - SaaS Feature Parity (auth, billing, teams modules complete)
+
 ## Notes and References
 
 **Target Audience:** Development team, project managers, stakeholders tracking progress
 
-- **Previous Releases:** [release notes](./releases.md).
+- **Completed Releases:** See [CHANGELOG.md](../../CHANGELOG.md)
 - **Technical SSOT**: [decisions.md](./decisions.md)
 - **Scaffolding SSOT**: [scaffolding.md](./scaffolding.md)
 - **Strategic Vision**: [quickscale.md](../overview/quickscale.md)
@@ -79,9 +83,7 @@ QuickScale follows an evolution-aligned roadmap that starts as a personal toolki
 
 ## ROADMAP
 
-**Current Status:** v0.66.0 (In Development) — Blog module with Wagtail CMS integration.
-**Next Milestone:** v0.69.0 - SaaS Feature Parity (auth, billing, teams modules complete)
-**Completed Releases:** See [CHANGELOG.md](../../CHANGELOG.md) and [docs/releases/](../releases/) for v0.61.0-v0.65.0 details
+List of upcoming releases with detailed implementation tasks:
 
 ### v0.66.0: Blog Module (`quickscale_modules.blog`) — IN DEVELOPMENT
 
