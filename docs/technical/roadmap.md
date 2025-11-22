@@ -67,8 +67,10 @@ QuickScale follows an evolution-aligned roadmap that starts as a personal toolki
 - **v1.0.0+:** Community platform (if demand exists)
 
 **Status:**
-- **Current Status:** v0.66.0 (In Development) — Blog module with Wagtail CMS integration.
-- **Next Milestone:** v0.69.0 - SaaS Feature Parity (auth, billing, teams modules complete)
+- **Current Status:** v0.66.0 — Blog module with custom Django implementation
+- **Validation:** Real estate project testing blog and listings modules
+- **Next Milestone:** v0.67.0 - Listings module (generic multi-vertical pattern)
+- **SaaS Parity:** v0.69.0 - auth, billing, teams modules complete
 
 ## Notes and References
 
@@ -85,38 +87,180 @@ QuickScale follows an evolution-aligned roadmap that starts as a personal toolki
 
 List of upcoming releases with detailed implementation tasks:
 
-### v0.66.0: Blog Module (`quickscale_modules.blog`) — IN DEVELOPMENT
+### v0.66.0: Blog Module (`quickscale_modules.blog`)
 
 **Status**: 🚧 In Development
 
+**Strategic Context**: Custom lightweight Django blog built for QuickScale philosophy. No suitable Django-native blog exists (zinnia unmaintained, Puput too heavy). Provides immediate validation via real estate project while maintaining generic reusability for any vertical.
+
 **Blog Module Development**:
-- [ ] Integrate Wagtail CMS for blog functionality
-- [ ] Create blog models (Post, Category, Tag, Author)
-- [ ] Implement blog views and URL routing
-- [ ] Design blog templates for showcase_html theme
-- [ ] Add rich text editor integration
-- [ ] Implement image handling and media management
+- [ ] Create blog models in `quickscale_modules/blog/models.py`:
+  - Post model (title, slug, content, author, published_date, status, featured_image)
+  - Category model (name, slug, description)
+  - Tag model (name, slug)
+  - AuthorProfile model (user, bio, avatar)
+  - **Acceptance Criteria**: All models have __str__ methods, Meta ordering, and admin registration
+- [ ] Implement Markdown editor integration in `quickscale_modules/blog/fields.py`:
+  - Use django-markdownx for WYSIWYG Markdown editing
+  - Configure image upload handling
+  - **Acceptance Criteria**: Editor renders in admin, supports image uploads, preview functionality works
+- [ ] Build views in `quickscale_modules/blog/views.py`:
+  - PostListView (paginated, 10 posts per page)
+  - PostDetailView (single post with category/tags)
+  - CategoryListView (posts filtered by category)
+  - TagListView (posts filtered by tag)
+  - **Acceptance Criteria**: All views handle published vs draft status, pagination works
+- [ ] Add URL routing in `quickscale_modules/blog/urls.py`:
+  - `/blog/` - post list
+  - `/blog/<slug>/` - post detail
+  - `/blog/category/<slug>/` - category list
+  - `/blog/tag/<slug>/` - tag list
+  - `/blog/feed/` - RSS feed
+  - **Acceptance Criteria**: All URLs resolve correctly, slug patterns work
+- [ ] Design blog templates:
+  - `quickscale_modules/blog/templates/quickscale_modules/blog/`:
+    - `base.html` - Zero-style semantic HTML (no CSS classes)
+    - `post_list.html` - Zero-style list view
+    - `post_detail.html` - Zero-style detail view
+  - `themes/default/templates/quickscale_modules/blog/`:
+    - Styled overrides for the default theme
+  - **Acceptance Criteria**: Zero-style templates render clean HTML, Default theme adds styling via `themes/` directory
+- [ ] Add featured images in `quickscale_modules/blog/models.py`:
+  - Use Pillow for image processing
+  - Generate thumbnails (300x200, 800x450)
+  - Store in MEDIA_ROOT/blog/images/
+  - **Acceptance Criteria**: Images upload, thumbnails generate, alt text supported
+- [ ] Implement RSS feed in `quickscale_modules/blog/feeds.py`:
+  - Use django.contrib.syndication.views.Feed
+  - Include last 20 published posts
+  - Full content vs excerpt (configurable)
+  - **Acceptance Criteria**: Feed validates at feedvalidator.org, includes pubDate, link, description
+
+**Features Deferred to Future**:
+- Comments (use third-party like Disqus)
+- Advanced SEO (Open Graph, schema)
+- Related posts algorithm
+- Scheduled publishing
+
+**Architecture Compliance**:
+- [ ] Follow split branch distribution pattern (develop in `quickscale_modules/blog/`, split to `splits/simple-blog`)
+- [ ] Theme compatibility: Zero-Style base + Default Theme (v0.66.0)
+- [ ] Interactive configuration during embed:
+  - Posts per page (default: 10)
+  - Excerpt length (default: 300 characters)
+  - Enable categories/tags (default: yes)
+  - Enable RSS feed (default: yes)
+- [ ] Auto-configuration during `quickscale embed --module simple-blog`:
+  - Add 'modules.blog' to INSTALLED_APPS
+  - Add MARKDOWNX_* settings to settings.py
+  - Include blog.urls in project urls.py (at /blog/)
+  - Run migrations automatically
+  - Create sample blog post (optional prompt)
+- **Acceptance Criteria**: Embed completes without manual settings editing, blog accessible at /blog/
 
 **Module Configuration**:
-- [ ] Add interactive prompts for blog configuration during embed
-- [ ] Configure blog settings (posts per page, comment system, etc.)
+- [ ] Interactive prompts for blog configuration during embed
+- [ ] Configure blog settings (posts per page, excerpt length, etc.)
 - [ ] Add blog URLs to generated project
 - [ ] Create initial blog migrations
 
 **Testing**:
-- [ ] Unit tests for blog models and views (70% coverage)
-- [ ] Integration tests for Wagtail integration
-- [ ] E2E tests for blog creation and publishing workflows
+- [ ] Unit tests in `quickscale_modules/blog/tests/`:
+  - `test_models.py`: All model methods, string representations, ordering (Target: 80%+ coverage)
+  - `test_views.py`: All view classes, context data, pagination (Target: 75%+ coverage)
+  - `test_urls.py`: URL resolution and reverse lookups (Target: 100% coverage)
+  - `test_feeds.py`: RSS feed content and validation (Target: 80%+ coverage)
+  - **Overall Target**: 70%+ coverage for blog module
+- [ ] Integration tests in `quickscale_modules/blog/tests/test_integration.py`:
+  - Test blog embedding via `quickscale embed --module simple-blog`
+  - Verify auto-configuration (INSTALLED_APPS, URLs, migrations)
+  - Test published vs draft filtering
+  - Verify category/tag filtering
+  - **Acceptance Criteria**: All integration scenarios pass, no manual config required
+- [ ] E2E tests in `quickscale_modules/blog/tests/test_e2e.py`:
+  - Create blog post via admin (with Playwright)
+  - Publish post and verify on frontend
+  - Test image upload and display
+  - Verify RSS feed generation
+  - Test pagination on post list
+  - **Acceptance Criteria**: Complete blog workflow (create → publish → view → RSS) validated
+- [ ] Real-world validation:
+  - Initialize `examples/real_estate` project
+  - Embed blog module
+  - Create 10+ sample posts
+  - Test filtering, pagination, RSS feed
+  - Document edge cases and iterate
+  - **Acceptance Criteria**: Real project successfully uses blog module without issues
+
+**Dependencies & Prerequisites**:
+- [ ] No module dependencies (blog is standalone)
+- [ ] Optional integration: If auth module installed, use allauth for author profiles
+- [ ] Django dependencies: django-markdownx, Pillow
+- [ ] Task Order:
+  1. Models (foundation)
+  2. Admin registration (enables manual testing)
+  3. Views and URLs (frontend access)
+  4. Templates (visual design)
+  5. RSS feed (content syndication)
+  6. Interactive embed configuration (integration)
+  7. Testing (validation)
 
 **Documentation**:
-- [ ] Create blog module README with features and setup
-- [ ] Document blog configuration options
-- [ ] Add blog module to user manual
-- [ ] Create blog customization guide
+- [ ] Create `quickscale_modules/blog/README.md`:
+  - Features overview (Markdown editing, categories, tags, RSS)
+  - Installation: `quickscale embed --module simple-blog`
+  - Configuration options reference
+  - Template customization guide
+  - Model extension patterns (for custom fields)
+  - **Acceptance Criteria**: README enables users to embed, configure, and customize blog without asking questions
+
+- [ ] Create blog customization guide in `quickscale_modules/blog/docs/customization.md`:
+  - Adding custom fields to Post model
+  - Creating custom blog templates
+  - Extending views with filters
+  - SEO optimization patterns
+- [ ] Add blog examples to `examples/`:
+  - Real estate blog example
+  - Tech blog example
+  - Agency blog example
+  - **Acceptance Criteria**: Examples demonstrate vertical-specific customizations
 
 ---
 
-### v0.67.0: HTMX Frontend Theme (Deferred)
+### v0.67.0: Listings Module (`quickscale_modules.listings`)
+
+**Status**: 📋 Planned (after blog module)
+
+**Strategic Context**: Generic listings base model supporting multiple verticals (real estate, jobs, events, products). Real estate becomes first implementation, validating generic pattern. Proves reusability from day 1.
+
+**Core Abstraction**:
+- [ ] `AbstractListing` model (title, description, price, location, status) - Abstract Base Class
+- [ ] Search and filtering infrastructure
+- [ ] Zero-style templates
+
+**Real Estate Vertical** (First Implementation):
+- [ ] `Property` model extending `AbstractListing` (Concrete model in `examples/real_estate`)
+- [ ] Property-specific fields (bedrooms, bathrooms, sqft, type)
+- [ ] Real estate theme in `themes/real_estate` (or similar)
+
+**Future Verticals**:
+- JobPosting, Event, Product, BusinessListing models
+- Vertical-specific extensions via Abstract Inheritance
+
+**Validation Workflow**:
+- [ ] Test in real estate project during development
+- [ ] Iterate module design based on real usage
+- [ ] Push improvements back to QuickScale
+- [ ] Update via `quickscale update`
+
+**Testing**:
+- [ ] Unit tests for base Listing model (70% coverage)
+- [ ] Integration tests for Property vertical
+- [ ] Real estate site validation
+
+---
+
+### v0.70.0: HTMX Frontend Theme (Deferred)
 
 **Status**: Deferred to post-v0.69.0 (after SaaS Feature Parity)
 

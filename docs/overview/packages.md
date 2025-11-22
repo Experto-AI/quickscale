@@ -30,6 +30,8 @@ P1 — High priority modules (competitive parity)
  - `quickscale-stripe` — Stripe-specific billing helpers (alias to billing)
  - `quickscale-module-billing` — dj-stripe wiring, subscriptions, invoices
  - `quickscale-module-teams` — teams, invitations, role-based access
+ - `quickscale-module-blog` — custom Django blog (Post, Category, Tag, Markdown)
+ - `quickscale-module-listings` — generic listings (real estate, jobs, events, products)
  - `quickscale-module-notifications` — email/notification infrastructure (anymail)
  - `quickscale-module-async` — Celery + Redis task patterns and beat
  - `quickscale-module-admin` — admin dashboards, audit logging, enhanced views
@@ -37,12 +39,11 @@ P1 — High priority modules (competitive parity)
 
 P2 — Differentiation & themes (polish and verticals)
  - `quickscale-module-ai` — AI service framework, BaseService, credits integration
- - `quickscale-theme-htmx` — HTMX / server-rendered default theme
- - `quickscale-theme-react` — React SPA starter theme
+ - `quickscale-theme-showcase-html` — Pure HTML/CSS (renamed from starter_html)
+ - `quickscale-theme-showcase-htmx` — HTMX + Alpine.js (renamed from starter_htmx)
+ - `quickscale-theme-showcase-react` — React SPA (renamed from starter_react)
  - `quickscale-theme-tailwind` — Tailwind CSS theme (UI primitives)
  - `quickscale-theme-bulma` — Bulma CSS theme (existing styling option)
- - `quickscale-theme-crm` — vertical starter (CRM templates)
- - `quickscale-theme-blog` — vertical starter (blog templates)
 
 P3 — Integrations & tooling (lower priority / optional)
  - `quickscale-module-analytics` — Sentry, usage dashboards, basic analytics

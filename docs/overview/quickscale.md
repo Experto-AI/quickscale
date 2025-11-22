@@ -107,10 +107,14 @@ QuickScale provides the building blocks for professional Django development:
 - **Starter** = Generates Django project you own completely
 
 **Post-MVP Structure (Phase 2+):**
-- **Backend Modules** = Packaged modules built from real client patterns (auth, payments, billing)
+- **Backend Modules** = Packaged modules built from real client patterns
+  - Core SaaS: auth, payments, billing, teams
+  - Content: blog (custom Django), listings (multi-vertical)
   - Built on proven Django foundations (django-allauth, dj-stripe, etc.)
-  - Distributed via git subtree initially, PyPI for commercial later
-- **Theme Packages** = Reusable business logic patterns (when emerged from client work)
+  - Distributed via split branches (git subtree), PyPI for commercial later
+- **Theme Packages** = Frontend scaffolding (HTML, HTMX, React)
+  - One-time generation, user owns code
+  - No updates after generation (disposable scaffolding)
 - **Marketplace** = Community ecosystem for agencies and developers
 
 **MVP Objectives (Phase 1):**
@@ -124,6 +128,13 @@ QuickScale provides the building blocks for professional Django development:
 - Enable commercial subscriptions via private PyPI
 - Build community ecosystem and marketplace
 - Maintain backward compatibility with MVP approach
+
+**Module Development Strategy** (v0.66+):
+- **Module-First with Immediate Validation**: Build generic modules in `quickscale_modules/` while testing in real projects
+- **Parallel Development**: Module architecture in morning, site integration in afternoon
+- **Validation Loop**: Real estate site validates blog and listings modules
+- **Push-Back Workflow**: `quickscale push --module <name>` to contribute improvements
+- **Generalization Discipline**: Question every feature - "Would job/event listings need this?"
 
 **Key Principle**: **Start simple, grow organically based on real usage.** Don't build marketplace features until you have multiple successful client projects proving the patterns work.
 

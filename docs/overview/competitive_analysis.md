@@ -826,6 +826,463 @@ The table below consolidates the repository's release-to-feature mapping and com
 
 Notes: rows mark where QuickScale aims to provide comparable functionality; exact scope may vary (e.g., we intentionally avoid Wagtail integration for MVP while matching core SaaS features).
 
+---
+
+## Additional Django-Based Competitors (2025 Research Update)
+
+**Research Date**: January 2025
+
+This section identifies additional Django SaaS boilerplates not previously analyzed in the main competitive matrix. These competitors provide insights into emerging trends and battle-tested features that QuickScale should consider.
+
+### Expanded Competitive Matrix
+
+| Feature | **QuickScale** | **SaaS Hammer** | **Launchr** | **SlimSaaS** | **Advantch** | **django-saas-boilerplate** | **YaSaas** | **djaodjin-saas** |
+|---------|----------------|-----------------|-------------|--------------|--------------|----------------------------|------------|-------------------|
+| **BASIC INFO** |
+| **GitHub Stars** | New/Growing | N/A (proprietary) | N/A (proprietary) | N/A (proprietary) | N/A (proprietary) | 83⭐ (growing) | Unknown | 599⭐ |
+| **Pricing** | Free (Apache 2.0) | Not disclosed | $0 (dev) / $499 (prod) | $169-$199 one-time | $750-$1,450 one-time | Free (MIT) | Free (Open Source) | Free (Open Source) |
+| **License** | Apache 2.0 | Proprietary | Open Source (dev) | Proprietary | Proprietary | MIT | Open Source | Open Source |
+| **Current Status** | MVP (Personal Toolkit) | Production Ready | Production Ready | Production Ready | Production Ready | Active | Active | Active (v1.1.5) |
+| **Type** | Framework | Full boilerplate | Full boilerplate | Full boilerplate | Full boilerplate | Full boilerplate | Full boilerplate | **Django App/Library** |
+| | | | | | | | | |
+| **DISTRIBUTION & UPDATES** |
+| **Distribution Model** | Git subtree (MVP) → PyPI (Post-MVP) | Static generation | Static generation | Static generation | Static generation | Git clone/fork | Git clone/fork | **pip install** (library) |
+| **Update Strategy** | ✅ Shared updates via git subtree/PyPI | ❌ Manual updates | ⚠️ Limited (1 year included) | ⚠️ Lifetime updates included | ⚠️ 6-12 months updates | ❌ Manual updates | ❌ Manual updates | ✅ **Standard package updates** |
+| **Shared Core Updates** | ✅ Yes (via git subtree/PyPI) | ❌ No | ❌ No | ❌ No | ❌ No | ❌ No | ❌ No | ✅ **Yes (pip upgrade)** |
+| **Module Ecosystem** | ✅ Composable (Post-MVP) | ❌ Monolithic | ❌ Static template | ❌ Static template | ❌ Static template | ❌ Static template | ❌ Static template | ✅ **Installable package** |
+| | | | | | | | | |
+| **ARCHITECTURE & TECH STACK** |
+| **Backend** | Django | Django | Django | Django | Django | Django 5.0 | Django 4.2.4 + DRF | Django 3.2-5.2 |
+| **Frontend Options** | Directory-based, any framework | Hotwire (Turbo/Stimulus) OR React | Bootstrap | React + Astro (marketing) | React (InertiaJS) | **HTMX** + Alpine.js | React 18 + TypeScript | Django/Jinja2 templates |
+| **Frontend Philosophy** | Framework-agnostic | HTML-over-JSON (minimal JS) | Traditional | Separate marketing/app | Modern SPA | **No-framework (HTMX)** | SPA (React) | Template-based |
+| **UI Framework** | Post-MVP | Tailwind CSS + TypeScript | Bootstrap | Tailwind + DaisyUI (32+ themes) | React + InertiaJS | Tailwind CSS | React 18 | N/A (billing logic only) |
+| **CMS Integration** | Not planned | ✅ **Wagtail CMS** | ❌ No | ❌ No | ❌ No | ❌ No | ❌ No | ❌ No |
+| **Build Tools** | Standard Django | **Vite, SWC** | Standard | Docker | CLI tools | Standard | Standard | N/A |
+| | | | | | | | | |
+| **SAAS-SPECIFIC FEATURES** |
+| **Subscription/Billing** | Post-MVP (dj-stripe) | ✅ Stripe (Checkout + Payment Element) | ✅ Full Stripe flow | ✅ Stripe (subscriptions + one-time) | ✅ Stripe integration | ✅ Stripe subscriptions | ✅ Stripe subscriptions | ✅ **Double-entry ledger** |
+| **Multi-tenancy** | Post-MVP | ⚠️ Not mentioned | ❌ Not included | ❌ Not included | ✅ **Teams/businesses focus** | ⚠️ Manual setup | ⚠️ Manual setup | ⚠️ Billing profile separation |
+| **User Auth** | Post-MVP (django-allauth) | ✅ django-allauth (headless API) | ✅ Email verification | ✅ MFA with QR codes | ✅ Full auth system | ✅ django-allauth | ✅ Social login support | ❌ Not included (use django-allauth) |
+| **MFA/2FA** | Post-MVP | ⚠️ Not mentioned | ❌ Not mentioned | ✅ **QR codes + recovery codes** | ⚠️ Not specified | ❌ Not mentioned | ❌ Not mentioned | ❌ Not included |
+| **Payment Processing** | Post-MVP | ✅ Stripe | ✅ Stripe | ✅ Stripe | ✅ Stripe | ✅ Stripe | ✅ Stripe | ✅ **Subscription logic** |
+| **Team Management** | Post-MVP | ⚠️ Not clear | ❌ Not included | ❌ Not included | ✅ Built-in | ⚠️ Manual RBAC | ⚠️ Django permissions | ⚠️ Flexible security framework |
+| **AI Features** | Post-MVP (planned) | ❌ No | ❌ No | ❌ No | ✅ **OpenAI, RAG, chat demo** | ❌ No | ❌ No | ❌ No |
+| | | | | | | | | |
+| **DEVELOPMENT TOOLS** |
+| **CLI Tool** | `quickscale init` (MVP) | ⚠️ Not mentioned | ⚠️ Basic | ⚠️ Docker-based | ✅ **Developer CLI** | ⚠️ Basic | ⚠️ Basic | N/A (library) |
+| **Docker Support** | ✅ IN (v0.53) | ⚠️ Not specified | ✅ **Full stack** | ✅ **Single command deploy** | ✅ Production-ready | ✅ Included | ⚠️ Not specified | ⚠️ App-level only |
+| **Testing Setup** | Django standard | ✅ Unit + Integration | ⚠️ Not specified | ⚠️ Not specified | ⚠️ Not specified | ⚠️ Not specified | ⚠️ Not specified | ✅ pytest (Python 3.7-3.12) |
+| **CI/CD** | Post-MVP | ✅ **Sustainable deployment** | ⚠️ Not specified | ⚠️ Not specified | ⚠️ Not specified | ⚠️ Not specified | ⚠️ Not specified | ⚠️ Not specified |
+| **Email Integration** | Post-MVP | ⚠️ Not specified | ✅ SendGrid | ✅ **Mailgun (8 templates)** | ⚠️ Not specified | ⚠️ Not specified | ✅ AWS SES | ❌ Not included |
+| **Task Queue** | Post-MVP | ⚠️ Not mentioned | ✅ **Celery + Redis** | ⚠️ Not mentioned | ⚠️ Not mentioned | ⚠️ Not mentioned | ⚠️ Not mentioned | ❌ Not included |
+| **SSL/Security** | Post-MVP | ⚠️ Not specified | ⚠️ Not specified | ✅ **Auto SSL (Let's Encrypt)** | ⚠️ Not specified | ⚠️ Not specified | ⚠️ Not specified | ⚠️ Not specified |
+| | | | | | | | | |
+| **PERFORMANCE** |
+| **PageSpeed Score** | TBD | Not disclosed | Not disclosed | ✅ **99/100** | Not disclosed | Not disclosed | Not disclosed | N/A |
+| **Time Saved** | TBD (MVP in development) | Not disclosed | Not disclosed | **~75 hours claimed** | **1 hour to production** | Not disclosed | Not disclosed | N/A |
+| **Learning Curve** | Low (Django-native) | Medium | Low-Medium | Low-Medium | Low (with docs) | Low (Django-native) | Medium | Low (library) |
+| **Production Ready** | Post-MVP | ✅ Yes | ✅ Yes | ✅ Yes | ✅ Yes | ✅ Yes | ✅ Yes | ✅ Yes |
+| | | | | | | | | |
+| **UNIQUE SELLING POINTS** |
+| **Key Differentiator** | Shared updates + composable modules | HTML-over-JSON + Wagtail | Hybrid open/commercial model | **Performance-focused** (99/100) | **AI-ready** out-of-box | **Modern HTMX** stack | Data monetization focus | **Library approach** (not boilerplate) |
+| **Target Audience** | Agencies building multiple clients | Full-stack developers | SaaS builders | Performance-conscious devs | AI product builders | Django + HTMX developers | Data-driven SaaS | **Developers adding billing to existing apps** |
+
+**Note on Inactive Projects**: *Quickstartup Template* (46⭐) was identified but excluded from this matrix as it was archived in April 2024 and is no longer maintained.
+
+---
+
+### Detailed Platform Analysis: New Competitors
+
+#### SaaS Hammer
+
+**Status**: Production Ready, Actively Maintained
+
+**Unique Advantages**:
+- ✅ **HTML-over-JSON Philosophy** - Hotwire (Turbo/Stimulus) reduces JavaScript complexity
+- ✅ **Wagtail CMS Integration** - Only competitor besides Pegasus with built-in CMS
+- ✅ **Dual Stack Options** - Django + Hotwire OR React + Django variants
+- ✅ **Modern Build Tools** - Vite + SWC for fast compilation
+- ✅ **Headless django-allauth** - API-ready authentication
+- ✅ **User Impersonation** - Built-in admin feature for customer support
+- ✅ **Component Library** - Pre-built buttons, modals, tabs, charts, widgets
+
+**Limitations**:
+- ❌ Pricing not transparent (requires contact)
+- ❌ Static generation model (no shared updates)
+- ❌ Proprietary license
+- ❌ Wagtail adds complexity for simple SaaS
+- ❌ Each project independent
+
+**Best For**: Full-stack developers wanting minimal JavaScript with CMS capabilities
+
+**Competitive Threat**: **HIGH** - Direct competitor to Pegasus with modern Hotwire approach
+
+**What QuickScale Should Copy**:
+1. ✅ **User impersonation feature** - Critical for agency client support
+2. ✅ **Headless django-allauth pattern** - Enables API-first auth (Post-MVP)
+3. ✅ **Component library approach** - Pre-built UI components save time
+4. ✅ **Vite/SWC build tools** - Faster builds than Webpack
+5. ⚠️ **Wagtail integration** - Consider as optional Post-MVP module (not core)
+
+**Strategic Insight**: Hotwire/HTMX trend is real. QuickScale should offer HTMX variant in Post-MVP Phase 3.
+
+---
+
+#### Launchr
+
+**Status**: Production Ready, Hybrid Open Source/Commercial
+
+**Unique Advantages**:
+- ✅ **Hybrid Model** - Free development, $499 production (aligns with QuickScale vision)
+- ✅ **Battle-Tested Stack** - Celery, Redis, Sentry, Caddy, Let's Encrypt
+- ✅ **Zero-Downtime Deployments** - Production-grade deployment strategy
+- ✅ **Full Stripe Flow** - Complete payment + subscription management
+- ✅ **1 Year Updates Included** - Better than most static generators
+- ✅ **Pre-built Pages** - Landing, contact, terms/privacy templates
+
+**Limitations**:
+- ❌ Static generation (no shared updates across projects)
+- ❌ Bootstrap (dated UI framework vs Tailwind)
+- ❌ Single production license ($499 per project)
+- ❌ Limited to 1 year updates
+
+**Best For**: Developers wanting open-source dev environment with commercial production support
+
+**Competitive Threat**: **MEDIUM-HIGH** - Hybrid model validates QuickScale's open-core strategy
+
+**What QuickScale Should Copy**:
+1. ✅ **Hybrid licensing model** - Free dev, paid production (validates QuickScale Post-MVP strategy)
+2. ✅ **Celery + Redis setup** - Battle-tested async task pattern
+3. ✅ **Zero-downtime deployment** - Critical for production SaaS
+4. ✅ **Sentry integration** - Error tracking out-of-box
+5. ✅ **Caddy reverse proxy** - Modern alternative to nginx
+6. ✅ **Pre-built legal pages** - Terms/privacy templates save legal review time
+
+**Strategic Insight**: $499 production pricing validates market willingness to pay. QuickScale's git subtree shared updates justify similar or higher pricing.
+
+---
+
+#### SlimSaaS
+
+**Status**: Production Ready, Performance-Focused
+
+**Unique Advantages**:
+- ✅ **99/100 PageSpeed Insights** - Best-in-class performance metrics
+- ✅ **Dual Frontend Architecture** - Astro (marketing) + React (SPA)
+- ✅ **MFA with Recovery Codes** - Most complete 2FA implementation found
+- ✅ **32+ Themes** - Tailwind + DaisyUI theme switcher
+- ✅ **Minimal Dependencies** - "Lean" philosophy avoiding bloat
+- ✅ **Performance Metrics** - 0.3s FCP, 0.6s LCP, 20ms TBT
+- ✅ **Budget Pricing** - $169-$199 undercuts Pegasus significantly
+- ✅ **Lifetime Updates** - No subscription required
+
+**Limitations**:
+- ❌ Static generation (no shared updates)
+- ❌ Single-project license
+- ❌ Proprietary license
+- ❌ No multi-tenancy/teams
+- ❌ React-only SPA (no HTMX option)
+
+**Best For**: Performance-conscious developers wanting fast marketing sites + SPA dashboards
+
+**Competitive Threat**: **MEDIUM** - Performance positioning + low price attracts budget-conscious developers
+
+**What QuickScale Should Copy**:
+1. ✅ **MFA with QR codes + recovery codes** - Most complete 2FA pattern (Post-MVP auth module)
+2. ✅ **Astro marketing site pattern** - Separate static marketing from Django app
+3. ✅ **DaisyUI theme system** - 32+ themes out-of-box (better than custom CSS)
+4. ✅ **Performance metrics focus** - Document PageSpeed scores as competitive advantage
+5. ✅ **Minimal dependencies philosophy** - Avoid bloat, proven packages only
+6. ✅ **Email template library** - 8 auth flow templates (Post-MVP notifications module)
+7. ✅ **Single-command deployment** - `docker compose up` simplicity
+
+**Strategic Insight**: Performance metrics (99/100 PageSpeed) are powerful marketing. QuickScale should measure and publish performance benchmarks.
+
+---
+
+#### Advantch
+
+**Status**: Production Ready, AI-Focused
+
+**Unique Advantages**:
+- ✅ **AI-Ready Out-of-Box** - OpenAI assistants, RAG, chat capabilities
+- ✅ **AI Chat Demo App** - Working implementation included
+- ✅ **Multi-Tenancy Focus** - Teams/businesses as core feature
+- ✅ **InertiaJS Frontend** - Modern React integration pattern
+- ✅ **Onboarding Call** - Premium support (Plus tier)
+- ✅ **1 Hour to Production** - Fastest setup time claimed
+- ✅ **Control Panel** - Admin interface for user/auth/billing management
+
+**Limitations**:
+- ❌ Highest pricing ($750-$1,450) - more expensive than Pegasus
+- ❌ Static generation (no shared updates)
+- ❌ React-only (no HTMX option)
+- ❌ Proprietary license
+- ❌ Limited project licenses (1 or 5)
+
+**Best For**: Developers building AI-powered SaaS products with budget for premium tooling
+
+**Competitive Threat**: **MEDIUM** - AI focus differentiates, but high price limits market
+
+**What QuickScale Should Copy**:
+1. ✅ **AI integration module** - OpenAI, RAG, chat patterns (Post-MVP AI module)
+2. ✅ **Multi-tenancy as core feature** - Teams/businesses not afterthought (Post-MVP teams module)
+3. ✅ **Admin control panel** - Better than raw Django admin (Post-MVP admin module)
+4. ✅ **InertiaJS pattern** - Modern React + Django integration (Post-MVP frontend variant)
+5. ✅ **Working demo apps** - AI chat example shows capabilities
+6. ⚠️ **Onboarding calls** - Consider for enterprise QuickScale users (Phase 4+)
+
+**Strategic Insight**: AI is a differentiator. QuickScale should plan AI module (Post-MVP Phase 3) with OpenAI/Anthropic integrations.
+
+---
+
+#### django-saas-boilerplate (Erik Taveras)
+
+**Status**: Active, Open Source, Growing Community
+
+**GitHub Stars**: 83⭐ (growing)
+
+**Unique Advantages**:
+- ✅ **Django 5.0** - Latest Django version (most up-to-date found)
+- ✅ **HTMX + Alpine.js** - Modern no-framework approach (trending)
+- ✅ **MIT License** - Most permissive license
+- ✅ **Free** - No cost barrier
+- ✅ **Mobile-First Design** - Responsive by default
+- ✅ **SEO Optimization** - Built-in search and SEO features
+- ✅ **RBAC** - Role-based access control included
+
+**Limitations**:
+- ❌ Small community (83 stars, 8 commits)
+- ❌ Git clone/fork model (no shared updates)
+- ❌ Limited documentation
+- ❌ No multi-tenancy
+- ❌ Basic feature set
+
+**Best For**: Django developers wanting modern HTMX stack without React complexity
+
+**Competitive Threat**: **MEDIUM** - HTMX trend + free + MIT license attracts Django purists
+
+**What QuickScale Should Copy**:
+1. ✅ **HTMX + Alpine.js stack** - Trending "no-framework" approach (Post-MVP HTMX variant)
+2. ✅ **Django 5.0 adoption** - Stay current with latest Django versions
+3. ✅ **Mobile-first responsive** - Design for mobile, scale to desktop
+4. ✅ **SEO optimization patterns** - Meta tags, sitemaps, structured data
+5. ✅ **RBAC patterns** - Role-based permissions from start
+
+**Strategic Insight**: HTMX is gaining traction. Multiple competitors (SaaS Hammer, this project) validate HTMX as Post-MVP frontend variant.
+
+---
+
+#### YaSaas
+
+**Status**: Active, Open Source, Niche Focus
+
+**Unique Advantages**:
+- ✅ **Free Open Source** - No cost barrier
+- ✅ **Data Monetization Focus** - Unique positioning
+- ✅ **Django Admin Integration** - Leverages admin for data management
+- ✅ **React 18 + TypeScript** - Modern frontend stack
+- ✅ **AWS SES Integration** - Email infrastructure included
+- ✅ **Django REST Framework** - API-first architecture
+- ✅ **Google Analytics** - Built-in tracking
+
+**Limitations**:
+- ❌ Niche focus (data monetization) limits general use
+- ❌ Small community (unknown stars)
+- ❌ Limited documentation
+- ❌ Git clone/fork model
+- ❌ No multi-tenancy mentioned
+
+**Best For**: Entrepreneurs monetizing data products or APIs
+
+**Competitive Threat**: **LOW-MEDIUM** - Niche positioning, but validates Django REST + React pattern
+
+**What QuickScale Should Copy**:
+1. ✅ **Django REST Framework patterns** - API-first architecture (Post-MVP)
+2. ✅ **AWS SES integration** - Alternative to SendGrid/Mailgun (Post-MVP notifications module)
+3. ✅ **Google Analytics setup** - Built-in analytics tracking
+4. ✅ **Django admin for data management** - Leverage Django's strength
+5. ⚠️ **Data monetization patterns** - Niche, but interesting for vertical themes (Phase 4+)
+
+**Strategic Insight**: Django admin is underutilized. QuickScale should enhance admin interface rather than build custom dashboards (Post-MVP admin module).
+
+---
+
+#### djaodjin-saas
+
+**Status**: Active Library/Package, Mature Project
+
+**GitHub Stars**: 599⭐ (highest of new competitors)
+
+**Type**: **Django App/Library** (pip install, not full boilerplate)
+
+**Unique Advantages**:
+- ✅ **Library Approach** - pip installable (different category than boilerplates)
+- ✅ **599 GitHub Stars** - Established project with community
+- ✅ **Billing Profile Separation** - Decouples billing from user accounts (best practice)
+- ✅ **Double-Entry Bookkeeping** - Proper accounting ledger system
+- ✅ **Flexible Security Framework** - Customizable access control
+- ✅ **Multi-Version Support** - Python 3.7-3.12, Django 3.2-5.2
+- ✅ **Active Maintenance** - Latest release v1.1.5, ongoing development
+- ✅ **Template Agnostic** - Works with Django + Jinja2
+
+**Limitations**:
+- ❌ Not a full boilerplate (billing logic only)
+- ❌ No frontend included
+- ❌ No auth system (expects django-allauth)
+- ❌ No UI components
+- ❌ Requires integration work
+
+**Best For**: Adding subscription billing to existing Django applications
+
+**Competitive Threat**: **LOW** (different category) - But validates QuickScale's Post-MVP modular vision
+
+**What QuickScale Should Copy**:
+1. ✅ **Billing profile separation pattern** - Decouple billing from User model (Post-MVP billing module)
+2. ✅ **Double-entry ledger** - Proper accounting for financial compliance (Post-MVP billing module)
+3. ✅ **Library distribution model** - pip install validates QuickScale's Post-MVP PyPI strategy
+4. ✅ **Flexible security framework** - Generic access control patterns
+5. ✅ **Multi-version support** - Test across Python 3.10-3.12, Django 4.2-5.2
+6. ✅ **Template agnostic** - Work with Django templates + Jinja2
+
+**Strategic Insight**: **This is the most important validation of QuickScale's Post-MVP strategy.** djaodjin-saas proves:
+- ✅ **Library approach works** for Django SaaS (599 stars, active use)
+- ✅ **pip install distribution** is viable for Django modules
+- ✅ **Shared updates work** via standard package upgrades
+- ✅ **Modular architecture** succeeds (billing as standalone package)
+
+**Key Takeaway**: QuickScale Post-MVP modules (`quickscale_modules.auth`, `quickscale_modules.billing`) should follow djaodjin-saas's library pattern while adding QuickScale's composable architecture advantages.
+
+---
+
+### Strategic Recommendations: What to Copy
+
+Based on battle-tested features from these competitors, QuickScale should incorporate:
+
+#### 🔴 HIGH PRIORITY (MVP/Post-MVP v1)
+
+**From Multiple Competitors (Validated Patterns)**:
+1. ✅ **Celery + Redis** (Launchr, Pegasus, Cookiecutter) - Battle-tested async tasks
+2. ✅ **Docker single-command deploy** (SlimSaaS, Launchr) - `docker compose up` simplicity
+3. ✅ **Sentry integration** (Launchr) - Error tracking scaffolding
+4. ✅ **HTMX frontend variant** (SaaS Hammer, django-saas-boilerplate) - Trending approach
+5. ✅ **Stripe-only payment** (ALL competitors use Stripe exclusively) - Validates QuickScale decision
+
+**From djaodjin-saas (Library Pattern Validation)**:
+6. ✅ **Billing profile separation** - Decouple from User model (Post-MVP billing module)
+7. ✅ **Double-entry ledger** - Financial compliance (Post-MVP billing module)
+8. ✅ **pip install distribution** - Validates QuickScale Post-MVP PyPI strategy
+9. ✅ **Multi-version testing** - Python 3.10-3.12, Django 4.2-5.2
+
+**From SlimSaaS (Performance & Security)**:
+10. ✅ **MFA with QR + recovery codes** - Most complete 2FA (Post-MVP auth module)
+11. ✅ **Automatic SSL (Let's Encrypt)** - Production security
+12. ✅ **Email template library** - 8 auth flow templates (Post-MVP notifications module)
+
+---
+
+#### 🟡 MEDIUM PRIORITY (Post-MVP v2)
+
+**From SaaS Hammer (Developer Experience)**:
+1. ✅ **User impersonation** - Critical for agency/support workflows
+2. ✅ **Headless django-allauth** - API-ready auth
+3. ✅ **Component library** - Pre-built UI widgets
+4. ✅ **Vite/SWC build tools** - Faster than Webpack
+
+**From Launchr (Production Operations)**:
+5. ✅ **Zero-downtime deployments** - Production-grade strategy
+6. ✅ **Caddy reverse proxy** - Modern nginx alternative
+7. ✅ **Pre-built legal pages** - Terms/privacy templates
+
+**From SlimSaaS (Frontend Architecture)**:
+8. ✅ **Astro marketing site** - Separate static marketing from Django app
+9. ✅ **DaisyUI theme system** - 32+ themes out-of-box
+10. ✅ **Performance metrics** - Measure/publish PageSpeed scores
+
+---
+
+#### 🟢 LOW PRIORITY (Post-MVP v3+)
+
+**From Advantch (Advanced Features)**:
+1. ✅ **AI integration module** - OpenAI, RAG, chat patterns
+2. ✅ **InertiaJS pattern** - Modern React + Django integration
+3. ✅ **Admin control panel** - Better than raw Django admin
+
+**From YaSaas (API Architecture)**:
+4. ✅ **Django REST Framework patterns** - API-first architecture
+5. ✅ **AWS SES integration** - Alternative email provider
+
+**From django-saas-boilerplate (Modern Patterns)**:
+6. ✅ **SEO optimization** - Meta tags, sitemaps, structured data
+7. ✅ **Mobile-first responsive** - Design for mobile, scale to desktop
+
+---
+
+### Key Insights & Trends
+
+#### 1. **HTMX Trend is Real**
+- **SaaS Hammer** (Hotwire/Turbo), **django-saas-boilerplate** (HTMX + Alpine.js)
+- **Recommendation**: QuickScale should offer HTMX variant in Post-MVP Phase 3
+- **Rationale**: Django developers prefer server-side rendering over React complexity
+
+#### 2. **Library Distribution Validated**
+- **djaodjin-saas** (599⭐, pip install, active maintenance)
+- **Recommendation**: QuickScale Post-MVP PyPI distribution strategy is validated
+- **Rationale**: Library approach enables shared updates, standard package management
+
+#### 3. **Stripe-Only is Correct**
+- **ALL competitors** use Stripe exclusively (no PayPal, Square, etc.)
+- **Recommendation**: QuickScale's Stripe-only decision is market-validated
+- **Rationale**: Multiple payment providers add complexity without value
+
+#### 4. **Hybrid Open/Commercial Model Works**
+- **Launchr** ($0 dev / $499 prod), **QuickScale** (Apache 2.0 + commercial extensions)
+- **Recommendation**: QuickScale's open-core strategy aligns with proven models
+- **Rationale**: $499 pricing validates market willingness to pay for production licenses
+
+#### 5. **Performance is Marketable**
+- **SlimSaaS** (99/100 PageSpeed, 0.3s FCP marketed prominently)
+- **Recommendation**: QuickScale should measure and publish performance metrics
+- **Rationale**: Quantifiable performance differentiates in crowded market
+
+#### 6. **AI Features Emerging**
+- **Only Advantch** has AI built-in (OpenAI, RAG, chat)
+- **Recommendation**: AI module is differentiator for Post-MVP Phase 3
+- **Rationale**: Early mover advantage in AI-powered SaaS tooling
+
+#### 7. **MFA is Table Stakes**
+- **SlimSaaS** has most complete 2FA (QR codes + recovery codes)
+- **Recommendation**: MFA must be in Post-MVP auth module (not MVP)
+- **Rationale**: Security-conscious buyers expect 2FA out-of-box
+
+#### 8. **Django Admin is Underutilized**
+- **YaSaas**, **djaodjin-saas** leverage Django admin instead of custom dashboards
+- **Recommendation**: Enhance Django admin rather than build custom (Post-MVP admin module)
+- **Rationale**: Django admin is powerful; avoid reinventing the wheel
+
+---
+
+### QuickScale's Differentiation vs New Competitors
+
+**None of these competitors offer:**
+1. ✅ **Git subtree shared updates** across multiple projects
+2. ✅ **Composable module architecture** with cross-project reuse
+3. ✅ **Agency-focused workflow** for building multiple client SaaS apps
+4. ✅ **Evolution from personal toolkit** to community platform
+5. ✅ **PyPI + git subtree hybrid** distribution (Post-MVP)
+
+**QuickScale's unique advantages validated:**
+- **djaodjin-saas** proves library distribution works (599 stars)
+- **Launchr** proves hybrid open/commercial works ($0 dev, $499 prod)
+- **SlimSaaS** proves performance metrics are marketable
+- **SaaS Hammer + django-saas-boilerplate** prove HTMX trend is real
+- **ALL competitors** validate Stripe-only decision
+
+**Strategic Positioning**:
+QuickScale's git subtree shared updates + composable modules remain unique in the Django SaaS boilerplate market. No competitor addresses cross-project code reuse and shared security/feature updates.
+
+---
+
 ## See Also
 
 - [quickscale.md](../overview/quickscale.md) - Strategic vision and evolution rationale

@@ -442,7 +442,7 @@ Other documents (README.md, roadmap.md, scaffolding.md, commercial.md) MUST refe
 
 **v0.63.0-v0.69.0 - Core Module Track:**
 - ✅ `quickscale_modules.auth` - Authentication module core (v0.63.0)
-- � `quickscale_modules.blog` - Wagtail-powered blog module (v0.66.0, in development)
+- 🚧 `quickscale_modules.blog` - Custom Django blog module with Markdown, categories, tags, RSS (v0.66.0, in development)
 - 📋 `quickscale_modules.billing` - Stripe billing module (v0.68.0)
 - 📋 `quickscale_modules.teams` - Teams/multi-tenancy module (v0.69.0)
 
@@ -468,6 +468,45 @@ Other documents (README.md, roadmap.md, scaffolding.md, commercial.md) MUST refe
 - ❌ `quickscale validate` - YAML configuration validation (requires config system)
 - ❌ `quickscale generate` - Generate from config (requires config system)
 - 📋 `quickscale embed --module auth@v0.63.0` - Pin specific module versions
+
+---
+
+### Module-Specific Architecture Decisions {#module-specific-architecture}
+
+#### Blog Module (v0.66.0) - Custom Django Implementation
+
+**Architectural Decision (v0.66.0):** Build custom Django blog instead of using existing solutions.
+
+**Rationale**:
+- ❌ **Wagtail**: Too heavy (full CMS with 50+ dependencies), contradicts QuickScale's lightweight philosophy
+- ❌ **django-blog-zinnia**: Unmaintained (last release 2016), incompatible with Django 4.x+
+- ❌ **Puput**: Wagtail-based (inherits Wagtail's complexity), overkill for simple blogging
+- ✅ **Custom Django**: Lightweight, Django-native, exactly the features needed, no CMS overhead
+
+**Technical Stack**:
+- Django models (Post, Category, Tag, AuthorProfile)
+- django-markdownx for WYSIWYG Markdown editing
+- Pillow for image processing and thumbnails
+- Django syndication framework for RSS feeds
+
+**Features Included (v0.66.0)**:
+- Markdown content editing with live preview
+- Categories and tags for organization
+- Featured images with automatic thumbnail generation
+- RSS feed for content syndication
+- Responsive templates for showcase_html theme
+
+**Features Deferred (Post-v0.66.0)**:
+- Comments (use third-party like Disqus/Commento)
+- Advanced SEO (Open Graph, JSON-LD schema)
+- Related posts algorithm
+- Scheduled publishing (use django-celery-beat if needed)
+
+**Distribution**: Split branch pattern (`splits/simple-blog`), embed via `quickscale embed --module simple-blog`
+
+**Theme Support**: showcase_html (v0.66.0), showcase_htmx (v0.70.0), showcase_react (v0.71.0)
+
+---
 
 ## Document Responsibilities
 
