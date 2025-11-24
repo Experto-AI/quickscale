@@ -107,7 +107,7 @@ fi
 
 # Push to origin
 print_info "Pushing split branch to origin..."
-if git push origin "$SPLIT_BRANCH"; then
+if git push --force origin "$SPLIT_BRANCH"; then
     print_success "Split branch pushed to origin"
 else
     print_error "Failed to push split branch to origin"
