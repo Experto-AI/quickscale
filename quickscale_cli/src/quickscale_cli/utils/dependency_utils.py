@@ -1,8 +1,34 @@
 """System dependency checking utilities."""
 
+import os
 import shutil
 import subprocess
 from typing import NamedTuple
+
+
+SKIP_ENV_VAR = "QUICKSCALE_SKIP_DEPENDENCY_CHECKS"
+
+
+def _should_skip_dependency_checks() -> bool:
+    """Return True when dependency checks should be skipped."""
+
+    value = os.getenv(SKIP_ENV_VAR, "")
+    return value.strip().lower() in {"1", "true", "yes", "on"}
+
+
+def _skipped_dependency(
+    name: str, required: bool, purpose: str, version_env: str | None = None
+) -> "DependencyStatus":
+    """Create a dependency status representing a skipped check."""
+
+    version = os.getenv(version_env) if version_env else None
+    return DependencyStatus(
+        name=name,
+        installed=True,
+        version=version,
+        required=required,
+        purpose=purpose,
+    )
 
 
 class DependencyStatus(NamedTuple):
@@ -35,6 +61,14 @@ def check_python_version() -> DependencyStatus:
 
 def check_poetry_installed() -> DependencyStatus:
     """Check if Poetry is installed."""
+
+    if _should_skip_dependency_checks():
+        return _skipped_dependency(
+            name="Poetry",
+            required=True,
+            purpose="Dependency management for generated projects",
+            version_env="QUICKSCALE_MOCK_POETRY_VERSION",
+        )
     try:
         result = subprocess.run(
             ["poetry", "--version"],
@@ -66,6 +100,14 @@ def check_poetry_installed() -> DependencyStatus:
 
 def check_git_installed() -> DependencyStatus:
     """Check if Git is installed."""
+
+    if _should_skip_dependency_checks():
+        return _skipped_dependency(
+            name="Git",
+            required=False,
+            purpose="Version control and module management (quickscale embed/update)",
+            version_env="QUICKSCALE_MOCK_GIT_VERSION",
+        )
     git_path = shutil.which("git")
 
     if git_path:
@@ -106,6 +148,14 @@ def check_git_installed() -> DependencyStatus:
 
 def check_docker_installed() -> DependencyStatus:
     """Check if Docker is installed."""
+
+    if _should_skip_dependency_checks():
+        return _skipped_dependency(
+            name="Docker",
+            required=False,
+            purpose="Containerized development (quickscale up/down)",
+            version_env="QUICKSCALE_MOCK_DOCKER_VERSION",
+        )
     docker_path = shutil.which("docker")
 
     if docker_path:
@@ -147,6 +197,14 @@ def check_docker_installed() -> DependencyStatus:
 
 def check_postgresql_installed() -> DependencyStatus:
     """Check if PostgreSQL client is installed."""
+
+    if _should_skip_dependency_checks():
+        return _skipped_dependency(
+            name="PostgreSQL",
+            required=False,
+            purpose="Database server (required for production, Docker provides for dev)",
+            version_env="QUICKSCALE_MOCK_POSTGRES_VERSION",
+        )
     psql_path = shutil.which("psql")
 
     if psql_path:

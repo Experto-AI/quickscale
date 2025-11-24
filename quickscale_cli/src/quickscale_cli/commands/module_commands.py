@@ -18,7 +18,7 @@ from quickscale_core.utils.git_utils import (
 )
 
 # Available modules
-AVAILABLE_MODULES = ["auth", "billing", "teams"]
+AVAILABLE_MODULES = ["auth", "billing", "teams", "blog"]
 
 
 def has_migrations_been_run() -> bool:
@@ -273,8 +273,102 @@ SITE_ID = 1
     click.echo(f"  • Authentication: {config['authentication_method']}")
 
 
+def configure_blog_module() -> dict[str, Any]:
+    """Interactive configuration for blog module"""
+    click.echo("\n⚙️  Configuring blog module...")
+    click.echo("The blog module will be configured with default settings.\n")
+
+    config = {
+        "posts_per_page": click.prompt(
+            "Posts per page",
+            type=int,
+            default=10,
+        ),
+        "enable_rss": click.confirm("Enable RSS feed?", default=True),
+    }
+
+    return config
+
+
+def apply_blog_configuration(project_path: Path, config: dict[str, Any]) -> None:
+    """Apply blog module configuration to project settings"""
+    # QuickScale uses settings/base.py and project_name/urls.py structure
+    settings_path = project_path / f"{project_path.name}" / "settings" / "base.py"
+    urls_path = project_path / f"{project_path.name}" / "urls.py"
+
+    if not settings_path.exists():
+        click.secho(
+            "⚠️  Warning: settings.py not found, skipping auto-configuration",
+            fg="yellow",
+        )
+        return
+
+    # Read settings.py
+    with open(settings_path) as f:
+        settings_content = f.read()
+
+    # Check if already configured
+    if "quickscale_modules_blog" in settings_content:
+        click.echo("ℹ️  Blog module already configured in settings.py")
+        return
+
+    # Add required apps to INSTALLED_APPS
+    installed_apps_addition = """
+# QuickScale Blog Module - Added by quickscale embed
+INSTALLED_APPS += [
+    "markdownx",  # Markdown editor with image upload
+    "quickscale_modules_blog",  # Blog module
+]
+
+# Blog Module Settings
+"""
+
+    installed_apps_addition += f"BLOG_POSTS_PER_PAGE = {config['posts_per_page']}\n"
+    installed_apps_addition += """MARKDOWNX_MARKDOWN_EXTENSIONS = [
+    "markdown.extensions.fenced_code",
+    "markdown.extensions.tables",
+    "markdown.extensions.toc",
+]
+MARKDOWNX_MEDIA_PATH = "blog/markdownx/"
+"""
+
+    # Append to settings.py
+    with open(settings_path, "a") as f:
+        f.write("\n" + installed_apps_addition)
+
+    click.secho("  ✅ Updated settings.py with blog configuration", fg="green")
+
+    # Update urls.py
+    if urls_path.exists():
+        with open(urls_path) as f:
+            urls_content = f.read()
+
+        if "quickscale_modules_blog" not in urls_content:
+            # Find urlpatterns and add blog URLs
+            if "urlpatterns = [" in urls_content:
+                urls_addition = (
+                    '    path("blog/", include("quickscale_modules_blog.urls")),\n'
+                )
+                if config["enable_rss"]:
+                    urls_addition += '    path("markdownx/", include("markdownx.urls")),  # Markdown editor upload\n'
+                urls_content = urls_content.replace(
+                    "urlpatterns = [", "urlpatterns = [\n" + urls_addition
+                )
+
+                with open(urls_path, "w") as f:
+                    f.write(urls_content)
+
+                click.secho("  ✅ Updated urls.py with blog URLs", fg="green")
+
+    # Show configuration summary
+    click.echo("\n📋 Configuration applied:")
+    click.echo(f"  • Posts per page: {config['posts_per_page']}")
+    click.echo(f"  • RSS feed: {'Enabled' if config['enable_rss'] else 'Disabled'}")
+
+
 MODULE_CONFIGURATORS = {
     "auth": (configure_auth_module, apply_auth_configuration),
+    "blog": (configure_blog_module, apply_blog_configuration),
 }
 
 
@@ -298,16 +392,18 @@ def embed(module: str, remote: str) -> None:
     Examples:
       quickscale embed --module auth
       quickscale embed --module billing
+      quickscale embed --module blog
 
     \b
-    Available modules (v0.62.0 placeholders):
+    Available modules:
       - auth: Authentication with django-allauth (placeholder)
       - billing: Stripe integration with dj-stripe (placeholder)
       - teams: Multi-tenancy and team management (placeholder)
+      - blog: Markdown-powered blog with categories, tags, and RSS (v0.66.0)
 
     \b
-    Note: In v0.62.0, modules contain only placeholder READMEs explaining
-    they're not yet implemented. Full implementations coming in v0.63.0+.
+    Note: Blog module is fully implemented in v0.66.0. Other modules contain
+    placeholder READMEs and will be implemented in future releases.
     """
     try:
         # Validate git repository
@@ -420,37 +516,117 @@ def embed(module: str, remote: str) -> None:
             project_root = Path.cwd()
             applier(project_root, config)
 
-        # Install dependencies if pyproject.toml was modified
-        if module == "auth":
-            click.echo("📦 Installing dependencies...")
+        # Install dependencies for modules that need it
+        if module in ["auth", "blog"]:
+            click.echo("\n📦 Installing dependencies...")
             try:
                 import subprocess
 
-                # Install the auth module
-                subprocess.run(
-                    ["poetry", "add", "./modules/auth"],
+                project_root = Path.cwd()
+                module_path = project_root / "modules" / module
+
+                # Verify module was actually embedded
+                if not module_path.exists():
+                    click.secho(
+                        f"❌ Error: Module directory not found at {module_path}",
+                        fg="red",
+                        err=True,
+                    )
+                    click.echo(
+                        "   The git subtree add may have failed. Check the output above.",
+                        err=True,
+                    )
+                    raise click.Abort()
+
+                # Determine the correct path to add
+                # Sometimes the split branch might contain the full repo (e.g. during dev/testing)
+                # We need to find the actual module's pyproject.toml
+                target_path = module_path
+                nested_path = module_path / "quickscale_modules" / module
+
+                if nested_path.exists() and (nested_path / "pyproject.toml").exists():
+                    click.secho(
+                        f"⚠️  Warning: Detected full repository in {module} module path.",
+                        fg="yellow",
+                    )
+                    click.echo(
+                        f"   Using nested path: {nested_path.relative_to(project_root)}"
+                    )
+                    target_path = nested_path
+
+                # Install the module
+                click.echo(f"  • Installing {module} module...")
+                result = subprocess.run(
+                    ["poetry", "add", f"./{target_path.relative_to(project_root)}"],
                     cwd=project_root,
                     capture_output=True,
                     text=True,
-                    check=True,
                 )
-                click.secho("  ✅ Auth module installed successfully", fg="green")
+
+                if result.returncode != 0:
+                    click.secho(
+                        f"\n❌ Failed to install {module} module",
+                        fg="red",
+                        err=True,
+                        bold=True,
+                    )
+                    click.echo("\n📋 Error output (stderr):", err=True)
+                    click.echo(result.stderr, err=True)
+                    click.echo("\n📋 Standard output (stdout):", err=True)
+                    click.echo(result.stdout, err=True)
+
+                    click.echo("\n💡 To fix this manually:", err=True)
+                    click.echo(f"   1. cd {project_root}", err=True)
+                    click.echo(f"   2. poetry add ./modules/{module}", err=True)
+                    click.echo("   3. poetry install", err=True)
+                    click.echo("   4. poetry run python manage.py migrate", err=True)
+                    raise click.Abort()
+
+                click.secho(
+                    f"  ✅ {module.capitalize()} module installed successfully",
+                    fg="green",
+                )
 
                 # Install dependencies
-                subprocess.run(
+                click.echo("  • Installing all dependencies...")
+                result = subprocess.run(
                     ["poetry", "install"],
                     cwd=project_root,
                     capture_output=True,
                     text=True,
-                    check=True,
                 )
+
+                if result.returncode != 0:
+                    click.secho(
+                        "\n❌ Failed to install dependencies",
+                        fg="red",
+                        err=True,
+                        bold=True,
+                    )
+                    click.echo("\n📋 Error output (stderr):", err=True)
+                    click.echo(result.stderr, err=True)
+                    click.echo("\n📋 Standard output (stdout):", err=True)
+                    click.echo(result.stdout, err=True)
+
+                    click.echo("\n💡 To fix this manually:", err=True)
+                    click.echo(f"   1. cd {project_root}", err=True)
+                    click.echo("   2. poetry install", err=True)
+                    click.echo("   3. poetry run python manage.py migrate", err=True)
+                    raise click.Abort()
+
                 click.secho("  ✅ Dependencies installed successfully", fg="green")
+
             except subprocess.CalledProcessError as e:
                 click.secho(
-                    f"⚠️  Warning: Failed to install dependencies automatically: {e}",
-                    fg="yellow",
+                    f"\n❌ Unexpected error during dependency installation: {e}",
+                    fg="red",
+                    err=True,
                 )
-                click.echo("  💡 You may need to run 'poetry install' manually")
+                click.echo(
+                    f"\n💡 Try running 'poetry install' manually in {project_root}",
+                    err=True,
+                )
+                raise click.Abort()
 
         # Success message
         click.secho(
@@ -475,10 +651,38 @@ def embed(module: str, remote: str) -> None:
                 "  3. Create superuser (optional): poetry run python manage.py createsuperuser"
             )
             click.echo("  4. Start development server:")
-            click.echo("     • With Docker: quickscale up")
+            click.secho(
+                "     • With Docker: quickscale down && quickscale up --build",
+                fg="cyan",
+            )
+            click.echo("       (--build rebuilds image with new dependencies)")
             click.echo("     • Without Docker: poetry run python manage.py runserver")
             click.echo("  5. Visit http://localhost:8000/accounts/login/")
-            click.echo("\n� Documentation: modules/auth/README.md")
+            click.echo("\n📖 Documentation: modules/auth/README.md")
+        elif module == "blog":
+            click.echo(f"  1. Review module code in modules/{module}/")
+            click.secho(
+                "  2. ⚠️  IMPORTANT: Run migrations (required before server start):",
+                fg="yellow",
+                bold=True,
+            )
+            click.secho(
+                "     poetry run python manage.py migrate", fg="cyan", bold=True
+            )
+            click.echo(
+                "  3. Create superuser (optional): poetry run python manage.py createsuperuser"
+            )
+            click.echo("  4. Start development server:")
+            click.secho(
+                "     • With Docker: quickscale down && quickscale up --build",
+                fg="cyan",
+            )
+            click.echo("       (--build rebuilds image with new dependencies)")
+            click.echo("     • Without Docker: poetry run python manage.py runserver")
+            click.echo("  5. Visit http://localhost:8000/admin/ to create blog posts")
+            click.echo("  6. View your blog at http://localhost:8000/blog/")
+            click.echo("  7. RSS feed available at http://localhost:8000/blog/feed/")
+            click.echo("\n📖 Documentation: modules/blog/README.md")
         else:
             click.echo(f"  1. Review the module code in modules/{module}/")
             click.echo(f"  2. Follow setup instructions in modules/{module}/README.md")

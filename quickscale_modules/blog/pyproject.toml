@@ -1,0 +1,49 @@
+[tool.poetry]
+name = "quickscale-module-blog"
+version = "0.66.0"
+description = "QuickScale blog module with Markdown support and RSS feeds"
+authors = ["Experto-AI <contact@experto.ai>"]
+license = "MIT"
+readme = "README.md"
+packages = [{include = "quickscale_modules_blog", from = "src"}]
+
+[tool.poetry.dependencies]
+python = "^3.11"
+Django = ">=5.0,<6.0"
+django-markdownx = "^4.0.0"
+Pillow = ">=10.0.0"
+
+[tool.poetry.group.dev.dependencies]
+# Most dev dependencies centralized in root pyproject.toml
+# Package-specific Django testing dependencies:
+pytest-django = "^4.7.0"
+pytest-cov = "^7.0.0"
+mypy = "^1.8.0"
+django-stubs = "^5.0.0"
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"
+
+# Ruff and mypy configurations centralized in root ruff.toml and mypy.ini
+# Package-specific overrides:
+
+[tool.ruff]
+target-version = "py311"  # This package requires Python 3.11+
+
+[[tool.mypy.overrides]]
+module = "markdownx.*"
+ignore_missing_imports = true
+
+[tool.mypy]
+plugins = ["mypy_django_plugin.main"]
+
+[tool.django-stubs]
+django_settings_module = "tests.settings"
+
+[tool.pytest.ini_options]
+DJANGO_SETTINGS_MODULE = "tests.settings"
+python_files = ["test_*.py"]
+python_paths = ["."]
+testpaths = ["tests"]
+addopts = "-v --cov=src/quickscale_modules_blog --cov-report=html --cov-report=term-missing --cov-fail-under=70"
