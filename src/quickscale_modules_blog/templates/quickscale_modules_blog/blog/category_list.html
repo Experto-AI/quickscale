@@ -1,0 +1,56 @@
+{% extends "quickscale_modules_blog/blog/base.html" %}
+
+{% block title %}{{ category.name }} - Blog{% endblock %}
+
+{% block content %}
+<article>
+    <h1>{{ category.name }}</h1>
+    {% if category.description %}
+    <p>{{ category.description }}</p>
+    {% endif %}
+
+    {% if posts %}
+        {% for post in posts %}
+        <article>
+            <h2><a href="{% url 'quickscale_blog:post_detail' post.slug %}">{{ post.title }}</a></h2>
+
+            {% if post.featured_image %}
+            <img src="{{ post.get_thumbnail_url }}" alt="{{ post.featured_image_alt }}">
+            {% endif %}
+
+            <p>{{ post.excerpt }}</p>
+
+            <footer>
+                <p>
+                    By {{ post.author.get_full_name|default:post.author.username }} on
+                    <time datetime="{{ post.published_date|date:'Y-m-d' }}">
+                        {{ post.published_date|date:"F d, Y" }}
+                    </time>
+                </p>
+            </footer>
+        </article>
+        {% endfor %}
+
+        <!-- Pagination -->
+        {% if is_paginated %}
+        <nav>
+            {% if page_obj.has_previous %}
+            <a href="?page=1">First</a>
+            <a href="?page={{ page_obj.previous_page_number }}">Previous</a>
+            {% endif %}
+
+            <span>Page {{ page_obj.number }} of {{ page_obj.paginator.num_pages }}</span>
+
+            {% if page_obj.has_next %}
+            <a href="?page={{ page_obj.next_page_number }}">Next</a>
+            <a href="?page={{ page_obj.paginator.num_pages }}">Last</a>
+            {% endif %}
+        </nav>
+        {% endif %}
+    {% else %}
+        <p>No posts in this category.</p>
+    {% endif %}
+
+    <p><a href="{% url 'quickscale_blog:post_list' %}">← Back to all posts</a></p>
+</article>
+{% endblock %}
