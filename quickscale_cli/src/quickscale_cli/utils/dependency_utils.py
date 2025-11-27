@@ -147,7 +147,7 @@ def check_git_installed() -> DependencyStatus:
 
 
 def check_docker_installed() -> DependencyStatus:
-    """Check if Docker is installed."""
+    """Check if Docker and Docker Compose are installed."""
 
     if _should_skip_dependency_checks():
         return _skipped_dependency(
@@ -171,6 +171,47 @@ def check_docker_installed() -> DependencyStatus:
             # Extract version (format: "Docker version X.Y.Z, build ...")
             parts = version_str.split()
             version = parts[2].rstrip(",") if len(parts) >= 3 else None
+
+            # Also check for Docker Compose (either v2 plugin or v1 standalone)
+            compose_available = False
+            try:
+                # Try docker compose v2 (plugin)
+                subprocess.run(
+                    ["docker", "compose", "version"],
+                    capture_output=True,
+                    check=True,
+                    timeout=2,
+                )
+                compose_available = True
+            except (
+                subprocess.SubprocessError,
+                FileNotFoundError,
+                subprocess.TimeoutExpired,
+            ):
+                # Try docker-compose v1 (standalone)
+                try:
+                    subprocess.run(
+                        ["docker-compose", "--version"],
+                        capture_output=True,
+                        check=True,
+                        timeout=2,
+                    )
+                    compose_available = True
+                except (
+                    subprocess.SubprocessError,
+                    FileNotFoundError,
+                    subprocess.TimeoutExpired,
+                ):
+                    pass
+
+            if not compose_available:
+                return DependencyStatus(
+                    name="Docker",
+                    installed=False,
+                    version=version,
+                    required=False,
+                    purpose="Containerized development (quickscale up/down) - Docker Compose not found",
+                )
 
             return DependencyStatus(
                 name="Docker",

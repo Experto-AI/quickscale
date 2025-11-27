@@ -219,5 +219,9 @@ quickscale_core/README.md
 quickscale_cli/README.md
 quickscale/README.md
 
+# Build state tracking files (used by build scripts)
+.quickscale/
+**/.quickscale/
+
 # Marketing content drafts (generated content not tracked in repo)
 marketing/

@@ -215,6 +215,11 @@ class ProjectGenerator:
             ("project_name/views.py.j2", f"{project_name}/views.py", False),
             ("project_name/wsgi.py.j2", f"{project_name}/wsgi.py", False),
             ("project_name/asgi.py.j2", f"{project_name}/asgi.py", False),
+            (
+                "project_name/context_processors.py.j2",
+                f"{project_name}/context_processors.py",
+                False,
+            ),
             # Settings files
             (
                 "project_name/settings/__init__.py.j2",

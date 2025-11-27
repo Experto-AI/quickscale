@@ -651,11 +651,22 @@ def embed(module: str, remote: str) -> None:
                 "  3. Create superuser (optional): poetry run python manage.py createsuperuser"
             )
             click.echo("  4. Start development server:")
+            click.echo("")
+            click.secho(
+                "     ⚠️  IMPORTANT: Use --build flag with Docker",
+                fg="yellow",
+                bold=True,
+            )
             click.secho(
                 "     • With Docker: quickscale down && quickscale up --build",
                 fg="cyan",
+                bold=True,
             )
-            click.echo("       (--build rebuilds image with new dependencies)")
+            click.secho(
+                "       ^^^ --build is REQUIRED to install new dependencies",
+                fg="yellow",
+            )
+            click.echo("")
             click.echo("     • Without Docker: poetry run python manage.py runserver")
             click.echo("  5. Visit http://localhost:8000/accounts/login/")
             click.echo("\n📖 Documentation: modules/auth/README.md")
@@ -673,11 +684,22 @@ def embed(module: str, remote: str) -> None:
                 "  3. Create superuser (optional): poetry run python manage.py createsuperuser"
             )
             click.echo("  4. Start development server:")
+            click.echo("")
+            click.secho(
+                "     ⚠️  IMPORTANT: Use --build flag with Docker",
+                fg="yellow",
+                bold=True,
+            )
             click.secho(
                 "     • With Docker: quickscale down && quickscale up --build",
                 fg="cyan",
+                bold=True,
             )
-            click.echo("       (--build rebuilds image with new dependencies)")
+            click.secho(
+                "       ^^^ --build is REQUIRED to install new dependencies",
+                fg="yellow",
+            )
+            click.echo("")
             click.echo("     • Without Docker: poetry run python manage.py runserver")
             click.echo("  5. Visit http://localhost:8000/admin/ to create blog posts")
             click.echo("  6. View your blog at http://localhost:8000/blog/")

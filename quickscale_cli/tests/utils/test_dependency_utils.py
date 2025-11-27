@@ -2,6 +2,7 @@
 
 from unittest.mock import Mock, patch
 
+import pytest
 
 from quickscale_cli.utils.dependency_utils import (
     DependencyStatus,
@@ -13,6 +14,12 @@ from quickscale_cli.utils.dependency_utils import (
     check_python_version,
     verify_required_dependencies,
 )
+
+
+@pytest.fixture(autouse=True)
+def enable_dependency_checks(monkeypatch):
+    """Enable dependency checks for these tests by clearing the skip flag."""
+    monkeypatch.delenv("QUICKSCALE_SKIP_DEPENDENCY_CHECKS", raising=False)
 
 
 class TestCheckPythonVersion:
