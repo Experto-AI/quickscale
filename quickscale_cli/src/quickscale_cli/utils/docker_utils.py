@@ -28,16 +28,20 @@ def find_docker_compose() -> Path | None:
 
 
 def get_docker_compose_command() -> list[str]:
-    """Get the appropriate docker compose command."""
-    # Try docker-compose first, fall back to docker compose
+    """Get the appropriate docker compose command.
+
+    Tries 'docker compose' (v2 plugin) first, falls back to 'docker-compose' (v1 standalone).
+    Both are fully supported.
+    """
+    # Try docker compose first (v2 plugin)
     try:
         subprocess.run(
-            ["docker-compose", "--version"], capture_output=True, check=True, timeout=2
+            ["docker", "compose", "version"], capture_output=True, check=True, timeout=2
         )
-        return ["docker-compose"]
-    except (subprocess.SubprocessError, FileNotFoundError, subprocess.TimeoutExpired):
-        # Fall back to docker compose (newer Docker versions)
         return ["docker", "compose"]
+    except (subprocess.SubprocessError, FileNotFoundError, subprocess.TimeoutExpired):
+        # Fall back to docker-compose (v1 standalone)
+        return ["docker-compose"]
 
 
 def get_container_status(container_name: str) -> str | None:

@@ -1,4 +1,4 @@
-# React Theme (Coming in v0.68.0)
+# React Theme (Coming in v0.71.0)
 
 This theme is not yet implemented. It will include:
 
@@ -8,6 +8,6 @@ This theme is not yet implemented. It will include:
 - Tailwind CSS for styling
 - Django REST Framework integration
 
-**Status**: Planned for release v0.68.0
+**Status**: Planned for release v0.71.0
 
 **To use**: This theme will be available via `quickscale init myproject --theme starter_react`

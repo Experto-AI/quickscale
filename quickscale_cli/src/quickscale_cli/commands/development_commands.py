@@ -1,8 +1,10 @@
 """Development lifecycle commands for QuickScale projects."""
 
+import json
 import re
 import subprocess
 import sys
+from pathlib import Path
 
 import click
 
@@ -42,6 +44,19 @@ def up(build: bool, no_cache: bool) -> None:
         click.echo("💡 Tip: Start Docker Desktop or the Docker daemon", err=True)
         sys.exit(1)
 
+    # Check if dependencies changed and suggest rebuild
+    if not build and _dependencies_changed_since_last_build():
+        click.secho(
+            "⚠️  Warning: Dependencies may have changed since last Docker build",
+            fg="yellow",
+            bold=True,
+        )
+        click.echo(
+            "   This can happen after embedding modules or updating dependencies.\n"
+            "   If you encounter import errors, rebuild the image:\n"
+        )
+        click.secho("   quickscale down && quickscale up --build\n", fg="cyan")
+
     # Check if required port is available BEFORE calling docker-compose
     port = get_port_from_env()
     if not is_port_available(port):
@@ -62,7 +77,12 @@ def up(build: bool, no_cache: bool) -> None:
 
     try:
         compose_cmd = get_docker_compose_command()
-        cmd = compose_cmd + ["up", "-d"]
+
+        # Use --progress plain during build for cleaner output without repetitive updates
+        if build or no_cache:
+            cmd = compose_cmd + ["--progress", "plain", "up", "-d"]
+        else:
+            cmd = compose_cmd + ["up", "-d"]
 
         if build or no_cache:
             cmd.append("--build")
@@ -71,9 +91,22 @@ def up(build: bool, no_cache: bool) -> None:
             cmd.append("--no-cache")
 
         click.echo("🚀 Starting Docker services...")
-        subprocess.run(cmd, check=True, capture_output=True, text=True)
+
+        # Show output during build operations for transparency
+        # Capture output for simple startups to keep it clean
+        if build or no_cache:
+            click.echo("📦 Building Docker images...")
+            click.echo("")  # Blank line for readability
+            subprocess.run(cmd, check=True, text=True)
+        else:
+            subprocess.run(cmd, check=True, capture_output=True, text=True)
+
         click.secho("✅ Services started successfully!", fg="green", bold=True)
         click.echo("💡 Tip: Use 'quickscale logs' to view service logs")
+
+        # Update build timestamp if build was performed
+        if build:
+            _update_last_build_timestamp()
 
     except subprocess.CalledProcessError as e:
         # Check for port conflict in error output
@@ -372,3 +405,76 @@ def ps() -> None:
             err=True,
         )
         sys.exit(1)
+
+
+def _get_build_state_file() -> Path:
+    """Get path to build state tracking file."""
+    return Path.cwd() / ".quickscale" / "build_state.json"
+
+
+def _dependencies_changed_since_last_build() -> bool:
+    """
+    Check if pyproject.toml or poetry.lock changed since last Docker build.
+
+    Returns
+    -------
+        True if dependencies may have changed, False otherwise
+    """
+    build_state_file = _get_build_state_file()
+    pyproject_file = Path.cwd() / "pyproject.toml"
+    poetry_lock_file = Path.cwd() / "poetry.lock"
+
+    # If build state file doesn't exist, we can't determine if changed
+    # (likely first time running, or old project)
+    if not build_state_file.exists():
+        return False
+
+    # If dependency files don't exist, something is wrong but don't warn
+    if not pyproject_file.exists() or not poetry_lock_file.exists():
+        return False
+
+    try:
+        with open(build_state_file) as f:
+            build_state = json.load(f)
+
+        last_pyproject_mtime: float = build_state.get("pyproject_mtime", 0)
+        last_poetry_lock_mtime: float = build_state.get("poetry_lock_mtime", 0)
+
+        current_pyproject_mtime = pyproject_file.stat().st_mtime
+        current_poetry_lock_mtime = poetry_lock_file.stat().st_mtime
+
+        # Return True if either file changed since last build
+        changed: bool = (
+            current_pyproject_mtime > last_pyproject_mtime
+            or current_poetry_lock_mtime > last_poetry_lock_mtime
+        )
+        return changed
+
+    except (json.JSONDecodeError, KeyError, OSError):
+        # If we can't read state, don't warn (fail safe)
+        return False
+
+
+def _update_last_build_timestamp() -> None:
+    """Update build state file with current dependency file timestamps."""
+    build_state_file = _get_build_state_file()
+    pyproject_file = Path.cwd() / "pyproject.toml"
+    poetry_lock_file = Path.cwd() / "poetry.lock"
+
+    # Ensure .quickscale directory exists
+    build_state_file.parent.mkdir(parents=True, exist_ok=True)
+
+    # Get current timestamps
+    pyproject_mtime = pyproject_file.stat().st_mtime if pyproject_file.exists() else 0
+    poetry_lock_mtime = (
+        poetry_lock_file.stat().st_mtime if poetry_lock_file.exists() else 0
+    )
+
+    # Write build state
+    build_state = {
+        "pyproject_mtime": pyproject_mtime,
+        "poetry_lock_mtime": poetry_lock_mtime,
+    }
+
+    with open(build_state_file, "w") as f:
+        json.dump(build_state, f, indent=2)

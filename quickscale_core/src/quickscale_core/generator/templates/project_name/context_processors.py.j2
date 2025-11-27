@@ -1,0 +1,15 @@
+"""
+Context processors for {{ project_name }}.
+"""
+from django.conf import settings as django_settings
+
+
+def project_settings(request):
+    """
+    Expose django settings to templates.
+
+    This allows templates to check for installed apps in settings.INSTALLED_APPS.
+    """
+    return {
+        "settings": django_settings,
+    }

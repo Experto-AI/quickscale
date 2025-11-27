@@ -2,6 +2,8 @@
 
 See docs/releases/ for detailed release notes.
 
+- v0.66.0 — 2025-11-24 — Blog module with Markdown, featured images, and RSS feeds
+- v0.65.0 — 2025-11-03 — Enhanced auth module and development tooling
 - v0.64.0 — 2025-11-01 — Theme rename to showcase_* (breaking change)
 - v0.63.0 — 2025-10-29 — Authentication Module with django-allauth and interactive embed
 - v0.62.0 — 2025-10-25 — Split Branch Infrastructure (module management CLI commands, GitHub Actions automation)

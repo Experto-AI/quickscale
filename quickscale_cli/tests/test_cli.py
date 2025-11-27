@@ -186,19 +186,19 @@ def test_init_command_unimplemented_themes(cli_runner):
     Regression test for: Issue where click.Abort() was caught by generic Exception handler,
     resulting in "❌ Unexpected error: " message with no actual error text.
     """
-    # Test showcase_htmx theme (planned for v0.67.0)
+    # Test showcase_htmx theme (planned for v0.70.0)
     result = cli_runner.invoke(cli, ["init", "testproj1", "--theme", "showcase_htmx"])
     assert result.exit_code == 1
     assert "not yet implemented" in result.output
-    assert "showcase_htmx: Coming in v0.67.0" in result.output
+    assert "showcase_htmx: Coming in v0.70.0" in result.output
     # Verify no spurious "Unexpected error:" message appears
     assert "Unexpected error:" not in result.output
 
-    # Test showcase_react theme (planned for v0.68.0)
+    # Test showcase_react theme (planned for v0.71.0)
     result = cli_runner.invoke(cli, ["init", "testproj2", "--theme", "showcase_react"])
     assert result.exit_code == 1
     assert "not yet implemented" in result.output
-    assert "showcase_react: Coming in v0.68.0" in result.output
+    assert "showcase_react: Coming in v0.71.0" in result.output
     # Verify no spurious "Unexpected error:" message appears
     assert "Unexpected error:" not in result.output
 

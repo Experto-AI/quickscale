@@ -1,8 +1,9 @@
 """Pytest configuration for quickscale_cli tests."""
 
+from unittest.mock import patch
+
 import pytest
 from click.testing import CliRunner
-from unittest.mock import patch
 
 
 @pytest.fixture
@@ -18,9 +19,11 @@ def sample_project_name() -> str:
 
 
 @pytest.fixture(autouse=True)
-def mock_dependencies():
+def mock_dependencies(monkeypatch):
     """Mock system dependency checks to always pass in tests."""
     from quickscale_cli.utils.dependency_utils import DependencyStatus
+
+    monkeypatch.setenv("QUICKSCALE_SKIP_DEPENDENCY_CHECKS", "1")
 
     mock_deps = [
         DependencyStatus("Python", True, "3.12.0", True, "Runtime"),
@@ -32,6 +35,9 @@ def mock_dependencies():
 
     with patch(
         "quickscale_cli.utils.dependency_utils.check_all_dependencies",
+        return_value=mock_deps,
+    ), patch(
+        "quickscale_cli.main.check_all_dependencies",
         return_value=mock_deps,
     ):
         yield

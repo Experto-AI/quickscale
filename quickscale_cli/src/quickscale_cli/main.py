@@ -97,8 +97,8 @@ def init(project_name: str, theme: str) -> None:
     \b
     Available themes:
       showcase_html    Pure HTML + CSS (default, production-ready)
-      showcase_htmx    HTMX + Alpine.js (coming in v0.67.0)
-      showcase_react   React + TypeScript SPA (coming in v0.68.0)
+    showcase_htmx    HTMX + Alpine.js (coming in v0.70.0)
+    showcase_react   React + TypeScript SPA (coming in v0.71.0)
     """
     # Step 1: Check system dependencies BEFORE generation
     click.echo("🔍 Checking system dependencies...")
@@ -145,8 +145,8 @@ def init(project_name: str, theme: str) -> None:
             click.echo(
                 f"\n💡 The '{theme}' theme is planned for a future release:", err=True
             )
-            click.echo("   - showcase_htmx: Coming in v0.67.0", err=True)
-            click.echo("   - showcase_react: Coming in v0.68.0", err=True)
+            click.echo("   - showcase_htmx: Coming in v0.70.0", err=True)
+            click.echo("   - showcase_react: Coming in v0.71.0", err=True)
             click.echo("\n📖 For now, use the default 'showcase_html' theme", err=True)
             raise click.Abort()
 

@@ -19,6 +19,27 @@
         </ul>
     </div>
 
+    <div class="installed-modules">
+        <h2>Installed Modules:</h2>
+        <ul>
+            {%raw%}{% if 'quickscale_modules_auth' in settings.INSTALLED_APPS %}
+            <li>✅ <strong>Authentication</strong> - User registration, login, profiles, and password management</li>
+            {% endif %}
+            {% if 'quickscale_modules_blog' in settings.INSTALLED_APPS %}
+            <li>✅ <strong>Blog</strong> - Full-featured blog with Markdown support, categories, tags, and RSS feed (<a href="{% url 'quickscale_blog:post_list' %}">View Blog</a>)</li>
+            {% endif %}
+            {% if 'quickscale_modules_billing' in settings.INSTALLED_APPS %}
+            <li>✅ <strong>Billing</strong> - Subscription management and payment processing</li>
+            {% endif %}
+            {% if 'quickscale_modules_teams' in settings.INSTALLED_APPS %}
+            <li>✅ <strong>Teams</strong> - Team collaboration and management features</li>
+            {% endif %}
+            {% if 'quickscale_modules_auth' not in settings.INSTALLED_APPS and 'quickscale_modules_blog' not in settings.INSTALLED_APPS and 'quickscale_modules_billing' not in settings.INSTALLED_APPS and 'quickscale_modules_teams' not in settings.INSTALLED_APPS %}
+            <li>No modules installed yet. Use <code>quickscale embed --module &lt;module_name&gt;</code> to add modules.</li>
+            {% endif %}{%endraw%}
+        </ul>
+    </div>
+
     <div class="resources">
         <h2>Resources:</h2>
         <ul>

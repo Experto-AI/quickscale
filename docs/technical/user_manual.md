@@ -153,17 +153,17 @@ QuickScale supports multiple frontend themes. Choose your theme during project i
 quickscale init myapp
 quickscale init myapp --theme showcase_html
 
-# HTMX theme (planned for v0.67.0)
+# HTMX theme (planned for v0.70.0)
 quickscale init myapp --theme showcase_htmx
 
-# React theme (planned for v0.68.0)
+# React theme (planned for v0.71.0)
 quickscale init myapp --theme showcase_react
 ```
 
 **Available themes**:
 - `showcase_html` - Pure HTML + CSS (default, production-ready, renamed from starter_html in v0.64.0)
-- `showcase_htmx` - HTMX + Alpine.js (coming in v0.67.0, renamed from starter_htmx in v0.64.0)
-- `showcase_react` - React + TypeScript SPA (coming in v0.68.0, renamed from starter_react in v0.64.0)
+- `showcase_htmx` - HTMX + Alpine.js (coming in v0.70.0, renamed from starter_htmx in v0.64.0)
+- `showcase_react` - React + TypeScript SPA (coming in v0.71.0, renamed from starter_react in v0.64.0)
 
 **Important**: Theme selection is one-time during project generation. Generated code is yours to own and customize - no updates or tracking after initialization.
 
@@ -179,9 +179,9 @@ poetry run python manage.py runserver
 
 The generated project is meant to be fully owned by the user — templates and guidance are in `scaffolding.md` and generated README files.
 
-### 4.1) Development Commands (v0.59.0 - Planned)
+### 4.1) Development Commands (Shipped in v0.59.0)
 
-> **Status**: Planned for v0.59.0
+> **Status**: ✅ Available (shipped in v0.59.0)
 >
 > The following commands will simplify Docker and Django operations, eliminating the need to remember complex docker-compose and docker exec syntax.
 
@@ -240,9 +240,9 @@ quickscale down                  # Stop services
 
 See [Roadmap v0.59.0](./roadmap.md#v0590-cli-development-commands--railway-deployment-) for complete implementation details.
 
-### 4.2) Git Subtree Commands (v0.60.0 - Planned)
+### 4.2) Git Subtree Commands (Shipped in v0.62.0)
 
-> **Status**: Planned for v0.60.0
+> **Status**: ✅ Available (shipped in v0.62.0)
 >
 > These commands will replace complex manual git subtree operations with simple CLI wrappers.
 
@@ -313,7 +313,7 @@ Run these scripts from the repository root.
 - CLI help: `quickscale --help`
 - Create project: `quickscale init <name>`
 
-**CLI Commands (v0.59.0 - Planned)**:
+**CLI Commands (v0.59.0 - Available)**:
 - Start services: `quickscale up`
 - Stop services: `quickscale down`
 - View logs: `quickscale logs [service]`
@@ -321,7 +321,7 @@ Run these scripts from the repository root.
 - Container shell: `quickscale shell`
 - Django commands: `quickscale manage <cmd>`
 
-**CLI Commands (v0.60.0 - Planned)**:
+**CLI Commands (v0.62.0 - Available)**:
 - Embed core: `quickscale embed`
 - Update core: `quickscale update`
 - Push changes: `quickscale push`
@@ -377,7 +377,7 @@ poetry publish --build
 
 ## 8) Git Subtree Workflow (Advanced)
 
-> **Note**: v0.60.0 will add CLI wrapper commands (`quickscale embed`, `quickscale update`, `quickscale push`) that simplify this workflow. See [section 4.2](#42-git-subtree-commands-v0600---planned) for the planned simplified commands.
+> **Note**: CLI wrapper commands (`quickscale embed`, `quickscale update`, `quickscale push`) now ship with QuickScale. See [section 4.2](#42-git-subtree-commands-shipped-in-v0620) for the simplified commands.
 >
 > The manual commands documented below will continue to work and are useful for understanding how git subtree works under the hood.
 

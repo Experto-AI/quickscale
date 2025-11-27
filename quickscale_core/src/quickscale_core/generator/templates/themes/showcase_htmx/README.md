@@ -1,4 +1,4 @@
-# HTMX Theme (Coming in v0.67.0)
+# HTMX Theme (Coming in v0.70.0)
 
 This theme is not yet implemented. It will include:
 
@@ -7,6 +7,6 @@ This theme is not yet implemented. It will include:
 - Modern CSS with Tailwind (optional)
 - Server-side rendering with Django templates
 
-**Status**: Planned for release v0.67.0
+**Status**: Planned for release v0.70.0
 
 **To use**: This theme will be available via `quickscale init myproject --theme starter_htmx`
