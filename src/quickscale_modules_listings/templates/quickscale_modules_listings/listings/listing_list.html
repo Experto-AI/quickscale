@@ -1,0 +1,95 @@
+{% extends "quickscale_modules_listings/listings/base.html" %}
+
+{% block title %}Listings{% endblock %}
+
+{% block content %}
+<section>
+    <h1>Listings</h1>
+
+    <!-- Filter Form -->
+    <form method="get" action="">
+        <fieldset>
+            <legend>Filter Listings</legend>
+            <label>
+                Min Price:
+                <input type="number" name="price_min" value="{{ filter_params.price_min }}" step="0.01" min="0">
+            </label>
+            <label>
+                Max Price:
+                <input type="number" name="price_max" value="{{ filter_params.price_max }}" step="0.01" min="0">
+            </label>
+            <label>
+                Location:
+                <input type="text" name="location" value="{{ filter_params.location }}">
+            </label>
+            <label>
+                Status:
+                <select name="status">
+                    <option value="">All</option>
+                    <option value="published" {% if filter_params.status == 'published' %}selected{% endif %}>Published</option>
+                    <option value="sold" {% if filter_params.status == 'sold' %}selected{% endif %}>Sold</option>
+                </select>
+            </label>
+            <button type="submit">Apply Filters</button>
+            <a href="{% url 'quickscale_listings:listing_list' %}">Clear Filters</a>
+        </fieldset>
+    </form>
+
+    {% if listings %}
+        <ul>
+            {% for listing in listings %}
+            <li>
+                <article>
+                    <h2><a href="{{ listing.get_absolute_url }}">{{ listing.title }}</a></h2>
+
+                    {% if listing.featured_image %}
+                    <img src="{{ listing.featured_image.url }}" alt="{{ listing.featured_image_alt }}">
+                    {% endif %}
+
+                    {% if listing.has_price %}
+                    <p><strong>Price:</strong> ${{ listing.price }}</p>
+                    {% else %}
+                    <p><strong>Price:</strong> Contact for price</p>
+                    {% endif %}
+
+                    {% if listing.location %}
+                    <p><strong>Location:</strong> {{ listing.location }}</p>
+                    {% endif %}
+
+                    {% if listing.description %}
+                    <p>{{ listing.description|truncatewords:30 }}</p>
+                    {% endif %}
+
+                    <footer>
+                        <p>
+                            <time datetime="{{ listing.published_date|date:'Y-m-d' }}">
+                                {{ listing.published_date|date:"F d, Y" }}
+                            </time>
+                        </p>
+                    </footer>
+                </article>
+            </li>
+            {% endfor %}
+        </ul>
+
+        <!-- Pagination -->
+        {% if is_paginated %}
+        <nav>
+            {% if page_obj.has_previous %}
+            <a href="?page=1{% for key, value in filter_params.items %}{% if value %}&{{ key }}={{ value }}{% endif %}{% endfor %}">First</a>
+            <a href="?page={{ page_obj.previous_page_number }}{% for key, value in filter_params.items %}{% if value %}&{{ key }}={{ value }}{% endif %}{% endfor %}">Previous</a>
+            {% endif %}
+
+            <span>Page {{ page_obj.number }} of {{ page_obj.paginator.num_pages }}</span>
+
+            {% if page_obj.has_next %}
+            <a href="?page={{ page_obj.next_page_number }}{% for key, value in filter_params.items %}{% if value %}&{{ key }}={{ value }}{% endif %}{% endfor %}">Next</a>
+            <a href="?page={{ page_obj.paginator.num_pages }}{% for key, value in filter_params.items %}{% if value %}&{{ key }}={{ value }}{% endif %}{% endfor %}">Last</a>
+            {% endif %}
+        </nav>
+        {% endif %}
+    {% else %}
+        <p>No listings available.</p>
+    {% endif %}
+</section>
+{% endblock %}
