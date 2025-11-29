@@ -38,15 +38,15 @@ QuickScale follows an evolution-aligned roadmap that starts as a personal toolki
 1. **Phase 1: Foundation + Core Modules (Showcase HTML Theme Only)** 🚧 _In Progress_
    - ✅ Theme system infrastructure and split branch management (v0.61.0-v0.62.0)
    - ✅ Auth module (v0.63.0) - production-ready with django-allauth
-   - 📋 Listings module (v0.67.0) - generic multi-vertical pattern
+   - 🚧 Listings module (v0.67.0) - generic base for vertical themes
    - 📋 **Plan/Apply System** (v0.68.0-v0.71.0) - Terraform-style configuration
-   - 📋 Billing module (v0.72.0) - Stripe integration
-   - 📋 Teams module (v0.73.0) - multi-tenancy
+   - 📋 Real Estate theme (v0.72.0) - first vertical theme (React-based)
+   - 📋 Billing module (v0.73.0) - Stripe integration
+   - 📋 Teams module (v0.74.0) - multi-tenancy
 
 2. **Phase 2: Additional Themes (Port Existing Modules)** 📋 _Planned_
-   - 📋 HTMX theme with Alpine.js (v0.74.0)
-   - 📋 React theme with TypeScript SPA (v0.75.0)
-   - 📋 Port all core modules to new themes
+   - 📋 HTMX theme with Alpine.js (v0.75.0)
+   - 📋 Port all core modules to HTMX theme
 
 3. **Phase 3: Expand Features (All Themes)** 📋 _Planned_
    - 📋 Notifications module with email infrastructure (v0.76.0)
@@ -65,15 +65,15 @@ QuickScale follows an evolution-aligned roadmap that starts as a personal toolki
 
 **Key Milestones:**
 - **v0.71.0:** Plan/Apply System Complete 🎯
-- **v0.73.0:** SaaS Feature Parity (auth, billing, teams) 🎯
+- **v0.74.0:** SaaS Feature Parity (auth, billing, teams) 🎯
 - **v1.0.0+:** Community platform (if demand exists)
 
 **Status:**
-- **Current Status:** v0.66.0 — Blog module with custom Django implementation
-- **Validation:** Real estate project testing blog and listings modules
-- **Next Milestone:** v0.67.0 - Listings module (generic multi-vertical pattern)
-- **Plan/Apply System:** v0.68.0-v0.71.0 - Terraform-style configuration
-- **SaaS Parity:** v0.73.0 - auth, billing, teams modules complete
+- **Current Status:** v0.67.0 — Listings module (in progress)
+- **Validation:** Abstract base model for vertical themes
+- **Next Milestone:** v0.68.0 - Plan/Apply System core commands
+- **Plan/Apply System:** v0.68.0-v0.71.0 - Terraform-style configuration (replaces `quickscale init`)
+- **SaaS Parity:** v0.74.0 - auth, billing, teams modules complete
 
 ## Notes and References
 
@@ -92,36 +92,114 @@ List of upcoming releases with detailed implementation tasks:
 
 ---
 
-### v0.67.0: Listings Module (`quickscale_modules.listings`)
+### v0.67.0: Listings Module
 
-**Status**: 📋 Planned (after blog module)
+**Status**: 🚧 In Progress
 
-**Strategic Context**: Generic listings base model supporting multiple verticals (real estate, jobs, events, products). Real estate becomes first implementation, validating generic pattern. Proves reusability from day 1.
+**Strategic Context**: Generic listings base model supporting multiple verticals (real estate, jobs, events, products). Provides `AbstractListing` model that vertical themes extend.
 
-**Core Abstraction**:
-- [ ] `AbstractListing` model (title, description, price, location, status) - Abstract Base Class
-- [ ] Search and filtering infrastructure
-- [ ] Zero-style templates
+**Prerequisites**:
+- ✅ Blog module pattern established (v0.66.0) — structural reference for src/ layout, testing, and zero-style templates
 
-**Real Estate Vertical** (First Implementation):
-- [ ] `Property` model extending `AbstractListing` (Concrete model in `examples/real_estate`)
-- [ ] Property-specific fields (bedrooms, bathrooms, sqft, type)
-- [ ] Real estate theme in `themes/real_estate` (or similar)
+**Listings Module** (in `quickscale_modules/listings/`):
 
-**Future Verticals**:
-- JobPosting, Event, Product, BusinessListing models
-- Vertical-specific extensions via Abstract Inheritance
+Structure follows blog module pattern:
+```
+quickscale_modules/listings/
+├── pyproject.toml
+├── README.md
+├── src/quickscale_modules_listings/
+│   ├── __init__.py
+│   ├── apps.py
+│   ├── models.py
+│   ├── views.py
+│   ├── urls.py
+│   ├── admin.py
+│   ├── filters.py
+│   ├── migrations/
+│   │   └── __init__.py
+│   ├── static/
+│   │   └── quickscale_modules_listings/
+│   │       └── .gitkeep
+│   └── templates/
+│       └── quickscale_modules_listings/
+│           └── listings/
+└── tests/
+```
 
-**Validation Workflow**:
-- [ ] Test in real estate project during development
-- [ ] Iterate module design based on real usage
-- [ ] Push improvements back to QuickScale
-- [ ] Update via `quickscale update`
+Tasks:
+- [ ] `quickscale_modules/listings/pyproject.toml` — Package configuration with dependencies (django-filter, Pillow) and dev-dependencies (pytest, pytest-django)
+- [ ] `quickscale_modules/listings/README.md` — Installation, configuration, and extension guide
+- [ ] `quickscale_modules/listings/src/quickscale_modules_listings/__init__.py` — Module version
+- [ ] `quickscale_modules/listings/src/quickscale_modules_listings/apps.py` — AppConfig with proper app_label
+- [ ] `quickscale_modules/listings/src/quickscale_modules_listings/models.py` — `AbstractListing` abstract model:
+  - `title`: CharField(max_length=200)
+  - `slug`: SlugField(max_length=200, unique=True, blank=True) — auto-generated from title
+  - `description`: TextField (plain text, not Markdown — simpler than blog posts)
+  - `price`: DecimalField(max_digits=12, decimal_places=2, null=True, blank=True) — nullable for "Contact for price"
+  - `location`: CharField(max_length=200, blank=True) — free-text location
+  - `status`: CharField with choices (DRAFT, PUBLISHED, SOLD, ARCHIVED)
+  - `featured_image`: ImageField(upload_to="listings/images/", blank=True, null=True)
+  - `featured_image_alt`: CharField(max_length=200, blank=True)
+  - `created_at`: DateTimeField(auto_now_add=True)
+  - `updated_at`: DateTimeField(auto_now=True)
+  - `published_date`: DateTimeField(null=True, blank=True) — set when status→PUBLISHED
+  - Meta: `abstract = True`, ordering by `-published_date`, indexes on status/published_date/slug
+- [ ] `quickscale_modules/listings/src/quickscale_modules_listings/views.py` — `ListingListView`, `ListingDetailView` (class-based views with filtering)
+- [ ] `quickscale_modules/listings/src/quickscale_modules_listings/urls.py` — URL patterns with `app_name = "quickscale_listings"`
+- [ ] `quickscale_modules/listings/src/quickscale_modules_listings/admin.py` — Admin configuration with search, filters, fieldsets
+- [ ] `quickscale_modules/listings/src/quickscale_modules_listings/filters.py` — `ListingFilter` using django-filter:
+  - PriceRangeFilter (min/max price fields)
+  - LocationFilter (case-insensitive location search)
+  - StatusFilter (dropdown for DRAFT/PUBLISHED/SOLD/ARCHIVED)
+- [ ] `quickscale_modules/listings/src/quickscale_modules_listings/migrations/0001_initial.py` — Initial migration
+- [ ] `quickscale_modules/listings/src/quickscale_modules_listings/templates/quickscale_modules_listings/listings/listing_list.html` — Zero-style list template
+- [ ] `quickscale_modules/listings/src/quickscale_modules_listings/templates/quickscale_modules_listings/listings/listing_detail.html` — Zero-style detail template
+- [ ] `quickscale_modules/listings/src/quickscale_modules_listings/templates/quickscale_modules_listings/listings/base.html` — Zero-style base template
+- [ ] `quickscale_modules/listings/src/quickscale_modules_listings/migrations/__init__.py` — Empty init for migrations package
+- [ ] `quickscale_modules/listings/src/quickscale_modules_listings/static/quickscale_modules_listings/.gitkeep` — Static files placeholder for future assets
 
-**Testing**:
-- [ ] Unit tests for base Listing model (70% coverage)
-- [ ] Integration tests for Property vertical
-- [ ] Real estate site validation
+**Acceptance Criteria**:
+- `AbstractListing` has `class Meta: abstract = True` — cannot be migrated or instantiated directly
+- Concrete model extending AbstractListing (e.g., `ConcreteListing` in tests) can be created and saved
+- ListView supports query params: `?price_min=X&price_max=Y&location=Z&status=published`
+- `ListingFilter` (django-filter) implements FilterSet for the abstract model fields
+- Module structure matches blog: `src/quickscale_modules_listings/`, tests outside `src/`
+- Templates use semantic HTML without CSS framework classes (zero-style)
+- `get_absolute_url()` returns URL using `app_name:listing_detail` pattern
+
+**Testing** (in `quickscale_modules/listings/tests/`):
+- [ ] `quickscale_modules/listings/tests/conftest.py` — Fixtures including:
+  - `ConcreteListing` **class definition** extending AbstractListing (required for testing abstract model)
+  - Factory fixtures for creating test listings
+  - User fixture for author-related tests (if needed)
+- [ ] `quickscale_modules/listings/tests/settings.py` — Django test settings
+- [ ] `quickscale_modules/listings/tests/urls.py` — Test URL configuration
+- [ ] `quickscale_modules/listings/tests/test_models.py` — AbstractListing validation via ConcreteListing test model:
+  - Define `ConcreteListing(AbstractListing)` class in this test file
+  - Test field types, constraints, and defaults
+  - Test auto-slug generation from title
+  - Test status transitions (DRAFT → PUBLISHED sets published_date)
+  - Test get_absolute_url() returns correct pattern
+  - Test Meta.abstract = False for concrete model (validates abstract pattern)
+  - Test ordering by -published_date
+  - **Minimum 70% coverage requirement**
+- [ ] `quickscale_modules/listings/tests/test_views.py` — List/detail views, filtering behavior
+- [ ] `quickscale_modules/listings/tests/test_urls.py` — URL resolution (100% coverage)
+- [ ] `quickscale_modules/listings/tests/test_filters.py` — Filter functionality tests
+- [ ] `quickscale_modules/listings/tests/test_admin.py` — Admin interface tests:
+  - Test admin registration
+  - Test search functionality
+  - Test list filters
+  - Test fieldsets organization
+
+**Quality Gates**:
+- `./scripts/lint.sh` passes (ruff, mypy)
+- `cd quickscale_modules/listings && poetry run pytest` passes with ≥70% coverage
+
+**Version Updates Required**:
+- [ ] Update `quickscale_modules/listings/pyproject.toml` version to `0.67.0`
+- [ ] Update `quickscale_modules/listings/src/quickscale_modules_listings/__init__.py` `__version__ = "0.67.0"`
 
 ---
 
@@ -299,7 +377,83 @@ List of upcoming releases with detailed implementation tasks:
 
 ---
 
-### v0.72.0: `quickscale_modules.billing` - Billing Module
+### v0.72.0: Real Estate Theme (React-based)
+
+**Status**: 📋 Planned
+
+**Strategic Context**: First vertical theme demonstrating React + Django integration. Uses `quickscale plan`/`quickscale apply` workflow and embeds listings module automatically. Serves as the React theme implementation.
+
+**Prerequisites**:
+- ✅ Listings module (v0.67.0)
+- ✅ Plan/Apply system (v0.68.0-v0.71.0)
+
+**Theme Structure** (in `quickscale_core/generator/templates/themes/real_estate/`):
+```
+real_estate/
+├── frontend/                    # React + Vite application
+│   ├── src/
+│   │   ├── components/          # Property cards, filters, gallery
+│   │   ├── pages/               # PropertyList, PropertyDetail
+│   │   ├── api/                 # API client for Django backend
+│   │   └── App.tsx
+│   ├── package.json
+│   └── vite.config.ts
+├── templates/                   # Django templates (minimal, React entry point)
+├── api/                         # Django REST Framework endpoints
+│   ├── serializers.py.j2
+│   ├── views.py.j2
+│   └── urls.py.j2
+├── models.py.j2                 # Property model extending AbstractListing
+├── views.py.j2                  # Property views (API + template)
+├── urls.py.j2                   # URL patterns
+├── admin.py.j2                  # Property admin configuration
+└── README.md                    # Theme documentation
+```
+
+**Backend Tasks**:
+- [ ] `models.py.j2` — `Property` model extending `AbstractListing` (bedrooms, bathrooms, sqft, property_type, amenities)
+- [ ] `api/serializers.py.j2` — PropertySerializer with nested images, filtering support
+- [ ] `api/views.py.j2` — PropertyViewSet with filtering, pagination, search
+- [ ] `api/urls.py.j2` — REST API URL patterns
+- [ ] `admin.py.j2` — Property admin with inline images, map preview
+
+**Frontend Tasks**:
+- [ ] `frontend/src/components/PropertyCard.tsx` — Property card with image, price, details
+- [ ] `frontend/src/components/PropertyFilters.tsx` — Price range, bedrooms, property type filters
+- [ ] `frontend/src/components/PropertyGallery.tsx` — Image gallery with lightbox
+- [ ] `frontend/src/pages/PropertyList.tsx` — Paginated property grid with filters
+- [ ] `frontend/src/pages/PropertyDetail.tsx` — Full property details with gallery
+- [ ] `frontend/src/api/client.ts` — API client for Django REST endpoints
+- [ ] `frontend/package.json` — Dependencies (React, Vite, axios, etc.)
+- [ ] `frontend/vite.config.ts` — Vite configuration for Django integration
+
+**Plan/Apply Integration**:
+- [ ] Add `real_estate` to theme choices in plan wizard
+- [ ] Auto-embed listings module when real_estate theme selected
+- [ ] Configure default module options for real estate use case
+- [ ] Generate working React + Django project via `quickscale apply`
+
+**Acceptance Criteria**:
+- `quickscale plan myrealestate` → select `real_estate` theme → `quickscale apply` generates working project
+- Property model successfully extends AbstractListing from listings module
+- React frontend communicates with Django API
+- Property list supports filtering by price, bedrooms, property type
+- Image gallery works with multiple property images
+- Development server runs both Django and Vite dev server
+
+**Testing**:
+- [ ] Unit tests for Property model and serializers
+- [ ] API tests for PropertyViewSet endpoints
+- [ ] E2E test: plan → apply → working real estate application
+
+**Quality Gates**:
+- `./scripts/lint.sh` passes
+- Generated project runs successfully with `quickscale up`
+- React frontend builds without errors
+
+---
+
+### v0.73.0: `quickscale_modules.billing` - Billing Module
 
 **Status**: 📋 Planned
 
@@ -328,7 +482,7 @@ List of upcoming releases with detailed implementation tasks:
 
 ---
 
-### v0.73.0: `quickscale_modules.teams` - Teams/Multi-tenancy Module
+### v0.74.0: `quickscale_modules.teams` - Teams/Multi-tenancy Module
 
 **Status**: 📋 Planned
 
@@ -357,9 +511,9 @@ List of upcoming releases with detailed implementation tasks:
 
 ---
 
-### Module Showcase Architecture (Deferred to Post-v0.73.0)
+### Module Showcase Architecture (Deferred to Post-v0.74.0)
 
-**Status**: 🚧 **NOT YET IMPLEMENTED** - Deferred to post-v0.73.0
+**Status**: 🚧 **NOT YET IMPLEMENTED** - Deferred to post-v0.74.0
 
 **Current Reality** (v0.66.0):
 - ✅ Basic context processor exists (`quickscale_core/context_processors.py`)
@@ -369,11 +523,11 @@ List of upcoming releases with detailed implementation tasks:
 - ❌ Current `index.html.j2`: Simple welcome page only
 
 **Why Deferred**:
-- Focus on Plan/Apply system and core modules first (v0.68-v0.73)
+- Focus on Plan/Apply system and core modules first (v0.68-v0.74)
 - Showcase architecture provides maximum value when multiple modules exist
 - Current simple welcome page is adequate for MVP
 
-**Implementation Plan**: After v0.73.0 (SaaS Feature Parity milestone), evaluate whether to implement showcase architecture or keep simple welcome page. Decision criteria:
+**Implementation Plan**: After v0.74.0 (SaaS Feature Parity milestone), evaluate whether to implement showcase architecture or keep simple welcome page. Decision criteria:
 - Are 3+ modules complete and production-ready?
 - Is module discovery a user pain point?
 - Would showcase provide meaningful marketing value?
@@ -382,27 +536,15 @@ List of upcoming releases with detailed implementation tasks:
 
 ---
 
-### v0.74.0: HTMX Frontend Theme
+### v0.75.0: HTMX Frontend Theme
 
 **Status**: 📋 Planned (after SaaS Feature Parity)
 
-**Rationale**: Focus on completing Plan/Apply system and core modules first.
+**Rationale**: React theme established via Real Estate theme (v0.72.0). HTMX provides alternative for progressive enhancement approach.
 
 **See**: [user_manual.md Theme Selection](../technical/user_manual.md#theme-selection-v0610) for current theme architecture.
 
 **When Implemented**: See [decisions.md: Module & Theme Architecture](./decisions.md#module-theme-architecture) for implementation specifications including HTMX + Alpine.js base templates and progressive enhancement patterns.
-
----
-
-### v0.75.0: React Frontend Theme
-
-**Status**: 📋 Planned (after SaaS Feature Parity)
-
-**Rationale**: Focus on completing Plan/Apply system and core modules first.
-
-**See**: [user_manual.md Theme Selection](../technical/user_manual.md#theme-selection-v0610) for current theme architecture.
-
-**When Implemented**: See [decisions.md: Module & Theme Architecture](./decisions.md#module-theme-architecture) for implementation specifications including React + TypeScript + Vite setup and Django REST Framework API endpoints.
 
 ---
 
@@ -464,7 +606,7 @@ List of upcoming releases with detailed implementation tasks:
 - [ ] Test conflict resolution workflows
 - [ ] E2E testing of enhanced UX features
 
-**Future Enhancements** (v0.78.0+, evaluate after v0.73.0):
+**Future Enhancements** (v0.78.0+, evaluate after v0.74.0):
 - [ ] Module versioning: `quickscale embed --module auth@v0.62.0` - Pin specific module version
 - [ ] Semantic versioning compatibility checks
 - [ ] Automatic migration scripts for breaking changes
