@@ -128,32 +128,52 @@ ls -la quickscale_modules/listings/tests/
 - `README.md` with installation and extension guide
 - `__init__.py` with version 0.67.0
 - `apps.py` with QuickscaleListingsConfig
-- `models.py` with AbstractListing abstract model (all 12 fields)
-- `views.py` with ListingListView and ListingDetailView
+- `models.py` with AbstractListing abstract model (all 12 fields) **+ concrete Listing model**
+- `views.py` with ListingListView and ListingDetailView **with model attribute set**
 - `urls.py` with app_name = "quickscale_listings"
-- `admin.py` with AbstractListingAdmin
+- `admin.py` with AbstractListingAdmin **+ registered ListingAdmin for concrete model**
 - `filters.py` with ListingFilter and get_listing_filter factory
+- `migrations/0001_initial.py` **— Initial migration for concrete Listing model**
 - `migrations/__init__.py` for migrations package
 - Zero-style templates (base.html, listing_list.html, listing_detail.html)
 - Static files placeholder (.gitkeep)
 - Complete test suite (68 tests, 100% coverage)
 
+### ✅ Task v0.67.0: CLI Embed Integration
+- Added `"listings"` to `AVAILABLE_MODULES` in `module_commands.py`
+- Created `configure_listings_module()` for interactive configuration
+- Created `apply_listings_configuration()` to update settings.py, urls.py, and pyproject.toml
+- Added `django-filter` dependency injection to project's pyproject.toml
+- Added listings to `MODULE_CONFIGURATORS` dictionary
+- Updated embed command docstring with listings description
+- Added listings-specific "Next steps" in embed output
+
+### ✅ Task v0.67.0: Template Integration
+- Added Listings section to `navigation.html.j2` (installed/not-installed states)
+- Added Listings to "Installed Modules" section in `index.html.j2`
+- Updated "no modules installed" condition to include listings
+
 ## Scope Compliance
 
 **In-scope (implemented)**:
 - AbstractListing abstract model with all roadmap-specified fields
+- **Concrete Listing model for immediate use after embed**
 - Auto-slug generation from title
 - Auto-published_date on status change to "published"
 - ListingFilter with price_min, price_max, location, status filters
-- ListView and DetailView with filtering support
+- ListView and DetailView with filtering support **and model attribute set**
 - AbstractListingAdmin with fieldsets, search, list_filter
+- **ListingAdmin registered for concrete Listing model**
 - Zero-style semantic HTML templates
 - Comprehensive test suite
+- **Initial migration (0001_initial.py) for concrete Listing model**
+- **CLI embed command integration with interactive configuration**
+- **Template integration (navigation + homepage)**
 
 **Out-of-scope (deliberate)**:
-- Initial migration file (0001_initial.py) — AbstractListing is abstract and cannot be migrated directly; users create migrations for their concrete models
-- CLI embed command integration (planned for future release)
 - Real-world vertical implementation (e.g., real_estate theme) (planned for v0.72.0)
+
+**Architecture Reference**: See [decisions.md §Module Implementation Checklist](../technical/decisions.md#module-implementation-checklist) for the authoritative checklist that all modules must follow.
 
 ## Dependencies
 
@@ -181,10 +201,11 @@ ls -la quickscale_modules/listings/tests/
 
 ## Notes and Known Issues
 
-- The module provides an abstract model; users must create concrete models that extend `AbstractListing` in their own applications
+- The module provides both an abstract model (`AbstractListing`) for extension and a concrete model (`Listing`) for immediate use
 - Tests use a `ConcreteListing` model defined in `tests/models.py` to validate the abstract model behavior
 - The `ListingListView` shows only published listings by default; filtering by status allows viewing other statuses
-- No initial migration file is included since `AbstractListing` is abstract and cannot create database tables directly
+- Users who need custom fields should extend `AbstractListing` in their own models; the concrete `Listing` model works out-of-the-box
+- **Post-release fix (v0.67.0)**: Added concrete `Listing` model, initial migration, CLI embed integration, and template integration to comply with [Module Implementation Checklist](../technical/decisions.md#module-implementation-checklist)
 
 ## Next Steps
 

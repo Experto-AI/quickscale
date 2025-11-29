@@ -352,6 +352,83 @@ modules:
 
 ---
 
+### Module Implementation Checklist {#module-implementation-checklist}
+
+**Architectural Decision (v0.67.0):** Every QuickScale module must be complete, embeddable, and usable immediately after `quickscale embed`. This checklist ensures no gaps between planning and implementation.
+
+#### **Required Components (All Modules)**
+
+**1. Package Structure:**
+- [ ] `quickscale_modules/<name>/pyproject.toml` — Package config with all dependencies
+- [ ] `quickscale_modules/<name>/README.md` — Installation, configuration, and usage guide
+- [ ] `quickscale_modules/<name>/src/quickscale_modules_<name>/` — Source code (src/ layout)
+- [ ] `quickscale_modules/<name>/tests/` — Test suite (outside src/)
+
+**2. Source Code (src/quickscale_modules_<name>/):**
+- [ ] `__init__.py` — Module version (e.g., `__version__ = "0.67.0"`)
+- [ ] `apps.py` — Django AppConfig with proper `name` and `label`
+- [ ] `models.py` — **Concrete model(s)** for immediate use (not just abstract base classes)
+- [ ] `views.py` — Views with `model` attribute set (not requiring subclassing)
+- [ ] `urls.py` — URL patterns with `app_name` for namespacing
+- [ ] `admin.py` — Admin registration for concrete models (not just base admin classes)
+- [ ] `migrations/0001_initial.py` — **Initial migration for concrete models**
+- [ ] `migrations/__init__.py` — Migrations package init
+
+**3. Templates (if applicable):**
+- [ ] `templates/quickscale_modules_<name>/` — Zero-style semantic HTML templates
+- [ ] Templates must work immediately after embed (no user customization required)
+
+**4. CLI Integration (quickscale_cli):**
+- [ ] Add module name to `AVAILABLE_MODULES` list in `module_commands.py`
+- [ ] Create `configure_<name>_module()` function for interactive prompts
+- [ ] Create `apply_<name>_configuration()` function to:
+  - [ ] Add dependencies to project's `pyproject.toml`
+  - [ ] Add module to `INSTALLED_APPS` in settings.py
+  - [ ] Add module-specific settings
+  - [ ] Add module URLs to project's `urls.py`
+- [ ] Add module to `MODULE_CONFIGURATORS` dictionary
+- [ ] Update embed command docstring with module description
+- [ ] Add module-specific "Next steps" instructions in embed output
+
+**5. Template Integration (showcase_html theme):**
+- [ ] Add module section to `navigation.html.j2` (installed/not-installed states)
+- [ ] Add module to "Installed Modules" section in `index.html.j2`
+- [ ] Update "no modules installed" condition to include new module
+
+**6. Testing:**
+- [ ] Unit tests for models, views, filters, admin
+- [ ] 70%+ test coverage (CI enforced)
+- [ ] Tests use concrete models (not abstract stubs)
+
+**7. Split Branch Publishing:**
+- [ ] Run `./scripts/publish_module.sh <name>` after implementation
+- [ ] Verify split branch exists: `splits/<name>-module`
+
+#### **Rationale**
+
+**Why concrete models are required (not just abstract):**
+- Modules must work immediately after `quickscale embed --module <name>`
+- Users should not need to create their own models to use the module
+- Abstract-only modules require user implementation, causing "missing QuerySet" errors
+- Concrete models can still be extended by users who need customization
+
+**Why initial migrations are required:**
+- `poetry run python manage.py migrate` must succeed after embed
+- Migrations for concrete models are module responsibility, not user's
+- Abstract models cannot be migrated; concrete models can and must be
+
+**Why CLI integration is required:**
+- `quickscale embed --module <name>` is the primary distribution mechanism
+- Interactive configuration provides immediate, working setup
+- Users should not manually edit settings.py, urls.py, or pyproject.toml
+
+**Why template integration is required:**
+- Generated projects show module status in navigation and homepage
+- Users can immediately see what's installed and access module features
+- Reduces confusion about which modules are available
+
+---
+
 **Post-MVP (v1.0.0+):**
 - 📦 `quickscale_modules/*`: Optional PyPI packages (for easier installation)
 - 📦 `quickscale_themes/*`: Optional PyPI packages (alternative to generator templates)
