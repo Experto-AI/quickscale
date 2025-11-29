@@ -43,6 +43,23 @@
             </li>
             {% endif %}
 
+            <!-- Listings Module Pages (if installed) -->
+            {% if 'quickscale_modules_listings' in settings.INSTALLED_APPS %}
+            <li class="nav-section">
+                <span class="nav-section-title">Listings</span>
+                <ul class="nav-submenu">
+                    <li><a href="{% url 'quickscale_listings:listing_list' %}">All Listings</a></li>
+                </ul>
+            </li>
+            {% else %}
+            <li class="nav-section nav-disabled">
+                <span class="nav-section-title">Listings (Not Installed)</span>
+                <ul class="nav-submenu">
+                    <li><span class="nav-disabled-link">All Listings</span></li>
+                </ul>
+            </li>
+            {% endif %}
+
             <!-- Billing Module Pages (if installed) -->
             {% if 'quickscale_modules_billing' in settings.INSTALLED_APPS %}
             <li class="nav-section">

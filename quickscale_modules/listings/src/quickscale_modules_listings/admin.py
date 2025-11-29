@@ -2,6 +2,8 @@
 
 from django.contrib import admin
 
+from .models import Listing
+
 
 class AbstractListingAdmin(admin.ModelAdmin):
     """Base admin class for listing models - extend for concrete models"""
@@ -50,15 +52,23 @@ class AbstractListingAdmin(admin.ModelAdmin):
     readonly_fields = ["created_at", "updated_at"]
 
 
+@admin.register(Listing)
+class ListingAdmin(AbstractListingAdmin):
+    """Admin for the default Listing model"""
+
+    pass
+
+
 # Note: This module provides AbstractListing and AbstractListingAdmin.
-# To use in your project:
+# To use custom listings in your project:
 #
-# 1. Create a concrete model:
+# 1. Create a concrete model extending AbstractListing:
 #    class PropertyListing(AbstractListing):
+#        bedrooms = models.IntegerField()
 #        class Meta(AbstractListing.Meta):
 #            abstract = False
 #
 # 2. Register with admin:
 #    @admin.register(PropertyListing)
 #    class PropertyListingAdmin(AbstractListingAdmin):
-#        pass  # or customize as needed
+#        list_display = AbstractListingAdmin.list_display + ['bedrooms']

@@ -5,10 +5,13 @@ from typing import Any
 from django.db.models import QuerySet
 from django.views.generic import DetailView, ListView
 
+from .models import Listing
+
 
 class ListingListView(ListView):
     """Display paginated list of published listings with filtering"""
 
+    model = Listing
     template_name = "quickscale_modules_listings/listings/listing_list.html"
     context_object_name = "listings"
     paginate_by = 12
@@ -50,6 +53,7 @@ class ListingListView(ListView):
 class ListingDetailView(DetailView):
     """Display single listing detail"""
 
+    model = Listing
     template_name = "quickscale_modules_listings/listings/listing_detail.html"
     context_object_name = "listing"
     slug_url_kwarg = "slug"
