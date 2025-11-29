@@ -1,0 +1,47 @@
+{% extends "quickscale_modules_listings/listings/base.html" %}
+
+{% block title %}{{ listing.title }} - Listings{% endblock %}
+
+{% block content %}
+<article>
+    <header>
+        <h1>{{ listing.title }}</h1>
+
+        {% if listing.featured_image %}
+        <img src="{{ listing.featured_image.url }}" alt="{{ listing.featured_image_alt }}">
+        {% endif %}
+
+        {% if listing.has_price %}
+        <p><strong>Price:</strong> ${{ listing.price }}</p>
+        {% else %}
+        <p><strong>Price:</strong> Contact for price</p>
+        {% endif %}
+
+        {% if listing.location %}
+        <p><strong>Location:</strong> {{ listing.location }}</p>
+        {% endif %}
+
+        <p>
+            <strong>Status:</strong> {{ listing.get_status_display }}
+        </p>
+
+        <p>
+            <strong>Listed:</strong>
+            <time datetime="{{ listing.published_date|date:'Y-m-d' }}">
+                {{ listing.published_date|date:"F d, Y" }}
+            </time>
+        </p>
+    </header>
+
+    {% if listing.description %}
+    <section>
+        <h2>Description</h2>
+        <p>{{ listing.description|linebreaks }}</p>
+    </section>
+    {% endif %}
+
+    <footer>
+        <p><a href="{% url 'quickscale_listings:listing_list' %}">← Back to all listings</a></p>
+    </footer>
+</article>
+{% endblock %}

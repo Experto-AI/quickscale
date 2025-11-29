@@ -38,7 +38,7 @@ QuickScale follows an evolution-aligned roadmap that starts as a personal toolki
 1. **Phase 1: Foundation + Core Modules (Showcase HTML Theme Only)** 🚧 _In Progress_
    - ✅ Theme system infrastructure and split branch management (v0.61.0-v0.62.0)
    - ✅ Auth module (v0.63.0) - production-ready with django-allauth
-   - 🚧 Listings module (v0.67.0) - generic base for vertical themes
+   - ✅ Listings module (v0.67.0) - generic base for vertical themes
    - 📋 **Plan/Apply System** (v0.68.0-v0.71.0) - Terraform-style configuration
    - 📋 Real Estate theme (v0.72.0) - first vertical theme (React-based)
    - 📋 Billing module (v0.73.0) - Stripe integration
@@ -69,7 +69,7 @@ QuickScale follows an evolution-aligned roadmap that starts as a personal toolki
 - **v1.0.0+:** Community platform (if demand exists)
 
 **Status:**
-- **Current Status:** v0.67.0 — Listings module (in progress)
+- **Current Status:** v0.67.0 — Listings module (complete)
 - **Validation:** Abstract base model for vertical themes
 - **Next Milestone:** v0.68.0 - Plan/Apply System core commands
 - **Plan/Apply System:** v0.68.0-v0.71.0 - Terraform-style configuration (replaces `quickscale init`)
@@ -92,114 +92,9 @@ List of upcoming releases with detailed implementation tasks:
 
 ---
 
-### v0.67.0: Listings Module
+### v0.67.0: Listings Module — ✅ Complete
 
-**Status**: 🚧 In Progress
-
-**Strategic Context**: Generic listings base model supporting multiple verticals (real estate, jobs, events, products). Provides `AbstractListing` model that vertical themes extend.
-
-**Prerequisites**:
-- ✅ Blog module pattern established (v0.66.0) — structural reference for src/ layout, testing, and zero-style templates
-
-**Listings Module** (in `quickscale_modules/listings/`):
-
-Structure follows blog module pattern:
-```
-quickscale_modules/listings/
-├── pyproject.toml
-├── README.md
-├── src/quickscale_modules_listings/
-│   ├── __init__.py
-│   ├── apps.py
-│   ├── models.py
-│   ├── views.py
-│   ├── urls.py
-│   ├── admin.py
-│   ├── filters.py
-│   ├── migrations/
-│   │   └── __init__.py
-│   ├── static/
-│   │   └── quickscale_modules_listings/
-│   │       └── .gitkeep
-│   └── templates/
-│       └── quickscale_modules_listings/
-│           └── listings/
-└── tests/
-```
-
-Tasks:
-- [ ] `quickscale_modules/listings/pyproject.toml` — Package configuration with dependencies (django-filter, Pillow) and dev-dependencies (pytest, pytest-django)
-- [ ] `quickscale_modules/listings/README.md` — Installation, configuration, and extension guide
-- [ ] `quickscale_modules/listings/src/quickscale_modules_listings/__init__.py` — Module version
-- [ ] `quickscale_modules/listings/src/quickscale_modules_listings/apps.py` — AppConfig with proper app_label
-- [ ] `quickscale_modules/listings/src/quickscale_modules_listings/models.py` — `AbstractListing` abstract model:
-  - `title`: CharField(max_length=200)
-  - `slug`: SlugField(max_length=200, unique=True, blank=True) — auto-generated from title
-  - `description`: TextField (plain text, not Markdown — simpler than blog posts)
-  - `price`: DecimalField(max_digits=12, decimal_places=2, null=True, blank=True) — nullable for "Contact for price"
-  - `location`: CharField(max_length=200, blank=True) — free-text location
-  - `status`: CharField with choices (DRAFT, PUBLISHED, SOLD, ARCHIVED)
-  - `featured_image`: ImageField(upload_to="listings/images/", blank=True, null=True)
-  - `featured_image_alt`: CharField(max_length=200, blank=True)
-  - `created_at`: DateTimeField(auto_now_add=True)
-  - `updated_at`: DateTimeField(auto_now=True)
-  - `published_date`: DateTimeField(null=True, blank=True) — set when status→PUBLISHED
-  - Meta: `abstract = True`, ordering by `-published_date`, indexes on status/published_date/slug
-- [ ] `quickscale_modules/listings/src/quickscale_modules_listings/views.py` — `ListingListView`, `ListingDetailView` (class-based views with filtering)
-- [ ] `quickscale_modules/listings/src/quickscale_modules_listings/urls.py` — URL patterns with `app_name = "quickscale_listings"`
-- [ ] `quickscale_modules/listings/src/quickscale_modules_listings/admin.py` — Admin configuration with search, filters, fieldsets
-- [ ] `quickscale_modules/listings/src/quickscale_modules_listings/filters.py` — `ListingFilter` using django-filter:
-  - PriceRangeFilter (min/max price fields)
-  - LocationFilter (case-insensitive location search)
-  - StatusFilter (dropdown for DRAFT/PUBLISHED/SOLD/ARCHIVED)
-- [ ] `quickscale_modules/listings/src/quickscale_modules_listings/migrations/0001_initial.py` — Initial migration
-- [ ] `quickscale_modules/listings/src/quickscale_modules_listings/templates/quickscale_modules_listings/listings/listing_list.html` — Zero-style list template
-- [ ] `quickscale_modules/listings/src/quickscale_modules_listings/templates/quickscale_modules_listings/listings/listing_detail.html` — Zero-style detail template
-- [ ] `quickscale_modules/listings/src/quickscale_modules_listings/templates/quickscale_modules_listings/listings/base.html` — Zero-style base template
-- [ ] `quickscale_modules/listings/src/quickscale_modules_listings/migrations/__init__.py` — Empty init for migrations package
-- [ ] `quickscale_modules/listings/src/quickscale_modules_listings/static/quickscale_modules_listings/.gitkeep` — Static files placeholder for future assets
-
-**Acceptance Criteria**:
-- `AbstractListing` has `class Meta: abstract = True` — cannot be migrated or instantiated directly
-- Concrete model extending AbstractListing (e.g., `ConcreteListing` in tests) can be created and saved
-- ListView supports query params: `?price_min=X&price_max=Y&location=Z&status=published`
-- `ListingFilter` (django-filter) implements FilterSet for the abstract model fields
-- Module structure matches blog: `src/quickscale_modules_listings/`, tests outside `src/`
-- Templates use semantic HTML without CSS framework classes (zero-style)
-- `get_absolute_url()` returns URL using `app_name:listing_detail` pattern
-
-**Testing** (in `quickscale_modules/listings/tests/`):
-- [ ] `quickscale_modules/listings/tests/conftest.py` — Fixtures including:
-  - `ConcreteListing` **class definition** extending AbstractListing (required for testing abstract model)
-  - Factory fixtures for creating test listings
-  - User fixture for author-related tests (if needed)
-- [ ] `quickscale_modules/listings/tests/settings.py` — Django test settings
-- [ ] `quickscale_modules/listings/tests/urls.py` — Test URL configuration
-- [ ] `quickscale_modules/listings/tests/test_models.py` — AbstractListing validation via ConcreteListing test model:
-  - Define `ConcreteListing(AbstractListing)` class in this test file
-  - Test field types, constraints, and defaults
-  - Test auto-slug generation from title
-  - Test status transitions (DRAFT → PUBLISHED sets published_date)
-  - Test get_absolute_url() returns correct pattern
-  - Test Meta.abstract = False for concrete model (validates abstract pattern)
-  - Test ordering by -published_date
-  - **Minimum 70% coverage requirement**
-- [ ] `quickscale_modules/listings/tests/test_views.py` — List/detail views, filtering behavior
-- [ ] `quickscale_modules/listings/tests/test_urls.py` — URL resolution (100% coverage)
-- [ ] `quickscale_modules/listings/tests/test_filters.py` — Filter functionality tests
-- [ ] `quickscale_modules/listings/tests/test_admin.py` — Admin interface tests:
-  - Test admin registration
-  - Test search functionality
-  - Test list filters
-  - Test fieldsets organization
-
-**Quality Gates**:
-- `./scripts/lint.sh` passes (ruff, mypy)
-- `cd quickscale_modules/listings && poetry run pytest` passes with ≥70% coverage
-
-**Version Updates Required**:
-- [ ] Update `quickscale_modules/listings/pyproject.toml` version to `0.67.0`
-- [ ] Update `quickscale_modules/listings/src/quickscale_modules_listings/__init__.py` `__version__ = "0.67.0"`
+See [release-v0.67.0-implementation.md](../releases/release-v0.67.0-implementation.md) for details.
 
 ---
 

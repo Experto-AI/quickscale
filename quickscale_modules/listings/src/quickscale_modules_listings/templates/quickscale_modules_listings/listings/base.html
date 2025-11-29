@@ -1,0 +1,37 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% block title %}Listings{% endblock %}</title>
+    {% load static %}
+    {% block extra_css %}{% endblock %}
+</head>
+<body>
+    <header>
+        <nav>
+            <a href="{% url 'quickscale_listings:listing_list' %}">Listings Home</a>
+        </nav>
+    </header>
+
+    <main>
+        {% if messages %}
+        <div>
+            {% for message in messages %}
+            <div>
+                {{ message }}
+            </div>
+            {% endfor %}
+        </div>
+        {% endif %}
+
+        {% block content %}{% endblock %}
+    </main>
+
+    <footer>
+        <p>&copy; {% now "Y" %} Listings. Built with QuickScale.</p>
+    </footer>
+
+    {% block extra_js %}{% endblock %}
+</body>
+</html>
