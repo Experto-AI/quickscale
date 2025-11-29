@@ -99,3 +99,16 @@ class AbstractListing(models.Model):
     def has_price(self) -> bool:
         """Check if listing has a price set"""
         return self.price is not None
+
+
+class Listing(AbstractListing):
+    """Concrete listing model for general-purpose use.
+
+    This model can be used directly or extended for vertical-specific listings.
+    For custom listings, extend AbstractListing instead.
+    """
+
+    class Meta(AbstractListing.Meta):
+        abstract = False
+        verbose_name = "Listing"
+        verbose_name_plural = "Listings"
