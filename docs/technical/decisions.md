@@ -283,7 +283,7 @@ Automatic changes made:
 **Future workflow** (v1.0.0+):
 ```yaml
 # quickscale.yml (optional, v1.0.0+)
-version: 0.66.0
+version: 0.67.0
 modules:
   auth:
     ACCOUNT_ALLOW_REGISTRATION: true
