@@ -2,6 +2,7 @@
 
 import os
 import shutil
+import subprocess
 import tempfile
 from pathlib import Path
 
@@ -200,7 +201,7 @@ class ProjectGenerator:
             ("README.md.j2", "README.md", False),
             ("manage.py.j2", "manage.py", True),
             ("pyproject.toml.j2", "pyproject.toml", False),
-            ("poetry.lock.j2", "poetry.lock", False),
+            # poetry.lock is generated dynamically via `poetry lock` below
             (".gitignore.j2", ".gitignore", False),
             (".dockerignore.j2", ".dockerignore", False),
             (".editorconfig.j2", ".editorconfig", False),
@@ -291,3 +292,56 @@ class ProjectGenerator:
             # Write file
             output_file_path = output_path / output_file
             write_file(output_file_path, content, executable=executable)
+
+        # Generate poetry.lock dynamically to ensure it's always in sync
+        # with pyproject.toml (avoids stale lock file issues)
+        self._generate_poetry_lock(output_path)
+
+    def _generate_poetry_lock(self, project_path: Path) -> None:
+        """
+        Generate poetry.lock file for the project.
+
+        Runs `poetry lock --no-update` in the project directory to create
+        a fresh lock file that matches pyproject.toml. This ensures the
+        lock file is always in sync with dependencies.
+
+        Args:
+        ----
+            project_path: Path to the generated project directory
+
+        Raises:
+        ------
+            RuntimeError: If poetry lock command fails
+
+        """
+        try:
+            result = subprocess.run(
+                ["poetry", "lock", "--no-update"],
+                cwd=project_path,
+                capture_output=True,
+                text=True,
+                check=False,
+            )
+
+            if result.returncode != 0:
+                # Log warning but don't fail - user can run poetry install manually
+                # This handles cases where poetry is not available or network issues
+                import sys
+
+                print(
+                    f"Warning: Could not generate poetry.lock: {result.stderr}",
+                    file=sys.stderr,
+                )
+                print(
+                    "Run 'poetry install' in the project directory to generate it.",
+                    file=sys.stderr,
+                )
+        except FileNotFoundError:
+            # Poetry not installed - user will need to run poetry install
+            import sys
+
+            print(
+                "Warning: Poetry not found. Run 'poetry install' in the project "
+                "directory to generate poetry.lock.",
+                file=sys.stderr,
+            )
