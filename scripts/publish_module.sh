@@ -111,7 +111,7 @@ echo ""
 
 # Perform git subtree split
 print_info "Running git subtree split..."
-if output=$(git subtree split --prefix="$MODULE_PATH" -b "$SPLIT_BRANCH" --rejoin 2>&1); then
+if output=$(git subtree split --prefix="$MODULE_PATH" -b "$SPLIT_BRANCH" --rejoin --ignore-joins 2>&1); then
     echo "$output"
     print_success "Git subtree split completed"
 else
