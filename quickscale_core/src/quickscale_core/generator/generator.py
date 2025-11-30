@@ -301,9 +301,9 @@ class ProjectGenerator:
         """
         Generate poetry.lock file for the project.
 
-        Runs `poetry lock --no-update` in the project directory to create
-        a fresh lock file that matches pyproject.toml. This ensures the
-        lock file is always in sync with dependencies.
+        Runs `poetry lock` in the project directory to create a fresh lock
+        file that matches pyproject.toml. This ensures the lock file is
+        always in sync with dependencies.
 
         Args:
         ----
@@ -316,7 +316,7 @@ class ProjectGenerator:
         """
         try:
             result = subprocess.run(
-                ["poetry", "lock", "--no-update"],
+                ["poetry", "lock"],
                 cwd=project_path,
                 capture_output=True,
                 text=True,
