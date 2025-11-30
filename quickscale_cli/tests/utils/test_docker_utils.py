@@ -96,21 +96,23 @@ class TestFindDockerCompose:
 
 
 class TestGetDockerComposeCommand:
-    """Tests for get_docker_compose_command function."""
+    """Tests for get_docker_compose_command."""
 
-    def test_docker_compose_command_available(self):
-        """Test when docker-compose command is available."""
+    def test_docker_compose_v2_available(self):
+        """Test when docker compose v2 plugin is available."""
         with patch("subprocess.run") as mock_run:
             mock_run.return_value = Mock(returncode=0)
             result = get_docker_compose_command()
-            assert result == ["docker-compose"]
+            # v2 plugin (docker compose) is tried first and preferred
+            assert result == ["docker", "compose"]
 
-    def test_docker_compose_fallback(self):
-        """Test fallback to docker compose."""
+    def test_docker_compose_v1_fallback(self):
+        """Test fallback to docker-compose v1 when v2 is not available."""
         with patch("subprocess.run") as mock_run:
             mock_run.side_effect = FileNotFoundError()
             result = get_docker_compose_command()
-            assert result == ["docker", "compose"]
+            # Falls back to v1 standalone (docker-compose)
+            assert result == ["docker-compose"]
 
 
 class TestGetContainerStatus:

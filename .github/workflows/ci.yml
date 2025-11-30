@@ -55,19 +55,40 @@ jobs:
       run: |
         poetry install --with dev
 
+    - name: Check for stale sub-package venvs
+      run: |
+        # Fail if any sub-package has a local .venv (should use root venv)
+        # This prevents version drift between packages
+        STALE_VENVS=$(find quickscale_core quickscale_cli quickscale quickscale_modules -maxdepth 2 -type d -name ".venv" 2>/dev/null || true)
+        if [ -n "$STALE_VENVS" ]; then
+          echo "ERROR: Found stale .venv directories in sub-packages:"
+          echo "$STALE_VENVS"
+          echo ""
+          echo "Sub-packages must use the root monorepo venv to prevent version drift."
+          echo "Delete these directories and use 'poetry install' from root instead."
+          exit 1
+        fi
+        echo "✓ No stale .venv directories found"
+
     - name: Run linting (ruff)
       run: |
-        poetry run ruff check quickscale_core quickscale_cli
-        echo "Running ruff format on quickscale_core..."
-        poetry run ruff format quickscale_core
-        echo "Running ruff format on quickscale_cli..."
-        poetry run ruff format quickscale_cli
+        poetry run ruff check quickscale_core quickscale_cli quickscale_modules
+        echo "Running ruff format..."
+        poetry run ruff format quickscale_core quickscale_cli quickscale_modules
         echo "Checking format..."
-        poetry run ruff format --check quickscale_core quickscale_cli
+        poetry run ruff format --check quickscale_core quickscale_cli quickscale_modules
 
     - name: Run type checking (mypy)
       run: |
         poetry run mypy quickscale_core/src/
+        poetry run mypy quickscale_cli/src/
+        # Type check modules (each module may have its own stubs config)
+        for mod in quickscale_modules/*/; do
+          if [ -d "${mod}src" ]; then
+            echo "Type checking ${mod}..."
+            poetry run mypy "${mod}src/" || true
+          fi
+        done
 
     - name: Run tests (quickscale_core) - Unit & Integration only
       run: |
@@ -76,6 +97,21 @@ jobs:
     - name: Run tests (quickscale_cli)
       run: |
         poetry run pytest quickscale_cli --cov=quickscale_cli --cov-report=xml --cov-report=term
+
+    - name: Run tests (quickscale_modules)
+      run: |
+        # Test modules using centralized dependencies
+        # PYTHONPATH set to module dir so tests.settings is importable
+        for mod in quickscale_modules/*/; do
+          if [ -d "${mod}tests" ]; then
+            mod_name=$(basename "$mod")
+            pkg_name="quickscale_modules_${mod_name}"
+            echo "Testing module: $mod_name"
+            PYTHONPATH="${mod}:${mod}src" poetry run pytest "${mod}tests/" \
+              --cov="$pkg_name" --cov-report=term \
+              -p pytest_django --ds=tests.settings || true
+          fi
+        done
 
     - name: Upload coverage reports
       uses: codecov/codecov-action@v4

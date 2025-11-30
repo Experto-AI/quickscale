@@ -482,11 +482,43 @@ Unsure if feature is MVP? → Check decisions.md MVP Feature Matrix (authoritati
 ## 4. Post-MVP Expansion (Modules & Themes) {#post-mvp-structure}
 Each module/theme is an independently publishable package. Namespaces `quickscale_modules` & `quickscale_themes` are PEP 420 implicit (no namespace `__init__.py`).
 
+### 4.1 Module Template Directory Convention
+
+Modules use a **double-nested template structure** for organization and future expansion:
+
+```
+templates/<app_label>/<feature_group>/
+```
+
+Where:
+- `<app_label>` — Matches Django's `app_label` (required for template namespacing, prevents collisions)
+- `<feature_group>` — Logical subdirectory matching the module's primary purpose
+
+**Rationale:**
+- Allows future expansion (e.g., `includes/`, `emails/`, `admin/` subdirectories)
+- Follows Django community best practices for reusable apps
+- Provides clear override paths for users customizing templates
+
+**Examples:**
+| Module | app_label | Template Path |
+|--------|-----------|---------------|
+| blog | `quickscale_modules_blog` | `templates/quickscale_modules_blog/blog/post_list.html` |
+| listings | `quickscale_modules_listings` | `templates/quickscale_modules_listings/listings/listing_list.html` |
+| auth | `quickscale_modules_auth` | `templates/quickscale_modules_auth/auth/login.html` |
+
+**View reference:**
+```python
+class PostListView(ListView):
+    template_name = "quickscale_modules_blog/blog/post_list.html"
+```
+
+### 4.2 Module Structure Example
+
 Example module (`auth`):
 ```
 quickscale_modules/auth/
 ├── pyproject.toml
-├── src/quickscale_modules/auth/
+├── src/quickscale_modules_auth/
 │   ├── __init__.py
 │   ├── apps.py
 │   ├── models.py
@@ -496,28 +528,38 @@ quickscale_modules/auth/
 │   ├── views/
 │   │   ├── __init__.py
 │   │   └── login.py
-│   ├── templates/quickscale_modules_auth/login.html
-│   └── migrations/0001_initial.py
+│   ├── templates/
+│   │   └── quickscale_modules_auth/
+│   │       └── auth/
+│   │           ├── login.html
+│   │           └── register.html
+│   └── migrations/
+│       └── __init__.py
 └── tests/
     ├── test_models.py
     ├── test_views.py
     └── test_integration.py
 ```
 
+### 4.3 Theme Structure Example
+
 Example theme (`starter`):
 ```
 quickscale_themes/starter/
 ├── pyproject.toml
-├── src/quickscale_themes/starter/
+├── src/quickscale_themes_starter/
 │   ├── __init__.py
 │   ├── apps.py
 │   ├── base_models.py              # Inheritance-friendly base classes
 │   ├── business.py
 │   ├── urls.py
-│   ├── templates/quickscale_themes_starter/
-│   │   ├── base.html
-│   │   └── dashboard.html
-│   └── migrations/0001_initial.py
+│   ├── templates/
+│   │   └── quickscale_themes_starter/
+│   │       └── starter/
+│   │           ├── base.html
+│   │           └── dashboard.html
+│   └── migrations/
+│       └── __init__.py
 └── tests/
     ├── test_base_models.py
     └── test_business_logic.py

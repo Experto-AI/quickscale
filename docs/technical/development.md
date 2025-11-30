@@ -257,13 +257,52 @@ quickscale/
 
 **Centralized Configuration:**
 - All dev dependencies are centralized in root `pyproject.toml`
+- All modules are installed in editable mode via root `pyproject.toml`
 - Shared Ruff config: `ruff.toml` (linting rules)
-- Shared mypy config: `mypy.ini` (type checking)
+- Shared mypy config: `mypy.ini` (type checking + module-specific overrides)
 - Run `poetry install` from root to install all packages + dev tools
+
+**Monorepo Virtual Environment Architecture:**
+- **Single venv at root**: All packages share the root `.venv/` directory
+- **Sub-packages MUST NOT have their own `.venv`**: Each sub-package has a `poetry.toml` with `virtualenvs.create = false`
+- **Why?** Prevents version drift (e.g., `pytest-cov 4.x` vs `6.x`) that causes cryptic errors like `TempliteSyntaxError: Don't understand tag`
+- **CI enforces this**: The CI workflow fails if any sub-package `.venv` is detected
+- **If you see stale `.venv` errors**: Delete all sub-package `.venv` directories:
+  ```bash
+  rm -rf quickscale_core/.venv quickscale_cli/.venv quickscale/.venv
+  rm -rf quickscale_modules/*/.venv
+  poetry install  # From root
+  ```
+
+**Module Testing Architecture:**
+- Modules use ROOT poetry environment (not their own `.venv`)
+- Module `pyproject.toml` has minimal dev dependencies (only `pytest-django`)
+- `./scripts/test_all.sh` runs module tests with `PYTHONPATH` set correctly
+- `./scripts/lint.sh` lints modules using ROOT poetry environment
+- See [Module Implementation Checklist](./decisions.md#module-implementation-checklist) for new module setup
 
 ---
 
 ## Common Issues & Solutions
+
+### Issue: "TempliteSyntaxError: Don't understand tag" or "coverage" version errors
+
+**Cause**: Stale `.venv` directories in sub-packages with outdated dependencies
+
+**Solution:**
+```bash
+# Delete all sub-package venvs
+rm -rf quickscale_core/.venv quickscale_cli/.venv quickscale/.venv
+rm -rf quickscale_modules/*/.venv
+
+# Reinstall from root
+cd /path/to/quickscale  # repository root
+poetry install
+```
+
+**Prevention**: Each sub-package has `poetry.toml` with `virtualenvs.create = false` to prevent this. The CI will fail if stale venvs are detected.
+
+---
 
 ### Issue: "quickscale: command not found"
 

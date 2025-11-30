@@ -18,7 +18,7 @@ from quickscale_core.utils.git_utils import (
 )
 
 # Available modules
-AVAILABLE_MODULES = ["auth", "billing", "teams", "blog"]
+AVAILABLE_MODULES = ["auth", "billing", "teams", "blog", "listings"]
 
 
 def has_migrations_been_run() -> bool:
@@ -366,9 +366,184 @@ MARKDOWNX_MEDIA_PATH = "blog/markdownx/"
     click.echo(f"  • RSS feed: {'Enabled' if config['enable_rss'] else 'Disabled'}")
 
 
+def configure_listings_module() -> dict[str, Any]:
+    """Interactive configuration for listings module"""
+    click.echo("\n⚙️  Configuring listings module...")
+    click.echo(
+        "The listings module provides an abstract base model for marketplace listings.\n"
+    )
+
+    config = {
+        "listings_per_page": click.prompt(
+            "Listings per page",
+            type=int,
+            default=12,
+        ),
+    }
+
+    return config
+
+
+def apply_listings_configuration(project_path: Path, config: dict[str, Any]) -> None:
+    """Apply listings module configuration to project settings"""
+    import re
+
+    # QuickScale uses settings/base.py and project_name/urls.py structure
+    settings_path = project_path / f"{project_path.name}" / "settings" / "base.py"
+    urls_path = project_path / f"{project_path.name}" / "urls.py"
+    pyproject_path = project_path / "pyproject.toml"
+
+    if not settings_path.exists():
+        click.secho(
+            "⚠️  Warning: settings.py not found, skipping auto-configuration",
+            fg="yellow",
+        )
+        return
+
+    # Read settings.py
+    with open(settings_path) as f:
+        settings_content = f.read()
+
+    # Check if already configured
+    if "quickscale_modules_listings" in settings_content:
+        click.echo("ℹ️  Listings module already configured in settings.py")
+        return
+
+    # Add django-filter dependency to pyproject.toml
+    if pyproject_path.exists():
+        with open(pyproject_path) as f:
+            pyproject_content = f.read()
+
+        if "django-filter" not in pyproject_content:
+            # Read django-filter version from the embedded listings module
+            listings_pyproject_path = (
+                project_path / "modules" / "listings" / "pyproject.toml"
+            )
+
+            if not listings_pyproject_path.exists():
+                click.secho(
+                    "❌ Error: Listings module pyproject.toml not found. "
+                    "Cannot determine django-filter version requirement.",
+                    fg="red",
+                    err=True,
+                )
+                click.echo(f"Expected file: {listings_pyproject_path}", err=True)
+                click.echo(
+                    "This indicates the listings module was not embedded correctly.",
+                    err=True,
+                )
+                raise click.Abort()
+
+            # Extract django-filter version using regex
+            try:
+                with open(listings_pyproject_path) as f:
+                    listings_pyproject_content = f.read()
+
+                version_match = re.search(
+                    r'django-filter\s*=\s*["\']([^"\']+)["\']',
+                    listings_pyproject_content,
+                )
+                if not version_match:
+                    click.secho(
+                        "❌ Error: Cannot find django-filter version in listings "
+                        "module's pyproject.toml",
+                        fg="red",
+                        err=True,
+                    )
+                    click.echo(f"File: {listings_pyproject_path}", err=True)
+                    click.echo('Expected format: django-filter = "^x.x.x"', err=True)
+                    click.echo(
+                        "Please check the listings module's dependencies.", err=True
+                    )
+                    raise click.Abort()
+                django_filter_version = version_match.group(1)
+            except (FileNotFoundError, AttributeError) as e:
+                click.secho(
+                    f"❌ Error: Failed to parse django-filter version from listings "
+                    f"module: {e}",
+                    fg="red",
+                    err=True,
+                )
+                click.echo(f"File: {listings_pyproject_path}", err=True)
+                click.echo(
+                    "Please ensure the listings module is properly embedded and its "
+                    "pyproject.toml is valid.",
+                    err=True,
+                )
+                raise click.Abort()
+
+            # Try to add to [tool.poetry.dependencies] section
+            dependencies_pattern = r"(\[tool\.poetry\.dependencies\][^\[]*)"
+            match = re.search(dependencies_pattern, pyproject_content, re.DOTALL)
+            if match:
+                dependencies_section = match.group(1)
+                # Add django-filter after the python version line
+                updated_dependencies = re.sub(
+                    r'(python = "[^"]*")',
+                    rf'\1\ndjango-filter = "{django_filter_version}"',
+                    dependencies_section,
+                )
+                pyproject_content = pyproject_content.replace(
+                    dependencies_section, updated_dependencies
+                )
+
+                with open(pyproject_path, "w") as f:
+                    f.write(pyproject_content)
+
+                click.secho("  ✅ Added django-filter to pyproject.toml", fg="green")
+            else:
+                click.secho(
+                    "⚠️  Warning: Could not find [tool.poetry.dependencies] section in "
+                    "pyproject.toml",
+                    fg="yellow",
+                )
+
+    # Add required apps to INSTALLED_APPS
+    installed_apps_addition = """
+# QuickScale Listings Module - Added by quickscale embed
+INSTALLED_APPS += [
+    "django_filters",  # Filtering support
+    "quickscale_modules_listings",  # Listings module
+]
+
+# Listings Module Settings
+"""
+
+    installed_apps_addition += f"LISTINGS_PER_PAGE = {config['listings_per_page']}\n"
+
+    # Append to settings.py
+    with open(settings_path, "a") as f:
+        f.write("\n" + installed_apps_addition)
+
+    click.secho("  ✅ Updated settings.py with listings configuration", fg="green")
+
+    # Update urls.py
+    if urls_path.exists():
+        with open(urls_path) as f:
+            urls_content = f.read()
+
+        if "quickscale_modules_listings" not in urls_content:
+            # Find urlpatterns and add listings URLs
+            if "urlpatterns = [" in urls_content:
+                urls_addition = '    path("listings/", include("quickscale_modules_listings.urls")),\n'
+                urls_content = urls_content.replace(
+                    "urlpatterns = [", "urlpatterns = [\n" + urls_addition
+                )
+
+                with open(urls_path, "w") as f:
+                    f.write(urls_content)
+
+                click.secho("  ✅ Updated urls.py with listings URLs", fg="green")
+
+    # Show configuration summary
+    click.echo("\n📋 Configuration applied:")
+    click.echo(f"  • Listings per page: {config['listings_per_page']}")
+
+
 MODULE_CONFIGURATORS = {
     "auth": (configure_auth_module, apply_auth_configuration),
     "blog": (configure_blog_module, apply_blog_configuration),
+    "listings": (configure_listings_module, apply_listings_configuration),
 }
 
 
@@ -393,17 +568,19 @@ def embed(module: str, remote: str) -> None:
       quickscale embed --module auth
       quickscale embed --module billing
       quickscale embed --module blog
+      quickscale embed --module listings
 
     \b
     Available modules:
-      - auth: Authentication with django-allauth (placeholder)
+      - auth: Authentication with django-allauth
       - billing: Stripe integration with dj-stripe (placeholder)
       - teams: Multi-tenancy and team management (placeholder)
-      - blog: Markdown-powered blog with categories, tags, and RSS (v0.66.0)
+      - blog: Markdown-powered blog with categories, tags, and RSS
+      - listings: Generic listings with filtering for marketplace verticals
 
     \b
-    Note: Blog module is fully implemented in v0.66.0. Other modules contain
-    placeholder READMEs and will be implemented in future releases.
+    Note: Auth, blog, and listings modules are fully implemented.
+    Billing and teams modules contain placeholder READMEs.
     """
     try:
         # Validate git repository
@@ -517,7 +694,7 @@ def embed(module: str, remote: str) -> None:
             applier(project_root, config)
 
         # Install dependencies for modules that need it
-        if module in ["auth", "blog"]:
+        if module in ["auth", "blog", "listings"]:
             click.echo("\n📦 Installing dependencies...")
             try:
                 import subprocess
@@ -705,6 +882,42 @@ def embed(module: str, remote: str) -> None:
             click.echo("  6. View your blog at http://localhost:8000/blog/")
             click.echo("  7. RSS feed available at http://localhost:8000/blog/feed/")
             click.echo("\n📖 Documentation: modules/blog/README.md")
+        elif module == "listings":
+            click.echo(f"  1. Review module code in modules/{module}/")
+            click.secho(
+                "  2. ⚠️  IMPORTANT: Run migrations (required before server start):",
+                fg="yellow",
+                bold=True,
+            )
+            click.secho(
+                "     poetry run python manage.py migrate", fg="cyan", bold=True
+            )
+            click.echo(
+                "  3. Create superuser (optional): poetry run python manage.py createsuperuser"
+            )
+            click.echo("  4. Start development server:")
+            click.echo("")
+            click.secho(
+                "     ⚠️  IMPORTANT: Use --build flag with Docker",
+                fg="yellow",
+                bold=True,
+            )
+            click.secho(
+                "     • With Docker: quickscale down && quickscale up --build",
+                fg="cyan",
+                bold=True,
+            )
+            click.secho(
+                "       ^^^ --build is REQUIRED to install new dependencies",
+                fg="yellow",
+            )
+            click.echo("")
+            click.echo("     • Without Docker: poetry run python manage.py runserver")
+            click.echo(
+                "  5. Create a concrete model extending AbstractListing (see README)"
+            )
+            click.echo("  6. View listings at http://localhost:8000/listings/")
+            click.echo("\n📖 Documentation: modules/listings/README.md")
         else:
             click.echo(f"  1. Review the module code in modules/{module}/")
             click.echo(f"  2. Follow setup instructions in modules/{module}/README.md")

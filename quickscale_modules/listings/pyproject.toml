@@ -1,0 +1,47 @@
+[tool.poetry]
+name = "quickscale-module-listings"
+version = "0.67.0"
+description = "QuickScale listings module with AbstractListing model for marketplace verticals"
+authors = ["Experto-AI <contact@experto.ai>"]
+license = "MIT"
+readme = "README.md"
+packages = [{include = "quickscale_modules_listings", from = "src"}]
+
+[tool.poetry.dependencies]
+python = "^3.11"
+Django = ">=5.0,<6.0"
+django-filter = "^24.0"
+Pillow = ">=10.0.0"
+
+[tool.poetry.group.dev.dependencies]
+# Minimal dev dependencies for standalone testing
+# pytest, pytest-cov, ruff, mypy centralized in root pyproject.toml (monorepo)
+# or provided by user's project (standalone embed)
+pytest-django = "^4.7.0"
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"
+
+# Ruff and mypy configurations centralized in root ruff.toml and mypy.ini
+# Package-specific overrides:
+
+[tool.ruff]
+target-version = "py311"  # This package requires Python 3.11+
+
+[[tool.mypy.overrides]]
+module = "django_filters.*"
+ignore_missing_imports = true
+
+[tool.mypy]
+plugins = ["mypy_django_plugin.main"]
+
+[tool.django-stubs]
+django_settings_module = "tests.settings"
+
+[tool.pytest.ini_options]
+DJANGO_SETTINGS_MODULE = "tests.settings"
+pythonpath = ["."]
+python_files = ["test_*.py"]
+testpaths = ["tests"]
+addopts = "-v --cov=src/quickscale_modules_listings --cov-report=html --cov-report=term-missing --cov-fail-under=70"

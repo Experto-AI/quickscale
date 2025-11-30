@@ -33,12 +33,15 @@ def mock_dependencies(monkeypatch):
         DependencyStatus("PostgreSQL", True, "15.0", True, "Database"),
     ]
 
-    with patch(
-        "quickscale_cli.utils.dependency_utils.check_all_dependencies",
-        return_value=mock_deps,
-    ), patch(
-        "quickscale_cli.main.check_all_dependencies",
-        return_value=mock_deps,
+    with (
+        patch(
+            "quickscale_cli.utils.dependency_utils.check_all_dependencies",
+            return_value=mock_deps,
+        ),
+        patch(
+            "quickscale_cli.main.check_all_dependencies",
+            return_value=mock_deps,
+        ),
     ):
         yield
 

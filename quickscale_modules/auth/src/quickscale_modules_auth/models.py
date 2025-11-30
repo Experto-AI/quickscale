@@ -1,6 +1,6 @@
 """User models for QuickScale authentication"""
 
-from django.contrib.auth.models import AbstractUser  # type: ignore[import-untyped]
+from django.contrib.auth.models import AbstractUser
 from django.urls import reverse
 
 

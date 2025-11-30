@@ -67,7 +67,8 @@ TARGET AUDIENCE: Maintainers, core contributors, community package developers, C
 
 **Package README Policy:**
 - ❌ Sub-packages (quickscale_core, quickscale_cli) MUST NOT have README.md
-- ✅ Use root README.md only (avoids duplication)
+- ✅ `quickscale_modules/*` MUST have README.md (distributed as standalone)
+- ✅ Use root README.md only for core/cli (avoids duplication)
 
 ## MVP vs Post-MVP Scope
 
@@ -150,54 +151,96 @@ myproject/
 
 #### **Themes: Generator Templates (One-time Copy)**
 
-**Purpose:** Frontend scaffolding with different tech stacks (HTML, HTMX, React).
+**Purpose:** Complete project scaffolding ranging from empty starters to full vertical applications.
+
+**Theme Categories (v0.67.0 Decision):**
+
+1. **Starter Themes** — Empty foundations for building custom applications
+   - `showcase_html` — Pure HTML + CSS (default)
+   - `showcase_htmx` — HTMX + Alpine.js (planned v0.74.0)
+   - `showcase_react` — React + TypeScript + Vite (planned v0.75.0)
+   - Minimal code, ready for module embedding
+   - Foundation for custom development
+
+2. **Vertical Themes** — Complete applications for specific industries
+   - `real_estate` — Property listings, React-based (v0.72.0, after plan/apply)
+   - `saas_starter` — SaaS with billing/teams (future)
+   - Pre-configured modules, production-ready
+   - Can be used as-is or further enhanced
 
 **Distribution Strategy:**
-1. Store themes in `quickscale_core/generator/templates/themes/{showcase_html,showcase_htmx,showcase_react}/`
-2. User selects theme during init: `quickscale init myproject --theme showcase_react`
+1. Store themes in `quickscale_core/generator/templates/themes/{theme_name}/`
+2. User selects theme via `quickscale plan` → `quickscale apply` (v0.68.0+)
 3. Generator copies theme files to user's project (Jinja2 rendering)
 4. User owns generated code completely, customizes immediately
 5. **NO embed/update for themes** - one-time scaffolding only
 
 **Workflow:**
 ```bash
-# User generates project with React theme
-quickscale init myproject --theme showcase_react
-# Copies themes/showcase_react/ → myproject/
-# User owns code, no git tracking
+# Create project with starter theme (empty foundation)
+quickscale plan myproject
+# → Select theme: showcase_html
+# → Select modules to embed: auth, billing
+quickscale apply
 
-# User immediately customizes:
-# - Changes colors, fonts, layout
-# - Adds custom React components
-# - Modifies package.json, vite.config.ts
-
-# No updates for themes (user owns the code)
+# Create project with vertical theme (complete application)
+quickscale plan myrealestate
+# → Select theme: real_estate
+# → Modules pre-configured (listings auto-embedded)
+quickscale apply
 ```
 
 **Theme Directory Structure:**
 ```
 quickscale_core/generator/templates/
 └── themes/
-  ├── showcase_html/         # Pure HTML + CSS
+    # Starter Themes (empty foundations)
+    ├── showcase_html/         # Pure HTML + CSS
     │   ├── templates/
     │   └── static/
-  ├── showcase_htmx/          # HTMX + Alpine.js + Tailwind
+    ├── showcase_htmx/         # HTMX + Alpine.js (planned v0.75.0)
     │   ├── templates/
     │   ├── static/
     │   └── package.json
-  └── showcase_react/         # React + TypeScript + Vite
-        ├── frontend/
+    ├── showcase_react/        # React + TypeScript + Vite (planned, via real_estate)
+    │   ├── frontend/
+    │   │   ├── src/
+    │   │   └── vite.config.ts
+    │   └── package.json
+    #
+    # Vertical Themes (complete applications)
+    └── real_estate/           # Property listings, React-based (v0.72.0)
+        ├── frontend/          # React + Vite application
         │   ├── src/
+        │   │   ├── components/
+        │   │   └── pages/
         │   └── vite.config.ts
-        └── package.json
+        ├── api/               # Django REST Framework
+        │   ├── serializers.py.j2
+        │   └── views.py.j2
+        ├── templates/         # Django templates (React entry point)
+        ├── models.py.j2       # Property model (extends AbstractListing)
+        ├── views.py.j2        # Property views
+        └── README.md          # Vertical documentation
 ```
+
+**Starter vs Vertical Theme Comparison:**
+
+| Aspect | Starter Themes | Vertical Themes |
+|--------|----------------|-----------------|
+| **Purpose** | Empty foundation | Complete application |
+| **Modules** | None (embed later) | Pre-configured |
+| **Use case** | Custom development | Production-ready or enhance |
+| **Examples** | showcase_html, showcase_react | real_estate, job_board |
+| **Customization** | Build from scratch | Modify existing features |
+
 
 **Key Characteristics:**
 - ❌ NOT runtime dependencies (just generated code)
 - ❌ NO updates after generation (user owns and customizes)
-- ✅ Frontend-heavy (~90% frontend, ~10% backend integration)
-- ✅ Heavy customization expected (colors, layout, components)
-- ✅ Disposable scaffolding, not ongoing dependencies
+- ✅ One-time scaffolding, user owns completely
+- ✅ Starter themes: empty foundations for custom development
+- ✅ Vertical themes: complete applications ready for production
 
 ---
 
@@ -206,7 +249,7 @@ quickscale_core/generator/templates/
 | Aspect | Modules | Themes |
 |--------|---------|--------|
 | **Distribution** | Split branches (git subtree) | Generator templates (Jinja2) |
-| **User Command** | `quickscale embed --module auth` | `quickscale init --theme showcase_react` |
+| **User Command** | `quickscale plan --add` | `quickscale plan` (theme selection) |
 | **Updates** | `quickscale update` (ongoing) | N/A (user owns code) |
 | **Lifecycle** | Runtime dependency | One-time scaffolding |
 | **Ownership** | Shared (can push back) | User owns completely |
@@ -283,7 +326,7 @@ Automatic changes made:
 **Future workflow** (v1.0.0+):
 ```yaml
 # quickscale.yml (optional, v1.0.0+)
-version: 0.66.0
+version: 0.67.0
 modules:
   auth:
     ACCOUNT_ALLOW_REGISTRATION: true
@@ -306,6 +349,135 @@ modules:
 - **Post-MVP (v1.0.0+)**: YAML support optional, interactive prompts unchanged
 
 **Authoritative Reference**: [roadmap.md §Module Configuration Strategy](./roadmap.md#-module-configuration-strategy-v06300)
+
+---
+
+### Module Implementation Checklist {#module-implementation-checklist}
+
+**Architectural Decision (v0.67.0):** Every QuickScale module must be complete, embeddable, and usable immediately after `quickscale embed`. This checklist ensures no gaps between planning and implementation.
+
+#### **Required Components (All Modules)**
+
+**1. Package Structure:**
+- [ ] `quickscale_modules/<name>/pyproject.toml` — Package config (see template below)
+- [ ] `quickscale_modules/<name>/README.md` — Installation, configuration, and usage guide
+- [ ] `quickscale_modules/<name>/src/quickscale_modules_<name>/` — Source code (src/ layout)
+- [ ] `quickscale_modules/<name>/tests/` — Test suite (outside src/)
+- [ ] `quickscale_modules/<name>/tests/__init__.py` — Tests package init
+- [ ] `quickscale_modules/<name>/tests/settings.py` — Django test settings
+- [ ] `quickscale_modules/<name>/tests/conftest.py` — pytest fixtures
+
+**1.1. Module pyproject.toml Template:**
+```toml
+[tool.poetry]
+name = "quickscale-module-<name>"
+version = "0.XX.0"
+description = "QuickScale <name> module - brief description"
+authors = ["Experto-AI <contact@experto.ai>"]
+license = "MIT"
+readme = "README.md"
+packages = [{include = "quickscale_modules_<name>", from = "src"}]
+
+[tool.poetry.dependencies]
+python = "^3.11"
+Django = ">=5.0,<6.0"
+# Add module-specific runtime dependencies here (e.g., django-allauth, Pillow)
+
+[tool.poetry.group.dev.dependencies]
+# Minimal dev dependencies - shared tools come from root pyproject.toml
+pytest-django = "^4.7.0"
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"
+
+[tool.pytest.ini_options]
+DJANGO_SETTINGS_MODULE = "tests.settings"
+pythonpath = ["."]
+python_files = ["test_*.py"]
+testpaths = ["tests"]
+addopts = "-v --cov=src/quickscale_modules_<name> --cov-report=html --cov-report=term-missing --cov-fail-under=70"
+```
+
+**1.2. Register Module in Root pyproject.toml:**
+Add the module to root `pyproject.toml` for centralized testing:
+```toml
+[tool.poetry.dependencies]
+quickscale-module-<name> = {path = "./quickscale_modules/<name>", develop = true}
+```
+
+**1.3. Register Module in Root mypy.ini:**
+Add mypy overrides for the module (Django models need relaxed type checking):
+```ini
+[mypy-quickscale_modules_<name>.*]
+disallow_untyped_defs = False
+warn_return_any = False
+warn_unused_ignores = False
+disable_error_code = var-annotated
+```
+
+**2. Source Code (src/quickscale_modules_<name>/):**
+- [ ] `__init__.py` — Module version (e.g., `__version__ = "0.67.0"`)
+- [ ] `apps.py` — Django AppConfig with proper `name` and `label`
+- [ ] `models.py` — **Concrete model(s)** for immediate use (not just abstract base classes)
+- [ ] `views.py` — Views with `model` attribute set (not requiring subclassing)
+- [ ] `urls.py` — URL patterns with `app_name` for namespacing
+- [ ] `admin.py` — Admin registration for concrete models (not just base admin classes)
+- [ ] `migrations/0001_initial.py` — **Initial migration for concrete models**
+- [ ] `migrations/__init__.py` — Migrations package init
+
+**3. Templates (if applicable):**
+- [ ] `templates/quickscale_modules_<name>/` — Zero-style semantic HTML templates
+- [ ] Templates must work immediately after embed (no user customization required)
+
+**4. CLI Integration (quickscale_cli):**
+- [ ] Add module name to `AVAILABLE_MODULES` list in `module_commands.py`
+- [ ] Create `configure_<name>_module()` function for interactive prompts
+- [ ] Create `apply_<name>_configuration()` function to:
+  - [ ] Add dependencies to project's `pyproject.toml`
+  - [ ] Add module to `INSTALLED_APPS` in settings.py
+  - [ ] Add module-specific settings
+  - [ ] Add module URLs to project's `urls.py`
+- [ ] Add module to `MODULE_CONFIGURATORS` dictionary
+- [ ] Update embed command docstring with module description
+- [ ] Add module-specific "Next steps" instructions in embed output
+
+**5. Template Integration (showcase_html theme):**
+- [ ] Add module section to `navigation.html.j2` (installed/not-installed states)
+- [ ] Add module to "Installed Modules" section in `index.html.j2`
+- [ ] Update "no modules installed" condition to include new module
+
+**6. Testing:**
+- [ ] Unit tests for models, views, filters, admin
+- [ ] 70%+ test coverage (CI enforced)
+- [ ] Tests use concrete models (not abstract stubs)
+
+**7. Split Branch Publishing:**
+- [ ] Run `./scripts/publish_module.sh <name>` after implementation
+- [ ] Verify split branch exists: `splits/<name>-module`
+
+#### **Rationale**
+
+**Why concrete models are required (not just abstract):**
+- Modules must work immediately after `quickscale embed --module <name>`
+- Users should not need to create their own models to use the module
+- Abstract-only modules require user implementation, causing "missing QuerySet" errors
+- Concrete models can still be extended by users who need customization
+
+**Why initial migrations are required:**
+- `poetry run python manage.py migrate` must succeed after embed
+- Migrations for concrete models are module responsibility, not user's
+- Abstract models cannot be migrated; concrete models can and must be
+
+**Why CLI integration is required:**
+- `quickscale embed --module <name>` is the primary distribution mechanism
+- Interactive configuration provides immediate, working setup
+- Users should not manually edit settings.py, urls.py, or pyproject.toml
+
+**Why template integration is required:**
+- Generated projects show module status in navigation and homepage
+- Users can immediately see what's installed and access module features
+- Reduces confusion about which modules are available
 
 ---
 
@@ -434,32 +606,34 @@ Other documents (README.md, roadmap.md, scaffolding.md, commercial.md) MUST refe
 - 📋 Placeholder directories for `themes/showcase_htmx/` and `themes/showcase_react/`
 
 **v0.62.0 - Split Branch Infrastructure (Module Management):**
-- 📋 `quickscale embed --module <name>` - Embed modules via split branches
-- 📋 `quickscale update` - Update installed modules
-- 📋 `quickscale push --module <name>` - Contribute module improvements
-- 📋 GitHub Actions for automatic split branch creation
-- 📋 `.quickscale/config.yml` module tracking
+- ✅ `quickscale embed --module <name>` - Embed modules via split branches
+- ✅ `quickscale update` - Update installed modules
+- ✅ `quickscale push --module <name>` - Contribute module improvements
+- ✅ GitHub Actions for automatic split branch creation
+- ✅ `.quickscale/config.yml` module tracking
 
-**v0.63.0-v0.69.0 - Core Module Track:**
+**v0.63.0-v0.74.0 - Core Module Track:**
 - ✅ `quickscale_modules.auth` - Authentication module core (v0.63.0)
-- 🚧 `quickscale_modules.blog` - Custom Django blog module with Markdown, categories, tags, RSS (v0.66.0, in development)
-- 📋 `quickscale_modules.billing` - Stripe billing module (v0.68.0)
-- 📋 `quickscale_modules.teams` - Teams/multi-tenancy module (v0.69.0)
+- ✅ `quickscale_modules.blog` - Blog module with Markdown, categories, tags, RSS (v0.66.0)
+- 🚧 `quickscale_modules.listings` - Generic listings base model (v0.67.0)
+- 📋 Plan/Apply System - Terraform-style configuration (v0.68.0-v0.71.0)
+- 📋 Real Estate Theme - First vertical theme, React-based (v0.72.0)
+- 📋 `quickscale_modules.billing` - Stripe billing module (v0.73.0)
+- 📋 `quickscale_modules.teams` - Teams/multi-tenancy module (v0.74.0)
 
-**v0.70.0-v0.71.0 - Additional Themes:**
-- 📋 HTMX theme variant with auth/billing/teams components (v0.70.0)
-- 📋 React theme variant with auth/billing/teams components (v0.71.0)
+**v0.75.0 - Additional Themes:**
+- 📋 HTMX theme with Alpine.js (v0.75.0)
 
-**v0.72.0 - Cross-Theme Module:**
-- 📋 `quickscale_modules.notifications` - Email infrastructure for all 3 themes (v0.72.0)
+**v0.76.0 - Cross-Theme Module:**
+- 📋 `quickscale_modules.notifications` - Email infrastructure for all themes (v0.76.0)
 
-**v0.73.0 - Advanced Module Management:**
+**v0.77.0 - Advanced Module Management:**
 - 📋 `quickscale update --all` - Batch update all modules
 - 📋 `quickscale status` - Show installed module versions
 - 📋 `quickscale list-modules` - Discover available modules
 - 📋 Enhanced conflict handling and progress indicators
 
-**v0.74.0 - Module Workflow Validation:**
+**v0.78.0 - Module Workflow Validation:**
 - 📋 Real-world validation of module updates across multiple projects
 - 📋 Safety automation to ensure user code is untouched during updates
 - 📋 Documented rollback procedures and case studies

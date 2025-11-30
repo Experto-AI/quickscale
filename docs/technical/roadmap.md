@@ -38,19 +38,20 @@ QuickScale follows an evolution-aligned roadmap that starts as a personal toolki
 1. **Phase 1: Foundation + Core Modules (Showcase HTML Theme Only)** 🚧 _In Progress_
    - ✅ Theme system infrastructure and split branch management (v0.61.0-v0.62.0)
    - ✅ Auth module (v0.63.0) - production-ready with django-allauth
-   - � Billing module (v0.68.0) - stub directory exists, implementation pending
-   - 📋 Teams module (v0.69.0) - stub directory exists, implementation pending
-   - 📋 Showcase architecture for module discovery (deferred to post-v0.69.0)
+   - ✅ Listings module (v0.67.0) - generic base for vertical themes
+   - 📋 **Plan/Apply System** (v0.68.0-v0.71.0) - Terraform-style configuration
+   - 📋 Real Estate theme (v0.72.0) - first vertical theme (React-based)
+   - 📋 Billing module (v0.73.0) - Stripe integration
+   - 📋 Teams module (v0.74.0) - multi-tenancy
 
 2. **Phase 2: Additional Themes (Port Existing Modules)** 📋 _Planned_
-   - 📋 HTMX theme with Alpine.js (v0.70.0)
-   - 📋 React theme with TypeScript SPA (v0.71.0)
-   - 📋 Port all core modules to new themes
+   - 📋 HTMX theme with Alpine.js (v0.75.0)
+   - 📋 Port all core modules to HTMX theme
 
 3. **Phase 3: Expand Features (All Themes)** 📋 _Planned_
-   - 📋 Notifications module with email infrastructure (v0.72.0)
-   - 📋 Advanced module management features (v0.73.0)
-   - 📋 Workflow validation and real-world testing (v0.74.0)
+   - 📋 Notifications module with email infrastructure (v0.76.0)
+   - 📋 Advanced module management features (v0.77.0)
+   - 📋 Workflow validation and real-world testing (v0.78.0)
 
 4. **Phase 4: Community Platform (Optional v1.0.0+)** 📋 _Future_
    - 📋 PyPI package distribution
@@ -63,14 +64,16 @@ QuickScale follows an evolution-aligned roadmap that starts as a personal toolki
 - 📋 = Planned/Not Started
 
 **Key Milestones:**
-- **v0.69.0:** SaaS Feature Parity (auth, billing, teams) 🎯
+- **v0.71.0:** Plan/Apply System Complete 🎯
+- **v0.74.0:** SaaS Feature Parity (auth, billing, teams) 🎯
 - **v1.0.0+:** Community platform (if demand exists)
 
 **Status:**
-- **Current Status:** v0.66.0 — Blog module with custom Django implementation
-- **Validation:** Real estate project testing blog and listings modules
-- **Next Milestone:** v0.67.0 - Listings module (generic multi-vertical pattern)
-- **SaaS Parity:** v0.69.0 - auth, billing, teams modules complete
+- **Current Status:** v0.67.0 — Listings module (complete)
+- **Validation:** Abstract base model for vertical themes
+- **Next Milestone:** v0.68.0 - Plan/Apply System core commands
+- **Plan/Apply System:** v0.68.0-v0.71.0 - Terraform-style configuration (replaces `quickscale init`)
+- **SaaS Parity:** v0.74.0 - auth, billing, teams modules complete
 
 ## Notes and References
 
@@ -87,58 +90,267 @@ QuickScale follows an evolution-aligned roadmap that starts as a personal toolki
 
 List of upcoming releases with detailed implementation tasks:
 
-### v0.66.0: Blog Module (`quickscale_modules.blog`)
+---
 
-**Release v0.66.0** (2025-11-24): Production-ready blog module with Markdown support, featured images, categories, tags, and RSS feeds. See [docs/releases/release-v0.66.0-implementation.md](../releases/release-v0.66.0-implementation.md) for complete details.
+### v0.67.0: Listings Module — ✅ Complete
+
+See [release-v0.67.0-implementation.md](../releases/release-v0.67.0-implementation.md) for details.
 
 ---
 
-### v0.67.0: Listings Module (`quickscale_modules.listings`)
+### v0.68.0: Plan/Apply System - Core Commands
 
-**Status**: 📋 Planned (after blog module)
+**Status**: 📋 Planned
 
-**Strategic Context**: Generic listings base model supporting multiple verticals (real estate, jobs, events, products). Real estate becomes first implementation, validating generic pattern. Proves reusability from day 1.
+**Technical Specification**: See [plan-apply-system.md](./plan-apply-system.md)
 
-**Core Abstraction**:
-- [ ] `AbstractListing` model (title, description, price, location, status) - Abstract Base Class
-- [ ] Search and filtering infrastructure
-- [ ] Zero-style templates
+**Objective**: Implement Terraform-style `quickscale plan` and `quickscale apply` commands for declarative project configuration.
 
-**Real Estate Vertical** (First Implementation):
-- [ ] `Property` model extending `AbstractListing` (Concrete model in `examples/real_estate`)
-- [ ] Property-specific fields (bedrooms, bathrooms, sqft, type)
-- [ ] Real estate theme in `themes/real_estate` (or similar)
+**Commands**:
+- [ ] `quickscale plan <name>` - Interactive wizard for new projects
+- [ ] `quickscale apply [config]` - Execute configuration file
 
-**Future Verticals**:
-- JobPosting, Event, Product, BusinessListing models
-- Vertical-specific extensions via Abstract Inheritance
+**YAML Schema**:
+- [ ] Define `quickscale.yml` schema (version, project, modules, docker)
+- [ ] Implement YAML validation with helpful error messages
+- [ ] Create schema documentation
 
-**Validation Workflow**:
-- [ ] Test in real estate project during development
-- [ ] Iterate module design based on real usage
-- [ ] Push improvements back to QuickScale
-- [ ] Update via `quickscale update`
+**Interactive Wizard** (`quickscale plan`):
+- [ ] Project name and theme selection
+- [ ] Module selection with descriptions
+- [ ] Module-specific configuration prompts
+- [ ] Docker options (start, build)
+- [ ] YAML preview before saving
+- [ ] Save to `quickscale.yml`
+
+**Apply Engine** (`quickscale apply`):
+- [ ] Parse and validate `quickscale.yml`
+- [ ] Execute steps in correct order:
+  1. Generate project
+  2. Git init + initial commit
+  3. Embed modules with git commits
+  4. Poetry install
+  5. Run migrations
+  6. Docker up (if configured)
+- [ ] Progress indicators and error handling
+- [ ] Success summary with next steps
+
+**Breaking Changes**:
+- [ ] Remove `quickscale init` command (replaced by `plan + apply`)
+- [ ] Remove `quickscale embed` command (replaced by `plan --add + apply`)
+- [ ] Update documentation to reflect new workflow
 
 **Testing**:
-- [ ] Unit tests for base Listing model (70% coverage)
-- [ ] Integration tests for Property vertical
-- [ ] Real estate site validation
+- [ ] Unit tests for YAML parsing and validation
+- [ ] Unit tests for interactive prompts
+- [ ] Integration tests for full plan/apply workflow
+- [ ] E2E test: plan → apply → working project
 
 ---
 
-### v0.70.0: HTMX Frontend Theme (Deferred)
+### v0.69.0: Plan/Apply System - State Management
 
-**Status**: Deferred to post-v0.69.0 (after SaaS Feature Parity)
+**Status**: 📋 Planned
 
-**Rationale**: Focus on completing core modules (auth, billing, teams) before adding new themes.
+**Objective**: Implement state tracking for incremental applies and existing project support.
 
-**See**: [user_manual.md Theme Selection](../technical/user_manual.md#theme-selection-v0610) for current theme architecture.
+**State File** (`.quickscale/state.yml`):
+- [ ] Create state file schema
+- [ ] Track applied modules and configuration
+- [ ] Record timestamps and commit SHAs
+- [ ] Auto-update on each apply
 
-**When Implemented**: See [decisions.md: Module & Theme Architecture](./decisions.md#module-theme-architecture) for implementation specifications including HTMX + Alpine.js base templates and progressive enhancement patterns.
+**Filesystem Verification**:
+- [ ] Check `modules/` directory for embedded modules
+- [ ] Verify state file matches filesystem
+- [ ] Handle state drift detection
+
+**Delta Detection**:
+- [ ] Compare desired state (`quickscale.yml`) vs applied state
+- [ ] Identify: new modules, removed modules, config changes
+- [ ] Generate change summary for user confirmation
+
+**Incremental Apply**:
+- [ ] Apply only changes (not full re-apply)
+- [ ] Skip already-embedded modules
+- [ ] Handle new module embedding
+
+**Testing**:
+- [ ] Unit tests for state file operations
+- [ ] Unit tests for delta detection
+- [ ] Integration tests for incremental apply
+- [ ] Test state recovery from filesystem
 
 ---
 
-### v0.68.0: `quickscale_modules.billing` - Billing Module
+### v0.70.0: Plan/Apply System - Existing Project Support
+
+**Status**: 📋 Planned
+
+**Objective**: Support adding modules and reconfiguring existing projects.
+
+**Commands**:
+- [ ] `quickscale plan --add` - Add modules to existing project
+- [ ] `quickscale plan --edit` - Reconfigure existing modules
+- [ ] `quickscale status` - Show current vs desired state
+
+**Add Modules** (`plan --add`):
+- [ ] Detect existing project (check for `quickscale.yml` or Django project)
+- [ ] Show currently embedded modules
+- [ ] Interactive wizard for adding new modules
+- [ ] Update existing `quickscale.yml`
+
+**Edit Configuration** (`plan --edit`):
+- [ ] Load current configuration from state
+- [ ] Show mutable options only (immutable are locked)
+- [ ] Interactive wizard for changing values
+- [ ] Update `quickscale.yml` with changes
+
+**Status Command**:
+- [ ] Display project info (name, theme, created date)
+- [ ] List modules with status (applied, pending, config)
+- [ ] Show Docker status
+- [ ] Highlight pending changes
+
+**Apply with Existing Project**:
+- [ ] Detect project exists → use incremental apply
+- [ ] Show change summary before applying
+- [ ] Confirm before making changes
+
+**Testing**:
+- [ ] Unit tests for existing project detection
+- [ ] Integration tests for --add workflow
+- [ ] Integration tests for --edit workflow
+- [ ] Integration tests for status command
+
+---
+
+### v0.71.0: Plan/Apply System - Module Manifests & Config Mutability
+
+**Status**: 📋 Planned
+
+**Objective**: Implement module manifests with mutable/immutable configuration.
+
+**Module Manifest** (`module.yml`):
+- [ ] Define manifest schema
+- [ ] Categorize config as mutable vs immutable
+- [ ] Specify Django settings mapping for mutable config
+- [ ] Add validation rules and defaults
+
+**Mutable Config**:
+- [ ] Store in Django `settings.py`
+- [ ] Update settings on apply
+- [ ] Module code reads from settings at runtime
+
+**Immutable Config**:
+- [ ] Lock at embed time
+- [ ] Store in state file
+- [ ] Reject changes with helpful error
+
+**Apply Behavior**:
+- [ ] Detect mutable config changes → update settings.py
+- [ ] Detect immutable config changes → error with guidance
+- [ ] Show post-apply notes for behavior changes
+
+**Remove Command**:
+- [ ] `quickscale remove <module>` - Remove embedded module
+- [ ] Confirm with data loss warning
+- [ ] Update state file
+- [ ] Guide for re-embedding with new config
+
+**Update Auth Module**:
+- [ ] Add `module.yml` manifest to auth module
+- [ ] Categorize existing options (registration, email_verification, etc.)
+- [ ] Update module code to read from settings
+
+**Testing**:
+- [ ] Unit tests for manifest parsing
+- [ ] Unit tests for mutable config updates
+- [ ] Integration tests for immutable config rejection
+- [ ] Integration tests for remove command
+- [ ] E2E test: change mutable config → apply → verify
+
+---
+
+### v0.72.0: Real Estate Theme (React-based)
+
+**Status**: 📋 Planned
+
+**Strategic Context**: First vertical theme demonstrating React + Django integration. Uses `quickscale plan`/`quickscale apply` workflow and embeds listings module automatically. Serves as the React theme implementation.
+
+**Prerequisites**:
+- ✅ Listings module (v0.67.0)
+- ✅ Plan/Apply system (v0.68.0-v0.71.0)
+
+**Theme Structure** (in `quickscale_core/generator/templates/themes/real_estate/`):
+```
+real_estate/
+├── frontend/                    # React + Vite application
+│   ├── src/
+│   │   ├── components/          # Property cards, filters, gallery
+│   │   ├── pages/               # PropertyList, PropertyDetail
+│   │   ├── api/                 # API client for Django backend
+│   │   └── App.tsx
+│   ├── package.json
+│   └── vite.config.ts
+├── templates/                   # Django templates (minimal, React entry point)
+├── api/                         # Django REST Framework endpoints
+│   ├── serializers.py.j2
+│   ├── views.py.j2
+│   └── urls.py.j2
+├── models.py.j2                 # Property model extending AbstractListing
+├── views.py.j2                  # Property views (API + template)
+├── urls.py.j2                   # URL patterns
+├── admin.py.j2                  # Property admin configuration
+└── README.md                    # Theme documentation
+```
+
+**Backend Tasks**:
+- [ ] `models.py.j2` — `Property` model extending `AbstractListing` (bedrooms, bathrooms, sqft, property_type, amenities)
+- [ ] `api/serializers.py.j2` — PropertySerializer with nested images, filtering support
+- [ ] `api/views.py.j2` — PropertyViewSet with filtering, pagination, search
+- [ ] `api/urls.py.j2` — REST API URL patterns
+- [ ] `admin.py.j2` — Property admin with inline images, map preview
+
+**Frontend Tasks**:
+- [ ] `frontend/src/components/PropertyCard.tsx` — Property card with image, price, details
+- [ ] `frontend/src/components/PropertyFilters.tsx` — Price range, bedrooms, property type filters
+- [ ] `frontend/src/components/PropertyGallery.tsx` — Image gallery with lightbox
+- [ ] `frontend/src/pages/PropertyList.tsx` — Paginated property grid with filters
+- [ ] `frontend/src/pages/PropertyDetail.tsx` — Full property details with gallery
+- [ ] `frontend/src/api/client.ts` — API client for Django REST endpoints
+- [ ] `frontend/package.json` — Dependencies (React, Vite, axios, etc.)
+- [ ] `frontend/vite.config.ts` — Vite configuration for Django integration
+
+**Plan/Apply Integration**:
+- [ ] Add `real_estate` to theme choices in plan wizard
+- [ ] Auto-embed listings module when real_estate theme selected
+- [ ] Configure default module options for real estate use case
+- [ ] Generate working React + Django project via `quickscale apply`
+
+**Acceptance Criteria**:
+- `quickscale plan myrealestate` → select `real_estate` theme → `quickscale apply` generates working project
+- Property model successfully extends AbstractListing from listings module
+- React frontend communicates with Django API
+- Property list supports filtering by price, bedrooms, property type
+- Image gallery works with multiple property images
+- Development server runs both Django and Vite dev server
+
+**Testing**:
+- [ ] Unit tests for Property model and serializers
+- [ ] API tests for PropertyViewSet endpoints
+- [ ] E2E test: plan → apply → working real estate application
+
+**Quality Gates**:
+- `./scripts/lint.sh` passes
+- Generated project runs successfully with `quickscale up`
+- React frontend builds without errors
+
+---
+
+### v0.73.0: `quickscale_modules.billing` - Billing Module
+
+**Status**: 📋 Planned
 
 **Stripe Integration**:
 - [ ] Set up dj-stripe for Stripe API integration
@@ -165,7 +377,9 @@ List of upcoming releases with detailed implementation tasks:
 
 ---
 
-### v0.69.0: `quickscale_modules.teams` - Teams/Multi-tenancy Module
+### v0.74.0: `quickscale_modules.teams` - Teams/Multi-tenancy Module
+
+**Status**: 📋 Planned
 
 **Team Management**:
 - [ ] Create team and membership models
@@ -192,9 +406,9 @@ List of upcoming releases with detailed implementation tasks:
 
 ---
 
-### Module Showcase Architecture (Deferred to Post-v0.69.0)
+### Module Showcase Architecture (Deferred to Post-v0.74.0)
 
-**Status**: 🚧 **NOT YET IMPLEMENTED** - Deferred to post-v0.69.0
+**Status**: 🚧 **NOT YET IMPLEMENTED** - Deferred to post-v0.74.0
 
 **Current Reality** (v0.66.0):
 - ✅ Basic context processor exists (`quickscale_core/context_processors.py`)
@@ -204,42 +418,34 @@ List of upcoming releases with detailed implementation tasks:
 - ❌ Current `index.html.j2`: Simple welcome page only
 
 **Why Deferred**:
-- Focus on completing auth, billing, teams modules first (v0.66-v0.69)
+- Focus on Plan/Apply system and core modules first (v0.68-v0.74)
 - Showcase architecture provides maximum value when multiple modules exist
 - Current simple welcome page is adequate for MVP
 
-**Implementation Plan**: After v0.69.0 (SaaS Feature Parity milestone), evaluate whether to implement showcase architecture or keep simple welcome page. Decision criteria:
+**Implementation Plan**: After v0.74.0 (SaaS Feature Parity milestone), evaluate whether to implement showcase architecture or keep simple welcome page. Decision criteria:
 - Are 3+ modules complete and production-ready?
 - Is module discovery a user pain point?
 - Would showcase provide meaningful marketing value?
 
-**If Implemented**: See [decisions.md: Module & Theme Architecture](./decisions.md#module-theme-architecture) for implementation patterns and [release-v0.65.0-plan.md](../releases/release-v0.65.0-plan.md) for original showcase specifications.
+**If Implemented**: See [decisions.md: Module & Theme Architecture](./decisions.md#module-theme-architecture) for implementation patterns.
 
 ---
 
-### v0.70.0: HTMX Frontend Theme (Deferred)
+### v0.75.0: HTMX Frontend Theme
 
-**Status**: Deferred to post-v0.69.0 (after SaaS Feature Parity)
+**Status**: 📋 Planned (after SaaS Feature Parity)
 
-**See**: v0.67.0 above for implementation details - this is the actual implementation release after deferral.
-
----
-
-### v0.71.0: React Frontend Theme (Deferred)
-
-**Status**: Deferred to post-v0.69.0 (after SaaS Feature Parity)
-
-**Rationale**: Focus on completing core modules (auth, billing, teams) before adding new themes.
+**Rationale**: React theme established via Real Estate theme (v0.72.0). HTMX provides alternative for progressive enhancement approach.
 
 **See**: [user_manual.md Theme Selection](../technical/user_manual.md#theme-selection-v0610) for current theme architecture.
 
-**When Implemented**: See [decisions.md: Module & Theme Architecture](./decisions.md#module-theme-architecture) for implementation specifications including React + TypeScript + Vite setup and Django REST Framework API endpoints.
+**When Implemented**: See [decisions.md: Module & Theme Architecture](./decisions.md#module-theme-architecture) for implementation specifications including HTMX + Alpine.js base templates and progressive enhancement patterns.
 
 ---
 
-### v0.72.0: `quickscale_modules.notifications` - Notifications Module (Deferred)
+### v0.76.0: `quickscale_modules.notifications` - Notifications Module
 
-**Status**: Deferred to post-v0.69.0 (after SaaS Feature Parity)
+**Status**: 📋 Planned (after SaaS Feature Parity)
 
 **Email Backend Integration**:
 - [ ] Set up django-anymail for multiple email providers
@@ -269,9 +475,9 @@ List of upcoming releases with detailed implementation tasks:
 
 ---
 
-### v0.73.0: Advanced Module Management Features
+### v0.77.0: Advanced Module Management Features
 
-**Note**: Basic module management commands (`quickscale embed --module <name>`, `quickscale update`, `quickscale push`) are implemented in **v0.62.0**. This release adds advanced features for managing multiple modules.
+**Note**: Basic module management commands (`quickscale update`, `quickscale push`) are implemented in **v0.62.0**. Plan/Apply system implemented in **v0.68.0-v0.71.0**. This release adds advanced features for managing multiple modules.
 
 **Batch Operations**:
 - [ ] Implement `quickscale update --all` command
@@ -295,7 +501,7 @@ List of upcoming releases with detailed implementation tasks:
 - [ ] Test conflict resolution workflows
 - [ ] E2E testing of enhanced UX features
 
-**Future Enhancements** (v0.74.0+, evaluate after v0.69.0):
+**Future Enhancements** (v0.78.0+, evaluate after v0.74.0):
 - [ ] Module versioning: `quickscale embed --module auth@v0.62.0` - Pin specific module version
 - [ ] Semantic versioning compatibility checks
 - [ ] Automatic migration scripts for breaking changes
@@ -307,7 +513,7 @@ List of upcoming releases with detailed implementation tasks:
 
 ---
 
-### v0.74.0: Module Workflow Validation & Real-World Testing
+### v0.78.0: Module Workflow Validation & Real-World Testing
 
 **Objective**: Validate that module updates work safely in real client projects and don't affect user's custom code.
 
@@ -324,7 +530,7 @@ List of upcoming releases with detailed implementation tasks:
 - [ ] Testing: E2E tests for multi-module workflows, conflict scenarios, and rollback functionality
 - [ ] Documentation: Create "Safe Module Updates" guide with screenshots and case studies
 
-**Rationale**: Module embed/update commands implemented in v0.62.0. This release validates those commands work safely in production after real usage across multiple client projects.
+**Rationale**: Module embed/update commands implemented in v0.62.0, Plan/Apply system in v0.68.0-v0.71.0. This release validates those systems work safely in production after real usage across multiple client projects.
 
 ---
 

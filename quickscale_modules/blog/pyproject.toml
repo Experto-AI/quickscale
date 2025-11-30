@@ -14,12 +14,10 @@ django-markdownx = "^4.0.0"
 Pillow = ">=10.0.0"
 
 [tool.poetry.group.dev.dependencies]
-# Most dev dependencies centralized in root pyproject.toml
-# Package-specific Django testing dependencies:
+# Minimal dev dependencies for standalone testing
+# pytest, pytest-cov, ruff, mypy centralized in root pyproject.toml (monorepo)
+# or provided by user's project (standalone embed)
 pytest-django = "^4.7.0"
-pytest-cov = "^7.0.0"
-mypy = "^1.8.0"
-django-stubs = "^5.0.0"
 
 [build-system]
 requires = ["poetry-core"]
@@ -43,7 +41,7 @@ django_settings_module = "tests.settings"
 
 [tool.pytest.ini_options]
 DJANGO_SETTINGS_MODULE = "tests.settings"
+pythonpath = ["."]
 python_files = ["test_*.py"]
-python_paths = ["."]
 testpaths = ["tests"]
 addopts = "-v --cov=src/quickscale_modules_blog --cov-report=html --cov-report=term-missing --cov-fail-under=70"
