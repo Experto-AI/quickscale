@@ -1,0 +1,6 @@
+# Poetry local configuration for quickscale (main package)
+# This prevents creation of local .venv - use root monorepo venv instead
+# See docs/technical/development.md for architecture details
+
+[virtualenvs]
+create = false

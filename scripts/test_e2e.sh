@@ -70,6 +70,7 @@ done
 SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
 PROJECT_ROOT="$(dirname "$SCRIPT_DIR")"
 CORE_DIR="$PROJECT_ROOT/quickscale_core"
+CLI_DIR="$PROJECT_ROOT/quickscale_cli"
 
 echo -e "${BLUE}╔════════════════════════════════════════╗${NC}"
 echo -e "${BLUE}║   QuickScale E2E Test Runner           ║${NC}"
@@ -83,7 +84,8 @@ if [ ! -d "$CORE_DIR" ]; then
     exit 1
 fi
 
-cd "$CORE_DIR"
+# Always run from project root using centralized poetry environment
+cd "$PROJECT_ROOT"
 
 # Cleanup function
 cleanup() {
@@ -91,7 +93,7 @@ cleanup() {
         echo -e "\n${YELLOW}Cleaning up Docker containers (pytest-docker handles this)...${NC}"
         # pytest-docker automatically cleans up containers, but we'll ensure any orphaned containers are removed
         cd "$CORE_DIR/tests"
-        docker-compose -f docker-compose.test.yml down -v 2>/dev/null || true
+        docker compose -f docker-compose.test.yml down -v 2>/dev/null || true
 
         # Cleanup any test containers that might be lingering
         docker ps -a | grep -E '(test|e2e_cli_test).*_(db|web|postgres)' | awk '{print $1}' | xargs -r docker rm -f 2>/dev/null || true
@@ -101,6 +103,9 @@ cleanup() {
         docker ps -a | grep -E ':(8000|5432)->' | awk '{print $1}' | xargs -r docker rm -f 2>/dev/null || true
 
         echo -e "${GREEN}✓ Cleanup complete${NC}"
+
+        # Return to project root
+        cd "$PROJECT_ROOT"
     else
         echo -e "\n${YELLOW}Skipping cleanup (--no-cleanup specified)${NC}"
         echo -e "${BLUE}To manually cleanup, run:${NC}"
@@ -123,7 +128,6 @@ echo ""
 
 # Step 2: Install Playwright browsers
 echo -e "${BLUE}[2/4] Installing Playwright browsers...${NC}"
-cd "$CORE_DIR"
 if ! poetry run playwright install chromium --with-deps > /dev/null 2>&1; then
     echo -e "${YELLOW}Warning: Playwright browser installation had issues${NC}"
     echo "Continuing anyway..."
@@ -137,8 +141,9 @@ echo -e "${YELLOW}Note: pytest-docker will automatically start PostgreSQL${NC}"
 echo -e "${YELLOW}This may take some minutes (includes installing project dependencies)...${NC}"
 echo ""
 
-# Build pytest command
-PYTEST_CMD="poetry run pytest -m e2e"
+# Build pytest command - run from root with PYTHONPATH for centralized venv
+# Using --rootdir to ensure pytest finds the correct conftest.py
+PYTEST_CMD="PYTHONPATH=\"$CORE_DIR:$CORE_DIR/src\" poetry run pytest $CORE_DIR/tests/ -m e2e --rootdir=$CORE_DIR"
 
 if [ -n "$VERBOSE" ]; then
     PYTEST_CMD="$PYTEST_CMD $VERBOSE"
@@ -183,10 +188,8 @@ echo -e "${BLUE}[4/4] Running CLI E2E tests...${NC}"
 echo -e "${YELLOW}Testing development commands with real Docker containers...${NC}"
 echo ""
 
-CLI_DIR="$PROJECT_ROOT/quickscale_cli"
-cd "$CLI_DIR"
-
-CLI_PYTEST_CMD="poetry run pytest -m e2e"
+# Build CLI pytest command - run from root with PYTHONPATH for centralized venv
+CLI_PYTEST_CMD="PYTHONPATH=\"$CLI_DIR:$CLI_DIR/src\" poetry run pytest $CLI_DIR/tests/ -m e2e --rootdir=$CLI_DIR"
 
 if [ -n "$VERBOSE" ]; then
     CLI_PYTEST_CMD="$CLI_PYTEST_CMD $VERBOSE"

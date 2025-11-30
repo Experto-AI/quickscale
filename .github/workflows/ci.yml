@@ -55,6 +55,21 @@ jobs:
       run: |
         poetry install --with dev
 
+    - name: Check for stale sub-package venvs
+      run: |
+        # Fail if any sub-package has a local .venv (should use root venv)
+        # This prevents version drift between packages
+        STALE_VENVS=$(find quickscale_core quickscale_cli quickscale quickscale_modules -maxdepth 2 -type d -name ".venv" 2>/dev/null || true)
+        if [ -n "$STALE_VENVS" ]; then
+          echo "ERROR: Found stale .venv directories in sub-packages:"
+          echo "$STALE_VENVS"
+          echo ""
+          echo "Sub-packages must use the root monorepo venv to prevent version drift."
+          echo "Delete these directories and use 'poetry install' from root instead."
+          exit 1
+        fi
+        echo "✓ No stale .venv directories found"
+
     - name: Run linting (ruff)
       run: |
         poetry run ruff check quickscale_core quickscale_cli quickscale_modules
