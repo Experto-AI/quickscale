@@ -28,22 +28,30 @@ poetry run pytest tests/ -q --tb=native --cov=src/ --cov-report=term-missing --c
 cd ..
 
 echo ""
-echo "📦 Testing quickscale_modules (if any)..."
-# Auto-detect modules and run their tests
+echo "📦 Testing quickscale_modules..."
+# Test modules using ROOT poetry environment (centralized dependencies)
+# Modules are installed in editable mode via root pyproject.toml
+# PYTHONPATH set to module dir so tests.settings is importable
 if [ -d "quickscale_modules" ]; then
   for mod in quickscale_modules/*; do
     if [ -d "$mod" ]; then
       mod_name=$(basename "$mod")
-      echo "  → Testing module: $mod_name"
       if [ -d "$mod/tests" ]; then
-        cd "$mod"
-        PYTHONPATH=. poetry run pytest tests/ -q --tb=native --cov=src/ --cov-report=term-missing --cov-report=html || EXIT_CODE=$?
-        cd - > /dev/null
+        echo "  → Testing module: $mod_name"
+        # Package name format: quickscale_modules_<name> (underscores, not hyphens)
+        pkg_name="quickscale_modules_${mod_name}"
+        # Use ROOT poetry environment with PYTHONPATH pointing to module
+        # Coverage uses package name (importable), not filesystem path
+        PYTHONPATH="$mod:$mod/src" poetry run pytest "$mod/tests/" -q --tb=native \
+          --cov="$pkg_name" --cov-report=term-missing \
+          -p pytest_django --ds=tests.settings || EXIT_CODE=$?
       else
-        echo "    → Skipping $mod_name (no tests/ directory)"
+        echo "  → Skipping $mod_name (no tests/ directory)"
       fi
     fi
   done
+else
+  echo "  → No quickscale_modules directory found"
 fi
 
 echo ""

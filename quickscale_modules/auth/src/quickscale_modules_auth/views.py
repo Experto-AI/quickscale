@@ -14,7 +14,7 @@ from quickscale_modules_auth.forms import ProfileUpdateForm
 User = get_user_model()
 
 
-class ProfileView(LoginRequiredMixin, DetailView):  # type: ignore[misc]
+class ProfileView(LoginRequiredMixin, DetailView):
     """Display user profile"""
 
     model = User
@@ -26,7 +26,7 @@ class ProfileView(LoginRequiredMixin, DetailView):  # type: ignore[misc]
         return self.request.user
 
 
-class ProfileUpdateView(LoginRequiredMixin, UpdateView):  # type: ignore[misc]
+class ProfileUpdateView(LoginRequiredMixin, UpdateView):
     """Update user profile"""
 
     model = User
@@ -44,7 +44,7 @@ class ProfileUpdateView(LoginRequiredMixin, UpdateView):  # type: ignore[misc]
         return super().form_valid(form)
 
 
-class AccountDeleteView(LoginRequiredMixin, DeleteView):  # type: ignore[misc]
+class AccountDeleteView(LoginRequiredMixin, DeleteView):
     """Delete user account"""
 
     model = User

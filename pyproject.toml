@@ -10,12 +10,16 @@ python = "^3.11"
 quickscale = {path = "./quickscale", develop = true}
 quickscale-core = {path = "./quickscale_core", develop = true}
 quickscale-cli = {path = "./quickscale_cli", develop = true}
+# All modules installed in editable mode for centralized testing
 quickscale-module-auth = {path = "./quickscale_modules/auth", develop = true}
+quickscale-module-blog = {path = "./quickscale_modules/blog", develop = true}
+quickscale-module-listings = {path = "./quickscale_modules/listings", develop = true}
 
 [tool.poetry.group.dev.dependencies]
 # Testing frameworks
 pytest = "^8.0"
-pytest-cov = "^4.1.0"
+pytest-cov = "^6.0.0"  # Updated for better coverage compatibility
+coverage = "^7.6.0"  # Pin to avoid templite syntax errors with newer versions
 pytest-docker = "^3.1.0"
 pytest-playwright = "^0.4.0"
 pytest-django = "^4.7.0"

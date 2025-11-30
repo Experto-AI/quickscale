@@ -2,11 +2,11 @@
 
 from typing import Any
 
-from allauth.account.adapter import DefaultAccountAdapter  # type: ignore[import-untyped]
+from allauth.account.adapter import DefaultAccountAdapter
 from django.conf import settings
 
 
-class QuickscaleAccountAdapter(DefaultAccountAdapter):  # type: ignore[misc]
+class QuickscaleAccountAdapter(DefaultAccountAdapter):
     """Custom account adapter for QuickScale authentication"""
 
     def is_open_for_signup(self, request: Any) -> bool:

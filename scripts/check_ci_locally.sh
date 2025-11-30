@@ -75,7 +75,13 @@ for mod in quickscale_modules/*; do
     if [ -d "$mod" ] && [ -d "$mod/tests" ]; then
         mod_name=$(basename "$mod")
         echo "    → Testing module: $mod_name"
-        poetry run pytest "$mod" --cov="$mod/src" --cov-report=term -q || FAILED=true
+        # Package name format: quickscale_modules_<name> (underscores, not hyphens)
+        pkg_name="quickscale_modules_${mod_name}"
+        # Use ROOT poetry environment with PYTHONPATH pointing to module
+        # Coverage uses package name (importable), not filesystem path
+        PYTHONPATH="$mod:$mod/src" poetry run pytest "$mod/tests/" -q \
+            --cov="$pkg_name" --cov-report=term \
+            -p pytest_django --ds=tests.settings || FAILED=true
     fi
 done
 

@@ -28,26 +28,28 @@ poetry run mypy src/
 cd ..
 
 echo ""
-echo "📦 Checking quickscale_modules (if any)..."
-# Auto-detect any modules under quickscale_modules/ and run ruff/mypy where applicable
+echo "📦 Checking quickscale_modules..."
+# Use ROOT poetry environment for linting (centralized dependencies)
+# Modules are installed in editable mode via root pyproject.toml
 if [ -d "quickscale_modules" ]; then
 	for mod in quickscale_modules/*; do
 		if [ -d "$mod" ]; then
-			echo "  → Found module: $(basename "$mod")"
+			mod_name=$(basename "$mod")
 			if [ -d "$mod/src" ]; then
-				cd "$mod"
+				echo "  → Linting module: $mod_name"
 				echo "    → Running ruff check..."
-				poetry run ruff check --fix src/ tests/ || true
+				poetry run ruff check --fix "$mod/src/" "$mod/tests/" || true
 				echo "    → Running ruff format..."
-				poetry run ruff format src/ tests/ || true
+				poetry run ruff format "$mod/src/" "$mod/tests/" || true
 				echo "    → Running mypy..."
-				poetry run mypy src/ || true
-				cd - > /dev/null
+				poetry run mypy "$mod/src/" || true
 			else
-				echo "    → Skipping $(basename "$mod") (no src/ directory)"
+				echo "  → Skipping $mod_name (no src/ directory)"
 			fi
 		fi
 	done
+else
+	echo "  → No quickscale_modules directory found"
 fi
 
 echo ""

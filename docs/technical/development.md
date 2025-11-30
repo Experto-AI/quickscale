@@ -257,9 +257,17 @@ quickscale/
 
 **Centralized Configuration:**
 - All dev dependencies are centralized in root `pyproject.toml`
+- All modules are installed in editable mode via root `pyproject.toml`
 - Shared Ruff config: `ruff.toml` (linting rules)
-- Shared mypy config: `mypy.ini` (type checking)
+- Shared mypy config: `mypy.ini` (type checking + module-specific overrides)
 - Run `poetry install` from root to install all packages + dev tools
+
+**Module Testing Architecture:**
+- Modules use ROOT poetry environment (not their own `.venv`)
+- Module `pyproject.toml` has minimal dev dependencies (only `pytest-django`)
+- `./scripts/test_all.sh` runs module tests with `PYTHONPATH` set correctly
+- `./scripts/lint.sh` lints modules using ROOT poetry environment
+- See [Module Implementation Checklist](./decisions.md#module-implementation-checklist) for new module setup
 
 ---
 

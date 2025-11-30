@@ -359,10 +359,62 @@ modules:
 #### **Required Components (All Modules)**
 
 **1. Package Structure:**
-- [ ] `quickscale_modules/<name>/pyproject.toml` — Package config with all dependencies
+- [ ] `quickscale_modules/<name>/pyproject.toml` — Package config (see template below)
 - [ ] `quickscale_modules/<name>/README.md` — Installation, configuration, and usage guide
 - [ ] `quickscale_modules/<name>/src/quickscale_modules_<name>/` — Source code (src/ layout)
 - [ ] `quickscale_modules/<name>/tests/` — Test suite (outside src/)
+- [ ] `quickscale_modules/<name>/tests/__init__.py` — Tests package init
+- [ ] `quickscale_modules/<name>/tests/settings.py` — Django test settings
+- [ ] `quickscale_modules/<name>/tests/conftest.py` — pytest fixtures
+
+**1.1. Module pyproject.toml Template:**
+```toml
+[tool.poetry]
+name = "quickscale-module-<name>"
+version = "0.XX.0"
+description = "QuickScale <name> module - brief description"
+authors = ["Experto-AI <contact@experto.ai>"]
+license = "MIT"
+readme = "README.md"
+packages = [{include = "quickscale_modules_<name>", from = "src"}]
+
+[tool.poetry.dependencies]
+python = "^3.11"
+Django = ">=5.0,<6.0"
+# Add module-specific runtime dependencies here (e.g., django-allauth, Pillow)
+
+[tool.poetry.group.dev.dependencies]
+# Minimal dev dependencies - shared tools come from root pyproject.toml
+pytest-django = "^4.7.0"
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"
+
+[tool.pytest.ini_options]
+DJANGO_SETTINGS_MODULE = "tests.settings"
+pythonpath = ["."]
+python_files = ["test_*.py"]
+testpaths = ["tests"]
+addopts = "-v --cov=src/quickscale_modules_<name> --cov-report=html --cov-report=term-missing --cov-fail-under=70"
+```
+
+**1.2. Register Module in Root pyproject.toml:**
+Add the module to root `pyproject.toml` for centralized testing:
+```toml
+[tool.poetry.dependencies]
+quickscale-module-<name> = {path = "./quickscale_modules/<name>", develop = true}
+```
+
+**1.3. Register Module in Root mypy.ini:**
+Add mypy overrides for the module (Django models need relaxed type checking):
+```ini
+[mypy-quickscale_modules_<name>.*]
+disallow_untyped_defs = False
+warn_return_any = False
+warn_unused_ignores = False
+disable_error_code = var-annotated
+```
 
 **2. Source Code (src/quickscale_modules_<name>/):**
 - [ ] `__init__.py` — Module version (e.g., `__version__ = "0.67.0"`)
