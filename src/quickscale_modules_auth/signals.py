@@ -2,7 +2,7 @@
 
 from typing import Any
 
-from allauth.account.signals import user_signed_up  # type: ignore[import-untyped]
+from allauth.account.signals import user_signed_up
 from django.dispatch import receiver
 
 
