@@ -8,6 +8,7 @@ keywords = ["django", "cli", "project-generator", "saas"]
 homepage = "https://github.com/Experto-AI/quickscale"
 repository = "https://github.com/Experto-AI/quickscale"
 documentation = "https://github.com/Experto-AI/quickscale/tree/main/docs"
+readme = "../README.md"
 classifiers = [
     "Development Status :: 3 - Alpha",
     "Intended Audience :: Developers",
