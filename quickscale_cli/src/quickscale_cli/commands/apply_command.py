@@ -1,0 +1,464 @@
+"""Apply command for executing project configuration
+
+Implements `quickscale apply [config]` - executes quickscale.yml configuration
+"""
+
+import subprocess
+from pathlib import Path
+
+import click
+
+from quickscale_cli.schema.config_schema import (
+    ConfigValidationError,
+    QuickScaleConfig,
+    validate_config,
+)
+from quickscale_core.generator import ProjectGenerator
+
+
+def _run_command(
+    cmd: list[str],
+    cwd: Path,
+    description: str,
+    capture: bool = True,
+) -> tuple[bool, str]:
+    """Run a shell command with progress output
+
+    Args:
+        cmd: Command and arguments
+        cwd: Working directory
+        description: Description for progress output
+        capture: Whether to capture output
+
+    Returns:
+        Tuple of (success, output)
+
+    """
+    click.echo(f"⏳ {description}...")
+    try:
+        result = subprocess.run(
+            cmd,
+            cwd=cwd,
+            capture_output=capture,
+            text=True,
+            check=False,
+        )
+        if result.returncode == 0:
+            click.secho(f"✅ {description}", fg="green")
+            return True, result.stdout if capture else ""
+        else:
+            click.secho(f"❌ {description} failed", fg="red")
+            if capture and result.stderr:
+                click.echo(result.stderr, err=True)
+            return False, result.stderr if capture else ""
+    except FileNotFoundError as e:
+        click.secho(f"❌ Command not found: {cmd[0]}", fg="red", err=True)
+        return False, str(e)
+    except Exception as e:
+        click.secho(f"❌ Unexpected error: {e}", fg="red", err=True)
+        return False, str(e)
+
+
+def _generate_project(config: QuickScaleConfig, output_path: Path) -> bool:
+    """Generate project using ProjectGenerator"""
+    try:
+        click.echo(f"⏳ Generating project: {config.project.name}...")
+
+        # Validate theme availability
+        if config.project.theme in ["showcase_htmx", "showcase_react"]:
+            click.secho(
+                f"❌ Error: Theme '{config.project.theme}' is not yet implemented",
+                fg="red",
+                err=True,
+            )
+            click.echo(
+                f"\n💡 The '{config.project.theme}' theme is planned for a future release:",
+                err=True,
+            )
+            click.echo("   - showcase_htmx: Coming in v0.70.0", err=True)
+            click.echo("   - showcase_react: Coming in v0.71.0", err=True)
+            return False
+
+        generator = ProjectGenerator(theme=config.project.theme)
+        generator.generate(config.project.name, output_path)
+
+        click.secho(f"✅ Project generated: {output_path}", fg="green")
+        return True
+    except FileExistsError:
+        click.secho(
+            f"❌ Directory already exists: {output_path}",
+            fg="red",
+            err=True,
+        )
+        click.echo("   Use --force to overwrite or choose a different name", err=True)
+        return False
+    except ValueError as e:
+        click.secho(f"❌ Invalid project configuration: {e}", fg="red", err=True)
+        return False
+    except Exception as e:
+        click.secho(f"❌ Failed to generate project: {e}", fg="red", err=True)
+        return False
+
+
+def _init_git(project_path: Path) -> bool:
+    """Initialize git repository"""
+    success, _ = _run_command(
+        ["git", "init"],
+        project_path,
+        "Initializing git repository",
+    )
+    return success
+
+
+def _git_commit(project_path: Path, message: str) -> bool:
+    """Create a git commit"""
+    # Stage all files
+    success, _ = _run_command(
+        ["git", "add", "-A"],
+        project_path,
+        f"Staging files for: {message}",
+    )
+    if not success:
+        return False
+
+    # Commit
+    success, _ = _run_command(
+        ["git", "commit", "-m", message],
+        project_path,
+        f"Committing: {message}",
+    )
+    return success
+
+
+def _embed_module(project_path: Path, module_name: str) -> bool:
+    """Embed a module using quickscale embed command with non-interactive mode"""
+    click.echo(f"⏳ Embedding module: {module_name}...")
+
+    try:
+        # Use --non-interactive flag to skip prompts and use defaults
+        result = subprocess.run(
+            ["quickscale", "embed", "--module", module_name, "--non-interactive"],
+            cwd=project_path,
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+
+        if result.returncode == 0:
+            click.secho(f"✅ Module embedded: {module_name}", fg="green")
+            return True
+        else:
+            click.secho(f"❌ Failed to embed module: {module_name}", fg="red", err=True)
+            # Check both stdout and stderr for error messages (click outputs to stdout)
+            all_output = (result.stdout or "") + "\n" + (result.stderr or "")
+            error_lines = []
+            for line in all_output.splitlines():
+                if "Error:" in line or "error:" in line.lower() or "❌" in line:
+                    error_lines.append(line.strip())
+            if error_lines:
+                for line in error_lines[:5]:  # Show up to 5 error lines
+                    click.echo(f"   {line}", err=True)
+            else:
+                # If no specific error found, show last few lines of output
+                output_lines = [
+                    out_line.strip()
+                    for out_line in all_output.splitlines()
+                    if out_line.strip()
+                ]
+                if output_lines:
+                    click.echo(f"   Last output: {output_lines[-1]}", err=True)
+            return False
+    except FileNotFoundError:
+        click.secho("❌ quickscale command not found", fg="red", err=True)
+        return False
+    except Exception as e:
+        click.secho(f"❌ Unexpected error embedding module: {e}", fg="red", err=True)
+        return False
+
+
+def _run_poetry_install(project_path: Path) -> bool:
+    """Run poetry install in project"""
+    return _run_command(
+        ["poetry", "install"],
+        project_path,
+        "Installing dependencies (poetry install)",
+    )[0]
+
+
+def _run_migrations(project_path: Path) -> bool:
+    """Run Django migrations"""
+    return _run_command(
+        ["poetry", "run", "python", "manage.py", "migrate"],
+        project_path,
+        "Running migrations",
+    )[0]
+
+
+def _start_docker(project_path: Path, build: bool = True) -> bool:
+    """Start Docker services using quickscale up"""
+    cmd = ["quickscale", "up"]
+    if build:
+        cmd.append("--build")
+
+    success, _ = _run_command(
+        cmd,
+        project_path,
+        "Starting Docker services",
+    )
+    return success
+
+
+@click.command()
+@click.argument(
+    "config",
+    required=False,
+    type=click.Path(exists=True),
+    default="quickscale.yml",
+)
+@click.option(
+    "--force",
+    "-f",
+    is_flag=True,
+    help="Overwrite existing project directory",
+)
+@click.option(
+    "--no-docker",
+    is_flag=True,
+    help="Skip Docker operations even if configured",
+)
+@click.option(
+    "--no-modules",
+    is_flag=True,
+    help="Skip module embedding",
+)
+def apply(config: str, force: bool, no_docker: bool, no_modules: bool) -> None:
+    """
+    Execute project configuration from quickscale.yml.
+
+    Generates a Django project based on the configuration file,
+    embeds selected modules, and optionally starts Docker services.
+
+    \b
+    Examples:
+      quickscale apply                    # Use quickscale.yml in current dir
+      quickscale apply myapp/quickscale.yml  # Use specific config file
+      quickscale apply --force            # Overwrite existing project
+      quickscale apply --no-docker        # Skip Docker operations
+
+    \b
+    Execution Order:
+      1. Validate configuration
+      2. Generate project
+      3. Initialize git + initial commit
+      4. Embed modules (if configured)
+      5. Run poetry install
+      6. Run migrations
+      7. Start Docker (if configured)
+    """
+    config_path = Path(config)
+
+    # Check if config exists
+    if not config_path.exists():
+        click.secho(
+            f"❌ Configuration file not found: {config_path}", fg="red", err=True
+        )
+        click.echo("\n💡 Create a configuration with: quickscale plan <name>", err=True)
+        raise click.Abort()
+
+    # Read and validate configuration
+    click.echo(f"\n📋 Reading configuration: {config_path}")
+    try:
+        yaml_content = config_path.read_text()
+        qs_config = validate_config(yaml_content)
+    except ConfigValidationError as e:
+        click.secho(f"\n❌ Configuration error:\n{e}", fg="red", err=True)
+        raise click.Abort()
+    except Exception as e:
+        click.secho(f"\n❌ Failed to read configuration: {e}", fg="red", err=True)
+        raise click.Abort()
+
+    # Display configuration summary
+    click.echo("\n🚀 Applying configuration:")
+    click.echo(f"   Project: {qs_config.project.name}")
+    click.echo(f"   Theme: {qs_config.project.theme}")
+    if qs_config.modules:
+        click.echo(f"   Modules: {', '.join(qs_config.modules.keys())}")
+    else:
+        click.echo("   Modules: (none)")
+    click.echo(
+        f"   Docker: start={qs_config.docker.start}, build={qs_config.docker.build}"
+    )
+
+    # Determine output path
+    # If config is in a project directory (e.g., myapp/quickscale.yml), use parent
+    if config_path.parent.name == qs_config.project.name:
+        output_path = config_path.parent
+        # Check if project directory already has content
+        if output_path.exists() and any(output_path.iterdir()):
+            if not force:
+                click.secho(
+                    f"\n⚠️  Project directory already has content: {output_path}",
+                    fg="yellow",
+                )
+                if not click.confirm(
+                    "Continue anyway? (may cause conflicts)", default=False
+                ):
+                    raise click.Abort()
+    else:
+        output_path = Path.cwd() / qs_config.project.name
+
+    # Check if output directory exists
+    if output_path.exists() and any(output_path.iterdir()):
+        existing_files = list(output_path.iterdir())
+        # Allow if only quickscale.yml exists
+        if not (
+            len(existing_files) == 1 and existing_files[0].name == "quickscale.yml"
+        ):
+            if not force:
+                click.secho(
+                    f"\n❌ Directory already exists and is not empty: {output_path}",
+                    fg="red",
+                    err=True,
+                )
+                click.echo(
+                    "   Use --force to overwrite or remove the directory first",
+                    err=True,
+                )
+                raise click.Abort()
+            else:
+                click.secho(
+                    f"\n⚠️  --force: Will overwrite existing content in {output_path}",
+                    fg="yellow",
+                )
+
+    click.echo(f"\n📁 Output directory: {output_path}")
+
+    # Confirm before proceeding
+    if not click.confirm("\n❓ Proceed with apply?", default=True):
+        click.echo("❌ Cancelled")
+        raise click.Abort()
+
+    click.echo("\n" + "=" * 50)
+    click.echo("🔧 Starting apply process...")
+    click.echo("=" * 50)
+
+    # Step 1: Generate project
+    # If output_path exists and has only quickscale.yml, we need to handle it differently
+    if output_path.exists():
+        quickscale_yml_path = output_path / "quickscale.yml"
+        if quickscale_yml_path.exists():
+            # Save quickscale.yml, remove other content, generate, restore
+            saved_config = quickscale_yml_path.read_text()
+
+            # Remove everything except quickscale.yml if force
+            if force:
+                import shutil
+
+                for item in output_path.iterdir():
+                    if item.name != "quickscale.yml":
+                        if item.is_dir():
+                            shutil.rmtree(item)
+                        else:
+                            item.unlink()
+
+            # Generate project (will fail if dir exists with other content)
+            # We need to generate to a temp location and move
+            import tempfile
+
+            temp_dir = Path(tempfile.mkdtemp())
+            temp_project = temp_dir / qs_config.project.name
+
+            if not _generate_project(qs_config, temp_project):
+                import shutil
+
+                shutil.rmtree(temp_dir)
+                raise click.Abort()
+
+            # Move generated content to output_path
+            import shutil
+
+            for item in temp_project.iterdir():
+                dest = output_path / item.name
+                if dest.exists():
+                    if dest.is_dir():
+                        shutil.rmtree(dest)
+                    else:
+                        dest.unlink()
+                shutil.move(str(item), str(dest))
+            shutil.rmtree(temp_dir)
+
+            # Restore quickscale.yml
+            quickscale_yml_path.write_text(saved_config)
+            click.secho(f"✅ Project generated: {output_path}", fg="green")
+        else:
+            if not _generate_project(qs_config, output_path):
+                raise click.Abort()
+    else:
+        if not _generate_project(qs_config, output_path):
+            raise click.Abort()
+
+    # Step 2: Initialize git
+    if not _init_git(output_path):
+        click.secho("⚠️  Git initialization failed, continuing...", fg="yellow")
+    else:
+        # Configure git user for commits (needed in CI/test environments)
+        subprocess.run(
+            ["git", "config", "user.email", "quickscale@example.com"],
+            cwd=output_path,
+            capture_output=True,
+        )
+        subprocess.run(
+            ["git", "config", "user.name", "QuickScale"],
+            cwd=output_path,
+            capture_output=True,
+        )
+
+        # Step 3: Initial commit
+        if not _git_commit(output_path, "Initial project structure"):
+            click.secho("⚠️  Initial commit failed, continuing...", fg="yellow")
+
+    # Step 4: Embed modules
+    if not no_modules and qs_config.modules:
+        for module_name in qs_config.modules.keys():
+            if not _embed_module(output_path, module_name):
+                click.secho(
+                    f"⚠️  Module embedding failed for {module_name}, continuing...",
+                    fg="yellow",
+                )
+            else:
+                # Commit after each module
+                _git_commit(output_path, f"Add module: {module_name}")
+
+    # Step 5: Run poetry install
+    if not _run_poetry_install(output_path):
+        click.secho("⚠️  Poetry install failed, continuing...", fg="yellow")
+
+    # Step 6: Run migrations
+    if not _run_migrations(output_path):
+        click.secho("⚠️  Migrations failed, continuing...", fg="yellow")
+
+    # Step 7: Start Docker
+    if not no_docker and qs_config.docker.start:
+        if not _start_docker(output_path, qs_config.docker.build):
+            click.secho("⚠️  Docker start failed, continuing...", fg="yellow")
+
+    # Success!
+    click.echo("\n" + "=" * 50)
+    click.secho("🎉 Apply complete!", fg="green", bold=True)
+    click.echo("=" * 50)
+
+    # Next steps
+    click.echo("\n📋 Next steps:")
+    if output_path != Path.cwd():
+        click.echo(f"  cd {qs_config.project.name}")
+
+    if qs_config.docker.start and not no_docker:
+        click.echo("  # Docker services should be running")
+        click.echo("  quickscale logs web  # View logs")
+        click.echo("  quickscale ps        # Check status")
+    else:
+        click.echo("  quickscale up        # Start Docker services")
+        click.echo("  # Or run without Docker:")
+        click.echo("  poetry run python manage.py runserver")
+
+    click.echo("\n  Visit: http://localhost:8000")

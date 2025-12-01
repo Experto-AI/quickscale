@@ -326,7 +326,7 @@ Automatic changes made:
 **Future workflow** (v1.0.0+):
 ```yaml
 # quickscale.yml (optional, v1.0.0+)
-version: 0.67.0
+version: 0.68.0
 modules:
   auth:
     ACCOUNT_ALLOW_REGISTRATION: true
@@ -512,13 +512,14 @@ Other documents (README.md, roadmap.md, scaffolding.md, commercial.md) MUST refe
 | Feature / Area | MVP Status | Notes / Decision Reference |
 |---|---:|---|
 | **CORE CLI & SCAFFOLDING** |
-| `quickscale init <project>` (single command, no flags) | IN | Core MVP entrypoint. (See: Phase 1.2.3) |
+| `quickscale init <project>` (single command, no flags) | IN | Core MVP entrypoint (v0.56-v0.67.0); superseded by `quickscale plan + apply` in v0.68.0+. Still works with deprecation warning for backward compatibility. (See: Phase 1.2.3) |
 | Generate Django starter (manage.py, settings.py, urls.py, wsgi/asgi, templates, pyproject.toml) | IN | Starter uses `pyproject.toml` (Poetry). Generated projects include a `pyproject.toml` and `poetry.lock` by default; `requirements.txt` is not generated. |
 | `quickscale_core` package (monolithic, src layout) | IN | Treat `quickscale_core` as a regular monolithic package in MVP (explicit `__init__.py`). See Section: "Core package shape" in this file. |
 | `quickscale_core` embedding via git-subtree (manual documented workflow) | IN (manual) | Manual subtree commands are documented and supported; embedding is opt-in and advanced. |
 | CLI development commands (`up`, `down`, `shell`, `manage`, `logs`, `ps`) | IN (v0.59.0) | User-friendly wrappers for Docker/Django operations to improve developer experience. |
 | `quickscale init --theme <name>` flag | IN (v0.61.0) | Theme selection during init (showcase_html). Themes are one-time copy, not embedded. |
-| CLI module management commands (`embed --module`, `update`, `push`) | IN (v0.62.0) | Module embed/update via split branches. **Starting v0.63.0**: Interactive prompts for module configuration (user doesn't manually edit settings.py). See [§Module Configuration Strategy](#module-configuration-strategy). |
+| CLI module management commands (`embed --module`, `update`, `push`) | IN (v0.62.0) | Module embed/update via split branches. `embed` command superseded by `quickscale plan --add + apply` in v0.68.0+ but remains available with deprecation warning. **Starting v0.63.0**: Interactive prompts for module configuration (user doesn't manually edit settings.py). See [§Module Configuration Strategy](#module-configuration-strategy). |
+| `quickscale plan` and `quickscale apply` commands | IN (v0.68.0+) | Terraform-style declarative configuration workflow introduced in v0.68.0. Replaces `quickscale init` and `quickscale embed` as primary commands; older commands available with deprecation warnings until v0.71.0. |
 | Module configuration (interactive prompts, not YAML) | IN (v0.63.0+) | Modules configured via interactive questions during embed (`--module auth`). YAML support deferred to Post-MVP (v1.0.0+). See [§Module Configuration Strategy](#module-configuration-strategy). |
 | Settings inheritance from `quickscale_core` into generated project | OPTIONAL | Default generated project uses standalone `settings.py`. If user explicitly embeds `quickscale_core`, optional settings inheritance is allowed and documented. |
 | **PRODUCTION-READY FOUNDATIONS (Competitive Requirement)** | | **See [competitive_analysis.md §1-3](../overview/competitive_analysis.md#-critical-for-mvp-viability-must-have)** |

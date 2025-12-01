@@ -44,8 +44,25 @@ def has_migrations_been_run() -> bool:
     return False
 
 
-def configure_auth_module() -> dict[str, Any]:
+def get_default_auth_config() -> dict[str, Any]:
+    """Get default configuration for auth module (non-interactive mode)"""
+    return {
+        "allow_registration": True,
+        "email_verification": "none",
+        "authentication_method": "email",
+    }
+
+
+def configure_auth_module(non_interactive: bool = False) -> dict[str, Any]:
     """Interactive configuration for auth module"""
+    if non_interactive:
+        click.echo("\n⚙️  Using default auth module configuration...")
+        config = get_default_auth_config()
+        click.echo("  • Registration: Enabled")
+        click.echo(f"  • Email verification: {config['email_verification']}")
+        click.echo(f"  • Authentication: {config['authentication_method']}")
+        return config
+
     click.echo("\n⚙️  Configuring auth module...")
     click.echo("Answer these questions to customize the authentication setup:\n")
 
@@ -273,8 +290,23 @@ SITE_ID = 1
     click.echo(f"  • Authentication: {config['authentication_method']}")
 
 
-def configure_blog_module() -> dict[str, Any]:
+def get_default_blog_config() -> dict[str, Any]:
+    """Get default configuration for blog module (non-interactive mode)"""
+    return {
+        "posts_per_page": 10,
+        "enable_rss": True,
+    }
+
+
+def configure_blog_module(non_interactive: bool = False) -> dict[str, Any]:
     """Interactive configuration for blog module"""
+    if non_interactive:
+        click.echo("\n⚙️  Using default blog module configuration...")
+        config = get_default_blog_config()
+        click.echo(f"  • Posts per page: {config['posts_per_page']}")
+        click.echo("  • RSS feed: Enabled")
+        return config
+
     click.echo("\n⚙️  Configuring blog module...")
     click.echo("The blog module will be configured with default settings.\n")
 
@@ -366,8 +398,21 @@ MARKDOWNX_MEDIA_PATH = "blog/markdownx/"
     click.echo(f"  • RSS feed: {'Enabled' if config['enable_rss'] else 'Disabled'}")
 
 
-def configure_listings_module() -> dict[str, Any]:
+def get_default_listings_config() -> dict[str, Any]:
+    """Get default configuration for listings module (non-interactive mode)"""
+    return {
+        "listings_per_page": 12,
+    }
+
+
+def configure_listings_module(non_interactive: bool = False) -> dict[str, Any]:
     """Interactive configuration for listings module"""
+    if non_interactive:
+        click.echo("\n⚙️  Using default listings module configuration...")
+        config = get_default_listings_config()
+        click.echo(f"  • Listings per page: {config['listings_per_page']}")
+        return config
+
     click.echo("\n⚙️  Configuring listings module...")
     click.echo(
         "The listings module provides an abstract base model for marketplace listings.\n"
@@ -559,7 +604,13 @@ MODULE_CONFIGURATORS = {
     default="https://github.com/Experto-AI/quickscale.git",
     help="Git remote URL (default: QuickScale repository)",
 )
-def embed(module: str, remote: str) -> None:
+@click.option(
+    "-y",
+    "--non-interactive",
+    is_flag=True,
+    help="Use default configuration without prompts (for automation)",
+)
+def embed(module: str, remote: str, non_interactive: bool) -> None:
     r"""
     Embed a QuickScale module into your project via git subtree.
 
@@ -569,6 +620,7 @@ def embed(module: str, remote: str) -> None:
       quickscale embed --module billing
       quickscale embed --module blog
       quickscale embed --module listings
+      quickscale embed --module auth -y  # Non-interactive with defaults
 
     \b
     Available modules:
@@ -581,7 +633,19 @@ def embed(module: str, remote: str) -> None:
     \b
     Note: Auth, blog, and listings modules are fully implemented.
     Billing and teams modules contain placeholder READMEs.
+
+    \b
+    ⚠️  DEPRECATED: Use 'quickscale plan --add' + 'quickscale apply' instead.
     """
+    # Show deprecation warning
+    click.secho(
+        "\n⚠️  DEPRECATED: 'quickscale embed' is deprecated.",
+        fg="yellow",
+        bold=True,
+    )
+    click.echo("   Use 'quickscale plan --add' + 'quickscale apply' instead.")
+    click.echo("   This command will be removed in v0.71.0.\n")
+
     try:
         # Validate git repository
         if not is_git_repo():
@@ -659,6 +723,20 @@ def embed(module: str, remote: str) -> None:
             click.echo(
                 "\n💡 Tip: For new projects, embed the auth module BEFORE running migrations."
             )
+
+            if non_interactive:
+                # In non-interactive mode, fail immediately since this is a critical issue
+                click.secho(
+                    "\n❌ Cannot embed auth module in non-interactive mode when migrations exist.",
+                    fg="red",
+                    err=True,
+                )
+                click.echo(
+                    "   Please reset the database first or embed auth module before running migrations.",
+                    err=True,
+                )
+                raise click.Abort()
+
             click.echo(
                 "\n❓ Do you want to continue anyway? (You'll need to reset the database manually)"
             )
@@ -671,7 +749,7 @@ def embed(module: str, remote: str) -> None:
         config = {}
         if module in MODULE_CONFIGURATORS:
             configurator, applier = MODULE_CONFIGURATORS[module]
-            config = configurator()
+            config = configurator(non_interactive=non_interactive)
 
         # Embed module via git subtree
         prefix = f"modules/{module}"

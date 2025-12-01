@@ -69,9 +69,9 @@ QuickScale follows an evolution-aligned roadmap that starts as a personal toolki
 - **v1.0.0+:** Community platform (if demand exists)
 
 **Status:**
-- **Current Status:** v0.67.0 — Listings module (complete)
-- **Validation:** Abstract base model for vertical themes
-- **Next Milestone:** v0.68.0 - Plan/Apply System core commands
+- **Current Status:** v0.68.0 — Plan/Apply System Core Commands (complete)
+- **Validation:** Terraform-style declarative project configuration
+- **Next Milestone:** v0.69.0 - Plan/Apply State Management
 - **Plan/Apply System:** v0.68.0-v0.71.0 - Terraform-style configuration (replaces `quickscale init`)
 - **SaaS Parity:** v0.74.0 - auth, billing, teams modules complete
 
@@ -98,53 +98,11 @@ See [release-v0.67.0-implementation.md](../releases/release-v0.67.0-implementati
 
 ---
 
-### v0.68.0: Plan/Apply System - Core Commands
+### v0.68.0: Plan/Apply System — Core Commands
 
-**Status**: 📋 Planned
+**Status**: ✅ Complete
 
-**Technical Specification**: See [plan-apply-system.md](./plan-apply-system.md)
-
-**Objective**: Implement Terraform-style `quickscale plan` and `quickscale apply` commands for declarative project configuration.
-
-**Commands**:
-- [ ] `quickscale plan <name>` - Interactive wizard for new projects
-- [ ] `quickscale apply [config]` - Execute configuration file
-
-**YAML Schema**:
-- [ ] Define `quickscale.yml` schema (version, project, modules, docker)
-- [ ] Implement YAML validation with helpful error messages
-- [ ] Create schema documentation
-
-**Interactive Wizard** (`quickscale plan`):
-- [ ] Project name and theme selection
-- [ ] Module selection with descriptions
-- [ ] Module-specific configuration prompts
-- [ ] Docker options (start, build)
-- [ ] YAML preview before saving
-- [ ] Save to `quickscale.yml`
-
-**Apply Engine** (`quickscale apply`):
-- [ ] Parse and validate `quickscale.yml`
-- [ ] Execute steps in correct order:
-  1. Generate project
-  2. Git init + initial commit
-  3. Embed modules with git commits
-  4. Poetry install
-  5. Run migrations
-  6. Docker up (if configured)
-- [ ] Progress indicators and error handling
-- [ ] Success summary with next steps
-
-**Breaking Changes**:
-- [ ] Remove `quickscale init` command (replaced by `plan + apply`)
-- [ ] Remove `quickscale embed` command (replaced by `plan --add + apply`)
-- [ ] Update documentation to reflect new workflow
-
-**Testing**:
-- [ ] Unit tests for YAML parsing and validation
-- [ ] Unit tests for interactive prompts
-- [ ] Integration tests for full plan/apply workflow
-- [ ] E2E test: plan → apply → working project
+See [release-v0.68.0-implementation.md](../releases/release-v0.68.0-implementation.md) for details.
 
 ---
 

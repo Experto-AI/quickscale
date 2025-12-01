@@ -6,7 +6,8 @@ class ClientExtensionsConfig(AppConfig):
     verbose_name = "Project-specific client extensions"
 
     def ready(self):
-        """Called when Django starts; call the opt-in register hook if present.
+        """
+        Call the opt-in register hook if present when Django starts.
 
         Keep register() idempotent and safe to call multiple times. Avoid
         heavy work on import; do runtime imports inside functions.
