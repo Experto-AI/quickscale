@@ -606,6 +606,7 @@ def fix_poetry_lock() -> tuple[bool, str]:
 
     """
     try:
+        # Prefer `--no-update` when available to avoid changing resolved versions.
         result = subprocess.run(
             ["poetry", "lock", "--no-update"],
             capture_output=True,
@@ -615,10 +616,26 @@ def fix_poetry_lock() -> tuple[bool, str]:
 
         if result.returncode == 0:
             return True, "poetry.lock updated successfully"
+
+        # If the CLI does not support --no-update (older/newdifferent Poetry),
+        # fall back to a plain `poetry lock` which is more widely supported.
+        # Detect common failure patterns but always attempt fallback once.
+        fallback = subprocess.run(
+            ["poetry", "lock"],
+            capture_output=True,
+            text=True,
+            timeout=120,
+        )
+
+        if fallback.returncode == 0:
+            return True, "poetry.lock updated successfully (fallback)"
         else:
-            return False, f"Failed to update poetry.lock: {result.stderr}"
+            return False, (
+                f"Failed to update poetry.lock (--no-update stderr: {result.stderr}; "
+                f"fallback stderr: {fallback.stderr})"
+            )
     except subprocess.TimeoutExpired:
-        return False, "poetry lock timed out after 60 seconds"
+        return False, "poetry lock timed out"
     except (subprocess.SubprocessError, FileNotFoundError) as e:
         return False, f"Failed to run poetry lock: {e}"
 
