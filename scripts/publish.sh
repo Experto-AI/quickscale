@@ -233,6 +233,17 @@ replace_path_deps() {
     esac
 }
 
+fix_readme_path() {
+    local pkg_dir="$1"
+    local pyproject="$pkg_dir/pyproject.toml"
+
+    # Replace readme = "../README.md" with readme = "README.md" (since we copied it locally)
+    if grep -q 'readme = "\.\./README\.md"' "$pyproject"; then
+        sed -i 's|readme = "\.\./README\.md"|readme = "README.md"|' "$pyproject"
+        log_info "Fixed readme path in $pyproject"
+    fi
+}
+
 clean_dist() {
     local pkg_dir="$1"
     local dist_dir="$pkg_dir/dist"
@@ -257,6 +268,7 @@ prepare_for_publish() {
         local pkg_dir="$ROOT/$pkg"
         copy_readme "$pkg_dir"
         backup_pyproject "$pkg_dir"
+        fix_readme_path "$pkg_dir"
         replace_path_deps "$pkg" "$version"
     done
 
@@ -308,6 +320,9 @@ build_package() {
 
     # Backup original pyproject.toml
     backup_pyproject "$pkg_dir"
+
+    # Fix readme path (../README.md -> README.md since we copied it)
+    fix_readme_path "$pkg_dir"
 
     # Replace path dependencies with version dependencies
     replace_path_deps "$pkg_name" "$version"

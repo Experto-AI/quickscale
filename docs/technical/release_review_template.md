@@ -412,5 +412,5 @@ These are NOT issues with current implementation, but potential future enhanceme
 
 **Related Documentation:**
 - [Release Implementation Template](./release_implementation_template.md) - Template for implementation documentation
-- [Roadmap Task Review Prompt](.github/prompts/roadmap-task-review.prompt.md) - Automated review prompt
+- [Roadmap Task Review Prompt](../../.github/prompts/roadmap-task-review.prompt.md) - Automated review prompt
 - [Review Guidelines](../contrib/review.md) - Quality control stage documentation

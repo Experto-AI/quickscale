@@ -111,11 +111,29 @@ See [competitive_analysis.md](./docs/overview/competitive_analysis.md) for detai
 
 ## Quick Start
 
+### Option A: Interactive Plan/Apply Workflow (Recommended)
+
 ```bash
 # Install QuickScale globally
 ./scripts/install_global.sh
 
-# Create your first project
+# Create a configuration interactively
+quickscale plan myapp
+# → Select theme, modules, Docker options
+# → Generates quickscale.yml
+
+# Execute the configuration
+quickscale apply quickscale.yml
+cd myapp
+```
+
+### Option B: Direct Init (Legacy)
+
+```bash
+# Install QuickScale globally
+./scripts/install_global.sh
+
+# Create your first project directly
 quickscale init myapp
 cd myapp
 
@@ -124,6 +142,8 @@ cd myapp
 # quickscale init myapp --theme showcase_htmx  # HTMX theme (coming in v0.70.0)
 # quickscale init myapp --theme showcase_react # React theme (coming in v0.71.0)
 ```
+
+> **Note**: The `init` and `embed` commands are deprecated and will be removed in v0.70.0. Use `plan` + `apply` instead.
 
 **Choose your development workflow:**
 

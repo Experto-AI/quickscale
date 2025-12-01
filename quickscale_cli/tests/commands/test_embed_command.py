@@ -176,6 +176,17 @@ def test_embed_auth_after_migrations_shows_warning(tmp_path):
     )
 
     # Step 3: Install dependencies and run migrations BEFORE embedding auth
+    # First regenerate lock file to ensure it's in sync with pyproject.toml
+    # Try the --no-update flag when available, otherwise fall back to plain `poetry lock`.
+    result = subprocess.run(
+        ["poetry", "lock", "--no-update"],
+        cwd=project_path,
+        capture_output=True,
+        text=True,
+    )
+    if result.returncode != 0:
+        # If the Poetry binary doesn't support --no-update, fall back to `poetry lock`.
+        subprocess.run(["poetry", "lock"], cwd=project_path, check=True)
     subprocess.run(["poetry", "install"], cwd=project_path, check=True)
     migrate_result = subprocess.run(
         ["poetry", "run", "python", "manage.py", "migrate"],
@@ -185,6 +196,21 @@ def test_embed_auth_after_migrations_shows_warning(tmp_path):
         check=True,
     )
     assert "Applying admin.0001_initial... OK" in migrate_result.stdout
+
+    # Commit changes from poetry lock/install before embed (embed requires clean git state)
+    # Use --allow-empty in case poetry lock didn't change anything
+    subprocess.run(["git", "add", "-A"], cwd=project_path, check=True)
+    subprocess.run(
+        [
+            "git",
+            "commit",
+            "--allow-empty",
+            "-m",
+            "Install dependencies and run migrations",
+        ],
+        cwd=project_path,
+        check=True,
+    )
 
     # Step 4: Try to embed auth module (should show warning)
     # The warning appears before configurator, but n will be consumed by "Continue?" prompt

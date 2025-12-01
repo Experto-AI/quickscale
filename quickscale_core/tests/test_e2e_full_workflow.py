@@ -64,20 +64,22 @@ class TestFullE2EWorkflow:
         self._collect_static(project_path)
 
         # Phase 5: Start development server in background
-        # First, ensure port 8000 is free (cleanup any orphaned processes)
-        self._ensure_port_free(8000)
-        server_process = self._start_dev_server(project_path)
+        # Use a dynamically assigned free port to avoid conflicts
+        server_port = self._find_free_port()
+        server_process = self._start_dev_server(project_path, port=server_port)
 
         try:
             # Wait for server to be ready (increased timeout for initial startup)
             self._wait_for_server(
-                "http://localhost:8000", timeout=30, server_process=server_process
+                f"http://localhost:{server_port}",
+                timeout=30,
+                server_process=server_process,
             )
 
             # Phase 6: Browser tests with Playwright
-            self._test_homepage_loads(page)
-            self._test_page_content(page, project_name)
-            self._test_static_files_load(page)
+            self._test_homepage_loads(page, port=server_port)
+            self._test_page_content(page, project_name, port=server_port)
+            self._test_static_files_load(page, port=server_port)
 
             # Take screenshot for visual verification
             screenshot_path = tmp_path / "homepage_screenshot.png"
@@ -178,6 +180,16 @@ class TestFullE2EWorkflow:
         assert ci_config["name"] == "CI"
 
     # Helper methods
+
+    def _find_free_port(self) -> int:
+        """Find a free port by binding to port 0 and letting the OS assign one."""
+        import socket
+
+        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+            s.bind(("127.0.0.1", 0))
+            s.listen(1)
+            port = s.getsockname()[1]
+        return port
 
     def _ensure_port_free(self, port: int = 8000):
         """Ensure the specified port is free before starting server."""
@@ -358,11 +370,19 @@ LOGGING = {{
         )
         assert result.returncode == 0, f"collectstatic failed: {result.stderr}"
 
-    def _start_dev_server(self, project_path: Path):
+    def _start_dev_server(self, project_path: Path, port: int = 8000):
         """Start Django development server in background."""
         # Start server without capturing output so we can see errors
         return subprocess.Popen(
-            ["poetry", "run", "python", "manage.py", "runserver", "8000", "--noreload"],
+            [
+                "poetry",
+                "run",
+                "python",
+                "manage.py",
+                "runserver",
+                str(port),
+                "--noreload",
+            ],
             cwd=project_path,
             stdout=subprocess.PIPE,
             stderr=subprocess.STDOUT,  # Merge stderr into stdout for easier debugging
@@ -430,14 +450,14 @@ LOGGING = {{
 
         raise TimeoutError(error_msg)
 
-    def _test_homepage_loads(self, page):
+    def _test_homepage_loads(self, page, port: int = 8000):
         """Test that homepage loads successfully."""
-        response = page.goto("http://localhost:8000")
+        response = page.goto(f"http://localhost:{port}")
         assert response.status == 200, f"Homepage returned status {response.status}"
 
-    def _test_page_content(self, page, project_name: str):
+    def _test_page_content(self, page, project_name: str, port: int = 8000):
         """Test that page contains expected content."""
-        page.goto("http://localhost:8000")
+        page.goto(f"http://localhost:{port}")
 
         # Verify page has a title
         assert page.title(), "Page should have a title"
@@ -446,9 +466,9 @@ LOGGING = {{
         body = page.locator("body")
         assert body.is_visible(), "Body should be visible"
 
-    def _test_static_files_load(self, page):
+    def _test_static_files_load(self, page, port: int = 8000):
         """Test that static files (CSS) load successfully."""
-        page.goto("http://localhost:8000")
+        page.goto(f"http://localhost:{port}")
 
         # Check if any CSS files are linked
         css_links = page.locator('link[rel="stylesheet"]')
@@ -460,7 +480,7 @@ LOGGING = {{
 
             # Navigate to CSS file to verify it loads
             if href:
-                response = page.goto(f"http://localhost:8000{href}")
+                response = page.goto(f"http://localhost:{port}{href}")
                 assert response.status == 200, f"CSS file failed to load: {href}"
 
 

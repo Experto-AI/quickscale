@@ -6,6 +6,7 @@ import click
 
 import quickscale_cli
 import quickscale_core
+from quickscale_cli.commands.apply_command import apply
 from quickscale_cli.commands.deployment_commands import deploy
 from quickscale_cli.commands.development_commands import (
     down,
@@ -16,6 +17,7 @@ from quickscale_cli.commands.development_commands import (
     up,
 )
 from quickscale_cli.commands.module_commands import embed, push, update
+from quickscale_cli.commands.plan_command import plan
 from quickscale_cli.utils.dependency_utils import (
     check_all_dependencies,
 )
@@ -70,6 +72,10 @@ cli.add_command(embed)
 cli.add_command(update)
 cli.add_command(push)
 
+# Register plan/apply commands (v0.68.0+)
+cli.add_command(plan)
+cli.add_command(apply)
+
 
 @cli.command(cls=InitCommand)
 @click.argument("project_name", required=True, metavar="PROJECT_NAME")
@@ -99,7 +105,19 @@ def init(project_name: str, theme: str) -> None:
       showcase_html    Pure HTML + CSS (default, production-ready)
     showcase_htmx    HTMX + Alpine.js (coming in v0.70.0)
     showcase_react   React + TypeScript SPA (coming in v0.71.0)
+
+    \b
+    ⚠️  DEPRECATED: Use 'quickscale plan' + 'quickscale apply' instead.
     """
+    # Show deprecation warning
+    click.secho(
+        "\n⚠️  DEPRECATED: 'quickscale init' is deprecated.",
+        fg="yellow",
+        bold=True,
+    )
+    click.echo("   Use 'quickscale plan <name>' + 'quickscale apply' instead.")
+    click.echo("   This command will be removed in v0.71.0.\n")
+
     # Step 1: Check system dependencies BEFORE generation
     click.echo("🔍 Checking system dependencies...")
     all_deps = check_all_dependencies()

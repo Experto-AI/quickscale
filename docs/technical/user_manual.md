@@ -244,10 +244,12 @@ See [Roadmap v0.59.0](./roadmap.md#v0590-cli-development-commands--railway-deplo
 
 > **Status**: ✅ Available (shipped in v0.62.0)
 >
+> **Deprecation Notice**: The `embed` command is deprecated and will be removed in v0.70.0. Use `quickscale plan` + `quickscale apply` instead for new projects.
+>
 > These commands will replace complex manual git subtree operations with simple CLI wrappers.
 
 ```bash
-# Embed quickscale_core in your project
+# Embed quickscale_core in your project (DEPRECATED)
 quickscale embed
 # Equivalent to: git subtree add --prefix=quickscale_core <remote> main --squash
 
@@ -261,6 +263,99 @@ quickscale push
 ```
 
 See [Roadmap v0.60.0](./roadmap.md#v0600-cli-git-subtree-wrappers--update-workflow-validation) for complete implementation details.
+
+### 4.3) Plan/Apply Commands (Shipped in v0.68.0)
+
+> **Status**: ✅ Available (shipped in v0.68.0)
+>
+> These commands provide a Terraform-style declarative workflow for project generation, replacing the imperative `init` command.
+
+**The `plan` command** creates a `quickscale.yml` configuration file through an interactive wizard:
+
+```bash
+# Create configuration interactively
+quickscale plan myapp
+
+# Save to custom location
+quickscale plan myapp --output ./configs/myapp.yml
+
+# Overwrite existing config
+quickscale plan myapp --overwrite
+```
+
+The wizard guides you through:
+1. **Theme selection**: Choose from available themes (showcase_html, showcase_htmx, showcase_react)
+2. **Module selection**: Select optional modules to include (blog, listings, billing, teams)
+3. **Docker configuration**: Configure Docker build and startup options
+
+**Generated `quickscale.yml` example**:
+```yaml
+version: 0.68.0
+project:
+  name: myapp
+  theme: showcase_html
+modules:
+  - name: blog
+  - name: listings
+docker:
+  build: true
+  start: true
+```
+
+**The `apply` command** executes a configuration file to generate the project:
+
+```bash
+# Apply configuration (looks for quickscale.yml in current directory)
+quickscale apply
+
+# Apply specific configuration file
+quickscale apply myconfig.yml
+
+# Skip Docker operations
+quickscale apply --no-docker
+
+# Skip module embedding
+quickscale apply --no-modules
+
+# Force overwrite existing project directory
+quickscale apply --force
+```
+
+**Apply execution order**:
+1. Validate configuration file
+2. Generate project from theme
+3. Initialize git repository
+4. Create initial commit
+5. Embed selected modules (via git subtree)
+6. Install Poetry dependencies
+7. Run Django migrations
+8. Start Docker services (if configured)
+
+**Typical Plan/Apply Workflow**:
+```bash
+# Step 1: Create configuration
+quickscale plan myapp
+# → Interactive wizard runs
+# → Creates quickscale.yml
+
+# Step 2: Review configuration (optional)
+cat quickscale.yml
+
+# Step 3: Apply configuration
+quickscale apply quickscale.yml
+cd myapp
+
+# Step 4: Start development
+quickscale up
+quickscale manage migrate
+quickscale manage createsuperuser
+```
+
+**Benefits over `init`**:
+- ✅ Declarative: Configuration is version-controllable
+- ✅ Reproducible: Same config produces same project
+- ✅ Reviewable: Preview before execution
+- ✅ Modular: Includes module embedding in one step
 
 ### Docker deployment
 
@@ -311,7 +406,11 @@ Run these scripts from the repository root.
 
 **CLI Commands (Current)**:
 - CLI help: `quickscale --help`
-- Create project: `quickscale init <name>`
+- Create project: `quickscale init <name>` (deprecated, use plan+apply)
+
+**CLI Commands (v0.68.0 - Available)**:
+- Create config: `quickscale plan <name>`
+- Apply config: `quickscale apply [config.yml]`
 
 **CLI Commands (v0.59.0 - Available)**:
 - Start services: `quickscale up`
@@ -322,7 +421,7 @@ Run these scripts from the repository root.
 - Django commands: `quickscale manage <cmd>`
 
 **CLI Commands (v0.62.0 - Available)**:
-- Embed core: `quickscale embed`
+- Embed core: `quickscale embed` (deprecated, use plan+apply)
 - Update core: `quickscale update`
 - Push changes: `quickscale push`
 

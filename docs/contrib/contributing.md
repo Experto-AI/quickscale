@@ -149,11 +149,14 @@ This policy ensures completed work is archived in a discoverable place and the r
 
 QuickScale uses structured prompts for automated development workflows:
 
+### [roadmap-plan-review-and-update.prompt.md](../../.github/prompts/roadmap-plan-review-and-update.prompt.md)
+**Roadmap planning and validation** - Choose next release, validate implementation plan, reconcile with decisions.md.
+
 ### [roadmap-task-implementation.prompt.md](../../.github/prompts/roadmap-task-implementation.prompt.md)
 **Complete task implementation workflow** - Covers PLAN → CODE → REVIEW → TESTING stages for implementing roadmap tasks.
 
-### [roadmap-plan-review-and-update.prompt.md](../../.github/prompts/roadmap-plan-review-and-update.prompt.md)
-**Roadmap planning and validation** - Choose next release, validate implementation plan, reconcile with decisions.md.
+### [roadmap-task-review.prompt.md](../../.github/prompts/roadmap-task-review.prompt.md)
+**Post-implementation quality review** - Comprehensive code review of completed implementation. Takes release version as parameter (e.g., `0.68.0`) and generates `docs/releases/release-v{VERSION}-review.md`.
 
 ### [release-commit-message-and-roadmap-cleaning.prompt.md](../../.github/prompts/release-commit-message-and-roadmap-cleaning.prompt.md)
 **Release finalization** - Generate release commit message, clean up roadmap after release completion.

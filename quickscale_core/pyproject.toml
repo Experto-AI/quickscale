@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "quickscale-core"
-version = "0.67.0"
+version = "0.68.0"
 description = "Core scaffolding and utilities for QuickScale Django project generator"
 authors = ["Experto AI <victor@experto.ai>"]
 license = "Apache-2.0"
@@ -8,6 +8,7 @@ keywords = ["django", "scaffolding", "project-generator", "saas"]
 homepage = "https://github.com/Experto-AI/quickscale"
 repository = "https://github.com/Experto-AI/quickscale"
 documentation = "https://github.com/Experto-AI/quickscale/tree/main/docs"
+readme = "../README.md"
 classifiers = [
     "Development Status :: 3 - Alpha",
     "Intended Audience :: Developers",
@@ -50,8 +51,8 @@ addopts = [
     "--cov-report=html",
     "-m", "not e2e",  # Skip E2E tests by default (run with: pytest -m e2e)
 ]
-# Playwright configuration
-base_url = "http://localhost:8000"
+# Note: Playwright base_url is configured via --base-url flag when running E2E tests
+# Example: pytest -m e2e --base-url http://localhost:8000
 
 [tool.coverage.run]
 omit = [

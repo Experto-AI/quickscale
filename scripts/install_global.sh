@@ -29,6 +29,20 @@ remove_readme() {
     fi
 }
 
+# Fix readme path in pyproject.toml for build (../README.md -> README.md)
+fix_readme_path() {
+    local pkg_dir="$1"
+    local pyproject="$pkg_dir/pyproject.toml"
+    sed -i 's|readme = "\.\./README\.md"|readme = "README.md"|' "$pyproject"
+}
+
+# Restore readme path in pyproject.toml after build (README.md -> ../README.md)
+restore_readme_path() {
+    local pkg_dir="$1"
+    local pyproject="$pkg_dir/pyproject.toml"
+    sed -i 's|readme = "README\.md"|readme = "../README.md"|' "$pyproject"
+}
+
 backup_pyproject() {
     local pkg_dir="$1"
     local pyproject="$pkg_dir/pyproject.toml"
@@ -67,8 +81,10 @@ echo "🚀 Installing QuickScale globally (version $VERSION)..."
 echo "📦 Building quickscale_core..."
 cd "$ROOT/quickscale_core"
 copy_readme "$ROOT/quickscale_core"
+fix_readme_path "$ROOT/quickscale_core"
 rm -rf dist/
 poetry build
+restore_readme_path "$ROOT/quickscale_core"
 remove_readme "$ROOT/quickscale_core"
 
 # Build quickscale_cli (with path dependency replaced)
@@ -76,6 +92,7 @@ echo "📦 Building quickscale_cli..."
 cd "$ROOT/quickscale_cli"
 copy_readme "$ROOT/quickscale_cli"
 backup_pyproject "$ROOT/quickscale_cli"
+fix_readme_path "$ROOT/quickscale_cli"
 replace_path_deps_cli "$ROOT/quickscale_cli" "$VERSION"
 rm -rf dist/
 poetry build

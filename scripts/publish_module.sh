@@ -29,9 +29,12 @@ print_error() {
 
 # Function to show usage
 show_usage() {
-    echo "Usage: $0 <module_name>"
+    echo "Usage: $0 <module_name> [--clean]"
     echo ""
     echo "Publish module changes to its split branch."
+    echo ""
+    echo "Options:"
+    echo "  --clean      Clear git subtree cache before splitting"
     echo ""
     echo "Available modules:"
     for module in $(ls quickscale_modules/ 2>/dev/null | grep -v "^$"); do
@@ -40,8 +43,7 @@ show_usage() {
     echo ""
     echo "Examples:"
     echo "  $0 auth      # Publish auth module"
-    echo "  $0 billing   # Publish billing module"
-    echo "  $0 teams     # Publish teams module"
+    echo "  $0 billing --clean  # Publish billing module with cache cleanup"
 }
 
 # Check if module name is provided
@@ -53,6 +55,12 @@ if [ $# -eq 0 ]; then
 fi
 
 MODULE_NAME="$1"
+CLEAN_CACHE=false
+
+if [ "$2" == "--clean" ]; then
+    CLEAN_CACHE=true
+fi
+
 MODULE_PATH="quickscale_modules/${MODULE_NAME}"
 SPLIT_BRANCH="splits/${MODULE_NAME}-module"
 
@@ -91,6 +99,11 @@ if ! git diff-index --quiet HEAD --; then
     fi
 fi
 
+if [ "$CLEAN_CACHE" = true ]; then
+    print_info "Cleaning git subtree cache..."
+    rm -rf .git/subtree-cache
+fi
+
 print_info "Publishing module: $MODULE_NAME"
 print_info "Module path: $MODULE_PATH"
 print_info "Split branch: $SPLIT_BRANCH"
@@ -98,10 +111,18 @@ echo ""
 
 # Perform git subtree split
 print_info "Running git subtree split..."
-if git subtree split --prefix="$MODULE_PATH" -b "$SPLIT_BRANCH" --rejoin; then
+if output=$(git subtree split --prefix="$MODULE_PATH" -b "$SPLIT_BRANCH" --rejoin --ignore-joins 2>&1); then
+    echo "$output"
     print_success "Git subtree split completed"
 else
-    print_error "Git subtree split failed"
+    echo "$output"
+    if [[ "$output" == *"cache for"* && "$output" == *"already exists"* ]]; then
+        print_error "Git subtree split failed due to cache error."
+        print_info "Try running with --clean to fix this:"
+        print_info "  $0 $MODULE_NAME --clean"
+    else
+        print_error "Git subtree split failed"
+    fi
     exit 1
 fi
 
