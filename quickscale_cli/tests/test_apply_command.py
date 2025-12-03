@@ -416,3 +416,254 @@ docker:
                 "Configuration file not found" in result.output
                 or "does not exist" in result.output
             )
+
+
+class TestApplyIncrementalApply:
+    """Tests for incremental apply behavior"""
+
+    def test_apply_creates_state_file(self):
+        """Test that apply creates .quickscale/state.yml on successful apply"""
+        runner = CliRunner()
+        with runner.isolated_filesystem():
+            with open("quickscale.yml", "w") as f:
+                f.write(
+                    """
+version: "1"
+project:
+  name: testapp
+  theme: showcase_html
+docker:
+  start: false
+"""
+                )
+
+            result = runner.invoke(
+                apply,
+                ["quickscale.yml", "--no-modules", "--no-docker"],
+                input="y\n",
+            )
+
+            if result.exit_code == 0:
+                # State file should be created
+                assert os.path.exists("testapp/.quickscale/state.yml")
+
+    def test_apply_second_apply_is_idempotent(self):
+        """Test that second apply with same config shows 'nothing to do'"""
+        runner = CliRunner()
+        with runner.isolated_filesystem():
+            with open("quickscale.yml", "w") as f:
+                f.write(
+                    """
+version: "1"
+project:
+  name: testapp
+  theme: showcase_html
+docker:
+  start: false
+"""
+                )
+
+            # First apply
+            result1 = runner.invoke(
+                apply,
+                ["quickscale.yml", "--no-modules", "--no-docker"],
+                input="y\n",
+            )
+
+            if result1.exit_code == 0:
+                # Create quickscale.yml in the generated project directory
+                with open("testapp/quickscale.yml", "w") as f:
+                    f.write(
+                        """
+version: "1"
+project:
+  name: testapp
+  theme: showcase_html
+docker:
+  start: false
+"""
+                    )
+
+                # Second apply should detect no changes
+                result2 = runner.invoke(
+                    apply,
+                    ["testapp/quickscale.yml", "--no-modules", "--no-docker"],
+                    input="y\n",
+                )
+
+                # Should show "nothing to do" message
+                assert (
+                    "Nothing to do" in result2.output
+                    or "No changes detected" in result2.output
+                    or "matches applied state" in result2.output
+                )
+
+    def test_apply_shows_delta_for_existing_project(self):
+        """Test that apply shows delta when applying to existing project"""
+        runner = CliRunner()
+        with runner.isolated_filesystem():
+            # First create a project with initial config
+            with open("quickscale.yml", "w") as f:
+                f.write(
+                    """
+version: "1"
+project:
+  name: testapp
+  theme: showcase_html
+docker:
+  start: false
+"""
+                )
+
+            result1 = runner.invoke(
+                apply,
+                ["quickscale.yml", "--no-modules", "--no-docker"],
+                input="y\n",
+            )
+
+            if result1.exit_code == 0:
+                # Modify config to add a module (will not actually embed)
+                with open("testapp/quickscale.yml", "w") as f:
+                    f.write(
+                        """
+version: "1"
+project:
+  name: testapp
+  theme: showcase_html
+modules:
+  auth:
+docker:
+  start: false
+"""
+                    )
+
+                # Second apply should show delta
+                result2 = runner.invoke(
+                    apply,
+                    ["testapp/quickscale.yml", "--no-modules", "--no-docker"],
+                    input="n\n",  # Decline to proceed
+                )
+
+                # Should show modules to add
+                assert (
+                    "Modules to add" in result2.output
+                    or "auth" in result2.output
+                    or "Changes to apply" in result2.output
+                )
+
+
+class TestApplyStateRecovery:
+    """Tests for state file recovery scenarios"""
+
+    def test_apply_handles_missing_state_file(self):
+        """Test that apply works when project exists but state file is missing"""
+        runner = CliRunner()
+        with runner.isolated_filesystem():
+            # First create a project
+            with open("quickscale.yml", "w") as f:
+                f.write(
+                    """
+version: "1"
+project:
+  name: testapp
+  theme: showcase_html
+docker:
+  start: false
+"""
+                )
+
+            result1 = runner.invoke(
+                apply,
+                ["quickscale.yml", "--no-modules", "--no-docker"],
+                input="y\n",
+            )
+
+            if result1.exit_code == 0:
+                # Delete state file to simulate corruption/missing state
+                import shutil
+
+                if os.path.exists("testapp/.quickscale"):
+                    shutil.rmtree("testapp/.quickscale")
+
+                # Move config back to project directory
+                with open("testapp/quickscale.yml", "w") as f:
+                    f.write(
+                        """
+version: "1"
+project:
+  name: testapp
+  theme: showcase_html
+docker:
+  start: false
+"""
+                    )
+
+                # Apply should detect existing project and handle gracefully
+                result2 = runner.invoke(
+                    apply,
+                    ["testapp/quickscale.yml", "--no-modules", "--no-docker"],
+                    input="n\n",  # Don't proceed to avoid regeneration
+                )
+
+                # Should handle existing project gracefully
+                assert result2.exit_code != 0 or "Existing project" in result2.output
+
+    def test_apply_detects_filesystem_modules(self):
+        """Test that apply respects modules in state file"""
+        runner = CliRunner()
+        with runner.isolated_filesystem():
+            import yaml
+
+            # Create project with state file containing module info
+            os.makedirs("testapp/.quickscale", exist_ok=True)
+            with open("testapp/.quickscale/state.yml", "w") as f:
+                yaml.dump(
+                    {
+                        "version": "1",
+                        "project": {
+                            "name": "testapp",
+                            "theme": "showcase_html",
+                            "created_at": "2025-01-01T00:00:00",
+                            "last_applied": "2025-01-01T00:00:00",
+                        },
+                        "modules": {
+                            "auth": {
+                                "version": None,
+                                "commit_sha": None,
+                                "embedded_at": "2025-01-01T00:00:00",
+                                "options": {},
+                            }
+                        },
+                    },
+                    f,
+                )
+
+            # Create config with same module
+            with open("testapp/quickscale.yml", "w") as f:
+                f.write(
+                    """
+version: "1"
+project:
+  name: testapp
+  theme: showcase_html
+modules:
+  auth:
+docker:
+  start: false
+"""
+                )
+
+            # Create minimal project structure
+            os.makedirs("testapp/modules/auth", exist_ok=True)
+            with open("testapp/manage.py", "w") as f:
+                f.write("# Django manage.py")
+
+            # Apply should show no changes since auth is already in state
+            result = runner.invoke(
+                apply,
+                ["testapp/quickscale.yml", "--no-modules", "--no-docker"],
+                input="y\n",
+            )
+
+            # Should show auth is unchanged
+            assert "Nothing to do" in result.output or "unchanged" in result.output

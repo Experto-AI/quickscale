@@ -106,38 +106,11 @@ See [release-v0.68.0-implementation.md](../releases/release-v0.68.0-implementati
 
 ---
 
-### v0.69.0: Plan/Apply System - State Management
+### v0.69.0: Plan/Apply System — State Management
 
-**Status**: 📋 Planned
+**Status**: ✅ Complete
 
-**Objective**: Implement state tracking for incremental applies and existing project support.
-
-**State File** (`.quickscale/state.yml`):
-- [ ] Create state file schema
-- [ ] Track applied modules and configuration
-- [ ] Record timestamps and commit SHAs
-- [ ] Auto-update on each apply
-
-**Filesystem Verification**:
-- [ ] Check `modules/` directory for embedded modules
-- [ ] Verify state file matches filesystem
-- [ ] Handle state drift detection
-
-**Delta Detection**:
-- [ ] Compare desired state (`quickscale.yml`) vs applied state
-- [ ] Identify: new modules, removed modules, config changes
-- [ ] Generate change summary for user confirmation
-
-**Incremental Apply**:
-- [ ] Apply only changes (not full re-apply)
-- [ ] Skip already-embedded modules
-- [ ] Handle new module embedding
-
-**Testing**:
-- [ ] Unit tests for state file operations
-- [ ] Unit tests for delta detection
-- [ ] Integration tests for incremental apply
-- [ ] Test state recovery from filesystem
+Terraform-style state management with incremental applies. See [release-v0.69.0-implementation.md](../releases/release-v0.69.0-implementation.md).
 
 ---
 

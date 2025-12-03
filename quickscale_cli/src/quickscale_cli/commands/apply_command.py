@@ -4,6 +4,7 @@ Implements `quickscale apply [config]` - executes quickscale.yml configuration
 """
 
 import subprocess
+from datetime import datetime
 from pathlib import Path
 
 import click
@@ -12,6 +13,13 @@ from quickscale_cli.schema.config_schema import (
     ConfigValidationError,
     QuickScaleConfig,
     validate_config,
+)
+from quickscale_cli.schema.delta import compute_delta, format_delta
+from quickscale_cli.schema.state_schema import (
+    ModuleState,
+    ProjectState,
+    QuickScaleState,
+    StateManager,
 )
 from quickscale_core.generator import ProjectGenerator
 
@@ -277,6 +285,20 @@ def apply(config: str, force: bool, no_docker: bool, no_modules: bool) -> None:
         click.secho(f"\n❌ Failed to read configuration: {e}", fg="red", err=True)
         raise click.Abort()
 
+    # Determine output path first (needed for state loading)
+    # If config is in a project directory (e.g., myapp/quickscale.yml), use parent
+    if config_path.parent.name == qs_config.project.name:
+        output_path = config_path.parent
+    else:
+        output_path = Path.cwd() / qs_config.project.name
+
+    # Load existing state if project exists
+    state_manager = StateManager(output_path)
+    existing_state = state_manager.load() if output_path.exists() else None
+
+    # Compute delta
+    delta = compute_delta(qs_config, existing_state)
+
     # Display configuration summary
     click.echo("\n🚀 Applying configuration:")
     click.echo(f"   Project: {qs_config.project.name}")
@@ -289,49 +311,62 @@ def apply(config: str, force: bool, no_docker: bool, no_modules: bool) -> None:
         f"   Docker: start={qs_config.docker.start}, build={qs_config.docker.build}"
     )
 
-    # Determine output path
-    # If config is in a project directory (e.g., myapp/quickscale.yml), use parent
-    if config_path.parent.name == qs_config.project.name:
-        output_path = config_path.parent
-        # Check if project directory already has content
-        if output_path.exists() and any(output_path.iterdir()):
-            if not force:
-                click.secho(
-                    f"\n⚠️  Project directory already has content: {output_path}",
-                    fg="yellow",
-                )
-                if not click.confirm(
-                    "Continue anyway? (may cause conflicts)", default=False
-                ):
-                    raise click.Abort()
-    else:
-        output_path = Path.cwd() / qs_config.project.name
+    # Show delta if state exists
+    if existing_state is not None:
+        click.echo("\n📊 Change Detection:")
+        click.echo(format_delta(delta))
 
-    # Check if output directory exists
-    if output_path.exists() and any(output_path.iterdir()):
-        existing_files = list(output_path.iterdir())
-        # Allow if only quickscale.yml exists
-        if not (
-            len(existing_files) == 1 and existing_files[0].name == "quickscale.yml"
-        ):
-            if not force:
-                click.secho(
-                    f"\n❌ Directory already exists and is not empty: {output_path}",
-                    fg="red",
-                    err=True,
-                )
-                click.echo(
-                    "   Use --force to overwrite or remove the directory first",
-                    err=True,
-                )
+        # If no changes and project exists, show message and exit
+        if not delta.has_changes:
+            click.secho(
+                "\n✅ Nothing to do. Configuration matches applied state.", fg="green"
+            )
+            raise click.Abort()
+
+        # Warn about theme changes
+        if delta.theme_changed:
+            click.secho(
+                "\n⚠️  WARNING: Theme changes are not supported after initial project generation!",
+                fg="red",
+                bold=True,
+            )
+            click.echo(
+                "   Theme changes require regenerating the entire project from scratch.",
+            )
+            if not click.confirm("Continue anyway?", default=False):
                 raise click.Abort()
-            else:
-                click.secho(
-                    f"\n⚠️  --force: Will overwrite existing content in {output_path}",
-                    fg="yellow",
-                )
 
-    click.echo(f"\n📁 Output directory: {output_path}")
+    # Check if project directory already has content
+    if output_path.exists() and any(output_path.iterdir()):
+        # If we have a state file, this is an incremental apply
+        if existing_state is not None:
+            click.echo(f"\n📁 Existing project detected: {output_path}")
+            click.echo("   Performing incremental apply (only changes will be made)")
+        else:
+            # No state file but directory exists
+            existing_files = list(output_path.iterdir())
+            # Allow if only quickscale.yml exists
+            if not (
+                len(existing_files) == 1 and existing_files[0].name == "quickscale.yml"
+            ):
+                if not force:
+                    click.secho(
+                        f"\n❌ Directory already exists and is not empty: {output_path}",
+                        fg="red",
+                        err=True,
+                    )
+                    click.echo(
+                        "   Use --force to overwrite or remove the directory first",
+                        err=True,
+                    )
+                    raise click.Abort()
+                else:
+                    click.secho(
+                        f"\n⚠️  --force: Will overwrite existing content in {output_path}",
+                        fg="yellow",
+                    )
+    else:
+        click.echo(f"\n📁 Output directory: {output_path}")
 
     # Confirm before proceeding
     if not click.confirm("\n❓ Proceed with apply?", default=True):
@@ -342,92 +377,107 @@ def apply(config: str, force: bool, no_docker: bool, no_modules: bool) -> None:
     click.echo("🔧 Starting apply process...")
     click.echo("=" * 50)
 
-    # Step 1: Generate project
-    # If output_path exists and has only quickscale.yml, we need to handle it differently
-    if output_path.exists():
-        quickscale_yml_path = output_path / "quickscale.yml"
-        if quickscale_yml_path.exists():
-            # Save quickscale.yml, remove other content, generate, restore
-            saved_config = quickscale_yml_path.read_text()
+    # For incremental applies, skip project generation
+    project_generated = False
+    if existing_state is None:
+        # Step 1: Generate project (only for new projects)
+        # If output_path exists and has only quickscale.yml, we need to handle it differently
+        if output_path.exists():
+            quickscale_yml_path = output_path / "quickscale.yml"
+            if quickscale_yml_path.exists():
+                # Save quickscale.yml, remove other content, generate, restore
+                saved_config = quickscale_yml_path.read_text()
 
-            # Remove everything except quickscale.yml if force
-            if force:
+                # Remove everything except quickscale.yml if force
+                if force:
+                    import shutil
+
+                    for item in output_path.iterdir():
+                        if item.name != "quickscale.yml":
+                            if item.is_dir():
+                                shutil.rmtree(item)
+                            else:
+                                item.unlink()
+
+                # Generate project (will fail if dir exists with other content)
+                # We need to generate to a temp location and move
+                import tempfile
+
+                temp_dir = Path(tempfile.mkdtemp())
+                temp_project = temp_dir / qs_config.project.name
+
+                if not _generate_project(qs_config, temp_project):
+                    import shutil
+
+                    shutil.rmtree(temp_dir)
+                    raise click.Abort()
+
+                # Move generated content to output_path
                 import shutil
 
-                for item in output_path.iterdir():
-                    if item.name != "quickscale.yml":
-                        if item.is_dir():
-                            shutil.rmtree(item)
+                for item in temp_project.iterdir():
+                    dest = output_path / item.name
+                    if dest.exists():
+                        if dest.is_dir():
+                            shutil.rmtree(dest)
                         else:
-                            item.unlink()
-
-            # Generate project (will fail if dir exists with other content)
-            # We need to generate to a temp location and move
-            import tempfile
-
-            temp_dir = Path(tempfile.mkdtemp())
-            temp_project = temp_dir / qs_config.project.name
-
-            if not _generate_project(qs_config, temp_project):
-                import shutil
-
+                            dest.unlink()
+                    shutil.move(str(item), str(dest))
                 shutil.rmtree(temp_dir)
-                raise click.Abort()
 
-            # Move generated content to output_path
-            import shutil
-
-            for item in temp_project.iterdir():
-                dest = output_path / item.name
-                if dest.exists():
-                    if dest.is_dir():
-                        shutil.rmtree(dest)
-                    else:
-                        dest.unlink()
-                shutil.move(str(item), str(dest))
-            shutil.rmtree(temp_dir)
-
-            # Restore quickscale.yml
-            quickscale_yml_path.write_text(saved_config)
-            click.secho(f"✅ Project generated: {output_path}", fg="green")
+                # Restore quickscale.yml
+                quickscale_yml_path.write_text(saved_config)
+                click.secho(f"✅ Project generated: {output_path}", fg="green")
+            else:
+                if not _generate_project(qs_config, output_path):
+                    raise click.Abort()
         else:
             if not _generate_project(qs_config, output_path):
                 raise click.Abort()
+        project_generated = True
     else:
-        if not _generate_project(qs_config, output_path):
-            raise click.Abort()
+        click.echo("⏭️  Skipping project generation (project already exists)")
 
-    # Step 2: Initialize git
-    if not _init_git(output_path):
-        click.secho("⚠️  Git initialization failed, continuing...", fg="yellow")
-    else:
-        # Configure git user for commits (needed in CI/test environments)
-        subprocess.run(
-            ["git", "config", "user.email", "quickscale@example.com"],
-            cwd=output_path,
-            capture_output=True,
-        )
-        subprocess.run(
-            ["git", "config", "user.name", "QuickScale"],
-            cwd=output_path,
-            capture_output=True,
-        )
+    # Step 2: Initialize git (only for new projects)
+    if project_generated:
+        if not _init_git(output_path):
+            click.secho("⚠️  Git initialization failed, continuing...", fg="yellow")
+        else:
+            # Configure git user for commits (needed in CI/test environments)
+            subprocess.run(
+                ["git", "config", "user.email", "quickscale@example.com"],
+                cwd=output_path,
+                capture_output=True,
+            )
+            subprocess.run(
+                ["git", "config", "user.name", "QuickScale"],
+                cwd=output_path,
+                capture_output=True,
+            )
 
-        # Step 3: Initial commit
-        if not _git_commit(output_path, "Initial project structure"):
-            click.secho("⚠️  Initial commit failed, continuing...", fg="yellow")
+            # Step 3: Initial commit
+            if not _git_commit(output_path, "Initial project structure"):
+                click.secho("⚠️  Initial commit failed, continuing...", fg="yellow")
 
-    # Step 4: Embed modules
-    if not no_modules and qs_config.modules:
-        for module_name in qs_config.modules.keys():
+    # Step 4: Embed modules (only modules in delta.modules_to_add)
+    modules_to_embed = (
+        delta.modules_to_add if existing_state else list(qs_config.modules.keys())
+    )
+    embedded_modules = []
+
+    if not no_modules and modules_to_embed:
+        for module_name in modules_to_embed:
             if not _embed_module(output_path, module_name):
                 click.secho(
                     f"⚠️  Module embedding failed for {module_name}, continuing...",
                     fg="yellow",
                 )
             else:
+                embedded_modules.append(module_name)
                 # Commit after each module
                 _git_commit(output_path, f"Add module: {module_name}")
+    elif existing_state and not delta.modules_to_add:
+        click.echo("⏭️  No new modules to embed")
 
     # Step 5: Run poetry install
     if not _run_poetry_install(output_path):
@@ -441,6 +491,47 @@ def apply(config: str, force: bool, no_docker: bool, no_modules: bool) -> None:
     if not no_docker and qs_config.docker.start:
         if not _start_docker(output_path, qs_config.docker.build):
             click.secho("⚠️  Docker start failed, continuing...", fg="yellow")
+
+    # Step 8: Save state
+    try:
+        # Build new state
+        if existing_state is None:
+            # New project - create initial state
+            new_state = QuickScaleState(
+                version="1",
+                project=ProjectState(
+                    name=qs_config.project.name,
+                    theme=qs_config.project.theme,
+                    created_at=datetime.now().isoformat(),
+                    last_applied=datetime.now().isoformat(),
+                ),
+                modules={},
+            )
+        else:
+            # Existing project - update state
+            new_state = existing_state
+            new_state.project.last_applied = datetime.now().isoformat()
+
+        # Add embedded modules to state
+        for module_name in embedded_modules:
+            new_state.modules[module_name] = ModuleState(
+                name=module_name,
+                version=None,  # TODO: Get from module metadata
+                commit_sha=None,  # TODO: Get from git
+                embedded_at=datetime.now().isoformat(),
+                options=qs_config.modules[module_name].options,
+            )
+
+        # Also include modules that were already in state (not re-embedded)
+        if existing_state:
+            for module_name, module_state in existing_state.modules.items():
+                if module_name not in new_state.modules:
+                    new_state.modules[module_name] = module_state
+
+        state_manager.save(new_state)
+        click.secho("✅ State saved to .quickscale/state.yml", fg="green")
+    except Exception as e:
+        click.secho(f"⚠️  Failed to save state: {e}", fg="yellow")
 
     # Success!
     click.echo("\n" + "=" * 50)

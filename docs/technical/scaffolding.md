@@ -617,8 +617,10 @@ myapp/
 ### 5.2 With Embedded Modules (Optional, User Choice)
 ```
 myapp/
-├── .quickscale/                 # Module configuration (v0.61.0+)
-│   └── config.yml              # Tracks installed modules
+├── .quickscale/                 # QuickScale state and configuration
+│   ├── state.yml                # Applied state tracking (v0.69.0+)
+│   └── config.yml               # Module metadata (v0.62.0+)
+├── quickscale.yml               # Desired state (plan/apply, v0.68.0+)
 ├── modules/                     # Embedded modules (git subtrees)
 │   ├── auth/                   # From splits/auth-module
 │   │   ├── __init__.py
@@ -642,38 +644,95 @@ myapp/
 └── ... (rest of project structure)
 ```
 
-**How Users Get Modules:**
-```bash
-# Generate base project
-quickscale init myapp --theme showcase_html
+### Configuration Files (v0.68.0+)
 
-# Embed modules (optional)
-cd myapp
-git init  # Must be a git repo
-quickscale embed --module auth
-quickscale embed --module billing
+**`.quickscale/state.yml`** — Applied state tracking (v0.69.0+):
 
-# Update modules later
-quickscale update  # Updates only installed modules
+```yaml
+version: 0.69.0
+project:
+  name: myapp
+  theme: showcase_html
+applied_modules:
+  - name: auth
+    version: v0.63.0
+    commit: abc123def456
+    applied_at: 2025-12-03T14:30:00Z
+  - name: listings
+    version: v0.67.0
+    commit: xyz789uvw012
+    applied_at: 2025-12-03T14:31:00Z
+docker:
+  build: true
+  start: true
+generated_by_version: 0.68.0
+last_apply_at: 2025-12-03T14:32:00Z
 ```
 
-**`.quickscale/config.yml` Example:**
+Location: `.quickscale/state.yml`
+Management: System-generated, do NOT edit manually
+Purpose: Records applied configuration state for idempotency and drift detection
+
+---
+
+**`.quickscale/config.yml`** — Module metadata (v0.62.0+):
+
 ```yaml
-# QuickScale module configuration
 default_remote: https://github.com/<org>/quickscale.git
 
 modules:
   auth:
     prefix: modules/auth
     branch: splits/auth-module
-    installed_version: v0.62.0
+    installed_version: v0.63.0
     installed_at: 2025-10-23
-  billing:
-    prefix: modules/billing
-    branch: splits/billing-module
-    installed_version: v0.64.0
-    installed_at: 2025-10-25
+  listings:
+    prefix: modules/listings
+    branch: splits/listings-module
+    installed_version: v0.67.0
+    installed_at: 2025-11-29
 ```
+
+Location: `.quickscale/config.yml`
+Management: System-generated, do NOT edit manually
+Purpose: Tracks module branches and versions for `quickscale update` and `quickscale push`
+
+---
+
+**`quickscale.yml`** — Desired configuration (v0.68.0+):
+
+```yaml
+version: 0.69.0
+project:
+  name: myapp
+  theme: showcase_html
+modules:
+  - name: auth
+  - name: listings
+docker:
+  build: true
+  start: true
+```
+
+Location: Project root (`./quickscale.yml`)
+Management: User-editable, version-controllable
+Purpose: Declarative desired state for project and modules
+
+---
+
+**Configuration Files Summary**:
+
+| File | Location | Purpose | Management |
+|------|----------|---------|-----------|
+| `quickscale.yml` | Project root | Desired configuration | User edits |
+| `.quickscale/state.yml` | `.quickscale/` | Applied state (what was done) | System-managed |
+| `.quickscale/config.yml` | `.quickscale/` | Module tracking | System-managed |
+
+**Constraints**:
+- ✅ All YAML files are valid YAML (validated on read)
+- ✅ State and config files are auto-generated and auto-updated
+- ❌ DO NOT manually edit `.quickscale/state.yml` or `.quickscale/config.yml`
+- ✅ `quickscale.yml` should be version-controlled in git
 
 **What Users Get with Modules:**
 - Reusable Django apps maintained by QuickScale

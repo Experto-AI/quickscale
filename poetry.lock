@@ -1283,7 +1283,7 @@ files = [
 
 [[package]]
 name = "quickscale"
-version = "0.67.0"
+version = "0.69.0"
 description = "Meta-package that installs quickscale-core and quickscale-cli together"
 optional = false
 python-versions = "^3.10"
@@ -1291,8 +1291,8 @@ files = []
 develop = true
 
 [package.dependencies]
-quickscale-cli = "^0.67.0"
-quickscale-core = "^0.67.0"
+quickscale-cli = "^0.69.0"
+quickscale-core = "^0.69.0"
 
 [package.source]
 type = "directory"
@@ -1300,7 +1300,7 @@ url = "quickscale"
 
 [[package]]
 name = "quickscale-cli"
-version = "0.67.0"
+version = "0.69.0"
 description = "Command-line interface for QuickScale Django project generator"
 optional = false
 python-versions = "^3.10"
@@ -1317,7 +1317,7 @@ url = "quickscale_cli"
 
 [[package]]
 name = "quickscale-core"
-version = "0.67.0"
+version = "0.69.0"
 description = "Core scaffolding and utilities for QuickScale Django project generator"
 optional = false
 python-versions = "^3.10"
