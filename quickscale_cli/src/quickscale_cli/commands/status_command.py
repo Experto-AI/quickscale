@@ -11,6 +11,8 @@ import click
 from quickscale_cli.schema.config_schema import QuickScaleConfig, validate_config
 from quickscale_cli.schema.delta import compute_delta, format_delta
 from quickscale_cli.schema.state_schema import QuickScaleState, StateManager
+from quickscale_core.manifest import ModuleManifest
+from quickscale_core.manifest.loader import get_manifest_for_module
 
 
 def _get_docker_status() -> dict[str, str] | None:
@@ -83,6 +85,27 @@ def _load_config(config_path: Path) -> QuickScaleConfig | None:
         return None
 
 
+def _load_module_manifests(
+    project_path: Path, module_names: list[str]
+) -> dict[str, ModuleManifest]:
+    """Load manifests for installed modules
+
+    Args:
+        project_path: Path to the project root
+        module_names: List of module names to load manifests for
+
+    Returns:
+        Dictionary mapping module names to their manifests
+
+    """
+    manifests: dict[str, ModuleManifest] = {}
+    for module_name in module_names:
+        manifest = get_manifest_for_module(project_path, module_name)
+        if manifest:
+            manifests[module_name] = manifest
+    return manifests
+
+
 def _display_project_info(state: QuickScaleState) -> None:
     """Display project information from state"""
     click.echo("\n📁 Project Information:")
@@ -108,13 +131,15 @@ def _display_modules(state: QuickScaleState) -> None:
 
 
 def _display_pending_changes(
-    config: QuickScaleConfig | None, state: QuickScaleState | None
+    config: QuickScaleConfig | None,
+    state: QuickScaleState | None,
+    manifests: dict[str, ModuleManifest] | None = None,
 ) -> None:
     """Display pending changes between config and state"""
     if config is None:
         return
 
-    delta = compute_delta(config, state)
+    delta = compute_delta(config, state, manifests)
 
     if delta.has_changes:
         click.echo("\n⚡ Pending Changes:")
@@ -251,7 +276,13 @@ def status(json_output: bool) -> None:
             }
 
         if config:
-            delta = compute_delta(config, state)
+            # Load manifests for accurate config change detection
+            json_manifests = None
+            if state and state.modules:
+                json_manifests = _load_module_manifests(
+                    project_path, list(state.modules.keys())
+                )
+            delta = compute_delta(config, state, json_manifests)
             output["pending_changes"] = {
                 "has_changes": delta.has_changes,
                 "modules_to_add": delta.modules_to_add,
@@ -293,8 +324,13 @@ def status(json_output: bool) -> None:
         click.secho("\n⚠️  No state file found (.quickscale/state.yml)", fg="yellow")
         click.echo("   Run 'quickscale apply' to initialize the project state.")
 
+    # Load manifests for installed modules (needed for config change detection)
+    manifests: dict[str, ModuleManifest] | None = None
+    if state and state.modules:
+        manifests = _load_module_manifests(project_path, list(state.modules.keys()))
+
     # Display pending changes
-    _display_pending_changes(config, state)
+    _display_pending_changes(config, state, manifests)
 
     # Display Docker status
     _display_docker_status()
