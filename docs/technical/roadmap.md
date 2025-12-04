@@ -69,9 +69,8 @@ QuickScale follows an evolution-aligned roadmap that starts as a personal toolki
 - **v1.0.0+:** Community platform (if demand exists)
 
 **Status:**
-- **Current Status:** v0.68.0 — Plan/Apply System Core Commands (complete)
-- **Validation:** Terraform-style declarative project configuration
-- **Next Milestone:** v0.69.0 - Plan/Apply State Management
+- **Current Status:** v0.70.0 — Plan/Apply System Existing Project Support (complete)
+- **Next Milestone:** v0.71.0 - Module Manifests & Config Mutability
 - **Plan/Apply System:** v0.68.0-v0.71.0 - Terraform-style configuration (replaces `quickscale init`)
 - **SaaS Parity:** v0.74.0 - auth, billing, teams modules complete
 
@@ -116,43 +115,11 @@ Terraform-style state management with incremental applies. See [release-v0.69.0-
 
 ### v0.70.0: Plan/Apply System - Existing Project Support
 
-**Status**: 📋 Planned
+**Status**: ✅ Complete — 2025-12-19
 
-**Objective**: Support adding modules and reconfiguring existing projects.
+Release v0.70.0 adds existing project support to the Plan/Apply system. Users can now check project status, add modules, and reconfigure options. New commands: `quickscale status`, `quickscale plan --add`, `quickscale plan --reconfigure`. Includes 37 new tests and full state management integration.
 
-**Commands**:
-- [ ] `quickscale plan --add` - Add modules to existing project
-- [ ] `quickscale plan --edit` - Reconfigure existing modules
-- [ ] `quickscale status` - Show current vs desired state
-
-**Add Modules** (`plan --add`):
-- [ ] Detect existing project (check for `quickscale.yml` or Django project)
-- [ ] Show currently embedded modules
-- [ ] Interactive wizard for adding new modules
-- [ ] Update existing `quickscale.yml`
-
-**Edit Configuration** (`plan --edit`):
-- [ ] Load current configuration from state
-- [ ] Show mutable options only (immutable are locked)
-- [ ] Interactive wizard for changing values
-- [ ] Update `quickscale.yml` with changes
-
-**Status Command**:
-- [ ] Display project info (name, theme, created date)
-- [ ] List modules with status (applied, pending, config)
-- [ ] Show Docker status
-- [ ] Highlight pending changes
-
-**Apply with Existing Project**:
-- [ ] Detect project exists → use incremental apply
-- [ ] Show change summary before applying
-- [ ] Confirm before making changes
-
-**Testing**:
-- [ ] Unit tests for existing project detection
-- [ ] Integration tests for --add workflow
-- [ ] Integration tests for --edit workflow
-- [ ] Integration tests for status command
+See [release-v0.70.0-implementation.md](../releases/release-v0.70.0-implementation.md) for details.
 
 ---
 

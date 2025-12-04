@@ -2,6 +2,8 @@
 
 See docs/releases/ for detailed release notes.
 
+- v0.70.0 — 2025-12-19 — Existing project support (status, plan --add, plan --reconfigure)
+- v0.69.0 — 2025-12-03 — State management and incremental applies
 - v0.68.0 — 2025-12-01 — Plan/Apply System core commands (Terraform-style declarative workflow)
 - v0.67.0 — 2025-11-29 — Listings module with AbstractListing base model for verticals
 - v0.66.0 — 2025-11-24 — Blog module with Markdown, featured images, and RSS feeds

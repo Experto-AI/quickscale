@@ -25,8 +25,10 @@ class TestPlanCommandBasic:
         result = runner.invoke(plan, ["--help"])
 
         assert result.exit_code == 0
-        assert "Create a project configuration" in result.output
+        assert "Create or update a project configuration" in result.output
         assert "--output" in result.output
+        assert "--add" in result.output
+        assert "--reconfigure" in result.output
 
     def test_plan_creates_directory_structure(self):
         """Test that plan creates the project directory with quickscale.yml"""
