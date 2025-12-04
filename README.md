@@ -1,13 +1,13 @@
 # QuickScale Auth Module
 
-**Version**: 0.63.0
+**Version**: 0.71.0
 **Status**: ✅ Production Ready
 
 Production-ready authentication module for QuickScale projects using django-allauth with custom User model patterns.
 
 ## Features
 
-### ✅ Implemented (v0.63.0)
+### ✅ Implemented (v0.71.0)
 
 - **django-allauth Integration**: Email/password authentication
 - **Custom User Model**: Extends Django's AbstractUser with custom fields support
@@ -18,6 +18,50 @@ Production-ready authentication module for QuickScale projects using django-alla
 - **Form Validation**: Client-side and server-side validation
 - **Security**: CSRF protection, password strength indicators
 - **Signals**: Post-registration hooks for custom logic
+- **Module Manifest**: Declarative config with mutable/immutable options
+
+## Module Manifest (v0.71.0+)
+
+The auth module includes a `module.yml` manifest that defines configuration options:
+
+### Mutable Options (can be changed anytime with `quickscale apply`)
+
+| Option | Django Setting | Default | Description |
+|--------|---------------|---------|-------------|
+| `registration_enabled` | `ACCOUNT_ALLOW_REGISTRATION` | `true` | Allow new user signups |
+| `email_verification` | `ACCOUNT_EMAIL_VERIFICATION` | `none` | Email verification mode |
+| `session_cookie_age` | `SESSION_COOKIE_AGE` | `1209600` | Session timeout in seconds |
+
+### Immutable Options (set at embed time, cannot be changed)
+
+| Option | Default | Description |
+|--------|---------|-------------|
+| `authentication_method` | `email_username` | How users authenticate (email, username, or both) |
+| `social_providers` | `[]` | OAuth providers (Google, GitHub, etc.) |
+
+### Changing Configuration
+
+**Mutable options** can be changed in `quickscale.yml` and applied:
+
+```yaml
+modules:
+  auth:
+    options:
+      registration_enabled: false  # Disable signups
+      session_cookie_age: 86400    # 1 day session
+```
+
+```bash
+quickscale apply
+```
+
+**Immutable options** require removing and re-embedding the module:
+
+```bash
+quickscale remove auth
+# Update quickscale.yml with new immutable options
+quickscale apply
+```
 
 ## Navigation & Module Integration
 
