@@ -23,7 +23,7 @@ myproject/
 
 State file format:
 ```yaml
-version: 0.70.0
+version: 0.71.0
 project:
   name: myproject
   theme: showcase_html
@@ -31,7 +31,7 @@ project:
   last_applied: "2025-12-03T10:00:00"
 modules:
   auth:
-    version: 0.70.0
+    version: 0.71.0
     commit_sha: null
     embedded_at: "2025-12-03T10:00:00"
     options: {}

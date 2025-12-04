@@ -1,0 +1,58 @@
+# Auth Module Manifest
+# Defines configuration options and their mutability for the auth module
+# See decisions.md §Module Manifest Architecture for schema specification
+
+name: auth
+version: "0.71.0"
+description: "Production-ready authentication module using django-allauth"
+
+config:
+  # Mutable options - can be changed after embed via quickscale apply
+  # These update Django settings.py automatically
+  mutable:
+    registration_enabled:
+      type: boolean
+      default: true
+      django_setting: ACCOUNT_ALLOW_REGISTRATION
+      description: "Allow new user registration"
+
+    email_verification:
+      type: string
+      default: "none"
+      django_setting: ACCOUNT_EMAIL_VERIFICATION
+      description: "Email verification requirement (none, optional, mandatory)"
+      validation:
+        choices: ["none", "optional", "mandatory"]
+
+    session_cookie_age:
+      type: integer
+      default: 1209600
+      django_setting: SESSION_COOKIE_AGE
+      description: "Session cookie lifetime in seconds (default: 2 weeks)"
+
+  # Immutable options - locked at embed time, require remove + re-embed to change
+  immutable:
+    authentication_method:
+      type: string
+      default: "email"
+      description: "Authentication method (email, username, both)"
+      validation:
+        choices: ["email", "username", "both"]
+
+    social_providers:
+      type: list
+      default: []
+      description: "Social auth providers to enable (google, github, facebook)"
+      validation:
+        allowed_values: ["google", "github", "facebook", "twitter"]
+
+# Dependencies required by this module
+dependencies:
+  - django-allauth>=0.63.0
+
+# Django apps that must be in INSTALLED_APPS
+django_apps:
+  - django.contrib.sites
+  - allauth
+  - allauth.account
+  - quickscale_modules_auth

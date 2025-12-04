@@ -279,7 +279,7 @@ Projects are managed through two configuration files with clear separation of co
 User-editable configuration file with this structure:
 
 ```yaml
-version: 0.70.0
+version: 0.71.0
 project:
   name: myapp
   theme: showcase_html
@@ -302,17 +302,17 @@ docker:
 System-managed state file tracking what has been applied:
 
 ```yaml
-version: 0.70.0
+version: 0.71.0
 project:
   name: myapp
   theme: showcase_html
 applied_modules:
   - name: auth
-    version: 0.70.0
+    version: 0.71.0
     commit: abc123def456
     applied_at: 2025-12-03T14:30:00Z
   - name: listings
-    version: 0.70.0
+    version: 0.71.0
     commit: xyz789uvw012
     applied_at: 2025-12-03T14:31:00Z
 docker:
@@ -431,7 +431,7 @@ Automatic changes made:
 **Future workflow** (v1.0.0+):
 ```yaml
 # quickscale.yml (optional, v1.0.0+)
-version: 0.70.0
+version: 0.71.0
 modules:
   auth:
     ACCOUNT_ALLOW_REGISTRATION: true
@@ -454,6 +454,54 @@ modules:
 - **Post-MVP (v1.0.0+)**: YAML support optional, interactive prompts unchanged
 
 **Authoritative Reference**: [roadmap.md §Module Configuration Strategy](./roadmap.md#-module-configuration-strategy-v06300)
+
+---
+
+### Module Manifest Architecture {#module-manifest-architecture}
+
+**Architectural Decision (v0.71.0):** Each module includes `module.yml` declaring configuration options as mutable or immutable.
+
+**Manifest Schema:**
+```yaml
+name: auth
+version: 0.71.0
+config:
+  mutable:
+    registration_enabled:
+      type: boolean
+      default: true
+      django_setting: ACCOUNT_ALLOW_REGISTRATION
+  immutable:
+    social_providers:
+      type: list
+      default: []
+```
+
+**Configuration Rules:**
+
+| Aspect | Mutable | Immutable |
+|--------|---------|-----------|
+| **Definition** | Runtime-changeable via `quickscale apply` | Embed-time-only, locked after |
+| **Storage** | Django `settings.py` | `.quickscale/state.yml` |
+| **Changes** | Auto-update settings.py on apply | Reject with error guidance |
+| **Code** | Read from settings (no hardcoding) | Configured at embed time |
+| **Example** | `ACCOUNT_ALLOW_REGISTRATION` | `social_providers` list |
+
+**Apply Behavior** (extends v0.68.0-v0.70.0 Plan/Apply):
+1. Load module manifest from embedded module
+2. Compare desired config (`quickscale.yml`) vs applied state (`.quickscale/state.yml`)
+3. For mutable changes: update `settings.py` automatically
+4. For immutable changes: error with guidance ("To change X, run `quickscale remove <module>` then re-embed")
+5. Update `.quickscale/state.yml` with new config values
+
+**Constraints:**
+- ✅ Every module MUST have `module.yml` at package root
+- ✅ Mutable options MUST specify `django_setting` key
+- ✅ Immutable options MUST NOT have `django_setting`
+- ✅ Module code MUST read configurable values from settings (not hardcoded)
+- ✅ Backward compatible: modules without manifest treated as all-immutable
+
+**Tie-Breaker:** For config option disputes, default to **immutable** (safer) unless explicit `django_setting` mapping exists.
 
 ---
 
@@ -626,6 +674,8 @@ Other documents (README.md, roadmap.md, scaffolding.md, commercial.md) MUST refe
 | CLI module management commands (`embed --module`, `update`, `push`) | IN (v0.62.0) | Module embed/update via split branches. `embed` command superseded by `quickscale plan --add + apply` in v0.68.0+ but remains available with deprecation warning. **Starting v0.63.0**: Interactive prompts for module configuration (user doesn't manually edit settings.py). See [§Module Configuration Strategy](#module-configuration-strategy). |
 | `quickscale plan` and `quickscale apply` commands | IN (v0.68.0+) | Terraform-style declarative configuration workflow introduced in v0.68.0. Replaces `quickscale init` and `quickscale embed` as primary commands; older commands available with deprecation warnings until v0.71.0. |
 | Module configuration (interactive prompts, not YAML) | IN (v0.63.0+) | Modules configured via interactive questions during embed (`--module auth`). YAML support deferred to Post-MVP (v1.0.0+). See [§Module Configuration Strategy](#module-configuration-strategy). |
+| Module manifests (`module.yml`) with mutable/immutable config | IN (v0.71.0+) | **v0.71.0**: Each module includes `module.yml` declaring config options as mutable or immutable. `quickscale apply` updates settings.py for mutable changes. See [§Module Manifest Architecture](#module-manifest-architecture). |
+| `quickscale remove <module>` command | IN (v0.71.0+) | **v0.71.0**: Remove embedded modules with cleanup. Data loss warning required. Re-embed for new config. |
 | Settings inheritance from `quickscale_core` into generated project | OPTIONAL | Default generated project uses standalone `settings.py`. If user explicitly embeds `quickscale_core`, optional settings inheritance is allowed and documented. |
 | **PRODUCTION-READY FOUNDATIONS (Competitive Requirement)** | | **See [competitive_analysis.md §1-3](../overview/competitive_analysis.md#-critical-for-mvp-viability-must-have)** |
 | Docker setup (Dockerfile + docker-compose.yml) | IN | Production-ready multi-stage Dockerfile + local dev docker-compose with PostgreSQL & Redis services. Match Cookiecutter quality. |

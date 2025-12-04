@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "quickscale-core"
-version = "0.70.0"
+version = "0.71.0"
 description = "Core scaffolding and utilities for QuickScale Django project generator"
 authors = ["Experto AI <victor@experto.ai>"]
 license = "Apache-2.0"
@@ -50,6 +50,11 @@ addopts = [
     "--cov-report=term-missing",
     "--cov-report=html",
     "-m", "not e2e",  # Skip E2E tests by default (run with: pytest -m e2e)
+]
+markers = [
+    "integration: integration tests (slower, require external dependencies)",
+    "slow: slow tests that take significant time to run",
+    "e2e: end-to-end tests",
 ]
 # Note: Playwright base_url is configured via --base-url flag when running E2E tests
 # Example: pytest -m e2e --base-url http://localhost:8000

@@ -2,6 +2,7 @@
 
 See docs/releases/ for detailed release notes.
 
+- v0.71.0 — 2025-06-25 — Module manifests & config mutability (Plan/Apply system complete)
 - v0.70.0 — 2025-12-19 — Existing project support (status, plan --add, plan --reconfigure)
 - v0.69.0 — 2025-12-03 — State management and incremental applies
 - v0.68.0 — 2025-12-01 — Plan/Apply System core commands (Terraform-style declarative workflow)

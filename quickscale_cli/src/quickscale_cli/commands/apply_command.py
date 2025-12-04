@@ -14,7 +14,7 @@ from quickscale_cli.schema.config_schema import (
     QuickScaleConfig,
     validate_config,
 )
-from quickscale_cli.schema.delta import compute_delta, format_delta
+from quickscale_cli.schema.delta import ConfigDelta, compute_delta, format_delta
 from quickscale_cli.schema.state_schema import (
     ModuleState,
     ProjectState,
@@ -22,6 +22,9 @@ from quickscale_cli.schema.state_schema import (
     StateManager,
 )
 from quickscale_core.generator import ProjectGenerator
+from quickscale_core.manifest import ModuleManifest
+from quickscale_core.manifest.loader import get_manifest_for_module
+from quickscale_core.settings_manager import apply_mutable_config_changes
 
 
 def _run_command(
@@ -216,6 +219,102 @@ def _start_docker(project_path: Path, build: bool = True) -> bool:
     return success
 
 
+def _load_module_manifests(
+    project_path: Path, module_names: list[str]
+) -> dict[str, ModuleManifest]:
+    """Load manifests for all installed modules"""
+    manifests: dict[str, ModuleManifest] = {}
+    for module_name in module_names:
+        manifest = get_manifest_for_module(project_path, module_name)
+        if manifest:
+            manifests[module_name] = manifest
+    return manifests
+
+
+def _apply_mutable_config(
+    project_path: Path,
+    delta: ConfigDelta,
+    manifests: dict[str, ModuleManifest],
+) -> bool:
+    """Apply mutable configuration changes to settings.py
+
+    Returns True if all changes were applied successfully
+
+    """
+    if not delta.has_mutable_config_changes:
+        return True
+
+    click.echo("\n⏳ Applying mutable configuration changes...")
+
+    all_success = True
+    for module_name, change in delta.get_all_mutable_changes():
+        if change.django_setting:
+            results = apply_mutable_config_changes(
+                project_path, module_name, {change.django_setting: change.new_value}
+            )
+            for setting_name, success, message in results:
+                if success:
+                    click.secho(f"  ✅ {message}", fg="green")
+                else:
+                    click.secho(f"  ❌ {message}", fg="red")
+                    all_success = False
+
+    if all_success:
+        click.secho("✅ Mutable configuration changes applied", fg="green")
+
+    return all_success
+
+
+def _check_immutable_config_changes(delta: ConfigDelta) -> bool:
+    """Check for immutable config changes and show errors
+
+    Returns True if there are no immutable changes (safe to proceed)
+    Returns False if there are immutable changes (should abort)
+
+    """
+    if not delta.has_immutable_config_changes:
+        return True
+
+    click.secho(
+        "\n❌ Cannot apply: Immutable configuration changes detected!",
+        fg="red",
+        bold=True,
+    )
+    click.echo("\nThe following options cannot be changed after embed:\n")
+
+    for module_name, change in delta.get_all_immutable_changes():
+        click.echo(f"  ✗ {module_name}.{change.option_name}:")
+        click.echo(f"    Current: {change.old_value}")
+        click.echo(f"    Desired: {change.new_value}")
+
+    click.echo("\n💡 To change immutable options:")
+    modules_with_immutable = set(
+        module_name for module_name, _ in delta.get_all_immutable_changes()
+    )
+    for module_name in modules_with_immutable:
+        click.echo(f"   1. quickscale remove {module_name}")
+        click.echo("   2. Update quickscale.yml with new options")
+        click.echo("   3. quickscale apply")
+        click.echo()
+
+    return False
+
+
+def _update_module_config_in_state(
+    state: QuickScaleState,
+    config: QuickScaleConfig,
+    delta: ConfigDelta,
+) -> None:
+    """Update module options in state after mutable config changes"""
+    for module_name, module_delta in delta.config_deltas.items():
+        if module_delta.has_mutable_changes and module_name in state.modules:
+            # Update options with new values
+            current_options = state.modules[module_name].options or {}
+            for change in module_delta.mutable_changes:
+                current_options[change.option_name] = change.new_value
+            state.modules[module_name].options = current_options
+
+
 @click.command()
 @click.argument(
     "config",
@@ -285,6 +384,9 @@ def apply(config: str, force: bool, no_docker: bool, no_modules: bool) -> None:
         click.secho(f"\n❌ Failed to read configuration: {e}", fg="red", err=True)
         raise click.Abort()
 
+    # Resolve config path to absolute path for reliable parent directory detection
+    config_path = config_path.resolve()
+
     # Determine output path first (needed for state loading)
     # If config is in a project directory (e.g., myapp/quickscale.yml), use parent
     if config_path.parent.name == qs_config.project.name:
@@ -296,8 +398,15 @@ def apply(config: str, force: bool, no_docker: bool, no_modules: bool) -> None:
     state_manager = StateManager(output_path)
     existing_state = state_manager.load() if output_path.exists() else None
 
-    # Compute delta
-    delta = compute_delta(qs_config, existing_state)
+    # Load manifests for modules (needed for config change detection)
+    manifests: dict[str, ModuleManifest] = {}
+    if existing_state and existing_state.modules:
+        manifests = _load_module_manifests(
+            output_path, list(existing_state.modules.keys())
+        )
+
+    # Compute delta (with manifests for config change detection)
+    delta = compute_delta(qs_config, existing_state, manifests)
 
     # Display configuration summary
     click.echo("\n🚀 Applying configuration:")
@@ -321,6 +430,10 @@ def apply(config: str, force: bool, no_docker: bool, no_modules: bool) -> None:
             click.secho(
                 "\n✅ Nothing to do. Configuration matches applied state.", fg="green"
             )
+            raise click.Abort()
+
+        # Check for immutable config changes (abort if found)
+        if not _check_immutable_config_changes(delta):
             raise click.Abort()
 
         # Warn about theme changes
@@ -487,12 +600,17 @@ def apply(config: str, force: bool, no_docker: bool, no_modules: bool) -> None:
     if not _run_migrations(output_path):
         click.secho("⚠️  Migrations failed, continuing...", fg="yellow")
 
-    # Step 7: Start Docker
+    # Step 7: Apply mutable configuration changes
+    if existing_state and delta.has_mutable_config_changes:
+        if not _apply_mutable_config(output_path, delta, manifests):
+            click.secho("⚠️  Some config changes failed to apply", fg="yellow")
+
+    # Step 8: Start Docker
     if not no_docker and qs_config.docker.start:
         if not _start_docker(output_path, qs_config.docker.build):
             click.secho("⚠️  Docker start failed, continuing...", fg="yellow")
 
-    # Step 8: Save state
+    # Step 9: Save state
     try:
         # Build new state
         if existing_state is None:
@@ -527,6 +645,9 @@ def apply(config: str, force: bool, no_docker: bool, no_modules: bool) -> None:
             for module_name, module_state in existing_state.modules.items():
                 if module_name not in new_state.modules:
                     new_state.modules[module_name] = module_state
+
+        # Update options for modules with mutable config changes
+        _update_module_config_in_state(new_state, qs_config, delta)
 
         state_manager.save(new_state)
         click.secho("✅ State saved to .quickscale/state.yml", fg="green")

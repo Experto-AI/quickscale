@@ -39,7 +39,8 @@ QuickScale follows an evolution-aligned roadmap that starts as a personal toolki
    - ✅ Theme system infrastructure and split branch management (v0.61.0-v0.62.0)
    - ✅ Auth module (v0.63.0) - production-ready with django-allauth
    - ✅ Listings module (v0.67.0) - generic base for vertical themes
-   - 📋 **Plan/Apply System** (v0.68.0-v0.71.0) - Terraform-style configuration
+   - ✅ Plan/Apply System core (v0.68.0-v0.70.0) - Terraform-style configuration
+   - ✅ **Plan/Apply System complete** (v0.71.0) - Module manifests & config mutability
    - 📋 Real Estate theme (v0.72.0) - first vertical theme (React-based)
    - 📋 Billing module (v0.73.0) - Stripe integration
    - 📋 Teams module (v0.74.0) - multi-tenancy
@@ -69,9 +70,9 @@ QuickScale follows an evolution-aligned roadmap that starts as a personal toolki
 - **v1.0.0+:** Community platform (if demand exists)
 
 **Status:**
-- **Current Status:** v0.70.0 — Plan/Apply System Existing Project Support (complete)
-- **Next Milestone:** v0.71.0 - Module Manifests & Config Mutability
-- **Plan/Apply System:** v0.68.0-v0.71.0 - Terraform-style configuration (replaces `quickscale init`)
+- **Current Status:** v0.71.0 — Plan/Apply System Complete (Module Manifests & Config Mutability)
+- **Next Milestone:** v0.72.0 - Real Estate Theme (React-based)
+- **Plan/Apply System:** v0.68.0-v0.71.0 - Terraform-style configuration ✅ Complete
 - **SaaS Parity:** v0.74.0 - auth, billing, teams modules complete
 
 ## Notes and References
@@ -125,48 +126,11 @@ See [release-v0.70.0-implementation.md](../releases/release-v0.70.0-implementati
 
 ### v0.71.0: Plan/Apply System - Module Manifests & Config Mutability
 
-**Status**: 📋 Planned
+**Status**: ✅ Complete — 2025-12-04
 
-**Objective**: Implement module manifests with mutable/immutable configuration.
+Release v0.71.0 completes the Plan/Apply system (v0.68.0-v0.71.0) with module manifests enabling configuration mutability. Users can now modify mutable configuration options after initial embed without re-embedding, while immutable options are locked at embed time with clear upgrade guidance. Includes `quickscale remove` command for module removal. Auth module updated with manifest. 643 tests passing, full coverage achieved.
 
-**Module Manifest** (`module.yml`):
-- [ ] Define manifest schema
-- [ ] Categorize config as mutable vs immutable
-- [ ] Specify Django settings mapping for mutable config
-- [ ] Add validation rules and defaults
-
-**Mutable Config**:
-- [ ] Store in Django `settings.py`
-- [ ] Update settings on apply
-- [ ] Module code reads from settings at runtime
-
-**Immutable Config**:
-- [ ] Lock at embed time
-- [ ] Store in state file
-- [ ] Reject changes with helpful error
-
-**Apply Behavior**:
-- [ ] Detect mutable config changes → update settings.py
-- [ ] Detect immutable config changes → error with guidance
-- [ ] Show post-apply notes for behavior changes
-
-**Remove Command**:
-- [ ] `quickscale remove <module>` - Remove embedded module
-- [ ] Confirm with data loss warning
-- [ ] Update state file
-- [ ] Guide for re-embedding with new config
-
-**Update Auth Module**:
-- [ ] Add `module.yml` manifest to auth module
-- [ ] Categorize existing options (registration, email_verification, etc.)
-- [ ] Update module code to read from settings
-
-**Testing**:
-- [ ] Unit tests for manifest parsing
-- [ ] Unit tests for mutable config updates
-- [ ] Integration tests for immutable config rejection
-- [ ] Integration tests for remove command
-- [ ] E2E test: change mutable config → apply → verify
+See [release-v0.71.0-implementation.md](../releases/release-v0.71.0-implementation.md) and [decisions.md: Module Manifest Architecture](./decisions.md#module-manifest-architecture).
 
 ---
 
