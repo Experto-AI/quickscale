@@ -260,6 +260,111 @@ quickscale_core/generator/templates/
 
 ---
 
+### Plan/Apply Architecture {#planapply-architecture}
+
+**Architectural Decision (v0.68.0+):** QuickScale uses **Terraform-style declarative configuration** with distinct desired state and applied state tracking.
+
+#### **Core Decision**
+
+Projects are managed through two configuration files with clear separation of concerns:
+
+| File | Purpose | Role |
+|------|---------|------|
+| `quickscale.yml` | Declared desired configuration | Input (what user wants) |
+| `.quickscale/state.yml` | Applied state after execution | Output (what was actually done) |
+| `.quickscale/config.yml` | Module metadata for updates | System state (v0.62.0 legacy) |
+
+#### **Desired State Schema** (`quickscale.yml`)
+
+User-editable configuration file with this structure:
+
+```yaml
+version: 0.71.0
+project:
+  name: myapp
+  theme: showcase_html
+modules:
+  - name: auth
+  - name: listings
+docker:
+  build: true
+  start: true
+```
+
+**Constraints**:
+- ✅ Version-controllable (stored in git)
+- ✅ User-editable and reviewable
+- ✅ One file per project
+- ✅ Location: Project root
+
+#### **Applied State Schema** (`.quickscale/state.yml`, v0.69.0+)
+
+System-managed state file tracking what has been applied:
+
+```yaml
+version: 0.71.0
+project:
+  name: myapp
+  theme: showcase_html
+applied_modules:
+  - name: auth
+    version: 0.71.0
+    commit: abc123def456
+    applied_at: 2025-12-03T14:30:00Z
+  - name: listings
+    version: 0.71.0
+    commit: xyz789uvw012
+    applied_at: 2025-12-03T14:31:00Z
+docker:
+  build: true
+  start: true
+generated_by_version: 0.68.0
+last_apply_at: 2025-12-03T14:32:00Z
+```
+
+**Constraints**:
+- ✅ Auto-generated and auto-updated by `quickscale apply`
+- ✅ Do NOT edit manually (system will overwrite)
+- ✅ One file per project
+- ✅ Location: `.quickscale/state.yml`
+
+#### **Operational Properties**
+
+- **Declarative**: User specifies desired state in YAML; tool computes and executes changes
+- **Idempotent**: Running apply with unchanged config is safe (no-op, no re-execution)
+- **Incremental**: Apply computes delta between desired and applied state; only applies necessary changes
+- **Traceable**: State file records what modules/versions/commits were applied and when
+- **Recoverable**: State enables drift detection and recovery workflows
+
+#### **Implementation Rules**
+
+**State Computation** (`quickscale apply`):
+1. Read `quickscale.yml` (desired state)
+2. Read `.quickscale/state.yml` (applied state)
+3. Compute delta (what changed)
+4. Show delta to user for confirmation
+5. Execute changes
+6. Write new state to `.quickscale/state.yml`
+
+**Idempotency Requirements**:
+- ❌ NEVER re-execute already-applied modules
+- ✅ Skip modules that are already embedded
+- ✅ Only embed modules that appear in desired state but not in applied state
+- ✅ Remove modules that were applied but no longer appear in desired state (future)
+
+**State Integrity**:
+- ✅ Write state file atomically (no partial writes)
+- ✅ Include timestamp and generator version for auditing
+- ✅ Never corrupt state from manual edits (reject if format invalid)
+
+#### **Related Files**
+
+- **Module tracking**: `.quickscale/config.yml` (v0.62.0+) — Records module branches and versions for `quickscale update` and `quickscale push` operations. Will consolidate into `state.yml` post-MVP.
+- **User manual**: See [user_manual.md §4.3](./user_manual.md#43-planapply-commands-shipped-in-v0680) for workflow examples and CLI usage.
+- **Project structure**: See [scaffolding.md §5](./scaffolding.md#generated-project-output) for complete project layout including state files.
+
+---
+
 ### Module Configuration Strategy {#module-configuration-strategy}
 
 **Architectural Decision (v0.63.0):** Modules require configuration when embedded. QuickScale uses a **two-phase approach**:
@@ -326,7 +431,7 @@ Automatic changes made:
 **Future workflow** (v1.0.0+):
 ```yaml
 # quickscale.yml (optional, v1.0.0+)
-version: 0.68.0
+version: 0.71.0
 modules:
   auth:
     ACCOUNT_ALLOW_REGISTRATION: true
@@ -349,6 +454,54 @@ modules:
 - **Post-MVP (v1.0.0+)**: YAML support optional, interactive prompts unchanged
 
 **Authoritative Reference**: [roadmap.md §Module Configuration Strategy](./roadmap.md#-module-configuration-strategy-v06300)
+
+---
+
+### Module Manifest Architecture {#module-manifest-architecture}
+
+**Architectural Decision (v0.71.0):** Each module includes `module.yml` declaring configuration options as mutable or immutable.
+
+**Manifest Schema:**
+```yaml
+name: auth
+version: 0.71.0
+config:
+  mutable:
+    registration_enabled:
+      type: boolean
+      default: true
+      django_setting: ACCOUNT_ALLOW_REGISTRATION
+  immutable:
+    social_providers:
+      type: list
+      default: []
+```
+
+**Configuration Rules:**
+
+| Aspect | Mutable | Immutable |
+|--------|---------|-----------|
+| **Definition** | Runtime-changeable via `quickscale apply` | Embed-time-only, locked after |
+| **Storage** | Django `settings.py` | `.quickscale/state.yml` |
+| **Changes** | Auto-update settings.py on apply | Reject with error guidance |
+| **Code** | Read from settings (no hardcoding) | Configured at embed time |
+| **Example** | `ACCOUNT_ALLOW_REGISTRATION` | `social_providers` list |
+
+**Apply Behavior** (extends v0.68.0-v0.70.0 Plan/Apply):
+1. Load module manifest from embedded module
+2. Compare desired config (`quickscale.yml`) vs applied state (`.quickscale/state.yml`)
+3. For mutable changes: update `settings.py` automatically
+4. For immutable changes: error with guidance ("To change X, run `quickscale remove <module>` then re-embed")
+5. Update `.quickscale/state.yml` with new config values
+
+**Constraints:**
+- ✅ Every module MUST have `module.yml` at package root
+- ✅ Mutable options MUST specify `django_setting` key
+- ✅ Immutable options MUST NOT have `django_setting`
+- ✅ Module code MUST read configurable values from settings (not hardcoded)
+- ✅ Backward compatible: modules without manifest treated as all-immutable
+
+**Tie-Breaker:** For config option disputes, default to **immutable** (safer) unless explicit `django_setting` mapping exists.
 
 ---
 
@@ -521,6 +674,8 @@ Other documents (README.md, roadmap.md, scaffolding.md, commercial.md) MUST refe
 | CLI module management commands (`embed --module`, `update`, `push`) | IN (v0.62.0) | Module embed/update via split branches. `embed` command superseded by `quickscale plan --add + apply` in v0.68.0+ but remains available with deprecation warning. **Starting v0.63.0**: Interactive prompts for module configuration (user doesn't manually edit settings.py). See [§Module Configuration Strategy](#module-configuration-strategy). |
 | `quickscale plan` and `quickscale apply` commands | IN (v0.68.0+) | Terraform-style declarative configuration workflow introduced in v0.68.0. Replaces `quickscale init` and `quickscale embed` as primary commands; older commands available with deprecation warnings until v0.71.0. |
 | Module configuration (interactive prompts, not YAML) | IN (v0.63.0+) | Modules configured via interactive questions during embed (`--module auth`). YAML support deferred to Post-MVP (v1.0.0+). See [§Module Configuration Strategy](#module-configuration-strategy). |
+| Module manifests (`module.yml`) with mutable/immutable config | IN (v0.71.0+) | **v0.71.0**: Each module includes `module.yml` declaring config options as mutable or immutable. `quickscale apply` updates settings.py for mutable changes. See [§Module Manifest Architecture](#module-manifest-architecture). |
+| `quickscale remove <module>` command | IN (v0.71.0+) | **v0.71.0**: Remove embedded modules with cleanup. Data loss warning required. Re-embed for new config. |
 | Settings inheritance from `quickscale_core` into generated project | OPTIONAL | Default generated project uses standalone `settings.py`. If user explicitly embeds `quickscale_core`, optional settings inheritance is allowed and documented. |
 | **PRODUCTION-READY FOUNDATIONS (Competitive Requirement)** | | **See [competitive_analysis.md §1-3](../overview/competitive_analysis.md#-critical-for-mvp-viability-must-have)** |
 | Docker setup (Dockerfile + docker-compose.yml) | IN | Production-ready multi-stage Dockerfile + local dev docker-compose with PostgreSQL & Redis services. Match Cookiecutter quality. |
@@ -537,7 +692,8 @@ Other documents (README.md, roadmap.md, scaffolding.md, commercial.md) MUST refe
 | `quickscale_modules/` (split branch distribution) | IN (v0.62.0+) | Modules distributed via git subtree split branches. Embed with `quickscale embed --module <name>`. |
 | Themes (HTML, HTMX, React) | IN (v0.61.0+) | Generator templates, one-time copy during init. User owns generated code, no updates. |
 | `quickscale_themes/` packaged themes | OUT (Post-MVP) | Themes as PyPI packages is Post-MVP. Current: generator templates only. |
-| YAML declarative configuration (`quickscale.yml`) | OUT (Post-MVP) | **v0.63.0-v0.66.0**: Use interactive prompts instead. **v1.0.0+**: YAML optional convenience feature. See [§Module Configuration Strategy](#module-configuration-strategy). |
+| YAML declarative configuration (`quickscale.yml`) | IN (v0.68.0+) | **v0.68.0**: Shipped as part of Plan/Apply system. `quickscale plan` creates `quickscale.yml`, `quickscale apply` executes it. Terraform-style workflow. See [§Plan/Apply Architecture](#planapply-architecture). |
+| State tracking (`.quickscale/state.yml`) | IN (v0.69.0+) | **v0.69.0**: Applied state tracking for incremental applies. Distinguishes desired state (`quickscale.yml`) from applied state (`.quickscale/state.yml`). |
 | PyPI / private-registry distribution for commercial modules | OUT (Post-MVP) | Commercial distribution is Post-MVP (see commercial.md). |
 
 **Notes:**

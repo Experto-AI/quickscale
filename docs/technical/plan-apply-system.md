@@ -94,7 +94,7 @@ myapp/
 ### `quickscale.yml` (Desired State)
 
 ```yaml
-version: 0.68.0
+version: 0.71.0
 
 project:
   name: myapp
@@ -117,7 +117,7 @@ docker:
 ### `.quickscale/state.yml` (Applied State)
 
 ```yaml
-version: 0.68.0
+version: 0.71.0
 last_applied: "2025-11-28T10:30:00Z"
 
 project:
@@ -140,7 +140,7 @@ modules:
 
 ```yaml
 name: auth
-version: 0.68.0
+version: 0.71.0
 
 config:
   mutable:                       # Can change after embed

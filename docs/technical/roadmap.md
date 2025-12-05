@@ -39,7 +39,8 @@ QuickScale follows an evolution-aligned roadmap that starts as a personal toolki
    - ✅ Theme system infrastructure and split branch management (v0.61.0-v0.62.0)
    - ✅ Auth module (v0.63.0) - production-ready with django-allauth
    - ✅ Listings module (v0.67.0) - generic base for vertical themes
-   - 📋 **Plan/Apply System** (v0.68.0-v0.71.0) - Terraform-style configuration
+   - ✅ Plan/Apply System core (v0.68.0-v0.70.0) - Terraform-style configuration
+   - ✅ **Plan/Apply System complete** (v0.71.0) - Module manifests & config mutability
    - 📋 Real Estate theme (v0.72.0) - first vertical theme (React-based)
    - 📋 Billing module (v0.73.0) - Stripe integration
    - 📋 Teams module (v0.74.0) - multi-tenancy
@@ -69,10 +70,9 @@ QuickScale follows an evolution-aligned roadmap that starts as a personal toolki
 - **v1.0.0+:** Community platform (if demand exists)
 
 **Status:**
-- **Current Status:** v0.68.0 — Plan/Apply System Core Commands (complete)
-- **Validation:** Terraform-style declarative project configuration
-- **Next Milestone:** v0.69.0 - Plan/Apply State Management
-- **Plan/Apply System:** v0.68.0-v0.71.0 - Terraform-style configuration (replaces `quickscale init`)
+- **Current Status:** v0.71.0 — Plan/Apply System Complete (Module Manifests & Config Mutability)
+- **Next Milestone:** v0.72.0 - Real Estate Theme (React-based)
+- **Plan/Apply System:** v0.68.0-v0.71.0 - Terraform-style configuration ✅ Complete
 - **SaaS Parity:** v0.74.0 - auth, billing, teams modules complete
 
 ## Notes and References
@@ -106,127 +106,31 @@ See [release-v0.68.0-implementation.md](../releases/release-v0.68.0-implementati
 
 ---
 
-### v0.69.0: Plan/Apply System - State Management
+### v0.69.0: Plan/Apply System — State Management
 
-**Status**: 📋 Planned
+**Status**: ✅ Complete
 
-**Objective**: Implement state tracking for incremental applies and existing project support.
-
-**State File** (`.quickscale/state.yml`):
-- [ ] Create state file schema
-- [ ] Track applied modules and configuration
-- [ ] Record timestamps and commit SHAs
-- [ ] Auto-update on each apply
-
-**Filesystem Verification**:
-- [ ] Check `modules/` directory for embedded modules
-- [ ] Verify state file matches filesystem
-- [ ] Handle state drift detection
-
-**Delta Detection**:
-- [ ] Compare desired state (`quickscale.yml`) vs applied state
-- [ ] Identify: new modules, removed modules, config changes
-- [ ] Generate change summary for user confirmation
-
-**Incremental Apply**:
-- [ ] Apply only changes (not full re-apply)
-- [ ] Skip already-embedded modules
-- [ ] Handle new module embedding
-
-**Testing**:
-- [ ] Unit tests for state file operations
-- [ ] Unit tests for delta detection
-- [ ] Integration tests for incremental apply
-- [ ] Test state recovery from filesystem
+Terraform-style state management with incremental applies. See [release-v0.69.0-implementation.md](../releases/release-v0.69.0-implementation.md).
 
 ---
 
 ### v0.70.0: Plan/Apply System - Existing Project Support
 
-**Status**: 📋 Planned
+**Status**: ✅ Complete — 2025-12-19
 
-**Objective**: Support adding modules and reconfiguring existing projects.
+Release v0.70.0 adds existing project support to the Plan/Apply system. Users can now check project status, add modules, and reconfigure options. New commands: `quickscale status`, `quickscale plan --add`, `quickscale plan --reconfigure`. Includes 37 new tests and full state management integration.
 
-**Commands**:
-- [ ] `quickscale plan --add` - Add modules to existing project
-- [ ] `quickscale plan --edit` - Reconfigure existing modules
-- [ ] `quickscale status` - Show current vs desired state
-
-**Add Modules** (`plan --add`):
-- [ ] Detect existing project (check for `quickscale.yml` or Django project)
-- [ ] Show currently embedded modules
-- [ ] Interactive wizard for adding new modules
-- [ ] Update existing `quickscale.yml`
-
-**Edit Configuration** (`plan --edit`):
-- [ ] Load current configuration from state
-- [ ] Show mutable options only (immutable are locked)
-- [ ] Interactive wizard for changing values
-- [ ] Update `quickscale.yml` with changes
-
-**Status Command**:
-- [ ] Display project info (name, theme, created date)
-- [ ] List modules with status (applied, pending, config)
-- [ ] Show Docker status
-- [ ] Highlight pending changes
-
-**Apply with Existing Project**:
-- [ ] Detect project exists → use incremental apply
-- [ ] Show change summary before applying
-- [ ] Confirm before making changes
-
-**Testing**:
-- [ ] Unit tests for existing project detection
-- [ ] Integration tests for --add workflow
-- [ ] Integration tests for --edit workflow
-- [ ] Integration tests for status command
+See [release-v0.70.0-implementation.md](../releases/release-v0.70.0-implementation.md) for details.
 
 ---
 
 ### v0.71.0: Plan/Apply System - Module Manifests & Config Mutability
 
-**Status**: 📋 Planned
+**Status**: ✅ Complete — 2025-12-04
 
-**Objective**: Implement module manifests with mutable/immutable configuration.
+Release v0.71.0 completes the Plan/Apply system (v0.68.0-v0.71.0) with module manifests enabling configuration mutability. Users can now modify mutable configuration options after initial embed without re-embedding, while immutable options are locked at embed time with clear upgrade guidance. Includes `quickscale remove` command for module removal. Auth module updated with manifest. 643 tests passing, full coverage achieved.
 
-**Module Manifest** (`module.yml`):
-- [ ] Define manifest schema
-- [ ] Categorize config as mutable vs immutable
-- [ ] Specify Django settings mapping for mutable config
-- [ ] Add validation rules and defaults
-
-**Mutable Config**:
-- [ ] Store in Django `settings.py`
-- [ ] Update settings on apply
-- [ ] Module code reads from settings at runtime
-
-**Immutable Config**:
-- [ ] Lock at embed time
-- [ ] Store in state file
-- [ ] Reject changes with helpful error
-
-**Apply Behavior**:
-- [ ] Detect mutable config changes → update settings.py
-- [ ] Detect immutable config changes → error with guidance
-- [ ] Show post-apply notes for behavior changes
-
-**Remove Command**:
-- [ ] `quickscale remove <module>` - Remove embedded module
-- [ ] Confirm with data loss warning
-- [ ] Update state file
-- [ ] Guide for re-embedding with new config
-
-**Update Auth Module**:
-- [ ] Add `module.yml` manifest to auth module
-- [ ] Categorize existing options (registration, email_verification, etc.)
-- [ ] Update module code to read from settings
-
-**Testing**:
-- [ ] Unit tests for manifest parsing
-- [ ] Unit tests for mutable config updates
-- [ ] Integration tests for immutable config rejection
-- [ ] Integration tests for remove command
-- [ ] E2E test: change mutable config → apply → verify
+See [release-v0.71.0-implementation.md](../releases/release-v0.71.0-implementation.md) and [decisions.md: Module Manifest Architecture](./decisions.md#module-manifest-architecture).
 
 ---
 

@@ -1,10 +1,7 @@
 """Pytest fixtures for auth module tests"""
 
 import pytest
-from django.contrib.auth import get_user_model
 from django.test import Client
-
-User = get_user_model()
 
 
 @pytest.fixture
@@ -22,6 +19,9 @@ def user_data():
 @pytest.fixture
 def user(db, user_data):
     """Create a test user"""
+    from django.contrib.auth import get_user_model
+
+    User = get_user_model()
     return User.objects.create_user(
         username=user_data["username"],
         email=user_data["email"],

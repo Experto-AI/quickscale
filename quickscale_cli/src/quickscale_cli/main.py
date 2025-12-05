@@ -18,6 +18,8 @@ from quickscale_cli.commands.development_commands import (
 )
 from quickscale_cli.commands.module_commands import embed, push, update
 from quickscale_cli.commands.plan_command import plan
+from quickscale_cli.commands.remove_command import remove
+from quickscale_cli.commands.status_command import status
 from quickscale_cli.utils.dependency_utils import (
     check_all_dependencies,
 )
@@ -75,6 +77,10 @@ cli.add_command(push)
 # Register plan/apply commands (v0.68.0+)
 cli.add_command(plan)
 cli.add_command(apply)
+cli.add_command(status)
+
+# Register remove command (v0.71.0+)
+cli.add_command(remove)
 
 
 @cli.command(cls=InitCommand)

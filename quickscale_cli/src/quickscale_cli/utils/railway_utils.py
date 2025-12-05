@@ -318,38 +318,30 @@ def set_railway_variables_batch(
 
 def generate_django_secret_key() -> str:
     """Generate a secure Django SECRET_KEY."""
-    try:
-        from django.core.management.utils import (
-            get_random_secret_key,
-        )
+    import secrets
+    import string
 
-        return str(get_random_secret_key())
-    except ImportError:
-        # Fallback if Django not available
-        import secrets
-        import string
+    # Ensure we include at least one of each required character type
+    chars = string.ascii_letters + string.digits + "!@#$%^&*(-_=+)"
 
-        # Ensure we include at least one of each required character type
-        chars = string.ascii_letters + string.digits + "!@#$%^&*(-_=+)"
+    # Generate a key with guaranteed character diversity
+    key_chars = []
 
-        # Generate a key with guaranteed character diversity
-        key_chars = []
+    # Add at least one lowercase
+    key_chars.append(secrets.choice(string.ascii_lowercase))
+    # Add at least one uppercase
+    key_chars.append(secrets.choice(string.ascii_uppercase))
+    # Add at least one digit
+    key_chars.append(secrets.choice(string.digits))
 
-        # Add at least one lowercase
-        key_chars.append(secrets.choice(string.ascii_lowercase))
-        # Add at least one uppercase
-        key_chars.append(secrets.choice(string.ascii_uppercase))
-        # Add at least one digit
-        key_chars.append(secrets.choice(string.digits))
+    # Fill the rest randomly
+    for _ in range(47):  # 50 - 3 = 47
+        key_chars.append(secrets.choice(chars))
 
-        # Fill the rest randomly
-        for _ in range(47):  # 50 - 3 = 47
-            key_chars.append(secrets.choice(chars))
+    # Shuffle to avoid predictable pattern
+    secrets.SystemRandom().shuffle(key_chars)
 
-        # Shuffle to avoid predictable pattern
-        secrets.SystemRandom().shuffle(key_chars)
-
-        return "".join(key_chars)
+    return "".join(key_chars)
 
 
 def get_deployment_url(service: str | None = None) -> str | None:
