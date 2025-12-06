@@ -279,7 +279,7 @@ Projects are managed through two configuration files with clear separation of co
 User-editable configuration file with this structure:
 
 ```yaml
-version: 0.71.0
+version: 0.72.0
 project:
   name: myapp
   theme: showcase_html
@@ -302,17 +302,17 @@ docker:
 System-managed state file tracking what has been applied:
 
 ```yaml
-version: 0.71.0
+version: 0.72.0
 project:
   name: myapp
   theme: showcase_html
 applied_modules:
   - name: auth
-    version: 0.71.0
+    version: 0.72.0
     commit: abc123def456
     applied_at: 2025-12-03T14:30:00Z
   - name: listings
-    version: 0.71.0
+    version: 0.72.0
     commit: xyz789uvw012
     applied_at: 2025-12-03T14:31:00Z
 docker:
@@ -431,7 +431,7 @@ Automatic changes made:
 **Future workflow** (v1.0.0+):
 ```yaml
 # quickscale.yml (optional, v1.0.0+)
-version: 0.71.0
+version: 0.72.0
 modules:
   auth:
     ACCOUNT_ALLOW_REGISTRATION: true
@@ -464,7 +464,7 @@ modules:
 **Manifest Schema:**
 ```yaml
 name: auth
-version: 0.71.0
+version: 0.72.0
 config:
   mutable:
     registration_enabled:
