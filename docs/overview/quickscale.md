@@ -102,7 +102,7 @@ QuickScale provides the building blocks for professional Django development:
 
 **MVP Structure (Phase 1):**
 - **QuickScale Core** = Minimal utilities + project scaffolding
-- **CLI** = One command: `quickscale init myapp`
+- **CLI** = Declarative workflow: `quickscale plan myapp` + `quickscale apply`
 - **Distribution** = Git subtree only
 - **Starter** = Generates Django project you own completely
 

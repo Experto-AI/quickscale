@@ -1,0 +1,39 @@
+# Vulture configuration for QuickScale
+# Detects dead/unused code across the monorepo
+
+# Minimum confidence level (0-100) to report findings
+# 80% = High confidence findings only
+min_confidence = 80
+
+# Paths to scan
+paths = [
+    "quickscale_core/src",
+    "quickscale_cli/src",
+    "quickscale_modules/auth/src",
+    "quickscale_modules/blog/src",
+    "quickscale_modules/listings/src",
+]
+
+# Patterns to exclude
+exclude = [
+    "**/tests/",
+    "**/migrations/",
+    "**/__pycache__/",
+    "**/.venv/",
+    "**/htmlcov/",
+    "**/.pytest_cache/",
+]
+
+# Ignore specific patterns (common false positives)
+# Django models often have fields that appear unused
+ignore_names = [
+    "*Meta",           # Django model Meta classes
+    "*Migration",      # Django migration classes
+    "setUp",           # Test setup methods
+    "tearDown",        # Test teardown methods
+    "setUpClass",      # Test class setup
+    "tearDownClass",   # Test class teardown
+]
+
+# Sort output by confidence (highest first)
+sort_by_size = false

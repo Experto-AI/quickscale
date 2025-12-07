@@ -592,68 +592,49 @@ MODULE_CONFIGURATORS = {
 }
 
 
-@click.command()
-@click.option(
-    "--module",
-    required=True,
-    type=click.Choice(AVAILABLE_MODULES, case_sensitive=False),
-    help="Module name to embed",
-)
-@click.option(
-    "--remote",
-    default="https://github.com/Experto-AI/quickscale.git",
-    help="Git remote URL (default: QuickScale repository)",
-)
-@click.option(
-    "-y",
-    "--non-interactive",
-    is_flag=True,
-    help="Use default configuration without prompts (for automation)",
-)
-def embed(module: str, remote: str, non_interactive: bool) -> None:
-    r"""
-    Embed a QuickScale module into your project via git subtree.
-
-    \b
-    Examples:
-      quickscale embed --module auth
-      quickscale embed --module billing
-      quickscale embed --module blog
-      quickscale embed --module listings
-      quickscale embed --module auth -y  # Non-interactive with defaults
-
-    \b
-    Available modules:
-      - auth: Authentication with django-allauth
-      - billing: Stripe integration with dj-stripe (placeholder)
-      - teams: Multi-tenancy and team management (placeholder)
-      - blog: Markdown-powered blog with categories, tags, and RSS
-      - listings: Generic listings with filtering for marketplace verticals
-
-    \b
-    Note: Auth, blog, and listings modules are fully implemented.
-    Billing and teams modules contain placeholder READMEs.
-
-    \b
-    ⚠️  DEPRECATED: Use 'quickscale plan --add' + 'quickscale apply' instead.
+def embed_module(
+    module: str,
+    project_path: Path | None = None,
+    remote: str = "https://github.com/Experto-AI/quickscale.git",
+    non_interactive: bool = True,
+) -> bool:
     """
-    # Show deprecation warning
-    click.secho(
-        "\n⚠️  DEPRECATED: 'quickscale embed' is deprecated.",
-        fg="yellow",
-        bold=True,
-    )
-    click.echo("   Use 'quickscale plan --add' + 'quickscale apply' instead.")
-    click.echo("   This command will be removed in v0.71.0.\n")
+    Embed a QuickScale module into a project via git subtree.
 
+    This is the internal function used by `quickscale apply` to embed modules.
+    It handles git subtree operations, module configuration, and dependency installation.
+
+    Args:
+        module: Module name to embed (auth, billing, teams, blog, listings)
+        project_path: Path to the project directory. If None, uses current directory.
+        remote: Git remote URL (default: QuickScale repository)
+        non_interactive: Use default configuration without prompts
+
+    Returns:
+        True if embedding succeeded, False otherwise
+
+    Raises:
+        GitError: If git operations fail
+        click.Abort: If validation fails or user cancels
+
+    """
+    if project_path is None:
+        project_path = Path.cwd()
+
+    # Change to project directory for git operations
+    original_cwd = Path.cwd()
     try:
+        import os
+
+        os.chdir(project_path)
+
         # Validate git repository
         if not is_git_repo():
             click.secho("❌ Error: Not a git repository", fg="red", err=True)
             click.echo(
                 "\n💡 Tip: Run 'git init' to initialize a git repository", err=True
             )
-            raise click.Abort()
+            return False
 
         # Check working directory is clean
         if not is_working_directory_clean():
@@ -666,18 +647,18 @@ def embed(module: str, remote: str, non_interactive: bool) -> None:
                 "\n💡 Tip: Commit or stash your changes before embedding modules",
                 err=True,
             )
-            raise click.Abort()
+            return False
 
         # Check if module already exists
-        module_path = Path.cwd() / "modules" / module
-        if module_path.exists():
+        module_dir = project_path / "modules" / module
+        if module_dir.exists():
             click.secho(
-                f"❌ Error: Module '{module}' already exists at {module_path}",
+                f"❌ Error: Module '{module}' already exists at {module_dir}",
                 fg="red",
                 err=True,
             )
             click.echo("\n💡 Tip: Remove the existing module directory first", err=True)
-            raise click.Abort()
+            return False
 
         # Check if branch exists on remote
         branch = f"splits/{module}-module"
@@ -694,13 +675,12 @@ def embed(module: str, remote: str, non_interactive: bool) -> None:
                 "only placeholder files.",
                 err=True,
             )
-            click.echo("   Full implementation coming in v0.63.0+", err=True)
             click.echo(
                 f"\n📖 Branch '{branch}' does not exist on remote: {remote}", err=True
             )
-            raise click.Abort()
+            return False
 
-        # Check if migrations have already been run (only for auth module which changes User model)
+        # Check if migrations have already been run (only for auth module)
         if module == "auth" and has_migrations_been_run():
             click.secho(
                 "\n⚠️  Warning: Django migrations have already been run!",
@@ -711,42 +691,31 @@ def embed(module: str, remote: str, non_interactive: bool) -> None:
             click.echo(
                 "   Embedding it after running migrations will cause migration conflicts."
             )
-            click.echo(
-                "\n🔧 To fix this, you need to reset your database and re-run migrations:"
-            )
-            click.echo("   1. Backup any important data")
-            click.echo(
-                "   2. Delete the database: rm db.sqlite3  (or drop PostgreSQL database)"
-            )
-            click.echo("   3. Run this embed command again")
-            click.echo("   4. Run migrations: poetry run python manage.py migrate")
-            click.echo(
-                "\n💡 Tip: For new projects, embed the auth module BEFORE running migrations."
-            )
 
             if non_interactive:
-                # In non-interactive mode, fail immediately since this is a critical issue
                 click.secho(
-                    "\n❌ Cannot embed auth module in non-interactive mode when migrations exist.",
+                    "\n❌ Cannot embed auth module in non-interactive mode when "
+                    "migrations exist.",
                     fg="red",
                     err=True,
                 )
                 click.echo(
-                    "   Please reset the database first or embed auth module before running migrations.",
+                    "   Please reset the database first or embed auth module before "
+                    "running migrations.",
                     err=True,
                 )
-                raise click.Abort()
+                return False
 
             click.echo(
-                "\n❓ Do you want to continue anyway? (You'll need to reset the database manually)"
+                "\n❓ Do you want to continue anyway? "
+                "(You'll need to reset the database manually)"
             )
-
             if not click.confirm("Continue?", default=False):
                 click.echo("\n❌ Embedding cancelled")
-                raise click.Abort()
+                return False
 
-        # Interactive module configuration (v0.63.0+)
-        config = {}
+        # Interactive module configuration
+        config: dict[str, Any] = {}
         if module in MODULE_CONFIGURATORS:
             configurator, applier = MODULE_CONFIGURATORS[module]
             config = configurator(non_interactive=non_interactive)
@@ -762,28 +731,24 @@ def embed(module: str, remote: str, non_interactive: bool) -> None:
             module_name=module,
             prefix=prefix,
             branch=branch,
-            version="v0.63.0",
+            version="v0.72.0",
         )
 
         # Apply module-specific configuration
         if module in MODULE_CONFIGURATORS and config:
             _, applier = MODULE_CONFIGURATORS[module]
-            project_root = Path.cwd()
-            applier(project_root, config)
+            applier(project_path, config)
 
         # Install dependencies for modules that need it
         if module in ["auth", "blog", "listings"]:
             click.echo("\n📦 Installing dependencies...")
             try:
-                import subprocess
-
-                project_root = Path.cwd()
-                module_path = project_root / "modules" / module
+                module_dir = project_path / "modules" / module
 
                 # Verify module was actually embedded
-                if not module_path.exists():
+                if not module_dir.exists():
                     click.secho(
-                        f"❌ Error: Module directory not found at {module_path}",
+                        f"❌ Error: Module directory not found at {module_dir}",
                         fg="red",
                         err=True,
                     )
@@ -791,13 +756,11 @@ def embed(module: str, remote: str, non_interactive: bool) -> None:
                         "   The git subtree add may have failed. Check the output above.",
                         err=True,
                     )
-                    raise click.Abort()
+                    return False
 
                 # Determine the correct path to add
-                # Sometimes the split branch might contain the full repo (e.g. during dev/testing)
-                # We need to find the actual module's pyproject.toml
-                target_path = module_path
-                nested_path = module_path / "quickscale_modules" / module
+                target_path = module_dir
+                nested_path = module_dir / "quickscale_modules" / module
 
                 if nested_path.exists() and (nested_path / "pyproject.toml").exists():
                     click.secho(
@@ -805,15 +768,15 @@ def embed(module: str, remote: str, non_interactive: bool) -> None:
                         fg="yellow",
                     )
                     click.echo(
-                        f"   Using nested path: {nested_path.relative_to(project_root)}"
+                        f"   Using nested path: {nested_path.relative_to(project_path)}"
                     )
                     target_path = nested_path
 
                 # Install the module
                 click.echo(f"  • Installing {module} module...")
                 result = subprocess.run(
-                    ["poetry", "add", f"./{target_path.relative_to(project_root)}"],
-                    cwd=project_root,
+                    ["poetry", "add", f"./{target_path.relative_to(project_path)}"],
+                    cwd=project_path,
                     capture_output=True,
                     text=True,
                 )
@@ -831,11 +794,11 @@ def embed(module: str, remote: str, non_interactive: bool) -> None:
                     click.echo(result.stdout, err=True)
 
                     click.echo("\n💡 To fix this manually:", err=True)
-                    click.echo(f"   1. cd {project_root}", err=True)
+                    click.echo(f"   1. cd {project_path}", err=True)
                     click.echo(f"   2. poetry add ./modules/{module}", err=True)
                     click.echo("   3. poetry install", err=True)
                     click.echo("   4. poetry run python manage.py migrate", err=True)
-                    raise click.Abort()
+                    return False
 
                 click.secho(
                     f"  ✅ {module.capitalize()} module installed successfully",
@@ -846,7 +809,7 @@ def embed(module: str, remote: str, non_interactive: bool) -> None:
                 click.echo("  • Installing all dependencies...")
                 result = subprocess.run(
                     ["poetry", "install"],
-                    cwd=project_root,
+                    cwd=project_path,
                     capture_output=True,
                     text=True,
                 )
@@ -864,10 +827,10 @@ def embed(module: str, remote: str, non_interactive: bool) -> None:
                     click.echo(result.stdout, err=True)
 
                     click.echo("\n💡 To fix this manually:", err=True)
-                    click.echo(f"   1. cd {project_root}", err=True)
+                    click.echo(f"   1. cd {project_path}", err=True)
                     click.echo("   2. poetry install", err=True)
                     click.echo("   3. poetry run python manage.py migrate", err=True)
-                    raise click.Abort()
+                    return False
 
                 click.secho("  ✅ Dependencies installed successfully", fg="green")
 
@@ -878,135 +841,31 @@ def embed(module: str, remote: str, non_interactive: bool) -> None:
                     err=True,
                 )
                 click.echo(
-                    f"\n💡 Try running 'poetry install' manually in {project_root}",
+                    f"\n💡 Try running 'poetry install' manually in {project_path}",
                     err=True,
                 )
-                raise click.Abort()
+                return False
 
         # Success message
         click.secho(
             f"\n✅ Module '{module}' embedded successfully!", fg="green", bold=True
         )
-        click.echo(f"   Location: {module_path}")
+        click.echo(f"   Location: {module_dir}")
         click.echo(f"   Branch: {branch}")
 
-        # Module-specific next steps
-        click.echo("\n📋 Next steps:")
-        if module == "auth":
-            click.echo(f"  1. Review module code in modules/{module}/")
-            click.secho(
-                "  2. ⚠️  IMPORTANT: Run migrations (required before server start):",
-                fg="yellow",
-                bold=True,
-            )
-            click.secho(
-                "     poetry run python manage.py migrate", fg="cyan", bold=True
-            )
-            click.echo(
-                "  3. Create superuser (optional): poetry run python manage.py createsuperuser"
-            )
-            click.echo("  4. Start development server:")
-            click.echo("")
-            click.secho(
-                "     ⚠️  IMPORTANT: Use --build flag with Docker",
-                fg="yellow",
-                bold=True,
-            )
-            click.secho(
-                "     • With Docker: quickscale down && quickscale up --build",
-                fg="cyan",
-                bold=True,
-            )
-            click.secho(
-                "       ^^^ --build is REQUIRED to install new dependencies",
-                fg="yellow",
-            )
-            click.echo("")
-            click.echo("     • Without Docker: poetry run python manage.py runserver")
-            click.echo("  5. Visit http://localhost:8000/accounts/login/")
-            click.echo("\n📖 Documentation: modules/auth/README.md")
-        elif module == "blog":
-            click.echo(f"  1. Review module code in modules/{module}/")
-            click.secho(
-                "  2. ⚠️  IMPORTANT: Run migrations (required before server start):",
-                fg="yellow",
-                bold=True,
-            )
-            click.secho(
-                "     poetry run python manage.py migrate", fg="cyan", bold=True
-            )
-            click.echo(
-                "  3. Create superuser (optional): poetry run python manage.py createsuperuser"
-            )
-            click.echo("  4. Start development server:")
-            click.echo("")
-            click.secho(
-                "     ⚠️  IMPORTANT: Use --build flag with Docker",
-                fg="yellow",
-                bold=True,
-            )
-            click.secho(
-                "     • With Docker: quickscale down && quickscale up --build",
-                fg="cyan",
-                bold=True,
-            )
-            click.secho(
-                "       ^^^ --build is REQUIRED to install new dependencies",
-                fg="yellow",
-            )
-            click.echo("")
-            click.echo("     • Without Docker: poetry run python manage.py runserver")
-            click.echo("  5. Visit http://localhost:8000/admin/ to create blog posts")
-            click.echo("  6. View your blog at http://localhost:8000/blog/")
-            click.echo("  7. RSS feed available at http://localhost:8000/blog/feed/")
-            click.echo("\n📖 Documentation: modules/blog/README.md")
-        elif module == "listings":
-            click.echo(f"  1. Review module code in modules/{module}/")
-            click.secho(
-                "  2. ⚠️  IMPORTANT: Run migrations (required before server start):",
-                fg="yellow",
-                bold=True,
-            )
-            click.secho(
-                "     poetry run python manage.py migrate", fg="cyan", bold=True
-            )
-            click.echo(
-                "  3. Create superuser (optional): poetry run python manage.py createsuperuser"
-            )
-            click.echo("  4. Start development server:")
-            click.echo("")
-            click.secho(
-                "     ⚠️  IMPORTANT: Use --build flag with Docker",
-                fg="yellow",
-                bold=True,
-            )
-            click.secho(
-                "     • With Docker: quickscale down && quickscale up --build",
-                fg="cyan",
-                bold=True,
-            )
-            click.secho(
-                "       ^^^ --build is REQUIRED to install new dependencies",
-                fg="yellow",
-            )
-            click.echo("")
-            click.echo("     • Without Docker: poetry run python manage.py runserver")
-            click.echo(
-                "  5. Create a concrete model extending AbstractListing (see README)"
-            )
-            click.echo("  6. View listings at http://localhost:8000/listings/")
-            click.echo("\n📖 Documentation: modules/listings/README.md")
-        else:
-            click.echo(f"  1. Review the module code in modules/{module}/")
-            click.echo(f"  2. Follow setup instructions in modules/{module}/README.md")
-            click.echo("  3. Run migrations: python manage.py migrate")
+        return True
 
     except GitError as e:
         click.secho(f"❌ Git error: {e}", fg="red", err=True)
-        raise click.Abort()
+        return False
     except Exception as e:
         click.secho(f"❌ Unexpected error: {e}", fg="red", err=True)
-        raise click.Abort()
+        return False
+    finally:
+        # Always restore original directory
+        import os
+
+        os.chdir(original_cwd)
 
 
 @click.command()

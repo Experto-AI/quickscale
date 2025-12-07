@@ -39,11 +39,11 @@ TARGET AUDIENCE: Maintainers, core contributors, community package developers, C
 ## Quick Reference (AI Context)
 
 **MVP Essentials:**
-- ✅ Single CLI command: `quickscale init myapp`
+- ✅ CLI workflow: `quickscale plan myapp` + `quickscale apply`
 - ✅ Generates standalone Django project (Poetry + pyproject.toml)
 - ✅ Production-ready: Docker, PostgreSQL, pytest, CI/CD, security best practices
-- ✅ Git subtree for core distribution (manual commands documented)
-- ❌ NO YAML config, NO multiple templates, NO CLI wrappers (all Post-MVP)
+- ✅ Git subtree for module distribution
+- ✅ Declarative YAML configuration (quickscale.yml)
 
 **Development Stack:**
 - ✅ Poetry (package manager), Ruff (format + lint), MyPy (type check), pytest (testing)
@@ -79,13 +79,11 @@ TARGET AUDIENCE: Maintainers, core contributors, community package developers, C
 
 **MVP (v0.56-v0.57.0):**
 - ✅ `quickscale_core`: Scaffolding + git subtree integration (monolithic package)
-- ✅ `quickscale_cli`: Single command `quickscale init myapp` (no flags)
+- ✅ `quickscale_cli`: Plan/apply workflow (`quickscale plan` + `quickscale apply`)
 - ✅ Generated project: Standalone Django (user owns completely)
 - ✅ Settings: Standalone settings.py (NO inheritance from core by default)
 - ✅ Templates: Single starter template only
-- ❌ CLI git subtree helpers - Post-MVP
-- ❌ Multiple templates - Post-MVP
-- ❌ YAML configuration - Post-MVP
+- ❌ Multiple themes - Post-MVP
 
 **MVP Output:** See [scaffolding.md §3](./scaffolding.md#mvp-structure)
 
@@ -100,13 +98,17 @@ TARGET AUDIENCE: Maintainers, core contributors, community package developers, C
 **Distribution Strategy:**
 1. Develop modules on `main` branch in `quickscale_modules/`
 2. Auto-split to `splits/{module}-module` branches on release (GitHub Actions)
-3. Users embed via `quickscale embed --module <name>`
+3. Users embed via `quickscale plan --add <module>` + `quickscale apply`
 4. Users update via `quickscale update` (updates installed modules only)
 
 **Workflow:**
 ```bash
-# User embeds auth module
-quickscale embed --module auth
+# User adds auth module to configuration
+quickscale plan myapp --add auth
+# Adds auth module to quickscale.yml
+
+# Apply configuration (embeds module from splits/auth-module)
+quickscale apply
 # Embeds from splits/auth-module branch to modules/auth/
 
 # Later: Update installed modules
@@ -367,23 +369,27 @@ last_apply_at: 2025-12-03T14:32:00Z
 
 ### Module Configuration Strategy {#module-configuration-strategy}
 
-**Architectural Decision (v0.63.0):** Modules require configuration when embedded. QuickScale uses a **two-phase approach**:
+**Architectural Decision (v0.72.0):** Modules require configuration when embedded. QuickScale uses an **interactive wizard during plan**:
 
-#### **Phase 1 (MVP): Interactive Prompts During Embed**
-
-**When**: v0.63.0 through v0.66.0 (core 3 modules)
+#### **Interactive Configuration via Plan/Apply**
 
 **How**:
-- `quickscale embed --module auth` → asks interactive questions → applies configuration automatically
+- `quickscale plan myapp --add auth` → adds auth module to configuration
+- The `plan` wizard asks interactive questions for module-specific options
+- `quickscale apply` → embeds modules and applies configuration automatically
 - User does NOT manually edit settings.py, urls.py, or INSTALLED_APPS
-- Configuration is tracked in `.quickscale/config.yml`
+- Configuration is tracked in `.quickscale/state.yml`
 
 **Example**:
 ```bash
-$ quickscale embed --module auth
+$ quickscale plan myapp --add auth
+? Select theme (showcase_html): showcase_html
 ? Enable user registration? (y/n) [y]: y
 ? Email verification required? (y/n) [n]: n
 
+✅ Configuration saved to quickscale.yml
+
+$ quickscale apply
 ✅ Module 'auth' embedded successfully!
 Automatic changes made:
   ✅ Added 'modules.auth' to INSTALLED_APPS
@@ -392,29 +398,25 @@ Automatic changes made:
   ✅ Ran initial migrations
 ```
 
-**Benefits for MVP**:
-- ✅ Simple, self-documenting UX (no YAML complexity)
-- ✅ Scales well for 2-3 modules (auth, billing, teams)
+**Benefits**:
+- ✅ Declarative configuration (version-controllable quickscale.yml)
+- ✅ Reproducible project generation
 - ✅ No manual settings editing required
-- ✅ Creates foundation for YAML (same config options)
-
-**Constraints**:
-- ❌ NOT suitable for 10+ modules with many options (complexity threshold ~5 modules)
-- ❌ NOT suitable for batch initialization (one module at a time)
+- ✅ Terraform-style workflow (plan → review → apply)
 
 **Implementation Requirements**:
-1. Each module defines configuration prompts (via click.confirm/click.prompt)
-2. Embed handler automatically updates:
+1. Each module defines configuration prompts (via click.confirm/click.prompt in plan wizard)
+2. Apply handler automatically updates:
    - INSTALLED_APPS in settings.py
    - Module-specific settings (e.g., ACCOUNT_ALLOW_REGISTRATION)
    - urls.py (include module URLs)
    - Runs initial migration (`python manage.py migrate`)
-3. Configuration state stored in `.quickscale/config.yml` for tracking/updates
+3. Configuration state stored in `.quickscale/state.yml` for tracking/updates
 
-**When to Use Interactive Config** (MVP guidance):
+**When to Use Interactive Config**:
 - ✅ Simple yes/no options (enable registration, require verification)
-- ✅ 1-3 modules being embedded
-- ✅ User wants "quick setup" without thinking about config
+- ✅ 1-5 modules being embedded
+- ✅ User wants declarative configuration they can version control
 
 ---
 
@@ -430,30 +432,33 @@ Automatic changes made:
 
 **Future workflow** (v1.0.0+):
 ```yaml
-# quickscale.yml (optional, v1.0.0+)
+# quickscale.yml (v0.68.0+)
 version: 0.72.0
+project:
+  name: myproject
+  theme: showcase_html
 modules:
   auth:
-    ACCOUNT_ALLOW_REGISTRATION: true
-    ACCOUNT_EMAIL_VERIFICATION: "optional"
+    options:
+      ACCOUNT_ALLOW_REGISTRATION: true
+      ACCOUNT_EMAIL_VERIFICATION: "optional"
   billing:
-    STRIPE_API_KEY: "${STRIPE_API_KEY}"
-    BILLING_CURRENCY: "usd"
+    options:
+      STRIPE_API_KEY: "${STRIPE_API_KEY}"
+      BILLING_CURRENCY: "usd"
+docker:
+  start: true
+  build: true
 
-# Usage: quickscale embed --config quickscale.yml
-# OR: quickscale init myproject --config quickscale.yml
+# Usage: quickscale plan myproject → creates quickscale.yml
+#        quickscale apply → executes configuration
 ```
 
-**Backward Compatibility**:
-- Interactive prompts always work (even after YAML support added)
-- YAML is optional convenience, not required
-- Existing `embed` commands continue unchanged
-
 **Decision Rule**:
-- **MVP (v0.63.0-v0.66.0)**: Interactive prompts ONLY, no YAML
-- **Post-MVP (v1.0.0+)**: YAML support optional, interactive prompts unchanged
+- **v0.72.0+**: Plan/apply is the primary workflow
+- Interactive prompts guide configuration during `quickscale plan`
 
-**Authoritative Reference**: [roadmap.md §Module Configuration Strategy](./roadmap.md#-module-configuration-strategy-v06300)
+**Authoritative Reference**: [roadmap.md §Plan/Apply Architecture](./roadmap.md#-planapply-architecture-v06800)
 
 ---
 
@@ -507,7 +512,7 @@ config:
 
 ### Module Implementation Checklist {#module-implementation-checklist}
 
-**Architectural Decision (v0.67.0):** Every QuickScale module must be complete, embeddable, and usable immediately after `quickscale embed`. This checklist ensures no gaps between planning and implementation.
+**Architectural Decision (v0.67.0):** Every QuickScale module must be complete, embeddable, and usable immediately after `quickscale apply`. This checklist ensures no gaps between planning and implementation.
 
 #### **Required Components (All Modules)**
 
@@ -612,18 +617,18 @@ disable_error_code = var-annotated
 #### **Rationale**
 
 **Why concrete models are required (not just abstract):**
-- Modules must work immediately after `quickscale embed --module <name>`
+- Modules must work immediately after `quickscale apply`
 - Users should not need to create their own models to use the module
 - Abstract-only modules require user implementation, causing "missing QuerySet" errors
 - Concrete models can still be extended by users who need customization
 
 **Why initial migrations are required:**
-- `poetry run python manage.py migrate` must succeed after embed
+- `poetry run python manage.py migrate` must succeed after embedding
 - Migrations for concrete models are module responsibility, not user's
 - Abstract models cannot be migrated; concrete models can and must be
 
 **Why CLI integration is required:**
-- `quickscale embed --module <name>` is the primary distribution mechanism
+- `quickscale plan --add <name>` + `quickscale apply` is the primary distribution mechanism
 - Interactive configuration provides immediate, working setup
 - Users should not manually edit settings.py, urls.py, or pyproject.toml
 
@@ -665,15 +670,13 @@ Other documents (README.md, roadmap.md, scaffolding.md, commercial.md) MUST refe
 | Feature / Area | MVP Status | Notes / Decision Reference |
 |---|---:|---|
 | **CORE CLI & SCAFFOLDING** |
-| `quickscale init <project>` (single command, no flags) | IN | Core MVP entrypoint (v0.56-v0.67.0); superseded by `quickscale plan + apply` in v0.68.0+. Still works with deprecation warning for backward compatibility. (See: Phase 1.2.3) |
+| `quickscale plan <project>` and `quickscale apply` | IN (v0.68.0+) | Primary workflow. Terraform-style declarative configuration. Creates `quickscale.yml`, then executes it. |
 | Generate Django starter (manage.py, settings.py, urls.py, wsgi/asgi, templates, pyproject.toml) | IN | Starter uses `pyproject.toml` (Poetry). Generated projects include a `pyproject.toml` and `poetry.lock` by default; `requirements.txt` is not generated. |
 | `quickscale_core` package (monolithic, src layout) | IN | Treat `quickscale_core` as a regular monolithic package in MVP (explicit `__init__.py`). See Section: "Core package shape" in this file. |
 | `quickscale_core` embedding via git-subtree (manual documented workflow) | IN (manual) | Manual subtree commands are documented and supported; embedding is opt-in and advanced. |
 | CLI development commands (`up`, `down`, `shell`, `manage`, `logs`, `ps`) | IN (v0.59.0) | User-friendly wrappers for Docker/Django operations to improve developer experience. |
-| `quickscale init --theme <name>` flag | IN (v0.61.0) | Theme selection during init (showcase_html). Themes are one-time copy, not embedded. |
-| CLI module management commands (`embed --module`, `update`, `push`) | IN (v0.62.0) | Module embed/update via split branches. `embed` command superseded by `quickscale plan --add + apply` in v0.68.0+ but remains available with deprecation warning. **Starting v0.63.0**: Interactive prompts for module configuration (user doesn't manually edit settings.py). See [§Module Configuration Strategy](#module-configuration-strategy). |
-| `quickscale plan` and `quickscale apply` commands | IN (v0.68.0+) | Terraform-style declarative configuration workflow introduced in v0.68.0. Replaces `quickscale init` and `quickscale embed` as primary commands; older commands available with deprecation warnings until v0.71.0. |
-| Module configuration (interactive prompts, not YAML) | IN (v0.63.0+) | Modules configured via interactive questions during embed (`--module auth`). YAML support deferred to Post-MVP (v1.0.0+). See [§Module Configuration Strategy](#module-configuration-strategy). |
+| CLI module management commands (`update`, `push`) | IN (v0.62.0) | Module update/push via split branches. Module embedding now handled by `quickscale apply`. |
+| Module configuration (interactive prompts via plan wizard) | IN (v0.63.0+) | Modules configured via interactive questions during `quickscale plan`. See [§Module Configuration Strategy](#module-configuration-strategy). |
 | Module manifests (`module.yml`) with mutable/immutable config | IN (v0.71.0+) | **v0.71.0**: Each module includes `module.yml` declaring config options as mutable or immutable. `quickscale apply` updates settings.py for mutable changes. See [§Module Manifest Architecture](#module-manifest-architecture). |
 | `quickscale remove <module>` command | IN (v0.71.0+) | **v0.71.0**: Remove embedded modules with cleanup. Data loss warning required. Re-embed for new config. |
 | Settings inheritance from `quickscale_core` into generated project | OPTIONAL | Default generated project uses standalone `settings.py`. If user explicitly embeds `quickscale_core`, optional settings inheritance is allowed and documented. |
@@ -689,8 +692,8 @@ Other documents (README.md, roadmap.md, scaffolding.md, commercial.md) MUST refe
 | Pre-commit hooks (ruff) | IN | .pre-commit-config.yaml for code quality enforcement before commits. |
 | Comprehensive README with setup instructions | IN | README.md.j2 with Docker setup, local dev, testing, deployment instructions. |
 | **MODULES & DISTRIBUTION** |
-| `quickscale_modules/` (split branch distribution) | IN (v0.62.0+) | Modules distributed via git subtree split branches. Embed with `quickscale embed --module <name>`. |
-| Themes (HTML, HTMX, React) | IN (v0.61.0+) | Generator templates, one-time copy during init. User owns generated code, no updates. |
+| `quickscale_modules/` (split branch distribution) | IN (v0.62.0+) | Modules distributed via git subtree split branches. Embed via `quickscale plan --add <name>` + `quickscale apply`. |
+| Themes (HTML, HTMX, React) | IN (v0.61.0+) | Generator templates, one-time copy during apply. User owns generated code, no updates. |
 | `quickscale_themes/` packaged themes | OUT (Post-MVP) | Themes as PyPI packages is Post-MVP. Current: generator templates only. |
 | YAML declarative configuration (`quickscale.yml`) | IN (v0.68.0+) | **v0.68.0**: Shipped as part of Plan/Apply system. `quickscale plan` creates `quickscale.yml`, `quickscale apply` executes it. Terraform-style workflow. See [§Plan/Apply Architecture](#planapply-architecture). |
 | State tracking (`.quickscale/state.yml`) | IN (v0.69.0+) | **v0.69.0**: Applied state tracking for incremental applies. Distinguishes desired state (`quickscale.yml`) from applied state (`.quickscale/state.yml`). |
@@ -744,36 +747,33 @@ Other documents (README.md, roadmap.md, scaffolding.md, commercial.md) MUST refe
 
 ### CLI Commands {#cli-command-matrix}
 
-- ✅ `quickscale init <project>` - ONLY command (no flags, single starter template)
+**Primary Workflow (v0.72.0+):**
+- ✅ `quickscale plan <project>` - Create configuration interactively
+- ✅ `quickscale apply [config.yml]` - Execute configuration to generate project
+
+**Development Commands:**
 - ✅ `quickscale up` - Start Docker services (wrapper for docker-compose up)
 - ✅ `quickscale down` - Stop Docker services (wrapper for docker-compose down)
 - ✅ `quickscale shell` - Interactive bash shell in container
 - ✅ `quickscale manage <cmd>` - Run Django management commands
 - ✅ `quickscale logs [service]` - View Docker logs
 - ✅ `quickscale ps` - Show service status
+
+**Deployment Commands:**
 - ✅ `quickscale deploy railway` - Automated Railway deployment with PostgreSQL setup
-- ✅ `quickscale deploy railway --skip-migrations` - Deploy without running migrations
-- ✅ `quickscale deploy railway --skip-collectstatic` - Deploy without collecting static files
 - ✅ `quickscale deploy railway --project-name <name>` - Specify project name
 
-**v0.61.0 - Theme System Foundation:**
-- 📋 `quickscale init --theme <name>` - Theme selection (showcase_html/showcase_htmx/showcase_react)
-- 📋 Theme directory structure in generator templates
-- 📋 Refactor existing templates into `themes/showcase_html/` directory
-- 📋 Placeholder directories for `themes/showcase_htmx/` and `themes/showcase_react/`
-
-**v0.62.0 - Split Branch Infrastructure (Module Management):**
-- ✅ `quickscale embed --module <name>` - Embed modules via split branches
+**Module Management Commands:**
+- ✅ `quickscale status` - Show project and module status
 - ✅ `quickscale update` - Update installed modules
+- ✅ `quickscale remove <module>` - Remove embedded module
 - ✅ `quickscale push --module <name>` - Contribute module improvements
-- ✅ GitHub Actions for automatic split branch creation
-- ✅ `.quickscale/config.yml` module tracking
 
 **v0.63.0-v0.74.0 - Core Module Track:**
 - ✅ `quickscale_modules.auth` - Authentication module core (v0.63.0)
 - ✅ `quickscale_modules.blog` - Blog module with Markdown, categories, tags, RSS (v0.66.0)
-- 🚧 `quickscale_modules.listings` - Generic listings base model (v0.67.0)
-- 📋 Plan/Apply System - Terraform-style configuration (v0.68.0-v0.71.0)
+- ✅ `quickscale_modules.listings` - Generic listings base model (v0.67.0)
+- ✅ Plan/Apply System - Terraform-style configuration (v0.68.0-v0.71.0)
 - 📋 Real Estate Theme - First vertical theme, React-based (v0.72.0)
 - 📋 `quickscale_modules.billing` - Stripe billing module (v0.73.0)
 - 📋 `quickscale_modules.teams` - Teams/multi-tenancy module (v0.74.0)
@@ -786,7 +786,6 @@ Other documents (README.md, roadmap.md, scaffolding.md, commercial.md) MUST refe
 
 **v0.77.0 - Advanced Module Management:**
 - 📋 `quickscale update --all` - Batch update all modules
-- 📋 `quickscale status` - Show installed module versions
 - 📋 `quickscale list-modules` - Discover available modules
 - 📋 Enhanced conflict handling and progress indicators
 
@@ -798,7 +797,7 @@ Other documents (README.md, roadmap.md, scaffolding.md, commercial.md) MUST refe
 **Post-MVP (Future):**
 - ❌ `quickscale validate` - YAML configuration validation (requires config system)
 - ❌ `quickscale generate` - Generate from config (requires config system)
-- 📋 `quickscale embed --module auth@v0.63.0` - Pin specific module versions
+- 📋 `quickscale plan --add auth@v0.63.0` - Pin specific module versions
 
 ---
 
@@ -833,7 +832,7 @@ Other documents (README.md, roadmap.md, scaffolding.md, commercial.md) MUST refe
 - Related posts algorithm
 - Scheduled publishing (use django-celery-beat if needed)
 
-**Distribution**: Split branch pattern (`splits/simple-blog`), embed via `quickscale embed --module simple-blog`
+**Distribution**: Split branch pattern (`splits/simple-blog`), added via `quickscale plan` and `quickscale apply`
 
 **Theme Support**: showcase_html (v0.66.0), showcase_htmx (v0.70.0), showcase_react (v0.71.0)
 
@@ -991,10 +990,9 @@ frontend: {source: ./custom_frontend/, variant: default}
 
 **MVP - Git Subtree:**
 - ✅ Primary distribution mechanism
-- ✅ CLI: `quickscale init myapp` (single command)
+- ✅ CLI workflow: `quickscale plan myapp` + `quickscale apply`
 - ✅ Manual git subtree commands (documented)
 - ✅ No package registries, offline development
-- ❌ No CLI wrapper helpers (`embed-core`, `update-core`, `sync-push`) - Post-MVP
 
 **Post-MVP - PyPI:**
 - 📦 Optional for modules/themes only
@@ -1078,7 +1076,7 @@ INSTALLED_APPS = [
 - ❌ Nested package names (NO `quickscale/quickscale_core`)
 - ❌ Tests inside `src/` (place in parallel `tests/` directory)
 - ❌ README.md in sub-packages (use root README only)
-- ❌ NEVER run `quickscale init` in the QuickScale codebase (would generate unwanted project files)
+- ❌ NEVER run `quickscale plan`/`quickscale apply` in the QuickScale codebase (would generate unwanted project files)
 
 **Dependencies & Versions:**
 - ❌ Unpinned versions in production

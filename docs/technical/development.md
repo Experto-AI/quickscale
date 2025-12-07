@@ -131,8 +131,12 @@ poetry run pytest
 
 ### 6. Generate Test Project (2-3 minutes)
 ```bash
-# Create a test Django project
-poetry run quickscale init testproject
+# Create a test Django project configuration
+poetry run quickscale plan testproject
+# Use defaults for theme (showcase_html), no modules, Docker options
+
+# Apply the configuration to generate the project
+poetry run quickscale apply
 
 # Verify generated project
 cd testproject
@@ -415,8 +419,12 @@ poetry run python --version
 
 **Full integration test:**
 ```bash
-# Generate project
-poetry run quickscale init integration_test
+# Generate project configuration
+poetry run quickscale plan integration_test
+# Accept defaults
+
+# Apply configuration
+poetry run quickscale apply
 
 # Setup and test
 cd integration_test
@@ -506,7 +514,7 @@ You have a working development environment when:
 - ✅ `poetry run quickscale --version` shows version number
 - ✅ `./scripts/test_all.sh` passes with >80% coverage
 - ✅ `./scripts/lint.sh` passes all checks
-- ✅ `quickscale init testproject` generates working Django project
+- ✅ `quickscale plan testproject && quickscale apply` generates working Django project
 - ✅ Can make changes, run tests, and see results in <2 minutes
 
 **Target: Clone → working dev environment in <15 minutes** 🎯

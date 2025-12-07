@@ -9,6 +9,7 @@ from pathlib import Path
 
 import click
 
+from quickscale_cli.commands.module_commands import embed_module
 from quickscale_cli.schema.config_schema import (
     ConfigValidationError,
     QuickScaleConfig,
@@ -142,46 +143,22 @@ def _git_commit(project_path: Path, message: str) -> bool:
 
 
 def _embed_module(project_path: Path, module_name: str) -> bool:
-    """Embed a module using quickscale embed command with non-interactive mode"""
+    """Embed a module using the embed_module function with non-interactive mode"""
     click.echo(f"⏳ Embedding module: {module_name}...")
 
     try:
-        # Use --non-interactive flag to skip prompts and use defaults
-        result = subprocess.run(
-            ["quickscale", "embed", "--module", module_name, "--non-interactive"],
-            cwd=project_path,
-            capture_output=True,
-            text=True,
-            check=False,
+        success = embed_module(
+            module=module_name,
+            project_path=project_path,
+            non_interactive=True,
         )
 
-        if result.returncode == 0:
+        if success:
             click.secho(f"✅ Module embedded: {module_name}", fg="green")
             return True
         else:
             click.secho(f"❌ Failed to embed module: {module_name}", fg="red", err=True)
-            # Check both stdout and stderr for error messages (click outputs to stdout)
-            all_output = (result.stdout or "") + "\n" + (result.stderr or "")
-            error_lines = []
-            for line in all_output.splitlines():
-                if "Error:" in line or "error:" in line.lower() or "❌" in line:
-                    error_lines.append(line.strip())
-            if error_lines:
-                for line in error_lines[:5]:  # Show up to 5 error lines
-                    click.echo(f"   {line}", err=True)
-            else:
-                # If no specific error found, show last few lines of output
-                output_lines = [
-                    out_line.strip()
-                    for out_line in all_output.splitlines()
-                    if out_line.strip()
-                ]
-                if output_lines:
-                    click.echo(f"   Last output: {output_lines[-1]}", err=True)
             return False
-    except FileNotFoundError:
-        click.secho("❌ quickscale command not found", fg="red", err=True)
-        return False
     except Exception as e:
         click.secho(f"❌ Unexpected error embedding module: {e}", fg="red", err=True)
         return False

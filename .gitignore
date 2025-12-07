@@ -223,5 +223,9 @@ quickscale/README.md
 .quickscale/
 **/.quickscale/
 
+# Code quality reports (generated, not tracked)
+quality_report.json
+quality_report.md
+
 # Marketing content drafts (generated content not tracked in repo)
 marketing/

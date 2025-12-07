@@ -340,7 +340,7 @@ What are you testing?
 │
 └─ Requires Django URLs/templates/full app structure?
    └─ Integration Test (tests/integration/)
-      └─ Use quickscale init + real project
+      └─ Use quickscale plan + apply with real project
 
 🎬 Complete User Journey
 └─ E2E Test (tests/e2e/)
@@ -414,7 +414,7 @@ class TestCreditModel(TestCase):
 - 🚨 Test requires allauth, admin, or complete Django ecosystem
 
 **Key Characteristics**:
-- **Use real QuickScale projects** created with `quickscale init` in `/tmp`
+- **Use real QuickScale projects** created with `quickscale plan` + `quickscale apply` in `/tmp`
 - **PostgreSQL test database** in Docker container
 - **Test system boundaries** and component interactions
 - **Moderate execution time** (5-30 seconds per test)
@@ -505,7 +505,7 @@ def test_complete_subscription_workflow(docker_environment):
 
 ### Dynamic Project Generation Rules
 
-**ALWAYS use `quickscale init` for**:
+**ALWAYS use `quickscale plan` + `quickscale apply` for**:
 - Tests requiring Django URL resolution
 - Template rendering requiring full Django context
 - Cross-app functionality tests
