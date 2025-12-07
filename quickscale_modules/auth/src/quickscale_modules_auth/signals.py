@@ -7,7 +7,12 @@ from django.dispatch import receiver
 
 
 @receiver(user_signed_up)
-def on_user_signed_up(sender: Any, request: Any, user: Any, **kwargs: Any) -> None:
+def on_user_signed_up(
+    sender: Any,
+    request: Any,
+    user: Any,
+    **kwargs: Any,  # noqa: ARG001
+) -> None:
     """Handle post-registration actions"""
     # Placeholder for custom post-registration logic
     # Examples:

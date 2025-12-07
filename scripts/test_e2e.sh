@@ -126,6 +126,20 @@ fi
 echo -e "${GREEN}✓ Docker is running${NC}"
 echo ""
 
+# Step 1b: Pre-cleanup - stop any existing test containers to free ports
+echo -e "${BLUE}[1b/5] Cleaning up any orphaned test containers...${NC}"
+# Stop and remove any pytest containers that might be lingering from previous runs
+docker ps -a --filter "name=pytest" --format "{{.ID}}" | xargs -r docker rm -f 2>/dev/null || true
+# Stop containers on commonly used test ports
+docker ps --format "{{.ID}} {{.Ports}}" | grep -E ':(5432|5433|8000)->' | awk '{print $1}' | xargs -r docker stop 2>/dev/null || true
+docker ps -a --format "{{.ID}} {{.Ports}}" | grep -E ':(5432|5433|8000)->' | awk '{print $1}' | xargs -r docker rm -f 2>/dev/null || true
+# Also cleanup test containers by name pattern
+docker ps -a | grep -E '(test|e2e_cli_test).*_(db|web|postgres)' | awk '{print $1}' | xargs -r docker rm -f 2>/dev/null || true
+# Wait briefly for ports to be released
+sleep 1
+echo -e "${GREEN}✓ Pre-cleanup complete${NC}"
+echo ""
+
 # Step 2: Install Playwright browsers
 echo -e "${BLUE}[2/4] Installing Playwright browsers...${NC}"
 if ! poetry run playwright install chromium --with-deps > /dev/null 2>&1; then

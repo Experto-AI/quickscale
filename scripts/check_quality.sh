@@ -2,6 +2,7 @@
 # QuickScale Code Quality Analysis Script
 # Integrates: vulture (dead code), radon (complexity), pylint (duplication)
 # Outputs: JSON (machine-readable) + Markdown (LLM-readable)
+# Features: Auto-discovery of Python packages, configurable thresholds
 
 set -euo pipefail
 
@@ -26,6 +27,33 @@ YELLOW='\033[1;33m'
 GREEN='\033[0;32m'
 BLUE='\033[0;34m'
 NC='\033[0m' # No Color
+
+#######################################
+# ANALYSIS CONFIGURATION
+#
+# All thresholds are configurable below.
+# To modify analysis behavior, update these variables.
+#######################################
+
+# Vulture (Dead Code Detection)
+VULTURE_MIN_CONFIDENCE=80          # Minimum confidence percentage
+VULTURE_SORT_BY_SIZE=true          # Sort results by code size
+
+# Radon Complexity Thresholds
+RADON_MIN_COMPLEXITY_GRADE="C"     # Minimum grade to report (A=1-5, B=6-10, C=11-20, D=21-30, E=31+)
+RADON_HIGH_COMPLEXITY_CC=11        # Cyclomatic Complexity threshold for warnings
+RADON_ERROR_COMPLEXITY_CC=21       # NEW: Cyclomatic Complexity threshold for errors
+RADON_MIN_MI_GRADE="B"             # Maintainability Index minimum grade
+
+# Large File Detection
+LARGE_FILE_WARNING_LINES=500       # Line count to trigger warnings
+LARGE_FILE_ERROR_LINES=800         # Line count to trigger errors (UPDATED from 1000)
+
+# Code Duplication (pylint)
+PYLINT_MIN_SIMILARITY_LINES=6      # Minimum similar lines to detect duplication
+
+# Module Discovery
+MODULE_DISCOVERY_ENABLED=true      # Enable auto-discovery of modules
 
 #######################################
 # HELPER FUNCTIONS
@@ -84,6 +112,53 @@ check_dependencies() {
     fi
 }
 
+discover_python_modules() {
+    # Auto-discover Python packages with pyproject.toml and src/ directory
+    # Returns: Space-separated list of src/ paths to analyze
+
+    local modules=()
+
+    # Find all directories with pyproject.toml (excluding root repo pyproject.toml)
+    while IFS= read -r pyproject_file; do
+        local package_dir=$(dirname "$pyproject_file")
+        local src_dir="$package_dir/src"
+
+        # Check if src/ directory exists
+        if [ -d "$src_dir" ]; then
+            # Exclude template directories
+            if [[ ! "$src_dir" =~ /templates/ ]]; then
+                modules+=("$src_dir")
+            fi
+        fi
+    done < <(find "$ROOT" -name "pyproject.toml" -type f ! -path "$ROOT/pyproject.toml" 2>/dev/null)
+
+    # Sort modules for consistent ordering
+    IFS=$'\n' sorted_modules=($(sort <<<"${modules[*]}"))
+    unset IFS
+
+    # Return space-separated list
+    echo "${sorted_modules[@]}"
+}
+
+get_module_paths() {
+    # Returns module paths based on configuration
+    # If auto-discovery is disabled, returns hardcoded fallback list
+
+    if [ "$MODULE_DISCOVERY_ENABLED" = true ]; then
+        local discovered=$(discover_python_modules)
+
+        if [ -z "$discovered" ]; then
+            print_warning "Auto-discovery found no modules, using fallback list"
+            echo "quickscale_core/src quickscale_cli/src quickscale_modules/auth/src quickscale_modules/blog/src quickscale_modules/listings/src"
+        else
+            echo "$discovered"
+        fi
+    else
+        # Fallback: hardcoded module list
+        echo "quickscale_core/src quickscale_cli/src quickscale_modules/auth/src quickscale_modules/blog/src quickscale_modules/listings/src"
+    fi
+}
+
 #######################################
 # ANALYSIS FUNCTIONS
 #######################################
@@ -91,20 +166,32 @@ check_dependencies() {
 analyze_dead_code() {
     print_header "Analyzing Dead Code (vulture)"
 
+    # Get module paths
+    local module_paths=$(get_module_paths)
+
+    # Build vulture arguments
+    local vulture_args="--min-confidence $VULTURE_MIN_CONFIDENCE"
+
+    if [ "$VULTURE_SORT_BY_SIZE" = true ]; then
+        vulture_args="$vulture_args --sort-by-size"
+    fi
+
     # Run vulture and capture output
     local vulture_output
     vulture_output=$(poetry run vulture \
-        quickscale_core/src \
-        quickscale_cli/src \
-        quickscale_modules/auth/src \
-        quickscale_modules/blog/src \
-        quickscale_modules/listings/src \
-        --min-confidence 80 \
-        --sort-by-size 2>&1 || true)
+        $module_paths \
+        $vulture_args 2>&1 || true)
 
     # Count issues
     local dead_code_count
-    dead_code_count=$(echo "$vulture_output" | grep -c "unused" || echo "0")
+    if [ -z "$vulture_output" ]; then
+        dead_code_count=0
+    else
+        dead_code_count=$(echo "$vulture_output" | grep -c "unused" 2>/dev/null || echo "0")
+        # Ensure count is a single integer (trim whitespace)
+        dead_code_count=$(echo "$dead_code_count" | tr -d '[:space:]')
+        dead_code_count=${dead_code_count:-0}
+    fi
 
     if [ "$dead_code_count" -eq 0 ]; then
         print_success "No dead code found"
@@ -120,16 +207,15 @@ analyze_dead_code() {
 analyze_complexity() {
     print_header "Analyzing Code Complexity (radon)"
 
+    # Get module paths
+    local module_paths=$(get_module_paths)
+
     # Cyclomatic Complexity (CC)
     echo "Running cyclomatic complexity analysis..."
     local cc_output
     cc_output=$(poetry run radon cc \
-        quickscale_core/src \
-        quickscale_cli/src \
-        quickscale_modules/auth/src \
-        quickscale_modules/blog/src \
-        quickscale_modules/listings/src \
-        --min C \
+        $module_paths \
+        --min $RADON_MIN_COMPLEXITY_GRADE \
         --show-complexity \
         --total-average \
         --json 2>&1 || echo "{}")
@@ -143,7 +229,7 @@ analyze_complexity() {
 import sys, json
 try:
     data = json.load(sys.stdin)
-    count = sum(len([f for f in funcs if f.get('complexity', 0) >= 11])
+    count = sum(len([f for f in funcs if f.get('complexity', 0) >= $RADON_HIGH_COMPLEXITY_CC])
                 for funcs in data.values() if isinstance(funcs, list))
     print(count)
 except:
@@ -152,22 +238,38 @@ except:
 
     echo "$high_complexity_count" > "$OUTPUT_DIR/high_complexity_count.txt"
 
-    if [ "$high_complexity_count" -eq 0 ]; then
+    # Count error-level complexity functions (NEW)
+    local error_complexity_count
+    error_complexity_count=$(echo "$cc_output" | python3 -c "
+import sys, json
+try:
+    data = json.load(sys.stdin)
+    count = sum(len([f for f in funcs if f.get('complexity', 0) >= $RADON_ERROR_COMPLEXITY_CC])
+                for funcs in data.values() if isinstance(funcs, list))
+    print(count)
+except:
+    print(0)
+" 2>/dev/null || echo "0")
+
+    echo "$error_complexity_count" > "$OUTPUT_DIR/error_complexity_count.txt"
+
+    if [ "$high_complexity_count" -eq 0 ] && [ "$error_complexity_count" -eq 0 ]; then
         print_success "No high complexity functions found"
     else
-        print_warning "Found $high_complexity_count high complexity functions (CC >= 11)"
+        if [ "$error_complexity_count" -gt 0 ]; then
+            print_error "Found $error_complexity_count critical complexity functions (CC >= $RADON_ERROR_COMPLEXITY_CC)"
+        fi
+        if [ "$high_complexity_count" -gt 0 ]; then
+            print_warning "Found $high_complexity_count high complexity functions (CC >= $RADON_HIGH_COMPLEXITY_CC)"
+        fi
     fi
 
     # Maintainability Index (MI)
     echo "Running maintainability index analysis..."
     local mi_output
     mi_output=$(poetry run radon mi \
-        quickscale_core/src \
-        quickscale_cli/src \
-        quickscale_modules/auth/src \
-        quickscale_modules/blog/src \
-        quickscale_modules/listings/src \
-        --min B \
+        $module_paths \
+        --min $RADON_MIN_MI_GRADE \
         --show \
         --json 2>&1 || echo "{}")
 
@@ -177,11 +279,7 @@ except:
     echo "Calculating raw metrics..."
     local raw_output
     raw_output=$(poetry run radon raw \
-        quickscale_core/src \
-        quickscale_cli/src \
-        quickscale_modules/auth/src \
-        quickscale_modules/blog/src \
-        quickscale_modules/listings/src \
+        $module_paths \
         --summary \
         --json 2>&1 || echo "{}")
 
@@ -191,25 +289,29 @@ except:
 analyze_large_files() {
     print_header "Analyzing Large Files"
 
-    # Find files > 500 lines (warning) and > 1000 lines (error)
+    # Get module paths
+    local module_paths=$(get_module_paths)
+
+    # Find files >= warning threshold
+    # Filter out the "total" line from wc -l output
     local large_files_output
     large_files_output=$(find \
-        quickscale_core/src \
-        quickscale_cli/src \
-        quickscale_modules/auth/src \
-        quickscale_modules/blog/src \
-        quickscale_modules/listings/src \
+        $module_paths \
         -type f -name "*.py" -exec wc -l {} + 2>/dev/null | \
-        awk '$1 >= 500 {print $1 "\t" $2}' | \
+        grep -v " total$" | \
+        awk -v warn="$LARGE_FILE_WARNING_LINES" '$1 >= warn {print $1 "\t" $2}' | \
         sort -rn || echo "")
 
     echo "$large_files_output" > "$OUTPUT_DIR/large_files.txt"
 
     local warning_count
-    warning_count=$(echo "$large_files_output" | awk '$1 >= 500 && $1 < 1000' | wc -l)
+    warning_count=$(echo "$large_files_output" | grep -v "^$" | \
+        awk -v warn="$LARGE_FILE_WARNING_LINES" -v err="$LARGE_FILE_ERROR_LINES" \
+        '$1 >= warn && $1 < err' | wc -l)
 
     local error_count
-    error_count=$(echo "$large_files_output" | awk '$1 >= 1000' | wc -l)
+    error_count=$(echo "$large_files_output" | grep -v "^$" | \
+        awk -v err="$LARGE_FILE_ERROR_LINES" '$1 >= err' | wc -l)
 
     echo "$warning_count" > "$OUTPUT_DIR/large_files_warning_count.txt"
     echo "$error_count" > "$OUTPUT_DIR/large_files_error_count.txt"
@@ -217,24 +319,23 @@ analyze_large_files() {
     if [ "$error_count" -eq 0 ] && [ "$warning_count" -eq 0 ]; then
         print_success "No large files found"
     else
-        print_warning "Found $warning_count files >500 lines, $error_count files >1000 lines"
+        print_warning "Found $warning_count files >$LARGE_FILE_WARNING_LINES lines, $error_count files >$LARGE_FILE_ERROR_LINES lines"
     fi
 }
 
 analyze_duplication() {
     print_header "Analyzing Code Duplication (pylint)"
 
+    # Get module paths
+    local module_paths=$(get_module_paths)
+
     # Run pylint with only duplicate-code check enabled
     local pylint_output
     pylint_output=$(poetry run pylint \
-        quickscale_core/src \
-        quickscale_cli/src \
-        quickscale_modules/auth/src \
-        quickscale_modules/blog/src \
-        quickscale_modules/listings/src \
+        $module_paths \
         --disable=all \
         --enable=duplicate-code \
-        --min-similarity-lines=6 \
+        --min-similarity-lines=$PYLINT_MIN_SIMILARITY_LINES \
         --ignore-comments=yes \
         --ignore-docstrings=yes \
         --ignore-imports=yes \
@@ -274,6 +375,7 @@ generate_json_report() {
     # Read all counts
     local dead_code_count=$(cat "$OUTPUT_DIR/dead_code_count.txt" 2>/dev/null || echo "0")
     local high_complexity_count=$(cat "$OUTPUT_DIR/high_complexity_count.txt" 2>/dev/null || echo "0")
+    local error_complexity_count=$(cat "$OUTPUT_DIR/error_complexity_count.txt" 2>/dev/null || echo "0")
     local large_files_warning=$(cat "$OUTPUT_DIR/large_files_warning_count.txt" 2>/dev/null || echo "0")
     local large_files_error=$(cat "$OUTPUT_DIR/large_files_error_count.txt" 2>/dev/null || echo "0")
     local dup_count=$(cat "$OUTPUT_DIR/duplication_count.txt" 2>/dev/null || echo "0")
@@ -305,11 +407,13 @@ report = {
     "summary": {
         "dead_code_issues": int("$dead_code_count"),
         "high_complexity_functions": int("$high_complexity_count"),
+        "error_complexity_functions": int("$error_complexity_count"),
         "large_files_warning": int("$large_files_warning"),
         "large_files_error": int("$large_files_error"),
         "duplication_blocks": int("$dup_count"),
         "total_issues": int("$dead_code_count") + int("$high_complexity_count") +
-                       int("$large_files_warning") + int("$large_files_error") + int("$dup_count")
+                       int("$error_complexity_count") + int("$large_files_warning") +
+                       int("$large_files_error") + int("$dup_count")
     },
     "dead_code": {
         "raw_output": read_text_safe("vulture_raw.txt")
@@ -337,10 +441,11 @@ generate_markdown_report() {
     # Read counts
     local dead_code_count=$(cat "$OUTPUT_DIR/dead_code_count.txt" 2>/dev/null || echo "0")
     local high_complexity_count=$(cat "$OUTPUT_DIR/high_complexity_count.txt" 2>/dev/null || echo "0")
+    local error_complexity_count=$(cat "$OUTPUT_DIR/error_complexity_count.txt" 2>/dev/null || echo "0")
     local large_files_warning=$(cat "$OUTPUT_DIR/large_files_warning_count.txt" 2>/dev/null || echo "0")
     local large_files_error=$(cat "$OUTPUT_DIR/large_files_error_count.txt" 2>/dev/null || echo "0")
     local dup_count=$(cat "$OUTPUT_DIR/duplication_count.txt" 2>/dev/null || echo "0")
-    local total_issues=$((dead_code_count + high_complexity_count + large_files_warning + large_files_error + dup_count))
+    local total_issues=$((dead_code_count + high_complexity_count + error_complexity_count + large_files_warning + large_files_error + dup_count))
 
     # Generate Markdown report
     cat > "$MD_OUTPUT" <<MDEOF
@@ -353,9 +458,10 @@ generate_markdown_report() {
 | Metric | Count | Status |
 |--------|-------|--------|
 | Dead Code Issues | $dead_code_count | $([ "$dead_code_count" -eq 0 ] && echo "✓ Good" || echo "⚠ Needs attention") |
-| High Complexity Functions | $high_complexity_count | $([ "$high_complexity_count" -eq 0 ] && echo "✓ Good" || echo "⚠ Needs attention") |
-| Large Files (500-1000 lines) | $large_files_warning | $([ "$large_files_warning" -eq 0 ] && echo "✓ Good" || echo "⚠ Warning") |
-| Very Large Files (>1000 lines) | $large_files_error | $([ "$large_files_error" -eq 0 ] && echo "✓ Good" || echo "✗ Critical") |
+| High Complexity Functions (CC >= $RADON_HIGH_COMPLEXITY_CC) | $high_complexity_count | $([ "$high_complexity_count" -eq 0 ] && echo "✓ Good" || echo "⚠ Needs attention") |
+| Error Complexity Functions (CC >= $RADON_ERROR_COMPLEXITY_CC) | $error_complexity_count | $([ "$error_complexity_count" -eq 0 ] && echo "✓ Good" || echo "✗ Critical") |
+| Large Files ($LARGE_FILE_WARNING_LINES-$LARGE_FILE_ERROR_LINES lines) | $large_files_warning | $([ "$large_files_warning" -eq 0 ] && echo "✓ Good" || echo "⚠ Warning") |
+| Very Large Files (>$LARGE_FILE_ERROR_LINES lines) | $large_files_error | $([ "$large_files_error" -eq 0 ] && echo "✓ Good" || echo "✗ Critical") |
 | Code Duplication Blocks | $dup_count | $([ "$dup_count" -eq 0 ] && echo "✓ Good" || echo "⚠ Needs attention") |
 | **Total Issues** | **$total_issues** | $([ "$total_issues" -eq 0 ] && echo "**✓ Excellent**" || echo "**⚠ Action Required**") |
 
@@ -385,10 +491,15 @@ fi)
 
 #### Cyclomatic Complexity
 
-$(if [ "$high_complexity_count" -eq 0 ]; then
-    echo "✓ All functions have acceptable complexity (CC < 11)."
+$(if [ "$high_complexity_count" -eq 0 ] && [ "$error_complexity_count" -eq 0 ]; then
+    echo "✓ All functions have acceptable complexity (CC < $RADON_HIGH_COMPLEXITY_CC)."
 else
-    echo "⚠ Found $high_complexity_count functions with high complexity (CC >= 11):"
+    if [ "$error_complexity_count" -gt 0 ]; then
+        echo "✗ CRITICAL: Found $error_complexity_count functions with error-level complexity (CC >= $RADON_ERROR_COMPLEXITY_CC):"
+    fi
+    if [ "$high_complexity_count" -gt 0 ]; then
+        echo "⚠ Found $high_complexity_count functions with high complexity (CC >= $RADON_HIGH_COMPLEXITY_CC):"
+    fi
     echo '```json'
     cat "$OUTPUT_DIR/complexity_cc.json" 2>/dev/null | python3 -m json.tool 2>/dev/null || echo "{}"
     echo '```'
@@ -430,9 +541,9 @@ else
     echo '```'
     echo ""
     echo "**Size Thresholds:**"
-    echo "- **< 500 lines:** Good"
-    echo "- **500-1000 lines:** Warning - consider splitting"
-    echo "- **> 1000 lines:** Critical - refactor required"
+    echo "- **< $LARGE_FILE_WARNING_LINES lines:** Good"
+    echo "- **$LARGE_FILE_WARNING_LINES-$LARGE_FILE_ERROR_LINES lines:** Warning - consider splitting"
+    echo "- **> $LARGE_FILE_ERROR_LINES lines:** Critical - refactor required"
     echo ""
     echo "**Recommended Actions:**"
     echo "1. Split large files into multiple modules"
@@ -445,7 +556,7 @@ fi)
 ### 4. Code Duplication Analysis (pylint)
 
 $(if [ "$dup_count" -eq 0 ]; then
-    echo "✓ No significant code duplication detected (minimum 6 similar lines)."
+    echo "✓ No significant code duplication detected (minimum $PYLINT_MIN_SIMILARITY_LINES similar lines)."
 else
     echo "⚠ Found $dup_count duplication blocks:"
     echo '```json'
@@ -474,20 +585,29 @@ $(if [ "$total_issues" -eq 0 ]; then
 else
     echo "### Priority Actions:"
     echo ""
+    local priority=1
     if [ "$large_files_error" -gt 0 ]; then
-        echo "1. **CRITICAL:** Refactor $large_files_error files exceeding 1000 lines"
+        echo "$priority. **CRITICAL:** Refactor $large_files_error files exceeding $LARGE_FILE_ERROR_LINES lines"
+        priority=$((priority + 1))
+    fi
+    if [ "$error_complexity_count" -gt 0 ]; then
+        echo "$priority. **CRITICAL:** Refactor $error_complexity_count functions with CC >= $RADON_ERROR_COMPLEXITY_CC"
+        priority=$((priority + 1))
     fi
     if [ "$high_complexity_count" -gt 0 ]; then
-        echo "2. **HIGH:** Reduce complexity in $high_complexity_count functions (CC >= 11)"
+        echo "$priority. **HIGH:** Reduce complexity in $high_complexity_count functions (CC >= $RADON_HIGH_COMPLEXITY_CC)"
+        priority=$((priority + 1))
     fi
     if [ "$dup_count" -gt 0 ]; then
-        echo "3. **MEDIUM:** Eliminate $dup_count code duplication blocks"
+        echo "$priority. **MEDIUM:** Eliminate $dup_count code duplication blocks"
+        priority=$((priority + 1))
     fi
     if [ "$dead_code_count" -gt 0 ]; then
-        echo "4. **LOW:** Remove $dead_code_count dead code instances"
+        echo "$priority. **LOW:** Remove $dead_code_count dead code instances"
+        priority=$((priority + 1))
     fi
     if [ "$large_files_warning" -gt 0 ]; then
-        echo "5. **LOW:** Consider splitting $large_files_warning files (500-1000 lines)"
+        echo "$priority. **LOW:** Consider splitting $large_files_warning files ($LARGE_FILE_WARNING_LINES-$LARGE_FILE_ERROR_LINES lines)"
     fi
     echo ""
     echo "### General Best Practices:"
@@ -501,10 +621,10 @@ fi)
 
 ## Tool Details
 
-- **vulture:** Dead code detection (min confidence: 80%)
-- **radon:** Complexity metrics (CC, MI, raw LOC)
-- **pylint:** Code duplication (min 6 similar lines)
-- **Custom:** Large file detection (>500 lines warning, >1000 error)
+- **vulture:** Dead code detection (min confidence: $VULTURE_MIN_CONFIDENCE%)
+- **radon:** Complexity metrics (CC >= $RADON_HIGH_COMPLEXITY_CC warning, CC >= $RADON_ERROR_COMPLEXITY_CC error; MI, raw LOC)
+- **pylint:** Code duplication (min $PYLINT_MIN_SIMILARITY_LINES similar lines)
+- **Custom:** Large file detection (>$LARGE_FILE_WARNING_LINES lines warning, >$LARGE_FILE_ERROR_LINES error)
 
 **Full JSON report:** \`$JSON_OUTPUT\`
 
@@ -539,15 +659,17 @@ main() {
     # Read summary counts for exit code determination
     local dead_code_count=$(cat "$OUTPUT_DIR/dead_code_count.txt" 2>/dev/null || echo "0")
     local high_complexity_count=$(cat "$OUTPUT_DIR/high_complexity_count.txt" 2>/dev/null || echo "0")
+    local error_complexity_count=$(cat "$OUTPUT_DIR/error_complexity_count.txt" 2>/dev/null || echo "0")
     local large_files_error=$(cat "$OUTPUT_DIR/large_files_error_count.txt" 2>/dev/null || echo "0")
     local dup_count=$(cat "$OUTPUT_DIR/duplication_count.txt" 2>/dev/null || echo "0")
-    local total_issues=$((dead_code_count + high_complexity_count + large_files_error + dup_count))
+    local total_issues=$((dead_code_count + high_complexity_count + error_complexity_count + large_files_error + dup_count))
 
     echo ""
     echo "Summary:"
     echo "  - Dead code: $dead_code_count"
-    echo "  - High complexity: $high_complexity_count"
-    echo "  - Large files (>1000 lines): $large_files_error"
+    echo "  - High complexity (CC >= $RADON_HIGH_COMPLEXITY_CC): $high_complexity_count"
+    echo "  - Error complexity (CC >= $RADON_ERROR_COMPLEXITY_CC): $error_complexity_count"
+    echo "  - Large files (>$LARGE_FILE_ERROR_LINES lines): $large_files_error"
     echo "  - Duplication blocks: $dup_count"
     echo ""
     echo "Reports generated:"
@@ -556,8 +678,13 @@ main() {
     echo ""
 
     # Exit codes
-    if [ "$large_files_error" -gt 0 ]; then
-        print_error "CRITICAL: Files exceeding 1000 lines found"
+    if [ "$large_files_error" -gt 0 ] || [ "$error_complexity_count" -gt 0 ]; then
+        if [ "$large_files_error" -gt 0 ]; then
+            print_error "CRITICAL: Files exceeding $LARGE_FILE_ERROR_LINES lines found"
+        fi
+        if [ "$error_complexity_count" -gt 0 ]; then
+            print_error "CRITICAL: Functions with CC >= $RADON_ERROR_COMPLEXITY_CC found"
+        fi
         exit 2
     elif [ "$total_issues" -gt 0 ]; then
         print_warning "Warnings found - review reports"

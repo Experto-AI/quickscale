@@ -14,32 +14,55 @@ class SettingsError(Exception):
     pass
 
 
+def _bool_to_string(value: bool) -> str:
+    """Convert boolean to Python string representation."""
+    return "True" if value else "False"
+
+
+def _str_to_string(value: str) -> str:
+    """Convert string to Python string representation with escaping."""
+    escaped = value.replace("\\", "\\\\").replace('"', '\\"')
+    return f'"{escaped}"'
+
+
+def _list_to_string(value: list) -> str:
+    """Convert list to Python string representation."""
+    items = ", ".join(_python_value_to_string(item) for item in value)
+    return f"[{items}]"
+
+
+def _dict_to_string(value: dict) -> str:
+    """Convert dict to Python string representation."""
+    items = ", ".join(
+        f"{_python_value_to_string(k)}: {_python_value_to_string(v)}"
+        for k, v in value.items()
+    )
+    return f"{{{items}}}"
+
+
+def _set_to_string(value: set) -> str:
+    """Convert set to Python string representation."""
+    items = ", ".join(_python_value_to_string(item) for item in sorted(value))
+    return f"{{{items}}}"
+
+
 def _python_value_to_string(value: Any) -> str:
     """Convert a Python value to its string representation for settings.py"""
-    if isinstance(value, bool):
-        return "True" if value else "False"
-    elif isinstance(value, str):
-        # Escape quotes and represent as string
-        escaped = value.replace("\\", "\\\\").replace('"', '\\"')
-        return f'"{escaped}"'
-    elif isinstance(value, (int, float)):
-        return str(value)
-    elif isinstance(value, list):
-        items = ", ".join(_python_value_to_string(item) for item in value)
-        return f"[{items}]"
-    elif isinstance(value, dict):
-        items = ", ".join(
-            f"{_python_value_to_string(k)}: {_python_value_to_string(v)}"
-            for k, v in value.items()
-        )
-        return f"{{{items}}}"
-    elif isinstance(value, set):
-        items = ", ".join(_python_value_to_string(item) for item in sorted(value))
-        return f"{{{items}}}"
-    elif value is None:
+    if value is None:
         return "None"
-    else:
-        return repr(value)
+    if isinstance(value, bool):
+        return _bool_to_string(value)
+    if isinstance(value, str):
+        return _str_to_string(value)
+    if isinstance(value, (int, float)):
+        return str(value)
+    if isinstance(value, list):
+        return _list_to_string(value)
+    if isinstance(value, dict):
+        return _dict_to_string(value)
+    if isinstance(value, set):
+        return _set_to_string(value)
+    return repr(value)
 
 
 def update_setting(
