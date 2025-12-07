@@ -32,6 +32,9 @@ TARGET AUDIENCE: Maintainers, core contributors, community package developers, C
 
 # Technical Decisions (Authoritative)
 
+> **You are here**: [QuickScale](../../START_HERE.md) → [Technical](../index.md) → **Decisions** (Authoritative)
+> **Related docs**: [Scaffolding](scaffolding.md) | [Roadmap](roadmap.md) | [Glossary](../../GLOSSARY.md) | [Start Here](../../START_HERE.md)
+
 **Purpose:** Single source of truth for QuickScale architecture, technical rules, and development standards for AI coding assistants and maintainers.
 
 **Scope:** All first-party packages (core, CLI, themes, modules). Experto-AI and core contributors own these decisions.
@@ -62,7 +65,7 @@ TARGET AUDIENCE: Maintainers, core contributors, community package developers, C
 - ✅ decisions.md is authoritative - always wins conflicts
 - ✅ Update decisions.md FIRST, then other docs
 - ✅ Contributing guides: `docs/contrib/*.md`
-- ✅ Release docs: `docs/releases/release-vX.XX.X-{implementation,review}.md`
+- ✅ Release docs: `docs/releases-archive/release-vX.XX.X-{implementation,review}.md` (archived)
 - ❌ Never contradict decisions.md elsewhere
 
 **Package README Policy:**

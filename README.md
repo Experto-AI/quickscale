@@ -1,5 +1,8 @@
 # 🚀 QuickScale
 
+> **You are here**: **QuickScale README** (Project Overview)
+> **Related docs**: [Start Here](START_HERE.md) | [Glossary](GLOSSARY.md) | [Decisions](docs/technical/decisions.md) | [User Manual](docs/technical/user_manual.md)
+
 <!--
 README.md - User-Focused Introduction
 

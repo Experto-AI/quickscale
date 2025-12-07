@@ -1,5 +1,8 @@
 # QuickScale: Strategic Vision & Context
 
+> **You are here**: [QuickScale](../../START_HERE.md) → [Overview](../index.md) → **Strategic Vision** (Why QuickScale?)
+> **Related docs**: [Competitive Analysis](competitive_analysis.md) | [Decisions](../technical/decisions.md) | [Glossary](../../GLOSSARY.md) | [Start Here](../../START_HERE.md)
+
 <!--
 quickscale.md - Strategic Vision and Context
 

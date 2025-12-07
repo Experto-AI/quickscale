@@ -1,5 +1,8 @@
 # SCAFFOLDING: Repository, Packages, and Generated Project Structures
 
+> **You are here**: [QuickScale](../../START_HERE.md) → [Technical](../index.md) → **Scaffolding** (Directory Structures)
+> **Related docs**: [Decisions](decisions.md) | [Roadmap](roadmap.md) | [Glossary](../../GLOSSARY.md) | [Start Here](../../START_HERE.md)
+
 > Authoritative guide to the directory/file scaffolding for QuickScale across MVP and post-MVP phases. Complements: `decisions.md` (technical rules), `roadmap.md` (timeline/tasks), `README.md` (user intro), `quickscale.md` (strategy).
 
 ## Table of Contents

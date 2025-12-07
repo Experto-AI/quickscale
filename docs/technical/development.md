@@ -1,5 +1,8 @@
 # QuickScale Development Setup Guide
 
+> **You are here**: [QuickScale](../../START_HERE.md) → [Technical](../index.md) → **Development** (Setup Guide)
+> **Related docs**: [Contributing](../contrib/contributing.md) | [User Manual](user_manual.md) | [Testing](../contrib/testing.md) | [Start Here](../../START_HERE.md)
+
 **Target**: New contributor can clone repository and run tests successfully in <15 minutes.
 
 **Last Updated**: November 1, 2025

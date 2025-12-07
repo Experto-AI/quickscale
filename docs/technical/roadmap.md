@@ -1,5 +1,8 @@
 # QuickScale Development Roadmap
 
+> **You are here**: [QuickScale](../../START_HERE.md) → [Technical](../index.md) → **Roadmap** (Timeline & Tasks)
+> **Related docs**: [Decisions](decisions.md) | [Scaffolding](scaffolding.md) | [Release Archive](release-archive.md) | [Start Here](../../START_HERE.md)
+
 ## General Introduction
 
 **Purpose:** This document outlines the development timeline, implementation phases, and specific tasks for building QuickScale.
@@ -96,7 +99,7 @@ List of upcoming releases with detailed implementation tasks:
 
 ### v0.67.0: Listings Module — ✅ Complete
 
-See [release-v0.67.0-implementation.md](../releases/release-v0.67.0-implementation.md) for details.
+See [release-v0.67.0-implementation.md](../releases-archive/release-v0.67.0-implementation.md) for details.
 
 ---
 
@@ -104,7 +107,7 @@ See [release-v0.67.0-implementation.md](../releases/release-v0.67.0-implementati
 
 **Status**: ✅ Complete
 
-See [release-v0.68.0-implementation.md](../releases/release-v0.68.0-implementation.md) for details.
+See [release-v0.68.0-implementation.md](../releases-archive/release-v0.68.0-implementation.md) for details.
 
 ---
 
@@ -112,7 +115,7 @@ See [release-v0.68.0-implementation.md](../releases/release-v0.68.0-implementati
 
 **Status**: ✅ Complete
 
-Terraform-style state management with incremental applies. See [release-v0.69.0-implementation.md](../releases/release-v0.69.0-implementation.md).
+Terraform-style state management with incremental applies. See [release-v0.69.0-implementation.md](../releases-archive/release-v0.69.0-implementation.md).
 
 ---
 
@@ -122,7 +125,7 @@ Terraform-style state management with incremental applies. See [release-v0.69.0-
 
 Release v0.70.0 adds existing project support to the Plan/Apply system. Users can now check project status, add modules, and reconfigure options. New commands: `quickscale status`, `quickscale plan --add`, `quickscale plan --reconfigure`. Includes 37 new tests and full state management integration.
 
-See [release-v0.70.0-implementation.md](../releases/release-v0.70.0-implementation.md) for details.
+See [release-v0.70.0-implementation.md](../releases-archive/release-v0.70.0-implementation.md) for details.
 
 ---
 
@@ -132,7 +135,7 @@ See [release-v0.70.0-implementation.md](../releases/release-v0.70.0-implementati
 
 Release v0.71.0 completes the Plan/Apply system (v0.68.0-v0.71.0) with module manifests enabling configuration mutability. Users can now modify mutable configuration options after initial embed without re-embedding, while immutable options are locked at embed time with clear upgrade guidance. Includes `quickscale remove` command for module removal. Auth module updated with manifest. 643 tests passing, full coverage achieved.
 
-See [release-v0.71.0-implementation.md](../releases/release-v0.71.0-implementation.md) and [decisions.md: Module Manifest Architecture](./decisions.md#module-manifest-architecture).
+See [release-v0.71.0-implementation.md](../releases-archive/release-v0.71.0-implementation.md) and [decisions.md: Module Manifest Architecture](./decisions.md#module-manifest-architecture).
 
 ---
 
