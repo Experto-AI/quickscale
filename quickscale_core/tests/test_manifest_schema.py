@@ -1,6 +1,5 @@
 """Tests for module manifest schema"""
 
-
 from quickscale_core.manifest import ConfigOption, ModuleManifest
 
 

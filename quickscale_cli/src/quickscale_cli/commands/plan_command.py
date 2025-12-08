@@ -66,9 +66,9 @@ def _confirm_unimplemented_theme(theme_id: str) -> bool:
 def _select_theme() -> str:
     """Interactive theme selection"""
     click.echo("\n🎨 Select a theme for your project:")
-    for i, (theme_id, description) in enumerate(AVAILABLE_THEMES, start=1):
-        status = " ⚠️  not yet implemented" if theme_id != "showcase_html" else ""
-        click.echo(f"  {i}. {theme_id} - {description}{status}")
+    for i, (tid, description) in enumerate(AVAILABLE_THEMES, start=1):
+        status = " ⚠️  not yet implemented" if tid != "showcase_html" else ""
+        click.echo(f"  {i}. {tid} - {description}{status}")
 
     while True:
         choice = click.prompt(
@@ -78,13 +78,13 @@ def _select_theme() -> str:
         )
 
         # Try numeric choice first
-        theme_id = None
+        theme_id: str | None
         if choice.isdigit():
             theme_id = _get_theme_by_index(int(choice) - 1)
         else:
             theme_id = _get_theme_by_name(choice)
 
-        if theme_id and _confirm_unimplemented_theme(theme_id):
+        if theme_id is not None and _confirm_unimplemented_theme(theme_id):
             return theme_id
 
         if theme_id is None:
@@ -295,8 +295,6 @@ def _parse_add_module_selection(
 
         if module_id not in selected:
             selected.append(module_id)
-
-    return selected
 
     return selected
 

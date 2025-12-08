@@ -9,7 +9,7 @@ from pathlib import Path
 import click
 import yaml
 
-from quickscale_cli.schema.state_schema import StateManager
+from quickscale_cli.schema.state_schema import QuickScaleState, StateManager
 
 
 def _update_quickscale_yml(project_path: Path, module_name: str) -> bool:
@@ -120,7 +120,7 @@ def _update_urls_py(project_path: Path, module_name: str) -> tuple[bool, str]:
 
 def _check_module_exists(
     project_path: Path, module_name: str, state_manager: StateManager
-) -> tuple[bool, bool, object]:
+) -> tuple[bool, bool, QuickScaleState | None]:
     """Check if module exists in state or filesystem
 
     Returns:
@@ -135,7 +135,9 @@ def _check_module_exists(
     return module_in_state, module_in_filesystem, state
 
 
-def _show_module_not_found_error(module_name: str, state: object) -> None:
+def _show_module_not_found_error(
+    module_name: str, state: QuickScaleState | None
+) -> None:
     """Display error when module is not found"""
     click.secho(
         f"❌ Module '{module_name}' is not installed in this project",
@@ -143,7 +145,7 @@ def _show_module_not_found_error(module_name: str, state: object) -> None:
         err=True,
     )
     click.echo("\n💡 Installed modules:", err=True)
-    if state and hasattr(state, "modules") and state.modules:
+    if state and state.modules:
         for name in state.modules:
             click.echo(f"   - {name}", err=True)
     else:
@@ -192,10 +194,10 @@ def _log_step_result(success: bool, message: str, is_error: bool = False) -> Non
 
 
 def _update_state_for_removal(
-    state: object, module_name: str, state_manager: StateManager
+    state: QuickScaleState | None, module_name: str, state_manager: StateManager
 ) -> None:
     """Remove module from state and save"""
-    if not (state and hasattr(state, "modules") and module_name in state.modules):
+    if not (state and module_name in state.modules):
         return
 
     del state.modules[module_name]
@@ -209,7 +211,7 @@ def _update_state_for_removal(
 def _perform_removal_steps(
     project_path: Path,
     module_name: str,
-    state: object,
+    state: QuickScaleState | None,
     state_manager: StateManager,
 ) -> None:
     """Execute all removal steps"""

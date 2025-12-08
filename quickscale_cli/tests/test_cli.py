@@ -1,6 +1,5 @@
 """Tests for QuickScale CLI main commands."""
 
-
 import quickscale_cli
 from quickscale_cli.main import cli
 
