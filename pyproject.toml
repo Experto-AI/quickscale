@@ -26,6 +26,10 @@ pytest-django = "^4.7.0"
 # Code quality tools
 ruff = "^0.14.0"
 mypy = "^1.18.0"
+# Advanced code quality analysis tools
+vulture = "^2.11"        # Dead code detection
+radon = "^6.0.1"         # Complexity metrics
+pylint = "^3.0.3"        # Code duplication detection
 # Type stubs
 types-pyyaml = "^6.0.0"
 django-stubs = "^5.1.0"
@@ -36,3 +40,40 @@ psycopg2-binary = "^2.9.0"
 [build-system]
 requires = ["poetry-core"]
 build-backend = "poetry.core.masonry.api"
+
+[tool.pylint.main]
+# Use multiple processes for faster analysis
+jobs = 0  # Auto-detect CPU count
+
+# Python version target
+py-version = "3.11"
+
+# Paths to analyze
+recursive = true
+ignore = ["tests", "migrations", "htmlcov", ".venv", "__pycache__"]
+
+[tool.pylint.messages_control]
+# Disable most checks - we only want duplication detection
+# Ruff and MyPy handle linting and type checking
+disable = [
+    "all",  # Disable everything first
+]
+enable = [
+    "duplicate-code",  # R0801 - Only enable duplication detection
+]
+
+[tool.pylint.similarities]
+# Minimum lines of similar code to trigger duplication warning
+min-similarity-lines = 6
+
+# Ignore comments when comparing code
+ignore-comments = true
+
+# Ignore docstrings when comparing code
+ignore-docstrings = true
+
+# Ignore imports when comparing code
+ignore-imports = true
+
+# Ignore function/method signatures
+ignore-signatures = true

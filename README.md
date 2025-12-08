@@ -1,5 +1,8 @@
 # 🚀 QuickScale
 
+> **You are here**: **QuickScale README** (Project Overview)
+> **Related docs**: [Start Here](START_HERE.md) | [Glossary](GLOSSARY.md) | [Decisions](docs/technical/decisions.md) | [User Manual](docs/technical/user_manual.md)
+
 <!--
 README.md - User-Focused Introduction
 
@@ -50,7 +53,7 @@ QuickScale is a **Django project generator** that creates production-ready SaaS 
 **Quick Reference:**
 - **MVP** = Phase 1 (Personal Toolkit)
 - **Post-MVP** = Phase 2+ (Modules & Themes)
-- **Generated Project** = Output of `quickscale init`
+- **Generated Project** = Output of `quickscale plan` + `quickscale apply`
 
 See [decisions.md - Glossary section](./docs/technical/decisions.md#document-responsibilities-short) for complete terminology and Single Source of Truth reference
 
@@ -63,23 +66,18 @@ See [decisions.md - Glossary section](./docs/technical/decisions.md#document-res
 - **Commercial Extension Developer**: Create and sell premium modules/themes
 - **Open Source Contributor**: Extend the ecosystem with modules and themes
 
-### Development Flow (MVP)
-1. `quickscale init myapp`
-  - Generates the minimal Django starter described in the MVP Feature Matrix
-  - Ships with standalone `settings.py` by default; there is NO automatic settings inheritance. Advanced users who manually embed `quickscale_core` via git subtree may opt-in to inherit from `quickscale_core.settings` (see [decisions.md](./docs/technical/decisions.md#mvp-feature-matrix-authoritative)).
-  - **Optional**: Embed `quickscale_core` via git subtree after generation; follow the [Personal Toolkit workflow](./docs/technical/decisions.md#integration-note-personal-toolkit-git-subtree) for canonical commands and helper roadmap
-2. Add your custom Django apps and features
-3. Adopt optional inheritance or module extraction patterns only when you embed the core; the rules and best practices stay centralized in `DECISIONS.md`
+### Development Flow
+1. `quickscale plan myapp` → Interactive configuration wizard
+2. `quickscale apply` → Generates production-ready Django project
+3. Add your custom Django apps and features
 4. Build your unique client application
 5. Deploy to Railway with `quickscale deploy railway` (or use standard Django deployment)
 
-ℹ️ QuickScale's MVP centers on the personal toolkit workflow. Extraction patterns, module packaging, and subtree helper command plans stay documented in `docs/technical/decisions.md` so this README can stay concise.
-
-🔎 **Scope note**: The [MVP Feature Matrix](./docs/technical/decisions.md#mvp-feature-matrix-authoritative) is the single source of truth for what's in or out.
+ℹ️ The [MVP Feature Matrix](./docs/technical/decisions.md#mvp-feature-matrix-authoritative) is the single source of truth for what's in or out.
 
 ### What You Get
 
-Running `quickscale init myapp` generates a **production-ready Django project** with:
+Running `quickscale plan myapp && quickscale apply` generates a **production-ready Django project** with:
 
 - ✅ **Docker** setup (development + production)
 - ✅ **PostgreSQL** configuration
@@ -88,6 +86,7 @@ Running `quickscale init myapp` generates a **production-ready Django project** 
 - ✅ **Testing** infrastructure (pytest + factory_boy)
 - ✅ **CI/CD** pipeline (GitHub Actions)
 - ✅ **Code quality** hooks (ruff format + ruff check)
+- ✅ **Advanced quality analysis** (dead code detection, complexity metrics, duplication)
 - ✅ **Poetry** for dependency management
 - ✅ **One-Command Deployment**: Deploy to Railway with `quickscale deploy railway` - fully automated setup
 
@@ -111,8 +110,6 @@ See [competitive_analysis.md](./docs/overview/competitive_analysis.md) for detai
 
 ## Quick Start
 
-### Option A: Interactive Plan/Apply Workflow (Recommended)
-
 ```bash
 # Install QuickScale globally
 ./scripts/install_global.sh
@@ -123,27 +120,9 @@ quickscale plan myapp
 # → Generates quickscale.yml
 
 # Execute the configuration
-quickscale apply quickscale.yml
+quickscale apply
 cd myapp
 ```
-
-### Option B: Direct Init (Legacy)
-
-```bash
-# Install QuickScale globally
-./scripts/install_global.sh
-
-# Create your first project directly
-quickscale init myapp
-cd myapp
-
-# Or choose a specific theme (v0.61.0+)
-# quickscale init myapp --theme showcase_html # Default Showcase HTML theme
-# quickscale init myapp --theme showcase_htmx  # HTMX theme (coming in v0.70.0)
-# quickscale init myapp --theme showcase_react # React theme (coming in v0.71.0)
-```
-
-> **Note**: The `init` and `embed` commands are deprecated and will be removed in v0.70.0. Use `plan` + `apply` instead.
 
 **Choose your development workflow:**
 
@@ -187,6 +166,27 @@ poetry run python manage.py runserver
 **Visit http://localhost:8000** - Your app is running natively!
 
 **For complete command reference and workflows**, see the [user_manual.md](./docs/technical/user_manual.md).
+
+## Code Quality Analysis
+
+QuickScale includes comprehensive code quality checks:
+
+```bash
+# Run quality analysis
+./scripts/check_quality.sh
+
+# View reports
+cat .quickscale/quality_report.md     # Human-readable
+cat .quickscale/quality_report.json   # Machine-readable
+```
+
+**Detects:**
+- Dead code (unused imports, functions, variables)
+- High complexity (cyclomatic complexity >10)
+- Large files (>500 lines warning, >1000 error)
+- Code duplication (>6 similar lines)
+
+**Exit codes:** 0 (clean), 1 (warnings), 2 (critical)
 
 ## Learn More
 

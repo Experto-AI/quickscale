@@ -97,6 +97,103 @@ class ConfigDelta:
         return changes
 
 
+def _get_option_mutability_info(
+    module_name: str,
+    option_name: str,
+    manifests: dict | None,
+) -> tuple[bool, str | None]:
+    """Check if an option is mutable and get its django_setting
+
+    Returns:
+        Tuple of (is_mutable, django_setting)
+    """
+    if not manifests or module_name not in manifests:
+        return False, None
+
+    manifest = manifests[module_name]
+    is_mutable = manifest.is_option_mutable(option_name)
+    django_setting = None
+
+    if is_mutable:
+        option = manifest.get_option(option_name)
+        if option:
+            django_setting = option.django_setting
+
+    return is_mutable, django_setting
+
+
+def _compute_option_changes(
+    desired_options: dict,
+    applied_options: dict,
+    module_name: str,
+    manifests: dict | None,
+) -> tuple[list[ConfigChange], list[ConfigChange]]:
+    """Compute mutable and immutable option changes for a module
+
+    Returns:
+        Tuple of (mutable_changes, immutable_changes)
+    """
+    all_options = set(desired_options.keys()) | set(applied_options.keys())
+    mutable_changes: list[ConfigChange] = []
+    immutable_changes: list[ConfigChange] = []
+
+    for option_name in all_options:
+        old_value = applied_options.get(option_name)
+        new_value = desired_options.get(option_name)
+
+        if old_value == new_value:
+            continue
+
+        is_mutable, django_setting = _get_option_mutability_info(
+            module_name, option_name, manifests
+        )
+
+        change = ConfigChange(
+            option_name=option_name,
+            old_value=old_value,
+            new_value=new_value,
+            django_setting=django_setting,
+            is_mutable=is_mutable,
+        )
+
+        if is_mutable:
+            mutable_changes.append(change)
+        else:
+            immutable_changes.append(change)
+
+    return mutable_changes, immutable_changes
+
+
+def _compute_config_deltas(
+    modules_unchanged: list[str],
+    desired: QuickScaleConfig,
+    applied: QuickScaleState,
+    manifests: dict | None,
+) -> dict[str, ModuleConfigDelta]:
+    """Compute config changes for unchanged modules"""
+    config_deltas: dict[str, ModuleConfigDelta] = {}
+
+    for module_name in modules_unchanged:
+        desired_config = desired.modules[module_name]
+        applied_state = applied.modules[module_name]
+
+        desired_options = desired_config.options or {}
+        applied_options = applied_state.options or {}
+
+        mutable_changes, immutable_changes = _compute_option_changes(
+            desired_options, applied_options, module_name, manifests
+        )
+
+        if mutable_changes or immutable_changes:
+            config_deltas[module_name] = ModuleConfigDelta(
+                module_name=module_name,
+                mutable_changes=mutable_changes,
+                immutable_changes=immutable_changes,
+            )
+
+    return config_deltas
+
+
 def compute_delta(
     desired: QuickScaleConfig,
     applied: QuickScaleState | None,
@@ -136,56 +233,9 @@ def compute_delta(
     theme_changed = desired.project.theme != applied.project.theme
 
     # v0.71.0: Compute config changes for unchanged modules
-    config_deltas: dict[str, ModuleConfigDelta] = {}
-
-    for module_name in modules_unchanged:
-        desired_config = desired.modules[module_name]
-        applied_state = applied.modules[module_name]
-
-        desired_options = desired_config.options or {}
-        applied_options = applied_state.options or {}
-
-        # Detect option changes
-        all_options = set(desired_options.keys()) | set(applied_options.keys())
-        mutable_changes = []
-        immutable_changes = []
-
-        for option_name in all_options:
-            old_value = applied_options.get(option_name)
-            new_value = desired_options.get(option_name)
-
-            if old_value != new_value:
-                # Check if option is mutable via manifest
-                is_mutable = False
-                django_setting = None
-
-                if manifests and module_name in manifests:
-                    manifest = manifests[module_name]
-                    is_mutable = manifest.is_option_mutable(option_name)
-                    if is_mutable:
-                        option = manifest.get_option(option_name)
-                        if option:
-                            django_setting = option.django_setting
-
-                change = ConfigChange(
-                    option_name=option_name,
-                    old_value=old_value,
-                    new_value=new_value,
-                    django_setting=django_setting,
-                    is_mutable=is_mutable,
-                )
-
-                if is_mutable:
-                    mutable_changes.append(change)
-                else:
-                    immutable_changes.append(change)
-
-        if mutable_changes or immutable_changes:
-            config_deltas[module_name] = ModuleConfigDelta(
-                module_name=module_name,
-                mutable_changes=mutable_changes,
-                immutable_changes=immutable_changes,
-            )
+    config_deltas = _compute_config_deltas(
+        modules_unchanged, desired, applied, manifests
+    )
 
     # Determine if there are any changes
     has_config_changes = bool(config_deltas)
@@ -205,6 +255,63 @@ def compute_delta(
     )
 
 
+def _format_theme_change(delta: ConfigDelta) -> list[str]:
+    """Format theme change section"""
+    if not delta.theme_changed:
+        return []
+    return [
+        f"  ~ Theme: {delta.old_theme} → {delta.new_theme} "
+        "(WARNING: Theme changes are not supported after initial generation)"
+    ]
+
+
+def _format_module_list(modules: list[str], label: str, prefix: str) -> list[str]:
+    """Format a list of modules with a prefix symbol"""
+    if not modules:
+        return []
+    lines = [f"\n{label} ({len(modules)}):"]
+    for module in modules:
+        lines.append(f"  {prefix} {module}")
+    return lines
+
+
+def _format_mutable_changes(
+    mutable_changes: list[tuple[str, ConfigChange]],
+) -> list[str]:
+    """Format mutable config changes section"""
+    if not mutable_changes:
+        return []
+    lines = [f"\nMutable config changes ({len(mutable_changes)}):"]
+    for module_name, change in mutable_changes:
+        lines.append(
+            f"  ~ {module_name}.{change.option_name}: "
+            f"{change.old_value} → {change.new_value}"
+        )
+        if change.django_setting:
+            lines.append(f"    (updates {change.django_setting} in settings.py)")
+    return lines
+
+
+def _format_immutable_changes(
+    immutable_changes: list[tuple[str, ConfigChange]],
+) -> list[str]:
+    """Format immutable config changes section with warning"""
+    if not immutable_changes:
+        return []
+    lines = [f"\nImmutable config changes ({len(immutable_changes)}):"]
+    for module_name, change in immutable_changes:
+        lines.append(
+            f"  ✗ {module_name}.{change.option_name}: "
+            f"{change.old_value} → {change.new_value}"
+        )
+    lines.append("\n⚠️  WARNING: Immutable options cannot be changed after embed.")
+    lines.append(
+        "   To change immutable options, run 'quickscale remove <module>' "
+        "and re-embed with new config."
+    )
+    return lines
+
+
 def format_delta(delta: ConfigDelta) -> str:
     """Format delta as human-readable change summary
 
@@ -220,53 +327,14 @@ def format_delta(delta: ConfigDelta) -> str:
 
     lines = ["Changes to apply:"]
 
-    if delta.theme_changed:
-        lines.append(
-            f"  ~ Theme: {delta.old_theme} → {delta.new_theme} "
-            "(WARNING: Theme changes are not supported after initial generation)"
-        )
-
-    if delta.modules_to_add:
-        lines.append(f"\nModules to add ({len(delta.modules_to_add)}):")
-        for module in delta.modules_to_add:
-            lines.append(f"  + {module}")
-
-    if delta.modules_to_remove:
-        lines.append(f"\nModules to remove ({len(delta.modules_to_remove)}):")
-        for module in delta.modules_to_remove:
-            lines.append(f"  - {module}")
+    lines.extend(_format_theme_change(delta))
+    lines.extend(_format_module_list(delta.modules_to_add, "Modules to add", "+"))
+    lines.extend(_format_module_list(delta.modules_to_remove, "Modules to remove", "-"))
 
     # v0.71.0: Show config changes
     if delta.config_deltas:
-        mutable_changes = delta.get_all_mutable_changes()
-        immutable_changes = delta.get_all_immutable_changes()
-
-        if mutable_changes:
-            lines.append(f"\nMutable config changes ({len(mutable_changes)}):")
-            for module_name, change in mutable_changes:
-                lines.append(
-                    f"  ~ {module_name}.{change.option_name}: "
-                    f"{change.old_value} → {change.new_value}"
-                )
-                if change.django_setting:
-                    lines.append(
-                        f"    (updates {change.django_setting} in settings.py)"
-                    )
-
-        if immutable_changes:
-            lines.append(f"\nImmutable config changes ({len(immutable_changes)}):")
-            for module_name, change in immutable_changes:
-                lines.append(
-                    f"  ✗ {module_name}.{change.option_name}: "
-                    f"{change.old_value} → {change.new_value}"
-                )
-            lines.append(
-                "\n⚠️  WARNING: Immutable options cannot be changed after embed."
-            )
-            lines.append(
-                "   To change immutable options, run 'quickscale remove <module>' "
-                "and re-embed with new config."
-            )
+        lines.extend(_format_mutable_changes(delta.get_all_mutable_changes()))
+        lines.extend(_format_immutable_changes(delta.get_all_immutable_changes()))
 
     if delta.modules_unchanged and not delta.config_deltas:
         lines.append(

@@ -54,7 +54,7 @@ QuickScale is positioned as the **only composable Django SaaS framework** design
 | **CMS Integration** | Not planned | ✅ Wagtail CMS | ❌ Manual | ❌ No | ❌ No |
 | | | | | | |
 | **DEVELOPMENT TOOLS** |
-| **CLI Tool** | `quickscale init` (MVP) | `pegasus init` + wizard | `cookiecutter` | Git clone | Download + setup |
+| **CLI Tool** | `quickscale plan/apply` | `pegasus init` + wizard | `cookiecutter` | Git clone | Download + setup |
 | **Docker Support** | IN (v0.53) | ✅ Included | ✅ Production-ready | ✅ AWS deployment | ✅ Docker Compose |
 | **Testing Setup** | Django standard | ✅ Pytest configured | ✅ Extensive | ✅ Included | ⚠️ Basic |
 | **CI/CD** | Post-MVP | ⚠️ Manual | ✅ GitHub Actions | ✅ Configured | ⚠️ Manual |
@@ -338,7 +338,7 @@ These are table-stakes features that every competitor has. Without them, QuickSc
 
 **Rationale**: Every competitor provides this. Without production-ready defaults, QuickScale appears as a toy project rather than professional tool.
 
-**Implementation approach**: Generate these in `quickscale init` output as part of the minimal starter.
+**Implementation approach**: Generate these via `quickscale plan` and `quickscale apply` output as part of the minimal starter.
 
 ---
 
@@ -566,8 +566,9 @@ Understanding what to avoid is as important as knowing what to adopt.
 **Goal**: Production-ready Django foundation
 
 ```bash
-quickscale init myapp
-# Must generate:
+# Create quickscale.yml configuration file, then:
+quickscale plan   # Preview changes
+quickscale apply  # Apply configuration
 ```
 
 **Critical outputs:**
@@ -810,7 +811,7 @@ The table below consolidates the repository's release-to-feature mapping and com
 | v0.52.0 | Project foundation (packages, tooling, dev environment) | Foundation ready | Production-ready defaults (env, Docker, Postgres, whitenoise) | Production-ready infra basics | Production-ready foundations | Docker + compose, production defaults |
 | v0.53.0 | Templates (Jinja2 templates for Django projects) | Templates delivered | Template quality & options (scaffolding choices) | Starter templates present (backend/frontend) | Template variants (frontend choices) | Starter templates available |
 | v0.54.0 | Generator (scaffolding engine) | Scaffolding capability | Generator options & project scaffolding | CLI/manual scaffolding support | Init/generator UX parity | Project generator parity |
-| v0.55.0 | CLI (`quickscale init` command) | Developer UX improvement | N/A (cookiecutter-driven) | CLI starter experience available | Comparable `init` UX | N/A / basic installer |
+| v0.55.0 | CLI (`quickscale plan/apply` commands) | Developer UX improvement | N/A (cookiecutter-driven) | CLI starter experience available | Comparable `init` UX | N/A / basic installer |
 | v0.56.0-v0.56.2 | Quality, testing & **MVP validated** | MVP working & validated | Pytest + GH Actions + working starter | Testing/CI + sample project | Comparable CI/testing + starter | Testing/CI + starter |
 | v0.57.0 | MVP release (production-ready personal toolkit) | MVP Launch | Starter parity (production-ready starter) | Starter parity (full stack) | Starter parity (core SaaS features) | Starter parity (Stripe, Docker) |
 | v0.58.0 | E2E Testing Infrastructure (PostgreSQL 16, Playwright) | Testing infrastructure | Comprehensive test suite | E2E testing parity | Testing infrastructure parity | E2E testing coverage |
@@ -869,7 +870,7 @@ This section identifies additional Django SaaS boilerplates not previously analy
 | **AI Features** | Post-MVP (planned) | ❌ No | ❌ No | ❌ No | ✅ **OpenAI, RAG, chat demo** | ❌ No | ❌ No | ❌ No |
 | | | | | | | | | |
 | **DEVELOPMENT TOOLS** |
-| **CLI Tool** | `quickscale init` (MVP) | ⚠️ Not mentioned | ⚠️ Basic | ⚠️ Docker-based | ✅ **Developer CLI** | ⚠️ Basic | ⚠️ Basic | N/A (library) |
+| **CLI Tool** | `quickscale plan/apply` | ⚠️ Not mentioned | ⚠️ Basic | ⚠️ Docker-based | ✅ **Developer CLI** | ⚠️ Basic | ⚠️ Basic | N/A (library) |
 | **Docker Support** | ✅ IN (v0.53) | ⚠️ Not specified | ✅ **Full stack** | ✅ **Single command deploy** | ✅ Production-ready | ✅ Included | ⚠️ Not specified | ⚠️ App-level only |
 | **Testing Setup** | Django standard | ✅ Unit + Integration | ⚠️ Not specified | ⚠️ Not specified | ⚠️ Not specified | ⚠️ Not specified | ⚠️ Not specified | ✅ pytest (Python 3.7-3.12) |
 | **CI/CD** | Post-MVP | ✅ **Sustainable deployment** | ⚠️ Not specified | ⚠️ Not specified | ⚠️ Not specified | ⚠️ Not specified | ⚠️ Not specified | ⚠️ Not specified |

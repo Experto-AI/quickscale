@@ -95,40 +95,25 @@ def _suggest_similar_key(invalid_key: str, valid_keys: set[str]) -> str | None:
     return None
 
 
-def validate_config(yaml_content: str) -> QuickScaleConfig:
-    """Validate YAML content and return a QuickScaleConfig
-
-    Args:
-        yaml_content: Raw YAML string
-
-    Returns:
-        QuickScaleConfig: Validated configuration object
-
-    Raises:
-        ConfigValidationError: If validation fails with helpful error message
-
-    """
-    try:
-        data = yaml.safe_load(yaml_content)
-    except yaml.YAMLError as e:
-        raise ConfigValidationError(f"Invalid YAML syntax: {e}") from e
-
-    if not isinstance(data, dict):
-        raise ConfigValidationError("Configuration must be a YAML mapping (dictionary)")
-
-    # Validate top-level keys
+def _validate_unknown_keys(
+    data: dict, valid_keys: set[str], yaml_content: str, section_name: str = ""
+) -> None:
+    """Validate that all keys in data are in valid_keys."""
+    section_prefix = f" in {section_name} section" if section_name else ""
     for key in data.keys():
-        if key not in VALID_TOP_LEVEL_KEYS:
+        if key not in valid_keys:
             line = _find_line_number(yaml_content, key)
-            suggestion = _suggest_similar_key(key, VALID_TOP_LEVEL_KEYS)
+            suggestion = _suggest_similar_key(key, valid_keys)
             suggestion_text = f"did you mean '{suggestion}'?" if suggestion else None
             raise ConfigValidationError(
-                f"Unknown key '{key}'",
+                f"Unknown key '{key}'{section_prefix}",
                 line=line,
                 suggestion=suggestion_text,
             )
 
-    # Validate required keys
+
+def _validate_version(data: dict, yaml_content: str) -> None:
+    """Validate the version field."""
     if "version" not in data:
         raise ConfigValidationError(
             "Missing required key 'version'",
@@ -143,28 +128,21 @@ def validate_config(yaml_content: str) -> QuickScaleConfig:
             suggestion="Use 'version: \"1\"'",
         )
 
+
+def _validate_project_section(data: dict, yaml_content: str) -> tuple[str, str]:
+    """Validate project section and return (project_name, theme)."""
     if "project" not in data:
         raise ConfigValidationError(
             "Missing required key 'project'",
             suggestion="Add 'project:\\n  name: your_project_name\\n  theme: showcase_html'",
         )
 
-    # Validate project section
     project_data = data.get("project", {})
     if not isinstance(project_data, dict):
         line = _find_line_number(yaml_content, "project")
         raise ConfigValidationError("'project' must be a mapping", line=line)
 
-    for key in project_data.keys():
-        if key not in VALID_PROJECT_KEYS:
-            line = _find_line_number(yaml_content, key)
-            suggestion = _suggest_similar_key(key, VALID_PROJECT_KEYS)
-            suggestion_text = f"did you mean '{suggestion}'?" if suggestion else None
-            raise ConfigValidationError(
-                f"Unknown key '{key}' in project section",
-                line=line,
-                suggestion=suggestion_text,
-            )
+    _validate_unknown_keys(project_data, VALID_PROJECT_KEYS, yaml_content, "project")
 
     if "name" not in project_data:
         line = _find_line_number(yaml_content, "project")
@@ -181,7 +159,6 @@ def validate_config(yaml_content: str) -> QuickScaleConfig:
             "'project.name' must be a non-empty string", line=line
         )
 
-    # Validate project name is a valid Python identifier
     if not project_name.isidentifier():
         line = _find_line_number(yaml_content, "name")
         raise ConfigValidationError(
@@ -199,22 +176,17 @@ def validate_config(yaml_content: str) -> QuickScaleConfig:
             suggestion=f"Available themes: {', '.join(sorted(VALID_THEMES))}",
         )
 
-    # Validate docker section
+    return project_name, theme
+
+
+def _validate_docker_section(data: dict, yaml_content: str) -> DockerConfig:
+    """Validate docker section and return DockerConfig."""
     docker_data = data.get("docker", {})
     if not isinstance(docker_data, dict):
         line = _find_line_number(yaml_content, "docker")
         raise ConfigValidationError("'docker' must be a mapping", line=line)
 
-    for key in docker_data.keys():
-        if key not in VALID_DOCKER_KEYS:
-            line = _find_line_number(yaml_content, key)
-            suggestion = _suggest_similar_key(key, VALID_DOCKER_KEYS)
-            suggestion_text = f"did you mean '{suggestion}'?" if suggestion else None
-            raise ConfigValidationError(
-                f"Unknown key '{key}' in docker section",
-                line=line,
-                suggestion=suggestion_text,
-            )
+    _validate_unknown_keys(docker_data, VALID_DOCKER_KEYS, yaml_content, "docker")
 
     docker_start = docker_data.get("start", True)
     docker_build = docker_data.get("build", True)
@@ -231,7 +203,11 @@ def validate_config(yaml_content: str) -> QuickScaleConfig:
             "'docker.build' must be a boolean (true/false)", line=line
         )
 
-    # Validate modules section
+    return DockerConfig(start=docker_start, build=docker_build)
+
+
+def _validate_modules_section(data: dict, yaml_content: str) -> dict[str, ModuleConfig]:
+    """Validate modules section and return dict of ModuleConfig."""
     modules_data = data.get("modules", {})
     if not isinstance(modules_data, dict):
         line = _find_line_number(yaml_content, "modules")
@@ -261,11 +237,44 @@ def validate_config(yaml_content: str) -> QuickScaleConfig:
 
         modules[module_name] = ModuleConfig(name=module_name, options=module_options)
 
+    return modules
+
+
+def validate_config(yaml_content: str) -> QuickScaleConfig:
+    """Validate YAML content and return a QuickScaleConfig
+
+    Args:
+        yaml_content: Raw YAML string
+
+    Returns:
+        QuickScaleConfig: Validated configuration object
+
+    Raises:
+        ConfigValidationError: If validation fails with helpful error message
+
+    """
+    try:
+        data = yaml.safe_load(yaml_content)
+    except yaml.YAMLError as e:
+        raise ConfigValidationError(f"Invalid YAML syntax: {e}") from e
+
+    if not isinstance(data, dict):
+        raise ConfigValidationError("Configuration must be a YAML mapping (dictionary)")
+
+    # Validate top-level structure
+    _validate_unknown_keys(data, VALID_TOP_LEVEL_KEYS, yaml_content)
+    _validate_version(data, yaml_content)
+
+    # Validate each section
+    project_name, theme = _validate_project_section(data, yaml_content)
+    docker_config = _validate_docker_section(data, yaml_content)
+    modules = _validate_modules_section(data, yaml_content)
+
     return QuickScaleConfig(
         version=data["version"],
         project=ProjectConfig(name=project_name, theme=theme),
         modules=modules,
-        docker=DockerConfig(start=docker_start, build=docker_build),
+        docker=docker_config,
     )
 
 

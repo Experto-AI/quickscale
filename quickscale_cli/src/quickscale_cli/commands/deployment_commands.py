@@ -36,28 +36,8 @@ def deploy() -> None:
     pass
 
 
-@deploy.command()
-@click.option(
-    "--project-name", help="Railway project name (auto-detected if not provided)"
-)
-def railway(project_name: str | None) -> None:
-    """
-    Deploy project to Railway with automated setup.
-
-    This command uses a config-first approach:
-    - railway.json defines build and deployment configuration
-    - Migrations and static files run automatically via startCommand
-    - Public domain is auto-generated and ALLOWED_HOSTS is auto-configured
-    """
-    click.echo("🚀 Deploying to Railway...")
-
-    # Determine the app service name for multi-service deployments
-    app_service = get_app_service_name(project_name)
-
-    # Step 0: Pre-flight checks
-    click.echo("\n🔍 Running pre-flight checks...")
-
-    # Check for uncommitted changes
+def _check_uncommitted_changes_step() -> None:
+    """Check for uncommitted git changes."""
     has_changes, status_output = check_uncommitted_changes()
     if has_changes:
         click.secho("⚠️  Warning: You have uncommitted changes:", fg="yellow")
@@ -69,7 +49,9 @@ def railway(project_name: str | None) -> None:
     else:
         click.secho("✅ No uncommitted changes", fg="green")
 
-    # Verify railway.json exists and is valid
+
+def _verify_railway_files_step() -> None:
+    """Verify railway.json and Dockerfile exist."""
     is_valid, error_msg = verify_railway_json()
     if not is_valid:
         click.secho(f"❌ Error: {error_msg}", fg="red", err=True)
@@ -77,7 +59,6 @@ def railway(project_name: str | None) -> None:
         sys.exit(1)
     click.secho("✅ railway.json is valid", fg="green")
 
-    # Verify Dockerfile exists
     dockerfile_exists, error_msg = verify_dockerfile()
     if not dockerfile_exists:
         click.secho(f"❌ Error: {error_msg}", fg="red", err=True)
@@ -85,7 +66,9 @@ def railway(project_name: str | None) -> None:
         sys.exit(1)
     click.secho("✅ Dockerfile found", fg="green")
 
-    # Verify required dependencies
+
+def _verify_dependencies_step() -> None:
+    """Verify required Railway dependencies are present."""
     deps_ok, missing_deps = verify_railway_dependencies()
     if not deps_ok:
         click.secho("⚠️  Warning: Missing required Railway dependencies:", fg="yellow")
@@ -102,12 +85,13 @@ def railway(project_name: str | None) -> None:
     else:
         click.secho("✅ All required dependencies present", fg="green")
 
-    # Check poetry.lock consistency
+
+def _check_poetry_lock_step() -> None:
+    """Check poetry.lock consistency and offer to fix."""
     is_consistent, lock_message = check_poetry_lock_consistency()
     if not is_consistent:
         click.secho(f"⚠️  Warning: {lock_message}", fg="yellow")
         if "not found" not in lock_message.lower():
-            # Lock file exists but is inconsistent - offer to fix it
             click.echo(
                 "💡 The lock file needs to be regenerated to match pyproject.toml"
             )
@@ -130,7 +114,6 @@ def railway(project_name: str | None) -> None:
                     click.echo("Deployment cancelled")
                     sys.exit(0)
         else:
-            # Lock file doesn't exist
             click.echo("💡 Run 'poetry lock' to create poetry.lock file")
             if not click.confirm("Continue anyway?", default=False):
                 click.echo("Deployment cancelled")
@@ -138,13 +121,12 @@ def railway(project_name: str | None) -> None:
     else:
         click.secho("✅ poetry.lock is consistent", fg="green")
 
-    # Step 1: Check Railway CLI installation
-    click.echo("\n🔧 Checking Railway CLI...")
 
+def _ensure_railway_cli_step() -> None:
+    """Ensure Railway CLI is installed and up to date."""
     if not is_railway_cli_installed():
         click.secho("⚠️  Railway CLI is not installed", fg="yellow")
 
-        # Check if npm is available
         if not is_npm_installed():
             click.secho("❌ Error: npm is not installed", fg="red", err=True)
             click.echo("\n💡 Install Node.js and npm first:", err=True)
@@ -154,7 +136,6 @@ def railway(project_name: str | None) -> None:
             )
             sys.exit(1)
 
-        # Auto-install Railway CLI
         click.echo("📦 Installing Railway CLI via npm...")
         click.echo("   This may take a minute...")
         if install_railway_cli():
@@ -167,40 +148,38 @@ def railway(project_name: str | None) -> None:
             sys.exit(1)
     else:
         click.secho("✅ Railway CLI is installed", fg="green")
+        _check_and_upgrade_railway_cli()
 
-        # Check version and upgrade if needed
-        current_version = get_railway_cli_version()
-        if current_version:
-            click.echo(f"   Current version: {current_version}")
 
-            # Check if version is 4.0.0 or higher
-            if not check_railway_cli_version("4.0.0"):
-                click.secho(
-                    f"⚠️  Railway CLI version {current_version} is outdated (need 4.0.0+)",
-                    fg="yellow",
-                )
-                click.echo("📦 Upgrading Railway CLI via npm...")
-                click.echo("   This may take a minute...")
+def _check_and_upgrade_railway_cli() -> None:
+    """Check Railway CLI version and upgrade if needed."""
+    current_version = get_railway_cli_version()
+    if current_version:
+        click.echo(f"   Current version: {current_version}")
 
-                if upgrade_railway_cli():
-                    new_version = get_railway_cli_version()
-                    click.secho(f"✅ Railway CLI upgraded to {new_version}", fg="green")
-                else:
-                    click.secho(
-                        "⚠️  Warning: Failed to upgrade Railway CLI", fg="yellow"
-                    )
-                    click.echo("💡 Try upgrading manually:", err=True)
-                    click.echo("   npm update -g @railway/cli", err=True)
-                    if not click.confirm(
-                        "Continue with current version?", default=False
-                    ):
-                        sys.exit(1)
+        if not check_railway_cli_version("4.0.0"):
+            click.secho(
+                f"⚠️  Railway CLI version {current_version} is outdated (need 4.0.0+)",
+                fg="yellow",
+            )
+            click.echo("📦 Upgrading Railway CLI via npm...")
+            click.echo("   This may take a minute...")
+
+            if upgrade_railway_cli():
+                new_version = get_railway_cli_version()
+                click.secho(f"✅ Railway CLI upgraded to {new_version}", fg="green")
             else:
-                click.secho("✅ Railway CLI version is up to date", fg="green")
+                click.secho("⚠️  Warning: Failed to upgrade Railway CLI", fg="yellow")
+                click.echo("💡 Try upgrading manually:", err=True)
+                click.echo("   npm update -g @railway/cli", err=True)
+                if not click.confirm("Continue with current version?", default=False):
+                    sys.exit(1)
+        else:
+            click.secho("✅ Railway CLI version is up to date", fg="green")
 
-    # Step 2: Check Railway authentication
-    click.echo("\n🔐 Checking Railway authentication...")
 
+def _ensure_railway_auth_step() -> None:
+    """Ensure Railway CLI is authenticated."""
     if not is_railway_authenticated():
         click.secho("⚠️  Not authenticated with Railway", fg="yellow")
         click.echo("\n🌐 Starting browserless authentication...")
@@ -222,13 +201,14 @@ def railway(project_name: str | None) -> None:
     else:
         click.secho("✅ Already authenticated with Railway", fg="green")
 
-    # Step 3: Initialize Railway project if needed
+
+def _init_railway_project_step() -> None:
+    """Initialize Railway project if needed."""
     if not is_railway_project_initialized():
         click.echo("\n📦 Initializing Railway project...")
         click.echo("💡 You can create a new project or link to an existing one")
 
         try:
-            # Run init interactively so user can select/create project
             result = run_railway_command(["init"], timeout=60, interactive=True)
 
             if result.returncode != 0:
@@ -238,25 +218,21 @@ def railway(project_name: str | None) -> None:
                 sys.exit(1)
 
             click.secho("✅ Railway project initialized", fg="green")
-        except FileNotFoundError as e:
-            click.secho(f"❌ Error: {e}", fg="red", err=True)
-            sys.exit(1)
-        except TimeoutError as e:
+        except (FileNotFoundError, TimeoutError) as e:
             click.secho(f"❌ Error: {e}", fg="red", err=True)
             sys.exit(1)
     else:
         click.echo("✅ Railway project already initialized")
 
-    # Step 4: Check for PostgreSQL service
-    click.echo("\n🗄️  Setting up PostgreSQL database...")
+
+def _setup_postgres_step() -> None:
+    """Set up PostgreSQL database service."""
     try:
-        # Check if database already exists
         result = run_railway_command(["service"], timeout=10)
 
         if "postgres" in result.stdout.lower():
             click.echo("✅ PostgreSQL service already exists")
         else:
-            # Add PostgreSQL service
             click.echo("Adding PostgreSQL service...")
             result = run_railway_command(["add", "--database", "postgres"], timeout=30)
 
@@ -268,16 +244,15 @@ def railway(project_name: str | None) -> None:
     except Exception as e:
         click.secho(f"⚠️  Warning: Could not check database service: {e}", fg="yellow")
 
-    # Step 5: Create app service
-    click.echo(f"\n📦 Creating application service: {app_service}...")
+
+def _create_app_service_step(app_service: str) -> None:
+    """Create application service."""
     try:
-        # Check if app service already exists
         result = run_railway_command(["service"], timeout=10)
 
         if app_service.lower() in result.stdout.lower():
             click.echo(f"✅ Service '{app_service}' already exists")
         else:
-            # Create app service (Railway CLI v4 requires explicit service creation)
             result = run_railway_command(
                 ["add", "--service", app_service], timeout=30, interactive=True
             )
@@ -292,8 +267,9 @@ def railway(project_name: str | None) -> None:
     except Exception as e:
         click.secho(f"⚠️  Warning: Could not create app service: {e}", fg="yellow")
 
-    # Step 6: Link DATABASE_URL from PostgreSQL to app service
-    click.echo("\n🔗 Linking DATABASE_URL to app service...")
+
+def _link_database_step(app_service: str) -> None:
+    """Link DATABASE_URL from PostgreSQL to app service."""
     link_success, link_message = link_database_to_service(app_service)
 
     if link_success:
@@ -309,37 +285,35 @@ def railway(project_name: str | None) -> None:
             "   Or link via Railway dashboard > Variables > New Variable > Reference"
         )
 
-    # Step 7: Generate public domain first (before setting env vars)
-    click.echo("\n🌐 Generating public domain...")
+
+def _generate_domain_step(app_service: str) -> str | None:
+    """Generate public domain and return the domain name."""
     domain_url = generate_railway_domain(app_service)
 
     if domain_url:
         click.secho(f"✅ Domain generated: {domain_url}", fg="green")
-        # Extract domain without https://
-        domain_name = domain_url.replace("https://", "").replace("http://", "")
+        return domain_url.replace("https://", "").replace("http://", "")
     else:
         click.secho("⚠️  Warning: Could not auto-generate domain", fg="yellow")
         click.echo("💡 Generate manually: railway domain")
         click.echo("💡 Then set: railway variables --set ALLOWED_HOSTS=<your-domain>")
-        domain_name = None
+        return None
 
-    # Step 8: Configure environment variables in batch (triggers only ONE deployment)
-    click.echo("\n⚙️  Configuring environment variables...")
+
+def _configure_env_vars_step(app_service: str, domain_name: str | None) -> None:
+    """Configure environment variables in batch."""
     click.echo(f"Setting variables for service: {app_service}")
     click.echo("💡 Setting all variables at once to minimize deployments")
 
-    # Prepare all environment variables
     env_vars = {
         "SECRET_KEY": generate_django_secret_key(),
         "DEBUG": "False",
         "DJANGO_SETTINGS_MODULE": f"{app_service}.settings.production",
     }
 
-    # Add ALLOWED_HOSTS if domain was generated
     if domain_name:
         env_vars["ALLOWED_HOSTS"] = domain_name
 
-    # Set all variables in one batch command
     success, failed_keys = set_railway_variables_batch(env_vars, service=app_service)
 
     if success:
@@ -360,15 +334,14 @@ def railway(project_name: str | None) -> None:
                 click.echo(f"   • {key}")
         click.echo("💡 Set manually using: railway variables --set KEY=VALUE")
 
-    # Step 9: Deploy to app service (using railway.json config)
-    click.echo("\n🚢 Deploying application...")
+
+def _deploy_app_step(app_service: str) -> None:
+    """Deploy application to Railway."""
     click.echo("💡 Using railway.json for build and deployment configuration")
     click.echo("💡 Migrations will run automatically at startup (via railway.json)")
     click.echo("This may take a few minutes...")
 
     try:
-        # Deploy to the specific app service
-        # railway.json in project root configures the build and startCommand
         result = run_railway_command(
             ["up", "--service", app_service, "--detach"], timeout=60
         )
@@ -394,13 +367,13 @@ def railway(project_name: str | None) -> None:
     except TimeoutError:
         click.secho("⚠️  Deployment command timed out", fg="yellow")
 
-    # Step 10: Verify environment variables were set correctly
-    click.echo("\n🔍 Verifying environment configuration...")
+
+def _verify_deployment_step(app_service: str) -> None:
+    """Verify environment variables were set correctly."""
     deployed_vars = get_railway_variables(app_service)
 
     if deployed_vars:
         click.secho("✅ Environment variables verified", fg="green")
-        # Show which variables are configured (mask sensitive values)
         required_vars = [
             "DATABASE_URL",
             "SECRET_KEY",
@@ -416,7 +389,6 @@ def railway(project_name: str | None) -> None:
                     click.echo(f"   • {var}=<linked to PostgreSQL>")
                 else:
                     value = deployed_vars[var]
-                    # Truncate long values
                     if len(value) > 50:
                         value = value[:50] + "..."
                     click.echo(f"   • {var}={value}")
@@ -426,7 +398,9 @@ def railway(project_name: str | None) -> None:
         click.secho("⚠️  Warning: Could not verify environment variables", fg="yellow")
         click.echo("💡 Check manually: railway variables")
 
-    # Step 11: Display deployment summary
+
+def _display_summary(app_service: str, domain_url: str | None) -> None:
+    """Display deployment summary."""
     click.echo("\n" + "=" * 60)
     click.secho("🎉 DEPLOYMENT SUMMARY", fg="green", bold=True)
     click.echo("=" * 60)
@@ -470,3 +444,71 @@ def railway(project_name: str | None) -> None:
     click.echo("\n" + "=" * 60)
     click.secho("✅ Deployment process completed successfully!", fg="green", bold=True)
     click.echo("=" * 60)
+
+
+@deploy.command()
+@click.option(
+    "--project-name", help="Railway project name (auto-detected if not provided)"
+)
+def railway(project_name: str | None) -> None:
+    """
+    Deploy project to Railway with automated setup.
+
+    This command uses a config-first approach:
+    - railway.json defines build and deployment configuration
+    - Migrations and static files run automatically via startCommand
+    - Public domain is auto-generated and ALLOWED_HOSTS is auto-configured
+    """
+    click.echo("🚀 Deploying to Railway...")
+
+    app_service = get_app_service_name(project_name)
+
+    # Step 0: Pre-flight checks
+    click.echo("\n🔍 Running pre-flight checks...")
+    _check_uncommitted_changes_step()
+    _verify_railway_files_step()
+    _verify_dependencies_step()
+    _check_poetry_lock_step()
+
+    # Step 1: Check Railway CLI installation
+    click.echo("\n🔧 Checking Railway CLI...")
+    _ensure_railway_cli_step()
+
+    # Step 2: Check Railway authentication
+    click.echo("\n🔐 Checking Railway authentication...")
+    _ensure_railway_auth_step()
+
+    # Step 3: Initialize Railway project if needed
+    _init_railway_project_step()
+
+    # Step 4: Check for PostgreSQL service
+    click.echo("\n🗄️  Setting up PostgreSQL database...")
+    _setup_postgres_step()
+
+    # Step 5: Create app service
+    click.echo(f"\n📦 Creating application service: {app_service}...")
+    _create_app_service_step(app_service)
+
+    # Step 6: Link DATABASE_URL from PostgreSQL to app service
+    click.echo("\n🔗 Linking DATABASE_URL to app service...")
+    _link_database_step(app_service)
+
+    # Step 7: Generate public domain first
+    click.echo("\n🌐 Generating public domain...")
+    domain_name = _generate_domain_step(app_service)
+    domain_url = f"https://{domain_name}" if domain_name else None
+
+    # Step 8: Configure environment variables in batch
+    click.echo("\n⚙️  Configuring environment variables...")
+    _configure_env_vars_step(app_service, domain_name)
+
+    # Step 9: Deploy to app service
+    click.echo("\n🚢 Deploying application...")
+    _deploy_app_step(app_service)
+
+    # Step 10: Verify environment variables
+    click.echo("\n🔍 Verifying environment configuration...")
+    _verify_deployment_step(app_service)
+
+    # Step 11: Display deployment summary
+    _display_summary(app_service, domain_url)

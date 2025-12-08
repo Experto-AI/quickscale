@@ -1,5 +1,8 @@
 # QuickScale: Strategic Vision & Context
 
+> **You are here**: [QuickScale](../../START_HERE.md) → [Overview](../index.md) → **Strategic Vision** (Why QuickScale?)
+> **Related docs**: [Competitive Analysis](competitive_analysis.md) | [Decisions](../technical/decisions.md) | [Glossary](../../GLOSSARY.md) | [Start Here](../../START_HERE.md)
+
 <!--
 quickscale.md - Strategic Vision and Context
 
@@ -102,7 +105,7 @@ QuickScale provides the building blocks for professional Django development:
 
 **MVP Structure (Phase 1):**
 - **QuickScale Core** = Minimal utilities + project scaffolding
-- **CLI** = One command: `quickscale init myapp`
+- **CLI** = Declarative workflow: `quickscale plan myapp` + `quickscale apply`
 - **Distribution** = Git subtree only
 - **Starter** = Generates Django project you own completely
 

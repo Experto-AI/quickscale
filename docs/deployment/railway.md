@@ -10,7 +10,7 @@ Railway.app is a modern platform-as-a-service (PaaS) that simplifies deploying D
 - Node.js/npm installed (for Railway CLI)
   - **Note**: QuickScale will automatically install/upgrade Railway CLI if needed
   - Railway CLI v4.0+ is required for multi-service project support
-- QuickScale project generated via `quickscale init`
+- QuickScale project generated via `quickscale plan` + `quickscale apply`
 - Git repository for your project (recommended)
 
 **Automated Setup**: The `quickscale deploy railway` command automatically:
@@ -28,7 +28,8 @@ Railway.app is a modern platform-as-a-service (PaaS) that simplifies deploying D
 
 ```bash
 # 1. Generate QuickScale project
-quickscale init myapp
+quickscale plan myapp
+quickscale apply
 cd myapp
 
 # 2. Deploy with one command (everything is automated!)
@@ -87,7 +88,8 @@ If you prefer manual control or need to customize the deployment process:
 
 ```bash
 # 1. Generate QuickScale project
-quickscale init myapp
+quickscale plan myapp
+quickscale apply
 cd myapp
 
 # 2. Initialize Railway project
@@ -168,7 +170,7 @@ The `quickscale deploy railway` command follows this config-first workflow:
 - Environment variables are service-specific. The CLI automatically targets the correct service for each operation.
 - **Optimized Variable Setting**: QuickScale sets all environment variables in a single batch command to trigger only ONE deployment instead of multiple deployments.
 - Railway CLI v4+ requires explicit service creation with `railway add --service` before deployment.
-- **Config-as-Code**: railway.json is generated with every `quickscale init` and handles build/deploy configuration.
+- **Config-as-Code**: railway.json is generated with every `quickscale apply` and handles build/deploy configuration.
 - **Automatic Migrations**: Migrations run on every deployment via startCommand (at runtime with DATABASE_URL available), eliminating manual migration steps.
 - **DATABASE_URL Validation**: Production settings now validate DATABASE_URL is set and provide clear error messages if missing.
 
@@ -206,7 +208,7 @@ Railway can auto-detect Django projects and build using Nixpacks.
 
 Railway supports infrastructure-as-code through `railway.json` or `railway.toml` configuration files. QuickScale-generated projects include a railway.json file that configures deployment settings.
 
-All QuickScale projects generated with `quickscale init` include a railway.json file that:
+All QuickScale projects generated with `quickscale apply` include a railway.json file that:
 - Uses Dockerfile for consistent builds
 - Automatically runs migrations on deployment
 - Collects static files automatically
@@ -448,13 +450,13 @@ This displays a pairing code and URL you can use from any device.
 ```
 ❌ Error: railway.json not found in project root
 ```
-**Solution**: Regenerate your project with `quickscale init` or create railway.json manually.
+**Solution**: Regenerate your project with `quickscale plan` + `quickscale apply` or create railway.json manually.
 
 **Missing Dockerfile**:
 ```
 ❌ Error: Dockerfile not found in project root
 ```
-**Solution**: Regenerate your project with `quickscale init` or create Dockerfile manually.
+**Solution**: Regenerate your project with `quickscale plan` + `quickscale apply` or create Dockerfile manually.
 
 **Missing Dependencies**:
 ```
@@ -674,7 +676,7 @@ The generated URL format is: `<service-name>-<environment>-<hash>.up.railway.app
 ## Deployment Checklist
 
 ### CLI Method (Recommended) ✅ v0.60.0+
-- [ ] Generate project: `quickscale init myapp`
+- [ ] Generate project: `quickscale plan myapp` then `quickscale apply`
 - [ ] Initialize git repository (optional but recommended)
 - [ ] Login to Railway: `railway login` or `railway login --browserless`
 - [ ] Deploy with automation: `quickscale deploy railway`
@@ -694,7 +696,7 @@ The generated URL format is: `<service-name>-<environment>-<hash>.up.railway.app
 **That's it!** The entire deployment is automated. No manual ALLOWED_HOSTS setup, no separate migration steps.
 
 ### Manual Method (Advanced Users)
-- [ ] Generate project: `quickscale init myapp` (includes railway.json)
+- [ ] Generate project: `quickscale plan myapp` then `quickscale apply` (includes railway.json)
 - [ ] Initialize git repository (optional)
 - [ ] Create Railway project: `railway init`
 - [ ] Add PostgreSQL database: `railway add --database postgres`

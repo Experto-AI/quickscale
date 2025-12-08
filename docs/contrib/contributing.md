@@ -1,5 +1,8 @@
 # Contributing to QuickScale
 
+> **You are here**: [QuickScale](../../START_HERE.md) → [Contributing](../index.md) → **Contributing Guide** (Workflow Overview)
+> **Related docs**: [Code Guide](code.md) | [Testing Guide](testing.md) | [Development Setup](../technical/development.md) | [Start Here](../../START_HERE.md)
+
 Welcome! This guide will help you understand the development workflow and where to find the right documentation for each stage of contribution.
 
 ## Development Workflow
@@ -156,7 +159,7 @@ QuickScale uses structured prompts for automated development workflows:
 **Complete task implementation workflow** - Covers PLAN → CODE → REVIEW → TESTING stages for implementing roadmap tasks.
 
 ### [roadmap-task-review.prompt.md](../../.github/prompts/roadmap-task-review.prompt.md)
-**Post-implementation quality review** - Comprehensive code review of completed implementation. Takes release version as parameter (e.g., `0.68.0`) and generates `docs/releases/release-v{VERSION}-review.md`.
+**Post-implementation quality review** - Comprehensive code review of completed implementation. Takes release version as parameter (e.g., `0.68.0`) and generates `docs/releases-archive/release-v{VERSION}-review.md`.
 
 ### [release-commit-message-and-roadmap-cleaning.prompt.md](../../.github/prompts/release-commit-message-and-roadmap-cleaning.prompt.md)
 **Release finalization** - Generate release commit message, clean up roadmap after release completion.

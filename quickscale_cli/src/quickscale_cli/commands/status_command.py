@@ -187,127 +187,91 @@ def _display_drift_warnings(state_manager: StateManager) -> None:
         click.echo("   These modules may have been manually removed.")
 
 
-@click.command()
-@click.option(
-    "--json",
-    "json_output",
-    is_flag=True,
-    help="Output in JSON format",
-)
-def status(json_output: bool) -> None:
-    """
-    Show project status and state information.
+def _build_json_output(
+    project_path: Path,
+    config_path: Path | None,
+    state: QuickScaleState | None,
+    config: QuickScaleConfig | None,
+) -> dict:
+    """Build JSON output for status command."""
 
-    Displays project information, applied modules, pending changes,
-    and Docker status for the current QuickScale project.
+    output: dict = {
+        "project_path": str(project_path),
+        "has_config": config_path is not None and config_path.exists(),
+        "has_state": state is not None,
+    }
 
-    \b
-    Examples:
-      quickscale status          # Show status in current directory
-      quickscale status --json   # Output as JSON
-
-    \b
-    Information displayed:
-      - Project name, theme, and timestamps
-      - Applied modules with versions
-      - Pending changes (diff between config and state)
-      - Docker container status (if running)
-    """
-    # Detect project context
-    project_path, config_path, state_path = _detect_project_context()
-
-    if project_path is None:
-        click.secho(
-            "❌ Not in a QuickScale project directory",
-            fg="red",
-            err=True,
-        )
-        click.echo("\n💡 Run this command from a directory containing:", err=True)
-        click.echo("   - quickscale.yml (configuration file), or", err=True)
-        click.echo("   - .quickscale/state.yml (state file)", err=True)
-        raise click.Abort()
-
-    # Load state and config
-    state_manager = StateManager(project_path)
-    state = state_manager.load()
-    config = _load_config(config_path) if config_path else None
-
-    # Handle JSON output
-    if json_output:
-        import json
-
-        output = {
-            "project_path": str(project_path),
-            "has_config": config_path is not None and config_path.exists(),
-            "has_state": state is not None,
+    if state:
+        output["state"] = {
+            "version": state.version,
+            "project": {
+                "name": state.project.name,
+                "theme": state.project.theme,
+                "created_at": state.project.created_at,
+                "last_applied": state.project.last_applied,
+            },
+            "modules": {
+                name: {
+                    "version": module.version,
+                    "commit_sha": module.commit_sha,
+                    "embedded_at": module.embedded_at,
+                }
+                for name, module in state.modules.items()
+            },
         }
 
-        if state:
-            output["state"] = {
-                "version": state.version,
-                "project": {
-                    "name": state.project.name,
-                    "theme": state.project.theme,
-                    "created_at": state.project.created_at,
-                    "last_applied": state.project.last_applied,
-                },
-                "modules": {
-                    name: {
-                        "version": module.version,
-                        "commit_sha": module.commit_sha,
-                        "embedded_at": module.embedded_at,
-                    }
-                    for name, module in state.modules.items()
-                },
-            }
+    if config:
+        output["config"] = {
+            "version": config.version,
+            "project": {
+                "name": config.project.name,
+                "theme": config.project.theme,
+            },
+            "modules": list(config.modules.keys()),
+            "docker": {
+                "start": config.docker.start,
+                "build": config.docker.build,
+            },
+        }
 
-        if config:
-            output["config"] = {
-                "version": config.version,
-                "project": {
-                    "name": config.project.name,
-                    "theme": config.project.theme,
-                },
-                "modules": list(config.modules.keys()),
-                "docker": {
-                    "start": config.docker.start,
-                    "build": config.docker.build,
-                },
-            }
+        # Load manifests for accurate config change detection
+        json_manifests = None
+        if state and state.modules:
+            json_manifests = _load_module_manifests(
+                project_path, list(state.modules.keys())
+            )
+        delta = compute_delta(config, state, json_manifests)
+        output["pending_changes"] = {
+            "has_changes": delta.has_changes,
+            "modules_to_add": delta.modules_to_add,
+            "modules_to_remove": delta.modules_to_remove,
+            "modules_unchanged": delta.modules_unchanged,
+            "theme_changed": delta.theme_changed,
+        }
 
-        if config:
-            # Load manifests for accurate config change detection
-            json_manifests = None
-            if state and state.modules:
-                json_manifests = _load_module_manifests(
-                    project_path, list(state.modules.keys())
-                )
-            delta = compute_delta(config, state, json_manifests)
-            output["pending_changes"] = {
-                "has_changes": delta.has_changes,
-                "modules_to_add": delta.modules_to_add,
-                "modules_to_remove": delta.modules_to_remove,
-                "modules_unchanged": delta.modules_unchanged,
-                "theme_changed": delta.theme_changed,
-            }
+    docker_status = _get_docker_status()
+    if docker_status:
+        output["docker"] = docker_status
 
-        docker_status = _get_docker_status()
-        if docker_status:
-            output["docker"] = docker_status
+    return output
 
-        click.echo(json.dumps(output, indent=2))
-        return
 
+def _display_text_status(
+    project_path: Path,
+    state: QuickScaleState | None,
+    config: QuickScaleConfig | None,
+    config_path: Path | None,
+    state_path: Path | None,
+    state_manager: StateManager,
+) -> None:
+    """Display status in text format."""
     # Display header
     click.echo("\n🔍 QuickScale Project Status")
     click.echo("=" * 40)
 
     # Handle case where neither state nor config exists
     if state is None and config is None:
-        click.secho(
-            "\n⚠️  No state or configuration found",
-            fg="yellow",
-        )
+        click.secho("\n⚠️  No state or configuration found", fg="yellow")
         click.echo("   This might be a new or corrupted project.")
         if config_path:
             click.echo(f"\n   Expected config: {config_path}")
@@ -336,3 +300,62 @@ def status(json_output: bool) -> None:
     _display_docker_status()
 
     click.echo("")  # Final newline
+
+
+@click.command()
+@click.option(
+    "--json",
+    "json_output",
+    is_flag=True,
+    help="Output in JSON format",
+)
+def status(json_output: bool) -> None:
+    """
+    Show project status and state information.
+
+    Displays project information, applied modules, pending changes,
+    and Docker status for the current QuickScale project.
+
+    \b
+    Examples:
+      quickscale status          # Show status in current directory
+      quickscale status --json   # Output as JSON
+
+    \b
+    Information displayed:
+      - Project name, theme, and timestamps
+      - Applied modules with versions
+      - Pending changes (diff between config and state)
+      - Docker container status (if running)
+    """
+    import json as json_module
+
+    # Detect project context
+    project_path, config_path, state_path = _detect_project_context()
+
+    if project_path is None:
+        click.secho(
+            "❌ Not in a QuickScale project directory",
+            fg="red",
+            err=True,
+        )
+        click.echo("\n💡 Run this command from a directory containing:", err=True)
+        click.echo("   - quickscale.yml (configuration file), or", err=True)
+        click.echo("   - .quickscale/state.yml (state file)", err=True)
+        raise click.Abort()
+
+    # Load state and config
+    state_manager = StateManager(project_path)
+    state = state_manager.load()
+    config = _load_config(config_path) if config_path else None
+
+    # Handle JSON output
+    if json_output:
+        output = _build_json_output(project_path, config_path, state, config)
+        click.echo(json_module.dumps(output, indent=2))
+        return
+
+    # Display text status
+    _display_text_status(
+        project_path, state, config, config_path, state_path, state_manager
+    )
