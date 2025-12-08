@@ -16,7 +16,7 @@ from quickscale_cli.schema.config_schema import (
     generate_yaml,
     validate_config,
 )
-from quickscale_cli.schema.state_schema import StateManager
+from quickscale_cli.schema.state_schema import QuickScaleState, StateManager
 
 # Available themes for selection
 AVAILABLE_THEMES = [
@@ -35,6 +35,34 @@ AVAILABLE_MODULES = [
 ]
 
 
+def _get_theme_by_index(idx: int) -> str | None:
+    """Get theme ID by index (0-based)"""
+    if 0 <= idx < len(AVAILABLE_THEMES):
+        return AVAILABLE_THEMES[idx][0]
+    return None
+
+
+def _get_theme_by_name(name: str) -> str | None:
+    """Get theme ID by name (case-insensitive)"""
+    for theme_id, _ in AVAILABLE_THEMES:
+        if name.lower() == theme_id.lower():
+            return theme_id
+    return None
+
+
+def _confirm_unimplemented_theme(theme_id: str) -> bool:
+    """Confirm use of unimplemented theme"""
+    if theme_id == "showcase_html":
+        return True
+
+    click.secho(
+        f"\n⚠️  Theme '{theme_id}' is not yet implemented. "
+        "It will be available in a future release.",
+        fg="yellow",
+    )
+    return click.confirm("Use this theme anyway?", default=False)
+
+
 def _select_theme() -> str:
     """Interactive theme selection"""
     click.echo("\n🎨 Select a theme for your project:")
@@ -49,36 +77,64 @@ def _select_theme() -> str:
             show_default=True,
         )
 
-        # Handle numeric choice
+        # Try numeric choice first
+        theme_id = None
         if choice.isdigit():
-            idx = int(choice) - 1
-            if 0 <= idx < len(AVAILABLE_THEMES):
-                theme_id = AVAILABLE_THEMES[idx][0]
-                # Warn about unimplemented themes
-                if theme_id != "showcase_html":
-                    click.secho(
-                        f"\n⚠️  Theme '{theme_id}' is not yet implemented. "
-                        "It will be available in a future release.",
-                        fg="yellow",
-                    )
-                    if not click.confirm("Use this theme anyway?", default=False):
-                        continue
-                return theme_id
+            theme_id = _get_theme_by_index(int(choice) - 1)
         else:
-            # Handle theme name
-            for theme_id, _ in AVAILABLE_THEMES:
-                if choice.lower() == theme_id.lower():
-                    if theme_id != "showcase_html":
-                        click.secho(
-                            f"\n⚠️  Theme '{theme_id}' is not yet implemented. "
-                            "It will be available in a future release.",
-                            fg="yellow",
-                        )
-                        if not click.confirm("Use this theme anyway?", default=False):
-                            break
-                    return theme_id
+            theme_id = _get_theme_by_name(choice)
 
-        click.secho("Invalid choice. Please try again.", fg="red")
+        if theme_id and _confirm_unimplemented_theme(theme_id):
+            return theme_id
+
+        if theme_id is None:
+            click.secho("Invalid choice. Please try again.", fg="red")
+
+
+def _parse_module_choice(part: str, selected: list[str]) -> str | None:
+    """Parse a single module choice (number or name).
+
+    Returns:
+        Module ID if valid, None otherwise
+
+    Raises:
+        ValueError: If choice is invalid
+    """
+    if part.isdigit():
+        idx = int(part) - 1
+        if 0 <= idx < len(AVAILABLE_MODULES):
+            return AVAILABLE_MODULES[idx][0]
+        raise ValueError(f"Invalid number: {part}")
+
+    # Handle module name
+    for module_id, _ in AVAILABLE_MODULES:
+        if part.lower() == module_id.lower():
+            return module_id
+
+    raise ValueError(f"Unknown module: {part}")
+
+
+def _parse_module_selection(choice: str) -> list[str]:
+    """Parse comma-separated module selection.
+
+    Returns:
+        List of unique module IDs
+
+    Raises:
+        ValueError: If any choice is invalid
+    """
+    if not choice.strip():
+        return []
+
+    selected: list[str] = []
+    parts = [p.strip() for p in choice.split(",")]
+
+    for part in parts:
+        module_id = _parse_module_choice(part, selected)
+        if module_id and module_id not in selected:
+            selected.append(module_id)
+
+    return selected
 
 
 def _select_modules() -> list[str]:
@@ -99,33 +155,8 @@ def _select_modules() -> list[str]:
             show_default=False,
         )
 
-        if not choice.strip():
-            return []
-
-        selected = []
         try:
-            parts = [p.strip() for p in choice.split(",")]
-            for part in parts:
-                if part.isdigit():
-                    idx = int(part) - 1
-                    if 0 <= idx < len(AVAILABLE_MODULES):
-                        module_id = AVAILABLE_MODULES[idx][0]
-                        if module_id not in selected:
-                            selected.append(module_id)
-                    else:
-                        raise ValueError(f"Invalid number: {part}")
-                else:
-                    # Handle module name
-                    found = False
-                    for module_id, _ in AVAILABLE_MODULES:
-                        if part.lower() == module_id.lower():
-                            if module_id not in selected:
-                                selected.append(module_id)
-                            found = True
-                            break
-                    if not found:
-                        raise ValueError(f"Unknown module: {part}")
-            return selected
+            return _parse_module_selection(choice)
         except ValueError as e:
             click.secho(f"Invalid selection: {e}. Please try again.", fg="red")
 
@@ -182,6 +213,94 @@ def _get_applied_modules(project_path: Path) -> list[str]:
     return list(state.modules.keys())
 
 
+def _display_current_modules(existing_modules: list[str]) -> None:
+    """Display currently installed modules"""
+    click.echo("\n📦 Current Modules:")
+    if existing_modules:
+        for module in existing_modules:
+            click.secho(f"   ✓ {module} (installed)", fg="green")
+    else:
+        click.echo("   (none installed)")
+
+
+def _get_available_modules(
+    existing_modules: list[str],
+) -> list[tuple[str, str]]:
+    """Get modules that are not yet installed.
+
+    Returns:
+        List of (module_id, description) tuples for available modules
+    """
+    available = []
+    for module_id, description in AVAILABLE_MODULES:
+        if module_id not in existing_modules:
+            available.append((module_id, description))
+    return available
+
+
+def _display_available_modules(available: list[tuple[str, str]]) -> None:
+    """Display available modules for adding"""
+    click.echo("\n📦 Available Modules to Add:")
+    for i, (module_id, description) in enumerate(available, start=1):
+        placeholder = " (placeholder)" if module_id in ("billing", "teams") else ""
+        click.echo(f"  {i}. {module_id} - {description}{placeholder}")
+
+
+def _get_module_by_index_from_available(
+    idx: int, available: list[tuple[str, str]]
+) -> str | None:
+    """Get module ID by index from available list (0-based)."""
+    if 0 <= idx < len(available):
+        return available[idx][0]
+    return None
+
+
+def _get_module_by_name_from_available(
+    name: str, available: list[tuple[str, str]]
+) -> str | None:
+    """Get module ID by name from available list (case-insensitive)."""
+    for module_id, _ in available:
+        if name.lower() == module_id.lower():
+            return module_id
+    return None
+
+
+def _parse_add_module_selection(
+    choice: str, available: list[tuple[str, str]]
+) -> list[str]:
+    """Parse module selection for add mode.
+
+    Returns:
+        List of selected module IDs
+
+    Raises:
+        ValueError: If selection is invalid
+    """
+    if not choice.strip():
+        return []
+
+    selected: list[str] = []
+    parts = [p.strip() for p in choice.split(",")]
+
+    for part in parts:
+        module_id = None
+        if part.isdigit():
+            module_id = _get_module_by_index_from_available(int(part) - 1, available)
+            if module_id is None:
+                raise ValueError(f"Invalid number: {part}")
+        else:
+            module_id = _get_module_by_name_from_available(part, available)
+            if module_id is None:
+                raise ValueError(f"Unknown or already installed module: {part}")
+
+        if module_id not in selected:
+            selected.append(module_id)
+
+    return selected
+
+    return selected
+
+
 def _select_modules_to_add(existing_modules: list[str]) -> list[str]:
     """Interactive module selection for adding to existing project
 
@@ -194,25 +313,16 @@ def _select_modules_to_add(existing_modules: list[str]) -> list[str]:
         List of newly selected module names
 
     """
-    click.echo("\n📦 Current Modules:")
-    if existing_modules:
-        for module in existing_modules:
-            click.secho(f"   ✓ {module} (installed)", fg="green")
-    else:
-        click.echo("   (none installed)")
+    _display_current_modules(existing_modules)
 
-    click.echo("\n📦 Available Modules to Add:")
-    available = []
-    for i, (module_id, description) in enumerate(AVAILABLE_MODULES, start=1):
-        if module_id in existing_modules:
-            continue
-        available.append((module_id, description))
-        placeholder = " (placeholder)" if module_id in ("billing", "teams") else ""
-        click.echo(f"  {len(available)}. {module_id} - {description}{placeholder}")
+    available = _get_available_modules(existing_modules)
 
     if not available:
+        click.echo("\n📦 Available Modules to Add:")
         click.echo("   All modules are already installed!")
         return []
+
+    _display_available_modules(available)
 
     click.echo(
         "\n  Enter numbers separated by commas (e.g., 1,3), or press Enter to skip"
@@ -225,33 +335,8 @@ def _select_modules_to_add(existing_modules: list[str]) -> list[str]:
             show_default=False,
         )
 
-        if not choice.strip():
-            return []
-
-        selected = []
         try:
-            parts = [p.strip() for p in choice.split(",")]
-            for part in parts:
-                if part.isdigit():
-                    idx = int(part) - 1
-                    if 0 <= idx < len(available):
-                        module_id = available[idx][0]
-                        if module_id not in selected:
-                            selected.append(module_id)
-                    else:
-                        raise ValueError(f"Invalid number: {part}")
-                else:
-                    # Handle module name
-                    found = False
-                    for module_id, _ in available:
-                        if part.lower() == module_id.lower():
-                            if module_id not in selected:
-                                selected.append(module_id)
-                            found = True
-                            break
-                    if not found:
-                        raise ValueError(f"Unknown or already installed module: {part}")
-            return selected
+            return _parse_add_module_selection(choice, available)
         except ValueError as e:
             click.secho(f"Invalid selection: {e}. Please try again.", fg="red")
 
@@ -345,6 +430,44 @@ def _handle_add_modules(
     click.echo("  quickscale apply     # Apply configuration to add modules")
 
 
+def _get_project_info_for_reconfig(
+    state: QuickScaleState | None,
+    existing_config: QuickScaleConfig | None,
+    project_path: Path,
+) -> tuple[str, str]:
+    """Get project name and theme for reconfiguration.
+
+    Returns:
+        Tuple of (project_name, current_theme)
+    """
+    if state:
+        return state.project.name, state.project.theme
+    if existing_config:
+        return existing_config.project.name, existing_config.project.theme
+    return project_path.name, "showcase_html"
+
+
+def _collect_existing_modules(
+    project_path: Path, existing_config: QuickScaleConfig | None
+) -> list[str]:
+    """Collect all existing modules from state and config."""
+    applied_modules = _get_applied_modules(project_path)
+    config_modules = list(existing_config.modules.keys()) if existing_config else []
+    return list(set(applied_modules + config_modules))
+
+
+def _display_reconfig_modules_status(
+    all_existing: list[str], applied_modules: list[str]
+) -> None:
+    """Display currently configured modules."""
+    click.echo("\n📦 Module Configuration:")
+    if all_existing:
+        click.echo("   Currently configured modules:")
+        for module in all_existing:
+            status = "(applied)" if module in applied_modules else "(pending)"
+            click.secho(f"   ✓ {module} {status}", fg="green")
+
+
 def _handle_reconfigure(
     project_path: Path, existing_config: QuickScaleConfig | None
 ) -> None:
@@ -371,31 +494,17 @@ def _handle_reconfigure(
         raise click.Abort()
 
     # Get current project info
-    if state:
-        project_name = state.project.name
-        current_theme = state.project.theme
-    elif existing_config:
-        project_name = existing_config.project.name
-        current_theme = existing_config.project.theme
-    else:
-        project_name = project_path.name
-        current_theme = "showcase_html"
+    project_name, current_theme = _get_project_info_for_reconfig(
+        state, existing_config, project_path
+    )
 
     click.echo(f"\n📁 Project: {project_name}")
     click.secho(f"   Theme: {current_theme} (locked after creation)", fg="cyan")
 
     # Get applied modules
     applied_modules = _get_applied_modules(project_path)
-    config_modules = list(existing_config.modules.keys()) if existing_config else []
-    all_existing = list(set(applied_modules + config_modules))
-
-    # Select modules (can add new ones or keep existing)
-    click.echo("\n📦 Module Configuration:")
-    if all_existing:
-        click.echo("   Currently configured modules:")
-        for module in all_existing:
-            status = "(applied)" if module in applied_modules else "(pending)"
-            click.secho(f"   ✓ {module} {status}", fg="green")
+    all_existing = _collect_existing_modules(project_path, existing_config)
+    _display_reconfig_modules_status(all_existing, applied_modules)
 
     # Ask if user wants to add more modules
     if click.confirm("\n   Add more modules?", default=False):
@@ -446,6 +555,114 @@ def _handle_reconfigure(
     click.echo("  quickscale apply     # Apply configuration changes")
 
 
+def _handle_existing_project_mode(add_modules: bool, reconfigure: bool) -> bool:
+    """Handle --add and --reconfigure flags for existing projects.
+
+    Returns:
+        True if handled (should return from plan), False to continue with new project
+    """
+    if not add_modules and not reconfigure:
+        return False
+
+    project_path, existing_config = _detect_existing_project()
+    if project_path is None:
+        click.secho(
+            "\n❌ Not in a QuickScale project directory",
+            fg="red",
+            err=True,
+        )
+        click.echo(
+            "   Run this command from a directory with quickscale.yml or .quickscale/state.yml",
+            err=True,
+        )
+        raise click.Abort()
+
+    if add_modules:
+        _handle_add_modules(project_path, existing_config)
+    else:
+        _handle_reconfigure(project_path, existing_config)
+
+    return True
+
+
+def _validate_new_project_name(name: str | None) -> str:
+    """Validate project name for new projects.
+
+    Returns:
+        Validated project name
+
+    Raises:
+        click.Abort: If name is invalid
+    """
+    if not name:
+        click.secho(
+            "\n❌ Error: PROJECT_NAME is required for new projects",
+            fg="red",
+            err=True,
+        )
+        click.echo("\n💡 Usage examples:", err=True)
+        click.echo(
+            "   quickscale plan myapp              # Create new project", err=True
+        )
+        click.echo(
+            "   quickscale plan --add              # Add modules to existing", err=True
+        )
+        click.echo(
+            "   quickscale plan --reconfigure      # Reconfigure existing", err=True
+        )
+        raise click.Abort()
+
+    if not name.isidentifier():
+        click.secho(
+            f"\n❌ Error: '{name}' is not a valid project name",
+            fg="red",
+            err=True,
+        )
+        click.echo(
+            "   Project name must be a valid Python identifier "
+            "(letters, numbers, underscores, not starting with a number)",
+            err=True,
+        )
+        raise click.Abort()
+
+    return name
+
+
+def _determine_output_path_for_plan(name: str, output: str | None) -> Path:
+    """Determine output path for configuration file."""
+    if output:
+        return Path(output)
+    return Path.cwd() / name / "quickscale.yml"
+
+
+def _check_output_path_exists(output_path: Path) -> None:
+    """Check if output path exists and confirm overwrite."""
+    if not output_path.exists():
+        return
+
+    click.secho(
+        f"\n⚠️  Configuration file already exists: {output_path}",
+        fg="yellow",
+    )
+    if not click.confirm("Overwrite?", default=False):
+        click.echo("❌ Cancelled")
+        raise click.Abort()
+
+
+def _save_config_with_validation(yaml_content: str, output_path: Path) -> None:
+    """Validate and save configuration."""
+    try:
+        validate_config(yaml_content)
+    except Exception as e:
+        click.secho(f"\n❌ Configuration validation failed: {e}", fg="red", err=True)
+        raise click.Abort()
+
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+
+    with open(output_path, "w") as f:
+        f.write(yaml_content)
+
+
 @click.command()
 @click.argument("name", required=False, metavar="PROJECT_NAME")
 @click.option(
@@ -492,90 +709,18 @@ def plan(
       --add          Add new modules to existing configuration
       --reconfigure  Modify Docker options and add modules
     """
-    # Handle --add flag for existing project
-    if add_modules:
-        project_path, existing_config = _detect_existing_project()
-        if project_path is None:
-            click.secho(
-                "\n❌ Not in a QuickScale project directory",
-                fg="red",
-                err=True,
-            )
-            click.echo(
-                "   Run this command from a directory with quickscale.yml or .quickscale/state.yml",
-                err=True,
-            )
-            raise click.Abort()
-        _handle_add_modules(project_path, existing_config)
+    # Handle --add or --reconfigure flags
+    if _handle_existing_project_mode(add_modules, reconfigure):
         return
 
-    # Handle --reconfigure flag for existing project
-    if reconfigure:
-        project_path, existing_config = _detect_existing_project()
-        if project_path is None:
-            click.secho(
-                "\n❌ Not in a QuickScale project directory",
-                fg="red",
-                err=True,
-            )
-            click.echo(
-                "   Run this command from a directory with quickscale.yml or .quickscale/state.yml",
-                err=True,
-            )
-            raise click.Abort()
-        _handle_reconfigure(project_path, existing_config)
-        return
+    # Validate and prepare for new project
+    validated_name = _validate_new_project_name(name)
 
-    # For new project, name is required
-    if not name:
-        click.secho(
-            "\n❌ Error: PROJECT_NAME is required for new projects",
-            fg="red",
-            err=True,
-        )
-        click.echo("\n💡 Usage examples:", err=True)
-        click.echo(
-            "   quickscale plan myapp              # Create new project", err=True
-        )
-        click.echo(
-            "   quickscale plan --add              # Add modules to existing", err=True
-        )
-        click.echo(
-            "   quickscale plan --reconfigure      # Reconfigure existing", err=True
-        )
-        raise click.Abort()
     click.echo("\n🚀 QuickScale Project Planner")
-    click.echo(f"   Creating configuration for: {name}")
+    click.echo(f"   Creating configuration for: {validated_name}")
 
-    # Validate project name
-    if not name.isidentifier():
-        click.secho(
-            f"\n❌ Error: '{name}' is not a valid project name",
-            fg="red",
-            err=True,
-        )
-        click.echo(
-            "   Project name must be a valid Python identifier "
-            "(letters, numbers, underscores, not starting with a number)",
-            err=True,
-        )
-        raise click.Abort()
-
-    # Determine output path
-    if output:
-        output_path = Path(output)
-    else:
-        output_path = Path.cwd() / name / "quickscale.yml"
-
-    # Check if output path exists
-    if output_path.exists():
-        click.secho(
-            f"\n⚠️  Configuration file already exists: {output_path}",
-            fg="yellow",
-        )
-        if not click.confirm("Overwrite?", default=False):
-            click.echo("❌ Cancelled")
-            raise click.Abort()
+    output_path = _determine_output_path_for_plan(validated_name, output)
+    _check_output_path_exists(output_path)
 
     # Interactive wizard
     theme = _select_theme()
@@ -590,7 +735,7 @@ def plan(
 
     config = QuickScaleConfig(
         version="1",
-        project=ProjectConfig(name=name, theme=theme),
+        project=ProjectConfig(name=validated_name, theme=theme),
         modules=modules,
         docker=DockerConfig(start=docker_start, build=docker_build),
     )
@@ -610,26 +755,15 @@ def plan(
         click.echo("❌ Cancelled")
         raise click.Abort()
 
-    # Validate before saving (sanity check)
-    try:
-        validate_config(yaml_content)
-    except Exception as e:
-        click.secho(f"\n❌ Configuration validation failed: {e}", fg="red", err=True)
-        raise click.Abort()
-
-    # Create output directory if needed
-    output_path.parent.mkdir(parents=True, exist_ok=True)
-
-    # Save configuration
-    with open(output_path, "w") as f:
-        f.write(yaml_content)
+    # Save with validation
+    _save_config_with_validation(yaml_content, output_path)
 
     click.secho(f"\n✅ Configuration saved to {output_path}", fg="green", bold=True)
 
     # Next steps
     click.echo("\n📋 Next steps:")
-    if output_path.parent.name == name:
-        click.echo(f"  cd {name}")
+    if output_path.parent.name == validated_name:
+        click.echo(f"  cd {validated_name}")
         click.echo("  quickscale apply")
     else:
         click.echo(f"  quickscale apply {output_path}")

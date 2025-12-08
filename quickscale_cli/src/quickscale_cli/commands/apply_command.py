@@ -4,6 +4,7 @@ Implements `quickscale apply [config]` - executes quickscale.yml configuration
 """
 
 import subprocess
+from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
 
@@ -26,6 +27,19 @@ from quickscale_core.generator import ProjectGenerator
 from quickscale_core.manifest import ModuleManifest
 from quickscale_core.manifest.loader import get_manifest_for_module
 from quickscale_core.settings_manager import apply_mutable_config_changes
+
+
+@dataclass
+class ApplyContext:
+    """Context object for the apply command execution."""
+
+    config_path: Path
+    qs_config: QuickScaleConfig
+    output_path: Path
+    state_manager: StateManager
+    existing_state: QuickScaleState | None
+    manifests: dict[str, ModuleManifest]
+    delta: ConfigDelta
 
 
 def _run_command(
@@ -590,6 +604,99 @@ def _display_next_steps(
     click.echo("\n  Visit: http://localhost:8000")
 
 
+def _prepare_apply_context(config_path: Path) -> ApplyContext:
+    """Prepare all context needed for apply execution.
+
+    Returns:
+        ApplyContext with all loaded and computed data
+    """
+    # Load and validate configuration
+    qs_config = _load_and_validate_config(config_path)
+
+    # Determine output path
+    output_path = _determine_output_path(config_path, qs_config.project.name)
+
+    # Load existing state if project exists
+    state_manager = StateManager(output_path)
+    existing_state = state_manager.load() if output_path.exists() else None
+
+    # Load manifests for modules (needed for config change detection)
+    manifests: dict[str, ModuleManifest] = {}
+    if existing_state and existing_state.modules:
+        manifests = _load_module_manifests(
+            output_path, list(existing_state.modules.keys())
+        )
+
+    # Compute delta
+    delta = compute_delta(qs_config, existing_state, manifests)
+
+    return ApplyContext(
+        config_path=config_path,
+        qs_config=qs_config,
+        output_path=output_path,
+        state_manager=state_manager,
+        existing_state=existing_state,
+        manifests=manifests,
+        delta=delta,
+    )
+
+
+def _execute_apply_steps(
+    ctx: ApplyContext, force: bool, no_docker: bool, no_modules: bool
+) -> None:
+    """Execute the apply steps after confirmation."""
+    click.echo("\n" + "=" * 50)
+    click.echo("🔧 Starting apply process...")
+    click.echo("=" * 50)
+
+    # Generate project (only for new projects)
+    project_generated = False
+    if ctx.existing_state is None:
+        _generate_new_project(ctx.qs_config, ctx.output_path, force)
+        project_generated = True
+    else:
+        click.echo("⏭️  Skipping project generation (project already exists)")
+
+    # Initialize git (only for new projects)
+    if project_generated:
+        _init_git_with_config(ctx.output_path)
+
+    # Embed modules
+    modules_to_embed = (
+        ctx.delta.modules_to_add
+        if ctx.existing_state
+        else list(ctx.qs_config.modules.keys())
+    )
+    embedded_modules = _embed_modules_step(
+        ctx.output_path, modules_to_embed, no_modules, ctx.existing_state
+    )
+
+    # Run post-generation steps
+    _run_post_generation_steps(ctx.output_path)
+
+    # Apply mutable configuration changes
+    if ctx.existing_state and ctx.delta.has_mutable_config_changes:
+        if not _apply_mutable_config(ctx.output_path, ctx.delta, ctx.manifests):
+            click.secho("⚠️  Some config changes failed to apply", fg="yellow")
+
+    # Start Docker
+    if not no_docker and ctx.qs_config.docker.start:
+        if not _start_docker(ctx.output_path, ctx.qs_config.docker.build):
+            click.secho("⚠️  Docker start failed, continuing...", fg="yellow")
+
+    # Save state
+    _save_project_state(
+        ctx.output_path,
+        ctx.qs_config,
+        ctx.existing_state,
+        embedded_modules,
+        ctx.delta,
+    )
+
+    # Display next steps
+    _display_next_steps(ctx.output_path, ctx.qs_config, no_docker)
+
+
 @click.command()
 @click.argument(
     "config",
@@ -637,81 +744,22 @@ def apply(config: str, force: bool, no_docker: bool, no_modules: bool) -> None:
       6. Run migrations
       7. Start Docker (if configured)
     """
-    config_path = Path(config)
-
-    # Load and validate configuration
-    qs_config = _load_and_validate_config(config_path)
-
-    # Determine output path
-    output_path = _determine_output_path(config_path, qs_config.project.name)
-
-    # Load existing state if project exists
-    state_manager = StateManager(output_path)
-    existing_state = state_manager.load() if output_path.exists() else None
-
-    # Load manifests for modules (needed for config change detection)
-    manifests: dict[str, ModuleManifest] = {}
-    if existing_state and existing_state.modules:
-        manifests = _load_module_manifests(
-            output_path, list(existing_state.modules.keys())
-        )
-
-    # Compute delta
-    delta = compute_delta(qs_config, existing_state, manifests)
+    # Prepare context
+    ctx = _prepare_apply_context(Path(config))
 
     # Display configuration summary
-    _display_config_summary(qs_config)
+    _display_config_summary(ctx.qs_config)
 
     # Handle delta and existing state
-    _handle_delta_and_existing_state(delta, existing_state)
+    _handle_delta_and_existing_state(ctx.delta, ctx.existing_state)
 
     # Check output directory
-    _check_output_directory(output_path, existing_state, force)
+    _check_output_directory(ctx.output_path, ctx.existing_state, force)
 
     # Confirm before proceeding
     if not click.confirm("\n❓ Proceed with apply?", default=True):
         click.echo("❌ Cancelled")
         raise click.Abort()
 
-    click.echo("\n" + "=" * 50)
-    click.echo("🔧 Starting apply process...")
-    click.echo("=" * 50)
-
-    # Generate project (only for new projects)
-    project_generated = False
-    if existing_state is None:
-        _generate_new_project(qs_config, output_path, force)
-        project_generated = True
-    else:
-        click.echo("⏭️  Skipping project generation (project already exists)")
-
-    # Initialize git (only for new projects)
-    if project_generated:
-        _init_git_with_config(output_path)
-
-    # Embed modules
-    modules_to_embed = (
-        delta.modules_to_add if existing_state else list(qs_config.modules.keys())
-    )
-    embedded_modules = _embed_modules_step(
-        output_path, modules_to_embed, no_modules, existing_state
-    )
-
-    # Run post-generation steps
-    _run_post_generation_steps(output_path)
-
-    # Apply mutable configuration changes
-    if existing_state and delta.has_mutable_config_changes:
-        if not _apply_mutable_config(output_path, delta, manifests):
-            click.secho("⚠️  Some config changes failed to apply", fg="yellow")
-
-    # Start Docker
-    if not no_docker and qs_config.docker.start:
-        if not _start_docker(output_path, qs_config.docker.build):
-            click.secho("⚠️  Docker start failed, continuing...", fg="yellow")
-
-    # Save state
-    _save_project_state(output_path, qs_config, existing_state, embedded_modules, delta)
-
-    # Display next steps
-    _display_next_steps(output_path, qs_config, no_docker)
+    # Execute apply steps
+    _execute_apply_steps(ctx, force, no_docker, no_modules)

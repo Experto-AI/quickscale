@@ -50,9 +50,9 @@ For complete definitions, see **[GLOSSARY.md](./GLOSSARY.md)**. Here are the ess
 ┌─────────────────────┐                    ┌──────────────────────┐
 │ Evaluate QuickScale │                    │  What's your goal?   │
 │ for my needs        │                    └──────────────────────┘
-└─────────────────────┘                              │
-      │                                              ▼
-      ▼                                    ┌─────────┴──────────┐
+└─────────────────────┘                               │
+      │                                               ▼
+      ▼                                    ┌──────────┴─────────┐
  READ (5-10 min):                          │                    │
  ├─ README.md                              ▼                    ▼
  ├─ docs/overview/                    [ADD FEATURE]      [DEPLOY PROJECT]
@@ -64,8 +64,8 @@ For complete definitions, see **[GLOSSARY.md](./GLOSSARY.md)**. Here are the ess
  THEN DECIDE:                         │  contributing.md  └─ development.md
  ├─ Build a project → ─────┐          └─ contrib/code.md       │
  └─ Learn more → [continue]│               │                   ▼
-                            │               ▼              THEN ACT:
-      ┌─────────────────────┘          THEN ACT:          └─ Deploy!
+                           │               ▼              THEN ACT:
+      ┌────────────────────┘           THEN ACT:          └─ Deploy!
       │                                └─ Implement!
       ▼
 ┌──────────────────────┐
@@ -232,18 +232,18 @@ See: [development.md - Prerequisites](./docs/technical/development.md#prerequisi
 
 ```
                     START_HERE.md (you are here)
-                            │
-              ┌─────────────┼─────────────┐
-              │             │             │
-              ▼             ▼             ▼
+                              │
+            ┌─────────────────┼─────────────┐
+            │                 │             │
+            ▼                 ▼             ▼
         [Foundation]   [Task-Specific] [Deep Dives]
-              │             │             │
-    ┌─────────┴─────┐      │             │
-    ▼               ▼      ▼             ▼
-decisions.md  scaffolding.md  roadmap.md  contrib/*
-    │               │      │             │
-    └───────┬───────┘      │             │
-            ▼              ▼             ▼
+            │                 │             │
+  ┌─────────┴─────┐           │             │
+  ▼               ▼           ▼             ▼
+decisions.md scaffolding.md roadmap.md   contrib/*
+  │               │           │             │
+  └───────┬───────┘           │             │
+          ▼                   ▼             ▼
        GLOSSARY.md    user_manual.md  testing.md
        (terms)        (commands)      (patterns)
 ```

@@ -64,6 +64,55 @@ def _parse_config_section(
     return options
 
 
+def _parse_yaml_content(yaml_content: str, module_name: str | None) -> dict[str, Any]:
+    """Parse YAML content and return data dictionary"""
+    try:
+        data = yaml.safe_load(yaml_content)
+    except yaml.YAMLError as e:
+        raise ManifestError(f"Invalid YAML syntax: {e}", module_name) from e
+
+    if not isinstance(data, dict):
+        raise ManifestError("Manifest must be a YAML mapping", module_name)
+
+    return data
+
+
+def _validate_required_string_field(
+    data: dict[str, Any], field: str, module_name: str | None
+) -> str:
+    """Validate a required string field exists and is non-empty"""
+    if field not in data:
+        raise ManifestError(f"Missing required field '{field}'", module_name)
+
+    value = data[field]
+    if not isinstance(value, str) or not value:
+        raise ManifestError(f"'{field}' must be a non-empty string", module_name)
+
+    return value
+
+
+def _validate_list_field(
+    data: dict[str, Any], field: str, module_name: str | None
+) -> list[str]:
+    """Validate an optional list field"""
+    value = data.get(field, [])
+    if not isinstance(value, list):
+        raise ManifestError(f"'{field}' must be a list", module_name)
+    return value
+
+
+def _validate_mutable_options(
+    mutable_options: dict[str, ConfigOption], module_name: str | None
+) -> None:
+    """Validate that mutable options have django_setting defined"""
+    for opt_name, option in mutable_options.items():
+        if not option.django_setting:
+            raise ManifestError(
+                f"Mutable option '{opt_name}' must have 'django_setting' defined",
+                module_name,
+            )
+
+
 def load_manifest(yaml_content: str, module_name: str | None = None) -> ModuleManifest:
     """Load and validate a module manifest from YAML content
 
@@ -78,27 +127,11 @@ def load_manifest(yaml_content: str, module_name: str | None = None) -> ModuleMa
         ManifestError: If validation fails
 
     """
-    try:
-        data = yaml.safe_load(yaml_content)
-    except yaml.YAMLError as e:
-        raise ManifestError(f"Invalid YAML syntax: {e}", module_name) from e
-
-    if not isinstance(data, dict):
-        raise ManifestError("Manifest must be a YAML mapping", module_name)
+    data = _parse_yaml_content(yaml_content, module_name)
 
     # Validate required fields
-    if "name" not in data:
-        raise ManifestError("Missing required field 'name'", module_name)
-    if "version" not in data:
-        raise ManifestError("Missing required field 'version'", module_name)
-
-    name = data["name"]
-    version = data["version"]
-
-    if not isinstance(name, str) or not name:
-        raise ManifestError("'name' must be a non-empty string", module_name)
-    if not isinstance(version, str) or not version:
-        raise ManifestError("'version' must be a non-empty string", module_name)
+    name = _validate_required_string_field(data, "name", module_name)
+    version = _validate_required_string_field(data, "version", module_name)
 
     # Parse config section
     config_data = data.get("config", {})
@@ -107,24 +140,11 @@ def load_manifest(yaml_content: str, module_name: str | None = None) -> ModuleMa
 
     mutable_options = _parse_config_section(config_data, "mutable")
     immutable_options = _parse_config_section(config_data, "immutable")
+    _validate_mutable_options(mutable_options, module_name)
 
-    # Validate mutable options have django_setting
-    for opt_name, option in mutable_options.items():
-        if not option.django_setting:
-            raise ManifestError(
-                f"Mutable option '{opt_name}' must have 'django_setting' defined",
-                module_name,
-            )
-
-    # Parse dependencies
-    dependencies = data.get("dependencies", [])
-    if not isinstance(dependencies, list):
-        raise ManifestError("'dependencies' must be a list", module_name)
-
-    # Parse django_apps
-    django_apps = data.get("django_apps", [])
-    if not isinstance(django_apps, list):
-        raise ManifestError("'django_apps' must be a list", module_name)
+    # Parse list fields
+    dependencies = _validate_list_field(data, "dependencies", module_name)
+    django_apps = _validate_list_field(data, "django_apps", module_name)
 
     return ModuleManifest(
         name=name,

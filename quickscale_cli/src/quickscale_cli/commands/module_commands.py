@@ -26,6 +26,164 @@ from .module_config import (
 AVAILABLE_MODULES = ["auth", "billing", "teams", "blog", "listings"]
 
 
+def _validate_git_environment() -> bool:
+    """Validate git repository state for module operations.
+
+    Returns:
+        True if valid, False otherwise
+    """
+    if not is_git_repo():
+        click.secho("❌ Error: Not a git repository", fg="red", err=True)
+        click.echo("\n💡 Tip: Run 'git init' to initialize a git repository", err=True)
+        return False
+
+    if not is_working_directory_clean():
+        click.secho(
+            "❌ Error: Working directory has uncommitted changes",
+            fg="red",
+            err=True,
+        )
+        click.echo(
+            "\n💡 Tip: Commit or stash your changes before embedding modules",
+            err=True,
+        )
+        return False
+
+    return True
+
+
+def _validate_module_not_exists(project_path: Path, module: str) -> bool:
+    """Check if module already exists.
+
+    Returns:
+        True if module doesn't exist, False if it does
+    """
+    module_dir = project_path / "modules" / module
+    if module_dir.exists():
+        click.secho(
+            f"❌ Error: Module '{module}' already exists at {module_dir}",
+            fg="red",
+            err=True,
+        )
+        click.echo("\n💡 Tip: Remove the existing module directory first", err=True)
+        return False
+    return True
+
+
+def _validate_remote_branch(remote: str, branch: str, module: str) -> bool:
+    """Check if branch exists on remote.
+
+    Returns:
+        True if branch exists, False otherwise
+    """
+    click.echo(f"🔍 Checking if {branch} exists on remote...")
+
+    if not check_remote_branch_exists(remote, branch):
+        click.secho(
+            f"❌ Error: Module '{module}' is not yet implemented",
+            fg="red",
+            err=True,
+        )
+        click.echo(
+            f"\n💡 The '{module}' module infrastructure is ready but contains "
+            "only placeholder files.",
+            err=True,
+        )
+        click.echo(
+            f"\n📖 Branch '{branch}' does not exist on remote: {remote}", err=True
+        )
+        return False
+    return True
+
+
+def _check_auth_module_migrations(non_interactive: bool) -> bool:
+    """Check if auth module can be embedded (no existing migrations).
+
+    Returns:
+        True if safe to proceed, False if blocked
+    """
+    if not has_migrations_been_run():
+        return True
+
+    click.secho(
+        "\n⚠️  Warning: Django migrations have already been run!",
+        fg="yellow",
+        bold=True,
+    )
+    click.echo("\n❌ The auth module changes the User model (AUTH_USER_MODEL).")
+    click.echo(
+        "   Embedding it after running migrations will cause migration conflicts."
+    )
+
+    if non_interactive:
+        click.secho(
+            "\n❌ Cannot embed auth module in non-interactive mode when "
+            "migrations exist.",
+            fg="red",
+            err=True,
+        )
+        click.echo(
+            "   Please reset the database first or embed auth module before "
+            "running migrations.",
+            err=True,
+        )
+        return False
+
+    click.echo(
+        "\n❓ Do you want to continue anyway? "
+        "(You'll need to reset the database manually)"
+    )
+    if not click.confirm("Continue?", default=False):
+        click.echo("\n❌ Embedding cancelled")
+        return False
+
+    return True
+
+
+def _perform_module_embed(
+    project_path: Path,
+    module: str,
+    remote: str,
+    branch: str,
+    config: dict[str, Any],
+) -> bool:
+    """Execute the actual module embedding.
+
+    Returns:
+        True if successful, False otherwise
+    """
+    prefix = f"modules/{module}"
+    click.echo(f"\n📦 Embedding {module} module from {branch}...")
+
+    run_git_subtree_add(prefix=prefix, remote=remote, branch=branch, squash=True)
+
+    # Update configuration tracking
+    add_module(
+        module_name=module,
+        prefix=prefix,
+        branch=branch,
+        version="v0.72.0",
+    )
+
+    # Apply module-specific configuration
+    if module in MODULE_CONFIGURATORS and config:
+        _, applier = MODULE_CONFIGURATORS[module]
+        applier(project_path, config)
+
+    # Install dependencies for modules that need it
+    if module in ["auth", "blog", "listings"]:
+        if not _install_module_dependencies(project_path, module):
+            return False
+
+    # Success message
+    module_dir = project_path / "modules" / module
+    click.secho(f"\n✅ Module '{module}' embedded successfully!", fg="green", bold=True)
+    click.echo(f"   Location: {module_dir}")
+    click.echo(f"   Branch: {branch}")
+
+    return True
+
+
 def embed_module(
     module: str,
     project_path: Path | None = None,
@@ -62,91 +220,20 @@ def embed_module(
 
         os.chdir(project_path)
 
-        # Validate git repository
-        if not is_git_repo():
-            click.secho("❌ Error: Not a git repository", fg="red", err=True)
-            click.echo(
-                "\n💡 Tip: Run 'git init' to initialize a git repository", err=True
-            )
+        # Validation steps
+        if not _validate_git_environment():
             return False
 
-        # Check working directory is clean
-        if not is_working_directory_clean():
-            click.secho(
-                "❌ Error: Working directory has uncommitted changes",
-                fg="red",
-                err=True,
-            )
-            click.echo(
-                "\n💡 Tip: Commit or stash your changes before embedding modules",
-                err=True,
-            )
+        if not _validate_module_not_exists(project_path, module):
             return False
 
-        # Check if module already exists
-        module_dir = project_path / "modules" / module
-        if module_dir.exists():
-            click.secho(
-                f"❌ Error: Module '{module}' already exists at {module_dir}",
-                fg="red",
-                err=True,
-            )
-            click.echo("\n💡 Tip: Remove the existing module directory first", err=True)
-            return False
-
-        # Check if branch exists on remote
         branch = f"splits/{module}-module"
-        click.echo(f"🔍 Checking if {branch} exists on remote...")
-
-        if not check_remote_branch_exists(remote, branch):
-            click.secho(
-                f"❌ Error: Module '{module}' is not yet implemented",
-                fg="red",
-                err=True,
-            )
-            click.echo(
-                f"\n💡 The '{module}' module infrastructure is ready but contains "
-                "only placeholder files.",
-                err=True,
-            )
-            click.echo(
-                f"\n📖 Branch '{branch}' does not exist on remote: {remote}", err=True
-            )
+        if not _validate_remote_branch(remote, branch, module):
             return False
 
-        # Check if migrations have already been run (only for auth module)
-        if module == "auth" and has_migrations_been_run():
-            click.secho(
-                "\n⚠️  Warning: Django migrations have already been run!",
-                fg="yellow",
-                bold=True,
-            )
-            click.echo("\n❌ The auth module changes the User model (AUTH_USER_MODEL).")
-            click.echo(
-                "   Embedding it after running migrations will cause migration conflicts."
-            )
-
-            if non_interactive:
-                click.secho(
-                    "\n❌ Cannot embed auth module in non-interactive mode when "
-                    "migrations exist.",
-                    fg="red",
-                    err=True,
-                )
-                click.echo(
-                    "   Please reset the database first or embed auth module before "
-                    "running migrations.",
-                    err=True,
-                )
-                return False
-
-            click.echo(
-                "\n❓ Do you want to continue anyway? "
-                "(You'll need to reset the database manually)"
-            )
-            if not click.confirm("Continue?", default=False):
-                click.echo("\n❌ Embedding cancelled")
-                return False
+        # Auth module special check
+        if module == "auth" and not _check_auth_module_migrations(non_interactive):
+            return False
 
         # Interactive module configuration
         config: dict[str, Any] = {}
@@ -154,38 +241,8 @@ def embed_module(
             configurator, applier = MODULE_CONFIGURATORS[module]
             config = configurator(non_interactive=non_interactive)
 
-        # Embed module via git subtree
-        prefix = f"modules/{module}"
-        click.echo(f"\n📦 Embedding {module} module from {branch}...")
-
-        run_git_subtree_add(prefix=prefix, remote=remote, branch=branch, squash=True)
-
-        # Update configuration tracking
-        add_module(
-            module_name=module,
-            prefix=prefix,
-            branch=branch,
-            version="v0.72.0",
-        )
-
-        # Apply module-specific configuration
-        if module in MODULE_CONFIGURATORS and config:
-            _, applier = MODULE_CONFIGURATORS[module]
-            applier(project_path, config)
-
-        # Install dependencies for modules that need it
-        if module in ["auth", "blog", "listings"]:
-            if not _install_module_dependencies(project_path, module):
-                return False
-
-        # Success message
-        click.secho(
-            f"\n✅ Module '{module}' embedded successfully!", fg="green", bold=True
-        )
-        click.echo(f"   Location: {module_dir}")
-        click.echo(f"   Branch: {branch}")
-
-        return True
+        # Perform embedding
+        return _perform_module_embed(project_path, module, remote, branch, config)
 
     except GitError as e:
         click.secho(f"❌ Git error: {e}", fg="red", err=True)
@@ -322,6 +379,58 @@ def _print_installation_error(
     click.echo("   4. poetry run python manage.py migrate", err=True)
 
 
+def _validate_update_environment() -> None:
+    """Validate git environment for update command.
+
+    Raises:
+        click.Abort: If validation fails
+    """
+    if not is_git_repo():
+        click.secho("❌ Error: Not a git repository", fg="red", err=True)
+        click.echo("\n💡 Tip: This command must be run from a git repository", err=True)
+        raise click.Abort()
+
+    if not is_working_directory_clean():
+        click.secho(
+            "❌ Error: Working directory has uncommitted changes",
+            fg="red",
+            err=True,
+        )
+        click.echo(
+            "\n💡 Tip: Commit or stash your changes before updating modules",
+            err=True,
+        )
+        raise click.Abort()
+
+
+def _update_single_module(
+    name: str, info: Any, default_remote: str, no_preview: bool
+) -> None:
+    """Update a single module via git subtree pull."""
+    click.echo(f"\n📥 Updating {name} module...")
+
+    try:
+        output = run_git_subtree_pull(
+            prefix=info.prefix,
+            remote=default_remote,
+            branch=info.branch,
+            squash=True,
+        )
+
+        # Update version in config
+        update_module_version(name, "v0.62.0")  # Placeholder version
+
+        click.secho(f"✅ Updated {name} successfully", fg="green")
+
+        if output and not no_preview:
+            click.echo("\n📋 Changes summary:")
+            click.echo(output[:500])  # Show first 500 chars
+
+    except GitError as e:
+        click.secho(f"❌ Failed to update {name}: {e}", fg="red", err=True)
+        click.echo(f"💡 Tip: Check for conflicts in modules/{name}/", err=True)
+
+
 @click.command()
 @click.option(
     "--no-preview",
@@ -345,26 +454,7 @@ def update(no_preview: bool) -> None:
       - Updates the installed version in config after successful update
     """
     try:
-        # Validate git repository
-        if not is_git_repo():
-            click.secho("❌ Error: Not a git repository", fg="red", err=True)
-            click.echo(
-                "\n💡 Tip: This command must be run from a git repository", err=True
-            )
-            raise click.Abort()
-
-        # Check working directory is clean
-        if not is_working_directory_clean():
-            click.secho(
-                "❌ Error: Working directory has uncommitted changes",
-                fg="red",
-                err=True,
-            )
-            click.echo(
-                "\n�� Tip: Commit or stash your changes before updating modules",
-                err=True,
-            )
-            raise click.Abort()
+        _validate_update_environment()
 
         # Load configuration
         config = load_config()
@@ -391,29 +481,7 @@ def update(no_preview: bool) -> None:
 
         # Update each module
         for name, info in config.modules.items():
-            click.echo(f"\n📥 Updating {name} module...")
-
-            try:
-                output = run_git_subtree_pull(
-                    prefix=info.prefix,
-                    remote=config.default_remote,
-                    branch=info.branch,
-                    squash=True,
-                )
-
-                # Update version in config
-                update_module_version(name, "v0.62.0")  # Placeholder version
-
-                click.secho(f"✅ Updated {name} successfully", fg="green")
-
-                if output and not no_preview:
-                    click.echo("\n📋 Changes summary:")
-                    click.echo(output[:500])  # Show first 500 chars
-
-            except GitError as e:
-                click.secho(f"❌ Failed to update {name}: {e}", fg="red", err=True)
-                click.echo(f"💡 Tip: Check for conflicts in modules/{name}/", err=True)
-                continue
+            _update_single_module(name, info, config.default_remote, no_preview)
 
         click.secho("\n🎉 Module update complete!", fg="green", bold=True)
 
