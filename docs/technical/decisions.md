@@ -168,7 +168,7 @@ myproject/
    - Foundation for custom development
 
 2. **Vertical Themes** — Complete applications for specific industries
-   - `real_estate` — Property listings, React-based (v0.72.0, after plan/apply)
+   - `crm` — CRM application, React-based (v0.74.0)
    - `saas_starter` — SaaS with billing/teams (future)
    - Pre-configured modules, production-ready
    - Can be used as-is or further enhanced
@@ -189,9 +189,9 @@ quickscale plan myproject
 quickscale apply
 
 # Create project with vertical theme (complete application)
-quickscale plan myrealestate
-# → Select theme: real_estate
-# → Modules pre-configured (listings auto-embedded)
+quickscale plan mycrm
+# → Select theme: crm
+# → Modules pre-configured (crm auto-embedded)
 quickscale apply
 ```
 
@@ -207,14 +207,14 @@ quickscale_core/generator/templates/
     │   ├── templates/
     │   ├── static/
     │   └── package.json
-    ├── showcase_react/        # React + TypeScript + Vite (planned, via real_estate)
+    ├── showcase_react/        # React + TypeScript + Vite (planned, via crm)
     │   ├── frontend/
     │   │   ├── src/
     │   │   └── vite.config.ts
     │   └── package.json
     #
     # Vertical Themes (complete applications)
-    └── real_estate/           # Property listings, React-based (v0.72.0)
+    └── crm/                   # CRM application, React-based (v0.74.0)
         ├── frontend/          # React + Vite application
         │   ├── src/
         │   │   ├── components/
@@ -224,8 +224,8 @@ quickscale_core/generator/templates/
         │   ├── serializers.py.j2
         │   └── views.py.j2
         ├── templates/         # Django templates (React entry point)
-        ├── models.py.j2       # Property model (extends AbstractListing)
-        ├── views.py.j2        # Property views
+        ├── models.py.j2       # CRM models (extends core)
+        ├── views.py.j2        # CRM views
         └── README.md          # Vertical documentation
 ```
 
@@ -236,7 +236,7 @@ quickscale_core/generator/templates/
 | **Purpose** | Empty foundation | Complete application |
 | **Modules** | None (embed later) | Pre-configured |
 | **Use case** | Custom development | Production-ready or enhance |
-| **Examples** | showcase_html, showcase_react | real_estate, job_board |
+| **Examples** | showcase_html, showcase_react | crm, job_board |
 | **Customization** | Build from scratch | Modify existing features |
 
 
@@ -771,31 +771,6 @@ Other documents (README.md, roadmap.md, scaffolding.md, commercial.md) MUST refe
 - ✅ `quickscale update` - Update installed modules
 - ✅ `quickscale remove <module>` - Remove embedded module
 - ✅ `quickscale push --module <name>` - Contribute module improvements
-
-**v0.63.0-v0.74.0 - Core Module Track:**
-- ✅ `quickscale_modules.auth` - Authentication module core (v0.63.0)
-- ✅ `quickscale_modules.blog` - Blog module with Markdown, categories, tags, RSS (v0.66.0)
-- ✅ `quickscale_modules.listings` - Generic listings base model (v0.67.0)
-- ✅ Plan/Apply System - Terraform-style configuration (v0.68.0-v0.71.0)
-- 📋 Real Estate Theme - First vertical theme, React-based (v0.72.0)
-- 📋 `quickscale_modules.billing` - Stripe billing module (v0.73.0)
-- 📋 `quickscale_modules.teams` - Teams/multi-tenancy module (v0.74.0)
-
-**v0.75.0 - Additional Themes:**
-- 📋 HTMX theme with Alpine.js (v0.75.0)
-
-**v0.76.0 - Cross-Theme Module:**
-- 📋 `quickscale_modules.notifications` - Email infrastructure for all themes (v0.76.0)
-
-**v0.77.0 - Advanced Module Management:**
-- 📋 `quickscale update --all` - Batch update all modules
-- 📋 `quickscale list-modules` - Discover available modules
-- 📋 Enhanced conflict handling and progress indicators
-
-**v0.78.0 - Module Workflow Validation:**
-- 📋 Real-world validation of module updates across multiple projects
-- 📋 Safety automation to ensure user code is untouched during updates
-- 📋 Documented rollback procedures and case studies
 
 **Post-MVP (Future):**
 - ❌ `quickscale validate` - YAML configuration validation (requires config system)

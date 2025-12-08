@@ -169,4 +169,54 @@ Starting with **v0.73.0**, releases will follow a streamlined process:
 
 **Last Updated**: 2025-12-07
 **Current Release**: v0.72.0
-**Next Release**: v0.73.0 (Real Estate Theme - in progress)
+**Next Release**: v0.73.0 (CRM Module - in progress)
+
+---
+
+## Detailed Release History
+
+### v0.67.0: Listings Module — ✅ Complete
+
+See [release-v0.67.0-implementation.md](../releases-archive/release-v0.67.0-implementation.md) for details.
+
+---
+
+### v0.68.0: Plan/Apply System — Core Commands
+
+**Status**: ✅ Complete
+
+See [release-v0.68.0-implementation.md](../releases-archive/release-v0.68.0-implementation.md) for details.
+
+---
+
+### v0.69.0: Plan/Apply System — State Management
+
+**Status**: ✅ Complete
+
+Terraform-style state management with incremental applies. See [release-v0.69.0-implementation.md](../releases-archive/release-v0.69.0-implementation.md).
+
+---
+
+### v0.70.0: Plan/Apply System - Existing Project Support
+
+**Status**: ✅ Complete — 2025-12-19
+
+See [release-v0.70.0-implementation.md](../releases-archive/release-v0.70.0-implementation.md).
+
+---
+
+### v0.71.0: Plan/Apply System - Module Manifests & Config Mutability
+
+**Status**: ✅ Complete — 2025-12-04
+
+See [release-v0.71.0-implementation.md](../releases-archive/release-v0.71.0-implementation.md) and [decisions.md: Module Manifest Architecture](./decisions.md#module-manifest-architecture).
+
+---
+
+### v0.72.0: Plan/Apply Functionality Cleanup
+
+**Status**: ✅ Complete
+
+See [release-v0.72.0-review.md](../releases-archive/release-v0.72.0-review.md).
+
+---

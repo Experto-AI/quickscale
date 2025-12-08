@@ -2,6 +2,7 @@
 
 See docs/releases/ for detailed release notes.
 
+- v0.72.0 — 2025-12-07 — Plan/Apply Cleanup (removed legacy init/embed commands, full transition to plan/apply)
 - v0.71.0 — 2025-06-25 — Module manifests & config mutability (Plan/Apply system complete)
 - v0.70.0 — 2025-12-19 — Existing project support (status, plan --add, plan --reconfigure)
 - v0.69.0 — 2025-12-03 — State management and incremental applies
