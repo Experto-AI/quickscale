@@ -1,0 +1,50 @@
+# CRM Module Manifest
+# Defines configuration options and their mutability for the CRM module
+# See decisions.md §Module Manifest Architecture for schema specification
+
+name: crm
+version: "0.73.0"
+description: "Lightweight CRM module with contacts, companies, deals, and pipeline management"
+
+config:
+  # Mutable options - can be changed after embed via quickscale apply
+  # These update Django settings.py automatically
+  mutable:
+    enable_api:
+      type: boolean
+      default: true
+      description: "Enable REST API endpoints at /api/crm/"
+
+    deals_per_page:
+      type: integer
+      default: 25
+      django_setting: CRM_DEALS_PER_PAGE
+      description: "Number of deals per page in list views"
+
+    contacts_per_page:
+      type: integer
+      default: 25
+      django_setting: CRM_CONTACTS_PER_PAGE
+      description: "Number of contacts per page in list views"
+
+  # Immutable options - locked at embed time, require remove + re-embed to change
+  immutable:
+    default_pipeline_stages:
+      type: list
+      default:
+        - Prospecting
+        - Negotiation
+        - Closed-Won
+        - Closed-Lost
+      description: "Default pipeline stages created during initial migration"
+
+# Dependencies required by this module
+dependencies:
+  - djangorestframework>=3.15.0
+  - django-filter>=24.0
+
+# Django apps that must be in INSTALLED_APPS
+django_apps:
+  - rest_framework
+  - django_filters
+  - quickscale_modules_crm
