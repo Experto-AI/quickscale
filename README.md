@@ -368,7 +368,7 @@ poetry run mypy src/
 
 ## Dependencies
 
-- Django >= 5.0
+- Django >= 6.0
 - django-markdownx ^4.0.0
 - Pillow ^10.0.0
 
