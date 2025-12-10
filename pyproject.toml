@@ -3,7 +3,7 @@ name = "quickscale-module-blog"
 version = "0.66.0"
 description = "QuickScale blog module with Markdown support and RSS feeds"
 authors = ["Experto-AI <contact@experto.ai>"]
-license = "MIT"
+license = "Apache-2.0"
 readme = "README.md"
 packages = [{include = "quickscale_modules_blog", from = "src"}]
 
