@@ -148,7 +148,7 @@ class TestAuthModuleConfig:
         # Create main pyproject.toml
         pyproject_path = tmp_path / "pyproject.toml"
         pyproject_path.write_text(
-            '[tool.poetry.dependencies]\npython = "^3.11"\nDjango = "^5.0"\n'
+            '[tool.poetry.dependencies]\npython = "^3.11"\nDjango = "^6.0"\n'
         )
 
         # Create auth module pyproject.toml with django-allauth
@@ -296,7 +296,7 @@ class TestListingsModuleConfig:
         # Create main pyproject.toml
         pyproject_path = tmp_path / "pyproject.toml"
         pyproject_path.write_text(
-            '[tool.poetry.dependencies]\npython = "^3.11"\nDjango = "^5.0"\n'
+            '[tool.poetry.dependencies]\npython = "^3.11"\nDjango = "^6.0"\n'
         )
 
         # Create listings module pyproject.toml with django-filter

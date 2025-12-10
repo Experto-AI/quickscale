@@ -404,7 +404,7 @@ These features are essential for competing with Pegasus and Ready SaaS in the Sa
 **Must incorporate:**
 - ✅ **GitHub Actions workflow** - Run tests, linting, coverage on every PR
 - ✅ **Pre-commit hooks** - ruff (format & lint), mypy locally before commit
-- ✅ **Automated testing matrix** - Test across Python 3.10, 3.11, 3.12 + Django 4.2, 5.0
+- ✅ **Automated testing matrix** - Test across Python 3.12 + Django 6.0
 - ✅ **Deployment workflows** - Sample deploy-to-production GitHub Action
 - ✅ **Dependency updates** - Dependabot configuration for security updates
 
