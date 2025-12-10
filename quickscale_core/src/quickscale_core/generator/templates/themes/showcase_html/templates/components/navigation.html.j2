@@ -101,6 +101,25 @@
                 </ul>
             </li>
             {% endif %}
+
+            <!-- CRM Module Pages (if installed) -->
+            {% if 'quickscale_modules_crm' in settings.INSTALLED_APPS %}
+            <li class="nav-section">
+                <span class="nav-section-title">CRM</span>
+                <ul class="nav-submenu">
+                    <li><a href="{% url 'quickscale_crm:dashboard' %}">Dashboard</a></li>
+                    <li><a href="/crm/api/">API Browser</a></li>
+                </ul>
+            </li>
+            {% else %}
+            <li class="nav-section nav-disabled">
+                <span class="nav-section-title">CRM (Not Installed)</span>
+                <ul class="nav-submenu">
+                    <li><span class="nav-disabled-link">Dashboard</span></li>
+                    <li><span class="nav-disabled-link">API Browser</span></li>
+                </ul>
+            </li>
+            {% endif %}
         </ul>
     </div>
 </nav>{%endraw%}
