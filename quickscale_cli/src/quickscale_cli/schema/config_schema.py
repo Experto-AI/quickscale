@@ -72,7 +72,7 @@ VALID_TOP_LEVEL_KEYS = {"version", "project", "modules", "docker"}
 VALID_PROJECT_KEYS = {"name", "theme"}
 VALID_DOCKER_KEYS = {"start", "build"}
 VALID_THEMES = {"showcase_html", "showcase_htmx", "showcase_react"}
-AVAILABLE_MODULES = {"auth", "billing", "teams", "blog", "listings"}
+AVAILABLE_MODULES = {"auth", "billing", "teams", "blog", "listings", "crm"}
 
 
 def _find_line_number(yaml_content: str, key: str) -> int | None:

@@ -95,21 +95,19 @@ def _check_poetry_lock_step() -> None:
             click.echo(
                 "💡 The lock file needs to be regenerated to match pyproject.toml"
             )
-            if click.confirm("Run 'poetry lock --no-update' to fix?", default=True):
+            if click.confirm("Run 'poetry lock' to fix?", default=True):
                 click.echo("🔄 Updating poetry.lock...")
                 success, fix_message = fix_poetry_lock()
                 if success:
                     click.secho(f"✅ {fix_message}", fg="green")
                 else:
                     click.secho(f"❌ Error: {fix_message}", fg="red", err=True)
-                    click.echo(
-                        "💡 Try running manually: poetry lock --no-update", err=True
-                    )
+                    click.echo("💡 Try running manually: poetry lock", err=True)
                     if not click.confirm("Continue anyway?", default=False):
                         click.echo("Deployment cancelled")
                         sys.exit(0)
             else:
-                click.echo("💡 Run 'poetry lock --no-update' before deploying")
+                click.echo("💡 Run 'poetry lock' before deploying")
                 if not click.confirm("Continue without fixing?", default=False):
                     click.echo("Deployment cancelled")
                     sys.exit(0)

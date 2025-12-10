@@ -37,7 +37,10 @@
             {% if 'quickscale_modules_teams' in settings.INSTALLED_APPS %}
             <li>✅ <strong>Teams</strong> - Team collaboration and management features</li>
             {% endif %}
-            {% if 'quickscale_modules_auth' not in settings.INSTALLED_APPS and 'quickscale_modules_blog' not in settings.INSTALLED_APPS and 'quickscale_modules_listings' not in settings.INSTALLED_APPS and 'quickscale_modules_billing' not in settings.INSTALLED_APPS and 'quickscale_modules_teams' not in settings.INSTALLED_APPS %}
+            {% if 'quickscale_modules_crm' in settings.INSTALLED_APPS %}
+            <li>✅ <strong>CRM</strong> - Contact management, companies, deals, and notes (<a href="{% url 'quickscale_crm:dashboard' %}">View CRM</a>)</li>
+            {% endif %}
+            {% if 'quickscale_modules_auth' not in settings.INSTALLED_APPS and 'quickscale_modules_blog' not in settings.INSTALLED_APPS and 'quickscale_modules_listings' not in settings.INSTALLED_APPS and 'quickscale_modules_billing' not in settings.INSTALLED_APPS and 'quickscale_modules_teams' not in settings.INSTALLED_APPS and 'quickscale_modules_crm' not in settings.INSTALLED_APPS %}
             <li>No modules installed yet. Use <code>quickscale embed --module &lt;module_name&gt;</code> to add modules.</li>
             {% endif %}{%endraw%}
         </ul>
