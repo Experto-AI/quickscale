@@ -3,7 +3,7 @@ name = "quickscale-module-listings"
 version = "0.67.0"
 description = "QuickScale listings module with AbstractListing model for marketplace verticals"
 authors = ["Experto-AI <contact@experto.ai>"]
-license = "MIT"
+license = "Apache-2.0"
 readme = "README.md"
 packages = [{include = "quickscale_modules_listings", from = "src"}]
 
