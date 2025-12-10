@@ -23,7 +23,7 @@ from .module_config import (
 )
 
 # Available modules
-AVAILABLE_MODULES = ["auth", "billing", "teams", "blog", "listings"]
+AVAILABLE_MODULES = ["auth", "billing", "teams", "blog", "listings", "crm"]
 
 
 def _validate_git_environment() -> bool:
@@ -171,7 +171,7 @@ def _perform_module_embed(
         applier(project_path, config)
 
     # Install dependencies for modules that need it
-    if module in ["auth", "blog", "listings"]:
+    if module in ["auth", "blog", "listings", "crm"]:
         if not _install_module_dependencies(project_path, module):
             return False
 

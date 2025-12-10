@@ -45,7 +45,7 @@ QuickScale follows an evolution-aligned roadmap that starts as a personal toolki
    - ✅ Plan/Apply System core (v0.68.0-v0.70.0) - Terraform-style configuration
    - ✅ **Plan/Apply System complete** (v0.71.0) - Module manifests & config mutability
    - ✅ Plan/Apply Cleanup (v0.72.0) - Remove legacy init/embed commands
-   - 📋 CRM module (v0.73.0) - native Django CRM app
+   - ✅ CRM module (v0.73.0) - native Django CRM app
    - 📋 CRM Theme (v0.74.0) - React-based theme for CRM
    - 📋 Billing module (v0.75.0) - Stripe integration
    - 📋 Teams module (v0.76.0) - multi-tenancy
@@ -76,8 +76,8 @@ QuickScale follows an evolution-aligned roadmap that starts as a personal toolki
 - **v1.0.0+:** Community platform (if demand exists)
 
 **Status:**
-- **Current Status:** v0.72.0 — Plan/Apply Functionality Cleanup ✅ Complete
-- **Next Milestone:** v0.73.0 - `quickscale_modules.crm` (CRM Module)
+- **Current Status:** v0.73.0 — CRM Module ✅ Complete
+- **Next Milestone:** v0.74.0 - CRM Theme (React)
 - **Plan/Apply System:** v0.68.0-v0.71.0 - Terraform-style configuration ✅ Complete
 - **SaaS Parity:** v0.76.0 - auth, billing, teams modules complete
 
@@ -100,24 +100,23 @@ List of upcoming releases with detailed implementation tasks:
 
 ### v0.73.0: `quickscale_modules.crm` - CRM Module
 
-**Status**: 📋 Planned
+**Status**: ✅ Complete
 
-**Strategic Context**: Replacing "Real Estate Theme" (pivot). A native Django CRM module providing reusable data structures (Contacts, Deals, Activity). Independent of any frontend theme but includes standard views.
+**Release**: v0.73.0 — Lightweight, API-first Django CRM module with 7 core models, comprehensive REST API, and CLI integration. 97.38% test coverage (67 tests). See [release-v0.73.0-review.md](../releases/release-v0.73.0-review.md) and [release-v0.73.0-implementation.md](../releases-archive/release-v0.73.0-implementation.md) for details.
 
-**Core Entities**:
-- [ ] **Contacts & Companies**: Core directory functionality (Name, Email, Phone, Related Company)
-- [ ] **Pipelines & Deals**: Kanban-ready data structure (Stages, Value, Expected Close Date)
-- [ ] **Activity Log**: Generic activity logging (Notes, Calls, Meetings) for any object (using GenericForeignKey or polymorphic)
+**Key Results**:
+- ✅ 7 core CRM models: Tag, Company, Contact, Stage, Deal, ContactNote, DealNote
+- ✅ Complete REST API with DRF (ViewSets, filtering, bulk operations)
+- ✅ Django Admin integration with inline notes and stage ordering
+- ✅ CLI module embedding via `quickscale plan --add crm`
+- ✅ 97.38% test coverage (67 comprehensive tests)
+- ⏸️ Template integration correctly deferred to v0.74.0
 
-**Technical Architecture**:
-- [ ] **Theme Agnostic**: Provide logical views and HTMX-ready templates, but fully overrideable.
-- [ ] **API First**: DRF Serializers for all models to support React/Vue frontends.
-- [ ] **Dependencies**: Keep it lightweight (no heavy SvelteKit/Node dependencies like BottleCRM).
-
-**Testing**:
-- [ ] Unit tests for CRM models
-- [ ] Integration tests for activity logging
-- [ ] API tests for all endpoints
+**Deferred Items**:
+- ❌ Template integration (showcase_html) → v0.74.0 (CRM Theme - React)
+- ❌ Email synchronization → v0.78.0 (notifications module)
+- ❌ File attachments → Post-v0.73.0
+- ❌ Custom fields → v0.75.0+
 
 ---
 
@@ -125,13 +124,15 @@ List of upcoming releases with detailed implementation tasks:
 
 **Status**: 📋 Planned
 
-**Strategic Context**: Replaces the former "Real Estate Theme". A modern, React-based frontend specifically designed for the CRM module. Demonstrates React + Django integration.
+**Strategic Context**: A modern, React-based frontend specifically designed for the CRM module. Demonstrates React + Django integration.
 
 **Prerequisites**:
 - ✅ CRM Module (v0.73.0)
 
 **Theme Structure**:
-- React + Vite application in `frontend/`
+- **Stack**: React TypeScript + Vite application in `frontend/`
+- **UI Framework**: **shadcn/ui** + **shadcn/admin** (modern, copy-paste components)
+- **Icons**: **Lucide React**
 - Consumes CRM Module APIs
 - Components: Kanban Board, Contact List, Deal Detail View
 

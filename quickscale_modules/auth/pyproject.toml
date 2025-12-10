@@ -3,7 +3,7 @@ name = "quickscale-module-auth"
 version = "0.63.0"
 description = "QuickScale authentication module with django-allauth integration"
 authors = ["Experto-AI <contact@experto.ai>"]
-license = "MIT"
+license = "Apache-2.0"
 readme = "README.md"
 packages = [{include = "quickscale_modules_auth", from = "src"}]
 

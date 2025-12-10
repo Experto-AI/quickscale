@@ -535,7 +535,7 @@ name = "quickscale-module-<name>"
 version = "0.XX.0"
 description = "QuickScale <name> module - brief description"
 authors = ["Experto-AI <contact@experto.ai>"]
-license = "MIT"
+license = "Apache-2.0"
 readme = "README.md"
 packages = [{include = "quickscale_modules_<name>", from = "src"}]
 

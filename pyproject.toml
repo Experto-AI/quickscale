@@ -14,6 +14,7 @@ quickscale-cli = {path = "./quickscale_cli", develop = true}
 quickscale-module-auth = {path = "./quickscale_modules/auth", develop = true}
 quickscale-module-blog = {path = "./quickscale_modules/blog", develop = true}
 quickscale-module-listings = {path = "./quickscale_modules/listings", develop = true}
+quickscale-module-crm = {path = "./quickscale_modules/crm", develop = true}
 
 [tool.poetry.group.dev.dependencies]
 # Testing frameworks

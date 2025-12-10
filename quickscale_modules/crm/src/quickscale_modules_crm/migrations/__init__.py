@@ -1,0 +1,1 @@
+"""CRM module migrations package."""

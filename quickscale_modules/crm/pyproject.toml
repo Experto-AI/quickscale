@@ -1,17 +1,17 @@
 [tool.poetry]
-name = "quickscale-module-blog"
-version = "0.66.0"
-description = "QuickScale blog module with Markdown support and RSS feeds"
+name = "quickscale-module-crm"
+version = "0.73.0"
+description = "QuickScale CRM module with contacts, companies, deals, and pipeline management"
 authors = ["Experto-AI <contact@experto.ai>"]
 license = "Apache-2.0"
 readme = "README.md"
-packages = [{include = "quickscale_modules_blog", from = "src"}]
+packages = [{include = "quickscale_modules_crm", from = "src"}]
 
 [tool.poetry.dependencies]
 python = "^3.12"
 Django = "^6.0"
-django-markdownx = "^4.0.0"
-Pillow = ">=10.0.0"
+djangorestframework = "^3.15.0"
+django-filter = "^24.0"
 
 [tool.poetry.group.dev.dependencies]
 # Minimal dev dependencies for standalone testing
@@ -30,18 +30,19 @@ build-backend = "poetry.core.masonry.api"
 target-version = "py312"  # This package requires Python 3.12+
 
 [[tool.mypy.overrides]]
-module = "markdownx.*"
+module = "rest_framework.*"
 ignore_missing_imports = true
 
-[tool.mypy]
-plugins = ["mypy_django_plugin.main"]
+[[tool.mypy.overrides]]
+module = "django_filters.*"
+ignore_missing_imports = true
 
 [tool.django-stubs]
 django_settings_module = "tests.settings"
 
 [tool.pytest.ini_options]
 DJANGO_SETTINGS_MODULE = "tests.settings"
-pythonpath = ["."]
+pythonpath = [".", "src"]
 python_files = ["test_*.py"]
 testpaths = ["tests"]
-addopts = "-v --cov=src/quickscale_modules_blog --cov-report=html --cov-report=term-missing --cov-fail-under=70"
+addopts = "-v --cov=quickscale_modules_crm --cov-report=html --cov-report=term-missing --cov-fail-under=70"
