@@ -7,13 +7,14 @@ from .views import (
     CompanyViewSet,
     ContactNoteViewSet,
     ContactViewSet,
+    CRMDashboardView,
     DealNoteViewSet,
     DealViewSet,
     StageViewSet,
     TagViewSet,
 )
 
-app_name = "crm"
+app_name = "quickscale_crm"
 
 router = DefaultRouter()
 router.register(r"tags", TagViewSet, basename="tag")
@@ -25,5 +26,6 @@ router.register(r"contact-notes", ContactNoteViewSet, basename="contact-note")
 router.register(r"deal-notes", DealNoteViewSet, basename="deal-note")
 
 urlpatterns = [
-    path("api/crm/", include(router.urls)),
+    path("", CRMDashboardView.as_view(), name="dashboard"),
+    path("api/", include(router.urls)),
 ]
