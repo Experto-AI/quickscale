@@ -12,6 +12,35 @@ from typing import Any
 import click
 
 
+def _is_app_in_installed_apps(settings_content: str, app_name: str) -> bool:
+    """Check if an app is already in INSTALLED_APPS.
+
+    Args:
+        settings_content: The content of settings.py
+        app_name: The app name to check for (e.g., 'django_filters')
+
+    Returns:
+        True if the app is already in INSTALLED_APPS, False otherwise
+    """
+    # Check for app in INSTALLED_APPS list or INSTALLED_APPS +=
+    # Match patterns like: "app_name", 'app_name' in lists
+    pattern = rf'["\']({re.escape(app_name)})["\']'
+    return bool(re.search(pattern, settings_content))
+
+
+def _filter_new_apps(settings_content: str, apps: list[str]) -> list[str]:
+    """Filter out apps that are already in INSTALLED_APPS.
+
+    Args:
+        settings_content: The content of settings.py
+        apps: List of app names to filter
+
+    Returns:
+        List of apps that are NOT already in settings.py
+    """
+    return [app for app in apps if not _is_app_in_installed_apps(settings_content, app)]
+
+
 def has_migrations_been_run() -> bool:
     """Check if Django migrations have been run in the current project"""
     # Check for SQLite database file
@@ -560,22 +589,33 @@ def apply_listings_configuration(project_path: Path, config: dict[str, Any]) -> 
     if pyproject_path.exists():
         _add_django_filter_dependency(project_path, pyproject_path)
 
-    # Add required apps to INSTALLED_APPS
-    installed_apps_addition = """
+    # Determine which apps need to be added (avoid duplicates)
+    required_apps = ["django_filters", "quickscale_modules_listings"]
+    new_apps = _filter_new_apps(settings_content, required_apps)
+
+    if not new_apps:
+        click.echo("ℹ️  All required apps already in INSTALLED_APPS")
+    else:
+        # Build the INSTALLED_APPS addition with only new apps
+        apps_list = ",\n    ".join([f'"{app}"' for app in new_apps])
+        installed_apps_addition = f"""
 # QuickScale Listings Module - Added by quickscale embed
 INSTALLED_APPS += [
-    "django_filters",  # Filtering support
-    "quickscale_modules_listings",  # Listings module
+    {apps_list},
 ]
+"""
+        # Append to settings.py
+        with open(settings_path, "a") as f:
+            f.write("\n" + installed_apps_addition)
 
+    # Add settings (always add these)
+    settings_addition = f"""
 # Listings Module Settings
+LISTINGS_PER_PAGE = {config['listings_per_page']}
 """
 
-    installed_apps_addition += f"LISTINGS_PER_PAGE = {config['listings_per_page']}\n"
-
-    # Append to settings.py
     with open(settings_path, "a") as f:
-        f.write("\n" + installed_apps_addition)
+        f.write(settings_addition)
 
     click.secho("  ✅ Updated settings.py with listings configuration", fg="green")
 
@@ -763,27 +803,36 @@ def apply_crm_configuration(project_path: Path, config: dict[str, Any]) -> None:
     if pyproject_path.exists():
         _add_drf_and_filter_dependencies(project_path, pyproject_path)
 
-    # Add required apps to INSTALLED_APPS
-    installed_apps_addition = """
+    # Determine which apps need to be added (avoid duplicates)
+    required_apps = ["rest_framework", "django_filters", "quickscale_modules_crm"]
+    new_apps = _filter_new_apps(settings_content, required_apps)
+
+    if not new_apps:
+        click.echo("ℹ️  All required apps already in INSTALLED_APPS")
+    else:
+        # Build the INSTALLED_APPS addition with only new apps
+        apps_list = ",\n    ".join([f'"{app}"' for app in new_apps])
+        installed_apps_addition = f"""
 # QuickScale CRM Module - Added by quickscale embed
 INSTALLED_APPS += [
-    "rest_framework",  # Django REST Framework
-    "django_filters",  # Filtering support
-    "quickscale_modules_crm",  # CRM module
+    {apps_list},
 ]
-
-# CRM Module Settings
 """
+        # Append INSTALLED_APPS to settings.py
+        with open(settings_path, "a") as f:
+            f.write("\n" + installed_apps_addition)
 
-    installed_apps_addition += f"CRM_DEALS_PER_PAGE = {config['deals_per_page']}\n"
-    installed_apps_addition += (
-        f"CRM_CONTACTS_PER_PAGE = {config['contacts_per_page']}\n"
-    )
-    installed_apps_addition += f"CRM_ENABLE_API = {config['enable_api']}\n"
+    # Add CRM settings (always add these)
+    settings_addition = f"""
+# CRM Module Settings
+CRM_DEALS_PER_PAGE = {config['deals_per_page']}
+CRM_CONTACTS_PER_PAGE = {config['contacts_per_page']}
+CRM_ENABLE_API = {config['enable_api']}
+"""
 
     # Add REST Framework settings if enabling API
     if config["enable_api"]:
-        installed_apps_addition += """
+        settings_addition += """
 # REST Framework Settings
 REST_FRAMEWORK = {
     "DEFAULT_AUTHENTICATION_CLASSES": [
@@ -802,9 +851,9 @@ REST_FRAMEWORK = {
 }
 """
 
-    # Append to settings.py
+    # Append settings to settings.py
     with open(settings_path, "a") as f:
-        f.write("\n" + installed_apps_addition)
+        f.write(settings_addition)
 
     click.secho("  ✅ Updated settings.py with CRM configuration", fg="green")
 
@@ -817,7 +866,7 @@ REST_FRAMEWORK = {
             # Find urlpatterns and add CRM URLs
             if "urlpatterns = [" in urls_content:
                 urls_addition = (
-                    '    path("api/crm/", include("quickscale_modules_crm.urls")),\n'
+                    '    path("crm/", include("quickscale_modules_crm.urls")),\n'
                 )
                 urls_content = urls_content.replace(
                     "urlpatterns = [", "urlpatterns = [\n" + urls_addition
@@ -826,7 +875,7 @@ REST_FRAMEWORK = {
                 with open(urls_path, "w") as f:
                     f.write(urls_content)
 
-                click.secho("  ✅ Updated urls.py with CRM API URLs", fg="green")
+                click.secho("  ✅ Updated urls.py with CRM URLs", fg="green")
 
     # Show configuration summary
     click.echo("\n📋 Configuration applied:")

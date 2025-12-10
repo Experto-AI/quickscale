@@ -1,5 +1,9 @@
-"""DRF ViewSets for CRM module"""
+"""DRF ViewSets and views for CRM module"""
 
+from typing import Any
+
+from django.db.models import Count, Sum
+from django.views.generic import TemplateView
 from django_filters.rest_framework import DjangoFilterBackend
 from rest_framework import status, viewsets
 from rest_framework.decorators import action
@@ -21,6 +25,45 @@ from .serializers import (
     StageSerializer,
     TagSerializer,
 )
+
+
+class CRMDashboardView(TemplateView):
+    """Dashboard view for CRM module showing summary statistics"""
+
+    template_name = "quickscale_modules_crm/crm/dashboard.html"
+
+    def get_context_data(self, **kwargs: Any) -> dict[str, Any]:
+        context = super().get_context_data(**kwargs)
+
+        # Summary statistics
+        context["total_contacts"] = Contact.objects.count()
+        context["total_companies"] = Company.objects.count()
+        context["total_deals"] = Deal.objects.count()
+
+        # Deal statistics
+        context["deals_by_stage"] = (
+            Stage.objects.annotate(deal_count=Count("deals"))
+            .values("name", "deal_count")
+            .order_by("order")
+        )
+
+        # Total deal value
+        deal_totals = Deal.objects.aggregate(
+            total_value=Sum("amount"),
+        )
+        context["total_deal_value"] = deal_totals["total_value"] or 0
+
+        # Recent contacts
+        context["recent_contacts"] = Contact.objects.select_related("company").order_by(
+            "-created_at"
+        )[:5]
+
+        # Recent deals
+        context["recent_deals"] = Deal.objects.select_related(
+            "contact", "stage"
+        ).order_by("-created_at")[:5]
+
+        return context
 
 
 class TagViewSet(viewsets.ModelViewSet):

@@ -23,6 +23,7 @@ from quickscale_cli.schema.state_schema import (
     QuickScaleState,
     StateManager,
 )
+from quickscale_core.utils.git_utils import is_working_directory_clean
 from quickscale_core.generator import ProjectGenerator
 from quickscale_core.manifest import ModuleManifest
 from quickscale_core.manifest.loader import get_manifest_for_module
@@ -516,6 +517,9 @@ def _embed_modules_step(
                 f"⚠️  Module embedding failed for {module_name}, continuing...",
                 fg="yellow",
             )
+            # Commit any partial changes to allow subsequent modules to be embedded
+            if not is_working_directory_clean(output_path):
+                _git_commit(output_path, f"Partial module: {module_name} (incomplete)")
         else:
             embedded_modules.append(module_name)
             _git_commit(output_path, f"Add module: {module_name}")
