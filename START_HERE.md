@@ -12,7 +12,7 @@ QuickScale = **Django Generator** + **Reusable Modules** + **Production Foundati
 **Output**: Complete Django project with Docker, PostgreSQL, testing, CI/CD, and security best practices
 **Future**: Reusable modules installable via git subtree (MVP) and PyPI (Post-MVP)
 
-**Current Status**: v0.72.0 - MVP Phase (production-ready personal toolkit)
+**Current Status**: v0.73.0 - MVP Phase (production-ready personal toolkit)
 **Target Audience**: Solo developers and development agencies building client projects
 
 ---
@@ -82,8 +82,9 @@ For complete definitions, see **[GLOSSARY.md](./GLOSSARY.md)**. Here are the ess
       ▼
  THEN ACT:
  ├─ quickscale plan myapp
+ ├─ cd myapp
  ├─ quickscale apply
- └─ cd myapp && quickscale up
+ └─ quickscale up
 
 
 ┌────────────────────────────────────────────────────────────┐
@@ -309,6 +310,6 @@ decisions.md scaffolding.md roadmap.md   contrib/*
 
 ---
 
-**Last Updated**: 2025-12-07
-**QuickScale Version**: v0.72.0
+**Last Updated**: 2025-12-11
+**QuickScale Version**: v0.73.0
 **Feedback**: Open an issue if this guide needs improvement!

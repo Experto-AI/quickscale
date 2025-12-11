@@ -73,18 +73,13 @@ python3 --version && git --version && poetry --version
 
 ## Quick Start (Clone → Test in <15 Minutes)
 
-### 1. Clone Repository (1 minute)
+**For Contributors** (modifying QuickScale source code):
+
+#### 1. Clone and Bootstrap (2-3 minutes)
 ```bash
 git clone https://github.com/Experto-AI/quickscale.git
 cd quickscale
-```
-
-### 2. Bootstrap Development Environment (2-3 minutes)
-```bash
-# Run bootstrap script (sets up virtualenv, checks dependencies)
 ./scripts/bootstrap.sh
-
-# Install all package dependencies
 poetry install
 ```
 
@@ -94,20 +89,17 @@ poetry install
 - Configures Poetry to use in-project virtualenv (`.venv/`)
 - Installs pre-commit hooks
 
-### 3. Verify Installation (1-2 minutes)
+#### 2. Verify Installation (1 minute)
 ```bash
-# Check quickscale CLI is available
 poetry run quickscale --version
-# Should show version number (e.g., 0.56.2)
+# Should show version number (e.g., 0.73.0)
 
-# List installed packages
 poetry show
 # Should show quickscale_core, quickscale_cli, and dependencies
 ```
 
-### 4. Run Tests (3-5 minutes)
+#### 3. Run Tests (3-5 minutes)
 ```bash
-# Run all tests with coverage
 ./scripts/test_all.sh
 
 # Or run with Poetry directly
@@ -120,9 +112,8 @@ poetry run pytest
 # =================== XX passed in X.XXs ====================
 ```
 
-### 5. Run Linters (1-2 minutes)
+#### 4. Run Linters (1-2 minutes)
 ```bash
-# Run all code quality checks
 ./scripts/lint.sh
 
 # Expected output:
@@ -132,17 +123,18 @@ poetry run pytest
 # All checks passed!
 ```
 
-### 6. Generate Test Project (2-3 minutes)
+#### 5. Generate Test Project (2-3 minutes)
 ```bash
-# Create a test Django project configuration
 poetry run quickscale plan testproject
-# Use defaults for theme (showcase_html), no modules, Docker options
-
-# Apply the configuration to generate the project
-poetry run quickscale apply
-
-# Verify generated project
 cd testproject
+poetry run quickscale apply
+# Services auto-start (if docker.start: true)
+
+# Verify services running:
+poetry run quickscale ps
+
+# OR use native Python (skip Docker):
+poetry run quickscale apply --no-docker
 poetry install
 poetry run python manage.py migrate
 poetry run pytest
@@ -150,7 +142,9 @@ poetry run pytest
 # Expected: 5/5 tests passing
 ```
 
-**Total time: some minutes** ✅
+**Total time**: ~15 minutes ✅
+
+**Note**: If you're just using QuickScale (not contributing), install via `pip install quickscale` instead. See the [README](../../README.md) for user installation instructions.
 
 ---
 

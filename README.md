@@ -68,10 +68,11 @@ See [decisions.md - Glossary section](./docs/technical/decisions.md#document-res
 
 ### Development Flow
 1. `quickscale plan myapp` → Interactive configuration wizard
-2. `quickscale apply` → Generates production-ready Django project
-3. Add your custom Django apps and features
-4. Build your unique client application
-5. Deploy to Railway with `quickscale deploy railway` (or use standard Django deployment)
+2. `cd myapp` → Navigate to your project directory
+3. `quickscale apply` → Generates production-ready Django project
+4. Add your custom Django apps and features
+5. Build your unique client application
+6. Deploy to Railway with `quickscale deploy railway` (or use standard Django deployment)
 
 ℹ️ The [MVP Feature Matrix](./docs/technical/decisions.md#mvp-feature-matrix-authoritative) is the single source of truth for what's in or out.
 
@@ -107,8 +108,148 @@ See [competitive_analysis.md](./docs/overview/competitive_analysis.md) for detai
 
 ---
 
+## Installation
 
-## Quick Start
+QuickScale can be installed in two ways:
+
+### Method 1: Install from PyPI (Recommended)
+
+**Quick install:**
+```bash
+pip install quickscale
+```
+
+**Or with Poetry:**
+```bash
+poetry add quickscale
+```
+
+**Then use directly:**
+```bash
+quickscale plan myapp
+cd myapp
+quickscale apply
+```
+
+### Method 2: Install from Source
+
+**For those who prefer building from source:**
+```bash
+git clone https://github.com/Experto-AI/quickscale.git
+cd quickscale
+./scripts/install_global.sh
+```
+
+**Then use directly:**
+```bash
+quickscale plan myapp
+cd myapp
+quickscale apply
+```
+
+**Both methods use the same command syntax:** `quickscale plan`, `quickscale apply`, etc.
+
+---
+
+### For Contributors
+
+If you want to contribute to QuickScale development, see the [Development Guide](./docs/technical/development.md) for setup instructions.
+
+---
+
+## 🚀 5-Minute Quickstart
+
+**Want to see QuickScale in action right now?** Here's the fastest path to a working Django SaaS:
+
+```bash
+# 1. Install QuickScale
+./scripts/install_global.sh
+
+# 2. Create your project configuration
+quickscale plan myapp
+# → Accept defaults: theme (showcase_html), no modules, Docker enabled
+
+# 3. Generate and enter the project
+cd myapp
+quickscale apply
+# → Docker services auto-start! (default: docker.start=true)
+
+# 4. Setup and verify
+quickscale manage migrate
+quickscale manage createsuperuser
+quickscale ps  # Check services are running
+
+# 5. Open http://localhost:8000
+```
+
+**That's it!** 🎉 You now have a production-ready Django SaaS running with Docker + PostgreSQL.
+
+**Note**: Services started automatically during `quickscale apply`. No need to run `quickscale up` manually!
+
+**Prefer native Python?** After step 3, run:
+```bash
+poetry install
+poetry run python manage.py migrate
+poetry run python manage.py runserver
+# Open http://localhost:8000
+```
+
+---
+
+## Understanding Docker Auto-Start
+
+**When does `quickscale apply` start Docker automatically?**
+
+✅ **Services auto-start** (no `quickscale up` needed):
+- First-time project generation
+- When `docker.start: true` in quickscale.yml (**default**)
+- When `--no-docker` flag is NOT used
+
+❌ **Manual start required** (`quickscale up` needed):
+- You set `docker.start: false` during `quickscale plan` wizard
+- After stopping services with `quickscale down`
+- When running `quickscale apply --no-docker`
+- Adding modules to existing project (incremental apply)
+
+**Example - No manual start needed:**
+```bash
+quickscale plan myapp  # Accept defaults (docker.start: true)
+cd myapp
+quickscale apply       # ← Docker services auto-start!
+
+# Already running - just check status:
+quickscale ps
+curl http://localhost:8000  # ✅ Works immediately
+```
+
+**Example - Manual start needed:**
+```bash
+quickscale plan myapp
+# During wizard, set: "Docker start? [Y/n]: n"
+cd myapp
+quickscale apply       # Services do NOT start
+
+# Must start manually:
+quickscale up
+```
+
+**Docker configuration options** in quickscale.yml:
+
+```yaml
+docker:
+  start: true   # Auto-start services during apply?
+  build: true   # Rebuild images? (slower but ensures latest)
+```
+
+- `start: true` + `build: true` → Full rebuild + start (slowest, most reliable)
+- `start: true` + `build: false` → Start with cached images (faster)
+- `start: false` → Manual control with `quickscale up`
+
+**Need more details?** See [Docker Workflows Guide](./docs/technical/docker_workflows.md) for comprehensive scenarios and troubleshooting.
+
+---
+
+## Full Documentation & Setup
 
 ```bash
 # Install QuickScale globally
@@ -117,11 +258,11 @@ See [competitive_analysis.md](./docs/overview/competitive_analysis.md) for detai
 # Create a configuration interactively
 quickscale plan myapp
 # → Select theme, modules, Docker options
-# → Generates quickscale.yml
+# → Generates quickscale.yml in myapp/ directory
 
-# Execute the configuration
-quickscale apply
+# Navigate to project and execute the configuration
 cd myapp
+quickscale apply
 ```
 
 **Choose your development workflow:**

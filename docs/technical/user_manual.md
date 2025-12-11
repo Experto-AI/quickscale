@@ -19,6 +19,60 @@ What does NOT belong in this file (and where to put it):
 Keep this doc short and actionable. When in doubt, link to the authoritative doc (decisions.md / roadmap.md / scaffolding.md) for details.
 -->
 
+## Installation Methods
+
+QuickScale can be installed in two ways:
+
+### Method 1: Install from PyPI (Recommended)
+
+**Quick install:**
+```bash
+pip install quickscale
+```
+
+**Or with Poetry:**
+```bash
+poetry add quickscale
+```
+
+**Usage:**
+```bash
+quickscale plan myapp       # Direct command
+cd myapp
+quickscale apply
+```
+
+### Method 2: Install from Source
+
+**For those who prefer building from source:**
+```bash
+git clone https://github.com/Experto-AI/quickscale.git
+cd quickscale
+./scripts/install_global.sh
+```
+
+**What this does:**
+1. Builds `quickscale_core` and `quickscale_cli` packages
+2. Installs them to your system Python (via pip)
+3. Makes `quickscale` command available globally
+
+**Usage:**
+```bash
+quickscale plan myapp       # Direct command
+cd myapp
+quickscale apply
+```
+
+**Both methods use the same command syntax.**
+
+---
+
+### For Contributors
+
+If you're contributing to QuickScale development (modifying source code), see the [Development Guide](./development.md) for setup instructions with `./scripts/bootstrap.sh` and `poetry install`.
+
+---
+
 ## Quick orientation
 
 - Repository scripts are in `scripts/` (for example `./scripts/bootstrap.sh`, `./scripts/test_all.sh`, `./scripts/lint.sh`, `./scripts/publish_module.sh`). Inspect them if you need to confirm exact actions.
@@ -166,8 +220,8 @@ quickscale plan myapp
 
 ```bash
 quickscale plan myapp
-quickscale apply
-cd myapp
+cd myapp             # Enter the created directory
+quickscale apply     # Apply from within the project directory
 poetry install
 poetry run python manage.py migrate
 poetry run python manage.py runserver
@@ -217,23 +271,34 @@ quickscale manage collectstatic
 
 **Typical Development Workflow**:
 ```bash
+# Create new project
 quickscale plan myapp
-quickscale apply
 cd myapp
+quickscale apply
+# ↑ Docker services auto-start here (if docker.start: true, the default)
 
-# Start services with new commands
-quickscale up                    # Start Docker services
-quickscale manage migrate        # Run migrations
-quickscale manage createsuperuser  # Create admin user
+# Services already running - check status:
+quickscale ps                    # Check services
+quickscale logs web              # View logs
+
+# OR if you need to start manually:
+# (e.g., after 'quickscale down' or if docker.start: false)
+quickscale up
 
 # Development
-quickscale logs web              # Monitor logs
+quickscale manage migrate        # Run migrations
+quickscale manage createsuperuser  # Create admin user
 quickscale shell                 # Access container shell
 quickscale manage test           # Run tests
 
 # Shutdown
 quickscale down                  # Stop services
 ```
+
+**Note on Docker auto-start:**
+- First `quickscale apply` with `docker.start: true` (default) → services start automatically
+- After `quickscale down` → must run `quickscale up` manually
+- Incremental applies (adding modules) → services keep running, no restart
 
 See [Roadmap v0.59.0](./roadmap.md#v0590-cli-development-commands--railway-deployment-) for complete implementation details.
 
@@ -329,16 +394,18 @@ quickscale apply --force
 # Step 1: Create configuration
 quickscale plan myapp
 # → Interactive wizard runs
-# → Creates quickscale.yml
+# → Creates myapp/ directory with quickscale.yml inside
 
-# Step 2: Review configuration (optional)
-cat quickscale.yml
-
-# Step 3: Apply configuration
-quickscale apply quickscale.yml
+# Step 2: Enter project directory
 cd myapp
 
-# Step 4: Start development
+# Step 3: Review configuration (optional)
+cat quickscale.yml
+
+# Step 4: Apply configuration
+quickscale apply
+
+# Step 5: Start development
 quickscale up
 quickscale manage migrate
 quickscale manage createsuperuser

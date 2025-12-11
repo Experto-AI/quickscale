@@ -676,7 +676,7 @@ The generated URL format is: `<service-name>-<environment>-<hash>.up.railway.app
 ## Deployment Checklist
 
 ### CLI Method (Recommended) ✅ v0.60.0+
-- [ ] Generate project: `quickscale plan myapp` then `quickscale apply`
+- [ ] Generate project: `quickscale plan myapp` → `cd myapp` → `quickscale apply`
 - [ ] Initialize git repository (optional but recommended)
 - [ ] Login to Railway: `railway login` or `railway login --browserless`
 - [ ] Deploy with automation: `quickscale deploy railway`
@@ -696,7 +696,7 @@ The generated URL format is: `<service-name>-<environment>-<hash>.up.railway.app
 **That's it!** The entire deployment is automated. No manual ALLOWED_HOSTS setup, no separate migration steps.
 
 ### Manual Method (Advanced Users)
-- [ ] Generate project: `quickscale plan myapp` then `quickscale apply` (includes railway.json)
+- [ ] Generate project: `quickscale plan myapp` → `cd myapp` → `quickscale apply` (includes railway.json)
 - [ ] Initialize git repository (optional)
 - [ ] Create Railway project: `railway init`
 - [ ] Add PostgreSQL database: `railway add --database postgres`
