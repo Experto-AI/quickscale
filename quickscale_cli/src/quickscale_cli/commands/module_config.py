@@ -611,7 +611,7 @@ INSTALLED_APPS += [
     # Add settings (always add these)
     settings_addition = f"""
 # Listings Module Settings
-LISTINGS_PER_PAGE = {config['listings_per_page']}
+LISTINGS_PER_PAGE = {config["listings_per_page"]}
 """
 
     with open(settings_path, "a") as f:
@@ -825,9 +825,9 @@ INSTALLED_APPS += [
     # Add CRM settings (always add these)
     settings_addition = f"""
 # CRM Module Settings
-CRM_DEALS_PER_PAGE = {config['deals_per_page']}
-CRM_CONTACTS_PER_PAGE = {config['contacts_per_page']}
-CRM_ENABLE_API = {config['enable_api']}
+CRM_DEALS_PER_PAGE = {config["deals_per_page"]}
+CRM_CONTACTS_PER_PAGE = {config["contacts_per_page"]}
+CRM_ENABLE_API = {config["enable_api"]}
 """
 
     # Add REST Framework settings if enabling API

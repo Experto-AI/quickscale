@@ -41,15 +41,25 @@ RUN poetry config virtualenvs.create false
 # Build argument to control dependency installation
 ARG INSTALL_DEV=false
 
-# Install dependencies
+# Install dependencies with retry logic for network resilience
 # For development (INSTALL_DEV=true): Install all dependencies including dev
 # For production (INSTALL_DEV=false): Install only main dependencies
+# Retry up to 3 times to handle transient network issues (PyPI timeouts)
 RUN echo "📦 Installing Python dependencies (INSTALL_DEV=$INSTALL_DEV)..." && \
-    if [ "$INSTALL_DEV" = "true" ]; then \
-        poetry install --no-root --no-interaction --no-ansi; \
-    else \
-        poetry install --only main --no-root --no-interaction --no-ansi; \
-    fi && \
+    export POETRY_HTTP_TIMEOUT=120 && \
+    for attempt in 1 2 3; do \
+        echo "  Attempt $attempt of 3..." && \
+        if [ "$INSTALL_DEV" = "true" ]; then \
+            poetry install --no-root --no-interaction --no-ansi && break; \
+        else \
+            poetry install --only main --no-root --no-interaction --no-ansi && break; \
+        fi; \
+        if [ $attempt -lt 3 ]; then \
+            echo "  ⚠️ Attempt $attempt failed, retrying in 5 seconds..." && sleep 5; \
+        else \
+            echo "  ❌ All attempts failed" && exit 1; \
+        fi; \
+    done && \
     echo "✅ Python dependencies installed"
 
 # Stage 2: Runtime - Create minimal production image
