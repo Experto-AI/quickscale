@@ -365,7 +365,7 @@ quickscale push --module auth
 
 ## License
 
-MIT License - Same as QuickScale project
+Apache 2.0 License - Same as QuickScale project
 
 ## Support
 

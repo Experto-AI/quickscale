@@ -30,3 +30,60 @@ class TestQuickscaleAccountAdapter:
         request = self.factory.get("/")
         url = self.adapter.get_login_redirect_url(request)
         assert url == "/accounts/profile/"
+
+    def test_get_login_redirect_url_custom(self, settings):
+        """Test login redirect URL with custom setting"""
+        settings.LOGIN_REDIRECT_URL = "/dashboard/"
+        request = self.factory.get("/")
+        url = self.adapter.get_login_redirect_url(request)
+        assert url == "/dashboard/"
+
+    def test_save_user_with_commit(self):
+        """Test save_user with commit=True"""
+        from django.contrib.auth import get_user_model
+        from unittest.mock import Mock, patch
+
+        User = get_user_model()
+        request = self.factory.post("/")
+
+        # Create a mock user
+        user = Mock(spec=User)
+        user.save = Mock()
+
+        # Create a mock form
+        form = Mock()
+
+        # Mock the parent's save_user method
+        with patch.object(
+            QuickscaleAccountAdapter.__bases__[0], "save_user", return_value=user
+        ):
+            result = self.adapter.save_user(request, user, form, commit=True)
+
+            # Verify user.save() was called
+            user.save.assert_called_once()
+            assert result == user
+
+    def test_save_user_without_commit(self):
+        """Test save_user with commit=False"""
+        from django.contrib.auth import get_user_model
+        from unittest.mock import Mock, patch
+
+        User = get_user_model()
+        request = self.factory.post("/")
+
+        # Create a mock user
+        user = Mock(spec=User)
+        user.save = Mock()
+
+        # Create a mock form
+        form = Mock()
+
+        # Mock the parent's save_user method
+        with patch.object(
+            QuickscaleAccountAdapter.__bases__[0], "save_user", return_value=user
+        ):
+            result = self.adapter.save_user(request, user, form, commit=False)
+
+            # Verify user.save() was NOT called
+            user.save.assert_not_called()
+            assert result == user
