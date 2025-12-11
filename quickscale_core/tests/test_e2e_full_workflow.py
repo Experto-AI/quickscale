@@ -245,7 +245,7 @@ class TestFullE2EWorkflow:
         """Install dependencies in the generated project using poetry."""
         # First, regenerate lock file to match current Python version
         lock_result = subprocess.run(
-            ["poetry", "lock", "--no-update"],
+            ["poetry", "lock"],
             cwd=project_path,
             capture_output=True,
             text=True,

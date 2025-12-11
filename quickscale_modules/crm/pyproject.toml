@@ -1,0 +1,48 @@
+[tool.poetry]
+name = "quickscale-module-crm"
+version = "0.73.0"
+description = "QuickScale CRM module with contacts, companies, deals, and pipeline management"
+authors = ["Experto-AI <contact@experto.ai>"]
+license = "Apache-2.0"
+readme = "README.md"
+packages = [{include = "quickscale_modules_crm", from = "src"}]
+
+[tool.poetry.dependencies]
+python = "^3.12"
+Django = "^6.0"
+djangorestframework = "^3.15.0"
+django-filter = "^24.0"
+
+[tool.poetry.group.dev.dependencies]
+# Minimal dev dependencies for standalone testing
+# pytest, pytest-cov, ruff, mypy centralized in root pyproject.toml (monorepo)
+# or provided by user's project (standalone embed)
+pytest-django = "^4.7.0"
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"
+
+# Ruff and mypy configurations centralized in root ruff.toml and mypy.ini
+# Package-specific overrides:
+
+[tool.ruff]
+target-version = "py312"  # This package requires Python 3.12+
+
+[[tool.mypy.overrides]]
+module = "rest_framework.*"
+ignore_missing_imports = true
+
+[[tool.mypy.overrides]]
+module = "django_filters.*"
+ignore_missing_imports = true
+
+[tool.django-stubs]
+django_settings_module = "tests.settings"
+
+[tool.pytest.ini_options]
+DJANGO_SETTINGS_MODULE = "tests.settings"
+pythonpath = [".", "src"]
+python_files = ["test_*.py"]
+testpaths = ["tests"]
+addopts = "-v --cov=quickscale_modules_crm --cov-report=html --cov-report=term-missing --cov-fail-under=70"

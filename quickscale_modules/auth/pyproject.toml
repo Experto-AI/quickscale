@@ -3,13 +3,13 @@ name = "quickscale-module-auth"
 version = "0.63.0"
 description = "QuickScale authentication module with django-allauth integration"
 authors = ["Experto-AI <contact@experto.ai>"]
-license = "MIT"
+license = "Apache-2.0"
 readme = "README.md"
 packages = [{include = "quickscale_modules_auth", from = "src"}]
 
 [tool.poetry.dependencies]
-python = "^3.11"
-Django = ">=5.0,<6.0"
+python = "^3.12"
+Django = "^6.0"
 django-allauth = "^65.12.0"
 
 [tool.poetry.group.dev.dependencies]
@@ -26,7 +26,7 @@ build-backend = "poetry.core.masonry.api"
 # Package-specific overrides:
 
 [tool.ruff]
-target-version = "py311"  # This package requires Python 3.11+
+target-version = "py312"  # This package requires Python 3.12+
 
 [[tool.mypy.overrides]]
 module = "allauth.*"

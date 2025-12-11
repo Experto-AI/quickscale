@@ -602,7 +602,7 @@ class TestPyprojectTomlContent:
         template = jinja_env.get_template("pyproject.toml.j2")
         output = template.render(test_context)
         assert "Django" in output
-        assert ">=5.0,<6.0" in output
+        assert "^6.0" in output
 
     def test_postgresql_driver(
         self, jinja_env: Environment, test_context: dict[str, str]

@@ -30,6 +30,7 @@ AVAILABLE_MODULES = [
     ("auth", "Authentication with django-allauth"),
     ("blog", "Markdown-powered blog with categories and RSS"),
     ("listings", "Generic listings for marketplace verticals"),
+    ("crm", "Customer Relationship Management (contacts, deals, pipeline)"),
     ("billing", "Stripe integration (placeholder)"),
     ("teams", "Multi-tenancy and team management (placeholder)"),
 ]

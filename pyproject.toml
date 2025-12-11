@@ -6,7 +6,7 @@ authors = ["Experto AI <victor@experto.ai>"]
 package-mode = false
 
 [tool.poetry.dependencies]
-python = "^3.11"
+python = "^3.12"
 quickscale = {path = "./quickscale", develop = true}
 quickscale-core = {path = "./quickscale_core", develop = true}
 quickscale-cli = {path = "./quickscale_cli", develop = true}
@@ -14,6 +14,7 @@ quickscale-cli = {path = "./quickscale_cli", develop = true}
 quickscale-module-auth = {path = "./quickscale_modules/auth", develop = true}
 quickscale-module-blog = {path = "./quickscale_modules/blog", develop = true}
 quickscale-module-listings = {path = "./quickscale_modules/listings", develop = true}
+quickscale-module-crm = {path = "./quickscale_modules/crm", develop = true}
 
 [tool.poetry.group.dev.dependencies]
 # Testing frameworks
@@ -24,15 +25,15 @@ pytest-docker = "^3.1.0"
 pytest-playwright = "^0.4.0"
 pytest-django = "^4.7.0"
 # Code quality tools
-ruff = "^0.14.0"
-mypy = "^1.18.0"
+ruff = "^0.14.8"
+mypy = "^1.19.0"
 # Advanced code quality analysis tools
 vulture = "^2.11"        # Dead code detection
 radon = "^6.0.1"         # Complexity metrics
 pylint = "^3.0.3"        # Code duplication detection
 # Type stubs
 types-pyyaml = "^6.0.0"
-django-stubs = "^5.1.0"
+django-stubs = "^5.2.8"
 # Testing utilities
 factory-boy = "^3.3.0"
 psycopg2-binary = "^2.9.0"
@@ -46,7 +47,7 @@ build-backend = "poetry.core.masonry.api"
 jobs = 0  # Auto-detect CPU count
 
 # Python version target
-py-version = "3.11"
+py-version = "3.12"
 
 # Paths to analyze
 recursive = true

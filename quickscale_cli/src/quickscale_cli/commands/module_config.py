@@ -12,6 +12,35 @@ from typing import Any
 import click
 
 
+def _is_app_in_installed_apps(settings_content: str, app_name: str) -> bool:
+    """Check if an app is already in INSTALLED_APPS.
+
+    Args:
+        settings_content: The content of settings.py
+        app_name: The app name to check for (e.g., 'django_filters')
+
+    Returns:
+        True if the app is already in INSTALLED_APPS, False otherwise
+    """
+    # Check for app in INSTALLED_APPS list or INSTALLED_APPS +=
+    # Match patterns like: "app_name", 'app_name' in lists
+    pattern = rf'["\']({re.escape(app_name)})["\']'
+    return bool(re.search(pattern, settings_content))
+
+
+def _filter_new_apps(settings_content: str, apps: list[str]) -> list[str]:
+    """Filter out apps that are already in INSTALLED_APPS.
+
+    Args:
+        settings_content: The content of settings.py
+        apps: List of app names to filter
+
+    Returns:
+        List of apps that are NOT already in settings.py
+    """
+    return [app for app in apps if not _is_app_in_installed_apps(settings_content, app)]
+
+
 def has_migrations_been_run() -> bool:
     """Check if Django migrations have been run in the current project"""
     # Check for SQLite database file
@@ -560,22 +589,33 @@ def apply_listings_configuration(project_path: Path, config: dict[str, Any]) -> 
     if pyproject_path.exists():
         _add_django_filter_dependency(project_path, pyproject_path)
 
-    # Add required apps to INSTALLED_APPS
-    installed_apps_addition = """
+    # Determine which apps need to be added (avoid duplicates)
+    required_apps = ["django_filters", "quickscale_modules_listings"]
+    new_apps = _filter_new_apps(settings_content, required_apps)
+
+    if not new_apps:
+        click.echo("ℹ️  All required apps already in INSTALLED_APPS")
+    else:
+        # Build the INSTALLED_APPS addition with only new apps
+        apps_list = ",\n    ".join([f'"{app}"' for app in new_apps])
+        installed_apps_addition = f"""
 # QuickScale Listings Module - Added by quickscale embed
 INSTALLED_APPS += [
-    "django_filters",  # Filtering support
-    "quickscale_modules_listings",  # Listings module
+    {apps_list},
 ]
+"""
+        # Append to settings.py
+        with open(settings_path, "a") as f:
+            f.write("\n" + installed_apps_addition)
 
+    # Add settings (always add these)
+    settings_addition = f"""
 # Listings Module Settings
+LISTINGS_PER_PAGE = {config["listings_per_page"]}
 """
 
-    installed_apps_addition += f"LISTINGS_PER_PAGE = {config['listings_per_page']}\n"
-
-    # Append to settings.py
     with open(settings_path, "a") as f:
-        f.write("\n" + installed_apps_addition)
+        f.write(settings_addition)
 
     click.secho("  ✅ Updated settings.py with listings configuration", fg="green")
 
@@ -603,6 +643,248 @@ INSTALLED_APPS += [
 
 
 # ============================================================================
+# CRM MODULE CONFIGURATION
+# ============================================================================
+
+
+def get_default_crm_config() -> dict[str, Any]:
+    """Get default configuration for CRM module (non-interactive mode)"""
+    return {
+        "enable_api": True,
+        "deals_per_page": 25,
+        "contacts_per_page": 50,
+    }
+
+
+def configure_crm_module(non_interactive: bool = False) -> dict[str, Any]:
+    """Interactive configuration for CRM module"""
+    if non_interactive:
+        click.echo("\n⚙️  Using default CRM module configuration...")
+        config = get_default_crm_config()
+        click.echo("  • API: Enabled")
+        click.echo(f"  • Deals per page: {config['deals_per_page']}")
+        click.echo(f"  • Contacts per page: {config['contacts_per_page']}")
+        return config
+
+    click.echo("\n⚙️  Configuring CRM module...")
+    click.echo(
+        "The CRM module provides contact management, companies, and deal pipeline.\n"
+    )
+
+    config = {
+        "enable_api": click.confirm("Enable REST API endpoints?", default=True),
+        "deals_per_page": click.prompt(
+            "Deals per page",
+            type=int,
+            default=25,
+        ),
+        "contacts_per_page": click.prompt(
+            "Contacts per page",
+            type=int,
+            default=50,
+        ),
+    }
+
+    return config
+
+
+def _add_drf_and_filter_dependencies(project_path: Path, pyproject_path: Path) -> None:
+    """Add djangorestframework and django-filter dependencies to project's pyproject.toml."""
+    with open(pyproject_path) as f:
+        pyproject_content = f.read()
+
+    # Read versions from the embedded CRM module
+    crm_pyproject_path = project_path / "modules" / "crm" / "pyproject.toml"
+
+    if not crm_pyproject_path.exists():
+        click.secho(
+            "❌ Error: CRM module pyproject.toml not found. "
+            "Cannot determine dependency version requirements.",
+            fg="red",
+            err=True,
+        )
+        click.echo(f"Expected file: {crm_pyproject_path}", err=True)
+        click.echo(
+            "This indicates the CRM module was not embedded correctly.",
+            err=True,
+        )
+        raise click.Abort()
+
+    try:
+        with open(crm_pyproject_path) as f:
+            crm_pyproject_content = f.read()
+
+        # Extract djangorestframework version
+        drf_version = None
+        if "djangorestframework" not in pyproject_content:
+            drf_match = re.search(
+                r'djangorestframework\s*=\s*["\']([^"\']+)["\']',
+                crm_pyproject_content,
+            )
+            if drf_match:
+                drf_version = drf_match.group(1)
+
+        # Extract django-filter version
+        filter_version = None
+        if "django-filter" not in pyproject_content:
+            filter_match = re.search(
+                r'django-filter\s*=\s*["\']([^"\']+)["\']',
+                crm_pyproject_content,
+            )
+            if filter_match:
+                filter_version = filter_match.group(1)
+
+        # Add dependencies if needed
+        if drf_version or filter_version:
+            dependencies_pattern = r"(\[tool\.poetry\.dependencies\][^\[]*)"
+            match = re.search(dependencies_pattern, pyproject_content, re.DOTALL)
+            if match:
+                dependencies_section = match.group(1)
+                additions = ""
+                if drf_version:
+                    additions += f'\ndjangorestframework = "{drf_version}"'
+                if filter_version:
+                    additions += f'\ndjango-filter = "{filter_version}"'
+
+                updated_dependencies = re.sub(
+                    r'(python = "[^"]*")',
+                    rf"\1{additions}",
+                    dependencies_section,
+                )
+                pyproject_content = pyproject_content.replace(
+                    dependencies_section, updated_dependencies
+                )
+
+                with open(pyproject_path, "w") as f:
+                    f.write(pyproject_content)
+
+                if drf_version:
+                    click.secho(
+                        "  ✅ Added djangorestframework to pyproject.toml", fg="green"
+                    )
+                if filter_version:
+                    click.secho(
+                        "  ✅ Added django-filter to pyproject.toml", fg="green"
+                    )
+    except (FileNotFoundError, AttributeError) as e:
+        click.secho(
+            f"❌ Error: Failed to parse dependencies from CRM module: {e}",
+            fg="red",
+            err=True,
+        )
+        click.echo(f"File: {crm_pyproject_path}", err=True)
+        raise click.Abort()
+
+
+def apply_crm_configuration(project_path: Path, config: dict[str, Any]) -> None:
+    """Apply CRM module configuration to project settings"""
+    # QuickScale uses settings/base.py and project_name/urls.py structure
+    settings_path = project_path / f"{project_path.name}" / "settings" / "base.py"
+    urls_path = project_path / f"{project_path.name}" / "urls.py"
+    pyproject_path = project_path / "pyproject.toml"
+
+    if not settings_path.exists():
+        click.secho(
+            "⚠️  Warning: settings.py not found, skipping auto-configuration",
+            fg="yellow",
+        )
+        return
+
+    # Read settings.py
+    with open(settings_path) as f:
+        settings_content = f.read()
+
+    # Check if already configured
+    if "quickscale_modules_crm" in settings_content:
+        click.echo("ℹ️  CRM module already configured in settings.py")
+        return
+
+    # Add DRF and django-filter dependencies to pyproject.toml
+    if pyproject_path.exists():
+        _add_drf_and_filter_dependencies(project_path, pyproject_path)
+
+    # Determine which apps need to be added (avoid duplicates)
+    required_apps = ["rest_framework", "django_filters", "quickscale_modules_crm"]
+    new_apps = _filter_new_apps(settings_content, required_apps)
+
+    if not new_apps:
+        click.echo("ℹ️  All required apps already in INSTALLED_APPS")
+    else:
+        # Build the INSTALLED_APPS addition with only new apps
+        apps_list = ",\n    ".join([f'"{app}"' for app in new_apps])
+        installed_apps_addition = f"""
+# QuickScale CRM Module - Added by quickscale embed
+INSTALLED_APPS += [
+    {apps_list},
+]
+"""
+        # Append INSTALLED_APPS to settings.py
+        with open(settings_path, "a") as f:
+            f.write("\n" + installed_apps_addition)
+
+    # Add CRM settings (always add these)
+    settings_addition = f"""
+# CRM Module Settings
+CRM_DEALS_PER_PAGE = {config["deals_per_page"]}
+CRM_CONTACTS_PER_PAGE = {config["contacts_per_page"]}
+CRM_ENABLE_API = {config["enable_api"]}
+"""
+
+    # Add REST Framework settings if enabling API
+    if config["enable_api"]:
+        settings_addition += """
+# REST Framework Settings
+REST_FRAMEWORK = {
+    "DEFAULT_AUTHENTICATION_CLASSES": [
+        "rest_framework.authentication.SessionAuthentication",
+    ],
+    "DEFAULT_PERMISSION_CLASSES": [
+        "rest_framework.permissions.IsAuthenticated",
+    ],
+    "DEFAULT_PAGINATION_CLASS": "rest_framework.pagination.PageNumberPagination",
+    "PAGE_SIZE": 25,
+    "DEFAULT_FILTER_BACKENDS": [
+        "django_filters.rest_framework.DjangoFilterBackend",
+        "rest_framework.filters.SearchFilter",
+        "rest_framework.filters.OrderingFilter",
+    ],
+}
+"""
+
+    # Append settings to settings.py
+    with open(settings_path, "a") as f:
+        f.write(settings_addition)
+
+    click.secho("  ✅ Updated settings.py with CRM configuration", fg="green")
+
+    # Update urls.py
+    if urls_path.exists():
+        with open(urls_path) as f:
+            urls_content = f.read()
+
+        if "quickscale_modules_crm" not in urls_content:
+            # Find urlpatterns and add CRM URLs
+            if "urlpatterns = [" in urls_content:
+                urls_addition = (
+                    '    path("crm/", include("quickscale_modules_crm.urls")),\n'
+                )
+                urls_content = urls_content.replace(
+                    "urlpatterns = [", "urlpatterns = [\n" + urls_addition
+                )
+
+                with open(urls_path, "w") as f:
+                    f.write(urls_content)
+
+                click.secho("  ✅ Updated urls.py with CRM URLs", fg="green")
+
+    # Show configuration summary
+    click.echo("\n📋 Configuration applied:")
+    click.echo(f"  • API: {'Enabled' if config['enable_api'] else 'Disabled'}")
+    click.echo(f"  • Deals per page: {config['deals_per_page']}")
+    click.echo(f"  • Contacts per page: {config['contacts_per_page']}")
+
+
+# ============================================================================
 # MODULE CONFIGURATORS REGISTRY
 # ============================================================================
 
@@ -610,4 +892,5 @@ MODULE_CONFIGURATORS = {
     "auth": (configure_auth_module, apply_auth_configuration),
     "blog": (configure_blog_module, apply_blog_configuration),
     "listings": (configure_listings_module, apply_listings_configuration),
+    "crm": (configure_crm_module, apply_crm_configuration),
 }

@@ -168,7 +168,7 @@ myproject/
    - Foundation for custom development
 
 2. **Vertical Themes** — Complete applications for specific industries
-   - `real_estate` — Property listings, React-based (v0.72.0, after plan/apply)
+   - `crm` — CRM application, React-based (v0.74.0)
    - `saas_starter` — SaaS with billing/teams (future)
    - Pre-configured modules, production-ready
    - Can be used as-is or further enhanced
@@ -189,9 +189,9 @@ quickscale plan myproject
 quickscale apply
 
 # Create project with vertical theme (complete application)
-quickscale plan myrealestate
-# → Select theme: real_estate
-# → Modules pre-configured (listings auto-embedded)
+quickscale plan mycrm
+# → Select theme: crm
+# → Modules pre-configured (crm auto-embedded)
 quickscale apply
 ```
 
@@ -207,14 +207,14 @@ quickscale_core/generator/templates/
     │   ├── templates/
     │   ├── static/
     │   └── package.json
-    ├── showcase_react/        # React + TypeScript + Vite (planned, via real_estate)
+    ├── showcase_react/        # React + TypeScript + Vite (planned, via crm)
     │   ├── frontend/
     │   │   ├── src/
     │   │   └── vite.config.ts
     │   └── package.json
     #
     # Vertical Themes (complete applications)
-    └── real_estate/           # Property listings, React-based (v0.72.0)
+    └── crm/                   # CRM application, React-based (v0.74.0)
         ├── frontend/          # React + Vite application
         │   ├── src/
         │   │   ├── components/
@@ -224,8 +224,8 @@ quickscale_core/generator/templates/
         │   ├── serializers.py.j2
         │   └── views.py.j2
         ├── templates/         # Django templates (React entry point)
-        ├── models.py.j2       # Property model (extends AbstractListing)
-        ├── views.py.j2        # Property views
+        ├── models.py.j2       # CRM models (extends core)
+        ├── views.py.j2        # CRM views
         └── README.md          # Vertical documentation
 ```
 
@@ -236,7 +236,7 @@ quickscale_core/generator/templates/
 | **Purpose** | Empty foundation | Complete application |
 | **Modules** | None (embed later) | Pre-configured |
 | **Use case** | Custom development | Production-ready or enhance |
-| **Examples** | showcase_html, showcase_react | real_estate, job_board |
+| **Examples** | showcase_html, showcase_react | crm, job_board |
 | **Customization** | Build from scratch | Modify existing features |
 
 
@@ -284,7 +284,7 @@ Projects are managed through two configuration files with clear separation of co
 User-editable configuration file with this structure:
 
 ```yaml
-version: 0.72.0
+version: 0.73.0
 project:
   name: myapp
   theme: showcase_html
@@ -307,17 +307,17 @@ docker:
 System-managed state file tracking what has been applied:
 
 ```yaml
-version: 0.72.0
+version: 0.73.0
 project:
   name: myapp
   theme: showcase_html
 applied_modules:
   - name: auth
-    version: 0.72.0
+    version: 0.73.0
     commit: abc123def456
     applied_at: 2025-12-03T14:30:00Z
   - name: listings
-    version: 0.72.0
+    version: 0.73.0
     commit: xyz789uvw012
     applied_at: 2025-12-03T14:31:00Z
 docker:
@@ -436,7 +436,7 @@ Automatic changes made:
 **Future workflow** (v1.0.0+):
 ```yaml
 # quickscale.yml (v0.68.0+)
-version: 0.72.0
+version: 0.73.0
 project:
   name: myproject
   theme: showcase_html
@@ -472,7 +472,7 @@ docker:
 **Manifest Schema:**
 ```yaml
 name: auth
-version: 0.72.0
+version: 0.73.0
 config:
   mutable:
     registration_enabled:
@@ -535,13 +535,13 @@ name = "quickscale-module-<name>"
 version = "0.XX.0"
 description = "QuickScale <name> module - brief description"
 authors = ["Experto-AI <contact@experto.ai>"]
-license = "MIT"
+license = "Apache-2.0"
 readme = "README.md"
 packages = [{include = "quickscale_modules_<name>", from = "src"}]
 
 [tool.poetry.dependencies]
-python = "^3.11"
-Django = ">=5.0,<6.0"
+python = "^3.12"
+Django = "^6.0"
 # Add module-specific runtime dependencies here (e.g., django-allauth, Pillow)
 
 [tool.poetry.group.dev.dependencies]
@@ -691,7 +691,7 @@ Other documents (README.md, roadmap.md, scaffolding.md, commercial.md) MUST refe
 | WhiteNoise static files configuration | IN | Production static file serving without CDN complexity. |
 | Gunicorn WSGI server | IN | Production-ready WSGI server declared in `pyproject.toml` (Poetry). |
 | pytest + factory_boy test setup | IN | Modern testing with pytest-django, factory_boy for fixtures. Sample tests demonstrating patterns. |
-| GitHub Actions CI/CD pipeline | IN | .github/workflows/ci.yml for automated testing on push/PR. Test matrix: Python 3.10-3.12, Django 4.2-5.0. |
+| GitHub Actions CI/CD pipeline | IN | .github/workflows/ci.yml for automated testing on push/PR. Test matrix: Python 3.10-3.12, Django 5.0-6.0. |
 | Pre-commit hooks (ruff) | IN | .pre-commit-config.yaml for code quality enforcement before commits. |
 | Comprehensive README with setup instructions | IN | README.md.j2 with Docker setup, local dev, testing, deployment instructions. |
 | **MODULES & DISTRIBUTION** |
@@ -771,31 +771,6 @@ Other documents (README.md, roadmap.md, scaffolding.md, commercial.md) MUST refe
 - ✅ `quickscale update` - Update installed modules
 - ✅ `quickscale remove <module>` - Remove embedded module
 - ✅ `quickscale push --module <name>` - Contribute module improvements
-
-**v0.63.0-v0.74.0 - Core Module Track:**
-- ✅ `quickscale_modules.auth` - Authentication module core (v0.63.0)
-- ✅ `quickscale_modules.blog` - Blog module with Markdown, categories, tags, RSS (v0.66.0)
-- ✅ `quickscale_modules.listings` - Generic listings base model (v0.67.0)
-- ✅ Plan/Apply System - Terraform-style configuration (v0.68.0-v0.71.0)
-- 📋 Real Estate Theme - First vertical theme, React-based (v0.72.0)
-- 📋 `quickscale_modules.billing` - Stripe billing module (v0.73.0)
-- 📋 `quickscale_modules.teams` - Teams/multi-tenancy module (v0.74.0)
-
-**v0.75.0 - Additional Themes:**
-- 📋 HTMX theme with Alpine.js (v0.75.0)
-
-**v0.76.0 - Cross-Theme Module:**
-- 📋 `quickscale_modules.notifications` - Email infrastructure for all themes (v0.76.0)
-
-**v0.77.0 - Advanced Module Management:**
-- 📋 `quickscale update --all` - Batch update all modules
-- 📋 `quickscale list-modules` - Discover available modules
-- 📋 Enhanced conflict handling and progress indicators
-
-**v0.78.0 - Module Workflow Validation:**
-- 📋 Real-world validation of module updates across multiple projects
-- 📋 Safety automation to ensure user code is untouched during updates
-- 📋 Documented rollback procedures and case studies
 
 **Post-MVP (Future):**
 - ❌ `quickscale validate` - YAML configuration validation (requires config system)
