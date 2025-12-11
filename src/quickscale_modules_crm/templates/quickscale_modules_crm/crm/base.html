@@ -1,0 +1,57 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% block title %}CRM{% endblock %}</title>
+    {% load static %}
+    <style>
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; line-height: 1.6; color: #333; background: #f5f5f5; }
+        header { background: #2563eb; color: white; padding: 1rem 2rem; }
+        header nav a { color: white; text-decoration: none; margin-right: 1rem; }
+        header nav a:hover { text-decoration: underline; }
+        main { max-width: 1200px; margin: 2rem auto; padding: 0 1rem; }
+        .card { background: white; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); padding: 1.5rem; margin-bottom: 1rem; }
+        .stats-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 1rem; margin-bottom: 2rem; }
+        .stat-card { text-align: center; }
+        .stat-card h3 { font-size: 2rem; color: #2563eb; }
+        .stat-card p { color: #666; }
+        h1, h2, h3 { margin-bottom: 1rem; }
+        table { width: 100%; border-collapse: collapse; }
+        th, td { padding: 0.75rem; text-align: left; border-bottom: 1px solid #eee; }
+        th { background: #f8f9fa; font-weight: 600; }
+        a { color: #2563eb; }
+        footer { text-align: center; padding: 2rem; color: #666; }
+    </style>
+    {% block extra_css %}{% endblock %}
+</head>
+<body>
+    <header>
+        <nav>
+            <a href="{% url 'quickscale_crm:dashboard' %}">CRM Dashboard</a>
+            <a href="/">← Back to Home</a>
+        </nav>
+    </header>
+
+    <main>
+        {% if messages %}
+        <div class="messages">
+            {% for message in messages %}
+            <div class="message {{ message.tags }}">
+                {{ message }}
+            </div>
+            {% endfor %}
+        </div>
+        {% endif %}
+
+        {% block content %}{% endblock %}
+    </main>
+
+    <footer>
+        <p>&copy; {% now "Y" %} CRM. Built with QuickScale.</p>
+    </footer>
+
+    {% block extra_js %}{% endblock %}
+</body>
+</html>

@@ -1,0 +1,117 @@
+{% extends "quickscale_modules_crm/crm/base.html" %}
+
+{% block title %}CRM Dashboard{% endblock %}
+
+{% block content %}
+<h1>CRM Dashboard</h1>
+
+<section class="stats-grid">
+    <div class="card stat-card">
+        <h3>{{ total_contacts }}</h3>
+        <p>Total Contacts</p>
+    </div>
+    <div class="card stat-card">
+        <h3>{{ total_companies }}</h3>
+        <p>Total Companies</p>
+    </div>
+    <div class="card stat-card">
+        <h3>{{ total_deals }}</h3>
+        <p>Total Deals</p>
+    </div>
+    <div class="card stat-card">
+        <h3>${{ total_deal_value|floatformat:0|default:"0" }}</h3>
+        <p>Total Pipeline Value</p>
+    </div>
+</section>
+
+<section class="card">
+    <h2>Deals by Stage</h2>
+    {% if deals_by_stage %}
+    <table>
+        <thead>
+            <tr>
+                <th>Stage</th>
+                <th>Number of Deals</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for stage in deals_by_stage %}
+            <tr>
+                <td>{{ stage.name }}</td>
+                <td>{{ stage.deal_count }}</td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+    {% else %}
+    <p>No stages configured yet. Add stages via the admin or API.</p>
+    {% endif %}
+</section>
+
+<div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem;">
+    <section class="card">
+        <h2>Recent Contacts</h2>
+        {% if recent_contacts %}
+        <table>
+            <thead>
+                <tr>
+                    <th>Name</th>
+                    <th>Company</th>
+                    <th>Email</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for contact in recent_contacts %}
+                <tr>
+                    <td>{{ contact.first_name }} {{ contact.last_name }}</td>
+                    <td>{{ contact.company.name|default:"-" }}</td>
+                    <td>{{ contact.email|default:"-" }}</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+        {% else %}
+        <p>No contacts yet. Create contacts via the API.</p>
+        {% endif %}
+    </section>
+
+    <section class="card">
+        <h2>Recent Deals</h2>
+        {% if recent_deals %}
+        <table>
+            <thead>
+                <tr>
+                    <th>Title</th>
+                    <th>Stage</th>
+                    <th>Amount</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for deal in recent_deals %}
+                <tr>
+                    <td>{{ deal.title }}</td>
+                    <td>{{ deal.stage.name|default:"-" }}</td>
+                    <td>${{ deal.amount|floatformat:0|default:"0" }}</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+        {% else %}
+        <p>No deals yet. Create deals via the API.</p>
+        {% endif %}
+    </section>
+</div>
+
+<section class="card" style="margin-top: 1rem;">
+    <h2>API Endpoints</h2>
+    <p>The CRM module provides a REST API for managing your CRM data:</p>
+    <ul style="margin: 1rem 0; padding-left: 2rem;">
+        <li><code>GET/POST /crm/api/contacts/</code> - List/Create contacts</li>
+        <li><code>GET/POST /crm/api/companies/</code> - List/Create companies</li>
+        <li><code>GET/POST /crm/api/deals/</code> - List/Create deals</li>
+        <li><code>GET/POST /crm/api/stages/</code> - List/Create pipeline stages</li>
+        <li><code>GET/POST /crm/api/tags/</code> - List/Create tags</li>
+    </ul>
+    <p>Visit the <a href="/crm/api/">API browser</a> to explore all endpoints.</p>
+</section>
+{% endblock %}
