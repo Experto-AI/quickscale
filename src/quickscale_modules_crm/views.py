@@ -172,8 +172,13 @@ class DealViewSet(viewsets.ModelViewSet):
         serializer.save()
         return Response(serializer.data, status=status.HTTP_201_CREATED)
 
-    @action(detail=False, methods=["post"])  # type: ignore
-    def bulk_update_stage(self, request: Request) -> Response:
+    @action(
+        detail=False,
+        methods=["post"],
+        url_path="bulk-update-stage",
+        url_name="bulk-update-stage",
+    )
+    def bulk_update_stage(self, request) -> Response:
         """Bulk update stage for multiple deals"""
         serializer = BulkUpdateStageSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
@@ -188,8 +193,13 @@ class DealViewSet(viewsets.ModelViewSet):
             status=status.HTTP_200_OK,
         )
 
-    @action(detail=False, methods=["post"])  # type: ignore
-    def mark_won(self, request: Request) -> Response:
+    @action(
+        detail=False,
+        methods=["post"],
+        url_path="mark-won",
+        url_name="mark-won",
+    )
+    def mark_won(self, request) -> Response:
         """Mark multiple deals as won (Closed-Won stage)"""
         serializer = BulkMarkSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
@@ -211,8 +221,13 @@ class DealViewSet(viewsets.ModelViewSet):
 
         return Response({"updated": updated}, status=status.HTTP_200_OK)
 
-    @action(detail=False, methods=["post"])  # type: ignore
-    def mark_lost(self, request: Request) -> Response:
+    @action(
+        detail=False,
+        methods=["post"],
+        url_path="mark-lost",
+        url_name="mark-lost",
+    )
+    def mark_lost(self, request) -> Response:
         """Mark multiple deals as lost (Closed-Lost stage)"""
         serializer = BulkMarkSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)

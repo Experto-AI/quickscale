@@ -2,6 +2,7 @@
 
 import pytest
 from rest_framework import status
+from django.urls import reverse
 
 
 @pytest.mark.django_db
@@ -10,19 +11,23 @@ class TestTagViewSet:
 
     def test_list_tags(self, authenticated_client, tag):
         """Test listing tags"""
-        response = authenticated_client.get("/api/crm/tags/")
+        response = authenticated_client.get(reverse("quickscale_crm:tag-list"))
         assert response.status_code == status.HTTP_200_OK
         assert len(response.data) >= 1
 
     def test_create_tag(self, authenticated_client):
         """Test creating a tag"""
-        response = authenticated_client.post("/api/crm/tags/", {"name": "New Tag"})
+        response = authenticated_client.post(
+            reverse("quickscale_crm:tag-list"), {"name": "New Tag"}
+        )
         assert response.status_code == status.HTTP_201_CREATED
         assert response.data["name"] == "New Tag"
 
     def test_delete_tag(self, authenticated_client, tag):
         """Test deleting a tag"""
-        response = authenticated_client.delete(f"/api/crm/tags/{tag.id}/")
+        response = authenticated_client.delete(
+            reverse("quickscale_crm:tag-detail", args=[tag.id])
+        )
         assert response.status_code == status.HTTP_204_NO_CONTENT
 
 
@@ -32,7 +37,7 @@ class TestCompanyViewSet:
 
     def test_list_companies(self, authenticated_client, company):
         """Test listing companies"""
-        response = authenticated_client.get("/api/crm/companies/")
+        response = authenticated_client.get(reverse("quickscale_crm:company-list"))
         assert response.status_code == status.HTTP_200_OK
         assert len(response.data) >= 1
 
@@ -43,13 +48,17 @@ class TestCompanyViewSet:
             "industry": "Finance",
             "website": "https://newcorp.com",
         }
-        response = authenticated_client.post("/api/crm/companies/", data)
+        response = authenticated_client.post(
+            reverse("quickscale_crm:company-list"), data
+        )
         assert response.status_code == status.HTTP_201_CREATED
         assert response.data["name"] == "New Corp"
 
     def test_search_companies(self, authenticated_client, company):
         """Test searching companies by name"""
-        response = authenticated_client.get("/api/crm/companies/?search=Acme")
+        response = authenticated_client.get(
+            f"{reverse('quickscale_crm:company-list')}?search=Acme"
+        )
         assert response.status_code == status.HTTP_200_OK
         assert len(response.data) >= 1
 
@@ -60,7 +69,7 @@ class TestContactViewSet:
 
     def test_list_contacts(self, authenticated_client, contact):
         """Test listing contacts"""
-        response = authenticated_client.get("/api/crm/contacts/")
+        response = authenticated_client.get(reverse("quickscale_crm:contact-list"))
         assert response.status_code == status.HTTP_200_OK
         assert len(response.data) >= 1
 
@@ -72,30 +81,38 @@ class TestContactViewSet:
             "email": "jane@example.com",
             "company_id": company.id,
         }
-        response = authenticated_client.post("/api/crm/contacts/", data)
+        response = authenticated_client.post(
+            reverse("quickscale_crm:contact-list"), data
+        )
         assert response.status_code == status.HTTP_201_CREATED
         assert response.data["first_name"] == "Jane"
 
     def test_retrieve_contact(self, authenticated_client, contact):
         """Test retrieving a contact"""
-        response = authenticated_client.get(f"/api/crm/contacts/{contact.id}/")
+        response = authenticated_client.get(
+            reverse("quickscale_crm:contact-detail", args=[contact.id])
+        )
         assert response.status_code == status.HTTP_200_OK
         assert response.data["first_name"] == "John"
 
     def test_filter_contacts_by_status(self, authenticated_client, contact):
         """Test filtering contacts by status"""
-        response = authenticated_client.get("/api/crm/contacts/?status=new")
+        response = authenticated_client.get(
+            f"{reverse('quickscale_crm:contact-list')}?status=new"
+        )
         assert response.status_code == status.HTTP_200_OK
 
     def test_contact_notes_endpoint(self, authenticated_client, contact):
         """Test listing contact notes"""
-        response = authenticated_client.get(f"/api/crm/contacts/{contact.id}/notes/")
+        response = authenticated_client.get(
+            reverse("quickscale_crm:contact-notes", args=[contact.id])
+        )
         assert response.status_code == status.HTTP_200_OK
 
     def test_create_contact_note_via_nested(self, authenticated_client, contact):
         """Test creating a contact note via nested endpoint"""
         response = authenticated_client.post(
-            f"/api/crm/contacts/{contact.id}/notes/",
+            reverse("quickscale_crm:contact-notes", args=[contact.id]),
             {"text": "New note"},
             format="json",
         )
@@ -109,14 +126,14 @@ class TestStageViewSet:
 
     def test_list_stages(self, authenticated_client, stage):
         """Test listing stages"""
-        response = authenticated_client.get("/api/crm/stages/")
+        response = authenticated_client.get(reverse("quickscale_crm:stage-list"))
         assert response.status_code == status.HTTP_200_OK
         assert len(response.data) >= 1
 
     def test_create_stage(self, authenticated_client):
         """Test creating a stage"""
         data = {"name": "Proposal", "order": 2}
-        response = authenticated_client.post("/api/crm/stages/", data)
+        response = authenticated_client.post(reverse("quickscale_crm:stage-list"), data)
         assert response.status_code == status.HTTP_201_CREATED
         assert response.data["name"] == "Proposal"
 
@@ -127,7 +144,7 @@ class TestDealViewSet:
 
     def test_list_deals(self, authenticated_client, deal):
         """Test listing deals"""
-        response = authenticated_client.get("/api/crm/deals/")
+        response = authenticated_client.get(reverse("quickscale_crm:deal-list"))
         assert response.status_code == status.HTTP_200_OK
         assert len(response.data) >= 1
 
@@ -140,30 +157,36 @@ class TestDealViewSet:
             "amount": "25000.00",
             "probability": 50,
         }
-        response = authenticated_client.post("/api/crm/deals/", data)
+        response = authenticated_client.post(reverse("quickscale_crm:deal-list"), data)
         assert response.status_code == status.HTTP_201_CREATED
         assert response.data["title"] == "New Deal"
 
     def test_retrieve_deal(self, authenticated_client, deal):
         """Test retrieving a deal"""
-        response = authenticated_client.get(f"/api/crm/deals/{deal.id}/")
+        response = authenticated_client.get(
+            reverse("quickscale_crm:deal-detail", args=[deal.id])
+        )
         assert response.status_code == status.HTTP_200_OK
         assert response.data["title"] == "Enterprise Deal"
 
     def test_filter_deals_by_stage(self, authenticated_client, deal, stage):
         """Test filtering deals by stage"""
-        response = authenticated_client.get(f"/api/crm/deals/?stage={stage.id}")
+        response = authenticated_client.get(
+            f"{reverse('quickscale_crm:deal-list')}?stage={stage.id}"
+        )
         assert response.status_code == status.HTTP_200_OK
 
     def test_deal_notes_endpoint(self, authenticated_client, deal):
         """Test listing deal notes"""
-        response = authenticated_client.get(f"/api/crm/deals/{deal.id}/notes/")
+        response = authenticated_client.get(
+            reverse("quickscale_crm:deal-notes", args=[deal.id])
+        )
         assert response.status_code == status.HTTP_200_OK
 
     def test_create_deal_note_via_nested(self, authenticated_client, deal):
         """Test creating a deal note via nested endpoint"""
         response = authenticated_client.post(
-            f"/api/crm/deals/{deal.id}/notes/",
+            reverse("quickscale_crm:deal-notes", args=[deal.id]),
             {"text": "New deal note"},
             format="json",
         )
@@ -176,7 +199,9 @@ class TestDealViewSet:
             "deal_ids": [deal.id],
             "stage_id": closed_won_stage.id,
         }
-        response = authenticated_client.post("/api/crm/deals/bulk_update_stage/", data)
+        response = authenticated_client.post(
+            reverse("quickscale_crm:deal-bulk-update-stage"), data
+        )
         assert response.status_code == status.HTTP_200_OK
         assert response.data["updated"] == 1
 
@@ -193,7 +218,7 @@ class TestDealViewSet:
 
         data = {"deal_ids": [deal.id]}
         response = authenticated_client.post(
-            "/api/crm/deals/mark_won/", data, format="json"
+            reverse("quickscale_crm:deal-mark-won"), data, format="json"
         )
         assert response.status_code == status.HTTP_200_OK
         assert response.data["updated"] == 1
@@ -212,7 +237,7 @@ class TestDealViewSet:
 
         data = {"deal_ids": [deal.id]}
         response = authenticated_client.post(
-            "/api/crm/deals/mark_lost/", data, format="json"
+            reverse("quickscale_crm:deal-mark-lost"), data, format="json"
         )
         assert response.status_code == status.HTTP_200_OK
         assert response.data["updated"] == 1
