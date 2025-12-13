@@ -49,7 +49,7 @@ MIDDLEWARE = [
     "django.middleware.clickjacking.XFrameOptionsMiddleware",
 ]
 
-ROOT_URLCONF = "{{ project_name }}.urls"
+ROOT_URLCONF = "{{ package_name }}.urls"
 
 TEMPLATES = [
     {
@@ -62,13 +62,13 @@ TEMPLATES = [
                 "django.template.context_processors.request",
                 "django.contrib.auth.context_processors.auth",
                 "django.contrib.messages.context_processors.messages",
-                "{{ project_name }}.context_processors.project_settings",
+                "{{ package_name }}.context_processors.project_settings",
             ],
         },
     },
 ]
 
-WSGI_APPLICATION = "{{ project_name }}.wsgi.application"
+WSGI_APPLICATION = "{{ package_name }}.wsgi.application"
 
 
 # Database
@@ -181,7 +181,7 @@ LOGGING = {
             "level": "INFO",
             "propagate": False,
         },
-        "{{ project_name }}": {
+        "{{ package_name }}": {
             "handlers": ["console", "file"],
             "level": "INFO",
             "propagate": False,

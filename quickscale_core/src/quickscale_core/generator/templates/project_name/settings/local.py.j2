@@ -25,7 +25,7 @@ DEBUG = True
 ALLOWED_HOSTS = ["localhost", "127.0.0.1", "[::1]", "0.0.0.0", "*"]
 
 # Database - SQLite for quick local development
-# For local PostgreSQL, use: postgresql://user:password@localhost:5432/{{ project_name }}
+# For local PostgreSQL, use: postgresql://user:password@localhost:5432/{{ package_name }}
 DATABASES = {
     "default": {
         "ENGINE": "django.db.backends.sqlite3",
@@ -83,7 +83,7 @@ LOGGING = {
             "level": "INFO",
             "propagate": False,
         },
-        "{{ project_name }}": {
+        "{{ package_name }}": {
             "handlers": ["console"],
             "level": "DEBUG",
             "propagate": False,

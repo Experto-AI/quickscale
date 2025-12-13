@@ -45,7 +45,7 @@ def main():
     # Check dependencies FIRST before anything else
     check_dependencies()
 
-    os.environ.setdefault("DJANGO_SETTINGS_MODULE", "{{ project_name }}.settings.local")
+    os.environ.setdefault("DJANGO_SETTINGS_MODULE", "{{ package_name }}.settings.local")
 
     from django.core.management import execute_from_command_line
 

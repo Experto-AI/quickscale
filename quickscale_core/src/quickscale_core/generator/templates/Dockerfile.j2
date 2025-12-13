@@ -68,7 +68,7 @@ FROM python:3.12-slim
 # Set environment variables
 ENV PYTHONUNBUFFERED=1 \
     PYTHONDONTWRITEBYTECODE=1 \
-    DJANGO_SETTINGS_MODULE={{ project_name }}.settings.production
+    DJANGO_SETTINGS_MODULE={{ package_name }}.settings.production
 
 # Port configuration
 ARG PORT=8000
@@ -128,4 +128,4 @@ HEALTHCHECK --interval=30s --timeout=10s --start-period=40s --retries=3 \
 # Note: Migrations should run via railway.json startCommand at deployment time
 # This ensures DATABASE_URL is available when migrations run
 # Run gunicorn
-CMD gunicorn {{ project_name }}.wsgi:application --bind 0.0.0.0:${PORT} --workers 4 --timeout 60 --access-logfile - --error-logfile -
+CMD gunicorn {{ package_name }}.wsgi:application --bind 0.0.0.0:${PORT} --workers 4 --timeout 60 --access-logfile - --error-logfile -

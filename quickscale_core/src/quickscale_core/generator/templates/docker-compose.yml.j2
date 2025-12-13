@@ -3,7 +3,7 @@ services:
     image: postgres:17-alpine
     container_name: {{ project_name }}_db
     environment:
-      POSTGRES_DB: {{ project_name }}
+      POSTGRES_DB: {{ package_name }}
       POSTGRES_USER: postgres
       POSTGRES_PASSWORD: postgres
     volumes:
@@ -37,8 +37,8 @@ services:
     ports:
       - "${PORT:-8000}:${PORT:-8000}"
     environment:
-      - DJANGO_SETTINGS_MODULE={{ project_name }}.settings.local
-      - DATABASE_URL=postgresql://postgres:postgres@db:5432/{{ project_name }}
+      - DJANGO_SETTINGS_MODULE={{ package_name }}.settings.local
+      - DATABASE_URL=postgresql://postgres:postgres@db:5432/{{ package_name }}
       - PORT=${PORT:-8000}
     depends_on:
       db:

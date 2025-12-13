@@ -143,7 +143,7 @@ echo ""
 # Step 2: Install Playwright browsers
 echo -e "${BLUE}[2/4] Installing Playwright browsers...${NC}"
 echo -e "${YELLOW}Note: This may prompt for sudo password to install system dependencies${NC}"
-if ! poetry run playwright install chromium --with-deps; then
+if ! poetry run playwright install chromium; then
     echo -e "${YELLOW}Warning: Playwright browser installation had issues${NC}"
     echo "Continuing anyway..."
 fi

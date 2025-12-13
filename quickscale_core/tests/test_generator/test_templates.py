@@ -27,6 +27,7 @@ def test_context() -> dict[str, str]:
     """Provide sample context data for template rendering tests."""
     return {
         "project_name": "testproject",
+        "package_name": "testproject",
     }
 
 

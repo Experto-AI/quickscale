@@ -611,15 +611,16 @@ def _validate_new_project_name(name: str | None) -> str:
         )
         raise click.Abort()
 
-    if not name.isidentifier():
+    package_name = name.replace("-", "_")
+    if not package_name.isidentifier():
         click.secho(
             f"\n❌ Error: '{name}' is not a valid project name",
             fg="red",
             err=True,
         )
         click.echo(
-            "   Project name must be a valid Python identifier "
-            "(letters, numbers, underscores, not starting with a number)",
+            "   Project name must check out as a valid Python identifier when hyphens are replaced with underscores "
+            "(letters, numbers, underscores, hyphens, not starting with a number)",
             err=True,
         )
         raise click.Abort()

@@ -189,9 +189,13 @@ class ProjectGenerator:
 
     def _generate_project(self, project_name: str, output_path: Path) -> None:
         """Generate project structure in specified directory"""
+        # Calculate package name (replace hyphens with underscores)
+        package_name = project_name.replace("-", "_")
+
         # Context for template rendering
         context = {
             "project_name": project_name,
+            "package_name": package_name,
         }
 
         # Map of template files to output files
@@ -211,35 +215,35 @@ class ProjectGenerator:
             ("railway.json.j2", "railway.json", False),
             ("start.sh.j2", "start.sh", False),
             # Project package files
-            ("project_name/__init__.py.j2", f"{project_name}/__init__.py", False),
-            ("project_name/urls.py.j2", f"{project_name}/urls.py", False),
-            ("project_name/views.py.j2", f"{project_name}/views.py", False),
-            ("project_name/wsgi.py.j2", f"{project_name}/wsgi.py", False),
-            ("project_name/asgi.py.j2", f"{project_name}/asgi.py", False),
+            ("project_name/__init__.py.j2", f"{package_name}/__init__.py", False),
+            ("project_name/urls.py.j2", f"{package_name}/urls.py", False),
+            ("project_name/views.py.j2", f"{package_name}/views.py", False),
+            ("project_name/wsgi.py.j2", f"{package_name}/wsgi.py", False),
+            ("project_name/asgi.py.j2", f"{package_name}/asgi.py", False),
             (
                 "project_name/context_processors.py.j2",
-                f"{project_name}/context_processors.py",
+                f"{package_name}/context_processors.py",
                 False,
             ),
             # Settings files
             (
                 "project_name/settings/__init__.py.j2",
-                f"{project_name}/settings/__init__.py",
+                f"{package_name}/settings/__init__.py",
                 False,
             ),
             (
                 "project_name/settings/base.py.j2",
-                f"{project_name}/settings/base.py",
+                f"{package_name}/settings/base.py",
                 False,
             ),
             (
                 "project_name/settings/local.py.j2",
-                f"{project_name}/settings/local.py",
+                f"{package_name}/settings/local.py",
                 False,
             ),
             (
                 "project_name/settings/production.py.j2",
-                f"{project_name}/settings/production.py",
+                f"{package_name}/settings/production.py",
                 False,
             ),
             # Template files (theme-specific)

@@ -35,7 +35,7 @@ echo "✅ Migrations completed successfully"
 echo ""
 
 echo "📋 Step 4/5: WSGI application check"
-python -c "from {{ project_name }}.wsgi import application; print(f'✅ WSGI app loaded: {type(application).__name__}')"
+python -c "from {{ package_name }}.wsgi import application; print(f'✅ WSGI app loaded: {type(application).__name__}')"
 echo ""
 
 echo "📋 Step 5/5: Starting Gunicorn"
@@ -45,7 +45,7 @@ echo "========================================"
 echo ""
 
 # Start Gunicorn with detailed logging
-exec gunicorn {{ project_name }}.wsgi:application \
+exec gunicorn {{ package_name }}.wsgi:application \
     --bind "0.0.0.0:${PORT:-8000}" \
     --workers 4 \
     --timeout 60 \

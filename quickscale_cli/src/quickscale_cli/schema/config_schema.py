@@ -159,12 +159,13 @@ def _validate_project_section(data: dict, yaml_content: str) -> tuple[str, str]:
             "'project.name' must be a non-empty string", line=line
         )
 
-    if not project_name.isidentifier():
+    package_name = project_name.replace("-", "_")
+    if not package_name.isidentifier():
         line = _find_line_number(yaml_content, "name")
         raise ConfigValidationError(
             f"Invalid project name '{project_name}'",
             line=line,
-            suggestion="Project name must be a valid Python identifier (letters, numbers, underscores, not starting with a number)",
+            suggestion="Project name must be a valid Python identifier (letters, numbers, underscores, hyphens, not starting with a number)",
         )
 
     theme = project_data.get("theme", "showcase_html")

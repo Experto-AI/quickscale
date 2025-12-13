@@ -4,7 +4,7 @@ version = "0.1.0"
 description = "A Django project scaffolded by QuickScale"
 authors = ["Your Name <you@example.com>"]
 readme = "README.md"
-packages = [{include = "{{ project_name }}"}]
+packages = [{include = "{{ package_name }}"}]
 
 [tool.poetry.dependencies]
 python = "^3.12"
@@ -30,11 +30,11 @@ requires = ["poetry-core"]
 build-backend = "poetry.core.masonry.api"
 
 [tool.pytest.ini_options]
-DJANGO_SETTINGS_MODULE = "{{ project_name }}.settings.local"
+DJANGO_SETTINGS_MODULE = "{{ package_name }}.settings.local"
 python_files = ["test_*.py", "*_test.py"]
 python_classes = ["Test*"]
 python_functions = ["test_*"]
-addopts = "--strict-markers --cov={{ project_name }} --cov-report=term-missing --cov-report=html"
+addopts = "--strict-markers --cov={{ package_name }} --cov-report=term-missing --cov-report=html"
 
 [tool.ruff]
 line-length = 100
@@ -76,4 +76,4 @@ module = "*.migrations.*"
 ignore_errors = true
 
 [tool.django-stubs]
-django_settings_module = "{{ project_name }}.settings.local"
+django_settings_module = "{{ package_name }}.settings.local"

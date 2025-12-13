@@ -23,7 +23,7 @@ from django.http import HttpResponse
 from django.urls import include, path
 from django.views.generic import TemplateView
 
-from {{ project_name }}.views import custom_404_view
+from {{ package_name }}.views import custom_404_view
 
 
 def healthcheck(request):
@@ -42,8 +42,8 @@ urlpatterns = [
 ]
 
 # Custom error handlers with helpful module installation hints
-handler404 = "{{ project_name }}.views.custom_404_view"
-handler500 = "{{ project_name }}.views.custom_500_view"
+handler404 = "{{ package_name }}.views.custom_404_view"
+handler500 = "{{ package_name }}.views.custom_500_view"
 
 # Serve media files in development
 if settings.DEBUG:
