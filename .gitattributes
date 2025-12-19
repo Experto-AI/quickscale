@@ -1,8 +1,0 @@
-# Force shell scripts to always use LF line endings
-*.sh text eol=lf
-
-# Ensure python files are handled correctly
-*.py text eol=lf
-
-# Handle the railway.json or other config files
-railway.json text eol=lf

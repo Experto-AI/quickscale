@@ -61,8 +61,9 @@ def write_file(path: Path, content: str, executable: bool = False) -> None:
     # Ensure parent directory exists
     ensure_directory(path.parent)
 
-    # Write file
-    path.write_text(content)
+    # Force LF line endings by using open() with newline='\n'
+    with path.open("w", encoding="utf-8", newline="\n") as f:
+        f.write(content)
 
     # Set executable permission if requested
     if executable:
