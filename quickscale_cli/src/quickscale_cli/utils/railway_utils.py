@@ -1,6 +1,7 @@
 """Railway CLI interaction utilities for deployment."""
 
 import json
+import platform
 import subprocess
 from pathlib import Path
 from typing import Any
@@ -14,6 +15,7 @@ def is_npm_installed() -> bool:
             capture_output=True,
             check=True,
             timeout=5,
+            shell=platform.system() == "Windows",
         )
         return True
     except (subprocess.SubprocessError, FileNotFoundError, subprocess.TimeoutExpired):
@@ -36,6 +38,7 @@ def get_railway_cli_version() -> str | None:
             text=True,
             check=True,
             timeout=5,
+            shell=platform.system() == "Windows",
         )
         version_str = result.stdout.strip()
 
@@ -63,6 +66,7 @@ def install_railway_cli() -> bool:
             capture_output=True,
             text=True,
             timeout=180,  # npm install can take a while
+            shell=platform.system() == "Windows",
         )
         return result.returncode == 0
     except (subprocess.SubprocessError, FileNotFoundError, subprocess.TimeoutExpired):
@@ -84,6 +88,7 @@ def upgrade_railway_cli() -> bool:
             capture_output=True,
             text=True,
             timeout=180,  # npm update can take a while
+            shell=platform.system() == "Windows",
         )
         return result.returncode == 0
     except (subprocess.SubprocessError, FileNotFoundError, subprocess.TimeoutExpired):
@@ -106,6 +111,7 @@ def login_railway_cli_browserless() -> bool:
         result = subprocess.run(
             ["railway", "login", "--browserless"],
             timeout=300,  # Give user 5 minutes to complete auth
+            shell=platform.system() == "Windows",
         )
         return result.returncode == 0
     except (subprocess.SubprocessError, FileNotFoundError, subprocess.TimeoutExpired):
@@ -120,6 +126,7 @@ def is_railway_cli_installed() -> bool:
             capture_output=True,
             check=True,
             timeout=5,
+            shell=platform.system() == "Windows",
         )
         return True
     except (subprocess.SubprocessError, FileNotFoundError, subprocess.TimeoutExpired):
@@ -135,6 +142,7 @@ def check_railway_cli_version(minimum: str = "3.0.0") -> bool:
             text=True,
             check=True,
             timeout=5,
+            shell=platform.system() == "Windows",
         )
         version_str = result.stdout.strip()
 
@@ -169,6 +177,7 @@ def is_railway_authenticated() -> bool:
             capture_output=True,
             check=True,
             timeout=5,
+            shell=platform.system() == "Windows",
         )
         return result.returncode == 0
     except (subprocess.SubprocessError, FileNotFoundError, subprocess.TimeoutExpired):
@@ -195,6 +204,7 @@ def get_railway_project_info() -> dict[str, Any] | None:
             text=True,
             check=True,
             timeout=10,
+            shell=platform.system() == "Windows",
         )
 
         # Parse status output for project information
@@ -230,6 +240,7 @@ def run_railway_command(
                 cmd,
                 text=True,
                 timeout=timeout,
+                shell=platform.system() == "Windows",
             )
         else:
             # Run non-interactively - capture output
@@ -238,6 +249,7 @@ def run_railway_command(
                 capture_output=True,
                 text=True,
                 timeout=timeout,
+                shell=platform.system() == "Windows",
             )
         return result
     except subprocess.TimeoutExpired as e:
