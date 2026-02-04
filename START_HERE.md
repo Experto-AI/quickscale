@@ -24,10 +24,10 @@ For complete definitions, see **[GLOSSARY.md](./GLOSSARY.md)**. Here are the ess
 | Term | Quick Definition | Learn More |
 |------|------------------|------------|
 | **Generated Project** | The standalone Django app created by `quickscale plan + apply` | [GLOSSARY.md](./GLOSSARY.md#generated-project) |
-| **MVP** | Phase 1 (v0.56-v0.75.0) - Personal toolkit for client projects | [GLOSSARY.md](./GLOSSARY.md#mvp-minimum-viable-product) |
-| **Post-MVP** | Phase 2+ (v0.76+) - Community platform with marketplace | [GLOSSARY.md](./GLOSSARY.md#post-mvp) |
+| **MVP** | Phase 1 (v0.56-v0.77.0) - Personal toolkit for client projects | [GLOSSARY.md](./GLOSSARY.md#mvp-minimum-viable-product) |
+| **Post-MVP** | Phase 2+ (v0.78+) - Community platform with marketplace | [GLOSSARY.md](./GLOSSARY.md#post-mvp) |
 | **Module** | Reusable Django app (auth, billing, blog) | [GLOSSARY.md](./GLOSSARY.md#module) |
-| **Theme** | Frontend scaffolding (HTML, HTMX, React) | [GLOSSARY.md](./GLOSSARY.md#theme) |
+| **Theme** | Frontend scaffolding (React default, HTML/HTMX alternatives) | [GLOSSARY.md](./GLOSSARY.md#theme) |
 | **Git Subtree** | Distribution mechanism for sharing code | [GLOSSARY.md](./GLOSSARY.md#git-subtree) |
 | **Plan/Apply** | Terraform-style declarative workflow | [GLOSSARY.md](./GLOSSARY.md#planapply-workflow) |
 
@@ -191,7 +191,7 @@ Detailed guides for specific stages:
 ## Quick Answers to Common Questions
 
 ### "Is QuickScale production-ready?"
-**Phase 1 (MVP)** will be production-ready by v0.75.0. Current: v0.72.0 (Plan/Apply cleanup complete).
+**Phase 1 (MVP)** will be production-ready by v0.77.0 (SaaS Feature Parity). Current: v0.73.0 (CRM Module complete).
 See: [roadmap.md](./docs/technical/roadmap.md)
 
 ### "Can I use it for my client projects?"
@@ -199,8 +199,8 @@ See: [roadmap.md](./docs/technical/roadmap.md)
 See: [README.md - Primary Use Cases](./README.md#primary-use-cases-mvp)
 
 ### "What's the difference between MVP and Post-MVP?"
-- **MVP (v0.56-v0.75)**: Personal toolkit, git subtree distribution, single theme
-- **Post-MVP (v0.76+)**: Multiple themes, PyPI distribution, marketplace
+- **MVP (v0.56-v0.77)**: Personal toolkit, git subtree distribution, React + shadcn/ui default
+- **Post-MVP (v0.78+)**: Additional themes, PyPI distribution, marketplace
 
 See: [GLOSSARY.md - MVP](./GLOSSARY.md#mvp-minimum-viable-product) | [GLOSSARY.md - Post-MVP](./GLOSSARY.md#post-mvp)
 
@@ -310,6 +310,6 @@ decisions.md scaffolding.md roadmap.md   contrib/*
 
 ---
 
-**Last Updated**: 2025-12-11
+**Last Updated**: 2026-02-04
 **QuickScale Version**: v0.73.0
 **Feedback**: Open an issue if this guide needs improvement!

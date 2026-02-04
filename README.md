@@ -80,6 +80,7 @@ See [decisions.md - Glossary section](./docs/technical/decisions.md#document-res
 
 Running `quickscale plan myapp && quickscale apply` generates a **production-ready Django project** with:
 
+- ✅ **React + shadcn/ui** frontend (TypeScript, Vite, Tailwind CSS) — **NEW in v0.74.0**
 - ✅ **Docker** setup (development + production)
 - ✅ **PostgreSQL** configuration
 - ✅ **Environment-based** settings (dev/prod split)
@@ -90,6 +91,8 @@ Running `quickscale plan myapp && quickscale apply` generates a **production-rea
 - ✅ **Advanced quality analysis** (dead code detection, complexity metrics, duplication)
 - ✅ **Poetry** for dependency management
 - ✅ **One-Command Deployment**: Deploy to Railway with `quickscale deploy railway` - fully automated setup
+
+**Alternative**: Use `quickscale plan myapp --theme showcase_html` for pure HTML/CSS (simpler projects).
 
 **See the complete project structure:** [scaffolding.md - Generated Project Output](./docs/technical/scaffolding.md#5-generated-project-output)
 

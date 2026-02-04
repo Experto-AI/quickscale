@@ -38,26 +38,27 @@ QuickScale follows an evolution-aligned roadmap that starts as a personal toolki
 
 **Roadmap Phases:**
 
-1. **Phase 1: Foundation + Core Modules (Showcase HTML Theme Only)** 🚧 _In Progress_
+1. **Phase 1: Foundation + Core Modules (React Theme Default)** 🚧 _In Progress_
    - ✅ Theme system infrastructure and split branch management (v0.61.0-v0.62.0)
    - ✅ Auth module (v0.63.0) - production-ready with django-allauth
    - ✅ Listings module (v0.67.0) - generic base for vertical themes
    - ✅ Plan/Apply System core (v0.68.0-v0.70.0) - Terraform-style configuration
    - ✅ **Plan/Apply System complete** (v0.71.0) - Module manifests & config mutability
    - ✅ Plan/Apply Cleanup (v0.72.0) - Remove legacy init/embed commands
-   - ✅ CRM module (v0.73.0) - native Django CRM app
-   - 📋 CRM Theme (v0.74.0) - React-based theme for CRM
-   - 📋 Billing module (v0.75.0) - Stripe integration
-   - 📋 Teams module (v0.76.0) - multi-tenancy
+   - ✅ CRM module (v0.73.0) - native Django CRM app (API-only)
+   - 📋 **React Default Theme** (v0.74.0) - React + shadcn/ui as default ✨ NEW
+   - 📋 CRM Theme (v0.75.0) - React frontend for CRM module
+   - 📋 Billing module (v0.76.0) - Stripe integration
+   - 📋 Teams module (v0.77.0) - multi-tenancy
 
-2. **Phase 2: Additional Themes (Port Existing Modules)** 📋 _Planned_
-   - 📋 HTMX theme with Alpine.js (v0.77.0)
-   - 📋 Port all core modules to HTMX theme
+2. **Phase 2: Additional Themes (Secondary Options)** 📋 _Planned_
+   - 📋 HTMX theme with Alpine.js (v0.78.0+) - alternative for progressive enhancement
+   - HTML theme remains as secondary option (simpler projects)
 
 3. **Phase 3: Expand Features (All Themes)** 📋 _Planned_
-   - 📋 Notifications module with email infrastructure (v0.78.0)
-   - 📋 Advanced module management features (v0.79.0)
-   - 📋 Workflow validation and real-world testing (v0.80.0)
+   - 📋 Notifications module with email infrastructure (v0.79.0)
+   - 📋 Advanced module management features (v0.80.0)
+   - 📋 Workflow validation and real-world testing (v0.81.0)
 
 4. **Phase 4: Community Platform (Optional v1.0.0+)** 📋 _Future_
    - 📋 PyPI package distribution
@@ -70,16 +71,17 @@ QuickScale follows an evolution-aligned roadmap that starts as a personal toolki
 - 📋 = Planned/Not Started
 
 **Key Milestones:**
-- **v0.71.0:** Plan/Apply System Complete 🎯
+- **v0.71.0:** Plan/Apply System Complete ✅
 - **v0.72.0:** Plan/Apply Cleanup (remove legacy commands) ✅
-- **v0.76.0:** SaaS Feature Parity (auth, billing, teams) 🎯
+- **v0.74.0:** React Default Theme (React + shadcn/ui) 🎯
+- **v0.77.0:** SaaS Feature Parity (auth, billing, teams) 🎯
 - **v1.0.0+:** Community platform (if demand exists)
 
 **Status:**
 - **Current Status:** v0.73.0 — CRM Module ✅ Complete
-- **Next Milestone:** v0.74.0 - CRM Theme (React)
+- **Next Milestone:** v0.74.0 - React Default Theme (shadcn/ui)
 - **Plan/Apply System:** v0.68.0-v0.71.0 - Terraform-style configuration ✅ Complete
-- **SaaS Parity:** v0.76.0 - auth, billing, teams modules complete
+- **SaaS Parity:** v0.77.0 - auth, billing, teams modules complete
 
 ## Notes and References
 
@@ -113,35 +115,123 @@ List of upcoming releases with detailed implementation tasks:
 - ⏸️ Template integration correctly deferred to v0.74.0
 
 **Deferred Items**:
-- ❌ Template integration (showcase_html) → v0.74.0 (CRM Theme - React)
-- ❌ Email synchronization → v0.78.0 (notifications module)
+- ❌ Template integration (showcase_html) → Deferred (React is now default)
+- ❌ Email synchronization → v0.79.0 (notifications module)
 - ❌ File attachments → Post-v0.73.0
-- ❌ Custom fields → v0.75.0+
+- ❌ Custom fields → v0.76.0+
 
 ---
 
-### v0.74.0: CRM Theme (React)
+### v0.74.0: React Default Theme (showcase_react)
 
 **Status**: 📋 Planned
 
-**Strategic Context**: A modern, React-based frontend specifically designed for the CRM module. Demonstrates React + Django integration.
+**Strategic Context**: Make React + shadcn/ui the **default** theme for all new QuickScale projects. This establishes the modern frontend foundation that CRM and future vertical themes will build upon.
 
 **Prerequisites**:
-- ✅ CRM Module (v0.73.0)
+- ✅ Plan/Apply System (v0.68.0-v0.71.0)
+- ✅ CRM Module API (v0.73.0) - for API integration testing
 
-**Theme Structure**:
-- **Stack**: React TypeScript + Vite application in `frontend/`
-- **UI Framework**: **shadcn/ui** + **shadcn/admin** (modern, copy-paste components)
-- **Icons**: **Lucide React**
-- Consumes CRM Module APIs
-- Components: Kanban Board, Contact List, Deal Detail View
+**Complete React Tech Stack (18 decisions):**
+
+| # | Category | Technology | Rationale |
+|---|----------|------------|-----------|
+| | **Core** | | |
+| 1 | Framework | React 18+ | Industry standard, excellent ecosystem |
+| 2 | Language | TypeScript | Type safety, better developer experience |
+| 3 | Build Tool | Vite | Fast HMR, modern bundling |
+| 4 | Package Manager | pnpm | Best disk efficiency, fast installs |
+| | **UI/Styling** | | |
+| 5 | UI Components | shadcn/ui | Copy-paste components, full ownership |
+| 6 | Admin Components | shadcn/admin | Pre-built admin patterns |
+| 7 | Icons | Lucide React | Clean, modern, shadcn default |
+| 8 | CSS Framework | Tailwind CSS | Required by shadcn/ui |
+| 9 | Animation | Motion | De-facto standard for React |
+| | **Data & State** | | |
+| 10 | Routing | React Router v6 | Most mature, largest market share |
+| 11 | Server State | TanStack Query | Best performance, highest satisfaction |
+| 12 | Client State | Zustand | Simplest API, fastest growing |
+| 13 | Forms | React Hook Form + Zod | Most popular, best performance |
+| | **Quality** | | |
+| 14 | Unit Testing | Vitest + RTL | Fast, Vite-native |
+| 15 | E2E Testing | Playwright | Already in QuickScale |
+| 16 | Linting | ESLint + Prettier | Standard tooling |
+
+**Implementation Tasks**:
+- [ ] Create `showcase_react/` theme template structure
+- [ ] Set up Vite + TypeScript + pnpm project scaffold
+- [ ] Integrate shadcn/ui with component configuration
+- [ ] Create base layouts (App shell, navigation, sidebar)
+- [ ] Set up Zustand stores for client state
+- [ ] Implement Django REST Framework API integration with TanStack Query
+- [ ] Add React Hook Form + Zod for form handling
+- [ ] Configure Vitest + React Testing Library
+- [ ] Create sample pages (Dashboard, List, Detail views)
+- [ ] Update CLI to default to `showcase_react` theme
+- [ ] Update `quickscale plan` wizard prompts
+
+**Generated Project Structure**:
+```
+myapp/
+├── frontend/                    # React + Vite application
+│   ├── src/
+│   │   ├── components/
+│   │   │   └── ui/             # shadcn/ui components
+│   │   ├── lib/
+│   │   │   └── utils.ts        # shadcn/ui utilities
+│   │   ├── stores/             # Zustand stores
+│   │   ├── hooks/              # Custom hooks (TanStack Query)
+│   │   ├── pages/
+│   │   ├── App.tsx
+│   │   └── main.tsx
+│   ├── components.json         # shadcn/ui config
+│   ├── tailwind.config.js
+│   ├── vite.config.ts
+│   ├── vitest.config.ts        # Vitest config
+│   ├── pnpm-lock.yaml          # pnpm lockfile
+│   └── package.json
+├── templates/
+│   └── index.html              # React entry point
+└── ... (Django project structure)
+```
 
 **Testing**:
-- [ ] E2E tests: Plan -> Apply -> Working CRM project
+- [ ] E2E tests: `quickscale plan` → `quickscale apply` → Working React project
+- [ ] Verify shadcn/ui components render correctly
+- [ ] Vitest unit tests pass
+- [ ] TanStack Query fetches from Django REST Framework API
+- [ ] Zustand stores work correctly
 
 ---
 
-### v0.75.0: `quickscale_modules.billing` - Billing Module
+### v0.75.0: CRM Theme (React Frontend for CRM)
+
+**Status**: 📋 Planned
+
+**Strategic Context**: React frontend specifically for the CRM module, building on the `showcase_react` foundation from v0.74.0.
+
+**Prerequisites**:
+- ✅ CRM Module (v0.73.0)
+- 📋 React Default Theme (v0.74.0)
+
+**Theme Features**:
+- **Extends**: `showcase_react` base patterns
+- **Components**: Kanban Board, Contact List, Deal Detail View, Pipeline Management
+- **API Integration**: Consumes CRM Module REST APIs
+
+**Implementation Tasks**:
+- [ ] CRM-specific page layouts
+- [ ] Kanban board for deal pipeline
+- [ ] Contact and company list views
+- [ ] Detail views with inline editing
+- [ ] Dashboard with CRM metrics
+
+**Testing**:
+- [ ] E2E tests: Plan → Apply → Working CRM project
+
+---
+
+### v0.76.0: `quickscale_modules.billing` - Billing Module
 
 **Status**: 📋 Planned
 
@@ -170,7 +260,7 @@ List of upcoming releases with detailed implementation tasks:
 
 ---
 
-### v0.76.0: `quickscale_modules.teams` - Teams/Multi-tenancy Module
+### v0.77.0: `quickscale_modules.teams` - Teams/Multi-tenancy Module
 
 **Status**: 📋 Planned
 
@@ -199,9 +289,9 @@ List of upcoming releases with detailed implementation tasks:
 
 ---
 
-### Module Showcase Architecture (Deferred to Post-v0.76.0)
+### Module Showcase Architecture (Deferred to Post-v0.77.0)
 
-**Status**: 🚧 **NOT YET IMPLEMENTED** - Deferred to post-v0.76.0
+**Status**: 🚧 **NOT YET IMPLEMENTED** - Deferred to post-v0.77.0
 
 **Current Reality** (v0.66.0):
 - ✅ Basic context processor exists (`quickscale_core/context_processors.py`)
@@ -211,11 +301,11 @@ List of upcoming releases with detailed implementation tasks:
 - ❌ Current `index.html.j2`: Simple welcome page only
 
 **Why Deferred**:
-- Focus on Plan/Apply system and core modules first (v0.68-v0.76)
+- Focus on Plan/Apply system and core modules first (v0.68-v0.77)
 - Showcase architecture provides maximum value when multiple modules exist
 - Current simple welcome page is adequate for MVP
 
-**Implementation Plan**: After v0.76.0 (SaaS Feature Parity milestone), evaluate whether to implement showcase architecture or keep simple welcome page. Decision criteria:
+**Implementation Plan**: After v0.77.0 (SaaS Feature Parity milestone), evaluate whether to implement showcase architecture or keep simple welcome page. Decision criteria:
 - Are 3+ modules complete and production-ready?
 - Is module discovery a user pain point?
 - Would showcase provide meaningful marketing value?
@@ -224,11 +314,11 @@ List of upcoming releases with detailed implementation tasks:
 
 ---
 
-### v0.77.0: HTMX Frontend Theme
+### v0.78.0+: HTMX Frontend Theme (Optional)
 
-**Status**: 📋 Planned (after SaaS Feature Parity)
+**Status**: 📋 Planned (low priority, after SaaS Feature Parity)
 
-**Rationale**: React theme established via CRM Theme (v0.74.0). HTMX provides alternative for progressive enhancement approach.
+**Rationale**: React theme is now the default (v0.74.0). HTMX provides an optional alternative for users preferring progressive enhancement.
 
 **See**: [user_manual.md Theme Selection](../technical/user_manual.md#theme-selection-v0610) for current theme architecture.
 
@@ -236,7 +326,7 @@ List of upcoming releases with detailed implementation tasks:
 
 ---
 
-### v0.78.0: `quickscale_modules.notifications` - Notifications Module
+### v0.79.0: `quickscale_modules.notifications` - Notifications Module
 
 **Status**: 📋 Planned (after SaaS Feature Parity)
 
@@ -268,7 +358,7 @@ List of upcoming releases with detailed implementation tasks:
 
 ---
 
-### v0.79.0: Advanced Module Management Features
+### v0.80.0: Advanced Module Management Features
 
 **Note**: Basic module management commands (`quickscale update`, `quickscale push`) are implemented in **v0.62.0**. Plan/Apply system implemented in **v0.68.0-v0.71.0**. This release adds advanced features for managing multiple modules.
 
@@ -294,7 +384,7 @@ List of upcoming releases with detailed implementation tasks:
 - [ ] Test conflict resolution workflows
 - [ ] E2E testing of enhanced UX features
 
-**Future Enhancements** (v0.80.0+, evaluate after v0.76.0):
+**Future Enhancements** (v0.81.0+, evaluate after v0.77.0):
 - [ ] Module versioning: `quickscale plan --add auth@v0.63.0` - Pin specific module version
 - [ ] Semantic versioning compatibility checks
 - [ ] Automatic migration scripts for breaking changes

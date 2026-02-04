@@ -158,20 +158,53 @@ myproject/
 
 **Purpose:** Complete project scaffolding ranging from empty starters to full vertical applications.
 
-**Theme Categories (v0.67.0 Decision):**
+**Theme Categories (v0.74.0 Decision - Updated):**
 
 1. **Starter Themes** — Empty foundations for building custom applications
-   - `showcase_html` — Pure HTML + CSS (default)
-   - `showcase_htmx` — HTMX + Alpine.js (planned v0.74.0)
-   - `showcase_react` — React + TypeScript + Vite (planned v0.75.0)
+   - `showcase_react` — **React + TypeScript + shadcn/ui (default)** ✅
+   - `showcase_html` — Pure HTML + CSS (secondary option)
+   - `showcase_htmx` — HTMX + Alpine.js (planned v0.78.0+)
    - Minimal code, ready for module embedding
    - Foundation for custom development
 
 2. **Vertical Themes** — Complete applications for specific industries
-   - `crm` — CRM application, React-based (v0.74.0)
+   - `crm` — CRM application, React-based (v0.75.0)
    - `saas_starter` — SaaS with billing/teams (future)
    - Pre-configured modules, production-ready
    - Can be used as-is or further enhanced
+
+**Default React Theme Tech Stack (v0.74.0):**
+
+| # | Category | Technology | Rationale |
+|---|----------|------------|-----------|
+| | **Core** | | |
+| 1 | Framework | React 18+ | Industry standard, excellent ecosystem |
+| 2 | Language | TypeScript | Type safety, better developer experience |
+| 3 | Build Tool | Vite | Fast HMR, modern bundling |
+| 4 | Package Manager | pnpm | Best disk efficiency, fast installs, enterprise adoption |
+| | **UI/Styling** | | |
+| 5 | UI Components | shadcn/ui | Copy-paste components, full ownership |
+| 6 | Admin Components | shadcn/admin | Pre-built admin patterns |
+| 7 | Icons | Lucide React | Clean, modern, shadcn default |
+| 8 | CSS Framework | Tailwind CSS | Required by shadcn/ui, utility-first |
+| 9 | Animation | Motion (Framer Motion) | De-facto standard for React animations |
+| | **Data & State** | | |
+| 10 | Routing | React Router v6 | Most mature, largest market share |
+| 11 | Server State | TanStack Query | Best performance, highest satisfaction |
+| 12 | Client State | Zustand | Simplest API, fastest growing, #1 sentiment |
+| 13 | Forms | React Hook Form + Zod | Most popular, best performance |
+| | **Quality** | | |
+| 14 | Unit Testing | Vitest + React Testing Library | Fast, Vite-native, modern |
+| 15 | E2E Testing | Playwright | Already in QuickScale |
+| 16 | Linting | ESLint + Prettier | Standard tooling |
+| | **Backend Integration** | | |
+| 17 | Authentication | Django allauth (backend) | Handled by QuickScale auth module |
+| 18 | API Client | TanStack Query | Handles fetch + caching |
+
+**Optional Utilities (for CRM v0.75.0):**
+- **date-fns** — Date handling (tree-shakeable, shadcn uses it)
+- **Recharts** — Charts (shadcn/charts uses it)
+- **TanStack Table** — Data tables (shadcn uses it)
 
 **Distribution Strategy:**
 1. Store themes in `quickscale_core/generator/templates/themes/{theme_name}/`
@@ -182,15 +215,19 @@ myproject/
 
 **Workflow:**
 ```bash
-# Create project with starter theme (empty foundation)
+# Create project with default React theme (empty foundation)
 quickscale plan myproject
-# → Select theme: showcase_html
+# → Theme defaults to: showcase_react (React + shadcn/ui)
 # → Select modules to embed: auth, billing
 quickscale apply
 
+# Create project with HTML theme (simpler alternative)
+quickscale plan myproject --theme showcase_html
+# → Uses pure HTML + CSS instead of React
+quickscale apply
+
 # Create project with vertical theme (complete application)
-quickscale plan mycrm
-# → Select theme: crm
+quickscale plan mycrm --theme crm
 # → Modules pre-configured (crm auto-embedded)
 quickscale apply
 ```
@@ -200,22 +237,34 @@ quickscale apply
 quickscale_core/generator/templates/
 └── themes/
     # Starter Themes (empty foundations)
-    ├── showcase_html/         # Pure HTML + CSS
+    ├── showcase_react/        # React + shadcn/ui (DEFAULT) ✅
+    │   ├── frontend/
+    │   │   ├── src/
+    │   │   │   ├── components/
+    │   │   │   │   └── ui/           # shadcn/ui components
+    │   │   │   ├── lib/
+    │   │   │   │   └── utils.ts      # shadcn/ui utilities
+    │   │   │   ├── pages/
+    │   │   │   ├── App.tsx
+    │   │   │   └── main.tsx
+    │   │   ├── components.json       # shadcn/ui config
+    │   │   ├── tailwind.config.js
+    │   │   ├── vite.config.ts
+    │   │   └── package.json
+    │   ├── templates/
+    │   │   └── index.html.j2         # React entry point
+    │   └── static/                   # Static assets
+    ├── showcase_html/         # Pure HTML + CSS (secondary)
     │   ├── templates/
     │   └── static/
-    ├── showcase_htmx/         # HTMX + Alpine.js (planned v0.75.0)
+    ├── showcase_htmx/         # HTMX + Alpine.js (planned v0.78.0+)
     │   ├── templates/
     │   ├── static/
     │   └── package.json
-    ├── showcase_react/        # React + TypeScript + Vite (planned, via crm)
-    │   ├── frontend/
-    │   │   ├── src/
-    │   │   └── vite.config.ts
-    │   └── package.json
     #
     # Vertical Themes (complete applications)
-    └── crm/                   # CRM application, React-based (v0.74.0)
-        ├── frontend/          # React + Vite application
+    └── crm/                   # CRM application, React-based (v0.75.0)
+        ├── frontend/          # Extends showcase_react patterns
         │   ├── src/
         │   │   ├── components/
         │   │   └── pages/
