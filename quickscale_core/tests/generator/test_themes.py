@@ -136,13 +136,29 @@ class TestProjectGenerationWithTheme:
         # Verify utils.ts exists (CRITICAL for build)
         assert (output_path / "frontend" / "src" / "lib" / "utils.ts").exists()
 
-        # Verify NO templates/index.html (it should be built)
-        assert not (output_path / "templates" / "index.html").exists()
+        # Verify Django template for React exists (serves built assets)
+        assert (output_path / "templates" / "index.html").exists()
+        index_html = (output_path / "templates" / "index.html").read_text()
+        assert "{% load static %}" in index_html
+        assert "{% static 'frontend/assets/index.js' %}" in index_html
 
         # Check Dockerfile has node parts
         dockerfile = (output_path / "Dockerfile").read_text()
         assert "FROM node:20-slim as frontend-builder" in dockerfile
         assert "npm run build" in dockerfile
+
+    def test_react_theme_vite_config_has_consistent_filenames(self, tmp_path):
+        """Vite config should use consistent filenames for Django compatibility"""
+        generator = ProjectGenerator(theme="showcase_react")
+        project_name = "testproject_react"
+        output_path = tmp_path / project_name
+
+        generator.generate(project_name, output_path)
+
+        vite_config = (output_path / "frontend" / "vite.config.ts").read_text()
+        # Check for consistent filename config (no hashes)
+        assert "entryFileNames: 'assets/[name].js'" in vite_config
+        assert "assetFileNames: 'assets/[name].[ext]'" in vite_config
 
     def test_generated_output_matches_v060(self, tmp_path):
         """Generated project structure should match v0.60.0 output"""
@@ -208,3 +224,86 @@ class TestBackwardCompatibility:
         assert "<!DOCTYPE html>" in base_html
         assert "<title>" in base_html
         assert "{% block content %}" in base_html
+
+
+class TestReactThemeBuildCompatibility:
+    """Test React theme TypeScript/build compatibility.
+
+    These tests verify that the generated React frontend can be built
+    without TypeScript errors, ensuring production deployments succeed.
+    """
+
+    def test_react_theme_no_unused_imports(self, tmp_path):
+        """Verify React theme files have no unused imports.
+
+        This is a critical test because unused imports cause TypeScript
+        compilation to fail with noUnusedLocals: true, which breaks
+        Docker builds.
+
+        Regression test for: Button import in Sidebar.tsx causing build failure.
+        """
+        generator = ProjectGenerator(theme="showcase_react")
+        project_name = "testproject_react"
+        output_path = tmp_path / project_name
+
+        generator.generate(project_name, output_path)
+
+        # Check key files that commonly have unused import issues
+        tsx_files = [
+            "frontend/src/components/layout/Sidebar.tsx",
+            "frontend/src/components/layout/Navbar.tsx",
+            "frontend/src/App.tsx",
+        ]
+
+        for tsx_file in tsx_files:
+            filepath = output_path / tsx_file
+            if filepath.exists():
+                content = filepath.read_text()
+                # Check each import statement
+                import_lines = [
+                    line
+                    for line in content.split("\n")
+                    if line.strip().startswith("import")
+                ]
+                for import_line in import_lines:
+                    # Extract imported names
+                    if "{" in import_line and "}" in import_line:
+                        imports_part = import_line.split("{")[1].split("}")[0]
+                        imports = [i.strip() for i in imports_part.split(",")]
+                        for imported_name in imports:
+                            # Clean up 'as' aliases
+                            clean_name = imported_name.split(" as ")[0].strip()
+                            if clean_name:
+                                # Check if the imported name is actually used in the file
+                                # (excluding the import line itself)
+                                content_without_imports = "\n".join(
+                                    line
+                                    for line in content.split("\n")
+                                    if not line.strip().startswith("import")
+                                )
+                                # Simple check: name should appear somewhere in the file
+                                assert clean_name in content_without_imports, (
+                                    f"Unused import '{clean_name}' in {tsx_file}. "
+                                    f"This will cause TypeScript build to fail."
+                                )
+
+    def test_react_theme_dockerfile_correct_paths(self, tmp_path):
+        """Verify Dockerfile copies frontend assets correctly.
+
+        The Dockerfile must copy built assets with correct ownership
+        to avoid permission errors during collectstatic.
+        """
+        generator = ProjectGenerator(theme="showcase_react")
+        project_name = "testproject_react"
+        output_path = tmp_path / project_name
+
+        generator.generate(project_name, output_path)
+
+        dockerfile = (output_path / "Dockerfile").read_text()
+
+        # Should have --chown for frontend assets
+        assert "--chown=django:django" in dockerfile
+        assert "/app/staticfiles/frontend/assets" in dockerfile
+
+        # Should NOT copy index.html to templates (we generate Django template)
+        assert "index.html /app/templates/index.html" not in dockerfile

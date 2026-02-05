@@ -124,12 +124,13 @@ RUN echo "📁 Creating application directories..." && \
     echo "✅ Directories created"
 
 {% if theme == 'showcase_react' %}
-# Copy frontend assets from frontend-builder
+# Copy frontend assets from frontend-builder (with correct ownership)
+# Note: We only copy the assets folder. The index.html template is generated
+# by QuickScale and uses Django's static template tags to load these assets.
 RUN echo "📦 Copying frontend assets..."
-# Copy static assets (css, js)
-COPY --from=frontend-builder /app/static/frontend/assets /app/staticfiles/frontend/assets
-# Copy index.html to templates
-COPY --from=frontend-builder /app/static/frontend/index.html /app/templates/index.html
+COPY --from=frontend-builder --chown=django:django /app/static/frontend/assets /app/staticfiles/frontend/assets
+# Copy favicon.svg to staticfiles
+COPY --from=frontend-builder --chown=django:django /app/static/frontend/favicon.svg /app/staticfiles/frontend/favicon.svg
 RUN echo "✅ Frontend assets copied"
 {% endif %}
 

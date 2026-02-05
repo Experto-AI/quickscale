@@ -315,12 +315,15 @@ class ProjectGenerator:
         """Generate React frontend from theme templates
 
         Copies all files from showcase_react theme, rendering .j2 templates
-        with project context.
+        with project context. Also generates the Django index.html template
+        for serving the React app.
 
         """
         theme_dir = self.template_dir / "themes" / "showcase_react"
         frontend_output = output_path / "frontend"
+        templates_output = output_path / "templates"
         ensure_directory(frontend_output)
+        ensure_directory(templates_output)
 
         # Walk through all files in theme directory
         for root, _dirs, files in os.walk(theme_dir):
@@ -331,6 +334,23 @@ class ProjectGenerator:
 
                 # Skip README.md (theme documentation, not project file)
                 if filename == "README.md" and rel_root == Path("."):
+                    continue
+
+                # Handle templates directory separately - copy to project templates/
+                if str(rel_root).startswith("templates"):
+                    if filename.endswith(".j2"):
+                        output_filename = filename[:-3]  # Remove .j2 extension
+                        rel_template_path = rel_root / output_filename
+                        # Convert relative path to just the filename within templates/
+                        output_file_path = output_path / rel_template_path
+
+                        template_rel_path = (
+                            f"themes/showcase_react/{rel_root / filename}"
+                        )
+                        template = self.env.get_template(template_rel_path)
+                        content = template.render(**context)
+
+                        write_file(output_file_path, content)
                     continue
 
                 # Determine output path and whether to render as template

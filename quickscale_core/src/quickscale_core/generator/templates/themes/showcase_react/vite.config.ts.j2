@@ -24,5 +24,13 @@ export default defineConfig({
     outDir: '../static/frontend',
     emptyOutDir: true,
     manifest: true,
+    rollupOptions: {
+      output: {
+        // Use consistent filenames for Django template compatibility
+        entryFileNames: 'assets/[name].js',
+        chunkFileNames: 'assets/[name].js',
+        assetFileNames: 'assets/[name].[ext]',
+      },
+    },
   },
 })
