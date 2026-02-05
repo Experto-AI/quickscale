@@ -54,7 +54,7 @@ TARGET AUDIENCE: Maintainers, core contributors, community package developers, C
 - ❌ NO Black, NO Flake8, NO requirements.txt, NO setup.py
 
 **Key Constraints:**
-- 70% unit test coverage minimum per file (CI enforced)
+- 90% overall mean + 80% per file minimum test coverage (CI enforced)
 - decisions.md is authoritative (update FIRST, never contradict)
 - Sub-packages MUST NOT have README.md (use root README only)
 - Settings: Standalone by default (NO automatic inheritance)
@@ -659,7 +659,7 @@ disable_error_code = var-annotated
 
 **6. Testing:**
 - [ ] Unit tests for models, views, filters, admin
-- [ ] 70%+ test coverage (CI enforced)
+- [ ] 90% overall mean + 80% per file minimum coverage (CI enforced)
 - [ ] Tests use concrete models (not abstract stubs)
 
 **7. Split Branch Publishing:**
@@ -878,10 +878,10 @@ Other documents (README.md, roadmap.md, scaffolding.md, commercial.md) MUST refe
 ## Testing Standards
 
 **Coverage Targets:**
-- ✅ 70% minimum unit test coverage per file: `quickscale_core`, `quickscale_cli`, modules, themes
-- ✅ CI fails if any file falls below threshold
+- ✅ 90% overall mean coverage + 80% minimum per file: `quickscale_core`, `quickscale_cli`, modules, themes
+- ✅ CI fails if overall mean < 90% or any file falls below 80%
 - ✅ Coverage reports on every CI run
-- ℹ️ Note: 70% threshold applies to unit tests only, measured per file (not overall mean)
+- ℹ️ Note: Thresholds apply to unit tests only; dual enforcement (overall mean + per file)
 
 **Test Requirements:**
 - ✅ New features: Tests required

@@ -150,7 +150,7 @@ This review evaluates Task {ID} ({name}), which implements {goal}.
 - [x] Test isolation verified
 - [x] No global mocking contamination
 - [x] Proper mock usage
-- [ ] Coverage ≥ 70% ← Below threshold
+- [ ] Coverage ≥ 90% overall, ≥ 80% per file ← Below threshold
 
 ### Coverage Report
 | File | Coverage | Status |

@@ -44,4 +44,8 @@ DJANGO_SETTINGS_MODULE = "tests.settings"
 pythonpath = ["."]
 python_files = ["test_*.py"]
 testpaths = ["tests"]
-addopts = "-v --cov=src/quickscale_modules_blog --cov-report=html --cov-report=term-missing --cov-fail-under=70"
+addopts = "-v --cov=src/quickscale_modules_blog --cov-report=html --cov-report=term-missing --cov-fail-under=90"
+
+[tool.coverage.report]
+fail_under = 90
+# Per-file minimum target: 80% (enforced via code review)

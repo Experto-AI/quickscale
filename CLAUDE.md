@@ -91,7 +91,7 @@ Always read before development:
 ### Testing
 - No global mocking contamination
 - Test isolation mandatory
-- Coverage ≥ 70%
+- Coverage: ≥ 90% overall, ≥ 80% per file
 
 ### Validation
 ```bash

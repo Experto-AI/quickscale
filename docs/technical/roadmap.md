@@ -370,7 +370,7 @@ myapp/
 - [ ] Ensure theme-agnostic backend code
 
 **Testing**:
-- [ ] Unit tests for email sending (70% coverage)
+- [ ] Unit tests for email sending (80%+ per file coverage)
 - [ ] Integration tests with email providers
 - [ ] Test async processing with Celery
 - [ ] Cross-theme compatibility testing

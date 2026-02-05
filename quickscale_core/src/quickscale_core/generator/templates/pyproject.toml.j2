@@ -34,7 +34,11 @@ DJANGO_SETTINGS_MODULE = "{{ package_name }}.settings.local"
 python_files = ["test_*.py", "*_test.py"]
 python_classes = ["Test*"]
 python_functions = ["test_*"]
-addopts = "--strict-markers --cov={{ package_name }} --cov-report=term-missing --cov-report=html"
+addopts = "--strict-markers --cov={{ package_name }} --cov-report=term-missing --cov-report=html --cov-fail-under=90"
+
+[tool.coverage.report]
+fail_under = 90
+# Per-file minimum target: 80% (enforced via code review)
 
 [tool.ruff]
 line-length = 100

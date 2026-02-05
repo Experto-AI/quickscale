@@ -18,13 +18,13 @@ echo "📦 Testing quickscale_core..."
 cd quickscale_core
 # LLM-friendly output: -q (quiet passing tests), --tb=native (detailed failures), comprehensive coverage
 # Skip E2E tests (run separately with ./scripts/test_e2e.sh)
-poetry run pytest tests/ -m "not e2e" -q --tb=native --cov=src/ --cov-report=term-missing --cov-report=html || EXIT_CODE=$?
+poetry run pytest tests/ -m "not e2e" -q --tb=native --cov=src/ --cov-report=term-missing --cov-report=html --cov-fail-under=90 || EXIT_CODE=$?
 cd ..
 
 echo ""
 echo "📦 Testing quickscale_cli..."
 cd quickscale_cli
-poetry run pytest tests/ -q --tb=native --cov=src/ --cov-report=term-missing --cov-report=html || EXIT_CODE=$?
+poetry run pytest tests/ -q --tb=native --cov=src/ --cov-report=term-missing --cov-report=html --cov-fail-under=90 || EXIT_CODE=$?
 cd ..
 
 echo ""
@@ -43,7 +43,7 @@ if [ -d "quickscale_modules" ]; then
         # Use ROOT poetry environment with PYTHONPATH pointing to module
         # Coverage uses package name (importable), not filesystem path
         PYTHONPATH="$mod:$mod/src" poetry run pytest "$mod/tests/" -q --tb=native \
-          --cov="$pkg_name" --cov-report=term-missing \
+          --cov="$pkg_name" --cov-report=term-missing --cov-fail-under=90 \
           -p pytest_django --ds=tests.settings || EXIT_CODE=$?
       else
         echo "  → Skipping $mod_name (no tests/ directory)"

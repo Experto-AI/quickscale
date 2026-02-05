@@ -189,5 +189,5 @@ Before any PR or commit:
 
 1. `./scripts/lint.sh` must pass
 2. `./scripts/test-all.sh` must pass
-3. Coverage ≥ 70% for new code
+3. Coverage ≥ 90% overall, ≥ 80% per file
 4. No scope violations (as defined in decisions.md)

@@ -44,7 +44,7 @@ QuickScale is a Django project generator that creates production-ready SaaS appl
 - pytest with pytest-django
 - NO global mocking (no sys.modules modifications)
 - Test isolation mandatory
-- Coverage minimum 70%
+- Coverage minimum: 90% overall, 80% per file
 
 ## SOLID Principles
 

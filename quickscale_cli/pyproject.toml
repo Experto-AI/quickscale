@@ -49,6 +49,7 @@ addopts = [
     "--cov=quickscale_cli",
     "--cov-report=term-missing",
     "--cov-report=html",
+    "--cov-fail-under=90",
     "-m", "not e2e",  # Skip E2E tests by default (run with: pytest -m e2e)
 ]
 markers = [
@@ -56,6 +57,10 @@ markers = [
     "slow: slow tests that take significant time to run",
     "e2e: end-to-end tests",
 ]
+
+[tool.coverage.report]
+fail_under = 90
+# Per-file minimum target: 80% (enforced via code review)
 
 # Ruff and mypy configurations centralized in root ruff.toml and mypy.ini
 # Package-specific isort override

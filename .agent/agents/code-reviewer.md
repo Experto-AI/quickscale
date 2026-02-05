@@ -133,7 +133,7 @@ This agent orchestrates a comprehensive review by delegating to specialized suba
 - No global mocking contamination
 - Test isolation verified
 - Proper mock usage
-- Coverage meets 70% threshold
+- Coverage meets thresholds (90% overall, 80% per file)
 - Delegate to: `test-reviewer`
 
 <!-- invoke-skill: testing-standards -->

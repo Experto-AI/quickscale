@@ -92,11 +92,11 @@ jobs:
 
     - name: Run tests (quickscale_core) - Unit & Integration only
       run: |
-        poetry run pytest quickscale_core -m "not e2e" --cov=quickscale_core --cov-report=xml --cov-report=term
+        poetry run pytest quickscale_core -m "not e2e" --cov=quickscale_core --cov-report=xml --cov-report=term --cov-fail-under=90
 
     - name: Run tests (quickscale_cli)
       run: |
-        poetry run pytest quickscale_cli --cov=quickscale_cli --cov-report=xml --cov-report=term
+        poetry run pytest quickscale_cli --cov=quickscale_cli --cov-report=xml --cov-report=term --cov-fail-under=90
 
     - name: Run tests (quickscale_modules)
       run: |
@@ -108,7 +108,7 @@ jobs:
             pkg_name="quickscale_modules_${mod_name}"
             echo "Testing module: $mod_name"
             PYTHONPATH="${mod}:${mod}src" poetry run pytest "${mod}tests/" \
-              --cov="$pkg_name" --cov-report=term \
+              --cov="$pkg_name" --cov-report=term --cov-fail-under=90 \
               -p pytest_django --ds=tests.settings || true
           fi
         done

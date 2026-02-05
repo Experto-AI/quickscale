@@ -150,7 +150,7 @@ class TestUserAuthentication:
 
 ### 6. Coverage Requirements
 
-**Minimum Coverage: 70% per file (CI enforced)**
+**Minimum Coverage: 90% overall mean, 80% per file (CI enforced)**
 
 **Coverage Checklist:**
 - [ ] All public methods have at least one test
@@ -207,7 +207,7 @@ When validating tests, check:
 
 1. **Isolation**: Run each test individually, then as suite
 2. **Mocking**: Verify no global state contamination
-3. **Coverage**: Check coverage meets 70% threshold
+3. **Coverage**: Check coverage meets thresholds (90% overall, 80% per file)
 4. **Organization**: Verify proper structure and naming
 5. **Behavior Focus**: Ensure tests verify behavior not implementation
 
@@ -240,7 +240,7 @@ issues:
   - type: low_coverage
     file: src/module/service.py
     coverage: 45%
-    description: "Coverage below 70% threshold"
+    description: "Coverage below 80% per-file threshold"
     recommendation: "Add tests for error handling paths"
 ```
 

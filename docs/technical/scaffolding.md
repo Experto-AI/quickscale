@@ -923,7 +923,7 @@ Rules: Dotted namespaces for imports, underscore-qualified app labels to avoid c
 | Creation-Time Assembly | Generator emits static Django project (no runtime plugin loading) | Fundamental architectural principle |
 | Poetry Packaging | `pyproject.toml` + `poetry.lock` (NO requirements.txt) | All QuickScale packages + generated projects |
 | Ruff Tooling | Format + lint (replaces Black + Flake8) | Development standard for all packages |
-| 70% Unit Test Coverage Per File | Minimum threshold enforced by CI (per file, not overall mean) | Critical quality gate |
+| 90% Overall + 80% Per File Coverage | Dual threshold enforced by CI (90% overall mean, 80% per file minimum) | Critical quality gate |
 
 **For AI Assistants:** When implementing:
 1. Check [decisions.md](./decisions.md) for the RULE (what/why)

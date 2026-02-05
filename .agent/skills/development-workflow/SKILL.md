@@ -142,7 +142,7 @@ Tests validate the logic established in CODE and REVIEW stages.
 1. Write unit tests for new functionality
 2. Add integration tests if required
 3. Run full test suite
-4. Check coverage meets 70% threshold
+4. Check coverage meets thresholds (90% overall, 80% per file)
 5. Run task-specific validation commands
 
 ### Skill Invocations
@@ -152,7 +152,7 @@ Tests validate the logic established in CODE and REVIEW stages.
 - [ ] Tests written for new functionality
 - [ ] No global mocking contamination
 - [ ] Test isolation verified
-- [ ] Coverage ≥ 70%
+- [ ] Coverage ≥ 90% overall, ≥ 80% per file
 - [ ] All tests pass: `./scripts/test-all.sh`
 - [ ] Task validation commands pass
 

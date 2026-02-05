@@ -149,7 +149,7 @@ If scope violations found → Stop and report (do not proceed)
    - [ ] No global mocking contamination
    - [ ] Test isolation verified
    - [ ] Behavior-focused (not implementation)
-   - [ ] Coverage ≥ 70%
+   - [ ] Coverage ≥ 90% overall, ≥ 80% per file
 
 ---
 

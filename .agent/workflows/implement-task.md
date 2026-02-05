@@ -164,7 +164,7 @@ This workflow guides implementation of a roadmap task through 5 stages, ensuring
    - [ ] Tests written for new functionality
    - [ ] No global mocking contamination
    - [ ] All tests pass
-   - [ ] Coverage ≥ 70%
+   - [ ] Coverage ≥ 90% overall, ≥ 80% per file
    - [ ] Validation commands succeed
 
 ### Exit Criteria

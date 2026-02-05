@@ -86,7 +86,7 @@ Agents are comprehensive guides for complex tasks.
 ### Testing Standards
 - **No global mocking contamination** (no sys.modules modifications)
 - Test isolation mandatory (each test independent)
-- Coverage minimum 70%
+- Coverage minimum: 90% overall, 80% per file
 - Implementation-first (write tests after code review)
 
 ### Documentation Standards

@@ -138,10 +138,10 @@ tests/
 
 ### 4. Coverage Analysis
 
-**Minimum: 70% per file**
+**Minimum: 90% overall mean, 80% per file**
 
 ```bash
-pytest --cov=src/quickscale --cov-report=term-missing --cov-fail-under=70
+pytest --cov=src/quickscale --cov-report=term-missing --cov-fail-under=80
 ```
 
 **Coverage Checklist:**
