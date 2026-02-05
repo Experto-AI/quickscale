@@ -200,18 +200,54 @@ def _run_migrations(project_path: Path) -> bool:
     )[0]
 
 
-def _start_docker(project_path: Path, build: bool = True) -> bool:
-    """Start Docker services using quickscale up"""
+def _start_docker(
+    project_path: Path, build: bool = True, verbose: bool = False
+) -> bool:
+    """Start Docker services using quickscale up
+
+    Args:
+        project_path: Path to the project directory
+        build: Whether to build images before starting
+        verbose: Whether to show Docker build output (useful for debugging)
+
+    Returns:
+        True if Docker started successfully, False otherwise
+    """
     cmd = ["quickscale", "up"]
     if build:
         cmd.append("--build")
 
-    success, _ = _run_command(
-        cmd,
-        project_path,
-        "Starting Docker services",
-    )
-    return success
+    if verbose:
+        # Show Docker build output for debugging
+        click.echo("⏳ Starting Docker services (showing build output)...")
+        click.echo("=" * 50)
+        try:
+            result = subprocess.run(
+                cmd,
+                cwd=project_path,
+                text=True,
+                check=False,
+            )
+            click.echo("=" * 50)
+            if result.returncode == 0:
+                click.secho("✅ Starting Docker services", fg="green")
+                return True
+            else:
+                click.secho("❌ Starting Docker services failed", fg="red")
+                return False
+        except FileNotFoundError:
+            click.secho(f"❌ Command not found: {cmd[0]}", fg="red", err=True)
+            return False
+        except Exception as e:
+            click.secho(f"❌ Unexpected error: {e}", fg="red", err=True)
+            return False
+    else:
+        success, _ = _run_command(
+            cmd,
+            project_path,
+            "Starting Docker services",
+        )
+        return success
 
 
 def _load_module_manifests(
@@ -649,7 +685,11 @@ def _prepare_apply_context(config_path: Path) -> ApplyContext:
 
 
 def _execute_apply_steps(
-    ctx: ApplyContext, force: bool, no_docker: bool, no_modules: bool
+    ctx: ApplyContext,
+    force: bool,
+    no_docker: bool,
+    no_modules: bool,
+    verbose_docker: bool = False,
 ) -> None:
     """Execute the apply steps after confirmation."""
     click.echo("\n" + "=" * 50)
@@ -688,7 +728,9 @@ def _execute_apply_steps(
 
     # Start Docker
     if not no_docker and ctx.qs_config.docker.start:
-        if not _start_docker(ctx.output_path, ctx.qs_config.docker.build):
+        if not _start_docker(
+            ctx.output_path, ctx.qs_config.docker.build, verbose_docker
+        ):
             click.secho("⚠️  Docker start failed, continuing...", fg="yellow")
 
     # Save state
@@ -727,7 +769,14 @@ def _execute_apply_steps(
     is_flag=True,
     help="Skip module embedding",
 )
-def apply(config: str, force: bool, no_docker: bool, no_modules: bool) -> None:
+@click.option(
+    "--verbose-docker",
+    is_flag=True,
+    help="Show Docker build output (useful for debugging build issues)",
+)
+def apply(
+    config: str, force: bool, no_docker: bool, no_modules: bool, verbose_docker: bool
+) -> None:
     """
     Execute project configuration from quickscale.yml.
 
@@ -740,6 +789,7 @@ def apply(config: str, force: bool, no_docker: bool, no_modules: bool) -> None:
       quickscale apply myapp/quickscale.yml  # Use specific config file
       quickscale apply --force            # Overwrite existing project
       quickscale apply --no-docker        # Skip Docker operations
+      quickscale apply --verbose-docker   # Show Docker build output
 
     \b
     Execution Order:
@@ -763,10 +813,23 @@ def apply(config: str, force: bool, no_docker: bool, no_modules: bool) -> None:
     # Check output directory
     _check_output_directory(ctx.output_path, ctx.existing_state, force)
 
+    # Ask about Docker build output visibility if Docker will be started
+    show_docker_output = verbose_docker
+    if (
+        not no_docker
+        and ctx.qs_config.docker.start
+        and ctx.qs_config.docker.build
+        and not verbose_docker
+    ):
+        show_docker_output = click.confirm(
+            "\n🐳 Show Docker build output? (useful for debugging build issues)",
+            default=False,
+        )
+
     # Confirm before proceeding
     if not click.confirm("\n❓ Proceed with apply?", default=True):
         click.echo("❌ Cancelled")
         raise click.Abort()
 
     # Execute apply steps
-    _execute_apply_steps(ctx, force, no_docker, no_modules)
+    _execute_apply_steps(ctx, force, no_docker, no_modules, show_docker_output)

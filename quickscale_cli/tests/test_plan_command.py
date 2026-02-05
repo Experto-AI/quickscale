@@ -100,7 +100,7 @@ class TestPlanThemeSelection:
     """Tests for theme selection in plan command"""
 
     def test_plan_selects_default_theme(self):
-        """Test that pressing Enter selects default showcase_html theme"""
+        """Test that pressing Enter selects default showcase_react theme"""
         runner = CliRunner()
         with runner.isolated_filesystem():
             # Empty input for theme selection (default), no modules, docker defaults, save
@@ -114,13 +114,13 @@ class TestPlanThemeSelection:
 
             with open("myapp/quickscale.yml") as f:
                 content = f.read()
-            assert "showcase_html" in content
+            assert "showcase_react" in content
 
     def test_plan_selects_theme_by_number(self):
         """Test selecting theme by number"""
         runner = CliRunner()
         with runner.isolated_filesystem():
-            # Select theme 1, no modules, docker defaults, save
+            # Select theme 1 (showcase_react), no modules, docker defaults, save
             result = runner.invoke(
                 plan,
                 ["myapp"],
@@ -131,7 +131,7 @@ class TestPlanThemeSelection:
 
             with open("myapp/quickscale.yml") as f:
                 content = f.read()
-            assert "showcase_html" in content
+            assert "showcase_react" in content
 
     def test_plan_selects_theme_by_name(self):
         """Test selecting theme by name"""
@@ -293,6 +293,7 @@ class TestPlanYamlValidation:
 
         runner = CliRunner()
         with runner.isolated_filesystem():
+            # Theme 1 is showcase_react (default), module 1 is auth
             result = runner.invoke(
                 plan,
                 ["myapp"],
@@ -307,5 +308,5 @@ class TestPlanYamlValidation:
             # Should be valid config
             config = validate_config(content)
             assert config.project.name == "myapp"
-            assert config.project.theme == "showcase_html"
+            assert config.project.theme == "showcase_react"
             assert "auth" in config.modules

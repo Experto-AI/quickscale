@@ -30,6 +30,7 @@ class TestApplyCommandBasic:
         assert "--force" in result.output
         assert "--no-docker" in result.output
         assert "--no-modules" in result.output
+        assert "--verbose-docker" in result.output
 
     def test_apply_invalid_yaml_syntax(self):
         """Test apply command with invalid YAML"""
