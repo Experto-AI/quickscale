@@ -196,6 +196,7 @@ class ProjectGenerator:
         context = {
             "project_name": project_name,
             "package_name": package_name,
+            "theme": self.theme,
         }
 
         # Map of template files to output files

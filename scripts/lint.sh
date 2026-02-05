@@ -37,12 +37,17 @@ if [ -d "quickscale_modules" ]; then
 			mod_name=$(basename "$mod")
 			if [ -d "$mod/src" ]; then
 				echo "  → Linting module: $mod_name"
+				LINT_ARGS=("$mod/src/")
+				if [ -d "$mod/tests" ]; then
+					LINT_ARGS+=("$mod/tests/")
+				fi
+
 				echo "    → Running ruff check..."
-				poetry run ruff check --fix "$mod/src/" "$mod/tests/" || true
+				poetry run ruff check --fix "${LINT_ARGS[@]}"
 				echo "    → Running ruff format..."
-				poetry run ruff format "$mod/src/" "$mod/tests/" || true
+				poetry run ruff format "${LINT_ARGS[@]}"
 				echo "    → Running mypy..."
-				poetry run mypy "$mod/src/" || true
+				poetry run mypy "$mod/src/"
 			else
 				echo "  → Skipping $mod_name (no src/ directory)"
 			fi
@@ -53,35 +58,61 @@ else
 fi
 
 echo ""
-echo "📝 Checking documentation formatting..."
-echo "  → Checking for trailing whitespace..."
-if grep -n '[[:space:]]$' docs/**/*.md 2>/dev/null; then
-	echo "  ❌ Trailing whitespace found in documentation files (see above)"
-	echo "  → Fixing trailing whitespace..."
-	find docs -name "*.md" -type f -exec sed -i 's/[[:space:]]*$//' {} +
-	echo "  ✅ Fixed trailing whitespace"
-else
-	echo "  ✅ No trailing whitespace found"
-fi
+echo "📝 Checking general file formatting..."
 
-echo "  → Checking for proper end-of-file newlines..."
-FILES_MISSING_NEWLINE=()
-for f in docs/**/*.md; do
-	if [ -f "$f" ] && [ -n "$(tail -c 1 "$f" 2>/dev/null)" ]; then
-		FILES_MISSING_NEWLINE+=("$f")
+# Define files to check (all text files that should have standard formatting)
+# We exclude hidden directories and specifically generated/binary files
+FILES_TO_CHECK=$(find . -type f \
+	\( -name "*.md" -o -name "*.py" -o -name "*.sh" -o -name "*.yml" -o -name "*.yaml" -o -name "*.toml" -o -name "*.json" \) \
+	-not -path "*/.git/*" \
+	-not -path "*/.venv/*" \
+	-not -path "*/__pycache__/*" \
+	-not -path "*/node_modules/*" \
+	-not -path "*/htmlcov/*" \
+	-not -path "*/.ruff_cache/*" \
+	-not -path "*/.pytest_cache/*" \
+	-not -path "*/.mypy_cache/*" \
+	-not -path "*/dist/*" \
+	-not -path "*/build/*" \
+	-not -path "*/.coverage*" \
+)
+
+if [ -z "$FILES_TO_CHECK" ]; then
+	echo "  ⚠️ No files found to check."
+else
+	echo "  → Checking for trailing whitespace..."
+	# Use temporary file to handle list of files safely
+	TMP_FILES=$(mktemp)
+	echo "$FILES_TO_CHECK" > "$TMP_FILES"
+
+	if xargs grep -l '[[:space:]]$' < "$TMP_FILES" > /dev/null 2>&1; then
+		echo "  ❌ Trailing whitespace found in some files."
+		echo "  → Fixing trailing whitespace..."
+		xargs sed -i 's/[[:space:]]*$//' < "$TMP_FILES"
+		echo "  ✅ Fixed trailing whitespace"
+	else
+		echo "  ✅ No trailing whitespace found"
 	fi
-done
 
-if [ ${#FILES_MISSING_NEWLINE[@]} -gt 0 ]; then
-	echo "  ❌ Files missing final newline:"
-	printf '    - %s\n' "${FILES_MISSING_NEWLINE[@]}"
-	echo "  → Fixing end-of-file newlines..."
-	for f in "${FILES_MISSING_NEWLINE[@]}"; do
-		echo >> "$f"
-	done
-	echo "  ✅ Fixed end-of-file newlines"
-else
-	echo "  ✅ All files have proper end-of-file newlines"
+	echo "  → Checking for proper end-of-file newlines..."
+	MISSING_NEWLINE=""
+	# Check for missing newlines
+	while IFS= read -r f; do
+		if [ -f "$f" ] && [ -n "$(tail -c 1 "$f" 2>/dev/null)" ]; then
+			MISSING_NEWLINE="$MISSING_NEWLINE$f "
+		fi
+	done < "$TMP_FILES"
+
+	if [ -n "$MISSING_NEWLINE" ]; then
+		echo "  ❌ Files missing final newline found."
+		echo "  → Fixing end-of-file newlines..."
+		echo "$MISSING_NEWLINE" | xargs -n 1 sh -c 'echo >> "$1"' --
+		echo "  ✅ Fixed end-of-file newlines"
+	else
+		echo "  ✅ All files have proper end-of-file newlines"
+	fi
+
+	rm "$TMP_FILES"
 fi
 
 echo ""

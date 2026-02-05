@@ -1,6 +1,19 @@
 # syntax=docker/dockerfile:1
 # Multi-stage build for production Django application
 
+# Stage 0: Frontend Builder (Conditional)
+{% if theme == 'showcase_react' %}
+FROM node:20-slim as frontend-builder
+WORKDIR /app/frontend
+# Copy dependency files
+COPY frontend/package.json frontend/package-lock.json* ./
+# Install dependencies
+RUN npm install
+# Copy source code and build
+COPY frontend .
+RUN npm run build
+{% endif %}
+
 # Stage 1: Builder - Install dependencies and build artifacts
 FROM python:3.12-slim as builder
 
@@ -109,6 +122,16 @@ RUN echo "📁 Creating application directories..." && \
     mkdir -p /app/staticfiles /app/media /app/logs && \
     chown -R django:django /app && \
     echo "✅ Directories created"
+
+{% if theme == 'showcase_react' %}
+# Copy frontend assets from frontend-builder
+RUN echo "📦 Copying frontend assets..."
+# Copy static assets (css, js)
+COPY --from=frontend-builder /app/static/frontend/assets /app/staticfiles/frontend/assets
+# Copy index.html to templates
+COPY --from=frontend-builder /app/static/frontend/index.html /app/templates/index.html
+RUN echo "✅ Frontend assets copied"
+{% endif %}
 
 # Switch to non-root user
 USER django

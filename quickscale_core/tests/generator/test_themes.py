@@ -120,6 +120,30 @@ class TestProjectGenerationWithTheme:
         assert (output_path / "templates" / "index.html").exists()
         assert (output_path / "static" / "css" / "style.css").exists()
 
+    def test_generate_with_react_theme(self, tmp_path):
+        """Generate project with showcase_react theme"""
+        generator = ProjectGenerator(theme="showcase_react")
+        project_name = "testproject_react"
+        output_path = tmp_path / project_name
+
+        generator.generate(project_name, output_path)
+
+        # Verify frontend structure
+        assert (output_path / "frontend" / "package.json").exists()
+        assert (output_path / "frontend" / "vite.config.ts").exists()
+        assert (output_path / "frontend" / "src" / "App.tsx").exists()
+
+        # Verify utils.ts exists (CRITICAL for build)
+        assert (output_path / "frontend" / "src" / "lib" / "utils.ts").exists()
+
+        # Verify NO templates/index.html (it should be built)
+        assert not (output_path / "templates" / "index.html").exists()
+
+        # Check Dockerfile has node parts
+        dockerfile = (output_path / "Dockerfile").read_text()
+        assert "FROM node:20-slim as frontend-builder" in dockerfile
+        assert "npm run build" in dockerfile
+
     def test_generated_output_matches_v060(self, tmp_path):
         """Generated project structure should match v0.60.0 output"""
         generator = ProjectGenerator(theme="showcase_html")
