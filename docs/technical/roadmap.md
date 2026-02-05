@@ -128,6 +128,12 @@ List of upcoming releases with detailed implementation tasks:
 
 **Strategic Context**: Make React + shadcn/ui the **default** theme for all new QuickScale projects. This establishes the modern frontend foundation that CRM and future vertical themes will build upon.
 
+**Current State** (as of v0.73.0):
+- ❌ `showcase_react/` theme directory does NOT exist (only `real_estate/` exists)
+- ✅ CLI already accepts `showcase_react` as valid theme option
+- ⚠️ `quickscale apply` shows "Coming in v0.71.0" error for `showcase_react`
+- ✅ Documentation already updated to show React as default
+
 **Prerequisites**:
 - ✅ Plan/Apply System (v0.68.0-v0.71.0)
 - ✅ CRM Module API (v0.73.0) - for API integration testing
@@ -157,18 +163,42 @@ List of upcoming releases with detailed implementation tasks:
 | 15 | E2E Testing | Playwright | Already in QuickScale |
 | 16 | Linting | ESLint + Prettier | Standard tooling |
 
-**Implementation Tasks**:
-- [ ] Create `showcase_react/` theme template structure
-- [ ] Set up Vite + TypeScript + pnpm project scaffold
-- [ ] Integrate shadcn/ui with component configuration
-- [ ] Create base layouts (App shell, navigation, sidebar)
-- [ ] Set up Zustand stores for client state
-- [ ] Implement Django REST Framework API integration with TanStack Query
-- [ ] Add React Hook Form + Zod for form handling
-- [ ] Configure Vitest + React Testing Library
-- [ ] Create sample pages (Dashboard, List, Detail views)
-- [ ] Update CLI to default to `showcase_react` theme
-- [ ] Update `quickscale plan` wizard prompts
+**Implementation Tasks (Prioritized)**:
+
+| Priority | Task | Effort | Dependencies |
+|----------|------|--------|--------------|
+| **P0** | Create `showcase_react/` theme template structure | 1d | None |
+| **P0** | Set up Vite + TypeScript + pnpm project scaffold | 1d | T1 |
+| **P0** | Update CLI to default to `showcase_react` theme | 0.5d | T1, T2 |
+| **P1** | Integrate shadcn/ui with component configuration | 1d | T2 |
+| **P1** | Create base layouts (App shell, navigation, sidebar) | 1d | T3 |
+| **P1** | Set up Zustand stores for client state | 0.5d | T2 |
+| **P1** | Implement API integration with TanStack Query | 1d | T2 |
+| **P1** | Create sample pages (Dashboard, List, Detail views) | 1.5d | T4, T5, T6 |
+| **P1** | Update `quickscale plan` wizard prompts | 0.5d | T10 |
+| **P2** | Add React Hook Form + Zod for form handling | 0.5d | T3 |
+| **P2** | Configure Vitest + React Testing Library | 0.5d | T2 |
+
+**Total Estimated Effort**: ~9 days
+
+**Dependencies Graph**:
+```
+T1 (Theme Structure)
+ │
+ └──► T2 (Vite + TypeScript + pnpm)
+       │
+       ├──► T3 (shadcn/ui) ──► T4 (Layouts) ──┐
+       │                                       │
+       ├──► T5 (Zustand) ─────────────────────├──► T9 (Sample Pages)
+       │                                       │
+       ├──► T6 (TanStack Query) ──────────────┘
+       │
+       ├──► T7 (React Hook Form + Zod)
+       │
+       └──► T8 (Vitest)
+
+T1 + T2 ──► T10 (CLI Default) ──► T11 (Wizard Prompts)
+```
 
 **Generated Project Structure**:
 ```
@@ -195,12 +225,29 @@ myapp/
 └── ... (Django project structure)
 ```
 
+**Implementation Notes**:
+- Do NOT use `npx create-vite` at runtime — pre-build scaffold as templates
+- Use Jinja2 only for config files (`package.json.j2`, `vite.config.ts.j2`) — not React components
+- Minimal shadcn/ui components initially: Button, Card, Input, Badge, Sidebar
+- Include Motion (framer-motion) for animations
+- Test with CRM API (v0.73.0) to validate TanStack Query integration
+- Add `django-cors-headers` configuration for API access
+
 **Testing**:
 - [ ] E2E tests: `quickscale plan` → `quickscale apply` → Working React project
+- [ ] React app starts with `pnpm dev` in `frontend/` directory
 - [ ] Verify shadcn/ui components render correctly
-- [ ] Vitest unit tests pass
+- [ ] Vitest unit tests pass with reasonable coverage
 - [ ] TanStack Query fetches from Django REST Framework API
 - [ ] Zustand stores work correctly
+- [ ] CI passes (lint, test-all, test-e2e)
+
+**Success Criteria**:
+- [ ] `quickscale plan myapp` defaults to `showcase_react` theme
+- [ ] `quickscale apply` generates working React project (no errors)
+- [ ] Generated React app builds and runs successfully
+- [ ] Sample Dashboard page displays data from Django API
+- [ ] All existing E2E tests continue to pass
 
 ---
 
