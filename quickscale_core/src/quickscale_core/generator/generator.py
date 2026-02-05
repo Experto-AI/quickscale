@@ -215,6 +215,7 @@ class ProjectGenerator:
             ("docker-compose.yml.j2", "docker-compose.yml", False),
             ("railway.json.j2", "railway.json", False),
             ("start.sh.j2", "start.sh", False),
+            ("scripts/lint.sh.j2", "scripts/lint.sh", True),
             # Project package files
             ("project_name/__init__.py.j2", f"{package_name}/__init__.py", False),
             ("project_name/urls.py.j2", f"{package_name}/urls.py", False),

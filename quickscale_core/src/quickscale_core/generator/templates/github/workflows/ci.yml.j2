@@ -60,3 +60,48 @@ jobs:
       with:
         file: ./coverage.xml
         fail_ci_if_error: false
+
+  frontend-lint:
+    runs-on: ubuntu-latest
+    if: {% raw %}${{ hashFiles('frontend/package.json') != '' }}{% endraw %}
+
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Set up Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: '22'
+
+    - name: Install pnpm
+      uses: pnpm/action-setup@v4
+      with:
+        version: 9
+
+    - name: Get pnpm store directory
+      shell: bash
+      run: echo "STORE_PATH=$(pnpm store path --silent)" >> $GITHUB_ENV
+
+    - name: Setup pnpm cache
+      uses: actions/cache@v4
+      with:
+        path: {% raw %}${{ env.STORE_PATH }}{% endraw %}
+        key: {% raw %}${{ runner.os }}-pnpm-store-${{ hashFiles('frontend/pnpm-lock.yaml') }}{% endraw %}
+        restore-keys: |
+          {% raw %}${{ runner.os }}-pnpm-store-{% endraw %}
+
+    - name: Install frontend dependencies
+      working-directory: frontend
+      run: pnpm install
+
+    - name: Run ESLint
+      working-directory: frontend
+      run: pnpm lint
+
+    - name: Run TypeScript type check
+      working-directory: frontend
+      run: pnpm type-check
+
+    - name: Run frontend tests
+      working-directory: frontend
+      run: pnpm test:coverage

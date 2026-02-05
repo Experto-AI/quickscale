@@ -91,6 +91,17 @@ View coverage report: `open htmlcov/index.html`
 ### Code Quality
 
 ```bash
+# Lint the entire project (Python + React frontend)
+./scripts/lint.sh
+
+# Lint Python only
+./scripts/lint.sh --python
+
+# Lint React frontend only
+./scripts/lint.sh --frontend
+
+# ── Python Commands ──
+
 # Format code with ruff
 poetry run ruff format .
 
@@ -100,8 +111,37 @@ poetry run ruff check .
 # Auto-fix issues
 poetry run ruff check --fix .
 
+# Type check
+poetry run mypy {{ package_name }}/
+
 # Run pre-commit hooks manually
 poetry run pre-commit run --all-files
+```
+
+### Frontend Code Quality
+
+If your project uses the React frontend (in `frontend/`):
+
+```bash
+cd frontend
+
+# Lint with ESLint
+pnpm lint
+
+# Lint and auto-fix
+pnpm lint:fix
+
+# TypeScript type check
+pnpm type-check
+
+# Run all frontend lint checks (type-check + ESLint)
+pnpm lint:all
+
+# Format with Prettier
+pnpm format
+
+# Check formatting (CI-friendly)
+pnpm format:check
 ```
 
 ### Database Management

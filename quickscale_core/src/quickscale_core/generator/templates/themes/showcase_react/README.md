@@ -20,7 +20,7 @@ This is the React frontend for {{ project_name }}, built with QuickScale.
 ### Prerequisites
 
 - Node.js 18+
-- pnpm (recommended) or npm
+- pnpm (required)
 
 ### Installation
 
@@ -45,8 +45,23 @@ pnpm test
 # Run tests with coverage
 pnpm test:coverage
 
-# Lint code
+# Lint code (ESLint)
 pnpm lint
+
+# Lint and auto-fix
+pnpm lint:fix
+
+# TypeScript type check
+pnpm type-check
+
+# Run all lint checks (type-check + ESLint)
+pnpm lint:all
+
+# Format with Prettier
+pnpm format
+
+# Check formatting (CI-friendly)
+pnpm format:check
 
 # Build for production
 pnpm build
