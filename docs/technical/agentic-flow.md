@@ -1286,14 +1286,14 @@ Convert existing shared docs to skill format:
 
 | Source | Destination | Status |
 |--------|-------------|--------|
-| `docs/contrib/shared/code_principles.md` | `.agent/skills/code-principles/SKILL.md` | ⬜ TODO |
-| `docs/contrib/shared/testing_standards.md` | `.agent/skills/testing-standards/SKILL.md` | ⬜ TODO |
-| `docs/contrib/shared/architecture_guidelines.md` | `.agent/skills/architecture-guidelines/SKILL.md` | ⬜ TODO |
-| `docs/contrib/shared/documentation_standards.md` | `.agent/skills/documentation-standards/SKILL.md` | ⬜ TODO |
-| `docs/contrib/shared/task_focus_guidelines.md` | `.agent/skills/task-focus/SKILL.md` | ⬜ TODO |
-| `docs/contrib/shared/development_workflow.md` | `.agent/skills/development-workflow/SKILL.md` | ⬜ TODO |
-| *New* | `.agent/skills/git-operations/SKILL.md` | ⬜ TODO |
-| *New* | `.agent/skills/roadmap-navigation/SKILL.md` | ⬜ TODO |
+| `docs/contrib/shared/code_principles.md` | `.agent/skills/code-principles/SKILL.md` | ✅ DONE |
+| `docs/contrib/shared/testing_standards.md` | `.agent/skills/testing-standards/SKILL.md` | ✅ DONE |
+| `docs/contrib/shared/architecture_guidelines.md` | `.agent/skills/architecture-guidelines/SKILL.md` | ✅ DONE |
+| `docs/contrib/shared/documentation_standards.md` | `.agent/skills/documentation-standards/SKILL.md` | ✅ DONE |
+| `docs/contrib/shared/task_focus_guidelines.md` | `.agent/skills/task-focus/SKILL.md` | ✅ DONE |
+| `docs/contrib/shared/development_workflow.md` | `.agent/skills/development-workflow/SKILL.md` | ✅ DONE |
+| *New* | `.agent/skills/git-operations/SKILL.md` | ✅ DONE |
+| *New* | `.agent/skills/roadmap-navigation/SKILL.md` | ✅ DONE |
 
 ### Phase 2: Create Agents
 
@@ -1301,10 +1301,10 @@ Convert prompts to agent format:
 
 | Source | Destination | Status |
 |--------|-------------|--------|
-| `roadmap-plan-review-and-update.prompt.md` | `.agent/agents/roadmap-planner.md` | ⬜ TODO |
-| `roadmap-task-implementation.prompt.md` | `.agent/agents/task-implementer.md` | ⬜ TODO |
-| `roadmap-task-review.prompt.md` | `.agent/agents/code-reviewer.md` | ⬜ TODO |
-| `release-commit-message-and-roadmap-cleaning.prompt.md` | `.agent/agents/release-manager.md` | ⬜ TODO |
+| `roadmap-plan-review-and-update.prompt.md` | `.agent/agents/roadmap-planner.md` | ✅ DONE |
+| `roadmap-task-implementation.prompt.md` | `.agent/agents/task-implementer.md` | ✅ DONE |
+| `roadmap-task-review.prompt.md` | `.agent/agents/code-reviewer.md` | ✅ DONE |
+| `release-commit-message-and-roadmap-cleaning.prompt.md` | `.agent/agents/release-manager.md` | ✅ DONE |
 
 ### Phase 3: Create Subagents
 
@@ -1312,12 +1312,12 @@ Decompose `code-reviewer` into subagents:
 
 | Subagent | Source Sections | Status |
 |----------|-----------------|--------|
-| `scope-validator` | Review steps 6-9 | ⬜ TODO |
-| `architecture-checker` | Review steps 10-13 | ⬜ TODO |
-| `code-quality-reviewer` | Review steps 14-19 | ⬜ TODO |
-| `test-reviewer` | Review steps 20-26 | ⬜ TODO |
-| `doc-reviewer` | Review steps 27-30 | ⬜ TODO |
-| `report-generator` | Review steps 35-42 | ⬜ TODO |
+| `scope-validator` | Review steps 6-9 | ✅ DONE |
+| `architecture-checker` | Review steps 10-13 | ✅ DONE |
+| `code-quality-reviewer` | Review steps 14-19 | ✅ DONE |
+| `test-reviewer` | Review steps 20-26 | ✅ DONE |
+| `doc-reviewer` | Review steps 27-30 | ✅ DONE |
+| `report-generator` | Review steps 35-42 | ✅ DONE |
 
 ### Phase 4: Create Workflows
 
@@ -1325,20 +1325,20 @@ Extract explicit workflows:
 
 | Workflow | Source | Status |
 |----------|--------|--------|
-| `implement-task` | `roadmap-task-implementation.prompt.md` WORKFLOW section | ⬜ TODO |
-| `review-code` | `roadmap-task-review.prompt.md` REVIEW WORKFLOW section | ⬜ TODO |
-| `plan-sprint` | `roadmap-plan-review-and-update.prompt.md` steps | ⬜ TODO |
-| `create-release` | `release-commit-message-and-roadmap-cleaning.prompt.md` | ⬜ TODO |
+| `implement-task` | `roadmap-task-implementation.prompt.md` WORKFLOW section | ✅ DONE |
+| `review-code` | `roadmap-task-review.prompt.md` REVIEW WORKFLOW section | ✅ DONE |
+| `plan-sprint` | `roadmap-plan-review-and-update.prompt.md` steps | ✅ DONE |
+| `create-release` | `release-commit-message-and-roadmap-cleaning.prompt.md` | ✅ DONE |
 
 ### Phase 5: Implement Adapters
 
 | Adapter | Target Platform | Priority | Status |
 |---------|-----------------|----------|--------|
-| `generate-claude.sh` | Claude Code | 🔴 High | ⬜ TODO |
-| `generate-gemini.sh` | Gemini CLI | 🔴 High | ⬜ TODO |
-| `generate-copilot.sh` | GitHub Copilot | 🟡 Medium | ⬜ TODO |
-| `generate-codex.sh` | Codex CLI | 🟢 Low | ⬜ TODO |
-| `generate-opencode.sh` | OpenCode | 🟢 Low | ⬜ TODO |
+| `generate-claude.sh` | Claude Code | 🔴 High | ✅ DONE |
+| `generate-gemini.sh` | Gemini CLI | 🔴 High | ✅ DONE |
+| `generate-copilot.sh` | GitHub Copilot | 🟡 Medium | ✅ DONE |
+| `generate-codex.sh` | Codex CLI | 🟢 Low | ⬜ DEFERRED |
+| `generate-opencode.sh` | OpenCode | 🟢 Low | ⬜ DEFERRED |
 
 ### Phase 6: Validation & Cleanup
 
@@ -1380,7 +1380,7 @@ rm -f CLAUDE.md GEMINI.md  # Remove generated files
 
 **Cleanup (after validation passes):**
 
-- [ ] Archive `.github/prompts/` to `docs/legacy/prompts/`
+- [x] Archive `.github/prompts/` to `docs/legacy/prompts/`
 - [ ] Update README.md with new agent instructions
 - [ ] Update CONTRIBUTING.md
 - [ ] Remove adapter generation from CI (if applicable)

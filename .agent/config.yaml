@@ -1,0 +1,59 @@
+# Agentic Flow Configuration
+# Controls global behavior for all agents and adapters.
+
+# Version of the agentic flow schema
+schema_version: "1.0"
+
+# Default settings applied to all agents
+defaults:
+  mode: adaptive              # adaptive | ask
+  max_iterations: 10          # Max workflow loops before forcing stop
+  timeout_seconds: 3600       # 1 hour max per agent invocation
+
+# Skill loading behavior
+skills:
+  directory: ".agent/skills"
+  auto_load: true             # Load skills referenced in agents
+  version_strategy: latest    # latest | pinned
+
+# Agent settings
+agents:
+  directory: ".agent/agents"
+  delegation_depth: 3         # Max subagent nesting
+  parallel_subagents: false   # Run subagents in parallel
+
+# Workflow settings
+workflows:
+  directory: ".agent/workflows"
+  stage_validation: strict    # strict | permissive
+  allow_stage_skip: false     # Allow skipping workflow stages
+
+# Adapter generation settings
+adapters:
+  output_directory: "."       # Where to write generated files
+  platforms:                  # Enable/disable specific platforms
+    claude_code: true
+    gemini_cli: true
+    github_copilot: true
+    codex_cli: false
+    opencode: false
+
+# Security settings
+security:
+  command_allowlist: true     # Enforce command allowlists
+  sandbox_mode: false         # Run commands in restricted sandbox
+  secrets_env_prefix: "AGENT_"  # Environment variable prefix for secrets
+
+# Context files to always include
+context:
+  always_read:
+    - "README.md"
+    - "docs/technical/roadmap.md"
+    - "docs/technical/decisions.md"
+
+# Project-specific overrides
+project:
+  name: "QuickScale"
+  language: "python"
+  test_command: "./scripts/test-all.sh"
+  lint_command: "./scripts/lint.sh"
