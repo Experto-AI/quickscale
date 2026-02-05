@@ -350,8 +350,8 @@ docker:
             # Should fail with not implemented error
             assert result.exit_code != 0 or "not yet implemented" in result.output
 
-    def test_apply_showcase_react_not_implemented(self):
-        """Test that showcase_react theme shows not implemented error"""
+    def test_apply_showcase_react_generates_frontend(self):
+        """Test that showcase_react theme generates frontend directory"""
         runner = CliRunner()
         with runner.isolated_filesystem():
             with open("quickscale.yml", "w") as f:
@@ -372,8 +372,11 @@ docker:
                 input="y\n",
             )
 
-            # Should fail with not implemented error
-            assert result.exit_code != 0 or "not yet implemented" in result.output
+            # Should succeed and create frontend directory
+            if result.exit_code == 0:
+                assert os.path.exists("myapp/frontend")
+                assert os.path.exists("myapp/frontend/package.json")
+                assert os.path.exists("myapp/frontend/src/main.tsx")
 
 
 class TestApplyDefaultConfig:

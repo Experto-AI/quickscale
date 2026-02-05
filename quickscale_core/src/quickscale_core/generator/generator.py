@@ -246,38 +246,9 @@ class ProjectGenerator:
                 f"{package_name}/settings/production.py",
                 False,
             ),
-            # Template files (theme-specific)
-            (
-                self._get_theme_template_path("templates/base.html.j2"),
-                "templates/base.html",
-                False,
-            ),
-            (
-                self._get_theme_template_path("templates/index.html.j2"),
-                "templates/index.html",
-                False,
-            ),
-            (
-                self._get_theme_template_path(
-                    "templates/components/navigation.html.j2"
-                ),
-                "templates/components/navigation.html",
-                False,
-            ),
             # Error page templates (shared across all themes)
             ("templates/404.html.j2", "templates/404.html", False),
             ("templates/500.html.j2", "templates/500.html", False),
-            # Static files (theme-specific)
-            (
-                self._get_theme_template_path("static/css/style.css.j2"),
-                "static/css/style.css",
-                False,
-            ),
-            (
-                self._get_theme_template_path("static/images/favicon.svg.j2"),
-                "static/images/favicon.svg",
-                False,
-            ),
             # CI/CD and quality tools
             ("github/workflows/ci.yml.j2", ".github/workflows/ci.yml", False),
             (".pre-commit-config.yaml.j2", ".pre-commit-config.yaml", False),
@@ -286,6 +257,44 @@ class ProjectGenerator:
             ("tests/conftest.py.j2", "tests/conftest.py", False),
             ("tests/test_example.py.j2", "tests/test_example.py", False),
         ]
+
+        # Theme-specific files: HTML/HTMX themes use Django templates, React uses frontend/
+        if self.theme == "showcase_react":
+            # React theme: copy entire frontend directory
+            self._generate_react_frontend(output_path, context)
+        else:
+            # HTML/HTMX themes: use Django templates and static files
+            file_mappings.extend(
+                [
+                    (
+                        self._get_theme_template_path("templates/base.html.j2"),
+                        "templates/base.html",
+                        False,
+                    ),
+                    (
+                        self._get_theme_template_path("templates/index.html.j2"),
+                        "templates/index.html",
+                        False,
+                    ),
+                    (
+                        self._get_theme_template_path(
+                            "templates/components/navigation.html.j2"
+                        ),
+                        "templates/components/navigation.html",
+                        False,
+                    ),
+                    (
+                        self._get_theme_template_path("static/css/style.css.j2"),
+                        "static/css/style.css",
+                        False,
+                    ),
+                    (
+                        self._get_theme_template_path("static/images/favicon.svg.j2"),
+                        "static/images/favicon.svg",
+                        False,
+                    ),
+                ]
+            )
 
         # Render and write all files
         for template_path, output_file, executable in file_mappings:
@@ -300,6 +309,49 @@ class ProjectGenerator:
         # Generate poetry.lock dynamically to ensure it's always in sync
         # with pyproject.toml (avoids stale lock file issues)
         self._generate_poetry_lock(output_path)
+
+    def _generate_react_frontend(self, output_path: Path, context: dict) -> None:
+        """Generate React frontend from theme templates
+
+        Copies all files from showcase_react theme, rendering .j2 templates
+        with project context.
+
+        """
+        theme_dir = self.template_dir / "themes" / "showcase_react"
+        frontend_output = output_path / "frontend"
+        ensure_directory(frontend_output)
+
+        # Walk through all files in theme directory
+        for root, _dirs, files in os.walk(theme_dir):
+            rel_root = Path(root).relative_to(theme_dir)
+
+            for filename in files:
+                src_path = Path(root) / filename
+
+                # Skip README.md (theme documentation, not project file)
+                if filename == "README.md" and rel_root == Path("."):
+                    continue
+
+                # Determine output path and whether to render as template
+                if filename.endswith(".j2"):
+                    # Template file: render it
+                    output_filename = filename[:-3]  # Remove .j2 extension
+                    rel_output_path = rel_root / output_filename
+
+                    # Get template relative to template_dir
+                    template_rel_path = f"themes/showcase_react/{rel_root / filename}"
+                    template = self.env.get_template(template_rel_path)
+                    content = template.render(**context)
+
+                    output_file_path = frontend_output / rel_output_path
+                    write_file(output_file_path, content)
+                else:
+                    # Regular file: copy as-is
+                    rel_output_path = rel_root / filename
+                    output_file_path = frontend_output / rel_output_path
+
+                    ensure_directory(output_file_path.parent)
+                    shutil.copy2(src_path, output_file_path)
 
     def _generate_poetry_lock(self, project_path: Path) -> None:
         """

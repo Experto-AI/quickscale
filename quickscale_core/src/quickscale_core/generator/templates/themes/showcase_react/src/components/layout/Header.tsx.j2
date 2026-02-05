@@ -1,0 +1,42 @@
+{% raw %}import { Bell, Search, User } from 'lucide-react'
+import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
+import { useThemeStore } from '@/stores/themeStore'
+
+export function Header() {
+  const { theme, toggleTheme } = useThemeStore()
+
+  return (
+    <header className="border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
+      <div className="flex h-14 items-center gap-4 px-6">
+        <div className="flex-1">
+          <div className="relative max-w-md">
+            <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+            <Input
+              type="search"
+              placeholder="Search..."
+              className="pl-8 w-full"
+            />
+          </div>
+        </div>
+        <div className="flex items-center gap-2">
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={toggleTheme}
+            aria-label="Toggle theme"
+          >
+            {theme === 'light' ? '🌙' : '☀️'}
+          </Button>
+          <Button variant="ghost" size="icon" aria-label="Notifications">
+            <Bell className="h-4 w-4" />
+          </Button>
+          <Button variant="ghost" size="icon" aria-label="User menu">
+            <User className="h-4 w-4" />
+          </Button>
+        </div>
+      </div>
+    </header>
+  )
+}
+{% endraw %}

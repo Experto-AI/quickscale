@@ -1,0 +1,31 @@
+{% raw %}import { useQuery } from '@tanstack/react-query'
+
+// API base URL - proxied through Vite in development
+const API_BASE = '/api'
+
+// Generic fetch wrapper with error handling
+async function fetchApi<T>(endpoint: string): Promise<T> {
+  const response = await fetch(`${API_BASE}${endpoint}`)
+  if (!response.ok) {
+    throw new Error(`API Error: ${response.status}`)
+  }
+  return response.json()
+}
+
+// Example: Health check query
+export function useHealthCheck() {
+  return useQuery({
+    queryKey: ['health'],
+    queryFn: () => fetchApi<{ status: string }>('/health/'),
+    retry: false,
+  })
+}
+
+// Example: Generic data fetching hook
+export function useApiData<T>(endpoint: string, queryKey: string[]) {
+  return useQuery({
+    queryKey,
+    queryFn: () => fetchApi<T>(endpoint),
+  })
+}
+{% endraw %}

@@ -1,0 +1,69 @@
+{% raw %}import { NavLink } from 'react-router-dom'
+import { Home, Settings, Users, FileText, BarChart3 } from 'lucide-react'
+import { cn } from '@/lib/utils'
+import { Button } from '@/components/ui/button'
+import { Separator } from '@/components/ui/separator'
+
+const navigation = [
+  { name: 'Dashboard', href: '/', icon: Home },
+  { name: 'Analytics', href: '/analytics', icon: BarChart3 },
+  { name: 'Users', href: '/users', icon: Users },
+  { name: 'Documents', href: '/documents', icon: FileText },
+]
+
+const bottomNavigation = [
+  { name: 'Settings', href: '/settings', icon: Settings },
+]
+
+export function Sidebar() {
+  return (
+    <aside className="hidden lg:flex w-64 flex-col border-r bg-sidebar min-h-screen">
+      <div className="p-6">
+        <h1 className="text-xl font-bold text-sidebar-foreground">
+          {% endraw %}{{ project_name }}{% raw %}
+        </h1>
+      </div>
+      <Separator />
+      <nav className="flex-1 p-4 space-y-1">
+        {navigation.map((item) => (
+          <NavLink
+            key={item.name}
+            to={item.href}
+            className={({ isActive }) =>
+              cn(
+                'flex items-center gap-3 rounded-lg px-3 py-2 text-sm transition-colors',
+                isActive
+                  ? 'bg-sidebar-accent text-sidebar-accent-foreground'
+                  : 'text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground'
+              )
+            }
+          >
+            <item.icon className="h-4 w-4" />
+            {item.name}
+          </NavLink>
+        ))}
+      </nav>
+      <Separator />
+      <div className="p-4 space-y-1">
+        {bottomNavigation.map((item) => (
+          <NavLink
+            key={item.name}
+            to={item.href}
+            className={({ isActive }) =>
+              cn(
+                'flex items-center gap-3 rounded-lg px-3 py-2 text-sm transition-colors',
+                isActive
+                  ? 'bg-sidebar-accent text-sidebar-accent-foreground'
+                  : 'text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground'
+              )
+            }
+          >
+            <item.icon className="h-4 w-4" />
+            {item.name}
+          </NavLink>
+        ))}
+      </div>
+    </aside>
+  )
+}
+{% endraw %}

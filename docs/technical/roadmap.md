@@ -78,8 +78,8 @@ QuickScale follows an evolution-aligned roadmap that starts as a personal toolki
 - **v1.0.0+:** Community platform (if demand exists)
 
 **Status:**
-- **Current Status:** v0.73.0 — CRM Module ✅ Complete
-- **Next Milestone:** v0.74.0 - React Default Theme (shadcn/ui)
+- **Current Status:** v0.74.0 — React Default Theme ✅ Complete
+- **Next Milestone:** v0.75.0 - CRM Theme (React frontend)
 - **Plan/Apply System:** v0.68.0-v0.71.0 - Terraform-style configuration ✅ Complete
 - **SaaS Parity:** v0.77.0 - auth, billing, teams modules complete
 
@@ -124,46 +124,20 @@ List of upcoming releases with detailed implementation tasks:
 
 ### v0.74.0: React Default Theme (showcase_react)
 
-**Status**: 📋 Planned
+**Status**: ✅ Complete
 
-**Strategic Context**: Make React + shadcn/ui the **default** theme for all new QuickScale projects. This establishes the modern frontend foundation that CRM and future vertical themes will build upon.
+**Release**: v0.74.0 — Established React + shadcn/ui as the default frontend foundation. Includes a fully functional `showcase_react` theme with Vite, TypeScript, TanStack Query, and Zustand. All CLI project generation defaults to this modern stack. See [release-v0.74.0.md](../releases/release-v0.74.0.md) for details.
 
-**Current State** (as of v0.73.0):
-- ❌ `showcase_react/` theme directory does NOT exist (only `real_estate/` exists)
-- ✅ CLI already accepts `showcase_react` as valid theme option
-- ⚠️ `quickscale apply` shows "Coming in v0.71.0" error for `showcase_react`
-- ✅ Documentation already updated to show React as default
+**Key Results**:
+- ✅ Brand new `showcase_react` theme with modern tech stack
+- ✅ CLI defaults to React for all new projects
+- ✅ Integrated shadcn/ui component library
+- ✅ Robust server state with TanStack Query
+- ✅ Lightweight client state with Zustand
+- ✅ Responsive App shell and Sidebar layouts
+- ✅ Pre-configured testing environment (Vitest)
 
-**Prerequisites**:
-- ✅ Plan/Apply System (v0.68.0-v0.71.0)
-- ✅ CRM Module API (v0.73.0) - for API integration testing
-
-**Complete React Tech Stack (18 decisions):**
-
-| # | Category | Technology | Rationale |
-|---|----------|------------|-----------|
-| | **Core** | | |
-| 1 | Framework | React 18+ | Industry standard, excellent ecosystem |
-| 2 | Language | TypeScript | Type safety, better developer experience |
-| 3 | Build Tool | Vite | Fast HMR, modern bundling |
-| 4 | Package Manager | pnpm | Best disk efficiency, fast installs |
-| | **UI/Styling** | | |
-| 5 | UI Components | shadcn/ui | Copy-paste components, full ownership |
-| 6 | Admin Components | shadcn/admin | Pre-built admin patterns |
-| 7 | Icons | Lucide React | Clean, modern, shadcn default |
-| 8 | CSS Framework | Tailwind CSS | Required by shadcn/ui |
-| 9 | Animation | Motion | De-facto standard for React |
-| | **Data & State** | | |
-| 10 | Routing | React Router v6 | Most mature, largest market share |
-| 11 | Server State | TanStack Query | Best performance, highest satisfaction |
-| 12 | Client State | Zustand | Simplest API, fastest growing |
-| 13 | Forms | React Hook Form + Zod | Most popular, best performance |
-| | **Quality** | | |
-| 14 | Unit Testing | Vitest + RTL | Fast, Vite-native |
-| 15 | E2E Testing | Playwright | Already in QuickScale |
-| 16 | Linting | ESLint + Prettier | Standard tooling |
-
-**Implementation Tasks (Prioritized)**:
+**Implementation Tasks (Completed)**:
 
 | Priority | Task | Effort | Dependencies |
 |----------|------|--------|--------------|

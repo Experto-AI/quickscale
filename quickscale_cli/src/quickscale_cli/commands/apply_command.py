@@ -92,18 +92,21 @@ def _generate_project(config: QuickScaleConfig, output_path: Path) -> bool:
         click.echo(f"⏳ Generating project: {config.project.name}...")
 
         # Validate theme availability
-        if config.project.theme in ["showcase_htmx", "showcase_react"]:
+        if config.project.theme == "showcase_htmx":
             click.secho(
                 f"❌ Error: Theme '{config.project.theme}' is not yet implemented",
                 fg="red",
                 err=True,
             )
             click.echo(
-                f"\n💡 The '{config.project.theme}' theme is planned for a future release:",
+                "\n💡 The 'showcase_htmx' theme is planned for a future release:",
                 err=True,
             )
-            click.echo("   - showcase_htmx: Coming in v0.70.0", err=True)
-            click.echo("   - showcase_react: Coming in v0.71.0", err=True)
+            click.echo("   - showcase_htmx: Coming in v0.78.0", err=True)
+            click.echo(
+                "   - Use 'showcase_react' (default) or 'showcase_html' instead",
+                err=True,
+            )
             return False
 
         generator = ProjectGenerator(theme=config.project.theme)

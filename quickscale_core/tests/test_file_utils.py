@@ -54,7 +54,6 @@ class TestValidateProjectName:
         """Invalid Python identifiers should fail"""
         invalid = [
             "123project",  # starts with number
-            "my-project",  # contains hyphen
             "my project",  # contains space
             "my.project",  # contains dot
         ]

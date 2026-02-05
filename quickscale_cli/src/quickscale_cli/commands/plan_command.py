@@ -20,9 +20,9 @@ from quickscale_cli.schema.state_schema import QuickScaleState, StateManager
 
 # Available themes for selection
 AVAILABLE_THEMES = [
-    ("showcase_html", "Pure HTML + CSS (default, production-ready)"),
-    ("showcase_htmx", "HTMX + Alpine.js (coming in v0.70.0)"),
-    ("showcase_react", "React + TypeScript SPA (coming in v0.71.0)"),
+    ("showcase_react", "React + TypeScript + shadcn/ui (default, production-ready)"),
+    ("showcase_html", "Pure HTML + CSS (simpler alternative)"),
+    ("showcase_htmx", "HTMX + Alpine.js (coming in v0.78.0)"),
 ]
 
 # Available modules for selection
@@ -53,12 +53,12 @@ def _get_theme_by_name(name: str) -> str | None:
 
 def _confirm_unimplemented_theme(theme_id: str) -> bool:
     """Confirm use of unimplemented theme"""
-    if theme_id == "showcase_html":
+    if theme_id in ("showcase_html", "showcase_react"):
         return True
 
     click.secho(
         f"\n⚠️  Theme '{theme_id}' is not yet implemented. "
-        "It will be available in a future release.",
+        "It will be available in a future release (v0.78.0).",
         fg="yellow",
     )
     return click.confirm("Use this theme anyway?", default=False)
@@ -68,7 +68,7 @@ def _select_theme() -> str:
     """Interactive theme selection"""
     click.echo("\n🎨 Select a theme for your project:")
     for i, (tid, description) in enumerate(AVAILABLE_THEMES, start=1):
-        status = " ⚠️  not yet implemented" if tid != "showcase_html" else ""
+        status = " ⚠️  not yet implemented" if tid == "showcase_htmx" else ""
         click.echo(f"  {i}. {tid} - {description}{status}")
 
     while True:
