@@ -7,7 +7,7 @@ including interactive configuration prompts and settings application.
 import re
 import subprocess
 from pathlib import Path
-from typing import Any
+from typing import Any, Optional
 
 import click
 
@@ -688,6 +688,50 @@ def configure_crm_module(non_interactive: bool = False) -> dict[str, Any]:
     return config
 
 
+def _get_dependency_version(content: str, package: str) -> Optional[str]:
+    """Extract dependency version from pyproject.toml content."""
+    match = re.search(
+        rf'{package}\s*=\s*["\']([^"\']+)["\']',
+        content,
+    )
+    return match.group(1) if match else None
+
+
+def _update_pyproject_toml(
+    pyproject_path: Path,
+    content: str,
+    drf_ver: Optional[str],
+    filter_ver: Optional[str],
+) -> None:
+    """Update pyproject.toml with new dependencies."""
+    dependencies_pattern = r"(\[tool\.poetry\.dependencies\][^\[]*)"
+    match = re.search(dependencies_pattern, content, re.DOTALL)
+    if not match:
+        return
+
+    dependencies_section = match.group(1)
+    additions = ""
+    if drf_ver:
+        additions += f'\ndjangorestframework = "{drf_ver}"'
+    if filter_ver:
+        additions += f'\ndjango-filter = "{filter_ver}"'
+
+    updated_dependencies = re.sub(
+        r'(python = "[^"]*")',
+        rf"\1{additions}",
+        dependencies_section,
+    )
+    content = content.replace(dependencies_section, updated_dependencies)
+
+    with open(pyproject_path, "w") as f:
+        f.write(content)
+
+    if drf_ver:
+        click.secho("  ✅ Added djangorestframework to pyproject.toml", fg="green")
+    if filter_ver:
+        click.secho("  ✅ Added django-filter to pyproject.toml", fg="green")
+
+
 def _add_drf_and_filter_dependencies(project_path: Path, pyproject_path: Path) -> None:
     """Add djangorestframework and django-filter dependencies to project's pyproject.toml."""
     with open(pyproject_path) as f:
@@ -704,76 +748,89 @@ def _add_drf_and_filter_dependencies(project_path: Path, pyproject_path: Path) -
             err=True,
         )
         click.echo(f"Expected file: {crm_pyproject_path}", err=True)
-        click.echo(
-            "This indicates the CRM module was not embedded correctly.",
-            err=True,
-        )
         raise click.Abort()
 
     try:
         with open(crm_pyproject_path) as f:
             crm_pyproject_content = f.read()
 
-        # Extract djangorestframework version
         drf_version = None
         if "djangorestframework" not in pyproject_content:
-            drf_match = re.search(
-                r'djangorestframework\s*=\s*["\']([^"\']+)["\']',
-                crm_pyproject_content,
+            drf_version = _get_dependency_version(
+                crm_pyproject_content, "djangorestframework"
             )
-            if drf_match:
-                drf_version = drf_match.group(1)
 
-        # Extract django-filter version
         filter_version = None
         if "django-filter" not in pyproject_content:
-            filter_match = re.search(
-                r'django-filter\s*=\s*["\']([^"\']+)["\']',
-                crm_pyproject_content,
+            filter_version = _get_dependency_version(
+                crm_pyproject_content, "django-filter"
             )
-            if filter_match:
-                filter_version = filter_match.group(1)
 
-        # Add dependencies if needed
         if drf_version or filter_version:
-            dependencies_pattern = r"(\[tool\.poetry\.dependencies\][^\[]*)"
-            match = re.search(dependencies_pattern, pyproject_content, re.DOTALL)
-            if match:
-                dependencies_section = match.group(1)
-                additions = ""
-                if drf_version:
-                    additions += f'\ndjangorestframework = "{drf_version}"'
-                if filter_version:
-                    additions += f'\ndjango-filter = "{filter_version}"'
+            _update_pyproject_toml(
+                pyproject_path, pyproject_content, drf_version, filter_version
+            )
 
-                updated_dependencies = re.sub(
-                    r'(python = "[^"]*")',
-                    rf"\1{additions}",
-                    dependencies_section,
-                )
-                pyproject_content = pyproject_content.replace(
-                    dependencies_section, updated_dependencies
-                )
-
-                with open(pyproject_path, "w") as f:
-                    f.write(pyproject_content)
-
-                if drf_version:
-                    click.secho(
-                        "  ✅ Added djangorestframework to pyproject.toml", fg="green"
-                    )
-                if filter_version:
-                    click.secho(
-                        "  ✅ Added django-filter to pyproject.toml", fg="green"
-                    )
     except (FileNotFoundError, AttributeError) as e:
         click.secho(
             f"❌ Error: Failed to parse dependencies from CRM module: {e}",
             fg="red",
             err=True,
         )
-        click.echo(f"File: {crm_pyproject_path}", err=True)
         raise click.Abort()
+
+
+def _get_crm_settings_addition(config: dict[str, Any]) -> str:
+    """Generate settings addition for CRM module."""
+    addition = f"""
+# CRM Module Settings
+CRM_DEALS_PER_PAGE = {config["deals_per_page"]}
+CRM_CONTACTS_PER_PAGE = {config["contacts_per_page"]}
+CRM_ENABLE_API = {config["enable_api"]}
+"""
+    if config["enable_api"]:
+        addition += """
+# REST Framework Settings
+REST_FRAMEWORK = {
+    "DEFAULT_AUTHENTICATION_CLASSES": [
+        "rest_framework.authentication.SessionAuthentication",
+    ],
+    "DEFAULT_PERMISSION_CLASSES": [
+        "rest_framework.permissions.IsAuthenticated",
+    ],
+    "DEFAULT_PAGINATION_CLASS": "rest_framework.pagination.PageNumberPagination",
+    "PAGE_SIZE": 25,
+    "DEFAULT_FILTER_BACKENDS": [
+        "django_filters.rest_framework.DjangoFilterBackend",
+        "rest_framework.filters.SearchFilter",
+        "rest_framework.filters.OrderingFilter",
+    ],
+}
+"""
+    return addition
+
+
+def _update_crm_urls(urls_path: Path) -> None:
+    """Add CRM URLs to project's urls.py."""
+    if not urls_path.exists():
+        return
+
+    with open(urls_path) as f:
+        urls_content = f.read()
+
+    if "quickscale_modules_crm" in urls_content:
+        return
+
+    if "urlpatterns = [" in urls_content:
+        urls_addition = '    path("crm/", include("quickscale_modules_crm.urls")),\n'
+        urls_content = urls_content.replace(
+            "urlpatterns = [", "urlpatterns = [\n" + urls_addition
+        )
+
+        with open(urls_path, "w") as f:
+            f.write(urls_content)
+
+        click.secho("  ✅ Updated urls.py with CRM URLs", fg="green")
 
 
 def apply_crm_configuration(project_path: Path, config: dict[str, Any]) -> None:
@@ -807,10 +864,7 @@ def apply_crm_configuration(project_path: Path, config: dict[str, Any]) -> None:
     required_apps = ["rest_framework", "django_filters", "quickscale_modules_crm"]
     new_apps = _filter_new_apps(settings_content, required_apps)
 
-    if not new_apps:
-        click.echo("ℹ️  All required apps already in INSTALLED_APPS")
-    else:
-        # Build the INSTALLED_APPS addition with only new apps
+    if new_apps:
         apps_list = ",\n    ".join([f'"{app}"' for app in new_apps])
         installed_apps_addition = f"""
 # QuickScale CRM Module - Added by quickscale embed
@@ -818,64 +872,20 @@ INSTALLED_APPS += [
     {apps_list},
 ]
 """
-        # Append INSTALLED_APPS to settings.py
         with open(settings_path, "a") as f:
             f.write("\n" + installed_apps_addition)
+    else:
+        click.echo("ℹ️  All required apps already in INSTALLED_APPS")
 
-    # Add CRM settings (always add these)
-    settings_addition = f"""
-# CRM Module Settings
-CRM_DEALS_PER_PAGE = {config["deals_per_page"]}
-CRM_CONTACTS_PER_PAGE = {config["contacts_per_page"]}
-CRM_ENABLE_API = {config["enable_api"]}
-"""
-
-    # Add REST Framework settings if enabling API
-    if config["enable_api"]:
-        settings_addition += """
-# REST Framework Settings
-REST_FRAMEWORK = {
-    "DEFAULT_AUTHENTICATION_CLASSES": [
-        "rest_framework.authentication.SessionAuthentication",
-    ],
-    "DEFAULT_PERMISSION_CLASSES": [
-        "rest_framework.permissions.IsAuthenticated",
-    ],
-    "DEFAULT_PAGINATION_CLASS": "rest_framework.pagination.PageNumberPagination",
-    "PAGE_SIZE": 25,
-    "DEFAULT_FILTER_BACKENDS": [
-        "django_filters.rest_framework.DjangoFilterBackend",
-        "rest_framework.filters.SearchFilter",
-        "rest_framework.filters.OrderingFilter",
-    ],
-}
-"""
-
-    # Append settings to settings.py
+    # Add CRM settings and REST framework settings
+    settings_addition = _get_crm_settings_addition(config)
     with open(settings_path, "a") as f:
         f.write(settings_addition)
 
     click.secho("  ✅ Updated settings.py with CRM configuration", fg="green")
 
     # Update urls.py
-    if urls_path.exists():
-        with open(urls_path) as f:
-            urls_content = f.read()
-
-        if "quickscale_modules_crm" not in urls_content:
-            # Find urlpatterns and add CRM URLs
-            if "urlpatterns = [" in urls_content:
-                urls_addition = (
-                    '    path("crm/", include("quickscale_modules_crm.urls")),\n'
-                )
-                urls_content = urls_content.replace(
-                    "urlpatterns = [", "urlpatterns = [\n" + urls_addition
-                )
-
-                with open(urls_path, "w") as f:
-                    f.write(urls_content)
-
-                click.secho("  ✅ Updated urls.py with CRM URLs", fg="green")
+    _update_crm_urls(urls_path)
 
     # Show configuration summary
     click.echo("\n📋 Configuration applied:")

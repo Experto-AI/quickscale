@@ -8,7 +8,7 @@ from django.dispatch import receiver
 
 @receiver(user_signed_up)
 def on_user_signed_up(
-    sender: Any,  # Required by Django signal API
+    _sender: Any,  # Required by Django signal API
     request: Any,
     user: Any,
     **kwargs: Any,  # noqa: ARG001

@@ -43,7 +43,7 @@ WORK_DIR="$CACHE_DIR/rendered"
 mkdir -p "$WORK_DIR"
 
 # Clean rendered source files but keep node_modules for caching
-find "$WORK_DIR" -maxdepth 1 -not -name "node_modules" -not -name "." -not -name ".." -exec rm -rf {} + 2>/dev/null || true
+find "$WORK_DIR" -mindepth 1 -maxdepth 1 -not -name "node_modules" -exec rm -rf {} + 2>/dev/null || true
 
 echo "📦 Rendering React theme templates..."
 

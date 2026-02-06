@@ -18,13 +18,15 @@ echo "📦 Testing quickscale_core..."
 cd quickscale_core
 # LLM-friendly output: -q (quiet passing tests), --tb=native (detailed failures), comprehensive coverage
 # Skip E2E tests (run separately with ./scripts/test_e2e.sh)
-poetry run pytest tests/ -m "not e2e" -q --tb=native --cov=src/ --cov-report=term-missing --cov-report=html --cov-fail-under=90 || EXIT_CODE=$?
+# Use package name (not src/) to avoid double-counting with pyproject.toml addopts
+poetry run pytest tests/ -m "not e2e" -q --tb=native -o "addopts=" --cov=quickscale_core --cov-report=term-missing --cov-report=html --cov-fail-under=90 || EXIT_CODE=$?
 cd ..
 
 echo ""
 echo "📦 Testing quickscale_cli..."
 cd quickscale_cli
-poetry run pytest tests/ -q --tb=native --cov=src/ --cov-report=term-missing --cov-report=html --cov-fail-under=90 || EXIT_CODE=$?
+# Use package name (not src/) to avoid double-counting with pyproject.toml addopts
+poetry run pytest tests/ -q --tb=native -o "addopts=" --cov=quickscale_cli --cov-report=term-missing --cov-report=html --cov-fail-under=90 || EXIT_CODE=$?
 cd ..
 
 echo ""
