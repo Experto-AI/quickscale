@@ -1,0 +1,108 @@
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
+import { Button } from '@/components/ui/button'
+import { UserCircle, LogIn, UserPlus, KeyRound, ExternalLink, Shield } from 'lucide-react'
+
+export function ProfilePage() {
+  return (
+    <div className="space-y-6">
+      <div>
+        <h1 className="text-3xl font-bold tracking-tight">Profile &amp; Authentication</h1>
+        <p className="text-muted-foreground">
+          Manage your account, login, and security settings
+        </p>
+      </div>
+
+      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+        <Card>
+          <CardHeader>
+            <LogIn className="h-5 w-5 text-muted-foreground mb-1" />
+            <CardTitle className="text-base">Sign In</CardTitle>
+            <CardDescription>Login to your account</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <Button variant="outline" size="sm" asChild>
+              <a href="/accounts/login/">
+                Login <ExternalLink className="ml-1 h-3 w-3" />
+              </a>
+            </Button>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader>
+            <UserPlus className="h-5 w-5 text-muted-foreground mb-1" />
+            <CardTitle className="text-base">Register</CardTitle>
+            <CardDescription>Create a new account</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <Button variant="outline" size="sm" asChild>
+              <a href="/accounts/signup/">
+                Sign Up <ExternalLink className="ml-1 h-3 w-3" />
+              </a>
+            </Button>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader>
+            <UserCircle className="h-5 w-5 text-muted-foreground mb-1" />
+            <CardTitle className="text-base">My Profile</CardTitle>
+            <CardDescription>View and edit your profile</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <Button variant="outline" size="sm" asChild>
+              <a href="/accounts/profile/">
+                View Profile <ExternalLink className="ml-1 h-3 w-3" />
+              </a>
+            </Button>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader>
+            <KeyRound className="h-5 w-5 text-muted-foreground mb-1" />
+            <CardTitle className="text-base">Change Password</CardTitle>
+            <CardDescription>Update your password</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <Button variant="outline" size="sm" asChild>
+              <a href="/accounts/password/change/">
+                Change Password <ExternalLink className="ml-1 h-3 w-3" />
+              </a>
+            </Button>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader>
+            <KeyRound className="h-5 w-5 text-muted-foreground mb-1" />
+            <CardTitle className="text-base">Reset Password</CardTitle>
+            <CardDescription>Forgot your password?</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <Button variant="outline" size="sm" asChild>
+              <a href="/accounts/password/reset/">
+                Reset <ExternalLink className="ml-1 h-3 w-3" />
+              </a>
+            </Button>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader>
+            <Shield className="h-5 w-5 text-muted-foreground mb-1" />
+            <CardTitle className="text-base">Account Security</CardTitle>
+            <CardDescription>Manage account settings and deletion</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <Button variant="outline" size="sm" asChild>
+              <a href="/accounts/account-delete/">
+                Account Settings <ExternalLink className="ml-1 h-3 w-3" />
+              </a>
+            </Button>
+          </CardContent>
+        </Card>
+      </div>
+    </div>
+  )
+}

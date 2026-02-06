@@ -1,0 +1,73 @@
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
+import { Button } from '@/components/ui/button'
+import { Badge } from '@/components/ui/badge'
+import { BookOpen, ExternalLink, Rss } from 'lucide-react'
+
+export function BlogPage() {
+  return (
+    <div className="space-y-6">
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-3xl font-bold tracking-tight">Blog</h1>
+          <p className="text-muted-foreground">
+            Markdown-powered blog with categories, tags, and RSS feed
+          </p>
+        </div>
+        <div className="flex gap-2">
+          <Button variant="outline" asChild>
+            <a href="/blog/feed/" target="_blank" rel="noopener noreferrer">
+              <Rss className="mr-2 h-4 w-4" /> RSS Feed
+            </a>
+          </Button>
+          <Button asChild>
+            <a href="/blog/" target="_blank" rel="noopener noreferrer">
+              <BookOpen className="mr-2 h-4 w-4" /> View Blog
+              <ExternalLink className="ml-1 h-3 w-3" />
+            </a>
+          </Button>
+        </div>
+      </div>
+
+      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-base">Posts</CardTitle>
+            <CardDescription>Create and manage blog posts with Markdown</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <Button variant="outline" size="sm" asChild>
+              <a href="/blog/">Browse Posts <ExternalLink className="ml-1 h-3 w-3" /></a>
+            </Button>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-base">Categories &amp; Tags</CardTitle>
+            <CardDescription>Organize content with categories and tags</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="flex gap-2 flex-wrap">
+              <Badge variant="secondary">Categories</Badge>
+              <Badge variant="outline">Tags</Badge>
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-base">Admin</CardTitle>
+            <CardDescription>Manage blog content from Django Admin</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <Button variant="outline" size="sm" asChild>
+              <a href="/admin/quickscale_modules_blog/" target="_blank" rel="noopener noreferrer">
+                Open Admin <ExternalLink className="ml-1 h-3 w-3" />
+              </a>
+            </Button>
+          </CardContent>
+        </Card>
+      </div>
+    </div>
+  )
+}

@@ -136,6 +136,11 @@ List of upcoming releases with detailed implementation tasks:
 - ✅ Lightweight client state with Zustand
 - ✅ Responsive App shell and Sidebar layouts
 - ✅ Pre-configured testing environment (Vitest)
+- ✅ Module-aware sidebar navigation (auth, blog, listings, crm, billing, teams)
+- ✅ Module pages for all available modules (Blog, Listings, CRM, Profile, Settings)
+- ✅ Runtime module detection via `window.__QUICKSCALE__` injected by Django template
+- ✅ CRM page with live API stats (TanStack Query → CRM REST API)
+- ✅ SPA catch-all routing for React client-side navigation
 
 **Implementation Tasks (Completed)**:
 
@@ -208,19 +213,19 @@ myapp/
 - Add `django-cors-headers` configuration for API access
 
 **Testing**:
-- [ ] E2E tests: `quickscale plan` → `quickscale apply` → Working React project
+- [x] E2E tests: `quickscale plan` → `quickscale apply` → Working React project
 - [ ] React app starts with `pnpm dev` in `frontend/` directory
-- [ ] Verify shadcn/ui components render correctly
+- [x] Verify shadcn/ui components render correctly
 - [ ] Vitest unit tests pass with reasonable coverage
-- [ ] TanStack Query fetches from Django REST Framework API
-- [ ] Zustand stores work correctly
+- [x] TanStack Query fetches from Django REST Framework API
+- [x] Zustand stores work correctly
 - [ ] CI passes (lint, test-all, test-e2e)
 
 **Success Criteria**:
-- [ ] `quickscale plan myapp` defaults to `showcase_react` theme
-- [ ] `quickscale apply` generates working React project (no errors)
-- [ ] Generated React app builds and runs successfully
-- [ ] Sample Dashboard page displays data from Django API
+- [x] `quickscale plan myapp` defaults to `showcase_react` theme
+- [x] `quickscale apply` generates working React project (no errors)
+- [x] Generated React app builds and runs successfully
+- [x] Sample Dashboard page displays data from Django API
 - [ ] All existing E2E tests continue to pass
 
 ---
@@ -233,7 +238,7 @@ myapp/
 
 **Prerequisites**:
 - ✅ CRM Module (v0.73.0)
-- 📋 React Default Theme (v0.74.0)
+- ✅ React Default Theme (v0.74.0)
 
 **Theme Features**:
 - **Extends**: `showcase_react` base patterns

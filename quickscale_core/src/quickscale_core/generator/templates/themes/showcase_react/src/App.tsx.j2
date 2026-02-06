@@ -1,6 +1,11 @@
-{% raw %}import { Routes, Route } from 'react-router-dom'
+import { Routes, Route } from 'react-router-dom'
 import { Layout } from '@/components/layout/Layout'
 import { Dashboard } from '@/pages/Dashboard'
+import { BlogPage } from '@/pages/BlogPage'
+import { ListingsPage } from '@/pages/ListingsPage'
+import { CrmPage } from '@/pages/CrmPage'
+import { ProfilePage } from '@/pages/ProfilePage'
+import { SettingsPage } from '@/pages/SettingsPage'
 import { NotFound } from '@/pages/NotFound'
 
 function App() {
@@ -8,6 +13,11 @@ function App() {
     <Routes>
       <Route element={<Layout />}>
         <Route path="/" element={<Dashboard />} />
+        <Route path="/blog" element={<BlogPage />} />
+        <Route path="/listings" element={<ListingsPage />} />
+        <Route path="/crm" element={<CrmPage />} />
+        <Route path="/profile" element={<ProfilePage />} />
+        <Route path="/settings" element={<SettingsPage />} />
         <Route path="*" element={<NotFound />} />
       </Route>
     </Routes>
@@ -15,4 +25,3 @@ function App() {
 }
 
 export default App
-{% endraw %}

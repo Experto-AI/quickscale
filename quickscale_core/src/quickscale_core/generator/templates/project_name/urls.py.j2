@@ -20,7 +20,7 @@ from django.conf import settings
 from django.conf.urls.static import static
 from django.contrib import admin
 from django.http import HttpResponse
-from django.urls import include, path
+from django.urls import include, path, re_path
 from django.views.generic import TemplateView
 
 from {{ package_name }}.views import custom_404_view
@@ -59,10 +59,15 @@ if settings.DEBUG:
     except ImportError:
         pass
 
+{% if theme == 'showcase_react' %}
+    # React SPA catch-all: serve index.html for client-side routing
+    # React Router handles navigation and shows 404 for unknown routes
+    urlpatterns += [
+        re_path(r".*", TemplateView.as_view(template_name="index.html")),
+    ]
+{% else %}
     # In DEBUG mode, show custom 404 page instead of Django's technical 404
     # This provides helpful hints about installing QuickScale modules
-    from django.urls import re_path
-
     urlpatterns += [
         # Catch module-specific URLs first (more specific patterns)
         re_path(r"^accounts/.*", custom_404_view),
@@ -71,3 +76,4 @@ if settings.DEBUG:
         # Catch-all for any other 404s (must be last)
         re_path(r".*", custom_404_view),
     ]
+{% endif %}

@@ -1,0 +1,40 @@
+{% raw %}interface QuickScaleModules {
+  auth: boolean
+  blog: boolean
+  listings: boolean
+  crm: boolean
+  billing: boolean
+  teams: boolean
+}
+
+interface QuickScaleConfig {
+  projectName: string
+  modules: QuickScaleModules
+}
+
+declare global {
+  interface Window {
+    __QUICKSCALE__?: QuickScaleConfig
+  }
+}
+
+const defaultConfig: QuickScaleConfig = {
+  projectName: '{% endraw %}{{ project_name }}{% raw %}',
+  modules: {
+    auth: false,
+    blog: false,
+    listings: false,
+    crm: false,
+    billing: false,
+    teams: false,
+  },
+}
+
+export function useModules(): QuickScaleModules {
+  return (window.__QUICKSCALE__ ?? defaultConfig).modules
+}
+
+export function useProjectConfig(): QuickScaleConfig {
+  return window.__QUICKSCALE__ ?? defaultConfig
+}
+{% endraw %}

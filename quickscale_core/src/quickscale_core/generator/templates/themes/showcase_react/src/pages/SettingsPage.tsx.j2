@@ -1,0 +1,95 @@
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
+import { Button } from '@/components/ui/button'
+import { Badge } from '@/components/ui/badge'
+import { Settings, ExternalLink, Server, Database, Palette } from 'lucide-react'
+import { useModules } from '@/hooks/useModules'
+import { useHealthCheck } from '@/hooks/useApi'
+
+export function SettingsPage() {
+  const modules = useModules()
+  const health = useHealthCheck()
+  const installedModules = Object.entries(modules).filter(([, v]) => v).map(([k]) => k)
+
+  return (
+    <div className="space-y-6">
+      <div>
+        <h1 className="text-3xl font-bold tracking-tight">Settings</h1>
+        <p className="text-muted-foreground">
+          Project configuration and system status
+        </p>
+      </div>
+
+      <div className="grid gap-4 md:grid-cols-2">
+        <Card>
+          <CardHeader>
+            <Server className="h-5 w-5 text-muted-foreground mb-1" />
+            <CardTitle className="text-base">System Status</CardTitle>
+            <CardDescription>Backend health and connectivity</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="flex items-center gap-2">
+              <span className="text-sm">Backend:</span>
+              {health.isLoading ? (
+                <Badge variant="secondary">Checking...</Badge>
+              ) : health.isError ? (
+                <Badge variant="destructive">Offline</Badge>
+              ) : (
+                <Badge variant="secondary" className="bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200">Online</Badge>
+              )}
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader>
+            <Database className="h-5 w-5 text-muted-foreground mb-1" />
+            <CardTitle className="text-base">Installed Modules</CardTitle>
+            <CardDescription>Active QuickScale modules</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="flex gap-2 flex-wrap">
+              {installedModules.length > 0 ? (
+                installedModules.map((mod) => (
+                  <Badge key={mod} variant="secondary">{mod}</Badge>
+                ))
+              ) : (
+                <span className="text-sm text-muted-foreground">No modules installed</span>
+              )}
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader>
+            <Settings className="h-5 w-5 text-muted-foreground mb-1" />
+            <CardTitle className="text-base">Django Admin</CardTitle>
+            <CardDescription>Full administrative interface</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <Button variant="outline" size="sm" asChild>
+              <a href="/admin/" target="_blank" rel="noopener noreferrer">
+                Open Admin <ExternalLink className="ml-1 h-3 w-3" />
+              </a>
+            </Button>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader>
+            <Palette className="h-5 w-5 text-muted-foreground mb-1" />
+            <CardTitle className="text-base">Theme</CardTitle>
+            <CardDescription>showcase_react (React + shadcn/ui)</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="flex gap-2 flex-wrap">
+              <Badge variant="outline">React 18</Badge>
+              <Badge variant="outline">TypeScript</Badge>
+              <Badge variant="outline">Tailwind CSS</Badge>
+              <Badge variant="outline">shadcn/ui</Badge>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+    </div>
+  )
+}

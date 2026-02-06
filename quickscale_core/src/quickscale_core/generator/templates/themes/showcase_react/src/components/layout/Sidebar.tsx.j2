@@ -1,20 +1,34 @@
 {% raw %}import { NavLink } from 'react-router-dom'
-import { Home, Settings, Users, FileText, BarChart3 } from 'lucide-react'
+import { Home, Settings, BookOpen, Store, Briefcase, CreditCard, Users, UserCircle } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { Separator } from '@/components/ui/separator'
+import { useModules } from '@/hooks/useModules'
 
-const navigation = [
-  { name: 'Dashboard', href: '/', icon: Home },
-  { name: 'Analytics', href: '/analytics', icon: BarChart3 },
-  { name: 'Users', href: '/users', icon: Users },
-  { name: 'Documents', href: '/documents', icon: FileText },
-]
-
-const bottomNavigation = [
-  { name: 'Settings', href: '/settings', icon: Settings },
-]
+interface NavItem {
+  name: string
+  href: string
+  icon: React.ComponentType<{ className?: string }>
+  show: boolean
+  end?: boolean
+}
 
 export function Sidebar() {
+  const modules = useModules()
+
+  const navigation: NavItem[] = [
+    { name: 'Dashboard', href: '/', icon: Home, show: true, end: true },
+    { name: 'Blog', href: '/blog', icon: BookOpen, show: modules.blog },
+    { name: 'Listings', href: '/listings', icon: Store, show: modules.listings },
+    { name: 'CRM', href: '/crm', icon: Briefcase, show: modules.crm },
+    { name: 'Billing', href: '/billing', icon: CreditCard, show: modules.billing },
+    { name: 'Teams', href: '/teams', icon: Users, show: modules.teams },
+  ]
+
+  const bottomNavigation: NavItem[] = [
+    { name: 'Profile', href: '/profile', icon: UserCircle, show: modules.auth },
+    { name: 'Settings', href: '/settings', icon: Settings, show: true },
+  ]
+
   return (
     <aside className="hidden lg:flex w-64 flex-col border-r bg-sidebar min-h-screen">
       <div className="p-6">
@@ -24,10 +38,11 @@ export function Sidebar() {
       </div>
       <Separator />
       <nav className="flex-1 p-4 space-y-1">
-        {navigation.map((item) => (
+        {navigation.filter(item => item.show).map((item) => (
           <NavLink
             key={item.name}
             to={item.href}
+            end={item.end}
             className={({ isActive }) =>
               cn(
                 'flex items-center gap-3 rounded-lg px-3 py-2 text-sm transition-colors',
@@ -44,7 +59,7 @@ export function Sidebar() {
       </nav>
       <Separator />
       <div className="p-4 space-y-1">
-        {bottomNavigation.map((item) => (
+        {bottomNavigation.filter(item => item.show).map((item) => (
           <NavLink
             key={item.name}
             to={item.href}

@@ -1,127 +1,134 @@
 {% raw %}import { motion } from 'motion/react'
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle
-} from '@/components/ui/card'
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
+import { Link } from 'react-router-dom'
 import {
-  ArrowUpRight,
-  Users,
-  CreditCard,
-  Activity,
-  TrendingUp
+  BookOpen, Store, Briefcase, CreditCard, Users, UserCircle,
+  ExternalLink, Rocket, Code, Database, Shield
 } from 'lucide-react'
+import { useModules } from '@/hooks/useModules'
 
-const stats = [
-  {
-    title: 'Total Users',
-    value: '2,543',
-    change: '+12.5%',
-    icon: Users,
-  },
-  {
-    title: 'Revenue',
-    value: '$45,231',
-    change: '+8.2%',
-    icon: CreditCard,
-  },
-  {
-    title: 'Active Now',
-    value: '573',
-    change: '+3.1%',
-    icon: Activity,
-  },
-  {
-    title: 'Growth',
-    value: '24.5%',
-    change: '+2.4%',
-    icon: TrendingUp,
-  },
+const moduleInfo = [
+  { key: 'auth', name: 'Authentication', icon: UserCircle, description: 'User registration, login, profiles, and password management', href: '/profile' },
+  { key: 'blog', name: 'Blog', icon: BookOpen, description: 'Full-featured blog with Markdown support, categories, tags, and RSS feed', href: '/blog' },
+  { key: 'listings', name: 'Listings', icon: Store, description: 'Generic listings with filtering for marketplace verticals', href: '/listings' },
+  { key: 'crm', name: 'CRM', icon: Briefcase, description: 'Contact management, companies, deals, and pipeline tracking', href: '/crm' },
+  { key: 'billing', name: 'Billing', icon: CreditCard, description: 'Subscription management and payment processing', href: '/billing' },
+  { key: 'teams', name: 'Teams', icon: Users, description: 'Team collaboration and management features', href: '/teams' },
+] as const
+
+const gettingStarted = [
+  { title: 'Customize Settings', description: 'Edit your project settings', icon: Code },
+  { title: 'Create Apps', description: 'Add Django apps with manage.py', icon: Rocket },
+  { title: 'Set Up Database', description: 'Run migrations and create superuser', icon: Database },
+  { title: 'Security', description: 'Configure SECRET_KEY and ALLOWED_HOSTS', icon: Shield },
 ]
 
 export function Dashboard() {
+  const modules = useModules()
+  const installedModules = moduleInfo.filter(m => modules[m.key as keyof typeof modules])
+  const hasModules = installedModules.length > 0
+
   return (
-    <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-3xl font-bold tracking-tight">Dashboard</h1>
-          <p className="text-muted-foreground">
-            Welcome to your {% endraw %}{{ project_name }}{% raw %} dashboard
-          </p>
-        </div>
-        <Button>
-          <ArrowUpRight className="mr-2 h-4 w-4" />
-          View Reports
-        </Button>
+    <div className="space-y-8">
+      <div>
+        <h1 className="text-3xl font-bold tracking-tight">Welcome to {% endraw %}{{ project_name }}{% raw %}</h1>
+        <p className="text-muted-foreground mt-1">
+          Your Django project has been successfully generated with QuickScale!
+        </p>
       </div>
 
-      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
-        {stats.map((stat, index) => (
-          <motion.div
-            key={stat.title}
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.3, delay: index * 0.1 }}
-          >
-            <Card>
-              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                <CardTitle className="text-sm font-medium">
-                  {stat.title}
-                </CardTitle>
-                <stat.icon className="h-4 w-4 text-muted-foreground" />
-              </CardHeader>
-              <CardContent>
-                <div className="text-2xl font-bold">{stat.value}</div>
-                <Badge variant="secondary" className="mt-1">
-                  {stat.change}
-                </Badge>
+      {/* Installed Modules */}
+      <div>
+        <h2 className="text-xl font-semibold mb-4">
+          {hasModules ? 'Installed Modules' : 'No Modules Installed'}
+        </h2>
+        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+          {hasModules ? (
+            installedModules.map((mod, index) => (
+              <motion.div
+                key={mod.key}
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.3, delay: index * 0.1 }}
+              >
+                <Card className="h-full">
+                  <CardHeader className="flex flex-row items-center gap-3 space-y-0 pb-2">
+                    <mod.icon className="h-5 w-5 text-primary" />
+                    <div>
+                      <CardTitle className="text-base">{mod.name}</CardTitle>
+                    </div>
+                    <Badge variant="secondary" className="ml-auto">Active</Badge>
+                  </CardHeader>
+                  <CardContent>
+                    <p className="text-sm text-muted-foreground mb-3">{mod.description}</p>
+                    <Button variant="outline" size="sm" asChild>
+                      <Link to={mod.href}>
+                        Open <ExternalLink className="ml-1 h-3 w-3" />
+                      </Link>
+                    </Button>
+                  </CardContent>
+                </Card>
+              </motion.div>
+            ))
+          ) : (
+            <Card className="col-span-full">
+              <CardContent className="pt-6">
+                <p className="text-muted-foreground">
+                  No modules installed yet. Use <code className="bg-muted px-1.5 py-0.5 rounded text-sm">quickscale plan --add &lt;module&gt;</code> to add modules.
+                </p>
               </CardContent>
             </Card>
-          </motion.div>
-        ))}
+          )}
+        </div>
       </div>
 
-      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-7">
-        <Card className="col-span-4">
-          <CardHeader>
-            <CardTitle>Overview</CardTitle>
-            <CardDescription>
-              Your activity for the current month
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            <div className="h-[200px] flex items-center justify-center text-muted-foreground">
-              Chart component will be added here
-            </div>
-          </CardContent>
-        </Card>
-        <Card className="col-span-3">
-          <CardHeader>
-            <CardTitle>Recent Activity</CardTitle>
-            <CardDescription>
-              Latest actions in your application
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            <div className="space-y-4">
-              {[1, 2, 3].map((i) => (
-                <div key={i} className="flex items-center gap-4">
-                  <div className="h-9 w-9 rounded-full bg-muted" />
-                  <div className="flex-1 space-y-1">
-                    <p className="text-sm font-medium">Activity {i}</p>
-                    <p className="text-xs text-muted-foreground">
-                      {i} hour{i > 1 ? 's' : ''} ago
-                    </p>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </CardContent>
-        </Card>
+      {/* Getting Started */}
+      <div>
+        <h2 className="text-xl font-semibold mb-4">Getting Started</h2>
+        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+          {gettingStarted.map((item, index) => (
+            <motion.div
+              key={item.title}
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.3, delay: 0.3 + index * 0.1 }}
+            >
+              <Card>
+                <CardHeader className="pb-2">
+                  <item.icon className="h-5 w-5 text-muted-foreground mb-1" />
+                  <CardTitle className="text-sm">{item.title}</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <CardDescription>{item.description}</CardDescription>
+                </CardContent>
+              </Card>
+            </motion.div>
+          ))}
+        </div>
+      </div>
+
+      {/* Resources */}
+      <div>
+        <h2 className="text-xl font-semibold mb-4">Resources</h2>
+        <div className="flex gap-4 flex-wrap">
+          <Button variant="outline" asChild>
+            <a href="https://docs.djangoproject.com/" target="_blank" rel="noopener noreferrer">
+              Django Docs <ExternalLink className="ml-1 h-3 w-3" />
+            </a>
+          </Button>
+          <Button variant="outline" asChild>
+            <a href="https://github.com/Experto-AI/quickscale" target="_blank" rel="noopener noreferrer">
+              QuickScale <ExternalLink className="ml-1 h-3 w-3" />
+            </a>
+          </Button>
+          <Button variant="outline" asChild>
+            <a href="/admin/" target="_blank" rel="noopener noreferrer">
+              Django Admin <ExternalLink className="ml-1 h-3 w-3" />
+            </a>
+          </Button>
+        </div>
       </div>
     </div>
   )

@@ -1,0 +1,106 @@
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
+import { Button } from '@/components/ui/button'
+import { useApiData } from '@/hooks/useApi'
+import { Briefcase, Building2, UserCircle, Tag, ExternalLink, ArrowUpRight } from 'lucide-react'
+
+interface ApiListResponse {
+  count?: number
+  results?: unknown[]
+}
+
+function useCrmStats() {
+  const contacts = useApiData<ApiListResponse>('/crm/api/contacts/', ['crm-contacts'])
+  const companies = useApiData<ApiListResponse>('/crm/api/companies/', ['crm-companies'])
+  const deals = useApiData<ApiListResponse>('/crm/api/deals/', ['crm-deals'])
+  const tags = useApiData<ApiListResponse>('/crm/api/tags/', ['crm-tags'])
+
+  return {
+    contacts: contacts.data?.count ?? contacts.data?.results?.length ?? 0,
+    companies: companies.data?.count ?? companies.data?.results?.length ?? 0,
+    deals: deals.data?.count ?? deals.data?.results?.length ?? 0,
+    tags: tags.data?.count ?? tags.data?.results?.length ?? 0,
+    isLoading: contacts.isLoading || companies.isLoading || deals.isLoading || tags.isLoading,
+  }
+}
+
+const crmSections = [
+  { key: 'contacts', name: 'Contacts', icon: UserCircle, description: 'Manage customer contacts and communication', apiPath: '/crm/api/contacts/' },
+  { key: 'companies', name: 'Companies', icon: Building2, description: 'Track companies and organizations', apiPath: '/crm/api/companies/' },
+  { key: 'deals', name: 'Deals', icon: Briefcase, description: 'Manage deals and sales pipeline', apiPath: '/crm/api/deals/' },
+  { key: 'tags', name: 'Tags', icon: Tag, description: 'Organize records with tags', apiPath: '/crm/api/tags/' },
+] as const
+
+export function CrmPage() {
+  const stats = useCrmStats()
+
+  return (
+    <div className="space-y-6">
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-3xl font-bold tracking-tight">CRM</h1>
+          <p className="text-muted-foreground">
+            Customer Relationship Management — contacts, companies, deals, and pipeline
+          </p>
+        </div>
+        <div className="flex gap-2">
+          <Button variant="outline" asChild>
+            <a href="/crm/api/" target="_blank" rel="noopener noreferrer">
+              API Browser <ExternalLink className="ml-1 h-3 w-3" />
+            </a>
+          </Button>
+          <Button asChild>
+            <a href="/crm/" target="_blank" rel="noopener noreferrer">
+              <ArrowUpRight className="mr-2 h-4 w-4" /> CRM Dashboard
+            </a>
+          </Button>
+        </div>
+      </div>
+
+      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+        {crmSections.map((section) => (
+          <Card key={section.key}>
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+              <CardTitle className="text-sm font-medium">{section.name}</CardTitle>
+              <section.icon className="h-4 w-4 text-muted-foreground" />
+            </CardHeader>
+            <CardContent>
+              <div className="text-2xl font-bold">
+                {stats.isLoading ? '—' : stats[section.key as keyof typeof stats]}
+              </div>
+              <p className="text-xs text-muted-foreground mt-1">{section.description}</p>
+              <Button variant="outline" size="sm" className="mt-3" asChild>
+                <a href={section.apiPath} target="_blank" rel="noopener noreferrer">
+                  View API <ExternalLink className="ml-1 h-3 w-3" />
+                </a>
+              </Button>
+            </CardContent>
+          </Card>
+        ))}
+      </div>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>Quick Actions</CardTitle>
+          <CardDescription>Manage CRM data through the Django Admin or REST API</CardDescription>
+        </CardHeader>
+        <CardContent className="flex gap-3 flex-wrap">
+          <Button variant="outline" asChild>
+            <a href="/admin/quickscale_modules_crm/" target="_blank" rel="noopener noreferrer">
+              Django Admin <ExternalLink className="ml-1 h-3 w-3" />
+            </a>
+          </Button>
+          <Button variant="outline" asChild>
+            <a href="/crm/api/contacts/" target="_blank" rel="noopener noreferrer">
+              Contacts API <ExternalLink className="ml-1 h-3 w-3" />
+            </a>
+          </Button>
+          <Button variant="outline" asChild>
+            <a href="/crm/api/deals/" target="_blank" rel="noopener noreferrer">
+              Deals API <ExternalLink className="ml-1 h-3 w-3" />
+            </a>
+          </Button>
+        </CardContent>
+      </Card>
+    </div>
+  )
+}

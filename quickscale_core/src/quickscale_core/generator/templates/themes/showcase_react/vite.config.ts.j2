@@ -14,10 +14,14 @@ export default defineConfig({
   server: {
     port: 5173,
     proxy: {
-      '/api': {
-        target: 'http://localhost:8000',
-        changeOrigin: true,
-      },
+      '/admin': { target: 'http://localhost:8000', changeOrigin: true },
+      '/accounts': { target: 'http://localhost:8000', changeOrigin: true },
+      '/blog': { target: 'http://localhost:8000', changeOrigin: true },
+      '/listings': { target: 'http://localhost:8000', changeOrigin: true },
+      '/crm': { target: 'http://localhost:8000', changeOrigin: true },
+      '/healthcheck': { target: 'http://localhost:8000', changeOrigin: true },
+      '/static': { target: 'http://localhost:8000', changeOrigin: true },
+      '/markdownx': { target: 'http://localhost:8000', changeOrigin: true },
     },
   },
   build: {

@@ -10,6 +10,19 @@
   </head>
   <body>
     <div id="root"></div>
-    <script type="module" src="{% static 'frontend/assets/index.js' %}"></script>
+    <script>
+      window.__QUICKSCALE__ = {
+        projectName: "{%endraw%}{{ project_name }}{%raw%}",
+        modules: {
+          auth: {% if 'quickscale_modules_auth' in settings.INSTALLED_APPS %}true{% else %}false{% endif %},
+          blog: {% if 'quickscale_modules_blog' in settings.INSTALLED_APPS %}true{% else %}false{% endif %},
+          listings: {% if 'quickscale_modules_listings' in settings.INSTALLED_APPS %}true{% else %}false{% endif %},
+          crm: {% if 'quickscale_modules_crm' in settings.INSTALLED_APPS %}true{% else %}false{% endif %},
+          billing: {% if 'quickscale_modules_billing' in settings.INSTALLED_APPS %}true{% else %}false{% endif %},
+          teams: {% if 'quickscale_modules_teams' in settings.INSTALLED_APPS %}true{% else %}false{% endif %}
+        }
+      };
+    </script>{%endraw%}
+    <script type="module" src="{%raw%}{% static 'frontend/assets/index.js' %}{%endraw%}"></script>
   </body>
-</html>{%endraw%}
+</html>
