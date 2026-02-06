@@ -9,21 +9,21 @@ packages = [{include = "{{ package_name }}"}]
 [tool.poetry.dependencies]
 python = "^3.12"
 Django = "^6.0"
-psycopg2-binary = "^2.9.9"
+psycopg2-binary = "^2.9.11"
 python-decouple = "^3.8"
-whitenoise = "^6.6.0"
-gunicorn = "^21.2.0"
-dj-database-url = "^2.1"
+whitenoise = "^6.8.0"
+gunicorn = "^25.0.0"
+dj-database-url = "^3.1.0"
 
 [tool.poetry.group.dev.dependencies]
-pytest = "^7.4.3"
-pytest-django = "^4.7.0"
-pytest-cov = "^4.1.0"
-factory-boy = "^3.3.0"
-ruff = "^0.1.9"
-mypy = "^1.8.0"
-django-stubs = "^5.2.8"
-pre-commit = "^3.6.0"
+pytest = "^9.0.0"
+pytest-django = "^4.8.0"
+pytest-cov = "^7.0.0"
+factory-boy = "^3.3.3"
+ruff = "^0.15.0"
+mypy = "^1.19.0"
+django-stubs = "^5.2.9"
+pre-commit = "^4.1.0"
 
 [build-system]
 requires = ["poetry-core"]

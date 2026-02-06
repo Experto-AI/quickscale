@@ -18,14 +18,14 @@ quickscale-module-crm = {path = "./quickscale_modules/crm", develop = true}
 
 [tool.poetry.group.dev.dependencies]
 # Testing frameworks
-pytest = "^8.0"
-pytest-cov = "^6.0.0"  # Updated for better coverage compatibility
+pytest = "^9.0.0"
+pytest-cov = "^7.0.0"  # Updated for better coverage compatibility
 coverage = "^7.6.0"  # Pin to avoid templite syntax errors with newer versions
 pytest-docker = "^3.1.0"
 pytest-playwright = "^0.4.0"
-pytest-django = "^4.7.0"
+pytest-django = "^4.8.0"
 # Code quality tools
-ruff = "^0.14.8"
+ruff = "^0.15.0"
 mypy = "^1.19.0"
 # Advanced code quality analysis tools
 vulture = "^2.11"        # Dead code detection
@@ -33,10 +33,10 @@ radon = "^6.0.1"         # Complexity metrics
 pylint = "^3.0.3"        # Code duplication detection
 # Type stubs
 types-pyyaml = "^6.0.0"
-django-stubs = "^5.2.8"
+django-stubs = "^5.2.9"
 # Testing utilities
-factory-boy = "^3.3.0"
-psycopg2-binary = "^2.9.0"
+factory-boy = "^3.3.3"
+psycopg2-binary = "^2.9.11"
 
 [build-system]
 requires = ["poetry-core"]
