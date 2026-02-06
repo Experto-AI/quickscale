@@ -10,13 +10,13 @@ packages = [{include = "quickscale_modules_auth", from = "src"}]
 [tool.poetry.dependencies]
 python = "^3.12"
 Django = "^6.0"
-django-allauth = "^65.12.0"
+django-allauth = "^65.14.0"
 
 [tool.poetry.group.dev.dependencies]
 # Minimal dev dependencies for standalone testing
 # pytest, pytest-cov, ruff, mypy centralized in root pyproject.toml (monorepo)
 # or provided by user's project (standalone embed)
-pytest-django = "^4.7.0"
+pytest-django = "^4.8.0"
 
 [build-system]
 requires = ["poetry-core"]
