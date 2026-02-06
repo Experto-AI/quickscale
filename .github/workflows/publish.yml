@@ -1,0 +1,275 @@
+# QuickScale CD Pipeline - Publish to PyPI
+# Triggers on version tag pushes ([0-9]* or v[0-9]*)
+# Uses Trusted Publishing (OIDC) for secure PyPI authentication
+
+name: Publish to PyPI
+
+on:
+  push:
+    tags:
+      - "[0-9]*"
+      - "v[0-9]*"
+
+jobs:
+  verify:
+    name: Verify Tag
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.get_version.outputs.version }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: "pip"
+
+      - name: Get version from tag
+        id: get_version
+        run: |
+          TAG_VERSION=${GITHUB_REF#refs/tags/}
+          TAG_VERSION=${TAG_VERSION#v}
+          echo "version=$TAG_VERSION" >> $GITHUB_OUTPUT
+          echo "Tag version: $TAG_VERSION"
+
+      - name: Verify tag matches VERSION file
+        run: |
+          TAG_VERSION=${{ steps.get_version.outputs.version }}
+          FILE_VERSION=$(cat VERSION | tr -d '\r' | sed -e 's/^\s*//' -e 's/\s*$//')
+          if [[ "$FILE_VERSION" != "$TAG_VERSION" ]]; then
+            echo "❌ Version mismatch!"
+            echo "   VERSION file: $FILE_VERSION"
+            echo "   Git tag: $TAG_VERSION"
+            exit 1
+          fi
+          echo "✅ VERSION verified: $FILE_VERSION"
+
+      - name: Verify pyproject versions match VERSION
+        run: |
+          ./scripts/version_tool.sh check
+
+  test:
+    name: Run Tests
+    runs-on: ubuntu-latest
+    needs: verify
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: "pip"
+
+      - name: Install Poetry
+        uses: snok/install-poetry@v1
+        with:
+          version: latest
+          virtualenvs-create: true
+          virtualenvs-in-project: true
+
+      - name: Cache Poetry dependencies
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cache/pypoetry
+            .venv
+          key: ${{ runner.os }}-poetry-${{ hashFiles('poetry.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-poetry-
+
+      - name: Install dependencies
+        run: |
+          poetry install --with dev
+
+      - name: Run linting (ruff)
+        run: |
+          poetry run ruff check quickscale_core quickscale_cli quickscale_modules
+          poetry run ruff format --check quickscale_core quickscale_cli quickscale_modules
+
+      - name: Run type checking (mypy)
+        run: |
+          poetry run mypy quickscale_core/src/
+          poetry run mypy quickscale_cli/src/
+          for mod in quickscale_modules/*/; do
+            if [ -d "${mod}src" ]; then
+              echo "Type checking ${mod}..."
+              poetry run mypy "${mod}src/" || true
+            fi
+          done
+
+      - name: Run unit and integration tests
+        run: |
+          ./scripts/test_unit.sh
+
+  build:
+    name: Build Packages
+    runs-on: ubuntu-latest
+    needs: test
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: "pip"
+
+      - name: Install Poetry
+        uses: snok/install-poetry@v1
+        with:
+          version: latest
+          virtualenvs-create: true
+          virtualenvs-in-project: true
+
+      - name: Build sdist and wheel
+        env:
+          VERSION: ${{ needs.verify.outputs.version }}
+        run: |
+          set -euo pipefail
+
+          ROOT="$GITHUB_WORKSPACE"
+          BUILD_DIR="$ROOT/dist"
+          PACKAGES=("quickscale_core" "quickscale_cli" "quickscale")
+
+          mkdir -p "$BUILD_DIR"
+
+          for pkg in "${PACKAGES[@]}"; do
+            pkg_dir="$ROOT/$pkg"
+            pyproject="$pkg_dir/pyproject.toml"
+            backup="$pkg_dir/pyproject.toml.backup"
+            readme_copied=0
+
+            echo "Building $pkg..."
+
+            if [[ ! -f "$pyproject" ]]; then
+              echo "pyproject.toml not found for $pkg"
+              exit 1
+            fi
+
+            cp "$pyproject" "$backup"
+
+            if [[ -f "$ROOT/README.md" ]] && [[ ! -f "$pkg_dir/README.md" ]]; then
+              cp "$ROOT/README.md" "$pkg_dir/README.md"
+              readme_copied=1
+            fi
+
+            sed -i 's|readme = "\.\./README\.md"|readme = "README.md"|' "$pyproject"
+
+            if [[ "$pkg" == "quickscale_cli" ]]; then
+              sed -i "s|quickscale-core = {path = \"../quickscale_core\"[^}]*}|quickscale-core = \"^${VERSION}\"|" "$pyproject"
+            fi
+
+            if [[ "$pkg" == "quickscale" ]]; then
+              sed -i "s|quickscale-core = {path = \"../quickscale_core\"[^}]*}|quickscale-core = \"^${VERSION}\"|" "$pyproject"
+              sed -i "s|quickscale-cli = {path = \"../quickscale_cli\"[^}]*}|quickscale-cli = \"^${VERSION}\"|" "$pyproject"
+            fi
+
+            rm -rf "$pkg_dir/dist"
+            (cd "$pkg_dir" && poetry build)
+
+            cp "$pkg_dir"/dist/* "$BUILD_DIR"/
+
+            mv "$backup" "$pyproject"
+            if [[ "$readme_copied" -eq 1 ]]; then
+              rm -f "$pkg_dir/README.md"
+            fi
+          done
+
+          ls -la "$BUILD_DIR"
+
+      - name: Upload build artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: dist
+          path: dist/
+
+  publish-testpypi:
+    name: Publish to TestPyPI
+    runs-on: ubuntu-latest
+    needs: build
+    environment:
+      name: testpypi
+      url: https://test.pypi.org/project/quickscale/
+    permissions:
+      id-token: write
+    steps:
+      - name: Download build artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: dist
+          path: dist/
+
+      - name: Publish to TestPyPI
+        uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          repository-url: https://test.pypi.org/legacy/
+          skip-existing: true
+
+  publish-pypi:
+    name: Publish to PyPI
+    runs-on: ubuntu-latest
+    needs: [build, publish-testpypi]
+    environment:
+      name: pypi
+      url: https://pypi.org/project/quickscale/
+    permissions:
+      id-token: write
+    steps:
+      - name: Download build artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: dist
+          path: dist/
+
+      - name: Publish to PyPI
+        uses: pypa/gh-action-pypi-publish@release/v1
+
+  create-release:
+    name: Create GitHub Release
+    runs-on: ubuntu-latest
+    needs: [verify, publish-pypi]
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Download build artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: dist
+          path: dist/
+
+      - name: Extract changelog for this version
+        id: changelog
+        run: |
+          VERSION=${{ needs.verify.outputs.version }}
+          CHANGELOG_LINE=$(grep -m1 -E "^- v?${VERSION}\\b" CHANGELOG.md || true)
+
+          if [[ -n "$CHANGELOG_LINE" ]]; then
+            echo "Release v$VERSION" > release_notes.md
+            echo "" >> release_notes.md
+            echo "$CHANGELOG_LINE" >> release_notes.md
+          else
+            echo "Release v$VERSION" > release_notes.md
+            echo "" >> release_notes.md
+            echo "See [CHANGELOG.md](https://github.com/Experto-AI/quickscale/blob/main/CHANGELOG.md) for details." >> release_notes.md
+          fi
+
+          cat release_notes.md
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.ref_name }}
+          name: v${{ needs.verify.outputs.version }}
+          body_path: release_notes.md
+          files: dist/*
+          draft: false
+          prerelease: ${{ contains(needs.verify.outputs.version, 'alpha') || contains(needs.verify.outputs.version, 'beta') || contains(needs.verify.outputs.version, 'rc') }}
+          fail_on_unmatched_files: true
