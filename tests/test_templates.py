@@ -65,9 +65,9 @@ class TestTemplateCSSLoading:
         assert auth_css_pos != -1, "Auth CSS not found in response"
 
         # Main CSS should come before auth CSS (due to block.super)
-        assert (
-            main_css_pos < auth_css_pos
-        ), "CSS loading order incorrect: main CSS should load before auth CSS"
+        assert main_css_pos < auth_css_pos, (
+            "CSS loading order incorrect: main CSS should load before auth CSS"
+        )
 
 
 @pytest.mark.django_db
