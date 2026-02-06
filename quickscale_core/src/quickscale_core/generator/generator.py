@@ -197,6 +197,8 @@ class ProjectGenerator:
             "project_name": project_name,
             "package_name": package_name,
             "theme": self.theme,
+            "host_uid": os.getuid() if hasattr(os, "getuid") else 1000,
+            "host_gid": os.getgid() if hasattr(os, "getgid") else 1000,
         }
 
         # Map of template files to output files
@@ -211,6 +213,7 @@ class ProjectGenerator:
             (".dockerignore.j2", ".dockerignore", False),
             (".editorconfig.j2", ".editorconfig", False),
             (".env.example.j2", ".env.example", False),
+            (".env.j2", ".env", False),
             ("Dockerfile.j2", "Dockerfile", False),
             ("docker-compose.yml.j2", "docker-compose.yml", False),
             ("railway.json.j2", "railway.json", False),

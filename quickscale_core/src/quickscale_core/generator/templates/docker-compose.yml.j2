@@ -23,7 +23,11 @@ services:
   frontend:
     image: node:20-slim
     container_name: {{ project_name }}_frontend
+    # Map to host user to prevent root-owned files in mounted volumes
+    user: "${DOCKER_UID:-1000}:${DOCKER_GID:-1000}"
     working_dir: /app/frontend
+    environment:
+      - HOME=/tmp
     command: sh -c "npm install && npm run build"
     volumes:
       - .:/app
@@ -37,9 +41,8 @@ services:
         INSTALL_DEV: "true"  # Install dev dependencies for local development
     container_name: {{ project_name }}_web
     command: python manage.py runserver 0.0.0.0:${PORT:-8000}
-    # Run as root in development to avoid permission issues with mounted volumes
-    # Production deployments should use the Dockerfile's non-root user
-    user: root
+    # Map to host user to prevent root-owned files in mounted volumes
+    user: "${DOCKER_UID:-1000}:${DOCKER_GID:-1000}"
     volumes:
       - .:/app
       - static_volume:/app/staticfiles
