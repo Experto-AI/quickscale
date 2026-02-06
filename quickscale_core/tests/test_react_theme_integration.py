@@ -9,6 +9,7 @@ These tests verify the complete React theme generation workflow including:
 """
 
 import json
+import re
 
 import pytest
 
@@ -414,3 +415,101 @@ class TestReactThemeBaseTemplate:
 
         # Verify base.html exists so the extends chain works
         assert (output_path / "templates" / "base.html").exists()
+
+
+@pytest.mark.integration
+class TestReactThemeAuthUrls:
+    """Test that React theme auth links match Django auth URL patterns
+
+    The React ProfilePage contains hardcoded <a href> links to Django-served
+    auth pages. These must exactly match the URL patterns defined in the auth
+    module's urls.py and django-allauth, otherwise users get 404 errors.
+
+    Regression test for: /accounts/account-delete/ vs /accounts/account/delete/
+    """
+
+    # URLs from django-allauth mounted at /accounts/
+    ALLAUTH_URLS = {
+        "/accounts/login/",
+        "/accounts/signup/",
+        "/accounts/password/change/",
+        "/accounts/password/reset/",
+    }
+
+    # Custom auth module URLs (from quickscale_modules_auth/urls.py)
+    CUSTOM_AUTH_URLS = {
+        "/accounts/profile/",
+        "/accounts/profile/edit/",
+        "/accounts/account/delete/",
+    }
+
+    VALID_AUTH_URLS = ALLAUTH_URLS | CUSTOM_AUTH_URLS
+
+    def test_profile_page_auth_urls_are_valid(self, tmp_path):
+        """All hardcoded auth URLs in ProfilePage must match Django URL patterns"""
+        generator = ProjectGenerator(theme="showcase_react")
+        project_name = "react_auth_urls_test"
+        output_path = tmp_path / project_name
+
+        generator.generate(project_name, output_path)
+
+        profile_page = output_path / "frontend" / "src" / "pages" / "ProfilePage.tsx"
+        assert profile_page.exists(), "ProfilePage.tsx should be generated"
+
+        content = profile_page.read_text()
+
+        # Extract all /accounts/ hrefs from the generated file
+        hrefs = re.findall(r'href="(/accounts/[^"]+)"', content)
+        assert len(hrefs) > 0, "ProfilePage should contain auth links"
+
+        for href in hrefs:
+            assert href in self.VALID_AUTH_URLS, (
+                f"ProfilePage contains invalid auth URL: {href}\n"
+                f"Valid URLs are: {sorted(self.VALID_AUTH_URLS)}"
+            )
+
+    def test_account_delete_url_uses_slash_separator(self, tmp_path):
+        """Account delete URL must use /account/delete/ not /account-delete/"""
+        generator = ProjectGenerator(theme="showcase_react")
+        project_name = "react_delete_url_test"
+        output_path = tmp_path / project_name
+
+        generator.generate(project_name, output_path)
+
+        profile_page = output_path / "frontend" / "src" / "pages" / "ProfilePage.tsx"
+        content = profile_page.read_text()
+
+        # The correct URL pattern from auth module urls.py
+        assert "/accounts/account/delete/" in content, (
+            "ProfilePage must link to /accounts/account/delete/ "
+            "(matching auth module URL pattern)"
+        )
+
+        # The incorrect hyphenated form must NOT be present
+        assert "/accounts/account-delete/" not in content, (
+            "ProfilePage must NOT use /accounts/account-delete/ — "
+            "the correct URL is /accounts/account/delete/"
+        )
+
+    def test_all_expected_auth_links_present(self, tmp_path):
+        """ProfilePage should contain links to all essential auth pages"""
+        generator = ProjectGenerator(theme="showcase_react")
+        project_name = "react_auth_links_test"
+        output_path = tmp_path / project_name
+
+        generator.generate(project_name, output_path)
+
+        profile_page = output_path / "frontend" / "src" / "pages" / "ProfilePage.tsx"
+        content = profile_page.read_text()
+
+        expected_urls = [
+            "/accounts/login/",
+            "/accounts/signup/",
+            "/accounts/profile/",
+            "/accounts/password/change/",
+            "/accounts/password/reset/",
+            "/accounts/account/delete/",
+        ]
+
+        for url in expected_urls:
+            assert url in content, f"ProfilePage missing expected auth link: {url}"
