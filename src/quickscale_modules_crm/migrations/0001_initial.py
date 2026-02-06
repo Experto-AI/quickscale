@@ -5,7 +5,7 @@ from django.conf import settings
 from django.db import migrations, models
 
 
-def create_default_stages(apps, schema_editor):
+def create_default_stages(apps, _schema_editor):
     """Create default pipeline stages"""
     Stage = apps.get_model("quickscale_modules_crm", "Stage")
     stages = [
@@ -18,7 +18,7 @@ def create_default_stages(apps, schema_editor):
         Stage.objects.create(**stage_data)
 
 
-def reverse_default_stages(apps, schema_editor):
+def reverse_default_stages(apps, _schema_editor):
     """Remove default pipeline stages"""
     Stage = apps.get_model("quickscale_modules_crm", "Stage")
     Stage.objects.filter(
