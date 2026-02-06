@@ -158,7 +158,8 @@ echo ""
 
 # Build pytest command - run from root with PYTHONPATH for centralized venv
 # Using --rootdir to ensure pytest finds the correct conftest.py
-PYTEST_CMD="PYTHONPATH=\"$CORE_DIR:$CORE_DIR/src\" poetry run pytest $CORE_DIR/tests/ -m e2e --rootdir=$CORE_DIR"
+# Clear addopts to disable coverage thresholds (E2E tests don't need full coverage)
+PYTEST_CMD="PYTHONPATH=\"$CORE_DIR:$CORE_DIR/src\" poetry run pytest $CORE_DIR/tests/ -m e2e --rootdir=$CORE_DIR -o \"addopts=\""
 
 if [ -n "$VERBOSE" ]; then
     PYTEST_CMD="$PYTEST_CMD $VERBOSE"
@@ -204,7 +205,8 @@ echo -e "${YELLOW}Testing development commands with real Docker containers...${N
 echo ""
 
 # Build CLI pytest command - run from root with PYTHONPATH for centralized venv
-CLI_PYTEST_CMD="PYTHONPATH=\"$CLI_DIR:$CLI_DIR/src\" poetry run pytest $CLI_DIR/tests/ -m e2e --rootdir=$CLI_DIR"
+# Clear addopts to disable coverage thresholds (E2E tests don't need full coverage)
+CLI_PYTEST_CMD="PYTHONPATH=\"$CLI_DIR:$CLI_DIR/src\" poetry run pytest $CLI_DIR/tests/ -m e2e --rootdir=$CLI_DIR -o \"addopts=\""
 
 if [ -n "$VERBOSE" ]; then
     CLI_PYTEST_CMD="$CLI_PYTEST_CMD $VERBOSE"

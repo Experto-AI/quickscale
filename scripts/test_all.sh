@@ -25,8 +25,9 @@ cd ..
 echo ""
 echo "📦 Testing quickscale_cli..."
 cd quickscale_cli
+# Skip E2E tests (run separately with ./scripts/test_e2e.sh)
 # Use package name (not src/) to avoid double-counting with pyproject.toml addopts
-poetry run pytest tests/ -q --tb=native -o "addopts=" --cov=quickscale_cli --cov-report=term-missing --cov-report=html --cov-fail-under=90 || EXIT_CODE=$?
+poetry run pytest tests/ -m "not e2e" -q --tb=native -o "addopts=" --cov=quickscale_cli --cov-report=term-missing --cov-report=html --cov-fail-under=90 || EXIT_CODE=$?
 cd ..
 
 echo ""
