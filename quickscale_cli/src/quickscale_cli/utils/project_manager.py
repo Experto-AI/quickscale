@@ -3,7 +3,19 @@
 from pathlib import Path
 from typing import Any
 
+from quickscale_cli.schema.config_schema import QuickScaleConfig, validate_config
 from .docker_utils import find_docker_compose, get_running_containers
+
+
+def get_project_config() -> QuickScaleConfig | None:
+    """Load and validate quickscale.yml from current directory if it exists."""
+    config_path = Path.cwd() / "quickscale.yml"
+    if not config_path.exists():
+        return None
+    try:
+        return validate_config(config_path.read_text())
+    except Exception:
+        return None
 
 
 def get_project_state() -> dict[str, Any]:

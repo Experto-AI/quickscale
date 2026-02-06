@@ -17,6 +17,7 @@ from quickscale_cli.utils.docker_utils import (
     wait_for_port_release,
 )
 from quickscale_cli.utils.project_manager import (
+    get_project_config,
     get_web_container_name,
     is_in_quickscale_project,
 )
@@ -135,8 +136,14 @@ def up(build: bool, no_cache: bool) -> None:
     """Start Docker services for development."""
     _validate_project_and_docker()
 
+    # Load config to check for default build behavior
+    config = get_project_config()
+    should_build = build
+    if not build and config and config.docker:
+        should_build = config.docker.build
+
     # Check if dependencies changed and suggest rebuild
-    if not build and _dependencies_changed_since_last_build():
+    if not should_build and _dependencies_changed_since_last_build():
         click.secho(
             "⚠️  Warning: Dependencies may have changed since last Docker build",
             fg="yellow",
@@ -156,10 +163,10 @@ def up(build: bool, no_cache: bool) -> None:
 
     try:
         compose_cmd = get_docker_compose_command()
-        _run_docker_compose_up(compose_cmd, build, no_cache)
+        _run_docker_compose_up(compose_cmd, should_build, no_cache)
 
         # Update build timestamp if build was performed
-        if build:
+        if should_build:
             _update_last_build_timestamp()
 
     except subprocess.CalledProcessError as e:
