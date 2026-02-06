@@ -1,5 +1,13 @@
 # 🚀 QuickScale
 
+[![PyPI version](https://img.shields.io/pypi/v/quickscale.svg)](https://pypi.org/project/quickscale/)
+[![CI](https://github.com/Experto-AI/quickscale/actions/workflows/ci.yml/badge.svg)](https://github.com/Experto-AI/quickscale/actions/workflows/ci.yml)
+[![Coverage](https://img.shields.io/badge/coverage-90%25-green.svg)](https://github.com/Experto-AI/quickscale/actions/workflows/ci.yml)
+[![Python 3.12+](https://img.shields.io/badge/python-3.12+-blue.svg)](https://www.python.org/downloads/)
+[![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
+[![Version](https://img.shields.io/badge/version-0.74.0-green.svg)](https://github.com/Experto-AI/quickscale/releases)
+[![Code style: Ruff](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/astral-sh/ruff/main/assets/badge/v2.json)](https://github.com/astral-sh/ruff)
+
 > **You are here**: **QuickScale README** (Project Overview)
 > **Related docs**: [Start Here](START_HERE.md) | [Glossary](GLOSSARY.md) | [Decisions](docs/technical/decisions.md) | [User Manual](docs/technical/user_manual.md)
 

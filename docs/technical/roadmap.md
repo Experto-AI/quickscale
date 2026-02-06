@@ -46,19 +46,21 @@ QuickScale follows an evolution-aligned roadmap that starts as a personal toolki
    - ✅ **Plan/Apply System complete** (v0.71.0) - Module manifests & config mutability
    - ✅ Plan/Apply Cleanup (v0.72.0) - Remove legacy init/embed commands
    - ✅ CRM module (v0.73.0) - native Django CRM app (API-only)
-   - 📋 **React Default Theme** (v0.74.0) - React + shadcn/ui as default ✨ NEW
-   - 📋 CRM Theme (v0.75.0) - React frontend for CRM module
-   - 📋 Billing module (v0.76.0) - Stripe integration
-   - 📋 Teams module (v0.77.0) - multi-tenancy
+   - ✅ **React Default Theme** (v0.74.0) - React + shadcn/ui as default
+   - 📋 Listings Theme (v0.75.0) - React frontend for property listings (sell/rent)
+   - 📋 Social & Link Tree module (v0.76.0) - social links page + media embeds
+   - 📋 CRM Theme (v0.77.0) - React frontend for CRM module
+   - 📋 Billing module (v0.78.0) - Stripe integration
+   - 📋 Teams module (v0.79.0) - multi-tenancy
 
 2. **Phase 2: Additional Themes (Secondary Options)** 📋 _Planned_
-   - 📋 HTMX theme with Alpine.js (v0.78.0+) - alternative for progressive enhancement
+   - 📋 HTMX theme with Alpine.js (v0.80.0+) - alternative for progressive enhancement
    - HTML theme remains as secondary option (simpler projects)
 
 3. **Phase 3: Expand Features (All Themes)** 📋 _Planned_
-   - 📋 Notifications module with email infrastructure (v0.79.0)
-   - 📋 Advanced module management features (v0.80.0)
-   - 📋 Workflow validation and real-world testing (v0.81.0)
+   - 📋 Notifications module with email infrastructure (v0.81.0)
+   - 📋 Advanced module management features (v0.82.0)
+   - 📋 Workflow validation and real-world testing (v0.83.0)
 
 4. **Phase 4: Community Platform (Optional v1.0.0+)** 📋 _Future_
    - 📋 PyPI package distribution
@@ -73,15 +75,16 @@ QuickScale follows an evolution-aligned roadmap that starts as a personal toolki
 **Key Milestones:**
 - **v0.71.0:** Plan/Apply System Complete ✅
 - **v0.72.0:** Plan/Apply Cleanup (remove legacy commands) ✅
-- **v0.74.0:** React Default Theme (React + shadcn/ui) 🎯
-- **v0.77.0:** SaaS Feature Parity (auth, billing, teams) 🎯
+- **v0.74.0:** React Default Theme (React + shadcn/ui) ✅
+- **v0.76.0:** Real Estate MVP (static + listings + social links) 🎯
+- **v0.79.0:** SaaS Feature Parity (auth, billing, teams) 🎯
 - **v1.0.0+:** Community platform (if demand exists)
 
 **Status:**
 - **Current Status:** v0.74.0 — React Default Theme ✅ Complete
-- **Next Milestone:** v0.75.0 - CRM Theme (React frontend)
+- **Next Milestone:** v0.75.0 - Listings Theme (React frontend for property listings)
 - **Plan/Apply System:** v0.68.0-v0.71.0 - Terraform-style configuration ✅ Complete
-- **SaaS Parity:** v0.77.0 - auth, billing, teams modules complete
+- **SaaS Parity:** v0.79.0 - auth, billing, teams modules complete
 
 ## Notes and References
 
@@ -118,7 +121,7 @@ List of upcoming releases with detailed implementation tasks:
 - ❌ Template integration (showcase_html) → Deferred (React is now default)
 - ❌ Email synchronization → v0.79.0 (notifications module)
 - ❌ File attachments → Post-v0.73.0
-- ❌ Custom fields → v0.76.0+
+- ❌ Custom fields → v0.78.0+
 
 ---
 
@@ -230,7 +233,78 @@ myapp/
 
 ---
 
-### v0.75.0: CRM Theme (React Frontend for CRM)
+### v0.75.0: Listings Theme (React Frontend for Listings)
+
+**Status**: 📋 Planned
+
+**Strategic Context**: React frontend for property listings (sell & rent), building on the `showcase_react` foundation from v0.74.0 and the Listings module backend from v0.67.0. Prioritized for the Real Estate Agency use case.
+
+**Prerequisites**:
+- ✅ Listings Module (v0.67.0)
+- ✅ React Default Theme (v0.74.0)
+
+**Theme Features**:
+- **Extends**: `showcase_react` base patterns
+- **Components**: Property Cards, Search/Filter Bar, Detail View, Image Gallery, Map View
+- **API Integration**: Consumes Listings Module REST APIs
+- **Listing Types**: Sell and Rent with type-specific filters
+
+**Implementation Tasks**:
+- [ ] Listings-specific page layouts (grid, list, map views)
+- [ ] Property card component with image, price, type (sell/rent), location
+- [ ] Search and filter bar (price range, type, location, bedrooms, etc.)
+- [ ] Property detail view with image gallery and contact form
+- [ ] Listings dashboard with stats and featured properties
+- [ ] Responsive design for mobile property browsing
+- [ ] SEO-friendly property pages (meta tags, structured data)
+
+**Testing**:
+- [ ] E2E tests: Plan → Apply → Working Listings project
+- [ ] Unit tests for filter/search components
+- [ ] API integration tests with Listings backend
+
+---
+
+### v0.76.0: `quickscale_modules.social` - Social & Link Tree Module
+
+**Status**: 📋 Planned
+
+**Strategic Context**: Social media presence module providing a link tree page (social network links) and social media embed integration. Supports progressive enhancement from simple social links to rich media embeds.
+
+**Prerequisites**:
+- ✅ React Default Theme (v0.74.0)
+
+**Link Tree Features**:
+- [ ] Configurable social links page (Instagram, TikTok, YouTube, Facebook, X/Twitter, LinkedIn)
+- [ ] Link tree models: SocialLink (platform, url, icon, order, is_active)
+- [ ] Admin interface for managing social links
+- [ ] Link tree React component with platform icons and branding
+- [ ] Customizable link tree layout (grid, list, card styles)
+- [ ] Click tracking and analytics (optional)
+
+**Social Media Embed Integration**:
+- [ ] oEmbed protocol support for rich media embeds
+- [ ] Instagram feed/post embed component
+- [ ] TikTok video embed component
+- [ ] YouTube video/channel embed component
+- [ ] Facebook post embed component
+- [ ] Embed gallery page (aggregate social feeds)
+- [ ] Caching layer for embed data (reduce API calls)
+
+**Backend**:
+- [ ] Social media models and Django Admin
+- [ ] REST API endpoints for social links and embeds
+- [ ] oEmbed resolver service
+- [ ] Rate limiting for external API calls
+
+**Testing**:
+- [ ] Unit tests for social models and oEmbed resolver
+- [ ] Integration tests for embed components
+- [ ] E2E tests: Plan → Apply → Working social links project
+
+---
+
+### v0.77.0: CRM Theme (React Frontend for CRM)
 
 **Status**: 📋 Planned
 
@@ -257,7 +331,7 @@ myapp/
 
 ---
 
-### v0.76.0: `quickscale_modules.billing` - Billing Module
+### v0.78.0: `quickscale_modules.billing` - Billing Module
 
 **Status**: 📋 Planned
 
@@ -286,7 +360,7 @@ myapp/
 
 ---
 
-### v0.77.0: `quickscale_modules.teams` - Teams/Multi-tenancy Module
+### v0.79.0: `quickscale_modules.teams` - Teams/Multi-tenancy Module
 
 **Status**: 📋 Planned
 
@@ -317,7 +391,7 @@ myapp/
 
 ### Module Showcase Architecture (Deferred to Post-v0.77.0)
 
-**Status**: 🚧 **NOT YET IMPLEMENTED** - Deferred to post-v0.77.0
+**Status**: 🚧 **NOT YET IMPLEMENTED** - Deferred to post-v0.79.0
 
 **Current Reality** (v0.66.0):
 - ✅ Basic context processor exists (`quickscale_core/context_processors.py`)
@@ -327,11 +401,11 @@ myapp/
 - ❌ Current `index.html.j2`: Simple welcome page only
 
 **Why Deferred**:
-- Focus on Plan/Apply system and core modules first (v0.68-v0.77)
+- Focus on Plan/Apply system and core modules first (v0.68-v0.79)
 - Showcase architecture provides maximum value when multiple modules exist
 - Current simple welcome page is adequate for MVP
 
-**Implementation Plan**: After v0.77.0 (SaaS Feature Parity milestone), evaluate whether to implement showcase architecture or keep simple welcome page. Decision criteria:
+**Implementation Plan**: After v0.79.0 (SaaS Feature Parity milestone), evaluate whether to implement showcase architecture or keep simple welcome page. Decision criteria:
 - Are 3+ modules complete and production-ready?
 - Is module discovery a user pain point?
 - Would showcase provide meaningful marketing value?
@@ -340,7 +414,7 @@ myapp/
 
 ---
 
-### v0.78.0+: HTMX Frontend Theme (Optional)
+### v0.80.0+: HTMX Frontend Theme (Optional)
 
 **Status**: 📋 Planned (low priority, after SaaS Feature Parity)
 
@@ -352,7 +426,7 @@ myapp/
 
 ---
 
-### v0.79.0: `quickscale_modules.notifications` - Notifications Module
+### v0.81.0: `quickscale_modules.notifications` - Notifications Module
 
 **Status**: 📋 Planned (after SaaS Feature Parity)
 
@@ -384,7 +458,7 @@ myapp/
 
 ---
 
-### v0.80.0: Advanced Module Management Features
+### v0.82.0: Advanced Module Management Features
 
 **Note**: Basic module management commands (`quickscale update`, `quickscale push`) are implemented in **v0.62.0**. Plan/Apply system implemented in **v0.68.0-v0.71.0**. This release adds advanced features for managing multiple modules.
 
@@ -410,7 +484,7 @@ myapp/
 - [ ] Test conflict resolution workflows
 - [ ] E2E testing of enhanced UX features
 
-**Future Enhancements** (v0.81.0+, evaluate after v0.77.0):
+**Future Enhancements** (v0.83.0+, evaluate after v0.79.0):
 - [ ] Module versioning: `quickscale plan --add auth@v0.63.0` - Pin specific module version
 - [ ] Semantic versioning compatibility checks
 - [ ] Automatic migration scripts for breaking changes
@@ -422,7 +496,7 @@ myapp/
 
 ---
 
-### v0.80.0: Module Workflow Validation & Real-World Testing
+### v0.83.0: Module Workflow Validation & Real-World Testing
 
 **Objective**: Validate that module updates work safely in real client projects and don't affect user's custom code.
 

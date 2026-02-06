@@ -61,14 +61,28 @@ markers = [
 # Example: pytest -m e2e --base-url http://localhost:8000
 
 [tool.coverage.run]
+source = ["src/quickscale_core"]
 omit = [
-    "*/templates/*.j2",
-    "*/templates/**/*.j2",
+    "*/tests/*",
+    "tests/*",
+    "**/test_*.py",
+    "**/conftest.py",
+    "**/*.j2",
+    "*.j2",
 ]
 
 [tool.coverage.report]
 fail_under = 90
 # Per-file minimum target: 80% (enforced via code review)
+exclude_lines = [
+    "pragma: no cover",
+    "def __repr__",
+    "raise AssertionError",
+    "raise NotImplementedError",
+    "if __name__ == .__main__.:",
+    "if TYPE_CHECKING:",
+    "if typing.TYPE_CHECKING:",
+]
 
 # Ruff and mypy configurations centralized in root ruff.toml and mypy.ini
 # Package-specific isort override

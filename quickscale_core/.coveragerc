@@ -1,0 +1,21 @@
+[run]
+source = src/quickscale_core
+omit =
+    */tests/*
+    **/test_*.py
+    */conftest.py
+    */generator/templates/*
+    */generator/templates/**/*
+    */*.j2
+    */**/*.j2
+
+[report]
+fail_under = 90
+exclude_lines =
+    pragma: no cover
+    def __repr__
+    raise AssertionError
+    raise NotImplementedError
+    if __name__ == .__main__.:
+    if TYPE_CHECKING:
+    if typing.TYPE_CHECKING:
