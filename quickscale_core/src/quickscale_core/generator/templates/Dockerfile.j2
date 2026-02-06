@@ -124,13 +124,11 @@ RUN echo "📁 Creating application directories..." && \
     echo "✅ Directories created"
 
 {% if theme == 'showcase_react' %}
-# Copy frontend assets from frontend-builder (with correct ownership)
-# Note: We only copy the assets folder. The index.html template is generated
-# by QuickScale and uses Django's static template tags to load these assets.
+# Copy frontend build output to static/frontend/ (where STATICFILES_DIRS finds them).
+# collectstatic will then copy them to staticfiles/ for WhiteNoise in production.
 RUN echo "📦 Copying frontend assets..."
-COPY --from=frontend-builder --chown=django:django /app/static/frontend/assets /app/staticfiles/frontend/assets
-# Copy favicon.svg to staticfiles
-COPY --from=frontend-builder --chown=django:django /app/static/frontend/favicon.svg /app/staticfiles/frontend/favicon.svg
+COPY --from=frontend-builder --chown=django:django /app/static/frontend/assets /app/static/frontend/assets
+COPY --from=frontend-builder --chown=django:django /app/static/frontend/favicon.svg /app/static/frontend/favicon.svg
 RUN echo "✅ Frontend assets copied"
 {% endif %}
 

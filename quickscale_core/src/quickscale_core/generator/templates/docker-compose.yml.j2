@@ -19,6 +19,16 @@ services:
       timeout: 5s
       retries: 5
 
+{% if theme == 'showcase_react' %}
+  frontend:
+    image: node:20-slim
+    container_name: {{ project_name }}_frontend
+    working_dir: /app/frontend
+    command: sh -c "npm install && npm run build"
+    volumes:
+      - .:/app
+{% endif %}
+
   web:
     build:
       context: .
@@ -43,6 +53,10 @@ services:
     depends_on:
       db:
         condition: service_healthy
+{% if theme == 'showcase_react' %}
+      frontend:
+        condition: service_completed_successfully
+{% endif %}
 
 volumes:
   postgres_data:

@@ -303,7 +303,7 @@ class TestReactThemeBuildCompatibility:
 
         # Should have --chown for frontend assets
         assert "--chown=django:django" in dockerfile
-        assert "/app/staticfiles/frontend/assets" in dockerfile
+        assert "/app/static/frontend/assets" in dockerfile
 
         # Should NOT copy index.html to templates (we generate Django template)
         assert "index.html /app/templates/index.html" not in dockerfile
