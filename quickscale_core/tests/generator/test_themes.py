@@ -142,6 +142,15 @@ class TestProjectGenerationWithTheme:
         assert "{% load static %}" in index_html
         assert "{% static 'frontend/assets/index.js' %}" in index_html
 
+        # Verify base.html exists (required by auth module and error pages)
+        assert (output_path / "templates" / "base.html").exists()
+        base_html = (output_path / "templates" / "base.html").read_text()
+        assert "<!doctype html>" in base_html.lower() or "<!DOCTYPE html>" in base_html
+        assert "{% block content %}" in base_html
+        assert "{% block extra_css %}" in base_html
+        assert "{% block extra_js %}" in base_html
+        assert "{% block title %}" in base_html
+
         # Check Dockerfile has node parts
         dockerfile = (output_path / "Dockerfile").read_text()
         assert "FROM node:20-slim as frontend-builder" in dockerfile

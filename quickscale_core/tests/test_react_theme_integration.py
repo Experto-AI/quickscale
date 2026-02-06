@@ -300,3 +300,117 @@ class TestReactThemeTestingSetup:
         # Test script should exist
         scripts = package.get("scripts", {})
         assert "test:e2e" in scripts
+
+
+@pytest.mark.integration
+class TestReactThemeBaseTemplate:
+    """Test base.html template for React theme
+
+    The React theme needs a base.html Django template for server-rendered
+    pages (auth module pages, error pages). This prevents TemplateDoesNotExist
+    errors when allauth or error handlers render Django templates.
+    """
+
+    def test_react_theme_generates_base_html(self, tmp_path):
+        """React theme should generate base.html for server-rendered pages"""
+        generator = ProjectGenerator(theme="showcase_react")
+        project_name = "react_base_html_test"
+        output_path = tmp_path / project_name
+
+        generator.generate(project_name, output_path)
+
+        base_html = output_path / "templates" / "base.html"
+        assert base_html.exists(), (
+            "React theme must generate templates/base.html for auth module "
+            "and error page compatibility"
+        )
+
+    def test_react_base_html_has_required_blocks(self, tmp_path):
+        """base.html should provide blocks expected by auth module"""
+        generator = ProjectGenerator(theme="showcase_react")
+        project_name = "react_blocks_test"
+        output_path = tmp_path / project_name
+
+        generator.generate(project_name, output_path)
+
+        content = (output_path / "templates" / "base.html").read_text()
+
+        # Auth module base.html extends "base.html" and expects these blocks
+        required_blocks = ["title", "extra_css", "content", "extra_js"]
+        for block in required_blocks:
+            assert f"{{% block {block} %}}" in content, (
+                f"base.html missing '{{% block {block} %}}' — "
+                f"required by auth module templates"
+            )
+
+    def test_react_base_html_is_valid_html(self, tmp_path):
+        """base.html should be a valid standalone HTML document"""
+        generator = ProjectGenerator(theme="showcase_react")
+        project_name = "react_html_valid_test"
+        output_path = tmp_path / project_name
+
+        generator.generate(project_name, output_path)
+
+        content = (output_path / "templates" / "base.html").read_text()
+
+        assert "<!doctype html>" in content.lower() or "<!DOCTYPE html>" in content
+        assert "<html" in content
+        assert "</html>" in content
+        assert "<head>" in content or "<head " in content
+        assert "</head>" in content
+        assert "<body>" in content or "<body " in content
+        assert "</body>" in content
+
+    def test_react_base_html_has_static_tag(self, tmp_path):
+        """base.html should use Django static template tag"""
+        generator = ProjectGenerator(theme="showcase_react")
+        project_name = "react_static_tag_test"
+        output_path = tmp_path / project_name
+
+        generator.generate(project_name, output_path)
+
+        content = (output_path / "templates" / "base.html").read_text()
+        assert "{% load static %}" in content
+
+    def test_react_base_html_has_messages_support(self, tmp_path):
+        """base.html should display Django messages"""
+        generator = ProjectGenerator(theme="showcase_react")
+        project_name = "react_messages_test"
+        output_path = tmp_path / project_name
+
+        generator.generate(project_name, output_path)
+
+        content = (output_path / "templates" / "base.html").read_text()
+        assert "{% if messages %}" in content
+        assert "{% for message in messages %}" in content
+
+    def test_react_base_html_has_back_to_app_link(self, tmp_path):
+        """base.html should have navigation back to React app"""
+        generator = ProjectGenerator(theme="showcase_react")
+        project_name = "react_nav_test"
+        output_path = tmp_path / project_name
+
+        generator.generate(project_name, output_path)
+
+        content = (output_path / "templates" / "base.html").read_text()
+        # Should have a link back to the root (React SPA)
+        assert 'href="/"' in content
+
+    def test_error_pages_compatible_with_react_base_html(self, tmp_path):
+        """404 and 500 error pages should work with React theme base.html"""
+        generator = ProjectGenerator(theme="showcase_react")
+        project_name = "react_errors_test"
+        output_path = tmp_path / project_name
+
+        generator.generate(project_name, output_path)
+
+        # Both error pages extend base.html
+        for error_page in ["404.html", "500.html"]:
+            error_path = output_path / "templates" / error_page
+            assert error_path.exists(), f"{error_page} should exist"
+            content = error_path.read_text()
+            assert '{% extends "base.html" %}' in content
+            assert "{% block content %}" in content
+
+        # Verify base.html exists so the extends chain works
+        assert (output_path / "templates" / "base.html").exists()
