@@ -446,7 +446,7 @@ Skills are **reusable capability modules** that agents can invoke. Each skill en
 ```markdown
 ---
 name: code-principles
-version: "1.0"
+version: 0.74.0
 description: SOLID, DRY, KISS principles for code quality
 provides:
   - solid_validation
@@ -559,7 +559,7 @@ Agents are **autonomous task executors** with defined roles, inputs, outputs, an
 ```markdown
 ---
 name: task-implementer
-version: "1.0"
+version: 0.74.0
 description: Implements roadmap tasks with staged workflow
 mode: adaptive
 
@@ -723,7 +723,7 @@ Workflows are **explicit, step-by-step execution plans** that agents follow.
 ---
 name: implement-task
 description: End-to-end task implementation workflow
-version: "1.0"
+version: 0.74.0
 agent: task-implementer
 stages: 5
 estimated_duration: 30-120 minutes
@@ -926,7 +926,7 @@ The original `roadmap-task-review.prompt.md` (873 lines) is decomposed into focu
 ```markdown
 ---
 name: scope-validator
-version: "1.0"
+version: 0.74.0
 description: Validates changes are within task scope
 parent: code-reviewer
 type: subagent
@@ -1437,7 +1437,7 @@ The agentic flow transpiler has been updated to reflect these changes:
 ```yaml
 ---
 name: string              # Unique identifier (kebab-case)
-version: string           # Semantic version
+version: 0.74.0
 description: string       # One-line description
 mode: adaptive | ask      # Interaction mode
 
@@ -1473,7 +1473,7 @@ success_when:             # Success criteria
 ```yaml
 ---
 name: string              # Unique identifier (kebab-case)
-version: string           # Semantic version
+version: 0.74.0
 description: string       # One-line description
 parent: string            # Parent agent name
 type: subagent            # Fixed value
@@ -1496,7 +1496,7 @@ outputs:                  # Output definitions
 ```yaml
 ---
 name: string              # Unique identifier (kebab-case)
-version: string           # Semantic version
+version: 0.74.0
 description: string       # One-line description
 
 provides: string[]        # Capabilities this skill provides
@@ -1510,7 +1510,7 @@ requires: string[]        # Other skills this depends on
 ---
 name: string              # Unique identifier (kebab-case)
 description: string       # One-line description
-version: string           # Semantic version
+version: 0.74.0
 agent: string             # Primary agent that uses this workflow
 stages: number            # Number of stages
 estimated_duration: string # Human-readable duration estimate
@@ -1699,7 +1699,7 @@ MAJOR.MINOR.PATCH
 ```yaml
 ---
 name: code-principles
-version: "2.1.0"  # Major: 2, Minor: 1, Patch: 0
+version: 0.74.0
 ---
 ```
 
@@ -1732,7 +1732,7 @@ version: "2.1.0"  # Major: 2, Minor: 1, Patch: 0
 ```yaml
 ---
 name: old-skill
-version: "1.5.0"
+version: 0.74.0
 deprecated: true
 deprecation_notice: "Use new-skill instead. Migration guide below."
 removal_version: "2.0.0"
