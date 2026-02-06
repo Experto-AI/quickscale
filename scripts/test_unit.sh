@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Run all tests in the repository with Poetry
+# Run unit and integration tests in the repository with Poetry
 # Default mode is LLM-friendly: quiet for passing tests, detailed for failures, comprehensive coverage
 #
 # NOTE: This script runs unit and integration tests only.
@@ -8,7 +8,7 @@
 
 set -e
 
-echo "🧪 Running all tests..."
+echo "🧪 Running unit and integration tests..."
 echo ""
 
 # Track exit codes
@@ -59,7 +59,7 @@ fi
 
 echo ""
 if [ $EXIT_CODE -eq 0 ]; then
-    echo "✅ All tests passed!"
+    echo "✅ Tests passed!"
 else
     echo "❌ Some tests failed!"
     exit $EXIT_CODE

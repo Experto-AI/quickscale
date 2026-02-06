@@ -44,7 +44,7 @@ success_when:
   - validation:
       - command: ./scripts/lint.sh
         expect: exit_code_0
-      - command: ./scripts/test-all.sh
+      - command: ./scripts/test_unit.sh
         expect: exit_code_0
 ---
 
@@ -167,14 +167,14 @@ When `task_id` is not provided:
 - Use type hints and docstrings for public functions
 - Keep changes minimal and focused
 - Run `./scripts/lint.sh` before finalizing
-- Run `./scripts/test-all.sh` before marking complete
+- Run `./scripts/test_unit.sh` before marking complete
 
 ## Completion Checklist
 
 - [ ] All roadmap checklist items implemented
 - [ ] All items marked `[x]` in `docs/technical/roadmap.md`
 - [ ] `./scripts/lint.sh` passes
-- [ ] `./scripts/test-all.sh` passes
+- [ ] `./scripts/test_unit.sh` passes
 - [ ] Task-specific validation commands succeed
 - [ ] No out-of-scope features introduced
 - [ ] Changes staged but NOT committed

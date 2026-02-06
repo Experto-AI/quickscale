@@ -49,7 +49,7 @@ success_when:
   - validation:
       - command: ./scripts/lint.sh
         expect: exit_code_0
-      - command: ./scripts/test-all.sh
+      - command: ./scripts/test_unit.sh
         expect: exit_code_0
 ---
 
@@ -187,7 +187,7 @@ git diff --cached --name-only
 ### Step 6: Validation
 ```bash
 ./scripts/lint.sh
-./scripts/test-all.sh
+./scripts/test_unit.sh
 ```
 
 ### Step 7: Generate Report

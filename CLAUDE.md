@@ -96,7 +96,7 @@ Always read before development:
 ### Validation
 ```bash
 ./scripts/lint.sh
-./scripts/test-all.sh
+./scripts/test_unit.sh
 ```
 
 ## Tech Stack

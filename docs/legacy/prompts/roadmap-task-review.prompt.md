@@ -181,7 +181,7 @@ REVIEW WORKFLOW (execution steps)
 
 **STEP 7: VALIDATION**
 31. Run linting: `./scripts/lint.sh`
-32. Run all tests: `./scripts/test-all.sh`
+32. Run unit and integration tests: `./scripts/test_unit.sh`
 33. Run task-specific validation commands (from roadmap)
 34. Verify all validation passes
 
@@ -333,7 +333,7 @@ $ ./scripts/lint.sh
 
 ### Tests
 ```bash
-$ ./scripts/test-all.sh
+$ ./scripts/test_unit.sh
 [OUTPUT]
 ```
 

@@ -601,7 +601,7 @@ success_when:
   - validation:
       - command: ./scripts/lint.sh
         expect: exit_code_0
-      - command: ./scripts/test-all.sh
+      - command: ./scripts/test_unit.sh
         expect: exit_code_0
 ---
 
@@ -696,7 +696,7 @@ During implementation, invoke these skills:
 - [ ] All roadmap checklist items implemented
 - [ ] All items marked `[x]` in `docs/technical/roadmap.md`
 - [ ] `./scripts/lint.sh` passes
-- [ ] `./scripts/test-all.sh` passes
+- [ ] `./scripts/test_unit.sh` passes
 - [ ] Task-specific validation commands succeed
 - [ ] No out-of-scope features introduced
 ```
@@ -835,7 +835,7 @@ Tests must validate the logic established in the CODE and REVIEW stages.
 
 ### Step 4.2: Run Test Suite
 ```bash
-./scripts/test-all.sh
+./scripts/test_unit.sh
 ```
 
 ### Step 4.3: Run Task Validation
@@ -857,7 +857,7 @@ Open `docs/technical/roadmap.md` and mark all completed items `[x]`.
 ```bash
 # Final verification
 ./scripts/lint.sh
-./scripts/test-all.sh
+./scripts/test_unit.sh
 git status
 ```
 
@@ -875,7 +875,7 @@ All of the following must be true:
 | All checklist items complete | Visual inspection of roadmap |
 | Roadmap items marked `[x]` | `docs/technical/roadmap.md` updated |
 | Lint passes | `./scripts/lint.sh` exit code 0 |
-| Tests pass | `./scripts/test-all.sh` exit code 0 |
+| Tests pass | `./scripts/test_unit.sh` exit code 0 |
 | Task validation succeeds | Custom validation commands |
 | No scope creep | Review confirms in-scope only |
 ```
@@ -1746,7 +1746,7 @@ permissions:
   commands:
     allow:
       - "./scripts/lint.sh"
-      - "./scripts/test-all.sh"
+      - "./scripts/test_unit.sh"
       - "git status"
       - "git diff"
     deny:
@@ -1870,7 +1870,7 @@ context:
 project:
   name: "QuickScale"
   language: "python"
-  test_command: "./scripts/test-all.sh"
+  test_command: "./scripts/test_unit.sh"
   lint_command: "./scripts/lint.sh"
 ```
 

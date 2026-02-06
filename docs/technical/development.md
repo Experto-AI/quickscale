@@ -100,7 +100,7 @@ poetry show
 
 #### 3. Run Tests (3-5 minutes)
 ```bash
-./scripts/test_all.sh
+./scripts/test_unit.sh
 
 # Or run with Poetry directly
 poetry run pytest
@@ -208,7 +208,7 @@ poetry run pre-commit run --all-files
 1. Create feature branch: `git checkout -b feature/my-feature`
 2. Make code changes in `quickscale_core/src/` or `quickscale_cli/src/`
 3. Add tests in corresponding `tests/` directory
-4. Run tests: `./scripts/test_all.sh`
+4. Run tests: `./scripts/test_unit.sh`
 5. Run linters: `./scripts/lint.sh`
 6. Commit changes: `git commit -m "feat: description"`
 7. Push and create PR: `git push origin feature/my-feature`
@@ -243,7 +243,7 @@ quickscale/
 │   └── releases/             # Release notes
 ├── scripts/                  # Helper scripts
 │   ├── bootstrap.sh          # Development setup
-│   ├── test_all.sh           # Run all tests
+│   ├── test_unit.sh          # Run unit and integration tests
 │   ├── lint.sh               # Run all linters
 │   └── publish_module.sh     # Publish module changes to split branches
 ├── pyproject.toml            # Root config (centralized dev dependencies)
@@ -278,7 +278,7 @@ quickscale/
 **Module Testing Architecture:**
 - Modules use ROOT poetry environment (not their own `.venv`)
 - Module `pyproject.toml` has minimal dev dependencies (only `pytest-django`)
-- `./scripts/test_all.sh` runs module tests with `PYTHONPATH` set correctly
+- `./scripts/test_unit.sh` runs module tests with `PYTHONPATH` set correctly
 - `./scripts/lint.sh` lints modules using ROOT poetry environment
 - See [Module Implementation Checklist](./decisions.md#module-implementation-checklist) for new module setup
 
@@ -487,7 +487,7 @@ quickscale --version
 **Commands Quick Reference:**
 - Bootstrap: `./scripts/bootstrap.sh`
 - Install: `poetry install`
-- Tests: `./scripts/test_all.sh` or `poetry run pytest`
+- Tests: `./scripts/test_unit.sh` or `poetry run pytest`
 - Linters: `./scripts/lint.sh`
 - CLI: `poetry run quickscale --help`
 
@@ -509,7 +509,7 @@ quickscale --version
 You have a working development environment when:
 
 - ✅ `poetry run quickscale --version` shows version number
-- ✅ `./scripts/test_all.sh` passes with >80% coverage
+- ✅ `./scripts/test_unit.sh` passes with >80% coverage
 - ✅ `./scripts/lint.sh` passes all checks
 - ✅ `quickscale plan testproject && quickscale apply` generates working Django project
 - ✅ Can make changes, run tests, and see results in <2 minutes

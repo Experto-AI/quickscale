@@ -115,7 +115,7 @@ Always run before completion:
 ./scripts/lint.sh
 
 # Full test suite
-./scripts/test-all.sh
+./scripts/test_unit.sh
 ```
 
 ## Context Files

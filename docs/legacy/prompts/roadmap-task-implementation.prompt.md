@@ -71,7 +71,7 @@ TESTING REQUIREMENTS
 ---------------------
 - Write tests for all new functionality (unit tests + small integration tests when required).
 - Use existing test frameworks and fixtures in the repo (pytest, Click's CliRunner, etc.).
-- Run `./scripts/test-all.sh` to execute all tests across packages.
+- Run `./scripts/test_unit.sh` to execute all unit and integration tests across packages.
 - Ensure all tests pass before marking task complete.
 
 DELIVERABLES (to fill per task)
@@ -118,7 +118,7 @@ WORKFLOW (recommended execution steps)
 14. Follow test structure and organization patterns from testing.md
 15. Use proper mocking for isolation (NO global mocking)
 16. Run `./scripts/lint.sh` to verify code quality
-17. Run `./scripts/test-all.sh` to execute all tests
+17. Run `./scripts/test_unit.sh` to execute all unit and integration tests
 18. Run task-specific validation commands; fix any issues
 
 **STAGE 5: COMPLETION**
@@ -133,7 +133,7 @@ The task is complete when all these are met:
 - All items from the roadmap task checklist are implemented (Done)
 - All items in the roadmap task are marked [x] as complete in `docs/technical/roadmap.md` (Done)
 - Code quality checks pass: `./scripts/lint.sh` succeeds (Done)
-- All tests pass: `./scripts/test-all.sh` succeeds (Done)
+- All unit and integration tests pass: `./scripts/test_unit.sh` succeeds (Done)
 - Task-specific validation commands succeed (Done)
 - No out-of-scope features were introduced (Verified)
 - Release document created in `docs/releases/` following the template (Done)

@@ -97,7 +97,7 @@ Always run before completing work:
 
 ```bash
 ./scripts/lint.sh      # Ruff format + check + mypy
-./scripts/test-all.sh  # Full test suite
+./scripts/test_unit.sh  # Unit and integration tests
 ```
 
 

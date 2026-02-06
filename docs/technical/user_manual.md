@@ -75,7 +75,7 @@ If you're contributing to QuickScale development (modifying source code), see th
 
 ## Quick orientation
 
-- Repository scripts are in `scripts/` (for example `./scripts/bootstrap.sh`, `./scripts/test_all.sh`, `./scripts/lint.sh`, `./scripts/publish_module.sh`). Inspect them if you need to confirm exact actions.
+- Repository scripts are in `scripts/` (for example `./scripts/bootstrap.sh`, `./scripts/test_unit.sh`, `./scripts/lint.sh`, `./scripts/publish_module.sh`). Inspect them if you need to confirm exact actions.
 - The primary CLI provided by this repository is the `quickscale` command (installed by the `quickscale_cli` package).
 - For dependency management we recommend Poetry — see `docs/technical/poetry_user_manual.md` for full Poetry usage. This manual focuses on QuickScale commands, not Poetry details.
 
@@ -102,11 +102,11 @@ Notes:
 
 ## 2) Running tests (local)
 
-You can run the full test suite using the repository script or Poetry:
+You can run the unit and integration test suite using the repository script or Poetry:
 
 ```bash
-# Run all tests (script)
-./scripts/test_all.sh
+# Run unit and integration tests (script)
+./scripts/test_unit.sh
 
 # Or run pytest via Poetry
 poetry run pytest
@@ -442,7 +442,7 @@ The `Dockerfile` uses multi-stage builds (builder + runtime) for production effi
 ## 5) Development helper scripts
 
 - `./scripts/bootstrap.sh` — initial environment/setup steps (inspect to confirm behavior)
-- `./scripts/test_all.sh` — runs the full test matrix for the repo
+- `./scripts/test_unit.sh` — runs the unit and integration test matrix for the repo
 - `./scripts/lint.sh` — runs configured linters and formatters
 - `./scripts/publish_module.sh` — publishes module changes to split branches
 
@@ -460,8 +460,8 @@ Run these scripts from the repository root.
 **Repository Commands**:
 - Bootstrapping: `./scripts/bootstrap.sh`
 - Install deps (Poetry): `poetry install`
-- Tests: `./scripts/test_all.sh`
-- E2E tests: `pytest -m e2e`
+- Tests: `./scripts/test_unit.sh`
+- E2E tests: `./scripts/test_e2e.sh`
 - Lint: `./scripts/lint.sh`
 
 **CLI Commands (Current)**:
