@@ -1,7 +1,11 @@
 """Tests for blog models"""
 
+import os
+
 import pytest
 from django.contrib.auth import get_user_model
+from django.core.files.uploadedfile import SimpleUploadedFile
+from PIL import Image
 
 from quickscale_modules_blog.models import AuthorProfile, Category, Post, Tag
 
@@ -162,3 +166,84 @@ class TestPost:
         )
         url = post.get_absolute_url()
         assert "/post/test-post/" in url
+
+    def test_post_short_content_no_ellipsis(self, author_user):
+        """Test excerpt for short content has no ellipsis"""
+        post = Post.objects.create(
+            title="Short",
+            author=author_user,
+            content="Short content",
+        )
+        assert post.excerpt == "Short content"
+        assert not post.excerpt.endswith("...")
+
+    def test_post_save_with_featured_image(self, author_user, tmp_path, settings):
+        """Test saving a post with a featured image triggers thumbnail generation"""
+        settings.MEDIA_ROOT = str(tmp_path)
+
+        # Create a test image
+        img_dir = tmp_path / "blog" / "images"
+        img_dir.mkdir(parents=True)
+        img_path = img_dir / "test.jpg"
+        img = Image.new("RGB", (1200, 800), color="red")
+        img.save(str(img_path), format="JPEG")
+
+        # Create post with featured image
+        with open(str(img_path), "rb") as f:
+            image_file = SimpleUploadedFile(
+                "test.jpg", f.read(), content_type="image/jpeg"
+            )
+        post = Post.objects.create(
+            title="Image Post",
+            author=author_user,
+            content="Content with image",
+            featured_image=image_file,
+        )
+
+        # Verify thumbnails were generated
+        image_dir = os.path.dirname(post.featured_image.path)
+        thumb_dir = os.path.join(image_dir, "thumbnails")
+        assert os.path.isdir(thumb_dir)
+
+        # Check both small and medium thumbnails exist
+        assert any("small" in f for f in os.listdir(thumb_dir))
+        assert any("medium" in f for f in os.listdir(thumb_dir))
+
+    def test_get_thumbnail_url_with_image(self, author_user, tmp_path, settings):
+        """Test get_thumbnail_url returns correct URL when image exists"""
+        settings.MEDIA_ROOT = str(tmp_path)
+
+        img_dir = tmp_path / "blog" / "images"
+        img_dir.mkdir(parents=True)
+        img_path = img_dir / "thumb_test.jpg"
+        img = Image.new("RGB", (1200, 800), color="blue")
+        img.save(str(img_path), format="JPEG")
+
+        with open(str(img_path), "rb") as f:
+            image_file = SimpleUploadedFile(
+                "thumb_test.jpg", f.read(), content_type="image/jpeg"
+            )
+        post = Post.objects.create(
+            title="Thumbnail Post",
+            author=author_user,
+            content="Content",
+            featured_image=image_file,
+        )
+
+        medium_url = post.get_thumbnail_url("medium")
+        assert "thumbnails" in medium_url
+        assert "medium" in medium_url
+
+        small_url = post.get_thumbnail_url("small")
+        assert "thumbnails" in small_url
+        assert "small" in small_url
+
+    def test_get_thumbnail_url_without_image(self, author_user):
+        """Test get_thumbnail_url returns empty string when no image"""
+        post = Post.objects.create(
+            title="No Image Post",
+            author=author_user,
+            content="Content",
+        )
+        assert post.get_thumbnail_url() == ""
+        assert post.get_thumbnail_url("small") == ""
