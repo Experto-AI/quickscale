@@ -16,7 +16,7 @@ New `module.yml` manifest files define module configuration options with mutabil
 ```yaml
 # quickscale_modules/auth/module.yml
 name: auth
-version: 0.74.0
+version: 0.74.1
 description: Authentication module with django-allauth
 
 config:
@@ -166,7 +166,7 @@ class ConfigOption:
 @dataclass
 class ModuleManifest:
     name: str
-    version: 0.74.0
+    version: 0.74.1
     description: str
     mutable_options: dict[str, ConfigOption]
     immutable_options: dict[str, ConfigOption]

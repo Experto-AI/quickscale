@@ -496,7 +496,7 @@ project_name: TestProject
 theme: showcase
 modules:
   - name: auth
-    version: 0.74.0
+    version: 0.74.1
 EOF
 
 # 3. Run quickscale apply
@@ -552,9 +552,9 @@ project_name: TestProject
 theme: showcase
 modules:
   - name: auth
-    version: 0.74.0
+    version: 0.74.1
   - name: blog
-    version: 0.74.0
+    version: 0.74.1
 EOF
 
 # 2. Run quickscale apply
@@ -633,9 +633,9 @@ project_name: TestProject
 theme: showcase
 modules:
   - name: auth
-    version: 0.74.0
+    version: 0.74.1
   - name: blog
-    version: 0.74.0
+    version: 0.74.1
 EOF
 
 # 2. Run quickscale apply
@@ -719,7 +719,7 @@ project_name: MyApp
 theme: showcase
 modules:
   - name: auth
-    version: 0.74.0
+    version: 0.74.1
 EOF
 
 # 3. First apply - new project
@@ -741,9 +741,9 @@ project_name: MyApp
 theme: showcase
 modules:
   - name: auth
-    version: 0.74.0
+    version: 0.74.1
   - name: blog
-    version: 0.74.0
+    version: 0.74.1
 EOF
 
 # 6. Third apply - with changes
