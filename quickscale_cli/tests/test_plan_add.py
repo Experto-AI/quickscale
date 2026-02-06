@@ -190,9 +190,9 @@ docker:
                 elif available_section:
                     # In the available section, auth should not be numbered for selection
                     if ". auth" in line.lower():
-                        assert (
-                            False
-                        ), "auth should not appear as available for selection"
+                        assert False, (
+                            "auth should not appear as available for selection"
+                        )
 
     def test_plan_add_updates_config(self):
         """Test that adding module updates quickscale.yml"""

@@ -1,0 +1,11 @@
+{
+  "context": {
+    "fileName": "GEMINI.md"
+  },
+  "skills": {
+    "enabled": true
+  },
+  "experimental": {
+    "enableAgents": true
+  }
+}

@@ -1,0 +1,11 @@
+---
+applyTo: "**/test_*.py,**/tests/**/*.py"
+---
+- Use pytest fixtures and parametrize
+- Each test must be independent (no shared mutable state)
+- No global mocking contamination (no sys.modules modifications)
+- Use unittest.mock.patch as context manager or decorator
+- Test isolation mandatory
+- Coverage minimum: 90% overall, 80% per file
+- Name tests: test_{what}_{condition}_{expected}
+- Implementation-first: tests written after code review

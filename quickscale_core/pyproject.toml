@@ -28,7 +28,7 @@ include = [
 [tool.poetry.dependencies]
 python = "^3.12"
 Jinja2 = "^3.1.6"
-pyyaml = "^6.0.0"
+pyyaml = "^6.0.3"
 
 [tool.poetry.group.dev.dependencies]
 # Dev dependencies centralized in root pyproject.toml

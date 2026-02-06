@@ -1,5 +1,13 @@
 #!/usr/bin/env bash
 # Generate all platform configurations from .agent/ source files
+#
+# Supported platforms:
+#   - Claude Code    → CLAUDE.md, .claude/commands/, .claude/agents/
+#   - Gemini CLI     → GEMINI.md, .gemini/commands/, .gemini/settings.json
+#   - GitHub Copilot → .github/copilot-instructions.md, prompts/, agents/, instructions/
+#   - Codex CLI      → AGENTS.md, .codex/config.toml
+#   - OpenCode       → .opencode.json, .opencode/commands/
+#
 # Usage: .agent/adapters/generate-all.sh
 
 set -euo pipefail
@@ -8,14 +16,14 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 AGENT_DIR="$(dirname "$SCRIPT_DIR")"
 ROOT_DIR="$(dirname "$AGENT_DIR")"
 
-echo "🤖 Agentic Flow - Platform Configuration Generator"
+echo "🤖 Agentic Flow — Platform Configuration Generator"
 echo "=================================================="
 echo ""
 
 # Check dependencies
 check_deps() {
     local missing=()
-    for cmd in bash cat sed grep; do
+    for cmd in bash cat sed grep awk; do
         if ! command -v "$cmd" &> /dev/null; then
             missing+=("$cmd")
         fi
@@ -29,39 +37,13 @@ check_deps() {
 
 check_deps
 
-# Generate Claude Code configuration
-generate_claude() {
-    echo "📘 Generating Claude Code configuration..."
-
-    if [[ -f "$SCRIPT_DIR/claude-adapter.sh" ]]; then
-        bash "$SCRIPT_DIR/claude-adapter.sh"
-        echo "   ✅ CLAUDE.md generated"
+# Run an adapter script if it exists
+run_adapter() {
+    local name="$1" script="$2"
+    if [[ -f "$SCRIPT_DIR/$script" ]]; then
+        bash "$SCRIPT_DIR/$script"
     else
-        echo "   ⚠️  claude-adapter.sh not found, skipping"
-    fi
-}
-
-# Generate Gemini CLI configuration
-generate_gemini() {
-    echo "💜 Generating Gemini CLI configuration..."
-
-    if [[ -f "$SCRIPT_DIR/gemini-adapter.sh" ]]; then
-        bash "$SCRIPT_DIR/gemini-adapter.sh"
-        echo "   ✅ GEMINI.md generated"
-    else
-        echo "   ⚠️  gemini-adapter.sh not found, skipping"
-    fi
-}
-
-# Generate GitHub Copilot configuration
-generate_copilot() {
-    echo "🐙 Generating GitHub Copilot configuration..."
-
-    if [[ -f "$SCRIPT_DIR/copilot-adapter.sh" ]]; then
-        bash "$SCRIPT_DIR/copilot-adapter.sh"
-        echo "   ✅ .github/copilot-instructions.md generated"
-    else
-        echo "   ⚠️  copilot-adapter.sh not found, skipping"
+        echo "  ⚠️  $script not found, skipping $name"
     fi
 }
 
@@ -71,20 +53,43 @@ main() {
     echo "Output: $ROOT_DIR"
     echo ""
 
-    generate_claude
-    generate_gemini
-    generate_copilot
+    run_adapter "Claude Code"    "claude-adapter.sh"
+    echo ""
+    run_adapter "Gemini CLI"     "gemini-adapter.sh"
+    echo ""
+    run_adapter "GitHub Copilot" "copilot-adapter.sh"
+    echo ""
+    run_adapter "Codex CLI"      "codex-adapter.sh"
+    echo ""
+    run_adapter "OpenCode"       "opencode-adapter.sh"
 
     echo ""
     echo "=================================================="
-    echo "✅ Platform configurations generated successfully!"
+    echo "✅ All platform configurations generated!"
     echo ""
     echo "Generated files:"
-    [[ -f "$ROOT_DIR/CLAUDE.md" ]] && echo "  - CLAUDE.md"
-    [[ -f "$ROOT_DIR/GEMINI.md" ]] && echo "  - GEMINI.md"
-    [[ -f "$ROOT_DIR/.github/copilot-instructions.md" ]] && echo "  - .github/copilot-instructions.md"
+    # Claude Code
+    [[ -f "$ROOT_DIR/CLAUDE.md" ]]                         && echo "  📘 CLAUDE.md"
+    [[ -d "$ROOT_DIR/.claude/commands" ]]                  && echo "  📘 .claude/commands/"
+    [[ -d "$ROOT_DIR/.claude/agents" ]]                    && echo "  📘 .claude/agents/"
+    # Gemini CLI
+    [[ -f "$ROOT_DIR/GEMINI.md" ]]                         && echo "  💜 GEMINI.md"
+    [[ -d "$ROOT_DIR/.gemini/commands" ]]                  && echo "  💜 .gemini/commands/"
+    [[ -f "$ROOT_DIR/.gemini/settings.json" ]]             && echo "  💜 .gemini/settings.json"
+    # GitHub Copilot
+    [[ -f "$ROOT_DIR/.github/copilot-instructions.md" ]]   && echo "  🐙 .github/copilot-instructions.md"
+    [[ -d "$ROOT_DIR/.github/prompts" ]]                   && echo "  🐙 .github/prompts/"
+    [[ -d "$ROOT_DIR/.github/agents" ]]                    && echo "  🐙 .github/agents/"
+    [[ -d "$ROOT_DIR/.github/instructions" ]]              && echo "  🐙 .github/instructions/"
+    # Codex CLI
+    [[ -f "$ROOT_DIR/AGENTS.md" ]]                         && echo "  🤖 AGENTS.md"
+    [[ -f "$ROOT_DIR/.codex/config.toml" ]]                && echo "  🤖 .codex/config.toml"
+    # OpenCode
+    [[ -f "$ROOT_DIR/.opencode.json" ]]                    && echo "  📦 .opencode.json"
+    [[ -d "$ROOT_DIR/.opencode/commands" ]]                && echo "  📦 .opencode/commands/"
     echo ""
-    echo "Run this script after modifying .agent/ files to update configs."
+    echo "Run this script after modifying .agent/ files to update all configs."
+    echo "For specifications, see: .agent/SOURCES.md"
 }
 
 main "$@"

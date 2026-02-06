@@ -1,0 +1,13 @@
+---
+applyTo: "**/*.py"
+---
+- Use Python 3.11+ features
+- Type hints on all public functions and methods
+- Google-style docstrings (single-line preferred, no ending punctuation)
+- F-strings for string formatting (no .format() or %)
+- Ruff for formatting and linting
+- Poetry for package management (pyproject.toml, not setup.py)
+- pytest for testing (not unittest alone)
+- No bare except clauses
+- No global mocking (no sys.modules modifications)
+- Follow SOLID, DRY, KISS principles

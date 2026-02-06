@@ -48,6 +48,7 @@ For complete documentation, see:
 - **Technical Spec**: `docs/technical/agentic-flow.md`
 - **Migration Plan**: Section 12 of agentic-flow.md
 - **Platform Compatibility**: Section 13 of agentic-flow.md
+- **Adapter Specifications**: Section 14 of agentic-flow.md
 
 ## Adding Custom Agents
 

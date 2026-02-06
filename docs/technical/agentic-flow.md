@@ -35,7 +35,8 @@ This document defines a **unified agent architecture** that converts the existin
 11. [Platform Adapters](#platform-adapters)
 12. [Migration Plan](#migration-plan)
 13. [Platform Compatibility](#platform-compatibility)
-14. [Appendices](#appendix-a-file-format-specifications)
+14. [Platform Specifications & References](#platform-specifications--references)
+15. [Appendices](#appendix-a-file-format-specifications)
 
 ---
 
@@ -113,12 +114,12 @@ chmod +x .agent/adapters/*.sh
 
 ### Common Commands
 
-| Task | Claude Code | Gemini CLI |
-|------|-------------|------------|
-| Implement next task | `/implement-task` | "Follow implement-task workflow" |
-| Review staged code | `/review-code` | "Follow review-code workflow" |
-| Plan next sprint | `/plan-sprint` | "Follow plan-sprint workflow" |
-| Create release | `/create-release` | "Follow create-release workflow" |
+| Task | Claude Code | Gemini CLI | Copilot | Codex CLI |
+|------|-------------|------------|---------|-----------|
+| Implement next task | `/implement-task` | `/implement-task` | `#implement-task` | "implement-task from AGENTS.md" |
+| Review staged code | `/review-code` | `/review-code` | `#review-code` | "review-code from AGENTS.md" |
+| Plan next sprint | `/plan-sprint` | `/plan-sprint` | `#plan-sprint` | "plan-sprint from AGENTS.md" |
+| Create release | `/create-release` | `/create-release` | `#create-release` | "create-release from AGENTS.md" |
 
 ### Troubleshooting First Run
 
@@ -248,11 +249,11 @@ chmod +x .agent/adapters/*.sh
 │   └── project-conventions.md          # Project-specific rules
 │
 └── adapters/                           # Platform transpilers
-    ├── generate-claude.sh              # Claude Code adapter
-    ├── generate-gemini.sh              # Gemini CLI adapter
-    ├── generate-copilot.sh             # GitHub Copilot adapter
-    ├── generate-codex.sh               # Codex CLI adapter
-    ├── generate-opencode.sh            # OpenCode adapter
+    ├── claude-adapter.sh               # Claude Code adapter
+    ├── gemini-adapter.sh               # Gemini CLI adapter
+    ├── copilot-adapter.sh              # GitHub Copilot adapter
+    ├── codex-adapter.sh                # Codex CLI adapter
+    ├── opencode-adapter.sh             # OpenCode adapter
     └── generate-all.sh                 # Generate all platforms
 ```
 
@@ -427,12 +428,12 @@ The architecture uses a **Domain-Specific Language (DSL)** for declaring depende
 
 ### Quick Reference Card
 
-| Action | Claude Code | Gemini CLI | Copilot |
-|--------|-------------|------------|--------|
-| Implement task | `/implement-task` | "Follow implement-task workflow" | `@workspace .agent/workflows/implement-task.md` |
-| Review code | `/review-code` | "Follow review-code workflow" | `@workspace .agent/workflows/review-code.md` |
-| Plan sprint | `/plan-sprint` | "Follow plan-sprint workflow" | `@workspace .agent/workflows/plan-sprint.md` |
-| Create release | `/create-release` | "Follow create-release workflow" | `@workspace .agent/workflows/create-release.md` |
+| Action | Claude Code | Gemini CLI | Copilot | Codex CLI |
+|--------|-------------|------------|---------|-----------|
+| Implement task | `/implement-task` | `/implement-task` or "Follow implement-task workflow" | `#implement-task` or `@task-implementer` | "Follow implement-task from AGENTS.md" |
+| Review code | `/review-code` | `/review-code` or "Follow review-code workflow" | `#review-code` or `@code-reviewer` | "Follow review-code from AGENTS.md" |
+| Plan sprint | `/plan-sprint` | `/plan-sprint` or "Follow plan-sprint workflow" | `#plan-sprint` or `@roadmap-planner` | "Follow plan-sprint from AGENTS.md" |
+| Create release | `/create-release` | `/create-release` or "Follow create-release workflow" | `#create-release` or `@release-manager` | "Follow create-release from AGENTS.md" |
 
 ---
 
@@ -1036,245 +1037,154 @@ Adapters **transpile** the unified agent format to platform-specific configurati
                             │
                             ▼
 ┌──────────────────────────────────────────────────────────────────┐
-│                     .agent/adapters/generate-all.sh                      │
+│                 .agent/adapters/generate-all.sh                   │
 └───────────────────────────┬──────────────────────────────────────┘
                             │
-        ┌───────────────────┼───────────────────┐
-        │                   │                   │
-        ▼                   ▼                   ▼
-┌──────────────┐  ┌──────────────┐  ┌──────────────┐
-│ Claude Code  │  │  Gemini CLI  │  │   OpenCode   │
-│              │  │              │  │              │
-│ • CLAUDE.md  │  │ • GEMINI.md  │  │ • .opencode   │
-│ • .claude/   │  │ • .gemini/   │  │              │
-│   settings   │  │   settings   │  │              │
-│ • skills/    │  │              │  │              │
-│   (linked)   │  │              │  │              │
-└──────────────┘  └──────────────┘  └──────────────┘
-        │                   │                   │
-        ▼                   ▼                   ▼
-┌──────────────┐  ┌──────────────┐
-│   Copilot    │  │  Codex CLI   │
-│              │  │              │
-│ • .github/   │  │ • AGENTS.md  │
-│   copilot-   │  │ • codex.     │
-│   instructions│ │   config     │
-└──────────────┘  └──────────────┘
+    ┌───────────┬───────────┼───────────┬───────────┐
+    │           │           │           │           │
+    ▼           ▼           ▼           ▼           ▼
+┌────────┐ ┌────────┐ ┌────────┐ ┌────────┐ ┌────────┐
+│ Claude │ │ Gemini │ │Copilot │ │ Codex  │ │Open   │
+│  Code  │ │  CLI   │ │        │ │  CLI   │ │ Code  │
+│        │ │        │ │        │ │        │ │       │
+│CLAUDE  │ │GEMINI  │ │copilot-│ │AGENTS  │ │.open- │
+│.md     │ │.md     │ │instruc-│ │.md     │ │code.  │
+│.claude/│ │.gemini/│ │tions.md│ │.codex/ │ │json   │
+│  cmds/ │ │  cmds/ │ │prompts/│ │config  │ │.open- │
+│  agents│ │  sett- │ │agents/ │ │.toml   │ │code/  │
+│        │ │  ings  │ │instruc-│ │        │ │cmds/  │
+│        │ │        │ │tions/  │ │        │ │       │
+└────────┘ └────────┘ └────────┘ └────────┘ └────────┘
 ```
 
-> **Future Improvement:** While initial adapters are implemented as shell scripts, future versions may migrate to Python or Node.js to provide better cross-platform support and robust dependency resolution.
+> **Note:** All adapters are implemented as Bash 4.0+ scripts using shared helpers for YAML frontmatter extraction, body content parsing, and TOML/JSON escaping.
 
 ### Claude Code Adapter
 
-> **⚠️ Implementation Note:** The settings format below is illustrative. Research the actual Claude Code configuration structure before implementing. Claude Code uses `CLAUDE.md` for instructions but may have different settings patterns than shown here.
+Claude Code has the richest native support. The adapter maps `.agent/` concepts almost 1:1.
 
 **Output Structure:**
 ```
-CLAUDE.md                    # Main instructions
+CLAUDE.md                    # Project instructions with @import syntax
 .claude/
-├── settings.json            # Tool permissions (format TBD)
-└── commands/                # Custom slash commands
-    ├── implement-task.md
-    ├── review-code.md
-    └── create-release.md
-.agent/skills/               # Linked skills (native support)
+├── commands/                # Slash commands (from .agent/workflows/)
+│   ├── implement-task.md    #   - description frontmatter
+│   ├── review-code.md       #   - $ARGUMENTS support
+│   ├── plan-sprint.md       #   - Step summaries from workflow
+│   └── create-release.md
+└── agents/                  # Custom agents (from .agent/agents/ + subagents/)
+    ├── task-implementer.md  #   - name/description frontmatter only
+    ├── code-reviewer.md     #   - Skills mapped to /command references
+    ├── roadmap-planner.md   #   - delegates_to mapped to agent delegation
+    ├── release-manager.md
+    ├── scope-validator.md   # Subagents also become agents
+    ├── architecture-checker.md
+    └── ...
 ```
 
-**Adapter Script** (`.agent/adapters/generate-claude.sh`):
-
-```bash
-#!/bin/bash
-set -euo pipefail
-
-AGENT_DIR=".agent"
-OUTPUT_DIR="."
-
-echo "🔧 Generating Claude Code configuration..."
-
-# Generate CLAUDE.md from agents
-cat > "$OUTPUT_DIR/CLAUDE.md" << 'HEADER'
-# QuickScale AI Development Agent
-
-This repository uses a structured agent system for development workflows.
-
-## Available Agents
-
-HEADER
-
-# Append agent summaries
-for agent in "$AGENT_DIR/agents/"*.md; do
-    name=$(basename "$agent" .md)
-    description=$(grep -m1 "^description:" "$agent" | cut -d: -f2- | xargs)
-    echo "- **$name**: $description" >> "$OUTPUT_DIR/CLAUDE.md"
-done
-
-# Append skills reference
-cat >> "$OUTPUT_DIR/CLAUDE.md" << 'SKILLS'
-
-## Skills Available
-
-Skills are located in `.agent/skills/`. Read the SKILL.md file before using.
-
-SKILLS
-
-for skill in "$AGENT_DIR/skills/"*/SKILL.md; do
-    skill_dir=$(dirname "$skill")
-    skill_name=$(basename "$skill_dir")
-    echo "- \`$skill_name\`: $skill_dir/SKILL.md" >> "$OUTPUT_DIR/CLAUDE.md"
-done
-
-# Generate .claude/commands from workflows
-mkdir -p "$OUTPUT_DIR/.claude/commands"
-for workflow in "$AGENT_DIR/workflows/"*.md; do
-    name=$(basename "$workflow" .md)
-    cp "$workflow" "$OUTPUT_DIR/.claude/commands/$name.md"
-done
-
-# Generate settings
-cat > "$OUTPUT_DIR/.claude/settings.json" << 'SETTINGS'
-{
-  "permissions": {
-    "allow_file_read": true,
-    "allow_file_write": true,
-    "allow_terminal": true,
-    "allow_subagents": true
-  },
-  "skills_directory": ".agent/skills"
-}
-SETTINGS
-
-echo "✅ Claude Code configuration generated"
-```
+**Key Mappings:**
+- `CLAUDE.md` uses `@.agent/contexts/*.md` import syntax (max 5 hops)
+- Workflows → `.claude/commands/*.md` with `description:` frontmatter
+- Agents + Subagents → `.claude/agents/*.md` with Claude-supported frontmatter only
+- Source `skills:` list → `/command` references in agent body
+- Source `delegates_to:` → delegation instructions in agent body
+- Preserves `.claude/settings.local.json` (never overwritten)
 
 ### Gemini CLI Adapter
 
+Gemini CLI supports custom TOML commands with file injection and argument interpolation.
+
 **Output Structure:**
 ```
-GEMINI.md                    # Main instructions (flattened)
+GEMINI.md                    # Project context with @path imports
 .gemini/
-├── settings.json            # Configuration
-└── style.md                 # Code style preferences
+├── settings.json            # Skills + experimental agents enabled
+└── commands/                # TOML custom commands (from .agent/workflows/)
+    ├── implement-task.toml  #   - @{path} file injection
+    ├── review-code.toml     #   - {{args}} interpolation
+    ├── plan-sprint.toml     #   - Agent role + skill references
+    └── create-release.toml
+.geminiignore                # Created if absent (preserves user edits)
 ```
 
-**Adapter Script** (`.agent/adapters/generate-gemini.sh`):
-
-```bash
-#!/bin/bash
-set -euo pipefail
-
-AGENT_DIR=".agent"
-OUTPUT_DIR="."
-
-echo "🔧 Generating Gemini CLI configuration..."
-
-# Gemini doesn't support subagents or skills natively
-# Flatten everything into GEMINI.md
-
-cat > "$OUTPUT_DIR/GEMINI.md" << 'HEADER'
-# QuickScale Development Instructions
-
-## Development Workflows
-
-HEADER
-
-# Inline workflows (Gemini can't reference external files as easily)
-for workflow in "$AGENT_DIR/workflows/"*.md; do
-    echo "---" >> "$OUTPUT_DIR/GEMINI.md"
-    cat "$workflow" >> "$OUTPUT_DIR/GEMINI.md"
-    echo "" >> "$OUTPUT_DIR/GEMINI.md"
-done
-
-# Inline key skills
-echo "## Code Principles" >> "$OUTPUT_DIR/GEMINI.md"
-if [ -f "$AGENT_DIR/skills/code-principles/SKILL.md" ]; then
-    cat "$AGENT_DIR/skills/code-principles/SKILL.md" >> "$OUTPUT_DIR/GEMINI.md"
-fi
-
-mkdir -p "$OUTPUT_DIR/.gemini"
-cat > "$OUTPUT_DIR/.gemini/settings.json" << 'SETTINGS'
-{
-  "style": "professional",
-  "verbosity": "concise"
-}
-SETTINGS
-
-echo "✅ Gemini CLI configuration generated"
-```
+**Key Mappings:**
+- `GEMINI.md` uses `@.agent/contexts/*.md` import syntax
+- Workflows → `.gemini/commands/*.toml` with `@{path}` file injection
+- Skills referenced via `@{.agent/skills/NAME/SKILL.md}` in commands
+- Agent roles embedded in command steps via `@{.agent/agents/NAME.md}`
+- `settings.json` enables `skills.enabled` and `experimental.enableAgents`
 
 ### GitHub Copilot Adapter
+
+Copilot now has rich native support for agents, prompts, and path-specific instructions.
 
 **Output Structure:**
 ```
 .github/
-└── copilot-instructions.md  # Flattened instructions
+├── copilot-instructions.md              # Always-on project guidance
+├── prompts/                             # Reusable prompt files (from workflows)
+│   ├── implement-task.prompt.md         #   - mode: agent
+│   ├── review-code.prompt.md            #   - tools: list
+│   ├── plan-sprint.prompt.md            #   - ${input:varName} variables
+│   └── create-release.prompt.md
+├── agents/                              # Custom agents
+│   ├── task-implementer.agent.md        #   - tools: list
+│   ├── code-reviewer.agent.md           #   - agents: subagent references
+│   ├── scope-validator.agent.md         # Subagents also become agents
+│   └── ...
+└── instructions/                        # Path-specific instructions
+    ├── python.instructions.md           #   - applyTo: "**/*.py"
+    ├── testing.instructions.md          #   - applyTo: "**/test_*.py"
+    ├── frontend.instructions.md         #   - applyTo: "**/*.{ts,tsx}"
+    └── docs.instructions.md             #   - applyTo: "**/*.md"
 ```
 
-**Adapter Script** (`.agent/adapters/generate-copilot.sh`):
+**Key Mappings:**
+- Workflows → `.github/prompts/*.prompt.md` with `mode: agent` and `tools:` list
+- Agents + Subagents → `.github/agents/*.agent.md` with `agents:` for delegation
+- Skills referenced as file paths in agent/prompt body
+- Path-specific instructions generated for Python, tests, frontend, docs
+- `copilot-instructions.md` includes dynamic tables of prompts, agents, and skills
 
-```bash
-#!/bin/bash
-set -euo pipefail
+### Codex CLI Adapter
 
-AGENT_DIR=".agent"
-OUTPUT_DIR=".github"
+Codex uses `AGENTS.md` as its primary instruction file (auto-read at startup).
 
-echo "🔧 Generating GitHub Copilot configuration..."
-
-mkdir -p "$OUTPUT_DIR"
-
-# Copilot uses a single instructions file
-cat > "$OUTPUT_DIR/copilot-instructions.md" << 'HEADER'
-# QuickScale Coding Guidelines
-
-When working on this codebase, follow these guidelines:
-
-## Code Quality
-HEADER
-
-# Extract key sections from skills
-if [ -f "$AGENT_DIR/skills/code-principles/SKILL.md" ]; then
-    grep -A 100 "## Capabilities" "$AGENT_DIR/skills/code-principles/SKILL.md" | \
-        head -50 >> "$OUTPUT_DIR/copilot-instructions.md"
-fi
-
-echo "" >> "$OUTPUT_DIR/copilot-instructions.md"
-echo "## Testing" >> "$OUTPUT_DIR/copilot-instructions.md"
-
-if [ -f "$AGENT_DIR/skills/testing-standards/SKILL.md" ]; then
-    grep -A 50 "## Overview" "$AGENT_DIR/skills/testing-standards/SKILL.md" | \
-        head -30 >> "$OUTPUT_DIR/copilot-instructions.md"
-fi
-
-echo "✅ GitHub Copilot configuration generated"
+**Output Structure:**
+```
+AGENTS.md                    # Hierarchical project instructions (primary)
+.codex/
+└── config.toml              # Sandbox mode, fallback filenames
 ```
 
-### Master Generation Script
+**Key Mappings:**
+- All agents, skills, and workflows summarized in `AGENTS.md`
+- Workflow steps extracted and listed under each workflow heading
+- `.codex/config.toml` sets `sandbox_mode` and `project_doc_fallback_filenames`
+- Skills in `.agent/skills/*/SKILL.md` are already agentskills.io-compatible
+- Subagents flattened into instruction text (no native subagent support)
+- Config only created if absent (preserves user customization)
 
-**`.agent/adapters/generate-all.sh`**:
+### OpenCode Adapter
 
-```bash
-#!/bin/bash
-set -euo pipefail
+OpenCode is archived (succeeded by Crush) but supported for compatibility.
 
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-
-echo "🚀 Generating all platform configurations..."
-echo ""
-
-"$SCRIPT_DIR/generate-claude.sh"
-"$SCRIPT_DIR/generate-gemini.sh"
-"$SCRIPT_DIR/generate-copilot.sh"
-"$SCRIPT_DIR/generate-codex.sh" 2>/dev/null || echo "⚠️  Codex adapter not implemented"
-"$SCRIPT_DIR/generate-opencode.sh" 2>/dev/null || echo "⚠️  OpenCode adapter not implemented"
-
-echo ""
-echo "✅ All platform configurations generated!"
-echo ""
-echo "Generated files:"
-echo "  • CLAUDE.md + .claude/"
-echo "  • GEMINI.md + .gemini/"
-echo "  • .github/copilot-instructions.md"
+**Output Structure:**
 ```
+.opencode.json               # Project config (agents, LSP)
+.opencode/
+└── commands/                # Custom commands (from .agent/workflows/)
+    ├── implement-task.md    #   - $TASK_ID argument
+    ├── review-code.md
+    ├── plan-sprint.md
+    └── create-release.md
+```
+
+**Key Mappings:**
+- `.opencode.json` configures `coder` and `task` agents with system prompts
+- Workflows → `.opencode/commands/*.md` with `$NAME` argument placeholders
+- Skills/subagents flattened into system prompt and command instructions
+- LSP config for Python (pyright) included by default
 
 ---
 
@@ -1334,11 +1244,11 @@ Extract explicit workflows:
 
 | Adapter | Target Platform | Priority | Status |
 |---------|-----------------|----------|--------|
-| `generate-claude.sh` | Claude Code | 🔴 High | ✅ DONE |
-| `generate-gemini.sh` | Gemini CLI | 🔴 High | ✅ DONE |
-| `generate-copilot.sh` | GitHub Copilot | 🟡 Medium | ✅ DONE |
-| `generate-codex.sh` | Codex CLI | 🟢 Low | ⬜ DEFERRED |
-| `generate-opencode.sh` | OpenCode | 🟢 Low | ⬜ DEFERRED |
+| `claude-adapter.sh` | Claude Code | 🔴 High | ✅ DONE |
+| `gemini-adapter.sh` | Gemini CLI | 🔴 High | ✅ DONE |
+| `copilot-adapter.sh` | GitHub Copilot | 🟡 Medium | ✅ DONE |
+| `codex-adapter.sh` | Codex CLI | 🟢 Low | ✅ DONE |
+| `opencode-adapter.sh` | OpenCode | 🟢 Low | ✅ DONE |
 
 ### Phase 6: Validation & Cleanup
 
@@ -1393,24 +1303,130 @@ rm -f CLAUDE.md GEMINI.md  # Remove generated files
 
 | Feature | Claude Code | Gemini CLI | Copilot | Codex CLI | OpenCode |
 |---------|:-----------:|:----------:|:-------:|:---------:|:------:|
-| **Markdown Instructions** | ✅ CLAUDE.md | ✅ GEMINI.md | ✅ copilot-instructions.md | ✅ AGENTS.md | ✅ .opencode |
-| **Skills/Tools** | ✅ Native | ⚠️ Inline | ❌ No | ⚠️ Limited | ⚠️ Limited |
-| **Subagents** | ✅ Native | ❌ Flatten | ❌ Flatten | ❌ Flatten | ❌ Flatten |
-| **Workflows** | ✅ Native | ⚠️ Manual | ❌ No | ❌ No | ❌ No |
-| **MCP Support** | ✅ Yes | ❓ Planned | ❌ No | ❌ No | ❌ No |
-| **File References** | ✅ Yes | ✅ Yes | ⚠️ Limited | ✅ Yes | ✅ Yes |
-| **Command Execution** | ✅ Yes | ✅ Yes | ❌ Chat only | ✅ Yes | ✅ Yes |
-| **Multi-File Editing** | ✅ Yes | ✅ Yes | ⚠️ Limited | ✅ Yes | ✅ Yes |
+| **Platform Status** | ✅ Active | ✅ Active | ✅ Active | ✅ Active | ❌ Archived (Sep 2025) |
+| **Markdown Instructions** | ✅ CLAUDE.md | ✅ GEMINI.md | ✅ copilot-instructions.md | ✅ AGENTS.md | ⚠️ JSON config |
+| **Import Syntax** | ✅ `@path` | ✅ `@path` | ❌ No | ✅ Concatenation | ❌ No |
+| **Custom Commands** | ✅ `.claude/commands/` (Skills) | ✅ `.gemini/commands/*.toml` | ✅ `.github/prompts/*.prompt.md` | ✅ Skills | ✅ `.opencode/commands/` |
+| **Custom Agents** | ✅ `.claude/agents/` | ✅ Stable (v0.27.0+) | ⚠️ Experimental | ❌ No | ❌ No |
+| **Subagent Delegation** | ✅ Native | ❌ Flatten | ✅ `agents:` frontmatter | ❌ Flatten | ❌ Built-in only |
+| **Path-Specific Rules** | ✅ `.claude/rules/` | ❌ No | ✅ `.github/instructions/` | ❌ Nested dirs only | ❌ No |
+| **Skills/Tools** | ✅ Native | ✅ Stable (v0.27.0+) | ⚠️ Experimental | ✅ agentskills.io | ❌ No |
+| **MCP Support** | ✅ `.mcp.json` | ✅ `mcpServers` in settings | ✅ VS Code settings | ✅ `config.toml` | ✅ JSON config |
+| **AGENTS.md Support** | ❌ No | ❌ No | ✅ Since Aug 2025 | ✅ Primary | ❌ No |
+| **Lifecycle Hooks** | ✅ Rich | ✅ Rich | ❌ No | ⚠️ `notify` only | ❌ No |
+| **File References** | ✅ Yes | ✅ `@{path}` injection | ⚠️ Limited | ✅ Yes | ✅ Yes |
+| **Command Execution** | ✅ Yes | ✅ Yes | ✅ `runInTerminal` tool | ✅ Yes | ✅ Yes |
+| **Multi-File Editing** | ✅ Yes | ✅ Yes | ✅ `editFiles` tool | ✅ Yes | ✅ Yes |
+| **Sandboxing** | ✅ Yes | ✅ Docker/Seatbelt | ❌ No | ✅ `sandbox_mode` | ❌ No |
 
 ### Adapter Strategy by Platform
 
-| Platform | Strategy | Complexity |
-|----------|----------|------------|
-| **Claude Code** | Full native support—use all features | Low |
-| **Gemini CLI** | Flatten subagents, inline skills | Medium |
-| **GitHub Copilot** | Single instructions file, key principles only | High (lossy) |
-| **Codex CLI** | Similar to Claude, fewer features | Medium |
-| **OpenCode** | .opencode with flattened instructions | Medium |
+| Platform | Strategy | Output Files | Complexity |
+|----------|----------|-------------|------------|
+| **Claude Code** | Full native — agents, skills (merged Jan 2026), @imports | `CLAUDE.md`, `.claude/commands/`, `.claude/agents/` | Low (1:1 mapping) |
+| **Gemini CLI** | Commands via TOML, @imports, event-driven (v0.27.0) | `GEMINI.md`, `.gemini/commands/`, `.gemini/settings.json` | Medium |
+| **GitHub Copilot** | Rich — prompts, agents, AGENTS.md (Aug 2025) | `.github/copilot-instructions.md`, `prompts/`, `agents/`, `instructions/` | Low (rich native support) |
+| **Codex CLI** | AGENTS.md primary (auto-read), skills via agentskills.io | `AGENTS.md`, `.codex/config.toml` | Medium |
+| **OpenCode** | Archived (Sep 2025) — compatibility only | `.opencode.json`, `.opencode/commands/` | High (limited features) |
+
+---
+
+## Platform Specifications & References
+
+This section documents the technical specifications and documentation sources used to develop the transpiler adapters.
+
+### Claude Code
+- **Source**: [Anthropic Claude Code Documentation](https://docs.anthropic.com/en/docs/agents-and-tools/claude-code)
+- **Key Specifications**:
+  - `CLAUDE.md`: Use of `@import` syntax for context modularity.
+  - `.claude/commands/`: YAML frontmatter with `description:` and `$ARGUMENTS` interpolation.
+    - **Note**: Slash commands merged into skills system (Jan 24, 2026) — commands are now treated as skills automatically.
+  - `.claude/agents/`: Native agent persona definitions with role-based instructions.
+- **Verification Method**: Iterative testing with `claude-code` CLI version 1.2+ (as of Feb 2026).
+
+### Gemini CLI
+- **Source**: [Google Gemini Developer CLI Reference](https://github.com/google-gemini/gemini-cli)
+- **Key Specifications**:
+  - `GEMINI.md`: Path-relative imports using `@{path}` marker.
+  - `.gemini/settings.json`: Configuration for native agent support.
+    - **Note**: Agent Skills promoted to stable in v0.27.0 (Feb 3, 2026) with event-driven architecture.
+  - TOML Commands: Use of `{{args}}` for dynamic command interpolation and shell execution hooks.
+- **Verification Method**: Command validation against `gemini config --schema` (v0.27.0+).
+
+### GitHub Copilot
+- **Source**: [GitHub Copilot Customization Guide](https://docs.github.com/en/copilot/using-github-copilot/customizing-copilot-with-custom-instructions) and [VS Code Copilot Wiki](https://github.com/microsoft/vscode-copilot/wiki).
+- **Key Specifications**:
+  - `.github/copilot-instructions.md`: Unified markdown rules for workspace-wide context.
+  - `AGENTS.md`: Official support added Aug 28, 2025 (Linux Foundation/Agentic AI Foundation open standard).
+  - `.agent.md`: Role-based agent discovery (supported by agentskills.io extension).
+  - `.prompt.md`: Structured task markers for prompt-discovery in Copilot Chat.
+  - **Note**: Experimental Agent Skills in active development (VS Code 1.108+).
+- **Verification Method**: Manual inspection of `.github/` artifacts and integration with VS Code Copilot Chat (v1.108+).
+
+### Codex CLI
+- **Source**: [Codex Agents Protocol Specification](https://github.com/openai/codex-agents)
+- **Key Specifications**:
+  - `AGENTS.md`: Primary instruction file (automatically read by Codex CLI).
+    - **Note**: Part of the Linux Foundation/Agentic AI Foundation open standard.
+  - `.codex/config.toml`: Registry of skills and tool-call mapping with fallback filenames.
+  - Command Hooks: Execution of `.agent/adapters/` scripts as native pre-processing hooks.
+- **Verification Method**: Linting generated TOML against established Codex CLI schema.
+
+### OpenCode
+- **Status**: ⚠️ **ARCHIVED** (September 2025) — Succeeded by Crush
+- **Source**: [OpenCode Developer Portal](https://opencode.ai/docs) (archived)
+- **Key Specifications**:
+  - `.opencode.json`: Centralized JSON descriptor for agents and their associated skills.
+  - `.opencode/`: Workspace directory for command logic and session-persistent state.
+  - Context Injection: Usage of `$WORKSPACE_ROOT` for path-agnostic configurations.
+- **Verification Method**: Schema validation of generated `.opencode.json` using `opencode-cli validate`.
+- **Note**: Adapter maintained for compatibility with existing installations only. New projects should use Claude Code, Gemini CLI, GitHub Copilot, or Codex CLI.
+
+---
+
+## Platform Updates (2026)
+
+This section documents major platform changes and updates as of early 2026 that affect the agentic flow implementation.
+
+### Claude Code
+- **Jan 24, 2026**: Slash commands merged into skills system
+  - All `.claude/commands/` files now function as skills automatically
+  - No breaking changes — existing command files continue to work
+  - Skills and commands are now treated as unified functionality
+
+### Gemini CLI
+- **Feb 3, 2026**: v0.27.0 released with event-driven architecture
+  - Agent Skills promoted from experimental to stable
+  - Improved performance and reliability through event-driven design
+  - `experimental.enableAgents` setting retained for backward compatibility
+
+### GitHub Copilot
+- **Aug 28, 2025**: AGENTS.md support added (VS Code 1.108+)
+  - Adopts Linux Foundation/Agentic AI Foundation open standard
+  - AGENTS.md auto-read in workspace root
+  - Experimental Agent Skills in active development
+  - Enhanced integration with agentskills.io ecosystem
+
+### AGENTS.md Standard
+- **2025-2026**: Became open standard under Linux Foundation/Agentic AI Foundation
+  - Adopted by GitHub Copilot (Aug 2025) and Codex CLI
+  - Provides unified instruction format across platforms
+  - Auto-read by supporting platforms (no manual configuration needed)
+
+### OpenCode
+- **September 2025**: Project archived and succeeded by Crush
+  - No longer actively maintained
+  - Existing installations continue to function
+  - QuickScale adapter maintained for compatibility only
+  - Users encouraged to migrate to active platforms
+
+### Impact on QuickScale
+
+The agentic flow transpiler has been updated to reflect these changes:
+- Adapter comments updated with 2026 platform information
+- Documentation reflects current platform capabilities
+- Deprecation notices added for archived platforms
+- No breaking changes to existing workflows
 
 ---
 

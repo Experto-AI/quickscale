@@ -826,9 +826,9 @@ class TestEnvExampleContent:
         output = template.render(test_context)
 
         # Check that 0.0.0.0 is included for Docker compatibility
-        assert (
-            "0.0.0.0" in output
-        ), ".env.example should include 0.0.0.0 in ALLOWED_HOSTS for Docker containers"
+        assert "0.0.0.0" in output, (
+            ".env.example should include 0.0.0.0 in ALLOWED_HOSTS for Docker containers"
+        )
         # Verify standard localhost entries are also present
         assert "localhost" in output, ".env.example should include localhost"
         assert "127.0.0.1" in output, ".env.example should include 127.0.0.1"
@@ -845,13 +845,13 @@ class TestEnvExampleContent:
         output = template.render(test_context)
 
         # Check that 0.0.0.0 is included in ALLOWED_HOSTS for Docker compatibility
-        assert (
-            "0.0.0.0" in output
-        ), "local.py should include 0.0.0.0 in ALLOWED_HOSTS for Docker containers"
+        assert "0.0.0.0" in output, (
+            "local.py should include 0.0.0.0 in ALLOWED_HOSTS for Docker containers"
+        )
         # Also check for the catch-all wildcard for development flexibility
-        assert (
-            '"*"' in output or "'*'" in output
-        ), "local.py should allow all hosts (* wildcard) for development"
+        assert '"*"' in output or "'*'" in output, (
+            "local.py should allow all hosts (* wildcard) for development"
+        )
 
     def test_database_url(
         self, jinja_env: Environment, test_context: dict[str, str]

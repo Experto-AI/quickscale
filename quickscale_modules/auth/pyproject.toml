@@ -16,7 +16,7 @@ django-allauth = "^65.14.0"
 # Minimal dev dependencies for standalone testing
 # pytest, pytest-cov, ruff, mypy centralized in root pyproject.toml (monorepo)
 # or provided by user's project (standalone embed)
-pytest-django = "^4.8.0"
+pytest-django = "^4.11.1"
 
 [build-system]
 requires = ["poetry-core"]

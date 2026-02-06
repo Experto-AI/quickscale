@@ -91,15 +91,52 @@ sys.modules['module'] = mock  # ❌ Never
 - Tailwind CSS for styling
 - TanStack Query for server state
 
+## Available Prompts
+
+Use these in Copilot Chat with `#` or via the prompt picker:
+
+| Prompt | Description |
+|--------|-------------|
+| `create-release` | Finalize a release with commit message, roadmap cleanup, and documentation |
+| `implement-task` | Implement a roadmap task through PLAN → CODE → REVIEW → TEST → COMPLETE stages |
+| `plan-sprint` | Plan the next sprint by analyzing roadmap and prioritizing tasks |
+| `review-code` | Review staged code changes for quality, scope compliance, and completeness |
+
+## Available Agents
+
+Use in Copilot Chat with `@agent-name`:
+
+| Agent | Description |
+|-------|-------------|
+| `code-reviewer` | Comprehensive code quality review and validation |
+| `release-manager` | Release finalization, commit messages, roadmap cleanup |
+| `roadmap-planner` | Sprint planning, release selection, roadmap validation |
+| `task-implementer` | Implements roadmap tasks with staged workflow |
+
+## Skills Reference
+
+Detailed guidance available in `.agent/skills/`:
+
+| Skill | Description |
+|-------|-------------|
+| `architecture-guidelines` | Tech stack compliance, layer boundaries, patterns |
+| `code-principles` | SOLID, DRY, KISS principles for code quality |
+| `development-workflow` | Feature development and bug fix workflow stages |
+| `documentation-standards` | Docstring format, comments, and documentation quality |
+| `git-operations` | Git commands, staging, commits, and diff operations |
+| `roadmap-navigation` | Task detection, checklist parsing, and roadmap operations |
+| `task-focus` | Scope discipline and boundary enforcement |
+| `testing-standards` | Test isolation, mocking, coverage standards |
+
 ## Validation
 
 Always run before completing work:
 
 ```bash
 ./scripts/lint.sh      # Ruff format + check + mypy
-./scripts/test_unit.sh  # Unit and integration tests
+./scripts/test_unit.sh # Unit and integration tests
 ```
 
 
 ---
-*Generated from .agent/ on 2026-02-05T20:25:28+01:00*
+*Generated from .agent/ on 2026-02-06T20:21:56+01:00*

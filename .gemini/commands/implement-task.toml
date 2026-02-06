@@ -1,0 +1,28 @@
+description = "Implement a roadmap task through PLAN → CODE → REVIEW → TEST → COMPLETE stages"
+steps = """
+Follow the implement-task workflow.
+
+Adopt the role defined in: @{.agent/agents/task-implementer.md}
+
+Apply these skills:
+- @{.agent/skills/code-principles/SKILL.md}
+- @{.agent/skills/testing-standards/SKILL.md}
+- @{.agent/skills/architecture-guidelines/SKILL.md}
+- @{.agent/skills/task-focus/SKILL.md}
+- @{.agent/skills/documentation-standards/SKILL.md}
+- @{.agent/skills/development-workflow/SKILL.md}
+- @{.agent/skills/git-operations/SKILL.md}
+- @{.agent/skills/roadmap-navigation/SKILL.md}
+
+## Steps
+
+1. Stage 1: PLAN
+2. Stage 2: CODE
+3. Stage 3: REVIEW
+4. Stage 4: TEST
+5. Stage 5: COMPLETE
+
+Read the full workflow: @{.agent/workflows/implement-task.md}
+
+Arguments: {{args}}
+"""

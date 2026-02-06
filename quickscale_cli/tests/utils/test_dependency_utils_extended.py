@@ -324,9 +324,9 @@ class TestCheckAllDependencies:
 
         ok, missing = verify_required_dependencies()
         assert ok is False, f"Expected False but got {ok}, missing={missing}"
-        assert (
-            len(missing) == 1
-        ), f"Expected 1 missing but got {len(missing)}: {missing}"
+        assert len(missing) == 1, (
+            f"Expected 1 missing but got {len(missing)}: {missing}"
+        )
         assert missing[0].name == "Poetry"
 
     @patch("quickscale_cli.utils.dependency_utils.check_postgresql_installed")

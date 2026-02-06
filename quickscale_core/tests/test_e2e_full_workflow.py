@@ -261,9 +261,9 @@ class TestFullE2EWorkflow:
             text=True,
             timeout=180,  # 3 minutes timeout for installation
         )
-        assert (
-            install_result.returncode == 0
-        ), f"Poetry install failed: {install_result.stderr}"
+        assert install_result.returncode == 0, (
+            f"Poetry install failed: {install_result.stderr}"
+        )
 
     def _configure_test_database(
         self, project_path: Path, project_name: str, postgres_url: str

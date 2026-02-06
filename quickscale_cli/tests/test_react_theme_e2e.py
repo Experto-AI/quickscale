@@ -308,9 +308,9 @@ class TestReactThemePnpmIntegration:
             text=True,
             timeout=120,
         )
-        assert (
-            install_result.returncode == 0
-        ), f"pnpm install failed: {install_result.stderr}"
+        assert install_result.returncode == 0, (
+            f"pnpm install failed: {install_result.stderr}"
+        )
 
         # Check if type-check script exists
         with open(frontend_path / "package.json") as f:
@@ -349,9 +349,9 @@ class TestReactThemePnpmIntegration:
             text=True,
             timeout=120,
         )
-        assert (
-            install_result.returncode == 0
-        ), f"pnpm install failed: {install_result.stderr}"
+        assert install_result.returncode == 0, (
+            f"pnpm install failed: {install_result.stderr}"
+        )
 
         # Run lint
         result = subprocess.run(

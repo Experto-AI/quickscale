@@ -35,8 +35,8 @@ adapters:
     claude_code: true
     gemini_cli: true
     github_copilot: true
-    codex_cli: false
-    opencode: false
+    codex_cli: true
+    opencode: true
 
 # Security settings
 security:

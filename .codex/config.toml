@@ -1,0 +1,13 @@
+# Codex CLI project configuration
+# Auto-generated from .agent/ — customize as needed
+# See: https://developers.openai.com/codex/config-advanced
+
+# Sandbox mode: workspace-write allows edits within the repo
+sandbox_mode = "workspace-write"
+
+# AGENTS.md is automatically read as the primary instruction file by Codex CLI.
+# The fallback filenames below are used only if AGENTS.md is not found.
+project_doc_fallback_filenames = ["CLAUDE.md", "GEMINI.md"]
+
+# Notification on agent turn completion (optional)
+# notify = "terminal-bell"

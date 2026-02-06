@@ -1,0 +1,19 @@
+{
+  "$schema": "https://opencode.ai/schema.json",
+  "agents": {
+    "coder": {
+      "model": "sonnet",
+      "systemPrompt": "You are a QuickScale development agent. QuickScale is a Django project generator for production-ready SaaS applications.\\n\\nCode Standards: Python 3.11+, type hints on public APIs, Google-style docstrings, Ruff for linting, Poetry for packages.\\n\\nPrinciples: SOLID, DRY, KISS. No bare except. No global mocking in tests.\\n\\nTesting: pytest, test isolation mandatory, coverage >= 90% overall, >= 80% per file.\\n\\nAlways run ./scripts/lint.sh and ./scripts/test_unit.sh before completing work.\\n\\nRead .agent/skills/ for detailed guidance on code principles, testing, and architecture."
+    },
+    "task": {
+      "model": "sonnet",
+      "systemPrompt": "You are a task planning agent for QuickScale. Break down tasks from docs/technical/roadmap.md into actionable steps."
+    }
+  },
+  "lsp": {
+    "python": {
+      "command": "pyright-langserver",
+      "args": ["--stdio"]
+    }
+  }
+}
