@@ -219,7 +219,7 @@ Build generic modules (blog, listings) in `quickscale_modules/` while simultaneo
 - Mitigation: Apply generalization checklist before every commit. Test module concepts with hypothetical second vertical (jobs or events).
 
 **Risk: Parallel Development Cognitive Overhead**
-- Likelihood: Medium  
+- Likelihood: Medium
 - Impact: Medium
 - Mitigation: Alternating focus schedule (module mornings, site afternoons), not simultaneous work.
 
@@ -272,7 +272,7 @@ Build generic modules (blog, listings) in `quickscale_modules/` while simultaneo
 - Clean extension patterns for future verticals
 
 **Workflow Validation**:
-- Push-back workflow used regularly 
+- Push-back workflow used regularly
 - Site updates via `quickscale update` work smoothly
 - Module versioning and iteration process proven
 - Generic architecture validated through real needs
@@ -296,5 +296,3 @@ Build generic modules (blog, listings) in `quickscale_modules/` while simultaneo
 4. **Cross-Module Patterns**: What patterns emerge from blog + listings integration? Should we extract common utilities?
 
 5. **Extension Discovery**: How do users discover available extensions (realestate.py, jobs.py, events.py)? Documentation only, or runtime discovery?
-
-

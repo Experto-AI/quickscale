@@ -1799,7 +1799,7 @@ class ProfileViewSet(viewsets.ModelViewSet):
     def analytics(self, request, username=None):
         """Get profile analytics (owner only)"""
         profile = self.get_object()
-        
+
         # Check ownership
         if profile.user != request.user:
             return Response(
@@ -1814,7 +1814,7 @@ class ProfileViewSet(viewsets.ModelViewSet):
                 click_count=Count('clicks')
             ).order_by('-click_count')[:5]
         }
-        
+
         return Response(stats)
 
 # Public profile view (HTML rendering)
@@ -1824,16 +1824,16 @@ def profile_detail_view(request, username):
     Tracked by PageViewMiddleware.
     """
     profile = get_object_or_404(Profile, username=username, is_public=True)
-    
+
     context = {
         'profile': profile,
         'links': profile.links.filter(is_active=True).order_by('order'),
         'social_links': profile.social_links.all().order_by('order'),
     }
-    
+
     # Determine theme template
     theme_template = f'quickscale_modules_linktree/themes/{profile.theme.slug}.html'
-    
+
     return render(request, theme_template, context)
 ```
 
@@ -1856,13 +1856,13 @@ class SocialLinkInline(admin.TabularInline):
 
 @admin.register(Profile)
 class ProfileAdmin(admin.ModelAdmin):
-    list_display = ['username', 'display_name', 'theme', 'is_public', 
+    list_display = ['username', 'display_name', 'theme', 'is_public',
                     'total_views', 'total_clicks', 'created_at']
     list_filter = ['is_public', 'theme', 'created_at']
     search_fields = ['username', 'display_name', 'bio']
     readonly_fields = ['created_at', 'updated_at', 'total_views', 'total_clicks']
     inlines = [LinkInline, SocialLinkInline]
-    
+
     fieldsets = (
         (None, {
             'fields': ('user', 'username', 'display_name', 'bio', 'avatar')
@@ -1882,11 +1882,11 @@ class ProfileAdmin(admin.ModelAdmin):
             'classes': ('collapse',)
         }),
     )
-    
+
     def total_views(self, obj):
         return obj.page_views.count()
     total_views.short_description = "Total Views"
-    
+
     def total_clicks(self, obj):
         return LinkClick.objects.filter(link__profile=obj).count()
     total_clicks.short_description = "Total Clicks"
