@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "quickscale-cli"
-version = "0.74.1"
+version = "0.74.2"
 description = "Command-line interface for QuickScale Django project generator"
 authors = ["Experto AI <victor@experto.ai>"]
 license = "Apache-2.0"

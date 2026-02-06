@@ -696,17 +696,17 @@ myapp/
 **`.quickscale/state.yml`** — Applied state tracking (v0.69.0+):
 
 ```yaml
-version: 0.74.1
+version: 0.74.2
 project:
   name: myapp
   theme: showcase_html
 applied_modules:
   - name: auth
-    version: 0.74.1
+    version: 0.74.2
     commit: abc123def456
     applied_at: 2025-12-03T14:30:00Z
   - name: listings
-    version: 0.74.1
+    version: 0.74.2
     commit: xyz789uvw012
     applied_at: 2025-12-03T14:31:00Z
 docker:
@@ -749,7 +749,7 @@ Purpose: Tracks module branches and versions for `quickscale update` and `quicks
 **`quickscale.yml`** — Desired configuration (v0.68.0+):
 
 ```yaml
-version: 0.74.1
+version: 0.74.2
 project:
   name: myapp
   theme: showcase_html

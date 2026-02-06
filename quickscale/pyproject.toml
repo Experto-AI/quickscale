@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "quickscale"
-version = "0.74.1"
+version = "0.74.2"
 description = "Meta-package that installs quickscale-core and quickscale-cli together"
 authors = ["Experto AI <victor@experto.ai>"]
 license = "Apache-2.0"
@@ -12,8 +12,8 @@ readme = "../README.md"
 
 [tool.poetry.dependencies]
 python = "^3.12"
-quickscale-core = "^0.74.1"
-quickscale-cli = "^0.74.1"
+quickscale-core = "^0.74.2"
+quickscale-cli = "^0.74.2"
 
 [build-system]
 requires = ["poetry-core"]

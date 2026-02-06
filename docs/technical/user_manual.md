@@ -348,7 +348,7 @@ The wizard guides you through:
 
 **Generated `quickscale.yml` example**:
 ```yaml
-version: 0.74.1
+version: 0.74.2
 project:
   name: myapp
   theme: showcase_html
