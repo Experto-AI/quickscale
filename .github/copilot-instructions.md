@@ -6,7 +6,6 @@
 ## Project Overview
 
 QuickScale is a Django project generator that creates production-ready SaaS applications.
-
 ## Code Standards
 
 ### Python Style
@@ -33,7 +32,6 @@ QuickScale is a Django project generator that creates production-ready SaaS appl
 3. **Liskov**: Subtypes substitutable for base types
 4. **Interface Segregation**: Small, focused interfaces
 5. **Dependency Inversion**: Depend on abstractions
-
 ## Available Prompts
 
 Use these in Copilot Chat with `#` or via the prompt picker:
@@ -45,11 +43,11 @@ Use these in Copilot Chat with `#` or via the prompt picker:
 | `plan-sprint` | Plan the next sprint by analyzing roadmap and prioritizing tasks |
 | `review-code` | Review staged code changes for quality, scope compliance, and completeness |
 
-## Available Chat Modes
+## Available Agents
 
-Use in Copilot Chat by selecting the mode:
+Use in Copilot Chat by selecting the agent:
 
-| Mode | Description |
+| Agent | Description |
 |------|-------------|
 | `code-reviewer` | Comprehensive code quality review and validation |
 | `release-manager` | Release finalization, commit messages, roadmap cleanup |
@@ -85,7 +83,7 @@ Detailed guidance available in `.agent/skills/`:
 
 ## Contract Notes
 
-Copilot instructions support textual contracts. Structured contract fields are preserved in generated `.chatmode.md` files.
+Copilot instructions support textual contracts. Structured contract fields are preserved in generated `.agent.md` files.
 
 ---
-*Generated from .agent/ on 2026-02-07T10:48:24+01:00*
+*Generated from .agent/ on 2026-02-07T12:58:06+01:00*

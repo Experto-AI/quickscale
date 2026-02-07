@@ -141,7 +141,7 @@ tmp_ir="$(mktemp)"
 trap 'rm -f "$tmp_agents" "$tmp_subagents" "$tmp_skills" "$tmp_workflows" "$tmp_contexts" "$tmp_ir"' EXIT
 
 jq -n \
-    --arg schema_version "$(get_frontmatter_scalar "$AGENT_DIR/config.yaml" "schema_version")" \
+    --arg schema_version "$(yaml_get_value "$AGENT_DIR/config.yaml" "schema_version")" \
     --arg generated_at "$(date -Iseconds)" \
     --arg output_directory "$(config_output_directory)" \
     --arg lint_command "$(resolve_lint_command)" \
@@ -153,21 +153,12 @@ jq -n \
     --argjson gemini_cli_enabled "$(platform_enabled "gemini_cli" | jq -R 'ascii_downcase == "true"')" \
     --arg gemini_cli_support_mode "$(platform_support_mode "gemini_cli")" \
     --argjson gemini_cli_experimental "$(platform_experimental "gemini_cli" | jq -R 'ascii_downcase == "true"')" \
-    --argjson gemini_antigravity_enabled "$(platform_enabled "gemini_antigravity" | jq -R 'ascii_downcase == "true"')" \
-    --arg gemini_antigravity_support_mode "$(platform_support_mode "gemini_antigravity")" \
-    --argjson gemini_antigravity_experimental "$(platform_experimental "gemini_antigravity" | jq -R 'ascii_downcase == "true"')" \
     --argjson github_copilot_enabled "$(platform_enabled "github_copilot" | jq -R 'ascii_downcase == "true"')" \
     --arg github_copilot_support_mode "$(platform_support_mode "github_copilot")" \
     --argjson github_copilot_experimental "$(platform_experimental "github_copilot" | jq -R 'ascii_downcase == "true"')" \
-    --argjson copilot_cli_enabled "$(platform_enabled "copilot_cli" | jq -R 'ascii_downcase == "true"')" \
-    --arg copilot_cli_support_mode "$(platform_support_mode "copilot_cli")" \
-    --argjson copilot_cli_experimental "$(platform_experimental "copilot_cli" | jq -R 'ascii_downcase == "true"')" \
     --argjson codex_cli_enabled "$(platform_enabled "codex_cli" | jq -R 'ascii_downcase == "true"')" \
     --arg codex_cli_support_mode "$(platform_support_mode "codex_cli")" \
     --argjson codex_cli_experimental "$(platform_experimental "codex_cli" | jq -R 'ascii_downcase == "true"')" \
-    --argjson opencode_enabled "$(platform_enabled "opencode" | jq -R 'ascii_downcase == "true"')" \
-    --arg opencode_support_mode "$(platform_support_mode "opencode")" \
-    --argjson opencode_experimental "$(platform_experimental "opencode" | jq -R 'ascii_downcase == "true"')" \
     --argjson agents "$agents_json" \
     --argjson subagents "$subagents_json" \
     --argjson skills "$skills_json" \
@@ -192,30 +183,15 @@ jq -n \
                     support_mode: $gemini_cli_support_mode,
                     experimental: $gemini_cli_experimental
                 },
-                gemini_antigravity: {
-                    enabled: $gemini_antigravity_enabled,
-                    support_mode: $gemini_antigravity_support_mode,
-                    experimental: $gemini_antigravity_experimental
-                },
                 github_copilot: {
                     enabled: $github_copilot_enabled,
                     support_mode: $github_copilot_support_mode,
                     experimental: $github_copilot_experimental
                 },
-                copilot_cli: {
-                    enabled: $copilot_cli_enabled,
-                    support_mode: $copilot_cli_support_mode,
-                    experimental: $copilot_cli_experimental
-                },
                 codex_cli: {
                     enabled: $codex_cli_enabled,
                     support_mode: $codex_cli_support_mode,
                     experimental: $codex_cli_experimental
-                },
-                opencode: {
-                    enabled: $opencode_enabled,
-                    support_mode: $opencode_support_mode,
-                    experimental: $opencode_experimental
                 }
             }
         },

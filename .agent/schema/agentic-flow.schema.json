@@ -34,20 +34,14 @@
           "required": [
             "claude_code",
             "gemini_cli",
-            "gemini_antigravity",
             "github_copilot",
-            "copilot_cli",
-            "codex_cli",
-            "opencode"
+            "codex_cli"
           ],
           "properties": {
             "claude_code": {"$ref": "#/$defs/platform_config"},
             "gemini_cli": {"$ref": "#/$defs/platform_config"},
-            "gemini_antigravity": {"$ref": "#/$defs/platform_config"},
             "github_copilot": {"$ref": "#/$defs/platform_config"},
-            "copilot_cli": {"$ref": "#/$defs/platform_config"},
-            "codex_cli": {"$ref": "#/$defs/platform_config"},
-            "opencode": {"$ref": "#/$defs/platform_config"}
+            "codex_cli": {"$ref": "#/$defs/platform_config"}
           },
           "additionalProperties": false
         }

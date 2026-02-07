@@ -93,47 +93,13 @@ Subagents handle focused sub-tasks delegated by agents.
 BLOCK
         jq -r '.subagents[] | "| `\(.name)` | \(.description) | `@\(.path)` |"' "$IR_PATH"
 
-        cat << 'BLOCK'
-
-## Key Principles
-
-### Scope Discipline (CRITICAL)
-- Implement ONLY items explicitly listed in task checklist
-- NO "nice-to-have" features, NO opportunistic refactoring
-- When in doubt, ask - do not assume
-
-### Code Quality
-- **SOLID** · **DRY** · **KISS** · **Explicit Failure**
-- Type hints on all public APIs
-- Google-style docstrings (single-line preferred, no ending punctuation)
-- F-strings for formatting (no `.format()` or `%`)
-
-### Testing
-- pytest with pytest-django - NO global mocking (`sys.modules` modifications prohibited)
-- Test isolation mandatory · Coverage >= 90% overall, >= 80% per file
-
-BLOCK
+        cat "$(template_path "gemini_standards.md")"
         render_validation_block "$lint_cmd" "$test_cmd"
 
         cat << 'BLOCK'
 ## Contract Notes
 
 Platform support for structured contract fields: unsupported natively; contract metadata is preserved in source agent files.
-
-## Tech Stack
-
-| Category | Technology |
-|----------|------------|
-| Language | Python 3.11+ |
-| Framework | Django 4.2+ |
-| Package Manager | Poetry (NOT pip/requirements.txt) |
-| Package Config | pyproject.toml (NOT setup.py) |
-| Linting | Ruff (NOT Black or Flake8) |
-| Testing | pytest |
-| Frontend | React 18+ with TypeScript |
-| Build | Vite |
-| Components | shadcn/ui |
-| CSS | Tailwind CSS |
 
 ---
 BLOCK

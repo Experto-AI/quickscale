@@ -57,13 +57,28 @@ def test_build_ir_contains_required_sections() -> None:
     for key in (
         "claude_code",
         "gemini_cli",
-        "gemini_antigravity",
         "github_copilot",
-        "copilot_cli",
         "codex_cli",
-        "opencode",
     ):
         assert set(platforms[key]) == {"enabled", "support_mode", "experimental"}
+
+
+def test_build_ir_uses_schema_version_from_config() -> None:
+    """IR schema version should be sourced from .agent/config.yaml"""
+    ir_path = _build_ir()
+    data = json.loads(ir_path.read_text(encoding="utf-8"))
+
+    config_version = ""
+    for line in (
+        (REPO_ROOT / ".agent/config.yaml").read_text(encoding="utf-8").splitlines()
+    ):
+        stripped = line.strip()
+        if stripped.startswith("schema_version:"):
+            config_version = stripped.split(":", maxsplit=1)[1].strip().strip('"')
+            break
+
+    assert config_version
+    assert data["schema_version"] == config_version
 
 
 def test_claude_output_preserves_contract_metadata(tmp_path: Path) -> None:
@@ -108,9 +123,9 @@ def test_copilot_release_prompt_uses_release_version_input(tmp_path: Path) -> No
     assert "Target: ${input:releaseVersion}" in content
     assert "./scripts/test_agentic_flow.sh" in content
 
-    chatmode = output_root / ".github/chatmodes/release-manager.chatmode.md"
-    assert chatmode.exists()
-    assert "whenToUse:" in chatmode.read_text(encoding="utf-8")
+    agent = output_root / ".github/agents/release-manager.agent.md"
+    assert agent.exists()
+    assert "whenToUse:" in agent.read_text(encoding="utf-8")
 
 
 def test_gemini_commands_use_prompt_field(tmp_path: Path) -> None:
@@ -139,23 +154,24 @@ def test_gemini_commands_use_prompt_field(tmp_path: Path) -> None:
     assert agent_file.exists()
 
 
-def test_gemini_antigravity_outputs_profile_and_commands(tmp_path: Path) -> None:
-    """Gemini antigravity adapter should produce profile and command files"""
+def test_copilot_removes_legacy_chatmode_outputs(tmp_path: Path) -> None:
+    """Copilot adapter should clean stale chatmode files during migration"""
     ir_path = _build_ir()
-    output_root = tmp_path / "gemini-antigravity-out"
+    output_root = tmp_path / "copilot-out"
+    legacy_dir = output_root / ".github/chatmodes"
+    legacy_dir.mkdir(parents=True)
+    (legacy_dir / "legacy.chatmode.md").write_text("legacy", encoding="utf-8")
 
     _run_adapter(
-        ".agent/adapters/gemini-antigravity-adapter.sh",
+        ".agent/adapters/copilot-adapter.sh",
         {
             "IR_FILE": str(ir_path),
             "OUTPUT_ROOT": str(output_root),
         },
     )
 
-    profile = output_root / ".gemini/antigravity/ANTIGRAVITY.md"
-    command = output_root / ".gemini/antigravity/commands/implement-task.md"
-    settings = output_root / ".gemini/antigravity/settings.json"
+    assert not (legacy_dir / "legacy.chatmode.md").exists()
+    assert not legacy_dir.exists()
 
-    assert profile.exists()
-    assert command.exists()
-    assert settings.exists()
+    agent = output_root / ".github/agents/release-manager.agent.md"
+    assert agent.exists()

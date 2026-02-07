@@ -400,11 +400,8 @@ capability_file_for_platform() {
     case "$platform_key" in
         claude_code) printf '%s\n' "$AGENT_DIR/adapters/capabilities/claude_code.yaml" ;;
         gemini_cli) printf '%s\n' "$AGENT_DIR/adapters/capabilities/gemini_cli.yaml" ;;
-        gemini_antigravity) printf '%s\n' "$AGENT_DIR/adapters/capabilities/gemini_antigravity.yaml" ;;
         github_copilot) printf '%s\n' "$AGENT_DIR/adapters/capabilities/copilot_vscode.yaml" ;;
-        copilot_cli) printf '%s\n' "$AGENT_DIR/adapters/capabilities/copilot_cli.yaml" ;;
         codex_cli) printf '%s\n' "$AGENT_DIR/adapters/capabilities/codex_cli.yaml" ;;
-        opencode) printf '%s\n' "$AGENT_DIR/adapters/capabilities/opencode.yaml" ;;
         *) return 1 ;;
     esac
 }

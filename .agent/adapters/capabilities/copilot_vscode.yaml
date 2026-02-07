@@ -12,6 +12,6 @@ supports:
     outputs: false
     success_when: false
   prompts: prompt_md
-  agents: chat_mode_md
+  agents: agent_md
   handoffs: true
   instructions: instructions_md

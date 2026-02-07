@@ -47,7 +47,6 @@
 | `report-generator` | Generates comprehensive review reports | Subagent |
 | `scope-validator` | Validates changes against task scope, detects scope creep | Subagent |
 | `test-reviewer` | Validates test quality, isolation, and coverage | Subagent |
-
 ## Key Principles
 
 ### Scope Discipline
@@ -67,17 +66,6 @@
 - Test isolation mandatory
 - Coverage >= 90% overall, >= 80% per file
 
-## Validation
-
-```bash
-./scripts/lint_agentic_flow.sh
-./scripts/test_agentic_flow.sh
-```
-
-## Contract Notes
-
-Platform support for structured contract fields: partial (`mode` native, other fields preserved as markdown sections)
-
 ## Tech Stack
 
 | Category | Technology |
@@ -92,6 +80,16 @@ Platform support for structured contract fields: partial (`mode` native, other f
 | Build | Vite |
 | Components | shadcn/ui |
 | CSS | Tailwind CSS |
+## Validation
+
+```bash
+./scripts/lint_agentic_flow.sh
+./scripts/test_agentic_flow.sh
+```
+
+## Contract Notes
+
+Platform support for structured contract fields: partial (`mode` native, other fields preserved as markdown sections)
 
 ---
-*Generated from .agent/ on 2026-02-07T10:48:22+01:00*
+*Generated from .agent/ on 2026-02-07T12:58:05+01:00*

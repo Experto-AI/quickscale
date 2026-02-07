@@ -6,9 +6,8 @@ This directory contains the unified AI agent architecture and transpiler pipelin
 
 ## Platform Policy (Verified 2026-02-07)
 
-- **Verified/Native**: Claude Code, Gemini CLI, GitHub Copilot (VS Code), Codex CLI
-- **Experimental/Emulated**: Gemini Antigravity, Copilot CLI, OpenCode
-- Experimental platforms are disabled by default in `.agent/config.yaml`.
+- **Active/Core**: Claude Code, Gemini CLI, GitHub Copilot (VS Code), Codex CLI
+- Experimental adapters are archived under `.agent/archive/experimental/` and are not part of active generation.
 
 ## Directory Structure
 
@@ -21,7 +20,9 @@ This directory contains the unified AI agent architecture and transpiler pipelin
 ├── skills/                    # Reusable capability modules
 ├── workflows/                 # Explicit execution workflows
 ├── contexts/                  # Shared context definitions
-└── adapters/                  # Platform transpilers
+├── templates/                 # Profile templates (headers + standards blocks)
+├── adapters/                  # Active platform transpilers
+└── archive/                   # Non-active archived adapter implementations
 ```
 
 ## Quick Commands
@@ -46,19 +47,15 @@ chmod +x .agent/adapters/*.sh
 This creates:
 - `CLAUDE.md` + `.claude/` for Claude Code
 - `GEMINI.md` + `.gemini/` for Gemini CLI
-- `.github/copilot-instructions.md` + `.github/prompts/` + `.github/chatmodes/` for Copilot VS Code
+- `.github/copilot-instructions.md` + `.github/prompts/` + `.github/agents/` for Copilot VS Code
 - `AGENTS.md` + `.codex/` for Codex CLI
-
-Optional (when explicitly enabled):
-- `.gemini/antigravity/` for Gemini Antigravity
-- `.github/copilot-cli/` for Copilot CLI
-- `.opencode.json` + `.opencode/` for OpenCode
 
 Generation is config-driven via `.agent/config.yaml` (`adapters.platforms.*`, per-platform `support_mode`, and `adapters.output_directory`).
 
 ## Project-Agnostic Profiles
 
 - Header templates are resolved by profile: `.agent/templates/<profile>/`.
+- Standards blocks are template-driven: `*_standards.md` in each profile.
 - Configure with `project.profile` in `.agent/config.yaml`.
 - Fallback order: selected profile -> `quickscale` -> `default`.
 

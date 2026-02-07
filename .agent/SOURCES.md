@@ -10,16 +10,14 @@ Verification date: **2026-02-07**.
 |----------|----------------------|---------------|------|
 | Claude Code | https://docs.anthropic.com/en/docs/claude-code/sub-agents and https://docs.anthropic.com/en/docs/claude-code/slash-commands | `.claude/commands/`, `.claude/agents/`, `CLAUDE.md` | verified |
 | Gemini CLI | https://geminicli.com/docs/ and https://geminicli.com/docs/cli/configuration | `.gemini/commands/*.toml` (`prompt` field), `.gemini/settings.json`, `.gemini/agents/` | verified |
-| GitHub Copilot (VS Code) | https://code.visualstudio.com/docs/copilot/copilot-customization#_prompt-files-experimental and https://code.visualstudio.com/docs/copilot/chat/chat-modes | `.github/prompts/*.prompt.md`, `.github/chatmodes/*.chatmode.md`, `.github/instructions/` | verified |
+| GitHub Copilot (VS Code) | https://code.visualstudio.com/docs/copilot/copilot-customization and https://code.visualstudio.com/docs/copilot/chat/chat-agent-mode | `.github/prompts/*.prompt.md`, `.github/agents/*.agent.md`, `.github/instructions/` | verified |
 | Codex CLI | https://developers.openai.com/codex/agents.md and https://developers.openai.com/codex/config | `AGENTS.md`, `.codex/config.toml` | verified |
-| Gemini Antigravity | Gemini ecosystem compatibility surface (no stable public spec) | `.gemini/antigravity/` | experimental |
-| Copilot CLI | https://docs.github.com/en/copilot (partial, evolving CLI behavior) | `.github/copilot-cli/` | experimental |
-| OpenCode | https://opencode.ai/docs/config | `.opencode.json`, `.opencode/` | experimental |
 
 ## Implementation Notes
 
 - Adapters consume the normalized IR at `.agent/.build/ir.json`.
 - Capability declarations in `.agent/adapters/capabilities/*.yaml` are treated as adapter contracts.
+- Experimental adapters/capabilities are archived under `.agent/archive/experimental/` and excluded from active generation.
 - Strict mode (`workflows.stage_validation: strict`) fails generation on capability mismatches.
 - Profile-based template selection is controlled by `project.profile` in `.agent/config.yaml`.
 

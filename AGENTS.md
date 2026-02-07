@@ -7,7 +7,6 @@
 
 QuickScale is a Django project generator that creates production-ready SaaS applications.
 This file provides instructions for AI coding agents working on this codebase.
-
 ## Context Files
 
 Read these before any development task:
@@ -59,7 +58,6 @@ Read these before any development task:
 - Implement ONLY items in task checklist
 - No "nice-to-have" features or opportunistic refactoring
 - When in doubt, ask - do not assume
-
 ## Agents
 
 Available agent definitions for complex workflows:
@@ -167,4 +165,4 @@ Details: `.agent/workflows/review-code.md`
 Codex supports rich markdown instructions. Input/output/success contracts are retained in source agent files and surfaced through workflow descriptions.
 
 ---
-*Generated from .agent/ on 2026-02-07T10:48:25+01:00*
+*Generated from .agent/ on 2026-02-07T12:58:06+01:00*

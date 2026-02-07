@@ -80,11 +80,11 @@ main() {
 
     run_adapter "Claude Code" "claude_code" "claude-adapter.sh"
     run_adapter "Gemini CLI" "gemini_cli" "gemini-adapter.sh"
-    run_adapter "Gemini Antigravity" "gemini_antigravity" "gemini-antigravity-adapter.sh"
     run_adapter "GitHub Copilot (VS Code)" "github_copilot" "copilot-adapter.sh"
-    run_adapter "GitHub Copilot CLI" "copilot_cli" "copilot-cli-adapter.sh"
     run_adapter "Codex CLI" "codex_cli" "codex-adapter.sh"
-    run_adapter "OpenCode" "opencode" "opencode-adapter.sh"
+    cleanup_manifest_platform "gemini_antigravity"
+    cleanup_manifest_platform "copilot_cli"
+    cleanup_manifest_platform "opencode"
 
     echo ""
     echo "================================================"

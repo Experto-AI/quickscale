@@ -48,18 +48,6 @@ adapters:
       enabled: true
       support_mode: native
       experimental: false
-    gemini_antigravity:
-      enabled: false
-      support_mode: emulated
-      experimental: true
-    copilot_cli:
-      enabled: false
-      support_mode: emulated
-      experimental: true
-    opencode:
-      enabled: false
-      support_mode: emulated
-      experimental: true
 
 # Security settings
 security:

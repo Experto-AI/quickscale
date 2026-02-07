@@ -34,8 +34,8 @@ tools:
 
 ## Delegation
 
-- Delegate to chat mode `code-reviewer` when needed
-- Delegate to chat mode `scope-validator` when needed
+- Delegate to agent `code-reviewer` when needed
+- Delegate to agent `scope-validator` when needed
 
 ## Contract Notes
 

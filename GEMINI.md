@@ -58,7 +58,6 @@ Subagents handle focused sub-tasks delegated by agents.
 | `report-generator` | Generates comprehensive review reports | `@.agent/subagents/report-generator.md` |
 | `scope-validator` | Validates changes against task scope, detects scope creep | `@.agent/subagents/scope-validator.md` |
 | `test-reviewer` | Validates test quality, isolation, and coverage | `@.agent/subagents/test-reviewer.md` |
-
 ## Key Principles
 
 ### Scope Discipline (CRITICAL)
@@ -76,17 +75,6 @@ Subagents handle focused sub-tasks delegated by agents.
 - pytest with pytest-django - NO global mocking (`sys.modules` modifications prohibited)
 - Test isolation mandatory · Coverage >= 90% overall, >= 80% per file
 
-## Validation
-
-```bash
-./scripts/lint_agentic_flow.sh
-./scripts/test_agentic_flow.sh
-```
-
-## Contract Notes
-
-Platform support for structured contract fields: unsupported natively; contract metadata is preserved in source agent files.
-
 ## Tech Stack
 
 | Category | Technology |
@@ -101,6 +89,16 @@ Platform support for structured contract fields: unsupported natively; contract 
 | Build | Vite |
 | Components | shadcn/ui |
 | CSS | Tailwind CSS |
+## Validation
+
+```bash
+./scripts/lint_agentic_flow.sh
+./scripts/test_agentic_flow.sh
+```
+
+## Contract Notes
+
+Platform support for structured contract fields: unsupported natively; contract metadata is preserved in source agent files.
 
 ---
-*Generated from .agent/ on 2026-02-07T10:48:23+01:00*
+*Generated from .agent/ on 2026-02-07T12:58:05+01:00*

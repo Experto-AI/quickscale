@@ -32,12 +32,12 @@ tools:
 
 ## Delegation
 
-- Delegate to chat mode `architecture-checker` when needed
-- Delegate to chat mode `code-quality-reviewer` when needed
-- Delegate to chat mode `doc-reviewer` when needed
-- Delegate to chat mode `report-generator` when needed
-- Delegate to chat mode `scope-validator` when needed
-- Delegate to chat mode `test-reviewer` when needed
+- Delegate to agent `architecture-checker` when needed
+- Delegate to agent `code-quality-reviewer` when needed
+- Delegate to agent `doc-reviewer` when needed
+- Delegate to agent `report-generator` when needed
+- Delegate to agent `scope-validator` when needed
+- Delegate to agent `test-reviewer` when needed
 
 ## Contract Notes
 

@@ -7,9 +7,9 @@ supports:
     invoke_agent: reference
     invoke_workflow: reference
   contract_fields:
-    mode: true
-    inputs: true
-    outputs: true
-    success_when: true
+    mode: false
+    inputs: false
+    outputs: false
+    success_when: false
   project_doc: AGENTS.md
   config: toml

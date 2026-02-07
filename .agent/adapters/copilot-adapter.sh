@@ -18,10 +18,10 @@ OUTPUT_ROOT="${OUTPUT_ROOT:-$(resolve_output_root)}"
 GITHUB_DIR="$OUTPUT_ROOT/.github"
 COPILOT_MD="$GITHUB_DIR/copilot-instructions.md"
 PROMPTS_DIR="$GITHUB_DIR/prompts"
-CHATMODES_DIR="$GITHUB_DIR/chatmodes"
+AGENTS_DIR="$GITHUB_DIR/agents"
 INSTRUCTIONS_DIR="$GITHUB_DIR/instructions"
 
-mkdir -p "$PROMPTS_DIR" "$CHATMODES_DIR" "$INSTRUCTIONS_DIR"
+mkdir -p "$PROMPTS_DIR" "$AGENTS_DIR" "$INSTRUCTIONS_DIR"
 
 lint_cmd="$(resolve_lint_command)"
 test_cmd="$(resolve_test_command)"
@@ -49,35 +49,8 @@ generate_copilot_instructions() {
     cat "$(template_path "copilot_header.md")" > "$COPILOT_MD"
 
     {
+        cat "$(template_path "copilot_standards.md")"
         cat << 'BLOCK'
-
-## Code Standards
-
-### Python Style
-- Python 3.11+
-- Type hints on all public APIs
-- Google-style docstrings (single-line preferred, no ending punctuation)
-- F-strings for formatting (no `.format()` or `%`)
-- Ruff for formatting and linting (NOT Black or Flake8)
-
-### Package Management
-- Use Poetry (NOT pip or requirements.txt)
-- Dependencies in pyproject.toml (NOT setup.py)
-
-### Testing
-- pytest with pytest-django
-- NO global mocking (no sys.modules modifications)
-- Test isolation mandatory
-- Coverage minimum: 90% overall, 80% per file
-
-## SOLID Principles
-
-1. **Single Responsibility**: One class, one reason to change
-2. **Open/Closed**: Open for extension, closed for modification
-3. **Liskov**: Subtypes substitutable for base types
-4. **Interface Segregation**: Small, focused interfaces
-5. **Dependency Inversion**: Depend on abstractions
-
 ## Available Prompts
 
 Use these in Copilot Chat with `#` or via the prompt picker:
@@ -89,11 +62,11 @@ BLOCK
 
         cat << 'BLOCK'
 
-## Available Chat Modes
+## Available Agents
 
-Use in Copilot Chat by selecting the mode:
+Use in Copilot Chat by selecting the agent:
 
-| Mode | Description |
+| Agent | Description |
 |------|-------------|
 BLOCK
         jq -r '(.agents + .subagents)[] | "| `\(.name)` | \(.description) |"' "$IR_PATH"
@@ -114,7 +87,7 @@ BLOCK
         cat << 'BLOCK'
 ## Contract Notes
 
-Copilot instructions support textual contracts. Structured contract fields are preserved in generated `.chatmode.md` files.
+Copilot instructions support textual contracts. Structured contract fields are preserved in generated `.agent.md` files.
 
 ---
 BLOCK
@@ -167,11 +140,11 @@ generate_prompts() {
     done < <(jq -r '.workflows[] | [.name, .description, .path] | @tsv' "$IR_PATH")
 }
 
-generate_chatmodes() {
+generate_agents() {
     while IFS=$'\t' read -r name description path; do
         [[ -n "$name" ]] || continue
         local source_file="$ROOT_DIR/$path"
-        local out_file="$CHATMODES_DIR/${name}.chatmode.md"
+        local out_file="$AGENTS_DIR/${name}.agent.md"
 
         delegates=$( {
             get_frontmatter_list "$source_file" "delegates_to"
@@ -228,7 +201,7 @@ generate_chatmodes() {
                 printf -- '## Delegation\n\n'
                 while IFS= read -r delegate; do
                     [[ -n "$delegate" ]] || continue
-                    printf -- '- Delegate to chat mode `%s` when needed\n' "$delegate"
+                    printf -- '- Delegate to agent `%s` when needed\n' "$delegate"
                 done <<< "$delegates"
                 printf '\n'
             fi
@@ -240,6 +213,19 @@ generate_chatmodes() {
 
         track_generated "$out_file"
     done < <(jq -r '(.agents + .subagents)[] | [.name, .description, .path] | @tsv' "$IR_PATH")
+}
+
+cleanup_legacy_chatmodes() {
+    local legacy_dir="$GITHUB_DIR/chatmodes"
+    [[ -d "$legacy_dir" ]] || return 0
+
+    local stale_file
+    for stale_file in "$legacy_dir"/*.chatmode.md; do
+        [[ -e "$stale_file" ]] || continue
+        rm -f "$stale_file"
+    done
+
+    rmdir "$legacy_dir" 2>/dev/null || true
 }
 
 generate_instructions() {
@@ -302,12 +288,13 @@ BLOCK
 main() {
     info "Copilot VS Code adapter: generating configuration"
     assert_capability_value "github_copilot" "supports.prompts" "prompt_md"
-    assert_capability_value "github_copilot" "supports.agents" "chat_mode_md"
+    assert_capability_value "github_copilot" "supports.agents" "agent_md"
 
     generate_copilot_instructions
     generate_prompts
-    generate_chatmodes
+    generate_agents
     generate_instructions
+    cleanup_legacy_chatmodes
 
     cleanup_with_manifest "github_copilot" "${generated_files[@]}"
 
