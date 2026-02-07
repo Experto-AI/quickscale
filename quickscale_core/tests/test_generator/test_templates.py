@@ -145,6 +145,23 @@ class TestTemplateRendering:
         assert output is not None
         assert "testproject" in output
 
+    def test_react_urls_include_spa_catch_all_in_production(
+        self, jinja_env: Environment, test_context: dict[str, str]
+    ) -> None:
+        """React theme should include SPA catch-all outside DEBUG-only block."""
+        template = jinja_env.get_template("project_name/urls.py.j2")
+        output = template.render({**test_context, "theme": "showcase_react"})
+
+        assert (
+            're_path(r".*", TemplateView.as_view(template_name="index.html"))' in output
+        )
+
+        # The comment should be top-level (not indented under if settings.DEBUG).
+        react_catchall_comment = next(
+            line for line in output.splitlines() if "React SPA catch-all" in line
+        )
+        assert react_catchall_comment.startswith("#")
+
     def test_wsgi_renders(
         self, jinja_env: Environment, test_context: dict[str, str]
     ) -> None:
