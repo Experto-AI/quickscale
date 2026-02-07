@@ -25,6 +25,10 @@ wheels/
 *.egg
 MANIFEST
 
+# Agent adapter shared libraries must be tracked
+!.agent/adapters/lib/
+!.agent/adapters/lib/*.sh
+
 # Poetry
 # Only root poetry.lock is tracked - individual packages use centralized deps
 quickscale_core/poetry.lock

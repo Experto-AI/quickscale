@@ -1,0 +1,14 @@
+platform: github_copilot
+supports:
+  directives:
+    invoke_skill: reference
+    invoke_agent: reference
+    invoke_workflow: reference
+  contract_fields:
+    mode: true
+    inputs: false
+    outputs: false
+    success_when: false
+  prompts: prompt_md
+  agents: agent_md
+  instructions: instructions_md

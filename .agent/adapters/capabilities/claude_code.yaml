@@ -1,0 +1,13 @@
+platform: claude_code
+supports:
+  directives:
+    invoke_skill: reference
+    invoke_agent: reference
+    invoke_workflow: reference
+  contract_fields:
+    mode: true
+    inputs: false
+    outputs: false
+    success_when: false
+  commands: markdown_skills
+  agents: markdown_agents

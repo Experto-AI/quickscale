@@ -1,5 +1,7 @@
 ---
 description: "Implements roadmap tasks with staged workflow"
+mode: agent
+agentMode: "adaptive"
 tools:
   - changes
   - codebase
@@ -13,25 +15,58 @@ tools:
   - terminalLastCommand
   - usages
 agents:
-  - .github/agents/scope-validator.agent.md
   - .github/agents/code-reviewer.agent.md
+  - .github/agents/scope-validator.agent.md
 ---
 
 ## Skills
 
-- Read `.agent/skills/code-principles/SKILL.md` for code-principles guidance
-- Read `.agent/skills/testing-standards/SKILL.md` for testing-standards guidance
-- Read `.agent/skills/architecture-guidelines/SKILL.md` for architecture-guidelines guidance
-- Read `.agent/skills/task-focus/SKILL.md` for task-focus guidance
-- Read `.agent/skills/documentation-standards/SKILL.md` for documentation-standards guidance
-- Read `.agent/skills/development-workflow/SKILL.md` for development-workflow guidance
-- Read `.agent/skills/git-operations/SKILL.md` for git-operations guidance
-- Read `.agent/skills/roadmap-navigation/SKILL.md` for roadmap-navigation guidance
+- Read `.agent/skills/architecture-guidelines/SKILL.md`
+- Read `.agent/skills/code-principles/SKILL.md`
+- Read `.agent/skills/development-workflow/SKILL.md`
+- Read `.agent/skills/documentation-standards/SKILL.md`
+- Read `.agent/skills/git-operations/SKILL.md`
+- Read `.agent/skills/roadmap-navigation/SKILL.md`
+- Read `.agent/skills/task-focus/SKILL.md`
+- Read `.agent/skills/testing-standards/SKILL.md`
 
 ## Workflows
 
 - Follow `.agent/workflows/implement-task.md`
 
+## Contract Notes
+
+Platform support for structured contract fields: textual
+When unsupported natively, this file preserves source metadata via the Contract Metadata section.
+
+## Contract Metadata
+
+```yaml
+mode: adaptive
+inputs:
+  - name: task_id
+    type: string
+    required: false
+    priority: 1
+    auto_detect:
+      method: scan_roadmap
+      file: docs/technical/roadmap.md
+      criteria: first_uncompleted_task
+outputs:
+  - name: implementation_files
+    type: file_list
+  - name: test_files
+    type: file_list
+  - name: roadmap_updated
+    type: boolean
+success_when:
+  - all_checklist_items_complete: true
+  - validation:
+      - command: ./scripts/lint.sh
+        expect: exit_code_0
+      - command: ./scripts/test_unit.sh
+        expect: exit_code_0
+```
 
 
 # Task Implementer Agent

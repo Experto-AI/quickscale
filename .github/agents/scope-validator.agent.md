@@ -1,19 +1,55 @@
 ---
 description: "Validates changes against task scope, detects scope creep"
+mode: agent
 tools:
   - changes
   - codebase
+  - editFiles
+  - fetch
   - findFiles
+  - githubRepo
   - problems
+  - runInTerminal
   - search
+  - terminalLastCommand
   - usages
 ---
 
 ## Skills
 
-- Read `.agent/skills/task-focus/SKILL.md` for task-focus guidance
-- Read `.agent/skills/roadmap-navigation/SKILL.md` for roadmap-navigation guidance
+- Read `.agent/skills/roadmap-navigation/SKILL.md`
+- Read `.agent/skills/task-focus/SKILL.md`
 
+## Contract Notes
+
+Platform support for structured contract fields: textual
+When unsupported natively, this file preserves source metadata via the Contract Metadata section.
+
+## Contract Metadata
+
+```yaml
+inputs:
+  - name: task_id
+    type: string
+    required: true
+  - name: changed_files
+    type: file_list
+    required: true
+  - name: roadmap_checklist
+    type: string_list
+    required: false
+    auto_detect:
+      method: parse_roadmap
+      task: "{task_id}"
+outputs:
+  - name: scope_status
+    type: enum
+    values: [IN_SCOPE, OUT_OF_SCOPE, MIXED]
+  - name: violations
+    type: violation_list
+  - name: recommendations
+    type: string_list
+```
 
 
 # Scope Validator Subagent

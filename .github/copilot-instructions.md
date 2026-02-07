@@ -13,7 +13,7 @@ QuickScale is a Django project generator that creates production-ready SaaS appl
 - Python 3.11+
 - Type hints on all public APIs
 - Google-style docstrings (single-line preferred, no ending punctuation)
-- F-strings for formatting (no .format() or %)
+- F-strings for formatting (no `.format()` or `%`)
 - Ruff for formatting and linting (NOT Black or Flake8)
 
 ### Package Management
@@ -33,63 +33,6 @@ QuickScale is a Django project generator that creates production-ready SaaS appl
 3. **Liskov**: Subtypes substitutable for base types
 4. **Interface Segregation**: Small, focused interfaces
 5. **Dependency Inversion**: Depend on abstractions
-
-## Code Patterns
-
-### DO
-```python
-# Type hints
-def process_data(data: dict) -> Result:
-    """Process input data and return result"""
-    ...
-
-# Explicit error handling
-try:
-    result = operation()
-except SpecificError as e:
-    raise ProcessingError(f"Operation failed: {e}")
-
-# Dependency injection
-class Service:
-    def __init__(self, repository: Repository):
-        self._repository = repository
-```
-
-### DON'T
-```python
-# No bare except
-try:
-    ...
-except:  # ❌ Never
-    pass
-
-# No global mocking in tests
-sys.modules['module'] = mock  # ❌ Never
-
-# No requirements.txt
-# requirements.txt  # ❌ Use pyproject.toml
-```
-
-## Architecture
-
-### Layers
-1. **Presentation**: Views, templates, API endpoints
-2. **Application**: Services, commands, queries
-3. **Domain**: Models, business logic
-4. **Infrastructure**: Database, external services
-
-### Rules
-- Views must not access database directly (use services)
-- Models must not call external services
-- Infrastructure must not depend on presentation
-
-## Frontend Stack
-
-- React 18+ with TypeScript
-- Vite for build
-- shadcn/ui for components
-- Tailwind CSS for styling
-- TanStack Query for server state
 
 ## Available Prompts
 
@@ -127,16 +70,16 @@ Detailed guidance available in `.agent/skills/`:
 | `roadmap-navigation` | Task detection, checklist parsing, and roadmap operations |
 | `task-focus` | Scope discipline and boundary enforcement |
 | `testing-standards` | Test isolation, mocking, coverage standards |
-
 ## Validation
 
-Always run before completing work:
-
 ```bash
-./scripts/lint.sh      # Ruff format + check + mypy
-./scripts/test_unit.sh # Unit and integration tests
+./scripts/lint.sh
+./scripts/test_unit.sh
 ```
 
+## Contract Notes
+
+Copilot instructions support textual contracts. Structured contract fields are preserved in generated `.agent.md` files.
 
 ---
-*Generated from .agent/ on 2026-02-06T20:21:56+01:00*
+*Generated from .agent/ on 2026-02-07T09:49:28+01:00*

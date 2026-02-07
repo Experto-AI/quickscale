@@ -164,7 +164,7 @@ Django==4.2.0  # ❌ Never create this file
 
 Always use project scripts:
 - `./scripts/lint.sh` — Not `ruff` directly
-- `./scripts/test-all.sh` — Not `pytest` directly
+- `./scripts/test_unit.sh` — Not `pytest` directly
 - `./scripts/install_global.sh` — Not `pip install poetry`
 
 ## Directory Layout
@@ -188,6 +188,6 @@ quickscale/
 Before any PR or commit:
 
 1. `./scripts/lint.sh` must pass
-2. `./scripts/test-all.sh` must pass
+2. `./scripts/test_unit.sh` must pass
 3. Coverage ≥ 90% overall, ≥ 80% per file
 4. No scope violations (as defined in decisions.md)

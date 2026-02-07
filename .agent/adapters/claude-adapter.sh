@@ -1,16 +1,5 @@
 #!/usr/bin/env bash
-# Generate Claude Code configuration from .agent/ source files
-#
-# Creates:
-#   - CLAUDE.md            — project instructions with @import syntax
-#   - .claude/commands/    — slash commands (from .agent/workflows/)
-#   - .claude/agents/      — agents & subagents (from .agent/agents/ + .agent/subagents/)
-#
-# NOTE: As of Jan 24, 2026, Claude Code merged slash commands into skills.
-# The .claude/commands/ files generated here are automatically treated as skills.
-#
-# Preserves: .claude/settings.local.json, .mcp.json
-# Does NOT modify any .agent/ source files.
+# Generate Claude Code configuration from normalized .agent IR.
 
 set -euo pipefail
 
@@ -18,117 +7,126 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 AGENT_DIR="$(dirname "$SCRIPT_DIR")"
 ROOT_DIR="$(dirname "$AGENT_DIR")"
 
-# Output paths
-CLAUDE_MD="$ROOT_DIR/CLAUDE.md"
-CLAUDE_DIR="$ROOT_DIR/.claude"
+# shellcheck disable=SC1091
+source "$SCRIPT_DIR/lib/common.sh"
+# shellcheck disable=SC1091
+source "$SCRIPT_DIR/lib/render_common.sh"
+
+IR_PATH="${IR_FILE:-$IR_FILE_DEFAULT}"
+OUTPUT_ROOT="${OUTPUT_ROOT:-$(resolve_output_root)}"
+
+CLAUDE_MD="$OUTPUT_ROOT/CLAUDE.md"
+CLAUDE_DIR="$OUTPUT_ROOT/.claude"
 COMMANDS_DIR="$CLAUDE_DIR/commands"
 AGENTS_DIR="$CLAUDE_DIR/agents"
 
-# Create output directories
 mkdir -p "$COMMANDS_DIR" "$AGENTS_DIR"
 
-# ─── Helpers ───────────────────────────────────────────────────────────────────
+lint_cmd="$(resolve_lint_command)"
+test_cmd="$(resolve_test_command)"
 
-# Extract a scalar YAML frontmatter value.
-# Usage: get_frontmatter <file> <key>
-get_frontmatter() {
-    local file="$1" key="$2"
-    [[ -f "$file" ]] || return 0
-    grep "^${key}:" "$file" 2>/dev/null \
-        | head -1 \
-        | sed "s/^${key}:[[:space:]]*//" \
-        | tr -d '"' \
-        | sed 's/^[[:space:]]*//;s/[[:space:]]*$//'
+declare -a generated_files=()
+track_generated() {
+    generated_files+=("$(abs_to_rel "$1")")
 }
 
-# Extract a YAML list field from frontmatter (one item per line).
-# Usage: get_frontmatter_list <file> <key>
-get_frontmatter_list() {
-    local file="$1" key="$2"
-    [[ -f "$file" ]] || return 0
-    sed -n '/^---$/,/^---$/p' "$file" \
-        | sed -n "/^${key}:$/,/^[^ ]/p" \
-        | grep '^  - ' \
-        | sed 's/^  - //' \
-        | tr -d '"'
-}
+emit_resource_refs() {
+    local source_file="$1"
 
-# Extract body content after YAML frontmatter (everything after closing ---).
-# Usage: get_body <file>
-get_body() {
-    local file="$1"
-    [[ -f "$file" ]] || return 0
-    awk 'BEGIN{n=0} /^---$/{n++; next} n>=2{print}' "$file"
-}
+    local refs workflows skills delegates
+    workflows=$( {
+        get_frontmatter_list "$source_file" "workflows"
+        get_directives "$source_file" "workflow"
+    } | awk 'NF' | sort -u )
+    skills=$( {
+        get_frontmatter_list "$source_file" "skills"
+        get_directives "$source_file" "skill"
+    } | awk 'NF' | sort -u )
+    delegates=$( {
+        get_frontmatter_list "$source_file" "delegates_to"
+        get_directives "$source_file" "agent"
+    } | awk 'NF' | sort -u )
 
-# ─── CLAUDE.md ─────────────────────────────────────────────────────────────────
+    if [[ -z "$workflows" && -z "$skills" && -z "$delegates" ]]; then
+        return 0
+    fi
+
+    cat << 'BLOCK'
+## Available Resources
+
+BLOCK
+
+    if [[ -n "$workflows" ]]; then
+        cat << 'BLOCK'
+### Workflows
+
+BLOCK
+        while IFS= read -r refs; do
+            [[ -n "$refs" ]] || continue
+            printf -- '- Follow `/%s` workflow\n' "$refs"
+        done <<< "$workflows"
+        echo ""
+    fi
+
+    if [[ -n "$skills" ]]; then
+        cat << 'BLOCK'
+### Skills
+
+BLOCK
+        while IFS= read -r refs; do
+            [[ -n "$refs" ]] || continue
+            printf -- '- Read `.agent/skills/%s/SKILL.md`\n' "$refs"
+        done <<< "$skills"
+        echo ""
+    fi
+
+    if [[ -n "$delegates" ]]; then
+        cat << 'BLOCK'
+### Delegation
+
+BLOCK
+        while IFS= read -r refs; do
+            [[ -n "$refs" ]] || continue
+            printf -- '- Delegate to `%s` when needed\n' "$refs"
+        done <<< "$delegates"
+        echo ""
+    fi
+}
 
 generate_claude_md() {
-    local workflows_table="" skills_table="" agents_table=""
+    cat "$AGENT_DIR/templates/quickscale/claude_header.md" > "$CLAUDE_MD"
 
-    # Build quick-commands table from workflows
-    for wf_file in "$AGENT_DIR"/workflows/*.md; do
-        [[ -f "$wf_file" ]] || continue
-        local wf_name description
-        wf_name=$(basename "$wf_file" .md)
-        description=$(get_frontmatter "$wf_file" "description")
-        workflows_table+="| \`/${wf_name}\` | ${description} |"$'\n'
-    done
-
-    # Build skills table
-    for skill_dir in "$AGENT_DIR"/skills/*/; do
-        [[ -f "${skill_dir}SKILL.md" ]] || continue
-        local skill_name description
-        skill_name=$(basename "$skill_dir")
-        description=$(get_frontmatter "${skill_dir}SKILL.md" "description")
-        skills_table+="| \`${skill_name}\` | ${description} | \`.agent/skills/${skill_name}/SKILL.md\` |"$'\n'
-    done
-
-    # Build agents table (agents + subagents)
-    for agent_file in "$AGENT_DIR"/agents/*.md; do
-        [[ -f "$agent_file" ]] || continue
-        local name description
-        name=$(basename "$agent_file" .md)
-        description=$(get_frontmatter "$agent_file" "description")
-        agents_table+="| \`${name}\` | ${description} | Agent |"$'\n'
-    done
-    for sa_file in "$AGENT_DIR"/subagents/*.md; do
-        [[ -f "$sa_file" ]] || continue
-        local name description
-        name=$(basename "$sa_file" .md)
-        description=$(get_frontmatter "$sa_file" "description")
-        agents_table+="| \`${name}\` | ${description} | Subagent |"$'\n'
-    done
-
-    cat > "$CLAUDE_MD" << HEADER
-# QuickScale Development Agent
-
-> **Auto-generated from \`.agent/\`** — Do not edit directly.
-> Regenerate with: \`.agent/adapters/generate-all.sh\`
-
-## Project Conventions
-
-@.agent/contexts/project-conventions.md
-
-## Authoritative Files
-
-@.agent/contexts/authoritative-files.md
+    {
+        cat << 'BLOCK'
 
 ## Quick Commands
 
 | Command | Description |
 |---------|-------------|
-${workflows_table}
+BLOCK
+        jq -r '.workflows[] | "| `/\(.name)` | \(.description) |"' "$IR_PATH"
+
+        cat << 'BLOCK'
+
 ## Skills
 
 | Skill | Description | Source |
 |-------|-------------|--------|
-${skills_table}
+BLOCK
+        jq -r '.skills[] | "| `\(.name)` | \(.description) | `.agent/skills/\(.name)/SKILL.md` |"' "$IR_PATH"
+
+        cat << 'BLOCK'
+
 ## Agents
 
 | Agent | Description | Type |
 |-------|-------------|------|
-${agents_table}
+BLOCK
+        jq -r '.agents[] | "| `\(.name)` | \(.description) | Agent |"' "$IR_PATH"
+        jq -r '.subagents[] | "| `\(.name)` | \(.description) | Subagent |"' "$IR_PATH"
+
+        cat << 'BLOCK'
+
 ## Key Principles
 
 ### Scope Discipline
@@ -144,16 +142,17 @@ ${agents_table}
 
 ### Testing
 - pytest with pytest-django
-- No global mocking contamination (\`sys.modules\` modifications prohibited)
+- No global mocking contamination (`sys.modules` modifications prohibited)
 - Test isolation mandatory
-- Coverage ≥ 90% overall, ≥ 80% per file
+- Coverage >= 90% overall, >= 80% per file
 
-### Validation
+BLOCK
+        render_validation_block "$lint_cmd" "$test_cmd"
 
-\`\`\`bash
-./scripts/lint.sh       # Ruff format + check + mypy
-./scripts/test_unit.sh  # Unit and integration tests
-\`\`\`
+        cat << 'BLOCK'
+## Contract Notes
+
+Platform support for structured contract fields: partial (`mode` native, other fields preserved as markdown sections)
 
 ## Tech Stack
 
@@ -171,177 +170,70 @@ ${agents_table}
 | CSS | Tailwind CSS |
 
 ---
-*Generated from .agent/ on $(date -Iseconds)*
-HEADER
-}
+BLOCK
+        printf '*Generated from .agent/ on %s*\n' "$(date -Iseconds)"
+    } >> "$CLAUDE_MD"
 
-# ─── Slash Commands (from .agent/workflows/) ──────────────────────────────────
+    track_generated "$CLAUDE_MD"
+}
 
 generate_commands() {
-    for wf_file in "$AGENT_DIR"/workflows/*.md; do
-        [[ -f "$wf_file" ]] || continue
-
-        local wf_name description command_file steps_summary
-        wf_name=$(basename "$wf_file" .md)
-        description=$(get_frontmatter "$wf_file" "description")
-        command_file="$COMMANDS_DIR/${wf_name}.md"
-
-        # Extract step/stage headings from the workflow body
-        steps_summary=$(get_body "$wf_file" \
-            | grep -E '^## (Step|Stage) ' \
-            | sed 's/^## //' \
-            | nl -ba -s '. ' \
-            | sed 's/^[[:space:]]*//' || true)
-
-        # Fallback: any H2 headings
-        if [[ -z "$steps_summary" ]]; then
-            steps_summary=$(get_body "$wf_file" \
-                | grep -E '^## ' \
-                | head -8 \
-                | nl -ba -s '. ' \
-                | sed 's/^[[:space:]]*//' || true)
-        fi
+    while IFS=$'\t' read -r wf_name wf_desc wf_path; do
+        [[ -n "$wf_name" ]] || continue
+        local_file="$COMMANDS_DIR/${wf_name}.md"
+        steps_summary="$(collect_step_headings "$ROOT_DIR/$wf_path")"
 
         {
-            echo "---"
-            echo "description: ${description}"
-            echo "---"
-            echo ""
-            echo "Follow the ${wf_name} workflow."
-            echo ""
+            printf -- '---\n'
+            printf -- 'description: %s\n' "$wf_desc"
+            printf -- '---\n\n'
+            printf -- 'Follow the %s workflow.\n\n' "$wf_name"
             if [[ -n "$steps_summary" ]]; then
-                echo "## Steps"
-                echo ""
-                echo "$steps_summary"
-                echo ""
+                printf -- '## Steps\n\n%s\n\n' "$steps_summary"
             fi
-            echo "Target: \$ARGUMENTS"
-            echo ""
-            echo "Start by reading the full workflow: \`.agent/workflows/${wf_name}.md\`"
-        } > "$command_file"
-    done
+            printf -- 'Arguments: $ARGUMENTS\n\n'
+            printf -- 'Start by reading the full workflow: `%s`\n' "$wf_path"
+        } > "$local_file"
+
+        track_generated "$local_file"
+    done < <(jq -r '.workflows[] | [.name, .description, .path] | @tsv' "$IR_PATH")
 }
 
-# ─── Agents (from .agent/agents/) ─────────────────────────────────────────────
+generate_agent_files() {
+    while IFS=$'\t' read -r name description path mode; do
+        [[ -n "$name" ]] || continue
+        local source_file="$ROOT_DIR/$path"
+        local out_file="$AGENTS_DIR/${name}.md"
 
-generate_agents() {
-    for agent_file in "$AGENT_DIR"/agents/*.md; do
-        [[ -f "$agent_file" ]] || continue
-
-        local agent_name description body output_file
-        agent_name=$(basename "$agent_file" .md)
-        description=$(get_frontmatter "$agent_file" "description")
-        body=$(get_body "$agent_file")
-        output_file="$AGENTS_DIR/${agent_name}.md"
-
-        # Map skills → command references
-        local skills_refs=""
-        while IFS= read -r skill; do
-            [[ -z "$skill" ]] && continue
-            skills_refs+="- Use \`/${skill}\` command for ${skill} guidance"$'\n'
-        done < <(get_frontmatter_list "$agent_file" "skills")
-
-        # Map delegates_to → agent references
-        local delegates_refs=""
-        while IFS= read -r delegate; do
-            [[ -z "$delegate" ]] && continue
-            delegates_refs+="- Delegate to \`${delegate}\` agent when needed"$'\n'
-        done < <(get_frontmatter_list "$agent_file" "delegates_to")
-
-        # Map workflows → command references
-        local workflow_refs=""
-        while IFS= read -r wf; do
-            [[ -z "$wf" ]] && continue
-            workflow_refs+="- Follow \`/${wf}\` workflow"$'\n'
-        done < <(get_frontmatter_list "$agent_file" "workflows")
-
-        # Write with only Claude-supported frontmatter fields
         {
-            echo "---"
-            echo "name: ${agent_name}"
-            echo "description: ${description}"
-            echo "---"
-            echo ""
-            if [[ -n "$skills_refs" || -n "$delegates_refs" || -n "$workflow_refs" ]]; then
-                echo "## Available Resources"
-                echo ""
-                if [[ -n "$workflow_refs" ]]; then
-                    echo "### Workflows"
-                    echo ""
-                    echo "$workflow_refs"
-                fi
-                if [[ -n "$skills_refs" ]]; then
-                    echo "### Skills (as commands)"
-                    echo ""
-                    echo "$skills_refs"
-                fi
-                if [[ -n "$delegates_refs" ]]; then
-                    echo "### Delegated Agents"
-                    echo ""
-                    echo "$delegates_refs"
-                fi
-                echo ""
+            printf -- '---\n'
+            printf -- 'name: %s\n' "$name"
+            printf -- 'description: %s\n' "$description"
+            if [[ -n "$mode" && "$mode" != "null" ]]; then
+                printf -- 'mode: %s\n' "$mode"
             fi
-            echo "$body"
-        } > "$output_file"
-    done
+            printf -- '---\n\n'
+
+            emit_resource_refs "$source_file"
+            render_contract_note_block 'partial'
+            render_contract_block "$source_file"
+            get_body "$source_file"
+        } > "$out_file"
+
+        track_generated "$out_file"
+    done < <(jq -r '(.agents + .subagents)[] | [.name, .description, .path, (.mode // "")] | @tsv' "$IR_PATH")
 }
-
-# ─── Subagents (from .agent/subagents/) ───────────────────────────────────────
-
-generate_subagents() {
-    for sa_file in "$AGENT_DIR"/subagents/*.md; do
-        [[ -f "$sa_file" ]] || continue
-
-        local sa_name description body output_file
-        sa_name=$(basename "$sa_file" .md)
-        description=$(get_frontmatter "$sa_file" "description")
-        body=$(get_body "$sa_file")
-        output_file="$AGENTS_DIR/${sa_name}.md"
-
-        # Map skills → command references
-        local skills_refs=""
-        while IFS= read -r skill; do
-            [[ -z "$skill" ]] && continue
-            skills_refs+="- Use \`/${skill}\` command for ${skill} guidance"$'\n'
-        done < <(get_frontmatter_list "$sa_file" "skills")
-
-        # Write with only Claude-supported frontmatter fields
-        {
-            echo "---"
-            echo "name: ${sa_name}"
-            echo "description: ${description}"
-            echo "---"
-            echo ""
-            if [[ -n "$skills_refs" ]]; then
-                echo "## Available Skills (as commands)"
-                echo ""
-                echo "$skills_refs"
-                echo ""
-            fi
-            echo "$body"
-        } > "$output_file"
-    done
-}
-
-# ─── Main ──────────────────────────────────────────────────────────────────────
 
 main() {
-    echo "  📘 Claude Code adapter: generating configuration..."
+    info "Claude Code adapter: generating configuration"
 
     generate_claude_md
-    echo "     ✅ CLAUDE.md"
-
     generate_commands
-    local cmd_count
-    cmd_count=$(find "$COMMANDS_DIR" -name '*.md' -type f 2>/dev/null | wc -l)
-    echo "     ✅ .claude/commands/ (${cmd_count} commands)"
+    generate_agent_files
 
-    generate_agents
-    generate_subagents
-    local agent_count
-    agent_count=$(find "$AGENTS_DIR" -name '*.md' -type f 2>/dev/null | wc -l)
-    echo "     ✅ .claude/agents/ (${agent_count} agents)"
+    cleanup_with_manifest "claude_code" "${generated_files[@]}"
+
+    info "Claude Code adapter complete"
 }
 
 main "$@"

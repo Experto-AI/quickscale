@@ -1,5 +1,7 @@
 ---
 description: "Sprint planning, release selection, roadmap validation"
+mode: agent
+agentMode: "adaptive"
 tools:
   - changes
   - codebase
@@ -16,13 +18,39 @@ tools:
 
 ## Skills
 
-- Read `.agent/skills/roadmap-navigation/SKILL.md` for roadmap-navigation guidance
-- Read `.agent/skills/task-focus/SKILL.md` for task-focus guidance
+- Read `.agent/skills/roadmap-navigation/SKILL.md`
+- Read `.agent/skills/task-focus/SKILL.md`
 
 ## Workflows
 
 - Follow `.agent/workflows/plan-sprint.md`
 
+## Contract Notes
+
+Platform support for structured contract fields: textual
+When unsupported natively, this file preserves source metadata via the Contract Metadata section.
+
+## Contract Metadata
+
+```yaml
+mode: adaptive
+inputs:
+  - name: release_version
+    type: string
+    required: false
+    auto_detect:
+      method: scan_roadmap
+      file: docs/technical/roadmap.md
+      criteria: current_release
+outputs:
+  - name: sprint_plan
+    type: object
+  - name: roadmap_updated
+    type: boolean
+success_when:
+  - sprint_identified: true
+  - tasks_prioritized: true
+```
 
 
 # Roadmap Planner Agent

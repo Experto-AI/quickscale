@@ -12,11 +12,11 @@ This file provides instructions for AI coding agents working on this codebase.
 
 Read these before any development task:
 
-1. `docs/technical/roadmap.md` — Current tasks and progress
-2. `docs/technical/decisions.md` — IN/OUT of scope boundaries
-3. `docs/contrib/code.md` — Implementation standards
-4. `docs/contrib/review.md` — Quality checklist
-5. `docs/contrib/testing.md` — Testing requirements
+1. `docs/technical/roadmap.md` - Current tasks and progress
+2. `docs/technical/decisions.md` - IN/OUT of scope boundaries
+3. `docs/contrib/code.md` - Implementation standards
+4. `docs/contrib/review.md` - Quality checklist
+5. `docs/contrib/testing.md` - Testing requirements
 
 ## Code Standards
 
@@ -58,7 +58,7 @@ Read these before any development task:
 
 - Implement ONLY items in task checklist
 - No "nice-to-have" features or opportunistic refactoring
-- When in doubt, ask — don't assume
+- When in doubt, ask - do not assume
 
 ## Agents
 
@@ -70,6 +70,17 @@ Available agent definitions for complex workflows:
 | `release-manager` | Release finalization, commit messages, roadmap cleanup | create-release |
 | `roadmap-planner` | Sprint planning, release selection, roadmap validation | plan-sprint |
 | `task-implementer` | Implements roadmap tasks with staged workflow | implement-task |
+
+## Subagents
+
+| Subagent | Description | Parent Agents |
+|----------|-------------|---------------|
+| `architecture-checker` | Validates tech stack compliance and architectural boundaries | code-reviewer |
+| `code-quality-reviewer` | Reviews SOLID, DRY, KISS compliance and code quality | code-reviewer |
+| `doc-reviewer` | Validates documentation quality and completeness | code-reviewer |
+| `report-generator` | Generates comprehensive review reports | code-reviewer |
+| `scope-validator` | Validates changes against task scope, detects scope creep | task-implementer, code-reviewer |
+| `test-reviewer` | Validates test quality, isolation, and coverage | code-reviewer |
 
 ## Skills
 
@@ -96,13 +107,13 @@ Finalize a release with commit message, roadmap cleanup, and documentation
 
 Details: `.agent/workflows/create-release.md`
 
-- Step 1: Verify Completion
-- Step 2: Extract Completed Tasks
-- Step 3: Generate Commit Message
-- Step 4: Create Release Notes
-- Step 5: Clean Roadmap
-- Step 6: Final Review
-- Step 7: Commit (Human Action)
+- 1. Step 1: Verify Completion
+- 2. Step 2: Extract Completed Tasks
+- 3. Step 3: Generate Commit Message
+- 4. Step 4: Create Release Notes
+- 5. Step 5: Clean Roadmap
+- 6. Step 6: Final Review
+- 7. Step 7: Commit (Human Action)
 
 ### implement-task
 
@@ -110,11 +121,11 @@ Implement a roadmap task through PLAN → CODE → REVIEW → TEST → COMPLETE 
 
 Details: `.agent/workflows/implement-task.md`
 
-- Stage 1: PLAN
-- Stage 2: CODE
-- Stage 3: REVIEW
-- Stage 4: TEST
-- Stage 5: COMPLETE
+- 1. Stage 1: PLAN
+- 2. Stage 2: CODE
+- 3. Stage 3: REVIEW
+- 4. Stage 4: TEST
+- 5. Stage 5: COMPLETE
 
 ### plan-sprint
 
@@ -122,12 +133,12 @@ Plan the next sprint by analyzing roadmap and prioritizing tasks
 
 Details: `.agent/workflows/plan-sprint.md`
 
-- Step 1: Analyze Current State
-- Step 2: Identify Release Scope
-- Step 3: Prioritize Tasks
-- Step 4: Validate Task Scopes
-- Step 5: Create Sprint Plan
-- Step 6: Update Roadmap (Optional)
+- 1. Step 1: Analyze Current State
+- 2. Step 2: Identify Release Scope
+- 3. Step 3: Prioritize Tasks
+- 4. Step 4: Validate Task Scopes
+- 5. Step 5: Create Sprint Plan
+- 6. Step 6: Update Roadmap (Optional)
 
 ### review-code
 
@@ -135,24 +146,25 @@ Review staged code changes for quality, scope compliance, and completeness
 
 Details: `.agent/workflows/review-code.md`
 
-- Step 1: Gather Context
-- Step 2: Scope Compliance Check
-- Step 3: Architecture Review
-- Step 4: Code Quality Review
-- Step 5: Testing Review
-- Step 6: Documentation Review
-- Step 7: Validation
-- Step 8: Generate Report
+- 1. Step 1: Gather Context
+- 2. Step 2: Scope Compliance Check
+- 3. Step 3: Architecture Review
+- 4. Step 4: Code Quality Review
+- 5. Step 5: Testing Review
+- 6. Step 6: Documentation Review
+- 7. Step 7: Validation
+- 8. Step 8: Generate Report
 
 ## Validation
 
-Always run before completing work:
-
 ```bash
-./scripts/lint.sh      # Ruff format + check + mypy
-./scripts/test_unit.sh # Unit and integration tests
+./scripts/lint.sh
+./scripts/test_unit.sh
 ```
 
+## Contract Notes
+
+Codex supports rich markdown instructions. Input/output/success contracts are retained in source agent files and surfaced through workflow descriptions.
 
 ---
-*Generated from .agent/ on 2026-02-06T20:23:04+01:00*
+*Generated from .agent/ on 2026-02-07T09:49:29+01:00*

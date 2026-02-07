@@ -217,19 +217,19 @@ myapp/
 
 **Testing**:
 - [x] E2E tests: `quickscale plan` → `quickscale apply` → Working React project
-- [ ] React app starts with `pnpm dev` in `frontend/` directory
+- [x] React app starts with `pnpm dev` in `frontend/` directory
 - [x] Verify shadcn/ui components render correctly
-- [ ] Vitest unit tests pass with reasonable coverage
+- [x] Vitest unit tests pass with reasonable coverage
 - [x] TanStack Query fetches from Django REST Framework API
 - [x] Zustand stores work correctly
-- [ ] CI passes (lint, test-all, test-e2e)
+- [x] CI passes (lint, test-all, test-e2e)
 
 **Success Criteria**:
 - [x] `quickscale plan myapp` defaults to `showcase_react` theme
 - [x] `quickscale apply` generates working React project (no errors)
 - [x] Generated React app builds and runs successfully
 - [x] Sample Dashboard page displays data from Django API
-- [ ] All existing E2E tests continue to pass
+- [x] All existing E2E tests continue to pass
 
 ---
 

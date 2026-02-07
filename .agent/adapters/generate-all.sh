@@ -1,14 +1,5 @@
 #!/usr/bin/env bash
-# Generate all platform configurations from .agent/ source files
-#
-# Supported platforms:
-#   - Claude Code    → CLAUDE.md, .claude/commands/, .claude/agents/
-#   - Gemini CLI     → GEMINI.md, .gemini/commands/, .gemini/settings.json
-#   - GitHub Copilot → .github/copilot-instructions.md, prompts/, agents/, instructions/
-#   - Codex CLI      → AGENTS.md, .codex/config.toml
-#   - OpenCode       → .opencode.json, .opencode/commands/
-#
-# Usage: .agent/adapters/generate-all.sh
+# Generate all enabled platform configurations from .agent/ source files.
 
 set -euo pipefail
 
@@ -16,80 +7,91 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 AGENT_DIR="$(dirname "$SCRIPT_DIR")"
 ROOT_DIR="$(dirname "$AGENT_DIR")"
 
-echo "🤖 Agentic Flow — Platform Configuration Generator"
-echo "=================================================="
-echo ""
+# shellcheck disable=SC1091
+source "$SCRIPT_DIR/lib/common.sh"
 
-# Check dependencies
 check_deps() {
     local missing=()
-    for cmd in bash cat sed grep awk; do
-        if ! command -v "$cmd" &> /dev/null; then
+    local cmd
+    for cmd in bash cat sed grep awk jq; do
+        if ! command -v "$cmd" > /dev/null 2>&1; then
             missing+=("$cmd")
         fi
     done
 
     if [[ ${#missing[@]} -gt 0 ]]; then
-        echo "❌ Missing dependencies: ${missing[*]}"
+        err "Missing dependencies: ${missing[*]}"
         exit 1
     fi
 }
 
-check_deps
-
-# Run an adapter script if it exists
-run_adapter() {
-    local name="$1" script="$2"
-    if [[ -f "$SCRIPT_DIR/$script" ]]; then
-        bash "$SCRIPT_DIR/$script"
-    else
-        echo "  ⚠️  $script not found, skipping $name"
-    fi
+validate_ir() {
+    local ir_file="$1"
+    jq -e '.schema_version and .config and .agents and .workflows and .diagnostics' "$ir_file" > /dev/null
 }
 
-# Main execution
+run_adapter() {
+    local name="$1" key="$2" script="$3"
+    local enabled
+
+    enabled="$(platform_enabled "$key")"
+    if [[ "$enabled" != "true" ]]; then
+        info "${name}: disabled in .agent/config.yaml"
+        return 0
+    fi
+
+    if [[ ! -f "$SCRIPT_DIR/$script" ]]; then
+        warn "${name}: adapter script '$script' not found"
+        return 0
+    fi
+
+    info "${name}: generating"
+    IR_FILE="$IR_FILE_DEFAULT" OUTPUT_ROOT="$(resolve_output_root)" bash "$SCRIPT_DIR/$script"
+}
+
 main() {
+    check_deps
+    ensure_build_dirs
+
+    local output_root
+    output_root="$(resolve_output_root)"
+    mkdir -p "$output_root"
+
+    echo "Agentic Flow — Platform Configuration Generator"
+    echo "================================================"
     echo "Source: $AGENT_DIR"
-    echo "Output: $ROOT_DIR"
+    echo "Output root: $output_root"
     echo ""
 
-    run_adapter "Claude Code"    "claude-adapter.sh"
-    echo ""
-    run_adapter "Gemini CLI"     "gemini-adapter.sh"
-    echo ""
-    run_adapter "GitHub Copilot" "copilot-adapter.sh"
-    echo ""
-    run_adapter "Codex CLI"      "codex-adapter.sh"
-    echo ""
-    run_adapter "OpenCode"       "opencode-adapter.sh"
+    info "Building normalized IR"
+    bash "$SCRIPT_DIR/build-ir.sh" "$IR_FILE_DEFAULT"
+    validate_ir "$IR_FILE_DEFAULT"
+
+    run_adapter "Claude Code" "claude_code" "claude-adapter.sh"
+    run_adapter "Gemini CLI" "gemini_cli" "gemini-adapter.sh"
+    run_adapter "Gemini Antigravity" "gemini_antigravity" "gemini-antigravity-adapter.sh"
+    run_adapter "GitHub Copilot (VS Code)" "github_copilot" "copilot-adapter.sh"
+    run_adapter "GitHub Copilot CLI" "copilot_cli" "copilot-cli-adapter.sh"
+    run_adapter "Codex CLI" "codex_cli" "codex-adapter.sh"
+    run_adapter "OpenCode" "opencode" "opencode-adapter.sh"
 
     echo ""
-    echo "=================================================="
-    echo "✅ All platform configurations generated!"
+    echo "================================================"
+    echo "Generation complete"
+
+    if compgen -G "$MANIFEST_DIR/*.txt" > /dev/null; then
+        echo ""
+        echo "Generated files by platform:"
+        local manifest platform count
+        for manifest in "$MANIFEST_DIR"/*.txt; do
+            platform="$(basename "$manifest" .txt)"
+            count="$(awk 'NF' "$manifest" | wc -l | tr -d ' ')"
+            printf '  - %s: %s files\n' "$platform" "$count"
+        done
+    fi
+
     echo ""
-    echo "Generated files:"
-    # Claude Code
-    [[ -f "$ROOT_DIR/CLAUDE.md" ]]                         && echo "  📘 CLAUDE.md"
-    [[ -d "$ROOT_DIR/.claude/commands" ]]                  && echo "  📘 .claude/commands/"
-    [[ -d "$ROOT_DIR/.claude/agents" ]]                    && echo "  📘 .claude/agents/"
-    # Gemini CLI
-    [[ -f "$ROOT_DIR/GEMINI.md" ]]                         && echo "  💜 GEMINI.md"
-    [[ -d "$ROOT_DIR/.gemini/commands" ]]                  && echo "  💜 .gemini/commands/"
-    [[ -f "$ROOT_DIR/.gemini/settings.json" ]]             && echo "  💜 .gemini/settings.json"
-    # GitHub Copilot
-    [[ -f "$ROOT_DIR/.github/copilot-instructions.md" ]]   && echo "  🐙 .github/copilot-instructions.md"
-    [[ -d "$ROOT_DIR/.github/prompts" ]]                   && echo "  🐙 .github/prompts/"
-    [[ -d "$ROOT_DIR/.github/agents" ]]                    && echo "  🐙 .github/agents/"
-    [[ -d "$ROOT_DIR/.github/instructions" ]]              && echo "  🐙 .github/instructions/"
-    # Codex CLI
-    [[ -f "$ROOT_DIR/AGENTS.md" ]]                         && echo "  🤖 AGENTS.md"
-    [[ -f "$ROOT_DIR/.codex/config.toml" ]]                && echo "  🤖 .codex/config.toml"
-    # OpenCode
-    [[ -f "$ROOT_DIR/.opencode.json" ]]                    && echo "  📦 .opencode.json"
-    [[ -d "$ROOT_DIR/.opencode/commands" ]]                && echo "  📦 .opencode/commands/"
-    echo ""
-    echo "Run this script after modifying .agent/ files to update all configs."
-    echo "For specifications, see: .agent/SOURCES.md"
+    echo "IR: $(abs_to_rel "$IR_FILE_DEFAULT")"
 }
 
 main "$@"

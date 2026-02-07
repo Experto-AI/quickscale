@@ -1,6 +1,6 @@
 # Review staged code changes for quality, scope compliance, and completeness
 
-Follow the review-code workflow for QuickScale development.
+Follow the `review-code` workflow for QuickScale development.
 
 ## Steps
 
@@ -15,11 +15,10 @@ Follow the review-code workflow for QuickScale development.
 
 Target: $TASK_ID
 
-Read the full workflow at `.agent/workflows/review-code.md` and follow it step by step.
+Read workflow source: `.agent/workflows/review-code.md`
 
 ## Validation
 
-Always run before completing:
 ```bash
 ./scripts/lint.sh
 ./scripts/test_unit.sh

@@ -1,5 +1,7 @@
 ---
 description: "Comprehensive code quality review and validation"
+mode: agent
+agentMode: "adaptive"
 tools:
   - changes
   - codebase
@@ -13,27 +15,63 @@ tools:
   - terminalLastCommand
   - usages
 agents:
-  - .github/agents/scope-validator.agent.md
   - .github/agents/architecture-checker.agent.md
   - .github/agents/code-quality-reviewer.agent.md
-  - .github/agents/test-reviewer.agent.md
   - .github/agents/doc-reviewer.agent.md
   - .github/agents/report-generator.agent.md
+  - .github/agents/scope-validator.agent.md
+  - .github/agents/test-reviewer.agent.md
 ---
 
 ## Skills
 
-- Read `.agent/skills/code-principles/SKILL.md` for code-principles guidance
-- Read `.agent/skills/testing-standards/SKILL.md` for testing-standards guidance
-- Read `.agent/skills/architecture-guidelines/SKILL.md` for architecture-guidelines guidance
-- Read `.agent/skills/task-focus/SKILL.md` for task-focus guidance
-- Read `.agent/skills/documentation-standards/SKILL.md` for documentation-standards guidance
-- Read `.agent/skills/git-operations/SKILL.md` for git-operations guidance
+- Read `.agent/skills/architecture-guidelines/SKILL.md`
+- Read `.agent/skills/code-principles/SKILL.md`
+- Read `.agent/skills/documentation-standards/SKILL.md`
+- Read `.agent/skills/git-operations/SKILL.md`
+- Read `.agent/skills/task-focus/SKILL.md`
+- Read `.agent/skills/testing-standards/SKILL.md`
 
 ## Workflows
 
 - Follow `.agent/workflows/review-code.md`
 
+## Contract Notes
+
+Platform support for structured contract fields: textual
+When unsupported natively, this file preserves source metadata via the Contract Metadata section.
+
+## Contract Metadata
+
+```yaml
+mode: adaptive
+inputs:
+  - name: task_id
+    type: string
+    required: false
+    auto_detect:
+      method: git_history
+      criteria: recent_commits_or_staged
+  - name: staged_files
+    type: file_list
+    required: false
+    auto_detect:
+      method: git_diff_cached
+outputs:
+  - name: review_report
+    type: file
+    path: docs/releases/release-v{version}-review.md
+  - name: approval_status
+    type: enum
+    values: [APPROVED, APPROVED_WITH_ISSUES, NEEDS_REVISION, BLOCKED]
+success_when:
+  - all_dimensions_reviewed: true
+  - validation:
+      - command: ./scripts/lint.sh
+        expect: exit_code_0
+      - command: ./scripts/test_unit.sh
+        expect: exit_code_0
+```
 
 
 # Code Reviewer Agent

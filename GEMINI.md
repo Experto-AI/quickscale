@@ -6,7 +6,6 @@
 ## Context
 
 Read these files to understand the project:
-
 - @.agent/contexts/authoritative-files.md
 - @.agent/contexts/project-conventions.md
 
@@ -65,7 +64,7 @@ Subagents handle focused sub-tasks delegated by agents.
 ### Scope Discipline (CRITICAL)
 - Implement ONLY items explicitly listed in task checklist
 - NO "nice-to-have" features, NO opportunistic refactoring
-- When in doubt, ask — don't assume
+- When in doubt, ask - do not assume
 
 ### Code Quality
 - **SOLID** · **DRY** · **KISS** · **Explicit Failure**
@@ -74,15 +73,19 @@ Subagents handle focused sub-tasks delegated by agents.
 - F-strings for formatting (no `.format()` or `%`)
 
 ### Testing
-- pytest with pytest-django — NO global mocking (`sys.modules` modifications prohibited)
-- Test isolation mandatory · Coverage ≥ 90% overall, ≥ 80% per file
+- pytest with pytest-django - NO global mocking (`sys.modules` modifications prohibited)
+- Test isolation mandatory · Coverage >= 90% overall, >= 80% per file
 
-### Validation
+## Validation
 
 ```bash
-./scripts/lint.sh       # Ruff format + check + mypy
-./scripts/test_unit.sh  # Unit and integration tests
+./scripts/lint.sh
+./scripts/test_unit.sh
 ```
+
+## Contract Notes
+
+Platform support for structured contract fields: unsupported natively; contract metadata is preserved in source agent files.
 
 ## Tech Stack
 
@@ -100,4 +103,4 @@ Subagents handle focused sub-tasks delegated by agents.
 | CSS | Tailwind CSS |
 
 ---
-*Generated from .agent/ on 2026-02-06T20:21:56+01:00*
+*Generated from .agent/ on 2026-02-07T09:49:28+01:00*

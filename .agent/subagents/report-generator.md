@@ -176,7 +176,7 @@ $ ./scripts/lint.sh
 
 ### Tests
 ```bash
-$ ./scripts/test-all.sh
+$ ./scripts/test_unit.sh
 {output}
 ```
 **Status:** ✅ PASS (X passed, Y skipped)

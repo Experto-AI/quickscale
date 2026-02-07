@@ -1,4 +1,4 @@
-# 🤖 Agentic Flow System
+# Agentic Flow System
 
 > **Quick Start**: Run `.agent/adapters/generate-all.sh` to generate platform configurations.
 
@@ -20,12 +20,12 @@ This directory contains the unified AI agent architecture for QuickScale develop
 
 ## Quick Commands
 
-| Task | Claude Code | Gemini CLI |
-|------|-------------|------------|
-| Implement task | `/implement-task` | "Follow implement-task workflow" |
-| Review code | `/review-code` | "Follow review-code workflow" |
-| Plan sprint | `/plan-sprint` | "Follow plan-sprint workflow" |
-| Create release | `/create-release` | "Follow create-release workflow" |
+| Task | Claude Code | Gemini CLI | Copilot |
+|------|-------------|------------|---------|
+| Implement task | `/implement-task` | `/implement-task` | `#implement-task` |
+| Review code | `/review-code` | `/review-code` | `#review-code` |
+| Plan sprint | `/plan-sprint` | `/plan-sprint` | `#plan-sprint` |
+| Create release | `/create-release` | `/create-release` | `#create-release` |
 
 ## Generate Platform Configurations
 
@@ -40,7 +40,12 @@ chmod +x .agent/adapters/*.sh
 This creates:
 - `CLAUDE.md` + `.claude/` for Claude Code
 - `GEMINI.md` + `.gemini/` for Gemini CLI
-- `.github/copilot-instructions.md` for GitHub Copilot
+- `.gemini/antigravity/` for Gemini Antigravity
+- `.github/copilot-instructions.md` + `.github/prompts/` + `.github/agents/` for Copilot VS Code
+- `.github/copilot-cli/` for Copilot CLI
+- `AGENTS.md` + `.codex/` for Codex CLI
+
+Generation is config-driven via `.agent/config.yaml` (`adapters.platforms.*` and `adapters.output_directory`).
 
 ## Documentation
 

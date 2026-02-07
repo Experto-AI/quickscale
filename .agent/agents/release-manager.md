@@ -64,7 +64,7 @@ Before creating release:
 
 ```bash
 # Check all tests pass
-./scripts/test-all.sh
+./scripts/test_unit.sh
 
 # Check lint passes
 ./scripts/lint.sh

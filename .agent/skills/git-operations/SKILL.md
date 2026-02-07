@@ -159,7 +159,7 @@ Closes #123"
 
 Before committing, verify:
 
-- [ ] All tests pass: `./scripts/test-all.sh`
+- [ ] All tests pass: `./scripts/test_unit.sh`
 - [ ] Lint passes: `./scripts/lint.sh`
 - [ ] Only intended files staged: `git status`
 - [ ] Changes reviewed: `git diff --cached`
@@ -239,7 +239,7 @@ git diff --cached --stat
 
 # Run validation
 ./scripts/lint.sh
-./scripts/test-all.sh
+./scripts/test_unit.sh
 
 # Stage changes (interactive for control)
 git add -p

@@ -145,7 +145,7 @@ This workflow guides implementation of a roadmap task through 5 stages, ensuring
 3. **Run Full Test Suite**
    // turbo
    ```bash
-   ./scripts/test-all.sh
+   ./scripts/test_unit.sh
    ```
 
 4. **Run Task-Specific Validation** (from roadmap)
@@ -157,7 +157,7 @@ This workflow guides implementation of a roadmap task through 5 stages, ensuring
 5. **Check Coverage**
    // turbo
    ```bash
-   pytest --cov=src/quickscale --cov-report=term-missing --cov-fail-under=70
+   pytest --cov --cov-report=term-missing --cov-fail-under=90
    ```
 
 6. **Test Verification Checklist**
@@ -188,7 +188,7 @@ This workflow guides implementation of a roadmap task through 5 stages, ensuring
    // turbo
    ```bash
    ./scripts/lint.sh
-   ./scripts/test-all.sh
+   ./scripts/test_unit.sh
    ```
 
 3. **Stage Changes**

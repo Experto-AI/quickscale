@@ -23,7 +23,7 @@ This workflow guides release finalization, including generating commit messages,
 1. **Run All Tests**
    // turbo
    ```bash
-   ./scripts/test-all.sh
+   ./scripts/test_unit.sh
    ```
 
 2. **Run Lint**

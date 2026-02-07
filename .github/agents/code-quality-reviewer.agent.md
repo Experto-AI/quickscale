@@ -1,19 +1,47 @@
 ---
 description: "Reviews SOLID, DRY, KISS compliance and code quality"
+mode: agent
 tools:
   - changes
   - codebase
+  - editFiles
+  - fetch
   - findFiles
+  - githubRepo
   - problems
+  - runInTerminal
   - search
+  - terminalLastCommand
   - usages
 ---
 
 ## Skills
 
-- Read `.agent/skills/code-principles/SKILL.md` for code-principles guidance
-- Read `.agent/skills/documentation-standards/SKILL.md` for documentation-standards guidance
+- Read `.agent/skills/code-principles/SKILL.md`
+- Read `.agent/skills/documentation-standards/SKILL.md`
 
+## Contract Notes
+
+Platform support for structured contract fields: textual
+When unsupported natively, this file preserves source metadata via the Contract Metadata section.
+
+## Contract Metadata
+
+```yaml
+inputs:
+  - name: changed_files
+    type: file_list
+    required: true
+  - name: file_contents
+    type: content_map
+    required: true
+outputs:
+  - name: quality_status
+    type: enum
+    values: [PASS, FAIL, ISSUES]
+  - name: violations
+    type: violation_list
+```
 
 
 # Code Quality Reviewer Subagent

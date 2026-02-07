@@ -254,7 +254,7 @@ navigation_result:
 
     validation:
       commands:
-        - "./scripts/test-all.sh"
+        - "./scripts/test_unit.sh"
         - "quickscale plan test && quickscale apply"
 
   decisions_reference:

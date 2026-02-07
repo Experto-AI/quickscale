@@ -1,18 +1,43 @@
 ---
 description: "Validates tech stack compliance and architectural boundaries"
+mode: agent
 tools:
   - changes
   - codebase
+  - editFiles
+  - fetch
   - findFiles
+  - githubRepo
   - problems
+  - runInTerminal
   - search
+  - terminalLastCommand
   - usages
 ---
 
 ## Skills
 
-- Read `.agent/skills/architecture-guidelines/SKILL.md` for architecture-guidelines guidance
+- Read `.agent/skills/architecture-guidelines/SKILL.md`
 
+## Contract Notes
+
+Platform support for structured contract fields: textual
+When unsupported natively, this file preserves source metadata via the Contract Metadata section.
+
+## Contract Metadata
+
+```yaml
+inputs:
+  - name: changed_files
+    type: file_list
+    required: true
+outputs:
+  - name: compliance_status
+    type: enum
+    values: [PASS, FAIL, ISSUES]
+  - name: violations
+    type: violation_list
+```
 
 
 # Architecture Checker Subagent

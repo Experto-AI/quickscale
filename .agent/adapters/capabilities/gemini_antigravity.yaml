@@ -1,0 +1,13 @@
+platform: gemini_antigravity
+supports:
+  directives:
+    invoke_skill: import
+    invoke_agent: import
+    invoke_workflow: import
+  contract_fields:
+    mode: false
+    inputs: false
+    outputs: false
+    success_when: false
+  commands: markdown
+  agents: markdown

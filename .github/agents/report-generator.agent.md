@@ -1,14 +1,41 @@
 ---
 description: "Generates comprehensive review reports"
+mode: agent
 tools:
   - changes
   - codebase
+  - editFiles
+  - fetch
   - findFiles
+  - githubRepo
   - problems
+  - runInTerminal
   - search
+  - terminalLastCommand
   - usages
 ---
 
+## Contract Notes
+
+Platform support for structured contract fields: textual
+When unsupported natively, this file preserves source metadata via the Contract Metadata section.
+
+## Contract Metadata
+
+```yaml
+inputs:
+  - name: task_id
+    type: string
+    required: true
+  - name: review_results
+    type: object
+    required: true
+    description: "Combined results from all review subagents"
+outputs:
+  - name: report_file
+    type: file
+    path: docs/releases/release-v{version}-review.md
+```
 
 
 # Report Generator Subagent
@@ -163,7 +190,7 @@ $ ./scripts/lint.sh
 
 ### Tests
 ```bash
-$ ./scripts/test-all.sh
+$ ./scripts/test_unit.sh
 {output}
 ```
 **Status:** ✅ PASS (X passed, Y skipped)

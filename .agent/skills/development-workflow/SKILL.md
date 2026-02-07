@@ -153,7 +153,7 @@ Tests validate the logic established in CODE and REVIEW stages.
 - [ ] No global mocking contamination
 - [ ] Test isolation verified
 - [ ] Coverage ≥ 90% overall, ≥ 80% per file
-- [ ] All tests pass: `./scripts/test-all.sh`
+- [ ] All tests pass: `./scripts/test_unit.sh`
 - [ ] Task validation commands pass
 
 ### Exit Criteria
@@ -177,7 +177,7 @@ Tests validate the logic established in CODE and REVIEW stages.
 ### Checklist
 - [ ] All roadmap items marked [x]
 - [ ] Final `./scripts/lint.sh` passes
-- [ ] Final `./scripts/test-all.sh` passes
+- [ ] Final `./scripts/test_unit.sh` passes
 - [ ] Changes staged: `git add -p`
 - [ ] Ready for final review/commit
 

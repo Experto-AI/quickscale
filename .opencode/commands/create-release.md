@@ -1,6 +1,6 @@
 # Finalize a release with commit message, roadmap cleanup, and documentation
 
-Follow the create-release workflow for QuickScale development.
+Follow the `create-release` workflow for QuickScale development.
 
 ## Steps
 
@@ -14,11 +14,10 @@ Follow the create-release workflow for QuickScale development.
 
 Target: $TASK_ID
 
-Read the full workflow at `.agent/workflows/create-release.md` and follow it step by step.
+Read workflow source: `.agent/workflows/create-release.md`
 
 ## Validation
 
-Always run before completing:
 ```bash
 ./scripts/lint.sh
 ./scripts/test_unit.sh

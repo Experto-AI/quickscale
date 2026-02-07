@@ -1,21 +1,5 @@
 #!/usr/bin/env bash
-# Generate GitHub Copilot configuration from .agent/ source files
-#
-# Creates:
-#   - .github/copilot-instructions.md          — always-on project instructions
-#   - .github/prompts/*.prompt.md              — reusable prompt files (from workflows)
-#   - .github/agents/*.agent.md                — custom coding agents (from agents)
-#   - .github/instructions/*.instructions.md   — path-specific instructions (from contexts)
-#
-# Leverages GitHub Copilot native features (VS Code 1.108+):
-#   - copilot-instructions.md for always-on project guidance
-#   - .prompt.md files with YAML frontmatter (description, tools, mode)
-#   - .agent.md files with YAML frontmatter (description, tools, agents)
-#   - .instructions.md files with applyTo globs for path-specific rules
-#   - AGENTS.md support (added Aug 28, 2025)
-#   - Experimental Agent Skills (in active development)
-#
-# Does NOT modify any .agent/ source files.
+# Generate GitHub Copilot VS Code configuration from normalized .agent IR.
 
 set -euo pipefail
 
@@ -23,60 +7,49 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 AGENT_DIR="$(dirname "$SCRIPT_DIR")"
 ROOT_DIR="$(dirname "$AGENT_DIR")"
 
-# Output paths
-GITHUB_DIR="$ROOT_DIR/.github"
+# shellcheck disable=SC1091
+source "$SCRIPT_DIR/lib/common.sh"
+# shellcheck disable=SC1091
+source "$SCRIPT_DIR/lib/render_common.sh"
+
+IR_PATH="${IR_FILE:-$IR_FILE_DEFAULT}"
+OUTPUT_ROOT="${OUTPUT_ROOT:-$(resolve_output_root)}"
+
+GITHUB_DIR="$OUTPUT_ROOT/.github"
 COPILOT_MD="$GITHUB_DIR/copilot-instructions.md"
 PROMPTS_DIR="$GITHUB_DIR/prompts"
 AGENTS_DIR="$GITHUB_DIR/agents"
 INSTRUCTIONS_DIR="$GITHUB_DIR/instructions"
 
-# Create output directories
 mkdir -p "$PROMPTS_DIR" "$AGENTS_DIR" "$INSTRUCTIONS_DIR"
 
-# ─── Helpers ───────────────────────────────────────────────────────────────────
+lint_cmd="$(resolve_lint_command)"
+test_cmd="$(resolve_test_command)"
 
-# Extract a scalar YAML frontmatter value.
-get_frontmatter() {
-    local file="$1" key="$2"
-    [[ -f "$file" ]] || return 0
-    sed -n '/^---$/,/^---$/p' "$file" \
-        | grep "^${key}:" \
-        | head -1 \
-        | sed "s/^${key}:[[:space:]]*//" \
-        | tr -d '"' \
-        | sed 's/^[[:space:]]*//;s/[[:space:]]*$//'
+declare -a generated_files=()
+track_generated() {
+    generated_files+=("$(abs_to_rel "$1")")
 }
 
-# Extract a YAML list field from frontmatter.
-get_frontmatter_list() {
-    local file="$1" key="$2"
-    [[ -f "$file" ]] || return 0
-    sed -n '/^---$/,/^---$/p' "$file" \
-        | sed -n "/^${key}:$/,/^[^ ]/p" \
-        | grep '^  - ' \
-        | sed 's/^  - //' \
-        | tr -d '"'
+owner_agent_for_workflow() {
+    local wf_name="$1"
+    jq -r --arg wf "$wf_name" '.agents[] | select((.workflows // []) | index($wf)) | .name' "$IR_PATH" | head -1
 }
 
-# Extract body content after YAML frontmatter.
-get_body() {
-    local file="$1"
-    [[ -f "$file" ]] || return 0
-    awk 'BEGIN{n=0} /^---$/{n++; next} n>=2{print}' "$file"
+prompt_target_for_workflow() {
+    local wf_name="$1"
+    if [[ "$wf_name" == "create-release" ]]; then
+        printf '%s\n' '${input:releaseVersion}'
+    else
+        printf '%s\n' '${input:taskId}'
+    fi
 }
-
-# ─── copilot-instructions.md ──────────────────────────────────────────────────
 
 generate_copilot_instructions() {
-    cat > "$COPILOT_MD" << 'HEADER'
-# QuickScale Development Instructions
+    cat "$AGENT_DIR/templates/quickscale/copilot_header.md" > "$COPILOT_MD"
 
-> **Auto-generated from `.agent/`** - Do not edit directly.
-> Regenerate with: `.agent/adapters/generate-all.sh`
-
-## Project Overview
-
-QuickScale is a Django project generator that creates production-ready SaaS applications.
+    {
+        cat << 'BLOCK'
 
 ## Code Standards
 
@@ -84,7 +57,7 @@ QuickScale is a Django project generator that creates production-ready SaaS appl
 - Python 3.11+
 - Type hints on all public APIs
 - Google-style docstrings (single-line preferred, no ending punctuation)
-- F-strings for formatting (no .format() or %)
+- F-strings for formatting (no `.format()` or `%`)
 - Ruff for formatting and linting (NOT Black or Flake8)
 
 ### Package Management
@@ -105,334 +78,169 @@ QuickScale is a Django project generator that creates production-ready SaaS appl
 4. **Interface Segregation**: Small, focused interfaces
 5. **Dependency Inversion**: Depend on abstractions
 
-## Code Patterns
+## Available Prompts
 
-### DO
-```python
-# Type hints
-def process_data(data: dict) -> Result:
-    """Process input data and return result"""
-    ...
+Use these in Copilot Chat with `#` or via the prompt picker:
 
-# Explicit error handling
-try:
-    result = operation()
-except SpecificError as e:
-    raise ProcessingError(f"Operation failed: {e}")
+| Prompt | Description |
+|--------|-------------|
+BLOCK
+        jq -r '.workflows[] | "| `\(.name)` | \(.description) |"' "$IR_PATH"
 
-# Dependency injection
-class Service:
-    def __init__(self, repository: Repository):
-        self._repository = repository
-```
+        cat << 'BLOCK'
 
-### DON'T
-```python
-# No bare except
-try:
-    ...
-except:  # ❌ Never
-    pass
+## Available Agents
 
-# No global mocking in tests
-sys.modules['module'] = mock  # ❌ Never
+Use in Copilot Chat with `@agent-name`:
 
-# No requirements.txt
-# requirements.txt  # ❌ Use pyproject.toml
-```
+| Agent | Description |
+|-------|-------------|
+BLOCK
+        jq -r '.agents[] | "| `\(.name)` | \(.description) |"' "$IR_PATH"
 
-## Architecture
+        cat << 'BLOCK'
 
-### Layers
-1. **Presentation**: Views, templates, API endpoints
-2. **Application**: Services, commands, queries
-3. **Domain**: Models, business logic
-4. **Infrastructure**: Database, external services
+## Skills Reference
 
-### Rules
-- Views must not access database directly (use services)
-- Models must not call external services
-- Infrastructure must not depend on presentation
+Detailed guidance available in `.agent/skills/`:
 
-## Frontend Stack
+| Skill | Description |
+|-------|-------------|
+BLOCK
+        jq -r '.skills[] | "| `\(.name)` | \(.description) |"' "$IR_PATH"
 
-- React 18+ with TypeScript
-- Vite for build
-- shadcn/ui for components
-- Tailwind CSS for styling
-- TanStack Query for server state
+        render_validation_block "$lint_cmd" "$test_cmd"
 
-HEADER
+        cat << 'BLOCK'
+## Contract Notes
 
-    # Add available prompts/agents section
-    {
-        echo "## Available Prompts"
-        echo ""
-        echo "Use these in Copilot Chat with \`#\` or via the prompt picker:"
-        echo ""
-        echo "| Prompt | Description |"
-        echo "|--------|-------------|"
+Copilot instructions support textual contracts. Structured contract fields are preserved in generated `.agent.md` files.
+
+---
+BLOCK
+        printf '*Generated from .agent/ on %s*\n' "$(date -Iseconds)"
     } >> "$COPILOT_MD"
 
-    for wf_file in "$AGENT_DIR"/workflows/*.md; do
-        [[ -f "$wf_file" ]] || continue
-        local wf_name description
-        wf_name=$(basename "$wf_file" .md)
-        description=$(get_frontmatter "$wf_file" "description")
-        echo "| \`${wf_name}\` | ${description} |" >> "$COPILOT_MD"
-    done
-
-    {
-        echo ""
-        echo "## Available Agents"
-        echo ""
-        echo "Use in Copilot Chat with \`@agent-name\`:"
-        echo ""
-        echo "| Agent | Description |"
-        echo "|-------|-------------|"
-    } >> "$COPILOT_MD"
-
-    for agent_file in "$AGENT_DIR"/agents/*.md; do
-        [[ -f "$agent_file" ]] || continue
-        local name description
-        name=$(basename "$agent_file" .md)
-        description=$(get_frontmatter "$agent_file" "description")
-        echo "| \`${name}\` | ${description} |" >> "$COPILOT_MD"
-    done
-
-    {
-        echo ""
-        echo "## Skills Reference"
-        echo ""
-        echo "Detailed guidance available in \`.agent/skills/\`:"
-        echo ""
-        echo "| Skill | Description |"
-        echo "|-------|-------------|"
-    } >> "$COPILOT_MD"
-
-    for skill_dir in "$AGENT_DIR"/skills/*/; do
-        [[ -f "${skill_dir}SKILL.md" ]] || continue
-        local skill_name description
-        skill_name=$(basename "$skill_dir")
-        description=$(get_frontmatter "${skill_dir}SKILL.md" "description")
-        echo "| \`${skill_name}\` | ${description} |" >> "$COPILOT_MD"
-    done
-
-    cat >> "$COPILOT_MD" << 'VALIDATION'
-
-## Validation
-
-Always run before completing work:
-
-```bash
-./scripts/lint.sh      # Ruff format + check + mypy
-./scripts/test_unit.sh # Unit and integration tests
-```
-
-VALIDATION
-
-    {
-        echo ""
-        echo "---"
-        echo "*Generated from .agent/ on $(date -Iseconds)*"
-    } >> "$COPILOT_MD"
+    track_generated "$COPILOT_MD"
 }
-
-# ─── Prompt Files (from .agent/workflows/) ─────────────────────────────────────
 
 generate_prompts() {
-    for wf_file in "$AGENT_DIR"/workflows/*.md; do
-        [[ -f "$wf_file" ]] || continue
-
-        local wf_name description prompt_file agent_name
-        wf_name=$(basename "$wf_file" .md)
-        description=$(get_frontmatter "$wf_file" "description")
+    while IFS=$'\t' read -r wf_name wf_desc wf_path; do
+        [[ -n "$wf_name" ]] || continue
+        local prompt_file owner_agent steps target
         prompt_file="$PROMPTS_DIR/${wf_name}.prompt.md"
-
-        # Find which agent uses this workflow
-        agent_name=""
-        for agent_file in "$AGENT_DIR"/agents/*.md; do
-            [[ -f "$agent_file" ]] || continue
-            if get_frontmatter_list "$agent_file" "workflows" | grep -qx "$wf_name" 2>/dev/null; then
-                agent_name=$(basename "$agent_file" .md)
-                break
-            fi
-        done
-
-        # Extract step summaries from workflow
-        local steps_summary
-        steps_summary=$(get_body "$wf_file" \
-            | grep -E '^## (Step|Stage) ' \
-            | sed 's/^## /- /' || true)
-        if [[ -z "$steps_summary" ]]; then
-            steps_summary=$(get_body "$wf_file" \
-                | grep -E '^## ' \
-                | head -8 \
-                | sed 's/^## /- /' || true)
-        fi
+        owner_agent="$(owner_agent_for_workflow "$wf_name")"
+        steps="$(collect_step_headings "$ROOT_DIR/$wf_path")"
+        target="$(prompt_target_for_workflow "$wf_name")"
 
         {
-            echo "---"
-            echo "description: \"${description}\""
-            echo "mode: agent"
-            echo "tools:"
-            echo "  - changes"
-            echo "  - codebase"
-            echo "  - editFiles"
-            echo "  - terminalLastCommand"
-            echo "  - runInTerminal"
-            echo "  - findFiles"
-            echo "  - search"
-            echo "  - usages"
-            if [[ -n "$agent_name" ]]; then
-                echo "  - problems"
+            printf -- '---\n'
+            printf -- 'description: "%s"\n' "$wf_desc"
+            printf -- 'mode: agent\n'
+            printf -- 'tools:\n'
+            printf -- '  - changes\n'
+            printf -- '  - codebase\n'
+            printf -- '  - editFiles\n'
+            printf -- '  - terminalLastCommand\n'
+            printf -- '  - runInTerminal\n'
+            printf -- '  - findFiles\n'
+            printf -- '  - search\n'
+            printf -- '  - usages\n'
+            if [[ -n "$owner_agent" ]]; then
+                printf -- '  - problems\n'
             fi
-            echo "---"
-            echo ""
-            echo "Follow the ${wf_name} workflow for QuickScale development."
-            echo ""
-            if [[ -n "$steps_summary" ]]; then
-                echo "## Steps"
-                echo ""
-                echo "$steps_summary"
-                echo ""
-            fi
-            echo "Target: \${input:taskId}"
-            echo ""
-            echo "Read the full workflow at \`.agent/workflows/${wf_name}.md\` and follow it step by step."
-            echo ""
-            echo "Always validate with:"
-            echo "\`\`\`bash"
-            echo "./scripts/lint.sh"
-            echo "./scripts/test_unit.sh"
-            echo "\`\`\`"
-        } > "$prompt_file"
-    done
-}
+            printf -- '---\n\n'
 
-# ─── Agent Files (from .agent/agents/) ─────────────────────────────────────────
+            printf -- 'Follow the %s workflow for QuickScale development.\n\n' "$wf_name"
+            if [[ -n "$steps" ]]; then
+                printf -- '## Steps\n\n%s\n\n' "$(echo "$steps" | sed 's/^/- /')"
+            fi
+            printf -- 'Target: %s\n\n' "$target"
+            printf -- 'Read the full workflow at `%s` and follow it step by step.\n\n' "$wf_path"
+
+            render_validation_block "$lint_cmd" "$test_cmd"
+        } > "$prompt_file"
+
+        track_generated "$prompt_file"
+    done < <(jq -r '.workflows[] | [.name, .description, .path] | @tsv' "$IR_PATH")
+}
 
 generate_agents() {
-    for agent_file in "$AGENT_DIR"/agents/*.md; do
-        [[ -f "$agent_file" ]] || continue
+    while IFS=$'\t' read -r name description path mode; do
+        [[ -n "$name" ]] || continue
+        local source_file="$ROOT_DIR/$path"
+        local out_file="$AGENTS_DIR/${name}.agent.md"
 
-        local agent_name description output_file body
-        agent_name=$(basename "$agent_file" .md)
-        description=$(get_frontmatter "$agent_file" "description")
-        body=$(get_body "$agent_file")
-        output_file="$AGENTS_DIR/${agent_name}.agent.md"
-
-        # Build sub-agents list if delegates_to is non-empty
-        local agents_yaml=""
-        local has_delegates=false
-        while IFS= read -r delegate; do
-            [[ -z "$delegate" ]] && continue
-            if [[ "$has_delegates" == "false" ]]; then
-                agents_yaml="agents:"
-                has_delegates=true
-            fi
-            agents_yaml+=$'\n'"  - .github/agents/${delegate}.agent.md"
-        done < <(get_frontmatter_list "$agent_file" "delegates_to")
-
-        # Write agent file
-        {
-            echo "---"
-            echo "description: \"${description}\""
-            echo "tools:"
-            echo "  - changes"
-            echo "  - codebase"
-            echo "  - editFiles"
-            echo "  - fetch"
-            echo "  - findFiles"
-            echo "  - githubRepo"
-            echo "  - problems"
-            echo "  - runInTerminal"
-            echo "  - search"
-            echo "  - terminalLastCommand"
-            echo "  - usages"
-            if [[ -n "$agents_yaml" ]]; then
-                echo "${agents_yaml}"
-            fi
-            echo "---"
-            echo ""
-
-            # Include skills references
-            local skills_section=""
-            while IFS= read -r skill; do
-                [[ -z "$skill" ]] && continue
-                skills_section+="- Read \`.agent/skills/${skill}/SKILL.md\` for ${skill} guidance"$'\n'
-            done < <(get_frontmatter_list "$agent_file" "skills")
-
-            if [[ -n "$skills_section" ]]; then
-                echo "## Skills"
-                echo ""
-                echo "$skills_section"
-            fi
-
-            # Include workflow references
-            local wf_section=""
-            while IFS= read -r wf; do
-                [[ -z "$wf" ]] && continue
-                wf_section+="- Follow \`.agent/workflows/${wf}.md\`"$'\n'
-            done < <(get_frontmatter_list "$agent_file" "workflows")
-
-            if [[ -n "$wf_section" ]]; then
-                echo "## Workflows"
-                echo ""
-                echo "$wf_section"
-            fi
-
-            echo ""
-            echo "$body"
-        } > "$output_file"
-    done
-
-    # Also generate agent files for subagents
-    for sa_file in "$AGENT_DIR"/subagents/*.md; do
-        [[ -f "$sa_file" ]] || continue
-
-        local sa_name description output_file body
-        sa_name=$(basename "$sa_file" .md)
-        description=$(get_frontmatter "$sa_file" "description")
-        body=$(get_body "$sa_file")
-        output_file="$AGENTS_DIR/${sa_name}.agent.md"
+        delegates=$( {
+            get_frontmatter_list "$source_file" "delegates_to"
+            get_directives "$source_file" "agent"
+        } | awk 'NF' | sort -u )
+        skills=$( {
+            get_frontmatter_list "$source_file" "skills"
+            get_directives "$source_file" "skill"
+        } | awk 'NF' | sort -u )
+        workflows=$( {
+            get_frontmatter_list "$source_file" "workflows"
+            get_directives "$source_file" "workflow"
+        } | awk 'NF' | sort -u )
 
         {
-            echo "---"
-            echo "description: \"${description}\""
-            echo "tools:"
-            echo "  - changes"
-            echo "  - codebase"
-            echo "  - findFiles"
-            echo "  - problems"
-            echo "  - search"
-            echo "  - usages"
-            echo "---"
-            echo ""
+            printf -- '---\n'
+            printf -- 'description: "%s"\n' "$description"
+            printf -- 'mode: agent\n'
+            if [[ -n "$mode" && "$mode" != "null" ]]; then
+                printf -- 'agentMode: "%s"\n' "$mode"
+            fi
+            printf -- 'tools:\n'
+            printf -- '  - changes\n'
+            printf -- '  - codebase\n'
+            printf -- '  - editFiles\n'
+            printf -- '  - fetch\n'
+            printf -- '  - findFiles\n'
+            printf -- '  - githubRepo\n'
+            printf -- '  - problems\n'
+            printf -- '  - runInTerminal\n'
+            printf -- '  - search\n'
+            printf -- '  - terminalLastCommand\n'
+            printf -- '  - usages\n'
+            if [[ -n "$delegates" ]]; then
+                printf -- 'agents:\n'
+                while IFS= read -r delegate; do
+                    [[ -n "$delegate" ]] || continue
+                    printf -- '  - .github/agents/%s.agent.md\n' "$delegate"
+                done <<< "$delegates"
+            fi
+            printf -- '---\n\n'
 
-            local skills_section=""
-            while IFS= read -r skill; do
-                [[ -z "$skill" ]] && continue
-                skills_section+="- Read \`.agent/skills/${skill}/SKILL.md\` for ${skill} guidance"$'\n'
-            done < <(get_frontmatter_list "$sa_file" "skills")
-
-            if [[ -n "$skills_section" ]]; then
-                echo "## Skills"
-                echo ""
-                echo "$skills_section"
+            if [[ -n "$skills" ]]; then
+                printf -- '## Skills\n\n'
+                while IFS= read -r skill; do
+                    [[ -n "$skill" ]] || continue
+                    printf -- '- Read `.agent/skills/%s/SKILL.md`\n' "$skill"
+                done <<< "$skills"
+                printf '\n'
             fi
 
-            echo ""
-            echo "$body"
-        } > "$output_file"
-    done
+            if [[ -n "$workflows" ]]; then
+                printf -- '## Workflows\n\n'
+                while IFS= read -r wf; do
+                    [[ -n "$wf" ]] || continue
+                    printf -- '- Follow `.agent/workflows/%s.md`\n' "$wf"
+                done <<< "$workflows"
+                printf '\n'
+            fi
+
+            render_contract_note_block 'textual'
+            render_contract_block "$source_file"
+            get_body "$source_file"
+        } > "$out_file"
+
+        track_generated "$out_file"
+    done < <(jq -r '(.agents + .subagents)[] | [.name, .description, .path, (.mode // "")] | @tsv' "$IR_PATH")
 }
 
-# ─── Path-Specific Instructions (from .agent/contexts/) ────────────────────────
-
 generate_instructions() {
-    # Python source files instruction
-    cat > "$INSTRUCTIONS_DIR/python.instructions.md" << 'EOF'
+    cat > "$INSTRUCTIONS_DIR/python.instructions.md" << 'BLOCK'
 ---
 applyTo: "**/*.py"
 ---
@@ -446,10 +254,9 @@ applyTo: "**/*.py"
 - No bare except clauses
 - No global mocking (no sys.modules modifications)
 - Follow SOLID, DRY, KISS principles
-EOF
+BLOCK
 
-    # Test files instruction
-    cat > "$INSTRUCTIONS_DIR/testing.instructions.md" << 'EOF'
+    cat > "$INSTRUCTIONS_DIR/testing.instructions.md" << 'BLOCK'
 ---
 applyTo: "**/test_*.py,**/tests/**/*.py"
 ---
@@ -461,10 +268,9 @@ applyTo: "**/test_*.py,**/tests/**/*.py"
 - Coverage minimum: 90% overall, 80% per file
 - Name tests: test_{what}_{condition}_{expected}
 - Implementation-first: tests written after code review
-EOF
+BLOCK
 
-    # Frontend instruction
-    cat > "$INSTRUCTIONS_DIR/frontend.instructions.md" << 'EOF'
+    cat > "$INSTRUCTIONS_DIR/frontend.instructions.md" << 'BLOCK'
 ---
 applyTo: "**/*.{ts,tsx,js,jsx}"
 ---
@@ -473,42 +279,34 @@ applyTo: "**/*.{ts,tsx,js,jsx}"
 - shadcn/ui for components (not MUI, Chakra)
 - Tailwind CSS for styling
 - TanStack Query for server state
-EOF
+BLOCK
 
-    # Documentation instruction
-    cat > "$INSTRUCTIONS_DIR/docs.instructions.md" << 'EOF'
+    cat > "$INSTRUCTIONS_DIR/docs.instructions.md" << 'BLOCK'
 ---
 applyTo: "**/*.md"
 ---
 - Use kebab-case for markdown filenames
-- Google-style docstrings referenced in docs
-- Comments explain "why" not "what"
 - Keep documentation concise and actionable
-EOF
+- Comments explain why, not what
+BLOCK
+
+    track_generated "$INSTRUCTIONS_DIR/python.instructions.md"
+    track_generated "$INSTRUCTIONS_DIR/testing.instructions.md"
+    track_generated "$INSTRUCTIONS_DIR/frontend.instructions.md"
+    track_generated "$INSTRUCTIONS_DIR/docs.instructions.md"
 }
 
-# ─── Main ──────────────────────────────────────────────────────────────────────
-
 main() {
-    echo "  🐙 Copilot adapter: generating configuration..."
+    info "Copilot VS Code adapter: generating configuration"
 
     generate_copilot_instructions
-    echo "     ✅ .github/copilot-instructions.md"
-
     generate_prompts
-    local prompt_count
-    prompt_count=$(find "$PROMPTS_DIR" -name '*.prompt.md' -type f 2>/dev/null | wc -l)
-    echo "     ✅ .github/prompts/ (${prompt_count} prompts)"
-
     generate_agents
-    local agent_count
-    agent_count=$(find "$AGENTS_DIR" -name '*.agent.md' -type f 2>/dev/null | wc -l)
-    echo "     ✅ .github/agents/ (${agent_count} agents)"
-
     generate_instructions
-    local instr_count
-    instr_count=$(find "$INSTRUCTIONS_DIR" -name '*.instructions.md' -type f 2>/dev/null | wc -l)
-    echo "     ✅ .github/instructions/ (${instr_count} instruction sets)"
+
+    cleanup_with_manifest "github_copilot" "${generated_files[@]}"
+
+    info "Copilot VS Code adapter complete"
 }
 
 main "$@"

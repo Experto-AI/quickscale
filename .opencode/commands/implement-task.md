@@ -1,6 +1,6 @@
 # Implement a roadmap task through PLAN → CODE → REVIEW → TEST → COMPLETE stages
 
-Follow the implement-task workflow for QuickScale development.
+Follow the `implement-task` workflow for QuickScale development.
 
 ## Steps
 
@@ -12,11 +12,10 @@ Follow the implement-task workflow for QuickScale development.
 
 Target: $TASK_ID
 
-Read the full workflow at `.agent/workflows/implement-task.md` and follow it step by step.
+Read workflow source: `.agent/workflows/implement-task.md`
 
 ## Validation
 
-Always run before completing:
 ```bash
 ./scripts/lint.sh
 ./scripts/test_unit.sh

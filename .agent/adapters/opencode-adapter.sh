@@ -1,21 +1,5 @@
 #!/usr/bin/env bash
-# Generate OpenCode configuration from .agent/ source files
-#
-# ⚠️  DEPRECATION WARNING ⚠️
-# OpenCode was archived in September 2025 and succeeded by Crush.
-# This adapter is maintained for compatibility with existing installations ONLY.
-# New projects should use Claude Code, Gemini CLI, GitHub Copilot, or Codex CLI.
-#
-# Creates:
-#   - .opencode.json           — project configuration (agents, MCP, LSP)
-#   - .opencode/commands/*.md  — custom commands (from .agent/workflows/)
-#
-# Leveraged OpenCode native features:
-#   - .opencode.json for project-level config (agents, MCP servers, LSP)
-#   - .opencode/commands/*.md for custom slash commands with $NAME args
-#   - Built-in sub-agent tool for delegation
-#
-# Does NOT modify any .agent/ source files.
+# Generate OpenCode compatibility configuration from normalized .agent IR.
 
 set -euo pipefail
 
@@ -23,36 +7,28 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 AGENT_DIR="$(dirname "$SCRIPT_DIR")"
 ROOT_DIR="$(dirname "$AGENT_DIR")"
 
-# Output paths
-OPENCODE_JSON="$ROOT_DIR/.opencode.json"
-OPENCODE_DIR="$ROOT_DIR/.opencode"
+# shellcheck disable=SC1091
+source "$SCRIPT_DIR/lib/common.sh"
+# shellcheck disable=SC1091
+source "$SCRIPT_DIR/lib/render_common.sh"
+
+IR_PATH="${IR_FILE:-$IR_FILE_DEFAULT}"
+OUTPUT_ROOT="${OUTPUT_ROOT:-$(resolve_output_root)}"
+
+OPENCODE_JSON="$OUTPUT_ROOT/.opencode.json"
+OPENCODE_DIR="$OUTPUT_ROOT/.opencode"
 COMMANDS_DIR="$OPENCODE_DIR/commands"
 
-# Create output directories
 mkdir -p "$COMMANDS_DIR"
 
-# ─── Helpers ───────────────────────────────────────────────────────────────────
+lint_cmd="$(resolve_lint_command)"
+test_cmd="$(resolve_test_command)"
 
-# Extract a scalar YAML frontmatter value.
-get_frontmatter() {
-    local file="$1" key="$2"
-    [[ -f "$file" ]] || return 0
-    sed -n '/^---$/,/^---$/p' "$file" \
-        | grep "^${key}:" \
-        | head -1 \
-        | sed "s/^${key}:[[:space:]]*//" \
-        | tr -d '"' \
-        | sed 's/^[[:space:]]*//;s/[[:space:]]*$//'
+declare -a generated_files=()
+track_generated() {
+    generated_files+=("$(abs_to_rel "$1")")
 }
 
-# Extract body content after YAML frontmatter.
-get_body() {
-    local file="$1"
-    [[ -f "$file" ]] || return 0
-    awk 'BEGIN{n=0} /^---$/{n++; next} n>=2{print}' "$file"
-}
-
-# Escape string for JSON (simple: escape backslashes, quotes, newlines)
 json_escape() {
     local s="$1"
     s="${s//\\/\\\\}"
@@ -61,29 +37,20 @@ json_escape() {
     printf '%s' "$s"
 }
 
-# ─── .opencode.json ───────────────────────────────────────────────────────────
-
 generate_opencode_json() {
-    # Build system prompt from project conventions
     local system_prompt
-    system_prompt="You are a QuickScale development agent. QuickScale is a Django project generator for production-ready SaaS applications."
-    system_prompt+="\\n\\nCode Standards: Python 3.11+, type hints on public APIs, Google-style docstrings, Ruff for linting, Poetry for packages."
-    system_prompt+="\\n\\nPrinciples: SOLID, DRY, KISS. No bare except. No global mocking in tests."
-    system_prompt+="\\n\\nTesting: pytest, test isolation mandatory, coverage >= 90% overall, >= 80% per file."
-    system_prompt+="\\n\\nAlways run ./scripts/lint.sh and ./scripts/test_unit.sh before completing work."
-    system_prompt+="\\n\\nRead .agent/skills/ for detailed guidance on code principles, testing, and architecture."
+    system_prompt="You are a QuickScale development agent."
+    system_prompt+="\n\nCode Standards: Python 3.11+, type hints on public APIs, Google-style docstrings, Ruff for linting, Poetry for package management."
+    system_prompt+="\n\nTesting: pytest, no global mocking contamination, coverage >= 90% overall and >= 80% per file."
+    system_prompt+="\n\nValidation commands: ${lint_cmd} and ${test_cmd}."
 
-    cat > "$OPENCODE_JSON" << JSONEOF
+    cat > "$OPENCODE_JSON" << JSON
 {
   "\$schema": "https://opencode.ai/schema.json",
   "agents": {
     "coder": {
       "model": "sonnet",
       "systemPrompt": "$(json_escape "$system_prompt")"
-    },
-    "task": {
-      "model": "sonnet",
-      "systemPrompt": "You are a task planning agent for QuickScale. Break down tasks from docs/technical/roadmap.md into actionable steps."
     }
   },
   "lsp": {
@@ -93,73 +60,43 @@ generate_opencode_json() {
     }
   }
 }
-JSONEOF
-}
+JSON
 
-# ─── Custom Commands (from .agent/workflows/) ──────────────────────────────────
+    track_generated "$OPENCODE_JSON"
+}
 
 generate_commands() {
-    for wf_file in "$AGENT_DIR"/workflows/*.md; do
-        [[ -f "$wf_file" ]] || continue
-
-        local wf_name description command_file
-        wf_name=$(basename "$wf_file" .md)
-        description=$(get_frontmatter "$wf_file" "description")
-        command_file="$COMMANDS_DIR/${wf_name}.md"
-
-        # Extract step summaries from workflow
-        local steps_summary
-        steps_summary=$(get_body "$wf_file" \
-            | grep -E '^## (Step|Stage) ' \
-            | sed 's/^## //' \
-            | nl -ba -s '. ' \
-            | sed 's/^[[:space:]]*//' || true)
-        if [[ -z "$steps_summary" ]]; then
-            steps_summary=$(get_body "$wf_file" \
-                | grep -E '^## ' \
-                | head -8 \
-                | nl -ba -s '. ' \
-                | sed 's/^[[:space:]]*//' || true)
-        fi
+    while IFS=$'\t' read -r wf_name wf_desc wf_path; do
+        [[ -n "$wf_name" ]] || continue
+        local command_file="$COMMANDS_DIR/${wf_name}.md"
+        local steps
+        steps="$(collect_step_headings "$ROOT_DIR/$wf_path")"
 
         {
-            echo "# ${description}"
-            echo ""
-            echo "Follow the ${wf_name} workflow for QuickScale development."
-            echo ""
-            if [[ -n "$steps_summary" ]]; then
-                echo "## Steps"
-                echo ""
-                echo "$steps_summary"
-                echo ""
+            printf '# %s\n\n' "$wf_desc"
+            printf 'Follow the `%s` workflow for QuickScale development.\n\n' "$wf_name"
+            if [[ -n "$steps" ]]; then
+                printf '## Steps\n\n%s\n\n' "$steps"
             fi
-            echo "Target: \$TASK_ID"
-            echo ""
-            echo "Read the full workflow at \`.agent/workflows/${wf_name}.md\` and follow it step by step."
-            echo ""
-            echo "## Validation"
-            echo ""
-            echo "Always run before completing:"
-            echo "\`\`\`bash"
-            echo "./scripts/lint.sh"
-            echo "./scripts/test_unit.sh"
-            echo "\`\`\`"
+            printf 'Target: $TASK_ID\n\n'
+            printf 'Read workflow source: `%s`\n\n' "$wf_path"
+            printf '## Validation\n\n'
+            printf '```bash\n%s\n%s\n```\n' "$lint_cmd" "$test_cmd"
         } > "$command_file"
-    done
+
+        track_generated "$command_file"
+    done < <(jq -r '.workflows[] | [.name, .description, .path] | @tsv' "$IR_PATH")
 }
 
-# ─── Main ──────────────────────────────────────────────────────────────────────
-
 main() {
-    echo "  📦 OpenCode adapter: generating configuration..."
+    info "OpenCode adapter: generating compatibility configuration"
 
     generate_opencode_json
-    echo "     ✅ .opencode.json"
-
     generate_commands
-    local cmd_count
-    cmd_count=$(find "$COMMANDS_DIR" -name '*.md' -type f 2>/dev/null | wc -l)
-    echo "     ✅ .opencode/commands/ (${cmd_count} commands)"
+
+    cleanup_with_manifest "opencode" "${generated_files[@]}"
+
+    info "OpenCode adapter complete"
 }
 
 main "$@"

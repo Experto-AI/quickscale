@@ -1,6 +1,6 @@
 # Plan the next sprint by analyzing roadmap and prioritizing tasks
 
-Follow the plan-sprint workflow for QuickScale development.
+Follow the `plan-sprint` workflow for QuickScale development.
 
 ## Steps
 
@@ -13,11 +13,10 @@ Follow the plan-sprint workflow for QuickScale development.
 
 Target: $TASK_ID
 
-Read the full workflow at `.agent/workflows/plan-sprint.md` and follow it step by step.
+Read workflow source: `.agent/workflows/plan-sprint.md`
 
 ## Validation
 
-Always run before completing:
 ```bash
 ./scripts/lint.sh
 ./scripts/test_unit.sh

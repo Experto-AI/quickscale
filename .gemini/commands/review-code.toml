@@ -5,12 +5,12 @@ Follow the review-code workflow.
 Adopt the role defined in: @{.agent/agents/code-reviewer.md}
 
 Apply these skills:
-- @{.agent/skills/code-principles/SKILL.md}
-- @{.agent/skills/testing-standards/SKILL.md}
 - @{.agent/skills/architecture-guidelines/SKILL.md}
-- @{.agent/skills/task-focus/SKILL.md}
+- @{.agent/skills/code-principles/SKILL.md}
 - @{.agent/skills/documentation-standards/SKILL.md}
 - @{.agent/skills/git-operations/SKILL.md}
+- @{.agent/skills/task-focus/SKILL.md}
+- @{.agent/skills/testing-standards/SKILL.md}
 
 ## Steps
 

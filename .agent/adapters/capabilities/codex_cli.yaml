@@ -1,0 +1,12 @@
+platform: codex_cli
+supports:
+  directives:
+    invoke_skill: reference
+    invoke_agent: reference
+    invoke_workflow: reference
+  contract_fields:
+    mode: true
+    inputs: true
+    outputs: true
+    success_when: true
+  project_doc: AGENTS.md

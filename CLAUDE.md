@@ -65,14 +65,18 @@
 - pytest with pytest-django
 - No global mocking contamination (`sys.modules` modifications prohibited)
 - Test isolation mandatory
-- Coverage ≥ 90% overall, ≥ 80% per file
+- Coverage >= 90% overall, >= 80% per file
 
-### Validation
+## Validation
 
 ```bash
-./scripts/lint.sh       # Ruff format + check + mypy
-./scripts/test_unit.sh  # Unit and integration tests
+./scripts/lint.sh
+./scripts/test_unit.sh
 ```
+
+## Contract Notes
+
+Platform support for structured contract fields: partial (`mode` native, other fields preserved as markdown sections)
 
 ## Tech Stack
 
@@ -90,4 +94,4 @@
 | CSS | Tailwind CSS |
 
 ---
-*Generated from .agent/ on 2026-02-06T20:21:56+01:00*
+*Generated from .agent/ on 2026-02-07T09:49:28+01:00*

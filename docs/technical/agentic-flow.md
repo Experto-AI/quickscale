@@ -249,9 +249,14 @@ chmod +x .agent/adapters/*.sh
 │   └── project-conventions.md          # Project-specific rules
 │
 └── adapters/                           # Platform transpilers
+    ├── build-ir.sh                     # Build normalized IR from source markdown
+    ├── lib/                            # Shared parser/render helpers
+    ├── capabilities/                   # Platform capability declarations
     ├── claude-adapter.sh               # Claude Code adapter
     ├── gemini-adapter.sh               # Gemini CLI adapter
+    ├── gemini-antigravity-adapter.sh   # Gemini Antigravity adapter
     ├── copilot-adapter.sh              # GitHub Copilot adapter
+    ├── copilot-cli-adapter.sh          # GitHub Copilot CLI adapter
     ├── codex-adapter.sh                # Codex CLI adapter
     ├── opencode-adapter.sh             # OpenCode adapter
     └── generate-all.sh                 # Generate all platforms
@@ -405,10 +410,10 @@ The architecture uses a **Domain-Specific Language (DSL)** for declaring depende
 **Processing Semantics:**
 
 1. **Generation Time (Adapter Scripts):**
-   - Directives are parsed by adapter scripts during `generate-*.sh` execution
-   - For Claude Code: Directives become native skill/tool references
-   - For Gemini/Codex: Skill content is inlined at the directive location
-   - For Copilot: Key principles are extracted into the instructions file
+   - Directives are parsed into a normalized IR (`.agent/.build/ir.json`) during `generate-all.sh`
+   - Platform adapters map directives according to capability declarations in `.agent/adapters/capabilities/*.yaml`
+   - Unsupported native fields are preserved as markdown contract metadata sections
+   - Generated files are tracked by per-platform manifests to remove stale outputs safely
 
 2. **Runtime (AI Agent Execution):**
    - Agent reads referenced skill/agent files from `.agent/`
@@ -446,7 +451,7 @@ Skills are **reusable capability modules** that agents can invoke. Each skill en
 ```markdown
 ---
 name: code-principles
-version: 0.74.2
+version: 0.75.0
 description: SOLID, DRY, KISS principles for code quality
 provides:
   - solid_validation
@@ -559,7 +564,7 @@ Agents are **autonomous task executors** with defined roles, inputs, outputs, an
 ```markdown
 ---
 name: task-implementer
-version: 0.74.2
+version: 0.75.0
 description: Implements roadmap tasks with staged workflow
 mode: adaptive
 
@@ -723,7 +728,7 @@ Workflows are **explicit, step-by-step execution plans** that agents follow.
 ---
 name: implement-task
 description: End-to-end task implementation workflow
-version: 0.74.2
+version: 0.75.0
 agent: task-implementer
 stages: 5
 estimated_duration: 30-120 minutes
@@ -926,7 +931,7 @@ The original `roadmap-task-review.prompt.md` (873 lines) is decomposed into focu
 ```markdown
 ---
 name: scope-validator
-version: 0.74.2
+version: 0.75.0
 description: Validates changes are within task scope
 parent: code-reviewer
 type: subagent
@@ -1437,7 +1442,7 @@ The agentic flow transpiler has been updated to reflect these changes:
 ```yaml
 ---
 name: string              # Unique identifier (kebab-case)
-version: 0.74.2
+version: 0.75.0
 description: string       # One-line description
 mode: adaptive | ask      # Interaction mode
 
@@ -1473,7 +1478,7 @@ success_when:             # Success criteria
 ```yaml
 ---
 name: string              # Unique identifier (kebab-case)
-version: 0.74.2
+version: 0.75.0
 description: string       # One-line description
 parent: string            # Parent agent name
 type: subagent            # Fixed value
@@ -1496,7 +1501,7 @@ outputs:                  # Output definitions
 ```yaml
 ---
 name: string              # Unique identifier (kebab-case)
-version: 0.74.2
+version: 0.75.0
 description: string       # One-line description
 
 provides: string[]        # Capabilities this skill provides
@@ -1510,7 +1515,7 @@ requires: string[]        # Other skills this depends on
 ---
 name: string              # Unique identifier (kebab-case)
 description: string       # One-line description
-version: 0.74.2
+version: 0.75.0
 agent: string             # Primary agent that uses this workflow
 stages: number            # Number of stages
 estimated_duration: string # Human-readable duration estimate
@@ -1699,7 +1704,7 @@ MAJOR.MINOR.PATCH
 ```yaml
 ---
 name: code-principles
-version: 0.74.2
+version: 0.75.0
 ---
 ```
 
@@ -1732,7 +1737,7 @@ version: 0.74.2
 ```yaml
 ---
 name: old-skill
-version: 0.74.2
+version: 0.75.0
 deprecated: true
 deprecation_notice: "Use new-skill instead. Migration guide below."
 removal_version: "2.0.0"
@@ -1865,9 +1870,11 @@ adapters:
   platforms:                  # Enable/disable specific platforms
     claude_code: true
     gemini_cli: true
+    gemini_antigravity: true
     github_copilot: true
-    codex_cli: false
-    opencode: false
+    copilot_cli: true
+    codex_cli: true
+    opencode: true
 
 # Security settings
 security:

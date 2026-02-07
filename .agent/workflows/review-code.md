@@ -185,7 +185,7 @@ If scope violations found → Stop and report (do not proceed)
 2. **Run Tests**
    // turbo
    ```bash
-   ./scripts/test-all.sh
+   ./scripts/test_unit.sh
    ```
 
 3. **Task-Specific Validation**

@@ -34,7 +34,9 @@ adapters:
   platforms:                  # Enable/disable specific platforms
     claude_code: true
     gemini_cli: true
+    gemini_antigravity: true
     github_copilot: true
+    copilot_cli: true
     codex_cli: true
     opencode: true
 
@@ -55,5 +57,5 @@ context:
 project:
   name: "QuickScale"
   language: "python"
-  test_command: "./scripts/test-all.sh"
+  test_command: "./scripts/test_unit.sh"
   lint_command: "./scripts/lint.sh"

@@ -1,18 +1,45 @@
 ---
 description: "Validates documentation quality and completeness"
+mode: agent
 tools:
   - changes
   - codebase
+  - editFiles
+  - fetch
   - findFiles
+  - githubRepo
   - problems
+  - runInTerminal
   - search
+  - terminalLastCommand
   - usages
 ---
 
 ## Skills
 
-- Read `.agent/skills/documentation-standards/SKILL.md` for documentation-standards guidance
+- Read `.agent/skills/documentation-standards/SKILL.md`
 
+## Contract Notes
+
+Platform support for structured contract fields: textual
+When unsupported natively, this file preserves source metadata via the Contract Metadata section.
+
+## Contract Metadata
+
+```yaml
+inputs:
+  - name: changed_files
+    type: file_list
+    required: true
+outputs:
+  - name: doc_status
+    type: enum
+    values: [PASS, FAIL, ISSUES]
+  - name: coverage
+    type: percentage
+  - name: violations
+    type: violation_list
+```
 
 
 # Documentation Reviewer Subagent

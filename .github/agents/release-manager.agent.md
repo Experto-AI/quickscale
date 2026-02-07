@@ -1,5 +1,7 @@
 ---
 description: "Release finalization, commit messages, roadmap cleanup"
+mode: agent
+agentMode: "adaptive"
 tools:
   - changes
   - codebase
@@ -16,13 +18,42 @@ tools:
 
 ## Skills
 
-- Read `.agent/skills/roadmap-navigation/SKILL.md` for roadmap-navigation guidance
-- Read `.agent/skills/git-operations/SKILL.md` for git-operations guidance
+- Read `.agent/skills/git-operations/SKILL.md`
+- Read `.agent/skills/roadmap-navigation/SKILL.md`
 
 ## Workflows
 
 - Follow `.agent/workflows/create-release.md`
 
+## Contract Notes
+
+Platform support for structured contract fields: textual
+When unsupported natively, this file preserves source metadata via the Contract Metadata section.
+
+## Contract Metadata
+
+```yaml
+mode: adaptive
+inputs:
+  - name: release_version
+    type: string
+    required: true
+  - name: staged_changes
+    type: file_list
+    required: false
+    auto_detect:
+      method: git_diff_cached
+outputs:
+  - name: commit_message
+    type: string
+  - name: release_notes
+    type: file
+  - name: roadmap_cleaned
+    type: boolean
+success_when:
+  - commit_message_generated: true
+  - roadmap_cleaned: true
+```
 
 
 # Release Manager Agent
@@ -53,7 +84,7 @@ Before creating release:
 
 ```bash
 # Check all tests pass
-./scripts/test-all.sh
+./scripts/test_unit.sh
 
 # Check lint passes
 ./scripts/lint.sh
