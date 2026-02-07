@@ -37,6 +37,7 @@ class TestReactThemeGeneration:
         assert (frontend_path / "tailwind.config.js").exists()
         assert (frontend_path / "postcss.config.js").exists()
         assert (frontend_path / "components.json").exists()
+        assert (frontend_path / ".prettierrc").exists()
 
         # Source structure
         assert (frontend_path / "src" / "main.tsx").exists()
@@ -48,6 +49,20 @@ class TestReactThemeGeneration:
 
         # shadcn/ui lib utilities
         assert (frontend_path / "src" / "lib" / "utils.ts").exists()
+
+    def test_react_theme_prettier_config_matches_templates(self, tmp_path):
+        """Prettier config should match generated React source style."""
+        generator = ProjectGenerator(theme="showcase_react")
+        project_name = "react_prettier_config_test"
+        output_path = tmp_path / project_name
+
+        generator.generate(project_name, output_path)
+
+        with open(output_path / "frontend" / ".prettierrc") as f:
+            config = json.load(f)
+
+        assert config["semi"] is False
+        assert config["singleQuote"] is True
 
     def test_react_theme_package_json_has_required_dependencies(self, tmp_path):
         """Package.json should have all required dependencies"""

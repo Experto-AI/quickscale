@@ -1,4 +1,5 @@
-{% raw %}interface QuickScaleModules {
+{% raw -%}
+interface QuickScaleModules {
   auth: boolean
   blog: boolean
   listings: boolean
@@ -19,7 +20,7 @@ declare global {
 }
 
 const defaultConfig: QuickScaleConfig = {
-  projectName: '{% endraw %}{{ project_name }}{% raw %}',
+  projectName: 'qs_fmt_test',
   modules: {
     auth: false,
     blog: false,
@@ -37,4 +38,4 @@ export function useModules(): QuickScaleModules {
 export function useProjectConfig(): QuickScaleConfig {
   return window.__QUICKSCALE__ ?? defaultConfig
 }
-{% endraw %}
+{% endraw -%}

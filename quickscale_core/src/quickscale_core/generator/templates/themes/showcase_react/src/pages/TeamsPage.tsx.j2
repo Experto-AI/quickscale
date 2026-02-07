@@ -1,3 +1,4 @@
+{% raw -%}
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
@@ -19,7 +20,7 @@ export function TeamsPage() {
       <div className="grid gap-4 md:grid-cols-2">
         <Card>
           <CardHeader>
-            <Users className="h-5 w-5 text-muted-foreground mb-1" />
+            <Users className="mb-1 h-5 w-5 text-muted-foreground" />
             <CardTitle className="text-base">Team Workspaces</CardTitle>
             <CardDescription>Organize members by workspace or account</CardDescription>
           </CardHeader>
@@ -32,7 +33,7 @@ export function TeamsPage() {
 
         <Card>
           <CardHeader>
-            <UserPlus className="h-5 w-5 text-muted-foreground mb-1" />
+            <UserPlus className="mb-1 h-5 w-5 text-muted-foreground" />
             <CardTitle className="text-base">Invitations</CardTitle>
             <CardDescription>Invite teammates and assign roles</CardDescription>
           </CardHeader>
@@ -45,7 +46,7 @@ export function TeamsPage() {
 
         <Card>
           <CardHeader>
-            <Shield className="h-5 w-5 text-muted-foreground mb-1" />
+            <Shield className="mb-1 h-5 w-5 text-muted-foreground" />
             <CardTitle className="text-base">Access Control</CardTitle>
             <CardDescription>Role-based access and audit-friendly settings</CardDescription>
           </CardHeader>
@@ -61,3 +62,4 @@ export function TeamsPage() {
     </div>
   )
 }
+{% endraw -%}

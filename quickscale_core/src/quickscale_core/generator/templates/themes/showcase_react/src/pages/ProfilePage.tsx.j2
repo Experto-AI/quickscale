@@ -1,3 +1,4 @@
+{% raw -%}
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { UserCircle, LogIn, UserPlus, KeyRound, ExternalLink, Shield } from 'lucide-react'
@@ -7,15 +8,13 @@ export function ProfilePage() {
     <div className="space-y-6">
       <div>
         <h1 className="text-3xl font-bold tracking-tight">Profile &amp; Authentication</h1>
-        <p className="text-muted-foreground">
-          Manage your account, login, and security settings
-        </p>
+        <p className="text-muted-foreground">Manage your account, login, and security settings</p>
       </div>
 
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
         <Card>
           <CardHeader>
-            <LogIn className="h-5 w-5 text-muted-foreground mb-1" />
+            <LogIn className="mb-1 h-5 w-5 text-muted-foreground" />
             <CardTitle className="text-base">Sign In</CardTitle>
             <CardDescription>Login to your account</CardDescription>
           </CardHeader>
@@ -30,7 +29,7 @@ export function ProfilePage() {
 
         <Card>
           <CardHeader>
-            <UserPlus className="h-5 w-5 text-muted-foreground mb-1" />
+            <UserPlus className="mb-1 h-5 w-5 text-muted-foreground" />
             <CardTitle className="text-base">Register</CardTitle>
             <CardDescription>Create a new account</CardDescription>
           </CardHeader>
@@ -45,7 +44,7 @@ export function ProfilePage() {
 
         <Card>
           <CardHeader>
-            <UserCircle className="h-5 w-5 text-muted-foreground mb-1" />
+            <UserCircle className="mb-1 h-5 w-5 text-muted-foreground" />
             <CardTitle className="text-base">My Profile</CardTitle>
             <CardDescription>View and edit your profile</CardDescription>
           </CardHeader>
@@ -60,7 +59,7 @@ export function ProfilePage() {
 
         <Card>
           <CardHeader>
-            <KeyRound className="h-5 w-5 text-muted-foreground mb-1" />
+            <KeyRound className="mb-1 h-5 w-5 text-muted-foreground" />
             <CardTitle className="text-base">Change Password</CardTitle>
             <CardDescription>Update your password</CardDescription>
           </CardHeader>
@@ -75,7 +74,7 @@ export function ProfilePage() {
 
         <Card>
           <CardHeader>
-            <KeyRound className="h-5 w-5 text-muted-foreground mb-1" />
+            <KeyRound className="mb-1 h-5 w-5 text-muted-foreground" />
             <CardTitle className="text-base">Reset Password</CardTitle>
             <CardDescription>Forgot your password?</CardDescription>
           </CardHeader>
@@ -90,7 +89,7 @@ export function ProfilePage() {
 
         <Card>
           <CardHeader>
-            <Shield className="h-5 w-5 text-muted-foreground mb-1" />
+            <Shield className="mb-1 h-5 w-5 text-muted-foreground" />
             <CardTitle className="text-base">Account Security</CardTitle>
             <CardDescription>Manage account settings and deletion</CardDescription>
           </CardHeader>
@@ -106,3 +105,4 @@ export function ProfilePage() {
     </div>
   )
 }
+{% endraw -%}

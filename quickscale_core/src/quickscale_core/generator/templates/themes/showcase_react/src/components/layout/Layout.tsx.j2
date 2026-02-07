@@ -1,4 +1,5 @@
-{% raw %}import { Outlet } from 'react-router-dom'
+{% raw -%}
+import { Outlet } from 'react-router-dom'
 import { TooltipProvider } from '@/components/ui/tooltip'
 import { Sidebar } from './Sidebar'
 import { Header } from './Header'
@@ -9,7 +10,7 @@ export function Layout() {
       <div className="min-h-screen bg-background">
         <div className="flex">
           <Sidebar />
-          <div className="flex-1 flex flex-col">
+          <div className="flex flex-1 flex-col">
             <Header />
             <main className="flex-1 p-6">
               <Outlet />
@@ -20,4 +21,4 @@ export function Layout() {
     </TooltipProvider>
   )
 }
-{% endraw %}
+{% endraw -%}

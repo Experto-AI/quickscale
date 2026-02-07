@@ -1,21 +1,67 @@
-{% raw %}import { motion } from 'motion/react'
+{% raw -%}
+import { motion } from 'motion/react'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Link } from 'react-router-dom'
 import {
-  BookOpen, Store, Briefcase, CreditCard, Users, UserCircle,
-  ExternalLink, Rocket, Code, Database, Shield
+  BookOpen,
+  Store,
+  Briefcase,
+  CreditCard,
+  Users,
+  UserCircle,
+  ExternalLink,
+  Rocket,
+  Code,
+  Database,
+  Shield,
 } from 'lucide-react'
 import { useModules } from '@/hooks/useModules'
 
 const moduleInfo = [
-  { key: 'auth', name: 'Authentication', icon: UserCircle, description: 'User registration, login, profiles, and password management', href: '/profile' },
-  { key: 'blog', name: 'Blog', icon: BookOpen, description: 'Full-featured blog with Markdown support, categories, tags, and RSS feed', href: '/blog' },
-  { key: 'listings', name: 'Listings', icon: Store, description: 'Generic listings with filtering for marketplace verticals', href: '/listings' },
-  { key: 'crm', name: 'CRM', icon: Briefcase, description: 'Contact management, companies, deals, and pipeline tracking', href: '/crm' },
-  { key: 'billing', name: 'Billing', icon: CreditCard, description: 'Subscription management and payment processing', href: '/billing' },
-  { key: 'teams', name: 'Teams', icon: Users, description: 'Team collaboration and management features', href: '/teams' },
+  {
+    key: 'auth',
+    name: 'Authentication',
+    icon: UserCircle,
+    description: 'User registration, login, profiles, and password management',
+    href: '/profile',
+  },
+  {
+    key: 'blog',
+    name: 'Blog',
+    icon: BookOpen,
+    description: 'Full-featured blog with Markdown support, categories, tags, and RSS feed',
+    href: '/blog',
+  },
+  {
+    key: 'listings',
+    name: 'Listings',
+    icon: Store,
+    description: 'Generic listings with filtering for marketplace verticals',
+    href: '/listings',
+  },
+  {
+    key: 'crm',
+    name: 'CRM',
+    icon: Briefcase,
+    description: 'Contact management, companies, deals, and pipeline tracking',
+    href: '/crm',
+  },
+  {
+    key: 'billing',
+    name: 'Billing',
+    icon: CreditCard,
+    description: 'Subscription management and payment processing',
+    href: '/billing',
+  },
+  {
+    key: 'teams',
+    name: 'Teams',
+    icon: Users,
+    description: 'Team collaboration and management features',
+    href: '/teams',
+  },
 ] as const
 
 const gettingStarted = [
@@ -27,21 +73,21 @@ const gettingStarted = [
 
 export function Dashboard() {
   const modules = useModules()
-  const installedModules = moduleInfo.filter(m => modules[m.key as keyof typeof modules])
+  const installedModules = moduleInfo.filter((m) => modules[m.key as keyof typeof modules])
   const hasModules = installedModules.length > 0
 
   return (
     <div className="space-y-8">
       <div>
-        <h1 className="text-3xl font-bold tracking-tight">Welcome to {% endraw %}{{ project_name }}{% raw %}</h1>
-        <p className="text-muted-foreground mt-1">
+        <h1 className="text-3xl font-bold tracking-tight">Welcome to qs_fmt_test</h1>
+        <p className="mt-1 text-muted-foreground">
           Your Django project has been successfully generated with QuickScale!
         </p>
       </div>
 
       {/* Installed Modules */}
       <div>
-        <h2 className="text-xl font-semibold mb-4">
+        <h2 className="mb-4 text-xl font-semibold">
           {hasModules ? 'Installed Modules' : 'No Modules Installed'}
         </h2>
         <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
@@ -59,10 +105,12 @@ export function Dashboard() {
                     <div>
                       <CardTitle className="text-base">{mod.name}</CardTitle>
                     </div>
-                    <Badge variant="secondary" className="ml-auto">Active</Badge>
+                    <Badge variant="secondary" className="ml-auto">
+                      Active
+                    </Badge>
                   </CardHeader>
                   <CardContent>
-                    <p className="text-sm text-muted-foreground mb-3">{mod.description}</p>
+                    <p className="mb-3 text-sm text-muted-foreground">{mod.description}</p>
                     <Button variant="outline" size="sm" asChild>
                       <Link to={mod.href}>
                         Open <ExternalLink className="ml-1 h-3 w-3" />
@@ -76,7 +124,11 @@ export function Dashboard() {
             <Card className="col-span-full">
               <CardContent className="pt-6">
                 <p className="text-muted-foreground">
-                  No modules installed yet. Use <code className="bg-muted px-1.5 py-0.5 rounded text-sm">quickscale plan --add &lt;module&gt;</code> to add modules.
+                  No modules installed yet. Use{' '}
+                  <code className="rounded bg-muted px-1.5 py-0.5 text-sm">
+                    quickscale plan --add &lt;module&gt;
+                  </code>{' '}
+                  to add modules.
                 </p>
               </CardContent>
             </Card>
@@ -86,7 +138,7 @@ export function Dashboard() {
 
       {/* Getting Started */}
       <div>
-        <h2 className="text-xl font-semibold mb-4">Getting Started</h2>
+        <h2 className="mb-4 text-xl font-semibold">Getting Started</h2>
         <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
           {gettingStarted.map((item, index) => (
             <motion.div
@@ -97,7 +149,7 @@ export function Dashboard() {
             >
               <Card>
                 <CardHeader className="pb-2">
-                  <item.icon className="h-5 w-5 text-muted-foreground mb-1" />
+                  <item.icon className="mb-1 h-5 w-5 text-muted-foreground" />
                   <CardTitle className="text-sm">{item.title}</CardTitle>
                 </CardHeader>
                 <CardContent>
@@ -111,15 +163,19 @@ export function Dashboard() {
 
       {/* Resources */}
       <div>
-        <h2 className="text-xl font-semibold mb-4">Resources</h2>
-        <div className="flex gap-4 flex-wrap">
+        <h2 className="mb-4 text-xl font-semibold">Resources</h2>
+        <div className="flex flex-wrap gap-4">
           <Button variant="outline" asChild>
             <a href="https://docs.djangoproject.com/" target="_blank" rel="noopener noreferrer">
               Django Docs <ExternalLink className="ml-1 h-3 w-3" />
             </a>
           </Button>
           <Button variant="outline" asChild>
-            <a href="https://github.com/Experto-AI/quickscale" target="_blank" rel="noopener noreferrer">
+            <a
+              href="https://github.com/Experto-AI/quickscale"
+              target="_blank"
+              rel="noopener noreferrer"
+            >
               QuickScale <ExternalLink className="ml-1 h-3 w-3" />
             </a>
           </Button>
@@ -133,4 +189,4 @@ export function Dashboard() {
     </div>
   )
 }
-{% endraw %}
+{% endraw -%}

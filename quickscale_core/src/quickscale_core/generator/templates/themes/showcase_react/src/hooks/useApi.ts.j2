@@ -1,3 +1,4 @@
+{% raw -%}
 import { useQuery } from '@tanstack/react-query'
 
 async function fetchApi<T>(endpoint: string): Promise<T> {
@@ -22,3 +23,4 @@ export function useApiData<T>(endpoint: string, queryKey: string[]) {
     queryFn: () => fetchApi<T>(endpoint),
   })
 }
+{% endraw -%}

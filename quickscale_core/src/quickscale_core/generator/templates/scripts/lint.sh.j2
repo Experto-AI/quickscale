@@ -74,6 +74,8 @@ if [ "$RUN_FRONTEND" = true ] && [ -d "$ROOT/frontend" ]; then
 		if [ ! -d "node_modules" ]; then
 			echo "  → Installing frontend dependencies..."
 			pnpm install
+			echo "  → Formatting generated sources..."
+			pnpm format
 		fi
 
 		echo "  → Running ESLint..."

@@ -394,7 +394,11 @@ class TestReactThemePnpmIntegration:
         assert result.returncode == 0, f"Lint failed: {result.stderr}"
 
     def test_pnpm_format_check_succeeds(self, tmp_path, pnpm_available):
-        """Verify formatter check succeeds after install."""
+        """Verify formatter check succeeds directly after install.
+
+        Generated files should be Prettier-compliant without requiring a
+        separate `pnpm run format` pass first.
+        """
         generator = ProjectGenerator(theme="showcase_react")
         project_name = "format_check_test"
         project_path = tmp_path / project_name

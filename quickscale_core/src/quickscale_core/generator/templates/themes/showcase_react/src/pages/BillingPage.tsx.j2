@@ -1,3 +1,4 @@
+{% raw -%}
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
@@ -9,9 +10,7 @@ export function BillingPage() {
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-3xl font-bold tracking-tight">Billing</h1>
-          <p className="text-muted-foreground">
-            Subscription management and payment processing
-          </p>
+          <p className="text-muted-foreground">Subscription management and payment processing</p>
         </div>
         <Badge variant="outline">Placeholder</Badge>
       </div>
@@ -19,7 +18,7 @@ export function BillingPage() {
       <div className="grid gap-4 md:grid-cols-2">
         <Card>
           <CardHeader>
-            <CreditCard className="h-5 w-5 text-muted-foreground mb-1" />
+            <CreditCard className="mb-1 h-5 w-5 text-muted-foreground" />
             <CardTitle className="text-base">Plans &amp; Subscriptions</CardTitle>
             <CardDescription>Configure plan tiers and active subscriptions</CardDescription>
           </CardHeader>
@@ -32,7 +31,7 @@ export function BillingPage() {
 
         <Card>
           <CardHeader>
-            <Receipt className="h-5 w-5 text-muted-foreground mb-1" />
+            <Receipt className="mb-1 h-5 w-5 text-muted-foreground" />
             <CardTitle className="text-base">Invoices</CardTitle>
             <CardDescription>Track payments and billing history</CardDescription>
           </CardHeader>
@@ -45,7 +44,7 @@ export function BillingPage() {
 
         <Card>
           <CardHeader>
-            <ShieldCheck className="h-5 w-5 text-muted-foreground mb-1" />
+            <ShieldCheck className="mb-1 h-5 w-5 text-muted-foreground" />
             <CardTitle className="text-base">Provider Integration</CardTitle>
             <CardDescription>Connect Stripe or another payment gateway</CardDescription>
           </CardHeader>
@@ -61,3 +60,4 @@ export function BillingPage() {
     </div>
   )
 }
+{% endraw -%}

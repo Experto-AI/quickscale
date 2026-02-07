@@ -1,4 +1,5 @@
-{% raw %}import { create } from 'zustand'
+{% raw -%}
+import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
 
 type Theme = 'light' | 'dark'
@@ -30,8 +31,8 @@ export const useThemeStore = create<ThemeState>()(
           updateDocumentClass(state.theme)
         }
       },
-    }
-  )
+    },
+  ),
 )
 
 function updateDocumentClass(theme: Theme) {
@@ -39,4 +40,4 @@ function updateDocumentClass(theme: Theme) {
   root.classList.remove('light', 'dark')
   root.classList.add(theme)
 }
-{% endraw %}
+{% endraw -%}

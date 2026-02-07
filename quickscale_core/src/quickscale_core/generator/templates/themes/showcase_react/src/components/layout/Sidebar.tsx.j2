@@ -1,5 +1,15 @@
-{% raw %}import { NavLink } from 'react-router-dom'
-import { Home, Settings, BookOpen, Store, Briefcase, CreditCard, Users, UserCircle } from 'lucide-react'
+{% raw -%}
+import { NavLink } from 'react-router-dom'
+import {
+  Home,
+  Settings,
+  BookOpen,
+  Store,
+  Briefcase,
+  CreditCard,
+  Users,
+  UserCircle,
+} from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { Separator } from '@/components/ui/separator'
 import { useModules } from '@/hooks/useModules'
@@ -30,54 +40,56 @@ export function Sidebar() {
   ]
 
   return (
-    <aside className="hidden lg:flex w-64 flex-col border-r bg-sidebar min-h-screen">
+    <aside className="hidden min-h-screen w-64 flex-col border-r bg-sidebar lg:flex">
       <div className="p-6">
-        <h1 className="text-xl font-bold text-sidebar-foreground">
-          {% endraw %}{{ project_name }}{% raw %}
-        </h1>
+        <h1 className="text-xl font-bold text-sidebar-foreground">qs_fmt_test</h1>
       </div>
       <Separator />
-      <nav className="flex-1 p-4 space-y-1">
-        {navigation.filter(item => item.show).map((item) => (
-          <NavLink
-            key={item.name}
-            to={item.href}
-            end={item.end}
-            className={({ isActive }) =>
-              cn(
-                'flex items-center gap-3 rounded-lg px-3 py-2 text-sm transition-colors',
-                isActive
-                  ? 'bg-sidebar-accent text-sidebar-accent-foreground'
-                  : 'text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground'
-              )
-            }
-          >
-            <item.icon className="h-4 w-4" />
-            {item.name}
-          </NavLink>
-        ))}
+      <nav className="flex-1 space-y-1 p-4">
+        {navigation
+          .filter((item) => item.show)
+          .map((item) => (
+            <NavLink
+              key={item.name}
+              to={item.href}
+              end={item.end}
+              className={({ isActive }) =>
+                cn(
+                  'flex items-center gap-3 rounded-lg px-3 py-2 text-sm transition-colors',
+                  isActive
+                    ? 'bg-sidebar-accent text-sidebar-accent-foreground'
+                    : 'text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground',
+                )
+              }
+            >
+              <item.icon className="h-4 w-4" />
+              {item.name}
+            </NavLink>
+          ))}
       </nav>
       <Separator />
-      <div className="p-4 space-y-1">
-        {bottomNavigation.filter(item => item.show).map((item) => (
-          <NavLink
-            key={item.name}
-            to={item.href}
-            className={({ isActive }) =>
-              cn(
-                'flex items-center gap-3 rounded-lg px-3 py-2 text-sm transition-colors',
-                isActive
-                  ? 'bg-sidebar-accent text-sidebar-accent-foreground'
-                  : 'text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground'
-              )
-            }
-          >
-            <item.icon className="h-4 w-4" />
-            {item.name}
-          </NavLink>
-        ))}
+      <div className="space-y-1 p-4">
+        {bottomNavigation
+          .filter((item) => item.show)
+          .map((item) => (
+            <NavLink
+              key={item.name}
+              to={item.href}
+              className={({ isActive }) =>
+                cn(
+                  'flex items-center gap-3 rounded-lg px-3 py-2 text-sm transition-colors',
+                  isActive
+                    ? 'bg-sidebar-accent text-sidebar-accent-foreground'
+                    : 'text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground',
+                )
+              }
+            >
+              <item.icon className="h-4 w-4" />
+              {item.name}
+            </NavLink>
+          ))}
       </div>
     </aside>
   )
 }
-{% endraw %}
+{% endraw -%}

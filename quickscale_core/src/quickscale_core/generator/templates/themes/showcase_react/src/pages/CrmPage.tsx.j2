@@ -1,3 +1,4 @@
+{% raw -%}
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { useApiData } from '@/hooks/useApi'
@@ -24,10 +25,34 @@ function useCrmStats() {
 }
 
 const crmSections = [
-  { key: 'contacts', name: 'Contacts', icon: UserCircle, description: 'Manage customer contacts and communication', apiPath: '/crm/api/contacts/' },
-  { key: 'companies', name: 'Companies', icon: Building2, description: 'Track companies and organizations', apiPath: '/crm/api/companies/' },
-  { key: 'deals', name: 'Deals', icon: Briefcase, description: 'Manage deals and sales pipeline', apiPath: '/crm/api/deals/' },
-  { key: 'tags', name: 'Tags', icon: Tag, description: 'Organize records with tags', apiPath: '/crm/api/tags/' },
+  {
+    key: 'contacts',
+    name: 'Contacts',
+    icon: UserCircle,
+    description: 'Manage customer contacts and communication',
+    apiPath: '/crm/api/contacts/',
+  },
+  {
+    key: 'companies',
+    name: 'Companies',
+    icon: Building2,
+    description: 'Track companies and organizations',
+    apiPath: '/crm/api/companies/',
+  },
+  {
+    key: 'deals',
+    name: 'Deals',
+    icon: Briefcase,
+    description: 'Manage deals and sales pipeline',
+    apiPath: '/crm/api/deals/',
+  },
+  {
+    key: 'tags',
+    name: 'Tags',
+    icon: Tag,
+    description: 'Organize records with tags',
+    apiPath: '/crm/api/tags/',
+  },
 ] as const
 
 export function CrmPage() {
@@ -67,7 +92,7 @@ export function CrmPage() {
               <div className="text-2xl font-bold">
                 {stats.isLoading ? '—' : stats[section.key as keyof typeof stats]}
               </div>
-              <p className="text-xs text-muted-foreground mt-1">{section.description}</p>
+              <p className="mt-1 text-xs text-muted-foreground">{section.description}</p>
               <Button variant="outline" size="sm" className="mt-3" asChild>
                 <a href={section.apiPath} target="_blank" rel="noopener noreferrer">
                   View API <ExternalLink className="ml-1 h-3 w-3" />
@@ -83,7 +108,7 @@ export function CrmPage() {
           <CardTitle>Quick Actions</CardTitle>
           <CardDescription>Manage CRM data through the Django Admin or REST API</CardDescription>
         </CardHeader>
-        <CardContent className="flex gap-3 flex-wrap">
+        <CardContent className="flex flex-wrap gap-3">
           <Button variant="outline" asChild>
             <a href="/admin/quickscale_modules_crm/" target="_blank" rel="noopener noreferrer">
               Django Admin <ExternalLink className="ml-1 h-3 w-3" />
@@ -104,3 +129,4 @@ export function CrmPage() {
     </div>
   )
 }
+{% endraw -%}

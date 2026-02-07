@@ -1,4 +1,5 @@
-{% raw %}import { Bell, Search, User } from 'lucide-react'
+{% raw -%}
+import { Bell, Search, User } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { useThemeStore } from '@/stores/themeStore'
@@ -12,20 +13,11 @@ export function Header() {
         <div className="flex-1">
           <div className="relative max-w-md">
             <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
-            <Input
-              type="search"
-              placeholder="Search..."
-              className="pl-8 w-full"
-            />
+            <Input type="search" placeholder="Search..." className="w-full pl-8" />
           </div>
         </div>
         <div className="flex items-center gap-2">
-          <Button
-            variant="ghost"
-            size="icon"
-            onClick={toggleTheme}
-            aria-label="Toggle theme"
-          >
+          <Button variant="ghost" size="icon" onClick={toggleTheme} aria-label="Toggle theme">
             {theme === 'light' ? '🌙' : '☀️'}
           </Button>
           <Button variant="ghost" size="icon" aria-label="Notifications">
@@ -39,4 +31,4 @@ export function Header() {
     </header>
   )
 }
-{% endraw %}
+{% endraw -%}

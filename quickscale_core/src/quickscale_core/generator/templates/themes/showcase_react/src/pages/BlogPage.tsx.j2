@@ -1,3 +1,4 @@
+{% raw -%}
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
@@ -36,7 +37,9 @@ export function BlogPage() {
           </CardHeader>
           <CardContent>
             <Button variant="outline" size="sm" asChild>
-              <a href="/blog/">Browse Posts <ExternalLink className="ml-1 h-3 w-3" /></a>
+              <a href="/blog/">
+                Browse Posts <ExternalLink className="ml-1 h-3 w-3" />
+              </a>
             </Button>
           </CardContent>
         </Card>
@@ -47,7 +50,7 @@ export function BlogPage() {
             <CardDescription>Organize content with categories and tags</CardDescription>
           </CardHeader>
           <CardContent>
-            <div className="flex gap-2 flex-wrap">
+            <div className="flex flex-wrap gap-2">
               <Badge variant="secondary">Categories</Badge>
               <Badge variant="outline">Tags</Badge>
             </div>
@@ -71,3 +74,4 @@ export function BlogPage() {
     </div>
   )
 }
+{% endraw -%}
