@@ -14,11 +14,39 @@ Run with: pytest -m e2e
 """
 
 import os
+import shlex
+import shutil
 import subprocess
 import time
 from pathlib import Path
 
 import pytest
+
+
+def _is_network_failure(output: str) -> bool:
+    """Detect common package-registry network failures."""
+    lowered = output.lower()
+    markers = [
+        "eai_again",
+        "enotfound",
+        "err_pnpm_meta_fetch_fail",
+        "etimedout",
+        "registry.npmjs.org",
+    ]
+    return any(marker in lowered for marker in markers)
+
+
+def _is_poetry_network_failure(output: str) -> bool:
+    """Detect Poetry/PyPI connectivity failures."""
+    lowered = output.lower()
+    markers = [
+        "all attempts to connect to pypi.org failed",
+        "hostname cannot be resolved by your dns",
+        "your network is not connected to the internet",
+        "nameresolutionerror",
+        "connection error",
+    ]
+    return any(marker in lowered for marker in markers)
 
 
 @pytest.mark.e2e
@@ -155,6 +183,170 @@ class TestFullE2EWorkflow:
         # Generated project tests should pass
         assert result.returncode == 0, f"Generated tests failed: {result.stderr}"
 
+    def test_generated_project_python_ruff_check(self, tmp_path):
+        """Generated Python project should pass Ruff lint check."""
+        from quickscale_core.generator import ProjectGenerator
+
+        project_name = "quality_ruff_check"
+        project_path = tmp_path / project_name
+        ProjectGenerator().generate(project_name, project_path)
+
+        result = self._run_repo_poetry_command(
+            ["ruff", "check", str(project_path)],
+            timeout=120,
+        )
+        assert result.returncode == 0, (
+            f"ruff check failed:\n{result.stderr}\n{result.stdout}"
+        )
+
+    def test_generated_project_python_ruff_format_check(self, tmp_path):
+        """Generated Python project should pass Ruff formatter check mode."""
+        from quickscale_core.generator import ProjectGenerator
+
+        project_name = "quality_ruff_format"
+        project_path = tmp_path / project_name
+        ProjectGenerator().generate(project_name, project_path)
+
+        result = self._run_repo_poetry_command(
+            ["ruff", "format", "--check", str(project_path)],
+            timeout=120,
+        )
+        assert result.returncode == 0, (
+            f"ruff format --check failed:\n{result.stderr}\n{result.stdout}"
+        )
+
+    def test_generated_project_python_mypy_check(self, tmp_path):
+        """Generated Python project should pass mypy type checking."""
+        from quickscale_core.generator import ProjectGenerator
+
+        project_name = "quality_mypy"
+        project_path = tmp_path / project_name
+        ProjectGenerator().generate(project_name, project_path)
+
+        current_pythonpath = os.environ.get("PYTHONPATH", "")
+        pythonpath = (
+            f"{project_path}:{current_pythonpath}"
+            if current_pythonpath
+            else str(project_path)
+        )
+        env = {**os.environ, "PYTHONPATH": pythonpath}
+
+        result = self._run_repo_poetry_command(
+            [
+                "mypy",
+                "--config-file",
+                str(project_path / "pyproject.toml"),
+                str(project_path / project_name),
+            ],
+            env=env,
+            timeout=180,
+        )
+        assert result.returncode == 0, f"mypy failed:\n{result.stderr}\n{result.stdout}"
+
+    def test_generated_lint_script_python_and_frontend(self, tmp_path):
+        """Generated lint script should work for both python and frontend modes."""
+        from quickscale_core.generator import ProjectGenerator
+
+        project_name = "lint_script_parity"
+        project_path = tmp_path / project_name
+        ProjectGenerator(theme="showcase_react").generate(project_name, project_path)
+
+        python_cmd = (
+            f"cd {shlex.quote(str(project_path))} && "
+            "POETRY_VIRTUALENVS_CREATE=false ./scripts/lint.sh --python"
+        )
+        python_result = self._run_repo_poetry_command(
+            ["bash", "-lc", python_cmd],
+            timeout=300,
+        )
+        assert python_result.returncode == 0, (
+            f"scripts/lint.sh --python failed:\n"
+            f"{python_result.stderr}\n{python_result.stdout}"
+        )
+
+        self._ensure_pnpm_available()
+
+        frontend_cmd = (
+            f"cd {shlex.quote(str(project_path))} && "
+            "POETRY_VIRTUALENVS_CREATE=false ./scripts/lint.sh --frontend"
+        )
+        frontend_result = self._run_repo_poetry_command(
+            ["bash", "-lc", frontend_cmd],
+            timeout=600,
+        )
+        combined_output = f"{frontend_result.stdout}\n{frontend_result.stderr}"
+        if frontend_result.returncode != 0 and _is_network_failure(combined_output):
+            pytest.skip("npm registry is unreachable in this environment")
+
+        assert frontend_result.returncode == 0, (
+            f"scripts/lint.sh --frontend failed:\n"
+            f"{frontend_result.stderr}\n{frontend_result.stdout}"
+        )
+
+    def test_complete_react_project_lifecycle(self, tmp_path):
+        """
+        Test full React lifecycle: generate → build frontend → serve → validate routes.
+        """
+        from quickscale_core.generator import ProjectGenerator
+
+        generator = ProjectGenerator(theme="showcase_react")
+        project_name = "e2e_react_project"
+        project_path = tmp_path / project_name
+
+        generator.generate(project_name, project_path)
+        self._install_project_dependencies(project_path)
+        self._build_react_frontend(project_path)
+
+        local_env = {
+            **os.environ,
+            "DJANGO_SETTINGS_MODULE": f"{project_name}.settings.local",
+        }
+        check_result = subprocess.run(
+            ["poetry", "run", "python", "manage.py", "check"],
+            cwd=project_path,
+            capture_output=True,
+            text=True,
+            env=local_env,
+        )
+        assert check_result.returncode == 0, (
+            f"Django checks failed: {check_result.stderr}"
+        )
+
+        server_port = self._find_free_port()
+        server_process = subprocess.Popen(
+            [
+                "poetry",
+                "run",
+                "python",
+                "manage.py",
+                "runserver",
+                str(server_port),
+                "--noreload",
+            ],
+            cwd=project_path,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+            env=local_env,
+            text=True,
+            bufsize=1,
+        )
+
+        try:
+            self._wait_for_server(
+                f"http://localhost:{server_port}",
+                timeout=30,
+                server_process=server_process,
+            )
+
+            self._test_react_routes_render(server_port)
+        finally:
+            try:
+                server_process.terminate()
+                server_process.wait(timeout=3)
+            except subprocess.TimeoutExpired:
+                server_process.kill()
+                server_process.wait(timeout=2)
+
     def test_ci_workflow_is_valid(self, tmp_path):
         """Verify GitHub Actions CI workflow is valid YAML."""
         from quickscale_core.generator import ProjectGenerator
@@ -241,6 +433,42 @@ class TestFullE2EWorkflow:
         # If we get here, port is still not free - raise an error
         raise RuntimeError(f"Port {port} is still in use after {max_wait} seconds")
 
+    def _run_repo_poetry_command(
+        self,
+        args: list[str],
+        timeout: int,
+        env: dict[str, str] | None = None,
+    ) -> subprocess.CompletedProcess[str]:
+        """Run poetry command from quickscale_core package environment."""
+        return subprocess.run(
+            ["poetry", "run", *args],
+            cwd=Path(__file__).resolve().parents[1],
+            capture_output=True,
+            text=True,
+            timeout=timeout,
+            env=env,
+        )
+
+    def _ensure_pnpm_available(self) -> None:
+        """Ensure pnpm is installed and npm registry is reachable."""
+        if shutil.which("pnpm") is None:
+            pytest.skip("pnpm is not installed")
+
+        try:
+            probe = subprocess.run(
+                ["pnpm", "view", "react", "version"],
+                capture_output=True,
+                text=True,
+                timeout=20,
+            )
+        except subprocess.TimeoutExpired:
+            pytest.skip("npm registry probe timed out in this environment")
+
+        if probe.returncode != 0:
+            combined_output = f"{probe.stdout}\n{probe.stderr}"
+            if _is_network_failure(combined_output):
+                pytest.skip("npm registry is unreachable in this environment")
+
     def _install_project_dependencies(self, project_path: Path):
         """Install dependencies in the generated project using poetry."""
         # First, regenerate lock file to match current Python version
@@ -251,6 +479,9 @@ class TestFullE2EWorkflow:
             text=True,
             timeout=120,  # 2 minutes timeout for lock
         )
+        lock_output = f"{lock_result.stdout}\n{lock_result.stderr}"
+        if lock_result.returncode != 0 and _is_poetry_network_failure(lock_output):
+            pytest.skip("PyPI is unreachable in this environment")
         assert lock_result.returncode == 0, f"Poetry lock failed: {lock_result.stderr}"
 
         # Then install dependencies from the updated lock file
@@ -261,9 +492,44 @@ class TestFullE2EWorkflow:
             text=True,
             timeout=180,  # 3 minutes timeout for installation
         )
+        install_output = f"{install_result.stdout}\n{install_result.stderr}"
+        if install_result.returncode != 0 and _is_poetry_network_failure(
+            install_output
+        ):
+            pytest.skip("PyPI is unreachable in this environment")
         assert install_result.returncode == 0, (
             f"Poetry install failed: {install_result.stderr}"
         )
+
+    def _build_react_frontend(self, project_path: Path) -> None:
+        """Install and build React frontend assets for generated project."""
+        self._ensure_pnpm_available()
+        frontend_path = project_path / "frontend"
+
+        install_result = subprocess.run(
+            ["pnpm", "install"],
+            cwd=frontend_path,
+            capture_output=True,
+            text=True,
+            timeout=180,
+        )
+        combined_install_output = f"{install_result.stdout}\n{install_result.stderr}"
+        if install_result.returncode != 0 and _is_network_failure(
+            combined_install_output
+        ):
+            pytest.skip("npm registry is unreachable in this environment")
+        assert install_result.returncode == 0, (
+            f"pnpm install failed: {install_result.stderr}"
+        )
+
+        build_result = subprocess.run(
+            ["pnpm", "run", "build"],
+            cwd=frontend_path,
+            capture_output=True,
+            text=True,
+            timeout=240,
+        )
+        assert build_result.returncode == 0, f"pnpm build failed: {build_result.stderr}"
 
     def _configure_test_database(
         self, project_path: Path, project_name: str, postgres_url: str
@@ -482,6 +748,28 @@ LOGGING = {{
             if href:
                 response = page.goto(f"http://localhost:{port}{href}")
                 assert response.status == 200, f"CSS file failed to load: {href}"
+
+    def _test_react_routes_render(self, port: int = 8000):
+        """Test React SPA routes return index template and built asset references."""
+        import urllib.request
+
+        urls = [
+            f"http://localhost:{port}/",
+            f"http://localhost:{port}/settings",
+            f"http://localhost:{port}/this-route-does-not-exist",
+        ]
+
+        for url in urls:
+            response = urllib.request.urlopen(url, timeout=10)
+            assert response.status == 200, f"Route failed: {url}"
+
+            html = response.read().decode("utf-8")
+            assert '<div id="root"></div>' in html, (
+                f"React root missing for route: {url}"
+            )
+            assert "frontend/assets/index.js" in html, (
+                f"React JS bundle not referenced for route: {url}"
+            )
 
 
 @pytest.mark.e2e

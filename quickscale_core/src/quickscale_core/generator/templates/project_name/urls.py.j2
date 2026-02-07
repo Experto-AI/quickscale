@@ -16,17 +16,20 @@ Including another URLconf
     2. Add a URL to urlpatterns:  path('blog/', include('blog.urls'))
 """
 
+import importlib
+from typing import Any, cast
+
 from django.conf import settings
 from django.conf.urls.static import static
 from django.contrib import admin
-from django.http import HttpResponse
+from django.http import HttpRequest, HttpResponse
 from django.urls import include, path, re_path
 from django.views.generic import TemplateView
 
-from {{ package_name }}.views import custom_404_view
+from {{ package_name }}.views import custom_404_view  # noqa: F401
 
 
-def healthcheck(request):
+def healthcheck(request: HttpRequest) -> HttpResponse:
     """Simple healthcheck endpoint for Railway and other monitoring services.
 
     Returns HTTP 200 OK without requiring database access or HTTPS redirect.
@@ -51,16 +54,16 @@ if settings.DEBUG:
 
     # Django Debug Toolbar (if installed)
     try:
-        import debug_toolbar
-
+        debug_toolbar_urls = cast(
+            Any,
+            importlib.import_module("debug_toolbar"),
+        ).urls
         urlpatterns = [
-            path("__debug__/", include(debug_toolbar.urls)),
+            path("__debug__/", include(debug_toolbar_urls)),
         ] + urlpatterns
     except ImportError:
         pass
-
-{% if theme == 'showcase_react' %}
-{% else %}
+{%- if theme != 'showcase_react' %}
     # In DEBUG mode, show custom 404 page instead of Django's technical 404
     # This provides helpful hints about installing QuickScale modules
     urlpatterns += [
@@ -71,13 +74,13 @@ if settings.DEBUG:
         # Catch-all for any other 404s (must be last)
         re_path(r".*", custom_404_view),
     ]
-{% endif %}
+{%- endif %}
 
-{% if theme == 'showcase_react' %}
+{%- if theme == 'showcase_react' %}
 # React SPA catch-all: serve index.html for client-side routing.
 # This must be enabled in both local and production environments so
 # direct navigation to routes like /settings works on Railway.
 urlpatterns += [
     re_path(r".*", TemplateView.as_view(template_name="index.html")),
 ]
-{% endif %}
+{%- endif %}

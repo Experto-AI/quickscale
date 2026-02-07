@@ -1,10 +1,14 @@
 """
 Context processors for {{ project_name }}.
 """
+
+from typing import Any
+
 from django.conf import settings as django_settings
+from django.http import HttpRequest
 
 
-def project_settings(request):
+def project_settings(request: HttpRequest) -> dict[str, Any]:
     """
     Expose django settings to templates.
 

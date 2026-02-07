@@ -71,7 +71,9 @@ class TestErrorHandlerViews:
         assert "def custom_404_view" in content, "Should have custom_404_view function"
         assert "request: HttpRequest" in content, "Should have proper type hints"
         assert "exception: Exception" in content, "Should accept exception parameter"
-        assert "render(request, '404.html'" in content, "Should render 404.html"
+        assert "render(request, " in content and '"404.html"' in content, (
+            "Should render 404.html"
+        )
         assert "status=404" in content, "Should return 404 status code"
         assert "request_path" in content, "Should pass request path to template"
 
@@ -83,7 +85,9 @@ class TestErrorHandlerViews:
         content = views_file.read_text()
 
         assert "def custom_500_view" in content, "Should have custom_500_view function"
-        assert "render(request, '500.html'" in content, "Should render 500.html"
+        assert "render(request, " in content and '"500.html"' in content, (
+            "Should render 500.html"
+        )
         assert "status=500" in content, "Should return 500 status code"
 
 

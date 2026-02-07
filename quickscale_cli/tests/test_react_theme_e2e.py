@@ -22,6 +22,19 @@ from quickscale_cli.main import cli
 from quickscale_core.generator import ProjectGenerator
 
 
+def _is_network_failure(output: str) -> bool:
+    """Detect common network-resolution failures from pnpm/npm commands."""
+    lowered = output.lower()
+    markers = [
+        "eai_again",
+        "enotfound",
+        "err_pnpm_meta_fetch_fail",
+        "etimedout",
+        "registry.npmjs.org",
+    ]
+    return any(marker in lowered for marker in markers)
+
+
 @pytest.mark.e2e
 class TestReactThemeUserWorkflow:
     """End-to-end tests for React theme user workflow."""
@@ -241,9 +254,9 @@ class TestReactThemeUserWorkflow:
 class TestReactThemePnpmIntegration:
     """Tests requiring pnpm to be installed"""
 
-    @pytest.fixture
+    @pytest.fixture(scope="class")
     def pnpm_available(self):
-        """Check if pnpm is available"""
+        """Check if pnpm is available and npm registry is reachable."""
         try:
             result = subprocess.run(
                 ["pnpm", "--version"],
@@ -254,6 +267,22 @@ class TestReactThemePnpmIntegration:
                 pytest.skip("pnpm is not installed")
         except FileNotFoundError:
             pytest.skip("pnpm is not installed")
+
+        # Skip pnpm-dependent E2E tests when registry is unreachable.
+        try:
+            probe = subprocess.run(
+                ["pnpm", "view", "react", "version"],
+                capture_output=True,
+                text=True,
+                timeout=20,
+            )
+        except subprocess.TimeoutExpired:
+            pytest.skip("npm registry probe timed out in this environment")
+
+        if probe.returncode != 0:
+            combined_output = f"{probe.stdout}\n{probe.stderr}"
+            if _is_network_failure(combined_output):
+                pytest.skip("npm registry is unreachable in this environment")
 
     def test_pnpm_install_succeeds(self, tmp_path, pnpm_available):
         """
@@ -363,6 +392,64 @@ class TestReactThemePnpmIntegration:
         )
         # Lint should succeed (exit 0)
         assert result.returncode == 0, f"Lint failed: {result.stderr}"
+
+    def test_pnpm_format_check_succeeds(self, tmp_path, pnpm_available):
+        """Verify formatter check succeeds after install."""
+        generator = ProjectGenerator(theme="showcase_react")
+        project_name = "format_check_test"
+        project_path = tmp_path / project_name
+
+        generator.generate(project_name, project_path)
+        frontend_path = project_path / "frontend"
+
+        install_result = subprocess.run(
+            ["pnpm", "install"],
+            cwd=frontend_path,
+            capture_output=True,
+            text=True,
+            timeout=120,
+        )
+        assert install_result.returncode == 0, (
+            f"pnpm install failed: {install_result.stderr}"
+        )
+
+        result = subprocess.run(
+            ["pnpm", "run", "format:check"],
+            cwd=frontend_path,
+            capture_output=True,
+            text=True,
+            timeout=60,
+        )
+        assert result.returncode == 0, f"format:check failed: {result.stderr}"
+
+    def test_pnpm_build_succeeds(self, tmp_path, pnpm_available):
+        """Verify direct frontend build succeeds after install."""
+        generator = ProjectGenerator(theme="showcase_react")
+        project_name = "build_test"
+        project_path = tmp_path / project_name
+
+        generator.generate(project_name, project_path)
+        frontend_path = project_path / "frontend"
+
+        install_result = subprocess.run(
+            ["pnpm", "install"],
+            cwd=frontend_path,
+            capture_output=True,
+            text=True,
+            timeout=120,
+        )
+        assert install_result.returncode == 0, (
+            f"pnpm install failed: {install_result.stderr}"
+        )
+
+        result = subprocess.run(
+            ["pnpm", "run", "build"],
+            cwd=frontend_path,
+            capture_output=True,
+            text=True,
+            timeout=180,
+        )
+        assert result.returncode == 0, f"pnpm build failed: {result.stderr}"
 
 
 @pytest.mark.e2e

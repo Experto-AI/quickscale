@@ -31,18 +31,18 @@ if [ "$RUN_PYTHON" = true ]; then
 	echo ""
 
 	echo "  → Running ruff check..."
-	if poetry run ruff check --fix .; then
+	if poetry run ruff check .; then
 		echo "  ✅ ruff check passed"
 	else
 		echo "  ❌ ruff check found issues"
 		EXIT_CODE=1
 	fi
 
-	echo "  → Running ruff format..."
-	if poetry run ruff format .; then
+	echo "  → Running ruff format --check..."
+	if poetry run ruff format --check .; then
 		echo "  ✅ ruff format passed"
 	else
-		echo "  ❌ ruff format found issues"
+		echo "  ❌ ruff format check found issues"
 		EXIT_CODE=1
 	fi
 
@@ -89,6 +89,14 @@ if [ "$RUN_FRONTEND" = true ] && [ -d "$ROOT/frontend" ]; then
 			echo "  ✅ TypeScript check passed"
 		else
 			echo "  ❌ TypeScript found type errors"
+			EXIT_CODE=1
+		fi
+
+		echo "  → Running Prettier format check..."
+		if pnpm format:check; then
+			echo "  ✅ Prettier format check passed"
+		else
+			echo "  ❌ Prettier format check found issues"
 			EXIT_CODE=1
 		fi
 

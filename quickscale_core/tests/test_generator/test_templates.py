@@ -145,6 +145,15 @@ class TestTemplateRendering:
         assert output is not None
         assert "testproject" in output
 
+    def test_urls_optional_debug_toolbar_import(
+        self, jinja_env: Environment, test_context: dict[str, str]
+    ) -> None:
+        """Optional debug toolbar import should not require package install."""
+        template = jinja_env.get_template("project_name/urls.py.j2")
+        output = template.render(test_context)
+        assert 'importlib.import_module("debug_toolbar")' in output
+        assert "except ImportError" in output
+
     def test_react_urls_include_spa_catch_all_in_production(
         self, jinja_env: Environment, test_context: dict[str, str]
     ) -> None:
@@ -526,6 +535,11 @@ class TestDevOpsTemplateLoading:
         template = jinja_env.get_template(".editorconfig.j2")
         assert template is not None
 
+    def test_lint_script_loads(self, jinja_env: Environment) -> None:
+        """Test scripts/lint.sh template loads without errors."""
+        template = jinja_env.get_template("scripts/lint.sh.j2")
+        assert template is not None
+
 
 class TestDevOpsTemplateRendering:
     """Verify DevOps templates render correctly with sample context data."""
@@ -609,6 +623,27 @@ class TestDevOpsTemplateRendering:
         assert "root = true" in output
         assert "indent_style" in output
 
+    def test_lint_script_renders(
+        self, jinja_env: Environment, test_context: dict[str, str]
+    ) -> None:
+        """Test scripts/lint.sh renders with package name."""
+        template = jinja_env.get_template("scripts/lint.sh.j2")
+        output = template.render(test_context)
+        assert output is not None
+        assert len(output) > 0
+        assert "mypy testproject/" in output
+
+    def test_lint_script_uses_check_mode_only(
+        self, jinja_env: Environment, test_context: dict[str, str]
+    ) -> None:
+        """Lint script should validate formatting/linting without auto-fixing."""
+        template = jinja_env.get_template("scripts/lint.sh.j2")
+        output = template.render(test_context)
+        assert "ruff check --fix" not in output
+        assert "ruff check ." in output
+        assert "ruff format --check ." in output
+        assert "pnpm format:check" in output
+
 
 class TestPyprojectTomlContent:
     """Verify pyproject.toml contains required production dependencies and configuration."""
@@ -665,6 +700,15 @@ class TestPyprojectTomlContent:
         assert "pytest-django" in output
         assert "ruff" in output
         assert "mypy" in output
+
+    def test_mypy_overrides_for_optional_and_untyped_imports(
+        self, jinja_env: Environment, test_context: dict[str, str]
+    ) -> None:
+        """Test mypy ignores known modules without complete type metadata."""
+        template = jinja_env.get_template("pyproject.toml.j2")
+        output = template.render(test_context)
+        assert 'module = ["decouple", "debug_toolbar", "debug_toolbar.*"]' in output
+        assert "ignore_missing_imports = true" in output
 
     def test_pytest_configuration(
         self, jinja_env: Environment, test_context: dict[str, str]
