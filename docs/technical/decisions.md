@@ -336,7 +336,7 @@ User-editable configuration file with this structure:
 version: 0.75.0
 project:
   name: myapp
-  theme: showcase_html
+  theme: showcase_react
 modules:
   - name: auth
   - name: listings
@@ -359,7 +359,7 @@ System-managed state file tracking what has been applied:
 version: 0.75.0
 project:
   name: myapp
-  theme: showcase_html
+  theme: showcase_react
 applied_modules:
   - name: auth
     version: 0.75.0
@@ -435,7 +435,7 @@ last_apply_at: 2025-12-03T14:32:00Z
 **Example**:
 ```bash
 $ quickscale plan myapp --add auth
-? Select theme (showcase_html): showcase_html
+? Select theme (showcase_react): showcase_react
 ? Enable user registration? (y/n) [y]: y
 ? Email verification required? (y/n) [n]: n
 
@@ -488,7 +488,7 @@ Automatic changes made:
 version: 0.75.0
 project:
   name: myproject
-  theme: showcase_html
+  theme: showcase_react
 modules:
   auth:
     options:

@@ -178,7 +178,7 @@ If you want to contribute to QuickScale development, see the [Development Guide]
 
 # 2. Create your project configuration
 quickscale plan myapp
-# → Accept defaults: theme (showcase_html), no modules, Docker enabled
+# → Accept defaults: theme (showcase_react), no modules, Docker enabled
 
 # 3. Generate and enter the project
 cd myapp

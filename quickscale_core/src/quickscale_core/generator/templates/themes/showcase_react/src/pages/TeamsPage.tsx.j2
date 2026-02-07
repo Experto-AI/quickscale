@@ -1,0 +1,63 @@
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
+import { Button } from '@/components/ui/button'
+import { Badge } from '@/components/ui/badge'
+import { Users, UserPlus, Shield, ExternalLink } from 'lucide-react'
+
+export function TeamsPage() {
+  return (
+    <div className="space-y-6">
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-3xl font-bold tracking-tight">Teams</h1>
+          <p className="text-muted-foreground">
+            Team collaboration and multi-tenant organization management
+          </p>
+        </div>
+        <Badge variant="outline">Placeholder</Badge>
+      </div>
+
+      <div className="grid gap-4 md:grid-cols-2">
+        <Card>
+          <CardHeader>
+            <Users className="h-5 w-5 text-muted-foreground mb-1" />
+            <CardTitle className="text-base">Team Workspaces</CardTitle>
+            <CardDescription>Organize members by workspace or account</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <p className="text-sm text-muted-foreground">
+              Configure team-level permissions and ownership boundaries.
+            </p>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader>
+            <UserPlus className="h-5 w-5 text-muted-foreground mb-1" />
+            <CardTitle className="text-base">Invitations</CardTitle>
+            <CardDescription>Invite teammates and assign roles</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <p className="text-sm text-muted-foreground">
+              Invitation and onboarding workflows appear here when enabled.
+            </p>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader>
+            <Shield className="h-5 w-5 text-muted-foreground mb-1" />
+            <CardTitle className="text-base">Access Control</CardTitle>
+            <CardDescription>Role-based access and audit-friendly settings</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <Button variant="outline" size="sm" asChild>
+              <a href="/admin/" target="_blank" rel="noopener noreferrer">
+                Open Admin <ExternalLink className="ml-1 h-3 w-3" />
+              </a>
+            </Button>
+          </CardContent>
+        </Card>
+      </div>
+    </div>
+  )
+}

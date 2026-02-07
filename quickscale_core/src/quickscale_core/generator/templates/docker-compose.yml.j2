@@ -28,7 +28,9 @@ services:
     working_dir: /app/frontend
     environment:
       - HOME=/tmp
-    command: sh -c "npm install && npm run build"
+    # Use corepack without `enable` because this container runs as non-root.
+    # `corepack enable` writes to /usr/local/bin and fails with EACCES.
+    command: sh -c "corepack pnpm install --no-frozen-lockfile && corepack pnpm run build"
     volumes:
       - .:/app
 {% endif %}

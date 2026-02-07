@@ -33,7 +33,18 @@ def _validate_project_and_docker() -> bool:
         click.secho(
             "❌ Error: Not in a QuickScale project directory", fg="red", err=True
         )
-        click.echo("💡 Tip: Navigate to a project directory", err=True)
+        if (Path.cwd() / "quickscale.yml").exists():
+            click.echo(
+                "💡 Tip: Found quickscale.yml but project files are not generated yet. "
+                "Run 'quickscale apply' first.",
+                err=True,
+            )
+        else:
+            click.echo(
+                "💡 Tip: Navigate to a generated project directory "
+                "(contains docker-compose.yml)",
+                err=True,
+            )
         sys.exit(1)
 
     if not is_docker_running():

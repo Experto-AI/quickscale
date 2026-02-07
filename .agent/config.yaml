@@ -59,8 +59,9 @@ security:
 context:
   always_read:
     - "README.md"
-    - "docs/technical/roadmap.md"
+    - "START_HERE.md"
     - "docs/technical/decisions.md"
+    - "docs/technical/scaffolding.md"
 
 # Project-specific overrides
 project:

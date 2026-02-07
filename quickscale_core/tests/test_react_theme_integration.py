@@ -63,6 +63,9 @@ class TestReactThemeGeneration:
         with open(package_json_path) as f:
             package = json.load(f)
 
+        package_manager = package.get("packageManager", "")
+        assert re.fullmatch(r"pnpm@\d+\.\d+\.\d+", package_manager)
+
         # Core React dependencies
         deps = package.get("dependencies", {})
         assert "react" in deps
@@ -194,8 +197,9 @@ class TestReactThemeGeneration:
         # Should have node build stage
         assert "node" in dockerfile.lower()
 
-        # Should build frontend
-        assert "npm" in dockerfile or "pnpm" in dockerfile
+        # Should build frontend with canonical package manager
+        assert "pnpm" in dockerfile
+        assert re.search(r"RUN\\s+npm\\s", dockerfile) is None
 
         # Should copy built assets
         assert "staticfiles" in dockerfile or "static" in dockerfile
@@ -513,3 +517,101 @@ class TestReactThemeAuthUrls:
 
         for url in expected_urls:
             assert url in content, f"ProfilePage missing expected auth link: {url}"
+
+
+@pytest.mark.integration
+class TestReactThemeModuleActivationMatrix:
+    """Validate React module activation behavior for none/some/all selections."""
+
+    MODULES = ["auth", "blog", "listings", "crm", "billing", "teams"]
+
+    @staticmethod
+    def _extract_template_module_app_map(index_html: str) -> dict[str, str]:
+        """Extract module->Django app mapping from generated index.html template."""
+        mapping: dict[str, str] = {}
+        for module in TestReactThemeModuleActivationMatrix.MODULES:
+            pattern = (
+                rf"{module}:\s*\{{%\s*if\s*'([^']+)'\s*in\s*settings\.INSTALLED_APPS\s*%\}}"
+                rf"true\{{%\s*else\s*%\}}false\{{%\s*endif\s*%\}}"
+            )
+            match = re.search(pattern, index_html)
+            assert match is not None, (
+                f"Missing module activation condition for '{module}' in templates/index.html"
+            )
+            mapping[module] = match.group(1)
+        return mapping
+
+    def test_index_template_declares_all_module_activation_conditions(self, tmp_path):
+        """Generated React index template should include activation conditions for all modules."""
+        generator = ProjectGenerator(theme="showcase_react")
+        output_path = tmp_path / "react_module_matrix"
+        generator.generate("react_module_matrix", output_path)
+
+        index_html = (output_path / "templates" / "index.html").read_text()
+        app_map = self._extract_template_module_app_map(index_html)
+
+        expected = {module: f"quickscale_modules_{module}" for module in self.MODULES}
+        assert app_map == expected
+
+    @pytest.mark.parametrize(
+        ("installed_apps", "expected_true"),
+        [
+            ([], set()),  # none
+            (  # some
+                [
+                    "quickscale_modules_auth",
+                    "quickscale_modules_blog",
+                    "quickscale_modules_crm",
+                ],
+                {"auth", "blog", "crm"},
+            ),
+            (  # all
+                [
+                    "quickscale_modules_auth",
+                    "quickscale_modules_blog",
+                    "quickscale_modules_listings",
+                    "quickscale_modules_crm",
+                    "quickscale_modules_billing",
+                    "quickscale_modules_teams",
+                ],
+                {"auth", "blog", "listings", "crm", "billing", "teams"},
+            ),
+        ],
+    )
+    def test_module_activation_matrix_none_some_all(
+        self, tmp_path, installed_apps, expected_true
+    ):
+        """Module activation naming convention should support none/some/all combinations."""
+        generator = ProjectGenerator(theme="showcase_react")
+        output_path = tmp_path / "react_module_matrix_flags"
+        generator.generate("react_module_matrix_flags", output_path)
+
+        index_html = (output_path / "templates" / "index.html").read_text()
+        app_map = self._extract_template_module_app_map(index_html)
+
+        resolved_flags = {
+            module: app_name in installed_apps for module, app_name in app_map.items()
+        }
+        expected_flags = {module: module in expected_true for module in self.MODULES}
+
+        assert resolved_flags == expected_flags
+
+    def test_react_routes_cover_all_module_navigation_targets(self, tmp_path):
+        """React router should include routes for every module link exposed by the UI."""
+        generator = ProjectGenerator(theme="showcase_react")
+        output_path = tmp_path / "react_route_matrix"
+        generator.generate("react_route_matrix", output_path)
+
+        app_tsx = (output_path / "frontend" / "src" / "App.tsx").read_text()
+
+        for path in ["/blog", "/listings", "/crm", "/billing", "/teams", "/profile"]:
+            assert f'path="{path}"' in app_tsx, f"Missing route for {path}"
+
+    def test_react_theme_generates_billing_and_teams_pages(self, tmp_path):
+        """Billing/Teams page templates should be generated for all-module compatibility."""
+        generator = ProjectGenerator(theme="showcase_react")
+        output_path = tmp_path / "react_module_pages"
+        generator.generate("react_module_pages", output_path)
+
+        assert (output_path / "frontend" / "src" / "pages" / "BillingPage.tsx").exists()
+        assert (output_path / "frontend" / "src" / "pages" / "TeamsPage.tsx").exists()

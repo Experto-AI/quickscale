@@ -624,7 +624,10 @@ def _save_project_state(
 
 
 def _display_next_steps(
-    output_path: Path, qs_config: QuickScaleConfig, no_docker: bool
+    output_path: Path,
+    qs_config: QuickScaleConfig,
+    no_docker: bool,
+    docker_started: bool | None = None,
 ) -> None:
     """Display success message and next steps."""
     click.echo("\n" + "=" * 50)
@@ -636,9 +639,14 @@ def _display_next_steps(
         click.echo(f"  cd {qs_config.project.name}")
 
     if qs_config.docker.start and not no_docker:
-        click.echo("  # Docker services should be running")
-        click.echo("  quickscale logs web  # View logs")
-        click.echo("  quickscale ps        # Check status")
+        if docker_started is False:
+            click.echo("  # Docker auto-start failed during apply")
+            click.echo("  quickscale up --build  # Retry Docker startup")
+            click.echo("  quickscale logs        # View failure details")
+        else:
+            click.echo("  # Docker services should be running")
+            click.echo("  quickscale logs web  # View logs")
+            click.echo("  quickscale ps        # Check status")
     else:
         click.echo("  quickscale up        # Start Docker services")
         click.echo("  # Or run without Docker:")
@@ -727,10 +735,12 @@ def _execute_apply_steps(
             click.secho("⚠️  Some config changes failed to apply", fg="yellow")
 
     # Start Docker
+    docker_started: bool | None = None
     if not no_docker and ctx.qs_config.docker.start:
-        if not _start_docker(
+        docker_started = _start_docker(
             ctx.output_path, ctx.qs_config.docker.build, verbose_docker
-        ):
+        )
+        if not docker_started:
             click.secho("⚠️  Docker start failed, continuing...", fg="yellow")
 
     # Save state
@@ -743,7 +753,7 @@ def _execute_apply_steps(
     )
 
     # Display next steps
-    _display_next_steps(ctx.output_path, ctx.qs_config, no_docker)
+    _display_next_steps(ctx.output_path, ctx.qs_config, no_docker, docker_started)
 
 
 @click.command()

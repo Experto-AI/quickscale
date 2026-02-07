@@ -211,6 +211,30 @@ class TestPlanModuleSelection:
             assert "auth:" in content
             assert "listings:" in content
 
+    def test_placeholder_label_not_duplicated_in_module_menu(self):
+        """Billing/teams should show exactly one '(placeholder)' marker."""
+        runner = CliRunner()
+        with runner.isolated_filesystem():
+            result = runner.invoke(
+                plan,
+                ["myapp"],
+                input="1\n\ny\ny\nn\n",
+            )
+
+            assert (
+                "billing - Stripe integration (placeholder) (placeholder)"
+                not in result.output
+            )
+            assert (
+                "teams - Multi-tenancy and team management (placeholder) (placeholder)"
+                not in result.output
+            )
+            assert "billing - Stripe integration (placeholder)" in result.output
+            assert (
+                "teams - Multi-tenancy and team management (placeholder)"
+                in result.output
+            )
+
 
 class TestPlanDockerConfiguration:
     """Tests for Docker configuration in plan command"""

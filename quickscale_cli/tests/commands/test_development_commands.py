@@ -1,5 +1,6 @@
 """Tests for development commands."""
 
+from pathlib import Path
 import subprocess
 from unittest.mock import Mock, patch
 
@@ -59,6 +60,23 @@ class TestUpCommand:
 
             assert result.exit_code == 1
             assert "Not in a QuickScale project directory" in result.output
+
+    def test_up_not_in_generated_project_shows_apply_tip(self):
+        """Test tip when quickscale.yml exists but project is not generated yet."""
+        runner = CliRunner()
+
+        with runner.isolated_filesystem():
+            Path("quickscale.yml").write_text("version: '1'\nproject:\n  name: test\n")
+
+            with patch(
+                "quickscale_cli.commands.development_commands.is_in_quickscale_project"
+            ) as mock_in_project:
+                mock_in_project.return_value = False
+
+                result = runner.invoke(up)
+
+                assert result.exit_code == 1
+                assert "Run 'quickscale apply' first" in result.output
 
     def test_up_docker_not_running(self):
         """Test up command when Docker is not running."""
@@ -157,15 +175,19 @@ class TestDownCommand:
                     "quickscale_cli.commands.development_commands.get_docker_compose_command"
                 ) as mock_cmd:
                     with patch("subprocess.run") as mock_run:
-                        mock_in_project.return_value = True
-                        mock_docker.return_value = True
-                        mock_cmd.return_value = ["docker-compose"]
-                        mock_run.return_value = Mock(returncode=0)
+                        with patch(
+                            "quickscale_cli.commands.development_commands.wait_for_port_release"
+                        ) as mock_wait:
+                            mock_in_project.return_value = True
+                            mock_docker.return_value = True
+                            mock_cmd.return_value = ["docker-compose"]
+                            mock_run.return_value = Mock(returncode=0)
+                            mock_wait.return_value = True
 
-                        result = runner.invoke(down)
+                            result = runner.invoke(down)
 
-                        assert result.exit_code == 0
-                        assert "Services stopped successfully!" in result.output
+                            assert result.exit_code == 0
+                            assert "Services stopped successfully!" in result.output
 
     def test_down_with_volumes(self):
         """Test down command with volumes flag."""
@@ -181,17 +203,21 @@ class TestDownCommand:
                     "quickscale_cli.commands.development_commands.get_docker_compose_command"
                 ) as mock_cmd:
                     with patch("subprocess.run") as mock_run:
-                        mock_in_project.return_value = True
-                        mock_docker.return_value = True
-                        mock_cmd.return_value = ["docker-compose"]
-                        mock_run.return_value = Mock(returncode=0)
+                        with patch(
+                            "quickscale_cli.commands.development_commands.wait_for_port_release"
+                        ) as mock_wait:
+                            mock_in_project.return_value = True
+                            mock_docker.return_value = True
+                            mock_cmd.return_value = ["docker-compose"]
+                            mock_run.return_value = Mock(returncode=0)
+                            mock_wait.return_value = True
 
-                        result = runner.invoke(down, ["--volumes"])
+                            result = runner.invoke(down, ["--volumes"])
 
-                        assert result.exit_code == 0
-                        # Verify --volumes was passed to docker-compose
-                        call_args = mock_run.call_args[0][0]
-                        assert "--volumes" in call_args
+                            assert result.exit_code == 0
+                            # Verify --volumes was passed to docker-compose
+                            call_args = mock_run.call_args[0][0]
+                            assert "--volumes" in call_args
 
 
 class TestShellCommand:

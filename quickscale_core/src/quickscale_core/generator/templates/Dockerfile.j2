@@ -5,13 +5,14 @@
 {% if theme == 'showcase_react' %}
 FROM node:20-slim as frontend-builder
 WORKDIR /app/frontend
+RUN corepack enable
 # Copy dependency files
-COPY frontend/package.json frontend/package-lock.json* ./
+COPY frontend/package.json frontend/pnpm-lock.yaml* ./
 # Install dependencies
-RUN npm install
+RUN pnpm install --no-frozen-lockfile
 # Copy source code and build
 COPY frontend .
-RUN npm run build
+RUN pnpm run build
 {% endif %}
 
 # Stage 1: Builder - Install dependencies and build artifacts

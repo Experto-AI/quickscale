@@ -756,6 +756,15 @@ class TestDockerComposeContent:
         assert "web:" in output
         assert "build:" in output
 
+    def test_react_frontend_uses_non_root_safe_corepack_command(
+        self, jinja_env: Environment, test_context: dict[str, str]
+    ) -> None:
+        """React frontend service should avoid `corepack enable` under non-root user."""
+        template = jinja_env.get_template("docker-compose.yml.j2")
+        output = template.render({**test_context, "theme": "showcase_react"})
+        assert 'command: sh -c "corepack pnpm install --no-frozen-lockfile' in output
+        assert 'command: sh -c "corepack enable' not in output
+
     def test_persistent_volumes(
         self, jinja_env: Environment, test_context: dict[str, str]
     ) -> None:

@@ -30,6 +30,7 @@ from quickscale_cli.commands.apply_command import (
     _run_post_generation_steps,
     _save_project_state,
     _display_next_steps,
+    _execute_apply_steps,
 )
 
 
@@ -796,6 +797,100 @@ class TestDisplayNextSteps:
         config.project.name = "myapp"
         config.docker.start = False
         _display_next_steps(Path.cwd(), config, True)
+
+    def test_with_docker_start_failure(self, monkeypatch, tmp_path, capsys):
+        """Test next steps display when Docker auto-start fails."""
+        monkeypatch.chdir(tmp_path)
+        config = Mock()
+        config.project.name = "myapp"
+        config.docker.start = True
+
+        _display_next_steps(tmp_path / "myapp", config, False, docker_started=False)
+        output = capsys.readouterr().out
+
+        assert "Docker auto-start failed during apply" in output
+        assert "quickscale up --build" in output
+
+
+# ============================================================================
+# _execute_apply_steps
+# ============================================================================
+
+
+class TestExecuteApplySteps:
+    """Tests for _execute_apply_steps module-selection matrix."""
+
+    @pytest.mark.parametrize(
+        "modules",
+        [
+            {},
+            {"auth": Mock(options={})},
+            {
+                "auth": Mock(options={}),
+                "blog": Mock(options={}),
+                "listings": Mock(options={}),
+                "crm": Mock(options={}),
+                "billing": Mock(options={}),
+                "teams": Mock(options={}),
+            },
+        ],
+    )
+    @patch("quickscale_cli.commands.apply_command._display_next_steps")
+    @patch("quickscale_cli.commands.apply_command._save_project_state")
+    @patch("quickscale_cli.commands.apply_command._start_docker")
+    @patch("quickscale_cli.commands.apply_command._run_post_generation_steps")
+    @patch("quickscale_cli.commands.apply_command._embed_modules_step")
+    @patch("quickscale_cli.commands.apply_command._init_git_with_config")
+    @patch("quickscale_cli.commands.apply_command._generate_new_project")
+    def test_new_project_all_none_some_modules_use_same_docker_path(
+        self,
+        mock_generate_new_project,
+        mock_init_git,
+        mock_embed_modules_step,
+        mock_run_post,
+        mock_start_docker,
+        mock_save_state,
+        mock_display_next_steps,
+        modules,
+    ):
+        """Docker startup flow should be identical for none/some/all module sets."""
+        mock_embed_modules_step.return_value = []
+        mock_start_docker.return_value = True
+
+        ctx = Mock()
+        ctx.existing_state = None
+        ctx.output_path = Path("/tmp/proj")
+        ctx.manifests = {}
+        ctx.delta = Mock()
+        ctx.delta.modules_to_add = []
+        ctx.delta.has_mutable_config_changes = False
+
+        ctx.qs_config = Mock()
+        ctx.qs_config.modules = modules
+        ctx.qs_config.docker.start = True
+        ctx.qs_config.docker.build = True
+
+        _execute_apply_steps(
+            ctx,
+            force=False,
+            no_docker=False,
+            no_modules=False,
+            verbose_docker=False,
+        )
+
+        mock_embed_modules_step.assert_called_once_with(
+            ctx.output_path,
+            list(modules.keys()),
+            False,
+            None,
+        )
+        mock_start_docker.assert_called_once_with(ctx.output_path, True, False)
+        mock_display_next_steps.assert_called_once_with(
+            ctx.output_path,
+            ctx.qs_config,
+            False,
+            True,
+        )
 
 
 # ============================================================================

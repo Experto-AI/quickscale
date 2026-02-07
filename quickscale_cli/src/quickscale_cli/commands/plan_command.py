@@ -31,8 +31,8 @@ AVAILABLE_MODULES = [
     ("blog", "Markdown-powered blog with categories and RSS"),
     ("listings", "Generic listings for marketplace verticals"),
     ("crm", "Customer Relationship Management (contacts, deals, pipeline)"),
-    ("billing", "Stripe integration (placeholder)"),
-    ("teams", "Multi-tenancy and team management (placeholder)"),
+    ("billing", "Stripe integration"),
+    ("teams", "Multi-tenancy and team management"),
 ]
 
 

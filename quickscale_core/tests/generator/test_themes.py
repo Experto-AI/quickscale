@@ -154,7 +154,7 @@ class TestProjectGenerationWithTheme:
         # Check Dockerfile has node parts
         dockerfile = (output_path / "Dockerfile").read_text()
         assert "FROM node:20-slim as frontend-builder" in dockerfile
-        assert "npm run build" in dockerfile
+        assert "pnpm run build" in dockerfile
 
     def test_react_theme_vite_config_has_consistent_filenames(self, tmp_path):
         """Vite config should use consistent filenames for Django compatibility"""
