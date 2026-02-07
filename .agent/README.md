@@ -2,7 +2,13 @@
 
 > **Quick Start**: Run `.agent/adapters/generate-all.sh` to generate platform configurations.
 
-This directory contains the unified AI agent architecture for QuickScale development workflows.
+This directory contains the unified AI agent architecture and transpiler pipeline for QuickScale development workflows.
+
+## Platform Policy (Verified 2026-02-07)
+
+- **Verified/Native**: Claude Code, Gemini CLI, GitHub Copilot (VS Code), Codex CLI
+- **Experimental/Emulated**: Gemini Antigravity, Copilot CLI, OpenCode
+- Experimental platforms are disabled by default in `.agent/config.yaml`.
 
 ## Directory Structure
 
@@ -40,12 +46,30 @@ chmod +x .agent/adapters/*.sh
 This creates:
 - `CLAUDE.md` + `.claude/` for Claude Code
 - `GEMINI.md` + `.gemini/` for Gemini CLI
-- `.gemini/antigravity/` for Gemini Antigravity
-- `.github/copilot-instructions.md` + `.github/prompts/` + `.github/agents/` for Copilot VS Code
-- `.github/copilot-cli/` for Copilot CLI
+- `.github/copilot-instructions.md` + `.github/prompts/` + `.github/chatmodes/` for Copilot VS Code
 - `AGENTS.md` + `.codex/` for Codex CLI
 
-Generation is config-driven via `.agent/config.yaml` (`adapters.platforms.*` and `adapters.output_directory`).
+Optional (when explicitly enabled):
+- `.gemini/antigravity/` for Gemini Antigravity
+- `.github/copilot-cli/` for Copilot CLI
+- `.opencode.json` + `.opencode/` for OpenCode
+
+Generation is config-driven via `.agent/config.yaml` (`adapters.platforms.*`, per-platform `support_mode`, and `adapters.output_directory`).
+
+## Project-Agnostic Profiles
+
+- Header templates are resolved by profile: `.agent/templates/<profile>/`.
+- Configure with `project.profile` in `.agent/config.yaml`.
+- Fallback order: selected profile -> `quickscale` -> `default`.
+
+## Agentic Flow Validation
+
+Use dedicated scripts for `.agent` quality checks:
+
+```bash
+./scripts/lint_agentic_flow.sh
+./scripts/test_agentic_flow.sh
+```
 
 ## Documentation
 

@@ -113,6 +113,28 @@ cleanup_with_manifest() {
     } | sort -u > "$manifest"
 }
 
+cleanup_manifest_platform() {
+    local platform="$1"
+    local manifest
+    manifest="$(manifest_path "$platform")"
+    [[ -f "$manifest" ]] || return 0
+
+    local stale stale_path
+    while IFS= read -r stale; do
+        [[ -n "$stale" ]] || continue
+        if [[ "$stale" == /* ]]; then
+            stale_path="$stale"
+        else
+            stale_path="$ROOT_DIR/$stale"
+        fi
+        if [[ -f "$stale_path" ]]; then
+            rm -f "$stale_path"
+        fi
+    done < "$manifest"
+
+    rm -f "$manifest"
+}
+
 get_frontmatter_block() {
     local file="$1"
     [[ -f "$file" ]] || return 0
@@ -207,30 +229,77 @@ get_directives() {
         | sort -u
 }
 
-yaml_in_section_value() {
-    local section="$1" key="$2"
-    local file="$AGENT_DIR/config.yaml"
+yaml_get_value() {
+    local file="$1" dotted_path="$2"
     [[ -f "$file" ]] || return 0
 
-    awk -v section="$section" -v key="$key" '
-        BEGIN { in_section = 0 }
-        $0 ~ "^" section ":[[:space:]]*$" { in_section = 1; next }
-        in_section {
-            if ($0 ~ "^[^[:space:]]") {
-                exit
+    awk -v target_path="$dotted_path" '
+        function trim(s) {
+            gsub(/^[[:space:]]+|[[:space:]]+$/, "", s)
+            return s
+        }
+        {
+            line = $0
+            sub(/[[:space:]]+#.*/, "", line)
+            if (line ~ /^[[:space:]]*$/) {
+                next
             }
-            if ($0 ~ "^[[:space:]]*" key ":[[:space:]]*") {
-                line = $0
-                sub("^[[:space:]]*" key ":[[:space:]]*", "", line)
-                sub(/[[:space:]]+#.*/, "", line)
-                gsub(/^[[:space:]]+|[[:space:]]+$/, "", line)
-                gsub(/^\"|\"$/, "", line)
-                gsub(/^\047|\047$/, "", line)
-                print line
-                exit
+            if (line !~ /:/) {
+                next
+            }
+
+            match(line, /[^ ]/)
+            indent = RSTART - 1
+            if (indent < 0) {
+                indent = 0
+            }
+
+            level = int(indent / 2)
+            key = line
+            sub(/:.*/, "", key)
+            key = trim(key)
+
+            value = line
+            sub(/^[^:]*:[[:space:]]*/, "", value)
+            value = trim(value)
+
+            keys[level] = key
+            for (i = level + 1; i < 64; i++) {
+                delete keys[i]
+            }
+
+            full = keys[0]
+            for (i = 1; i <= level; i++) {
+                full = full "." keys[i]
+            }
+
+            if (value != "") {
+                gsub(/^["\047]|["\047]$/, "", value)
+                values[full] = value
+            }
+        }
+        END {
+            if (target_path in values) {
+                print values[target_path]
             }
         }
     ' "$file"
+}
+
+yaml_in_section_value() {
+    local section="$1" key="$2"
+    local file="$AGENT_DIR/config.yaml"
+    yaml_get_value "$file" "${section}.${key}"
+}
+
+yaml_to_bool() {
+    local value
+    value="$(echo "$1" | tr '[:upper:]' '[:lower:]')"
+    if [[ "$value" == "true" || "$value" == "yes" || "$value" == "1" ]]; then
+        printf 'true\n'
+    else
+        printf 'false\n'
+    fi
 }
 
 platform_enabled() {
@@ -239,38 +308,127 @@ platform_enabled() {
     [[ -f "$file" ]] || { printf 'true\n'; return 0; }
 
     local value
-    value=$(awk -v key="$platform_key" '
-        BEGIN { in_adapters = 0; in_platforms = 0 }
-        /^adapters:[[:space:]]*$/ { in_adapters = 1; next }
-        in_adapters {
-            if ($0 ~ "^[^[:space:]]") {
-                in_adapters = 0
-                in_platforms = 0
-            }
-            if ($0 ~ "^[[:space:]]*platforms:[[:space:]]*$") {
-                in_platforms = 1
-                next
-            }
-            if (in_platforms && $0 ~ "^[[:space:]]*" key ":[[:space:]]*") {
-                line = $0
-                sub("^[[:space:]]*" key ":[[:space:]]*", "", line)
-                sub(/[[:space:]]+#.*/, "", line)
-                gsub(/[[:space:]]+$/, "", line)
-                gsub(/^\"|\"$/, "", line)
-                print tolower(line)
-                exit
-            }
-            if (in_platforms && $0 ~ "^[[:space:]]*[A-Za-z0-9_-]+:[[:space:]]*" && $0 !~ "^[[:space:]]{4}") {
-                in_platforms = 0
-            }
-        }
-    ' "$file")
+    value="$(yaml_get_value "$file" "adapters.platforms.${platform_key}.enabled")"
+    if [[ -z "$value" ]]; then
+        value="$(yaml_get_value "$file" "adapters.platforms.${platform_key}")"
+    fi
 
     if [[ -z "$value" ]]; then
         printf 'true\n'
     else
+        yaml_to_bool "$value"
+    fi
+}
+
+platform_support_mode() {
+    local platform_key="$1"
+    local file="$AGENT_DIR/config.yaml"
+    [[ -f "$file" ]] || { printf 'native\n'; return 0; }
+
+    local value
+    value="$(yaml_get_value "$file" "adapters.platforms.${platform_key}.support_mode")"
+    if [[ -z "$value" ]]; then
+        printf 'native\n'
+    else
         printf '%s\n' "$value"
     fi
+}
+
+platform_experimental() {
+    local platform_key="$1"
+    local file="$AGENT_DIR/config.yaml"
+    [[ -f "$file" ]] || { printf 'false\n'; return 0; }
+
+    local value
+    value="$(yaml_get_value "$file" "adapters.platforms.${platform_key}.experimental")"
+    if [[ -z "$value" ]]; then
+        printf 'false\n'
+    else
+        yaml_to_bool "$value"
+    fi
+}
+
+config_project_name() {
+    local value
+    value="$(yaml_in_section_value "project" "name")"
+    if [[ -n "$value" ]]; then
+        printf '%s\n' "$value"
+    else
+        printf 'Project\n'
+    fi
+}
+
+config_project_profile() {
+    local value
+    value="$(yaml_in_section_value "project" "profile")"
+    if [[ -n "$value" ]]; then
+        printf '%s\n' "$value"
+    else
+        printf 'quickscale\n'
+    fi
+}
+
+template_path() {
+    local filename="$1"
+    local profile
+    profile="$(config_project_profile)"
+
+    local candidate
+    candidate="$AGENT_DIR/templates/${profile}/${filename}"
+    if [[ -f "$candidate" ]]; then
+        printf '%s\n' "$candidate"
+        return 0
+    fi
+
+    candidate="$AGENT_DIR/templates/quickscale/${filename}"
+    if [[ -f "$candidate" ]]; then
+        printf '%s\n' "$candidate"
+        return 0
+    fi
+
+    candidate="$AGENT_DIR/templates/default/${filename}"
+    if [[ -f "$candidate" ]]; then
+        printf '%s\n' "$candidate"
+        return 0
+    fi
+
+    printf '%s\n' "$AGENT_DIR/templates/quickscale/${filename}"
+}
+
+capability_file_for_platform() {
+    local platform_key="$1"
+    case "$platform_key" in
+        claude_code) printf '%s\n' "$AGENT_DIR/adapters/capabilities/claude_code.yaml" ;;
+        gemini_cli) printf '%s\n' "$AGENT_DIR/adapters/capabilities/gemini_cli.yaml" ;;
+        gemini_antigravity) printf '%s\n' "$AGENT_DIR/adapters/capabilities/gemini_antigravity.yaml" ;;
+        github_copilot) printf '%s\n' "$AGENT_DIR/adapters/capabilities/copilot_vscode.yaml" ;;
+        copilot_cli) printf '%s\n' "$AGENT_DIR/adapters/capabilities/copilot_cli.yaml" ;;
+        codex_cli) printf '%s\n' "$AGENT_DIR/adapters/capabilities/codex_cli.yaml" ;;
+        opencode) printf '%s\n' "$AGENT_DIR/adapters/capabilities/opencode.yaml" ;;
+        *) return 1 ;;
+    esac
+}
+
+capability_value() {
+    local platform_key="$1" dotted_path="$2"
+    local file
+    file="$(capability_file_for_platform "$platform_key")" || return 0
+    yaml_get_value "$file" "$dotted_path"
+}
+
+assert_capability_value() {
+    local platform_key="$1" dotted_path="$2" expected="$3"
+    local value
+    value="$(capability_value "$platform_key" "$dotted_path")"
+    if [[ -z "$value" ]]; then
+        err "Missing capability '${dotted_path}' for platform '${platform_key}'"
+        return 1
+    fi
+    if [[ "$value" != "$expected" ]]; then
+        err "Capability mismatch for '${platform_key}': ${dotted_path}=${value}, expected ${expected}"
+        return 1
+    fi
+    return 0
 }
 
 config_output_directory() {

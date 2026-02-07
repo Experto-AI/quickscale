@@ -1,4 +1,6 @@
 platform: claude_code
+verified_on: "2026-02-07"
+tier: verified
 supports:
   directives:
     invoke_skill: reference
@@ -9,5 +11,5 @@ supports:
     inputs: false
     outputs: false
     success_when: false
-  commands: markdown_skills
+  commands: slash_command_markdown
   agents: markdown_agents

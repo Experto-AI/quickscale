@@ -1,5 +1,5 @@
 description = "Finalize a release with commit message, roadmap cleanup, and documentation"
-steps = """
+prompt = """
 Follow the create-release workflow.
 
 Adopt the role defined in: @{.agent/agents/release-manager.md}

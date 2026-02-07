@@ -90,6 +90,7 @@ generate_commands() {
 
 main() {
     info "OpenCode adapter: generating compatibility configuration"
+    assert_capability_value "opencode" "tier" "experimental"
 
     generate_opencode_json
     generate_commands

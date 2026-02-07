@@ -41,13 +41,13 @@
             "opencode"
           ],
           "properties": {
-            "claude_code": {"type": "boolean"},
-            "gemini_cli": {"type": "boolean"},
-            "gemini_antigravity": {"type": "boolean"},
-            "github_copilot": {"type": "boolean"},
-            "copilot_cli": {"type": "boolean"},
-            "codex_cli": {"type": "boolean"},
-            "opencode": {"type": "boolean"}
+            "claude_code": {"$ref": "#/$defs/platform_config"},
+            "gemini_cli": {"$ref": "#/$defs/platform_config"},
+            "gemini_antigravity": {"$ref": "#/$defs/platform_config"},
+            "github_copilot": {"$ref": "#/$defs/platform_config"},
+            "copilot_cli": {"$ref": "#/$defs/platform_config"},
+            "codex_cli": {"$ref": "#/$defs/platform_config"},
+            "opencode": {"$ref": "#/$defs/platform_config"}
           },
           "additionalProperties": false
         }
@@ -91,6 +91,19 @@
     }
   },
   "$defs": {
+    "platform_config": {
+      "type": "object",
+      "required": ["enabled", "support_mode", "experimental"],
+      "properties": {
+        "enabled": {"type": "boolean"},
+        "support_mode": {
+          "type": "string",
+          "enum": ["native", "emulated", "disabled"]
+        },
+        "experimental": {"type": "boolean"}
+      },
+      "additionalProperties": false
+    },
     "entity": {
       "type": "object",
       "required": [

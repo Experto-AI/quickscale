@@ -53,6 +53,18 @@ def test_build_ir_contains_required_sections() -> None:
     assert required_keys.issubset(data)
     assert data["diagnostics"]["errors"] == []
 
+    platforms = data["config"]["platforms"]
+    for key in (
+        "claude_code",
+        "gemini_cli",
+        "gemini_antigravity",
+        "github_copilot",
+        "copilot_cli",
+        "codex_cli",
+        "opencode",
+    ):
+        assert set(platforms[key]) == {"enabled", "support_mode", "experimental"}
+
 
 def test_claude_output_preserves_contract_metadata(tmp_path: Path) -> None:
     """Claude agent output should include contract metadata block"""
@@ -92,8 +104,39 @@ def test_copilot_release_prompt_uses_release_version_input(tmp_path: Path) -> No
     assert prompt.exists()
 
     content = prompt.read_text(encoding="utf-8")
+    assert "mode: release-manager" in content
     assert "Target: ${input:releaseVersion}" in content
-    assert "./scripts/test_unit.sh" in content
+    assert "./scripts/test_agentic_flow.sh" in content
+
+    chatmode = output_root / ".github/chatmodes/release-manager.chatmode.md"
+    assert chatmode.exists()
+    assert "whenToUse:" in chatmode.read_text(encoding="utf-8")
+
+
+def test_gemini_commands_use_prompt_field(tmp_path: Path) -> None:
+    """Gemini command TOML must use prompt field and modern settings key."""
+    ir_path = _build_ir()
+    output_root = tmp_path / "gemini-out"
+
+    _run_adapter(
+        ".agent/adapters/gemini-adapter.sh",
+        {
+            "IR_FILE": str(ir_path),
+            "OUTPUT_ROOT": str(output_root),
+        },
+    )
+
+    command_file = output_root / ".gemini/commands/implement-task.toml"
+    settings_file = output_root / ".gemini/settings.json"
+    agent_file = output_root / ".gemini/agents/task-implementer.md"
+
+    command_content = command_file.read_text(encoding="utf-8")
+    settings_content = settings_file.read_text(encoding="utf-8")
+
+    assert 'prompt = """' in command_content
+    assert "steps = " not in command_content
+    assert '"contextFileName": "GEMINI.md"' in settings_content
+    assert agent_file.exists()
 
 
 def test_gemini_antigravity_outputs_profile_and_commands(tmp_path: Path) -> None:

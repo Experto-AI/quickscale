@@ -45,16 +45,22 @@ Use these in Copilot Chat with `#` or via the prompt picker:
 | `plan-sprint` | Plan the next sprint by analyzing roadmap and prioritizing tasks |
 | `review-code` | Review staged code changes for quality, scope compliance, and completeness |
 
-## Available Agents
+## Available Chat Modes
 
-Use in Copilot Chat with `@agent-name`:
+Use in Copilot Chat by selecting the mode:
 
-| Agent | Description |
-|-------|-------------|
+| Mode | Description |
+|------|-------------|
 | `code-reviewer` | Comprehensive code quality review and validation |
 | `release-manager` | Release finalization, commit messages, roadmap cleanup |
 | `roadmap-planner` | Sprint planning, release selection, roadmap validation |
 | `task-implementer` | Implements roadmap tasks with staged workflow |
+| `architecture-checker` | Validates tech stack compliance and architectural boundaries |
+| `code-quality-reviewer` | Reviews SOLID, DRY, KISS compliance and code quality |
+| `doc-reviewer` | Validates documentation quality and completeness |
+| `report-generator` | Generates comprehensive review reports |
+| `scope-validator` | Validates changes against task scope, detects scope creep |
+| `test-reviewer` | Validates test quality, isolation, and coverage |
 
 ## Skills Reference
 
@@ -73,13 +79,13 @@ Detailed guidance available in `.agent/skills/`:
 ## Validation
 
 ```bash
-./scripts/lint.sh
-./scripts/test_unit.sh
+./scripts/lint_agentic_flow.sh
+./scripts/test_agentic_flow.sh
 ```
 
 ## Contract Notes
 
-Copilot instructions support textual contracts. Structured contract fields are preserved in generated `.agent.md` files.
+Copilot instructions support textual contracts. Structured contract fields are preserved in generated `.chatmode.md` files.
 
 ---
-*Generated from .agent/ on 2026-02-07T09:49:28+01:00*
+*Generated from .agent/ on 2026-02-07T10:48:24+01:00*

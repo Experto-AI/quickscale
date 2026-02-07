@@ -1,5 +1,5 @@
 description = "Implement a roadmap task through PLAN → CODE → REVIEW → TEST → COMPLETE stages"
-steps = """
+prompt = """
 Follow the implement-task workflow.
 
 Adopt the role defined in: @{.agent/agents/task-implementer.md}

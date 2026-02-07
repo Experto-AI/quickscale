@@ -31,7 +31,7 @@ track_generated() {
 }
 
 generate_instructions() {
-    cat "$AGENT_DIR/templates/quickscale/copilot_cli_header.md" > "$INSTRUCTIONS_MD"
+    cat "$(template_path "copilot_cli_header.md")" > "$INSTRUCTIONS_MD"
 
     {
         cat << 'BLOCK'
@@ -123,6 +123,7 @@ generate_agents() {
 
 main() {
     info "Copilot CLI adapter: generating configuration"
+    assert_capability_value "copilot_cli" "tier" "experimental"
 
     generate_instructions
     generate_prompts

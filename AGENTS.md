@@ -158,8 +158,8 @@ Details: `.agent/workflows/review-code.md`
 ## Validation
 
 ```bash
-./scripts/lint.sh
-./scripts/test_unit.sh
+./scripts/lint_agentic_flow.sh
+./scripts/test_agentic_flow.sh
 ```
 
 ## Contract Notes
@@ -167,4 +167,4 @@ Details: `.agent/workflows/review-code.md`
 Codex supports rich markdown instructions. Input/output/success contracts are retained in source agent files and surfaced through workflow descriptions.
 
 ---
-*Generated from .agent/ on 2026-02-07T09:49:29+01:00*
+*Generated from .agent/ on 2026-02-07T10:48:25+01:00*

@@ -18,10 +18,10 @@ OUTPUT_ROOT="${OUTPUT_ROOT:-$(resolve_output_root)}"
 GITHUB_DIR="$OUTPUT_ROOT/.github"
 COPILOT_MD="$GITHUB_DIR/copilot-instructions.md"
 PROMPTS_DIR="$GITHUB_DIR/prompts"
-AGENTS_DIR="$GITHUB_DIR/agents"
+CHATMODES_DIR="$GITHUB_DIR/chatmodes"
 INSTRUCTIONS_DIR="$GITHUB_DIR/instructions"
 
-mkdir -p "$PROMPTS_DIR" "$AGENTS_DIR" "$INSTRUCTIONS_DIR"
+mkdir -p "$PROMPTS_DIR" "$CHATMODES_DIR" "$INSTRUCTIONS_DIR"
 
 lint_cmd="$(resolve_lint_command)"
 test_cmd="$(resolve_test_command)"
@@ -46,7 +46,7 @@ prompt_target_for_workflow() {
 }
 
 generate_copilot_instructions() {
-    cat "$AGENT_DIR/templates/quickscale/copilot_header.md" > "$COPILOT_MD"
+    cat "$(template_path "copilot_header.md")" > "$COPILOT_MD"
 
     {
         cat << 'BLOCK'
@@ -89,14 +89,14 @@ BLOCK
 
         cat << 'BLOCK'
 
-## Available Agents
+## Available Chat Modes
 
-Use in Copilot Chat with `@agent-name`:
+Use in Copilot Chat by selecting the mode:
 
-| Agent | Description |
-|-------|-------------|
+| Mode | Description |
+|------|-------------|
 BLOCK
-        jq -r '.agents[] | "| `\(.name)` | \(.description) |"' "$IR_PATH"
+        jq -r '(.agents + .subagents)[] | "| `\(.name)` | \(.description) |"' "$IR_PATH"
 
         cat << 'BLOCK'
 
@@ -114,7 +114,7 @@ BLOCK
         cat << 'BLOCK'
 ## Contract Notes
 
-Copilot instructions support textual contracts. Structured contract fields are preserved in generated `.agent.md` files.
+Copilot instructions support textual contracts. Structured contract fields are preserved in generated `.chatmode.md` files.
 
 ---
 BLOCK
@@ -136,7 +136,11 @@ generate_prompts() {
         {
             printf -- '---\n'
             printf -- 'description: "%s"\n' "$wf_desc"
-            printf -- 'mode: agent\n'
+            if [[ -n "$owner_agent" ]]; then
+                printf -- 'mode: %s\n' "$owner_agent"
+            else
+                printf -- 'mode: agent\n'
+            fi
             printf -- 'tools:\n'
             printf -- '  - changes\n'
             printf -- '  - codebase\n'
@@ -146,12 +150,10 @@ generate_prompts() {
             printf -- '  - findFiles\n'
             printf -- '  - search\n'
             printf -- '  - usages\n'
-            if [[ -n "$owner_agent" ]]; then
-                printf -- '  - problems\n'
-            fi
+            printf -- '  - problems\n'
             printf -- '---\n\n'
 
-            printf -- 'Follow the %s workflow for QuickScale development.\n\n' "$wf_name"
+            printf -- 'Follow the %s workflow for project development.\n\n' "$wf_name"
             if [[ -n "$steps" ]]; then
                 printf -- '## Steps\n\n%s\n\n' "$(echo "$steps" | sed 's/^/- /')"
             fi
@@ -165,11 +167,11 @@ generate_prompts() {
     done < <(jq -r '.workflows[] | [.name, .description, .path] | @tsv' "$IR_PATH")
 }
 
-generate_agents() {
-    while IFS=$'\t' read -r name description path mode; do
+generate_chatmodes() {
+    while IFS=$'\t' read -r name description path; do
         [[ -n "$name" ]] || continue
         local source_file="$ROOT_DIR/$path"
-        local out_file="$AGENTS_DIR/${name}.agent.md"
+        local out_file="$CHATMODES_DIR/${name}.chatmode.md"
 
         delegates=$( {
             get_frontmatter_list "$source_file" "delegates_to"
@@ -187,10 +189,9 @@ generate_agents() {
         {
             printf -- '---\n'
             printf -- 'description: "%s"\n' "$description"
-            printf -- 'mode: agent\n'
-            if [[ -n "$mode" && "$mode" != "null" ]]; then
-                printf -- 'agentMode: "%s"\n' "$mode"
-            fi
+            printf -- 'whenToUse: "%s"\n' "$description"
+            printf -- 'groups:\n'
+            printf -- '  - generated\n'
             printf -- 'tools:\n'
             printf -- '  - changes\n'
             printf -- '  - codebase\n'
@@ -203,13 +204,6 @@ generate_agents() {
             printf -- '  - search\n'
             printf -- '  - terminalLastCommand\n'
             printf -- '  - usages\n'
-            if [[ -n "$delegates" ]]; then
-                printf -- 'agents:\n'
-                while IFS= read -r delegate; do
-                    [[ -n "$delegate" ]] || continue
-                    printf -- '  - .github/agents/%s.agent.md\n' "$delegate"
-                done <<< "$delegates"
-            fi
             printf -- '---\n\n'
 
             if [[ -n "$skills" ]]; then
@@ -230,13 +224,22 @@ generate_agents() {
                 printf '\n'
             fi
 
+            if [[ -n "$delegates" ]]; then
+                printf -- '## Delegation\n\n'
+                while IFS= read -r delegate; do
+                    [[ -n "$delegate" ]] || continue
+                    printf -- '- Delegate to chat mode `%s` when needed\n' "$delegate"
+                done <<< "$delegates"
+                printf '\n'
+            fi
+
             render_contract_note_block 'textual'
             render_contract_block "$source_file"
             get_body "$source_file"
         } > "$out_file"
 
         track_generated "$out_file"
-    done < <(jq -r '(.agents + .subagents)[] | [.name, .description, .path, (.mode // "")] | @tsv' "$IR_PATH")
+    done < <(jq -r '(.agents + .subagents)[] | [.name, .description, .path] | @tsv' "$IR_PATH")
 }
 
 generate_instructions() {
@@ -298,10 +301,12 @@ BLOCK
 
 main() {
     info "Copilot VS Code adapter: generating configuration"
+    assert_capability_value "github_copilot" "supports.prompts" "prompt_md"
+    assert_capability_value "github_copilot" "supports.agents" "chat_mode_md"
 
     generate_copilot_instructions
     generate_prompts
-    generate_agents
+    generate_chatmodes
     generate_instructions
 
     cleanup_with_manifest "github_copilot" "${generated_files[@]}"

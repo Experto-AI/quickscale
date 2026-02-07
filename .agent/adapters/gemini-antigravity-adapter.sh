@@ -31,7 +31,7 @@ track_generated() {
 }
 
 generate_profile() {
-    cat "$AGENT_DIR/templates/quickscale/gemini_antigravity_header.md" > "$PROFILE_MD"
+    cat "$(template_path "gemini_antigravity_header.md")" > "$PROFILE_MD"
 
     {
         cat << 'BLOCK'
@@ -121,6 +121,7 @@ JSON
 
 main() {
     info "Gemini Antigravity adapter: generating configuration"
+    assert_capability_value "gemini_antigravity" "tier" "experimental"
 
     generate_profile
     generate_commands

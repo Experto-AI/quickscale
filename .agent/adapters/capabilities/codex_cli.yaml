@@ -1,4 +1,6 @@
 platform: codex_cli
+verified_on: "2026-02-07"
+tier: verified
 supports:
   directives:
     invoke_skill: reference
@@ -10,3 +12,4 @@ supports:
     outputs: true
     success_when: true
   project_doc: AGENTS.md
+  config: toml

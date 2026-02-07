@@ -1,4 +1,6 @@
 platform: opencode
+verified_on: "2026-02-07"
+tier: experimental
 supports:
   directives:
     invoke_skill: reference

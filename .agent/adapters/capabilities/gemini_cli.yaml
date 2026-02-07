@@ -1,4 +1,6 @@
 platform: gemini_cli
+verified_on: "2026-02-07"
+tier: verified
 supports:
   directives:
     invoke_skill: import
@@ -9,5 +11,6 @@ supports:
     inputs: false
     outputs: false
     success_when: false
-  commands: toml
-  agents: markdown_imports
+  commands: toml_prompt
+  agents: markdown_local_agents
+  settings: json

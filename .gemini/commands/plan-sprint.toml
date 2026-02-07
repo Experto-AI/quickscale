@@ -1,5 +1,5 @@
 description = "Plan the next sprint by analyzing roadmap and prioritizing tasks"
-steps = """
+prompt = """
 Follow the plan-sprint workflow.
 
 Adopt the role defined in: @{.agent/agents/roadmap-planner.md}

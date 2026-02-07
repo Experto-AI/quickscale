@@ -94,7 +94,7 @@ BLOCK
 }
 
 generate_claude_md() {
-    cat "$AGENT_DIR/templates/quickscale/claude_header.md" > "$CLAUDE_MD"
+    cat "$(template_path "claude_header.md")" > "$CLAUDE_MD"
 
     {
         cat << 'BLOCK'
@@ -226,6 +226,8 @@ generate_agent_files() {
 
 main() {
     info "Claude Code adapter: generating configuration"
+    assert_capability_value "claude_code" "supports.commands" "slash_command_markdown"
+    assert_capability_value "claude_code" "supports.agents" "markdown_agents"
 
     generate_claude_md
     generate_commands

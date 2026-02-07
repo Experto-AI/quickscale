@@ -30,7 +30,7 @@ track_generated() {
 }
 
 generate_agents_md() {
-    cat "$AGENT_DIR/templates/quickscale/codex_header.md" > "$AGENTS_MD"
+    cat "$(template_path "codex_header.md")" > "$AGENTS_MD"
 
     {
         cat << 'BLOCK'
@@ -170,6 +170,7 @@ BLOCK
 
 main() {
     info "Codex CLI adapter: generating configuration"
+    assert_capability_value "codex_cli" "supports.project_doc" "AGENTS.md"
 
     generate_agents_md
     generate_codex_config

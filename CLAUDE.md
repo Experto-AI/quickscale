@@ -70,8 +70,8 @@
 ## Validation
 
 ```bash
-./scripts/lint.sh
-./scripts/test_unit.sh
+./scripts/lint_agentic_flow.sh
+./scripts/test_agentic_flow.sh
 ```
 
 ## Contract Notes
@@ -94,4 +94,4 @@ Platform support for structured contract fields: partial (`mode` native, other f
 | CSS | Tailwind CSS |
 
 ---
-*Generated from .agent/ on 2026-02-07T09:49:28+01:00*
+*Generated from .agent/ on 2026-02-07T10:48:22+01:00*

@@ -32,11 +32,19 @@ validate_ir() {
 
 run_adapter() {
     local name="$1" key="$2" script="$3"
-    local enabled
+    local enabled support_mode experimental
 
     enabled="$(platform_enabled "$key")"
+    support_mode="$(platform_support_mode "$key")"
+    experimental="$(platform_experimental "$key")"
     if [[ "$enabled" != "true" ]]; then
         info "${name}: disabled in .agent/config.yaml"
+        cleanup_manifest_platform "$key"
+        return 0
+    fi
+    if [[ "$support_mode" == "disabled" ]]; then
+        info "${name}: support_mode=disabled"
+        cleanup_manifest_platform "$key"
         return 0
     fi
 
@@ -45,7 +53,10 @@ run_adapter() {
         return 0
     fi
 
-    info "${name}: generating"
+    if [[ "$experimental" == "true" ]]; then
+        warn "${name}: experimental adapter enabled"
+    fi
+    info "${name}: generating (support_mode=${support_mode})"
     IR_FILE="$IR_FILE_DEFAULT" OUTPUT_ROOT="$(resolve_output_root)" bash "$SCRIPT_DIR/$script"
 }
 

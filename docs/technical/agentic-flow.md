@@ -1,9 +1,9 @@
 # Agentic Flow: Cross-Platform AI Agent Architecture
 
 > **Document Type**: Technical Specification & Implementation Plan
-> **Status**: 📋 PROPOSAL
+> **Status**: ✅ IMPLEMENTED (with verified platform matrix)
 > **Created**: 2026-02-04
-> **Updated**: 2026-02-05
+> **Updated**: 2026-02-07
 > **Related**: `.github/prompts/`, `docs/contrib/shared/`
 
 ---
@@ -17,6 +17,22 @@ This document defines a **unified agent architecture** that converts the existin
 - **Subagents**: Composable agent delegation for complex workflows
 - **Workflows**: Explicit, step-by-step execution plans
 - **Platform Adapters**: Transpilers for Claude Code, Gemini CLI, GitHub Copilot, Codex CLI, and OpenCode
+
+## 2026-02-07 Verification Snapshot (Authoritative)
+
+Use this snapshot as the source of truth for current adapter support levels.
+
+| Platform | Default State | Support Mode | Notes |
+|----------|---------------|--------------|-------|
+| Claude Code | enabled | native | Verified against current Claude Code docs |
+| Gemini CLI | enabled | native | Commands use TOML `prompt`, settings updated |
+| GitHub Copilot (VS Code) | enabled | native | Prompt files + chat mode files + instructions |
+| Codex CLI | enabled | native | `AGENTS.md` + `.codex/config.toml` |
+| Gemini Antigravity | disabled | emulated | Experimental compatibility only |
+| Copilot CLI | disabled | emulated | Experimental compatibility only |
+| OpenCode | disabled | emulated | Experimental compatibility only |
+
+**Important:** Some legacy sections in this document describe earlier proposals or historical assumptions. Current platform references and verification sources are tracked in `.agent/SOURCES.md`.
 
 ---
 
@@ -87,6 +103,10 @@ chmod +x .agent/adapters/*.sh
 
 # Generate platform configurations
 .agent/adapters/generate-all.sh
+
+# Validate only the agentic flow system
+./scripts/lint_agentic_flow.sh
+./scripts/test_agentic_flow.sh
 ```
 
 ---
@@ -1104,19 +1124,24 @@ Gemini CLI supports custom TOML commands with file injection and argument interp
 GEMINI.md                    # Project context with @path imports
 .gemini/
 ├── settings.json            # Skills + experimental agents enabled
-└── commands/                # TOML custom commands (from .agent/workflows/)
-    ├── implement-task.toml  #   - @{path} file injection
-    ├── review-code.toml     #   - {{args}} interpolation
-    ├── plan-sprint.toml     #   - Agent role + skill references
-    └── create-release.toml
+├── commands/                # TOML custom commands (from .agent/workflows/)
+│   ├── implement-task.toml  #   - prompt = """..."""
+│   ├── review-code.toml     #   - {{args}} interpolation
+│   ├── plan-sprint.toml     #   - Agent role + skill references
+│   └── create-release.toml
+└── agents/                  # Local Gemini agents/subagents
+    ├── task-implementer.md
+    ├── code-reviewer.md
+    └── ...
 .geminiignore                # Created if absent (preserves user edits)
 ```
 
 **Key Mappings:**
 - `GEMINI.md` uses `@.agent/contexts/*.md` import syntax
-- Workflows → `.gemini/commands/*.toml` with `@{path}` file injection
+- Workflows → `.gemini/commands/*.toml` using `prompt = """..."""`
 - Skills referenced via `@{.agent/skills/NAME/SKILL.md}` in commands
 - Agent roles embedded in command steps via `@{.agent/agents/NAME.md}`
+- Agents + Subagents → `.gemini/agents/*.md` with `kind: local`
 - `settings.json` enables `skills.enabled` and `experimental.enableAgents`
 
 ### GitHub Copilot Adapter
@@ -1128,14 +1153,14 @@ Copilot now has rich native support for agents, prompts, and path-specific instr
 .github/
 ├── copilot-instructions.md              # Always-on project guidance
 ├── prompts/                             # Reusable prompt files (from workflows)
-│   ├── implement-task.prompt.md         #   - mode: agent
+│   ├── implement-task.prompt.md         #   - mode: custom chat mode
 │   ├── review-code.prompt.md            #   - tools: list
 │   ├── plan-sprint.prompt.md            #   - ${input:varName} variables
 │   └── create-release.prompt.md
-├── agents/                              # Custom agents
-│   ├── task-implementer.agent.md        #   - tools: list
-│   ├── code-reviewer.agent.md           #   - agents: subagent references
-│   ├── scope-validator.agent.md         # Subagents also become agents
+├── chatmodes/                           # Custom chat modes
+│   ├── task-implementer.chatmode.md     #   - whenToUse + tools
+│   ├── code-reviewer.chatmode.md        #   - skill/workflow references
+│   ├── scope-validator.chatmode.md      # Subagents also become chat modes
 │   └── ...
 └── instructions/                        # Path-specific instructions
     ├── python.instructions.md           #   - applyTo: "**/*.py"
@@ -1145,8 +1170,8 @@ Copilot now has rich native support for agents, prompts, and path-specific instr
 ```
 
 **Key Mappings:**
-- Workflows → `.github/prompts/*.prompt.md` with `mode: agent` and `tools:` list
-- Agents + Subagents → `.github/agents/*.agent.md` with `agents:` for delegation
+- Workflows → `.github/prompts/*.prompt.md` with `mode:` and `tools:` frontmatter
+- Agents + Subagents → `.github/chatmodes/*.chatmode.md` with supported chat mode fields
 - Skills referenced as file paths in agent/prompt body
 - Path-specific instructions generated for Python, tests, frontend, docs
 - `copilot-instructions.md` includes dynamic tables of prompts, agents, and skills
@@ -1308,12 +1333,12 @@ rm -f CLAUDE.md GEMINI.md  # Remove generated files
 
 | Feature | Claude Code | Gemini CLI | Copilot | Codex CLI | OpenCode |
 |---------|:-----------:|:----------:|:-------:|:---------:|:------:|
-| **Platform Status** | ✅ Active | ✅ Active | ✅ Active | ✅ Active | ❌ Archived (Sep 2025) |
+| **Platform Status** | ✅ Active | ✅ Active | ✅ Active | ✅ Active | ⚠️ Experimental (disabled by default) |
 | **Markdown Instructions** | ✅ CLAUDE.md | ✅ GEMINI.md | ✅ copilot-instructions.md | ✅ AGENTS.md | ⚠️ JSON config |
 | **Import Syntax** | ✅ `@path` | ✅ `@path` | ❌ No | ✅ Concatenation | ❌ No |
 | **Custom Commands** | ✅ `.claude/commands/` (Skills) | ✅ `.gemini/commands/*.toml` | ✅ `.github/prompts/*.prompt.md` | ✅ Skills | ✅ `.opencode/commands/` |
-| **Custom Agents** | ✅ `.claude/agents/` | ✅ Stable (v0.27.0+) | ⚠️ Experimental | ❌ No | ❌ No |
-| **Subagent Delegation** | ✅ Native | ❌ Flatten | ✅ `agents:` frontmatter | ❌ Flatten | ❌ Built-in only |
+| **Custom Agents** | ✅ `.claude/agents/` | ✅ `.gemini/agents/` | ✅ `.github/chatmodes/*.chatmode.md` | ❌ No | ❌ No |
+| **Subagent Delegation** | ✅ Native | ⚠️ Prompt-driven | ⚠️ Prompt/chatmode-driven | ❌ Flatten | ❌ Built-in only |
 | **Path-Specific Rules** | ✅ `.claude/rules/` | ❌ No | ✅ `.github/instructions/` | ❌ Nested dirs only | ❌ No |
 | **Skills/Tools** | ✅ Native | ✅ Stable (v0.27.0+) | ⚠️ Experimental | ✅ agentskills.io | ❌ No |
 | **MCP Support** | ✅ `.mcp.json` | ✅ `mcpServers` in settings | ✅ VS Code settings | ✅ `config.toml` | ✅ JSON config |
@@ -1328,11 +1353,13 @@ rm -f CLAUDE.md GEMINI.md  # Remove generated files
 
 | Platform | Strategy | Output Files | Complexity |
 |----------|----------|-------------|------------|
-| **Claude Code** | Full native — agents, skills (merged Jan 2026), @imports | `CLAUDE.md`, `.claude/commands/`, `.claude/agents/` | Low (1:1 mapping) |
-| **Gemini CLI** | Commands via TOML, @imports, event-driven (v0.27.0) | `GEMINI.md`, `.gemini/commands/`, `.gemini/settings.json` | Medium |
-| **GitHub Copilot** | Rich — prompts, agents, AGENTS.md (Aug 2025) | `.github/copilot-instructions.md`, `prompts/`, `agents/`, `instructions/` | Low (rich native support) |
-| **Codex CLI** | AGENTS.md primary (auto-read), skills via agentskills.io | `AGENTS.md`, `.codex/config.toml` | Medium |
-| **OpenCode** | Archived (Sep 2025) — compatibility only | `.opencode.json`, `.opencode/commands/` | High (limited features) |
+| **Claude Code** | Native mapping for commands + agents | `CLAUDE.md`, `.claude/commands/`, `.claude/agents/` | Low |
+| **Gemini CLI** | Native mapping for command TOML + local agents | `GEMINI.md`, `.gemini/commands/`, `.gemini/agents/`, `.gemini/settings.json` | Medium |
+| **GitHub Copilot** | Native prompt files + chat mode files + instructions | `.github/copilot-instructions.md`, `.github/prompts/`, `.github/chatmodes/`, `.github/instructions/` | Medium |
+| **Codex CLI** | AGENTS.md-first mapping | `AGENTS.md`, `.codex/config.toml` | Low |
+| **Gemini Antigravity** | Compatibility-only (experimental) | `.gemini/antigravity/` | High |
+| **Copilot CLI** | Compatibility-only (experimental) | `.github/copilot-cli/` | High |
+| **OpenCode** | Compatibility-only (experimental) | `.opencode.json`, `.opencode/commands/` | High |
 
 ---
 
@@ -1341,57 +1368,50 @@ rm -f CLAUDE.md GEMINI.md  # Remove generated files
 This section documents the technical specifications and documentation sources used to develop the transpiler adapters.
 
 ### Claude Code
-- **Source**: [Anthropic Claude Code Documentation](https://docs.anthropic.com/en/docs/agents-and-tools/claude-code)
+- **Source**: [Anthropic Claude Code — Subagents](https://docs.anthropic.com/en/docs/claude-code/sub-agents) and [Anthropic Claude Code — Slash Commands](https://docs.anthropic.com/en/docs/claude-code/slash-commands)
 - **Key Specifications**:
-  - `CLAUDE.md`: Use of `@import` syntax for context modularity.
-  - `.claude/commands/`: YAML frontmatter with `description:` and `$ARGUMENTS` interpolation.
-    - **Note**: Slash commands merged into skills system (Jan 24, 2026) — commands are now treated as skills automatically.
-  - `.claude/agents/`: Native agent persona definitions with role-based instructions.
-- **Verification Method**: Iterative testing with `claude-code` CLI version 1.2+ (as of Feb 2026).
+  - `CLAUDE.md` as project instructions
+  - `.claude/commands/` markdown commands with frontmatter
+  - `.claude/agents/` subagent files
+- **Verification Method**: Adapter output inspection against documentation examples.
 
 ### Gemini CLI
-- **Source**: [Google Gemini Developer CLI Reference](https://github.com/google-gemini/gemini-cli)
+- **Source**: [Gemini CLI Docs](https://geminicli.com/docs/) and [Gemini CLI Configuration](https://geminicli.com/docs/cli/configuration)
 - **Key Specifications**:
-  - `GEMINI.md`: Path-relative imports using `@{path}` marker.
-  - `.gemini/settings.json`: Configuration for native agent support.
-    - **Note**: Agent Skills promoted to stable in v0.27.0 (Feb 3, 2026) with event-driven architecture.
-  - TOML Commands: Use of `{{args}}` for dynamic command interpolation and shell execution hooks.
-- **Verification Method**: Command validation against `gemini config --schema` (v0.27.0+).
+  - `.gemini/commands/*.toml` command files using `prompt = """..."""`.
+  - `.gemini/settings.json` with `contextFileName`, `skills.enabled`, and `experimental.enableAgents`.
+  - `.gemini/agents/*.md` local agent files.
+- **Verification Method**: Schema and file-shape checks of generated outputs.
 
 ### GitHub Copilot
-- **Source**: [GitHub Copilot Customization Guide](https://docs.github.com/en/copilot/using-github-copilot/customizing-copilot-with-custom-instructions) and [VS Code Copilot Wiki](https://github.com/microsoft/vscode-copilot/wiki).
+- **Source**: [VS Code Copilot Prompt Files](https://code.visualstudio.com/docs/copilot/copilot-customization#_prompt-files-experimental) and [VS Code Copilot Chat Modes](https://code.visualstudio.com/docs/copilot/chat/chat-modes)
 - **Key Specifications**:
-  - `.github/copilot-instructions.md`: Unified markdown rules for workspace-wide context.
-  - `AGENTS.md`: Official support added Aug 28, 2025 (Linux Foundation/Agentic AI Foundation open standard).
-  - `.agent.md`: Role-based agent discovery (supported by agentskills.io extension).
-  - `.prompt.md`: Structured task markers for prompt-discovery in Copilot Chat.
-  - **Note**: Experimental Agent Skills in active development (VS Code 1.108+).
-- **Verification Method**: Manual inspection of `.github/` artifacts and integration with VS Code Copilot Chat (v1.108+).
+  - `.github/prompts/*.prompt.md` with supported frontmatter (`description`, `mode`, `tools`, etc.).
+  - `.github/chatmodes/*.chatmode.md` with supported frontmatter (`description`, `tools`, `whenToUse`, `groups`).
+  - `.github/instructions/*.instructions.md` path-specific rules.
+- **Verification Method**: Adapter output inspection against VS Code documentation.
 
 ### Codex CLI
-- **Source**: [Codex Agents Protocol Specification](https://github.com/openai/codex-agents)
+- **Source**: [OpenAI Codex AGENTS.md Guide](https://developers.openai.com/codex/agents.md) and [OpenAI Codex Configuration](https://developers.openai.com/codex/config)
 - **Key Specifications**:
-  - `AGENTS.md`: Primary instruction file (automatically read by Codex CLI).
-    - **Note**: Part of the Linux Foundation/Agentic AI Foundation open standard.
-  - `.codex/config.toml`: Registry of skills and tool-call mapping with fallback filenames.
-  - Command Hooks: Execution of `.agent/adapters/` scripts as native pre-processing hooks.
-- **Verification Method**: Linting generated TOML against established Codex CLI schema.
+  - `AGENTS.md` as primary repo instruction file.
+  - `.codex/config.toml` for sandbox/default behavior.
+- **Verification Method**: Generated file conformance and CLI usage assumptions from current docs.
 
 ### OpenCode
-- **Status**: ⚠️ **ARCHIVED** (September 2025) — Succeeded by Crush
-- **Source**: [OpenCode Developer Portal](https://opencode.ai/docs) (archived)
+- **Status**: Experimental compatibility only
+- **Source**: [OpenCode Config Documentation](https://opencode.ai/docs/config)
 - **Key Specifications**:
-  - `.opencode.json`: Centralized JSON descriptor for agents and their associated skills.
-  - `.opencode/`: Workspace directory for command logic and session-persistent state.
-  - Context Injection: Usage of `$WORKSPACE_ROOT` for path-agnostic configurations.
-- **Verification Method**: Schema validation of generated `.opencode.json` using `opencode-cli validate`.
-- **Note**: Adapter maintained for compatibility with existing installations only. New projects should use Claude Code, Gemini CLI, GitHub Copilot, or Codex CLI.
+  - `.opencode.json` plus `.opencode/commands/` markdown prompts.
+- **Verification Method**: Best-effort compatibility output checks.
+- **Note**: Disabled by default in strict configuration.
 
 ---
 
 ## Platform Updates (2026)
 
-This section documents major platform changes and updates as of early 2026 that affect the agentic flow implementation.
+This section captures notable platform updates observed during implementation.
+For current adapter truth, prefer `.agent/SOURCES.md` and the capability files in `.agent/adapters/capabilities/`.
 
 ### Claude Code
 - **Jan 24, 2026**: Slash commands merged into skills system
@@ -1868,13 +1888,34 @@ workflows:
 adapters:
   output_directory: "."       # Where to write generated files
   platforms:                  # Enable/disable specific platforms
-    claude_code: true
-    gemini_cli: true
-    gemini_antigravity: true
-    github_copilot: true
-    copilot_cli: true
-    codex_cli: true
-    opencode: true
+    claude_code:
+      enabled: true
+      support_mode: native
+      experimental: false
+    gemini_cli:
+      enabled: true
+      support_mode: native
+      experimental: false
+    github_copilot:
+      enabled: true
+      support_mode: native
+      experimental: false
+    codex_cli:
+      enabled: true
+      support_mode: native
+      experimental: false
+    gemini_antigravity:
+      enabled: false
+      support_mode: emulated
+      experimental: true
+    copilot_cli:
+      enabled: false
+      support_mode: emulated
+      experimental: true
+    opencode:
+      enabled: false
+      support_mode: emulated
+      experimental: true
 
 # Security settings
 security:
@@ -1892,6 +1933,7 @@ context:
 # Project-specific overrides
 project:
   name: "QuickScale"
+  profile: "quickscale"
   language: "python"
   test_command: "./scripts/test_unit.sh"
   lint_command: "./scripts/lint.sh"
