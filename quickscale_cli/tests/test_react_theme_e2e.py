@@ -149,6 +149,32 @@ class TestReactThemeUserWorkflow:
         # Components directory
         assert (src / "components").is_dir()
 
+    def test_generated_react_branding_uses_project_name(self, tmp_path):
+        """Generated React UI branding should use the requested project name."""
+        generator = ProjectGenerator(theme="showcase_react")
+        project_name = "my_real_project_name"
+        project_path = tmp_path / project_name
+
+        generator.generate(project_name, project_path)
+
+        use_modules_content = (
+            project_path / "frontend" / "src" / "hooks" / "useModules.ts"
+        ).read_text()
+        dashboard_content = (
+            project_path / "frontend" / "src" / "pages" / "Dashboard.tsx"
+        ).read_text()
+        sidebar_content = (
+            project_path / "frontend" / "src" / "components" / "layout" / "Sidebar.tsx"
+        ).read_text()
+
+        assert project_name in use_modules_content
+        assert project_name in dashboard_content
+        assert project_name in sidebar_content
+
+        assert "qs_fmt_test" not in use_modules_content
+        assert "qs_fmt_test" not in dashboard_content
+        assert "qs_fmt_test" not in sidebar_content
+
     def test_package_json_valid_and_complete(self, tmp_path):
         """
         Verify package.json is valid JSON with all required fields.

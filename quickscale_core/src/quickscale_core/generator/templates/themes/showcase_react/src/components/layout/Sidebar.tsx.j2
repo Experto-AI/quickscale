@@ -42,7 +42,9 @@ export function Sidebar() {
   return (
     <aside className="hidden min-h-screen w-64 flex-col border-r bg-sidebar lg:flex">
       <div className="p-6">
-        <h1 className="text-xl font-bold text-sidebar-foreground">qs_fmt_test</h1>
+        <h1 className="text-xl font-bold text-sidebar-foreground">
+          {% endraw %}{{ project_name }}{% raw %}
+        </h1>
       </div>
       <Separator />
       <nav className="flex-1 space-y-1 p-4">

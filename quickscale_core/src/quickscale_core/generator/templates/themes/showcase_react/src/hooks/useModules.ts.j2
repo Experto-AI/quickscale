@@ -20,7 +20,7 @@ declare global {
 }
 
 const defaultConfig: QuickScaleConfig = {
-  projectName: 'qs_fmt_test',
+  projectName: '{% endraw %}{{ project_name }}{% raw %}',
   modules: {
     auth: false,
     blog: false,

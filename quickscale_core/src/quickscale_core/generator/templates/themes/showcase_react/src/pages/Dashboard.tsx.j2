@@ -79,7 +79,9 @@ export function Dashboard() {
   return (
     <div className="space-y-8">
       <div>
-        <h1 className="text-3xl font-bold tracking-tight">Welcome to qs_fmt_test</h1>
+        <h1 className="text-3xl font-bold tracking-tight">
+          Welcome to {% endraw %}{{ project_name }}{% raw %}
+        </h1>
         <p className="mt-1 text-muted-foreground">
           Your Django project has been successfully generated with QuickScale!
         </p>
