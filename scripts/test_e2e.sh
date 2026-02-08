@@ -15,7 +15,8 @@
 # Options:
 #   --headed          Run Playwright in headed mode (show browser)
 #   --no-cleanup      Don't cleanup Docker containers (for debugging)
-#   --verbose         Verbose pytest output
+#   --full            Show full pytest output (per-file lines)
+#   --verbose         Alias for --full
 #   --help            Show this help message
 #
 
@@ -31,7 +32,7 @@ NC='\033[0m' # No Color
 # Default options
 HEADED=""
 CLEANUP=true
-VERBOSE=""
+SHOW_FULL_OUTPUT=false
 PYTEST_ARGS=""
 
 # Parse arguments
@@ -45,8 +46,8 @@ while [[ $# -gt 0 ]]; do
             CLEANUP=false
             shift
             ;;
-        --verbose|-v)
-            VERBOSE="--verbose"
+        --full|--verbose|-v)
+            SHOW_FULL_OUTPUT=true
             shift
             ;;
         --help|-h)
@@ -55,7 +56,8 @@ while [[ $# -gt 0 ]]; do
             echo "Options:"
             echo "  --headed          Run Playwright in headed mode (show browser)"
             echo "  --no-cleanup      Don't cleanup Docker containers (for debugging)"
-            echo "  --verbose, -v     Verbose pytest output"
+            echo "  --full            Show full pytest output (per-file lines)"
+            echo "  --verbose, -v     Alias for --full"
             echo "  --help, -h        Show this help message"
             exit 0
             ;;
@@ -75,6 +77,11 @@ CLI_DIR="$PROJECT_ROOT/quickscale_cli"
 echo -e "${BLUE}╔════════════════════════════════════════╗${NC}"
 echo -e "${BLUE}║   QuickScale E2E Test Runner           ║${NC}"
 echo -e "${BLUE}╚════════════════════════════════════════╝${NC}"
+if [ "$SHOW_FULL_OUTPUT" = true ]; then
+    echo "Output mode: full"
+else
+    echo "Output mode: dots"
+fi
 echo ""
 
 # Check if we're in the project root
@@ -159,10 +166,10 @@ echo ""
 # Build pytest command - run from root with PYTHONPATH for centralized venv
 # Using --rootdir to ensure pytest finds the correct conftest.py
 # Clear addopts to disable coverage thresholds (E2E tests don't need full coverage)
-PYTEST_CMD="PYTHONPATH=\"$CORE_DIR:$CORE_DIR/src\" poetry run pytest $CORE_DIR/tests/ -m e2e --rootdir=$CORE_DIR -o \"addopts=\""
+PYTEST_CMD="PYTHONPATH=\"$CORE_DIR:$CORE_DIR/src\" poetry run pytest $CORE_DIR/tests/ -m e2e --rootdir=$CORE_DIR -o \"addopts=\" --tb=long -ra"
 
-if [ -n "$VERBOSE" ]; then
-    PYTEST_CMD="$PYTEST_CMD $VERBOSE"
+if [ "$SHOW_FULL_OUTPUT" = false ]; then
+    PYTEST_CMD="$PYTEST_CMD -q"
 fi
 
 if [ -n "$HEADED" ]; then
@@ -206,10 +213,10 @@ echo ""
 
 # Build CLI pytest command - run from root with PYTHONPATH for centralized venv
 # Clear addopts to disable coverage thresholds (E2E tests don't need full coverage)
-CLI_PYTEST_CMD="PYTHONPATH=\"$CLI_DIR:$CLI_DIR/src\" poetry run pytest $CLI_DIR/tests/ -m e2e --rootdir=$CLI_DIR -o \"addopts=\""
+CLI_PYTEST_CMD="PYTHONPATH=\"$CLI_DIR:$CLI_DIR/src\" poetry run pytest $CLI_DIR/tests/ -m e2e --rootdir=$CLI_DIR -o \"addopts=\" --tb=long -ra"
 
-if [ -n "$VERBOSE" ]; then
-    CLI_PYTEST_CMD="$CLI_PYTEST_CMD $VERBOSE"
+if [ "$SHOW_FULL_OUTPUT" = false ]; then
+    CLI_PYTEST_CMD="$CLI_PYTEST_CMD -q"
 fi
 
 if [ -n "$PYTEST_ARGS" ]; then
@@ -242,7 +249,7 @@ else
     echo ""
     echo -e "${YELLOW}Debugging tips:${NC}"
     echo "  • Run with --headed to see browser actions (Core tests)"
-    echo "  • Run with --verbose for detailed output"
+    echo "  • Run with --full for detailed output"
     echo "  • Run with --no-cleanup to inspect containers"
     echo "  • Check screenshots in failed test output"
     echo "  • Ensure Docker is running and accessible"
