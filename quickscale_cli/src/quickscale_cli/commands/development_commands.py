@@ -18,7 +18,7 @@ from quickscale_cli.utils.docker_utils import (
 )
 from quickscale_cli.utils.project_manager import (
     get_project_config,
-    get_web_container_name,
+    get_backend_container_name,
     is_in_quickscale_project,
 )
 
@@ -255,11 +255,11 @@ def _run_docker_exec_command(
     "-c", "--command", "cmd", help="Run a single command instead of interactive shell"
 )
 def shell(cmd: str | None) -> None:
-    """Open an interactive bash shell in the web container."""
+    """Open an interactive bash shell in the backend container."""
     _validate_project_and_docker()
 
     try:
-        container_name = get_web_container_name()
+        container_name = get_backend_container_name()
 
         if cmd:
             # Run single command (non-interactive)
@@ -296,7 +296,7 @@ def shell(cmd: str | None) -> None:
 @click.command(context_settings=dict(ignore_unknown_options=True))
 @click.argument("args", nargs=-1, type=click.UNPROCESSED)
 def manage(args: tuple) -> None:
-    """Run Django management commands in the web container."""
+    """Run Django management commands in the backend container."""
     _validate_project_and_docker()
 
     if not args:
@@ -309,7 +309,7 @@ def manage(args: tuple) -> None:
         sys.exit(1)
 
     try:
-        container_name = get_web_container_name()
+        container_name = get_backend_container_name()
         cmd_args = ["python", "manage.py"] + list(args)
         _run_docker_exec_command(container_name, cmd_args, capture=True)
 

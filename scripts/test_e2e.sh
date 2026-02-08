@@ -96,7 +96,7 @@ cleanup() {
         docker compose -f docker-compose.test.yml down -v 2>/dev/null || true
 
         # Cleanup any test containers that might be lingering
-        docker ps -a | grep -E '(test|e2e_cli_test).*_(db|web|postgres)' | awk '{print $1}' | xargs -r docker rm -f 2>/dev/null || true
+        docker ps -a | grep -E '(test|e2e_cli_test).*_(db|backend|postgres)' | awk '{print $1}' | xargs -r docker rm -f 2>/dev/null || true
 
         # Stop containers on test ports
         docker ps | grep -E ':(8000|5432)->' | awk '{print $1}' | xargs -r docker stop 2>/dev/null || true
@@ -134,7 +134,7 @@ docker ps -a --filter "name=pytest" --format "{{.ID}}" | xargs -r docker rm -f 2
 docker ps --format "{{.ID}} {{.Ports}}" | grep -E ':(5432|5433|8000)->' | awk '{print $1}' | xargs -r docker stop 2>/dev/null || true
 docker ps -a --format "{{.ID}} {{.Ports}}" | grep -E ':(5432|5433|8000)->' | awk '{print $1}' | xargs -r docker rm -f 2>/dev/null || true
 # Also cleanup test containers by name pattern
-docker ps -a | grep -E '(test|e2e_cli_test).*_(db|web|postgres)' | awk '{print $1}' | xargs -r docker rm -f 2>/dev/null || true
+docker ps -a | grep -E '(test|e2e_cli_test).*_(db|backend|postgres)' | awk '{print $1}' | xargs -r docker rm -f 2>/dev/null || true
 # Wait briefly for ports to be released
 sleep 1
 echo -e "${GREEN}✓ Pre-cleanup complete${NC}"
@@ -190,7 +190,7 @@ echo ""
 # Cleanup core test containers before running CLI tests
 echo -e "${BLUE}Cleaning up Core E2E test containers...${NC}"
 # Stop any containers from core E2E tests (pytest-docker containers)
-docker ps -a | grep -E 'test.*_(db|web|postgres)' | awk '{print $1}' | xargs -r docker rm -f 2>/dev/null || true
+docker ps -a | grep -E 'test.*_(db|backend|postgres)' | awk '{print $1}' | xargs -r docker rm -f 2>/dev/null || true
 # Also stop any containers on ports 8000 and 5432
 docker ps | grep -E ':(8000|5432)->' | awk '{print $1}' | xargs -r docker stop 2>/dev/null || true
 docker ps -a | grep -E ':(8000|5432)->' | awk '{print $1}' | xargs -r docker rm -f 2>/dev/null || true

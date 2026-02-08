@@ -247,7 +247,7 @@ quickscale down
 
 # View service logs
 quickscale logs           # All services
-quickscale logs web       # Web service only
+quickscale logs backend       # Backend service only
 quickscale logs db        # Database only
 # Equivalent to: docker-compose logs [service]
 
@@ -258,7 +258,7 @@ quickscale ps
 
 **Development Tools**:
 ```bash
-# Interactive bash shell in web container
+# Interactive bash shell in backend container
 quickscale shell
 # Equivalent to: docker exec -it <container> /bin/bash
 
@@ -279,7 +279,7 @@ quickscale apply
 
 # Services already running - check status:
 quickscale ps                    # Check services
-quickscale logs web              # View logs
+quickscale logs backend              # View logs
 
 # OR if you need to start manually:
 # (e.g., after 'quickscale down' or if docker.start: false)
@@ -426,7 +426,7 @@ Generated projects include Docker support for both development and production. A
 cd myapp
 cp .env.example .env  # Configure environment variables
 docker-compose up --build
-docker-compose exec web python manage.py migrate
+docker-compose exec backend python manage.py migrate
 
 # Production Docker build
 docker build -t myapp:latest .

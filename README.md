@@ -281,7 +281,7 @@ quickscale apply
 ### Option 1: Docker (Recommended for production parity)
 
 ```bash
-# Start all services (web + database)
+# Start all services (backend + database)
 quickscale up
 
 # Run migrations
@@ -291,7 +291,7 @@ quickscale manage migrate
 quickscale manage createsuperuser
 
 # View logs
-quickscale logs -f web
+quickscale logs -f backend
 
 # Open a shell in the container
 quickscale shell

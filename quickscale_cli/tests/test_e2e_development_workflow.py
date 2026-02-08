@@ -40,7 +40,7 @@ class TestDevelopmentCommandsE2E:
             )
             # Force remove all containers with our project name
             subprocess.run(
-                ["docker", "rm", "-f", "e2e_cli_test_web", "e2e_cli_test_db"],
+                ["docker", "rm", "-f", "e2e_cli_test_backend", "e2e_cli_test_db"],
                 capture_output=True,
                 timeout=10,
             )
@@ -257,7 +257,7 @@ class TestDevelopmentCommandsE2E:
             assert result.exit_code == 0
 
             # Test logs for specific service
-            result = runner.invoke(cli, ["logs", "web"])
+            result = runner.invoke(cli, ["logs", "backend"])
             assert result.exit_code == 0
 
             # Cleanup

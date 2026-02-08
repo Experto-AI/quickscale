@@ -9,7 +9,7 @@ services:
     volumes:
       - postgres_data:/var/lib/postgresql/data
     # Port mapping removed to avoid conflicts with system PostgreSQL
-    # The web service can still access the database via the internal Docker network
+    # The backend service can still access the database via the internal Docker network
     # If you need to access PostgreSQL from your host, uncomment the next 2 lines:
     # ports:
     #   - "5433:5432"  # Maps to host port 5433 to avoid conflict with system PostgreSQL
@@ -35,13 +35,13 @@ services:
       - .:/app
 {% endif %}
 
-  web:
+  backend:
     build:
       context: .
       dockerfile: Dockerfile
       args:
         INSTALL_DEV: "true"  # Install dev dependencies for local development
-    container_name: {{ project_name }}_web
+    container_name: {{ project_name }}_backend
     command: python manage.py runserver 0.0.0.0:${PORT:-8000}
     # Map to host user to prevent root-owned files in mounted volumes
     user: "${DOCKER_UID:-1000}:${DOCKER_GID:-1000}"

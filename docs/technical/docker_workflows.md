@@ -125,9 +125,9 @@ docker-compose down -v
 quickscale ps
 
 # View logs
-quickscale logs web
+quickscale logs backend
 quickscale logs db
-quickscale logs -f web  # Follow logs
+quickscale logs -f backend  # Follow logs
 ```
 
 ---

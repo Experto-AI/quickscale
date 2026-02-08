@@ -645,7 +645,7 @@ def _display_next_steps(
             click.echo("  quickscale logs        # View failure details")
         else:
             click.echo("  # Docker services should be running")
-            click.echo("  quickscale logs web  # View logs")
+            click.echo("  quickscale logs backend  # View logs")
             click.echo("  quickscale ps        # Check status")
     else:
         click.echo("  quickscale up        # Start Docker services")

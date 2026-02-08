@@ -48,19 +48,19 @@ def is_in_quickscale_project() -> bool:
     return find_docker_compose() is not None
 
 
-def get_web_container_name() -> str:
-    """Get the name of the web container (dynamically detected)."""
+def get_backend_container_name() -> str:
+    """Get the name of the backend container (dynamically detected)."""
     project_name = Path.cwd().name
     containers = get_running_containers()
 
     # Try different naming patterns used by Docker Compose
-    # Examples: test59_web, test59-web-1, test59_web_1
+    # Examples: test59_backend, test59-backend-1, test59_backend_1
     for container in containers:
-        if project_name in container and "web" in container:
+        if project_name in container and "backend" in container:
             return container
 
     # Fallback to common patterns if no running container found
-    return f"{project_name}-web-1"
+    return f"{project_name}-backend-1"
 
 
 def get_db_container_name() -> str:

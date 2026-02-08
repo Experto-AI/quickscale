@@ -43,10 +43,10 @@ cp .env.example .env
 docker-compose up --build
 
 # 3. Run migrations (in another terminal)
-docker-compose exec web python manage.py migrate
+docker-compose exec backend python manage.py migrate
 
 # 4. Create a superuser (optional)
-docker-compose exec web python manage.py createsuperuser
+docker-compose exec backend python manage.py createsuperuser
 ```
 
 Visit http://127.0.0.1:8000 to see your application.

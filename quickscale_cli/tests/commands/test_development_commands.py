@@ -234,12 +234,12 @@ class TestShellCommand:
                 "quickscale_cli.commands.development_commands.is_docker_running"
             ) as mock_docker:
                 with patch(
-                    "quickscale_cli.commands.development_commands.get_web_container_name"
+                    "quickscale_cli.commands.development_commands.get_backend_container_name"
                 ) as mock_container:
                     with patch("subprocess.run") as mock_run:
                         mock_in_project.return_value = True
                         mock_docker.return_value = True
-                        mock_container.return_value = "myproject-web-1"
+                        mock_container.return_value = "myproject-backend-1"
                         mock_run.return_value = Mock(returncode=0)
 
                         result = runner.invoke(shell)
@@ -257,12 +257,12 @@ class TestShellCommand:
                 "quickscale_cli.commands.development_commands.is_docker_running"
             ) as mock_docker:
                 with patch(
-                    "quickscale_cli.commands.development_commands.get_web_container_name"
+                    "quickscale_cli.commands.development_commands.get_backend_container_name"
                 ) as mock_container:
                     with patch("subprocess.run") as mock_run:
                         mock_in_project.return_value = True
                         mock_docker.return_value = True
-                        mock_container.return_value = "myproject-web-1"
+                        mock_container.return_value = "myproject-backend-1"
                         mock_run.return_value = Mock(returncode=0)
 
                         result = runner.invoke(shell, ["-c", "ls -la"])
@@ -284,12 +284,12 @@ class TestManageCommand:
                 "quickscale_cli.commands.development_commands.is_docker_running"
             ) as mock_docker:
                 with patch(
-                    "quickscale_cli.commands.development_commands.get_web_container_name"
+                    "quickscale_cli.commands.development_commands.get_backend_container_name"
                 ) as mock_container:
                     with patch("subprocess.run") as mock_run:
                         mock_in_project.return_value = True
                         mock_docker.return_value = True
-                        mock_container.return_value = "myproject-web-1"
+                        mock_container.return_value = "myproject-backend-1"
                         mock_run.return_value = Mock(returncode=0)
 
                         result = runner.invoke(manage, ["migrate"])
@@ -360,12 +360,12 @@ class TestLogsCommand:
                         mock_cmd.return_value = ["docker-compose"]
                         mock_run.return_value = Mock(returncode=0)
 
-                        result = runner.invoke(logs, ["web"])
+                        result = runner.invoke(logs, ["backend"])
 
                         assert result.exit_code == 0
                         # Verify service name was passed
                         call_args = mock_run.call_args[0][0]
-                        assert "web" in call_args
+                        assert "backend" in call_args
 
     def test_logs_with_follow_flag(self):
         """Test logs command with --follow flag."""
@@ -541,12 +541,12 @@ class TestErrorHandling:
                 "quickscale_cli.commands.development_commands.is_docker_running"
             ) as mock_docker:
                 with patch(
-                    "quickscale_cli.commands.development_commands.get_web_container_name"
+                    "quickscale_cli.commands.development_commands.get_backend_container_name"
                 ) as mock_container:
                     with patch("subprocess.run") as mock_run:
                         mock_in_project.return_value = True
                         mock_docker.return_value = True
-                        mock_container.return_value = "myproject-web-1"
+                        mock_container.return_value = "myproject-backend-1"
                         mock_run.side_effect = subprocess.CalledProcessError(
                             1, "docker"
                         )
@@ -567,12 +567,12 @@ class TestErrorHandling:
                 "quickscale_cli.commands.development_commands.is_docker_running"
             ) as mock_docker:
                 with patch(
-                    "quickscale_cli.commands.development_commands.get_web_container_name"
+                    "quickscale_cli.commands.development_commands.get_backend_container_name"
                 ) as mock_container:
                     with patch("subprocess.run") as mock_run:
                         mock_in_project.return_value = True
                         mock_docker.return_value = True
-                        mock_container.return_value = "myproject-web-1"
+                        mock_container.return_value = "myproject-backend-1"
                         mock_run.side_effect = subprocess.CalledProcessError(
                             1, "docker"
                         )

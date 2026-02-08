@@ -37,12 +37,12 @@ class TestGetDockerStatus:
         """Test Docker status when containers are running"""
         mock_run.return_value = Mock(
             returncode=0,
-            stdout="myapp-web-1: Up 5 minutes\nmyapp-db-1: Up 5 minutes",
+            stdout="myapp-backend-1: Up 5 minutes\nmyapp-db-1: Up 5 minutes",
         )
         result = _get_docker_status()
         assert result is not None
-        assert "myapp-web-1" in result
-        assert "Up 5 minutes" in result["myapp-web-1"]
+        assert "myapp-backend-1" in result
+        assert "Up 5 minutes" in result["myapp-backend-1"]
 
     @patch("quickscale_cli.commands.status_command.subprocess.run")
     def test_docker_no_containers(self, mock_run):
@@ -269,7 +269,7 @@ class TestDisplayFunctions:
     def test_display_docker_status_running(self, mock_status):
         """Display Docker status for running containers"""
         mock_status.return_value = {
-            "web": "Up 5 minutes",
+            "backend": "Up 5 minutes",
             "db": "Exited (0)",
             "redis": "starting",
         }
@@ -391,7 +391,7 @@ class TestBuildJsonOutput:
         """Build JSON with Docker status"""
         with patch(
             "quickscale_cli.commands.status_command._get_docker_status",
-            return_value={"web": "Up"},
+            return_value={"backend": "Up"},
         ):
             result = _build_json_output(tmp_path, None, None, None)
         assert "docker" in result

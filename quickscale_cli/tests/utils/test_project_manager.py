@@ -5,7 +5,7 @@ from unittest.mock import patch
 from quickscale_cli.utils.project_manager import (
     get_db_container_name,
     get_project_state,
-    get_web_container_name,
+    get_backend_container_name,
     is_in_quickscale_project,
 )
 
@@ -40,14 +40,14 @@ class TestGetProjectState:
         with patch(
             "quickscale_cli.utils.project_manager.get_running_containers"
         ) as mock_containers:
-            mock_containers.return_value = ["myproject-web-1", "myproject-db-1"]
+            mock_containers.return_value = ["myproject-backend-1", "myproject-db-1"]
 
             state = get_project_state()
 
             assert state["has_project"] is True
             assert state["project_dir"] == tmp_path
             assert state["project_name"] == tmp_path.name
-            assert "myproject-web-1" in state["containers"]
+            assert "myproject-backend-1" in state["containers"]
 
     def test_get_state_not_in_project(self, tmp_path, monkeypatch):
         """Test getting project state when not in a project."""
@@ -74,20 +74,20 @@ class TestGetProjectState:
 class TestContainerNames:
     """Tests for container name functions."""
 
-    def test_get_web_container_name_fallback(self, tmp_path, monkeypatch):
-        """Test getting web container name fallback when no containers running."""
+    def test_get_backend_container_name_fallback(self, tmp_path, monkeypatch):
+        """Test getting backend container name fallback when no containers running."""
         monkeypatch.chdir(tmp_path)
 
         with patch(
             "quickscale_cli.utils.project_manager.get_running_containers"
         ) as mock_containers:
             mock_containers.return_value = []
-            result = get_web_container_name()
-            assert result == f"{tmp_path.name}-web-1"
+            result = get_backend_container_name()
+            assert result == f"{tmp_path.name}-backend-1"
 
-    def test_get_web_container_name_found(self, monkeypatch):
-        """Test getting web container name when container is found."""
-        # Use a simple project name that doesn't contain 'web' or 'db'
+    def test_get_backend_container_name_found(self, monkeypatch):
+        """Test getting backend container name when container is found."""
+        # Use a simple project name that doesn't contain 'backend' or 'db'
         with patch("pathlib.Path.cwd") as mock_cwd:
             mock_cwd.return_value.name = "myproject"
 
@@ -95,11 +95,11 @@ class TestContainerNames:
                 "quickscale_cli.utils.project_manager.get_running_containers"
             ) as mock_containers:
                 mock_containers.return_value = [
-                    "myproject_web_1",
+                    "myproject_backend_1",
                     "myproject_db_1",
                 ]
-                result = get_web_container_name()
-                assert result == "myproject_web_1"
+                result = get_backend_container_name()
+                assert result == "myproject_backend_1"
 
     def test_get_db_container_name_fallback(self, tmp_path, monkeypatch):
         """Test getting database container name fallback when no containers running."""
@@ -114,7 +114,7 @@ class TestContainerNames:
 
     def test_get_db_container_name_found(self, monkeypatch):
         """Test getting database container name when container is found."""
-        # Use a simple project name that doesn't contain 'web' or 'db'
+        # Use a simple project name that doesn't contain 'backend' or 'db'
         with patch("pathlib.Path.cwd") as mock_cwd:
             mock_cwd.return_value.name = "myproject"
 
@@ -122,7 +122,7 @@ class TestContainerNames:
                 "quickscale_cli.utils.project_manager.get_running_containers"
             ) as mock_containers:
                 mock_containers.return_value = [
-                    "myproject_web_1",
+                    "myproject_backend_1",
                     "myproject_db_1",
                 ]
                 result = get_db_container_name()

@@ -381,8 +381,8 @@ class TestShellCommandExtended:
                 return_value=True,
             ):
                 with patch(
-                    "quickscale_cli.commands.development_commands.get_web_container_name",
-                    return_value="web",
+                    "quickscale_cli.commands.development_commands.get_backend_container_name",
+                    return_value="backend",
                 ):
                     with patch(
                         "subprocess.run",
@@ -414,8 +414,8 @@ class TestManageCommandExtended:
                 return_value=True,
             ):
                 with patch(
-                    "quickscale_cli.commands.development_commands.get_web_container_name",
-                    return_value="web",
+                    "quickscale_cli.commands.development_commands.get_backend_container_name",
+                    return_value="backend",
                 ):
                     with patch(
                         "quickscale_cli.commands.development_commands._run_docker_exec_command",

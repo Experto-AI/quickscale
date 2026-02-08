@@ -808,13 +808,13 @@ class TestDockerComposeContent:
         assert "postgres:" in output
         assert "POSTGRES_DB" in output
 
-    def test_web_service(
+    def test_backend_service(
         self, jinja_env: Environment, test_context: dict[str, str]
     ) -> None:
-        """Test docker-compose.yml includes web service."""
+        """Test docker-compose.yml includes backend service."""
         template = jinja_env.get_template("docker-compose.yml.j2")
         output = template.render(test_context)
-        assert "web:" in output
+        assert "backend:" in output
         assert "build:" in output
 
     def test_react_frontend_uses_non_root_safe_corepack_command(
