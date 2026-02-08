@@ -2,6 +2,7 @@
 
 import json
 import subprocess
+import time
 from pathlib import Path
 from typing import Any
 
@@ -671,38 +672,93 @@ def link_database_to_service(service: str) -> tuple[bool, str]:
         - message: Status or error message
 
     """
-    try:
-        # Use Railway CLI to add DATABASE_URL reference variable
-        # Format: railway variables --set "DATABASE_URL=${{Postgres.DATABASE_URL}}"
-        # --service <service>
-        result = run_railway_command(
-            [
-                "variables",
-                "--set",
-                "DATABASE_URL=${{Postgres.DATABASE_URL}}",
-                "--service",
-                service,
-            ],
-            timeout=30,
-        )
+    reference_services = ("Postgres", "PostgreSQL")
+    max_attempts = 12
+    retry_delay_seconds = 10
+    max_wait_seconds = 180
+    last_error: str = "Unknown error"
+    start_time = time.monotonic()
+    attempts_completed = 0
 
-        if result.returncode == 0:
-            return True, "DATABASE_URL reference linked successfully"
-        else:
-            # Try alternate format for different Railway CLI versions
-            result2 = run_railway_command(
-                [
-                    "variables",
-                    "--set",
-                    "DATABASE_URL=${{PostgreSQL.DATABASE_URL}}",
-                    "--service",
-                    service,
-                ],
-                timeout=30,
-            )
-            if result2.returncode == 0:
+    for attempt in range(1, max_attempts + 1):
+        if time.monotonic() - start_time >= max_wait_seconds:
+            break
+
+        attempts_completed = attempt
+        for reference in reference_services:
+            if time.monotonic() - start_time >= max_wait_seconds:
+                break
+
+            try:
+                result = run_railway_command(
+                    [
+                        "variables",
+                        "--set",
+                        f"DATABASE_URL=${{{{{reference}.DATABASE_URL}}}}",
+                        "--service",
+                        service,
+                    ],
+                    timeout=45,
+                )
+            except TimeoutError:
+                last_error = (
+                    f"Timed out while waiting for {reference}.DATABASE_URL reference"
+                )
+                continue
+            except Exception as e:
+                error_text = str(e).strip()
+                if error_text:
+                    last_error = error_text
+                if _is_non_retryable_database_link_error(error_text):
+                    return False, f"Error linking DATABASE_URL: {error_text}"
+                continue
+
+            if result.returncode == 0:
                 return True, "DATABASE_URL reference linked successfully"
-            else:
-                return False, f"Failed to link DATABASE_URL: {result.stderr}"
-    except Exception as e:
-        return False, f"Error linking DATABASE_URL: {e}"
+
+            error_text = (result.stderr or result.stdout or "").strip()
+            if error_text:
+                last_error = error_text
+
+            if _is_non_retryable_database_link_error(error_text):
+                return False, f"Failed to link DATABASE_URL: {error_text}"
+
+        deployed_vars = get_railway_variables(service)
+        if deployed_vars and "DATABASE_URL" in deployed_vars:
+            return True, "DATABASE_URL reference linked successfully"
+
+        if attempt < max_attempts and time.monotonic() - start_time < max_wait_seconds:
+            time.sleep(retry_delay_seconds)
+
+    return (
+        False,
+        "Failed to link DATABASE_URL after "
+        f"{attempts_completed} attempts (~{max_wait_seconds}s max wait): {last_error}",
+    )
+
+
+def _is_non_retryable_database_link_error(error_text: str) -> bool:
+    """Return True if the DATABASE_URL link error should fail fast."""
+    normalized = error_text.lower()
+    if not normalized:
+        return False
+
+    non_retryable_markers = (
+        "railway cli not found",
+        "cli not found",
+        "not authenticated",
+        "unauthorized",
+        "forbidden",
+        "permission denied",
+        "no project found",
+        "project not found",
+        "not linked to a project",
+        "not in a project",
+        "run railway link",
+        "invalid token",
+        "invalid argument",
+        "unknown option",
+        "unknown argument",
+        "usage:",
+    )
+    return any(marker in normalized for marker in non_retryable_markers)

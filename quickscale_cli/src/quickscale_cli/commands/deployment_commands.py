@@ -266,22 +266,29 @@ def _create_app_service_step(app_service: str) -> None:
         click.secho(f"⚠️  Warning: Could not create app service: {e}", fg="yellow")
 
 
-def _link_database_step(app_service: str) -> None:
+def _link_database_step(app_service: str) -> bool:
     """Link DATABASE_URL from PostgreSQL to app service."""
     link_success, link_message = link_database_to_service(app_service)
 
     if link_success:
         click.secho(f"✅ {link_message}", fg="green")
+        return True
     else:
         click.secho(f"⚠️  Warning: {link_message}", fg="yellow")
         click.echo("💡 You may need to link DATABASE_URL manually:")
         click.echo(
-            f'   railway variables --set "DATABASE_URL=${{{{Postgres.DATABASE_URL}}}}" '
+            f"   railway variables --set 'DATABASE_URL=${{{{Postgres.DATABASE_URL}}}}' "
             f"--service {app_service}"
         )
         click.echo(
+            f"   railway variables --set 'DATABASE_URL=${{{{PostgreSQL.DATABASE_URL}}}}' "
+            f"--service {app_service}"
+        )
+        click.echo("   Use single quotes to prevent shell expansion errors")
+        click.echo(
             "   Or link via Railway dashboard > Variables > New Variable > Reference"
         )
+        return False
 
 
 def _generate_domain_step(app_service: str) -> str | None:
@@ -366,9 +373,10 @@ def _deploy_app_step(app_service: str) -> None:
         click.secho("⚠️  Deployment command timed out", fg="yellow")
 
 
-def _verify_deployment_step(app_service: str) -> None:
+def _verify_deployment_step(app_service: str) -> bool:
     """Verify environment variables were set correctly."""
     deployed_vars = get_railway_variables(app_service)
+    database_url_present = False
 
     if deployed_vars:
         click.secho("✅ Environment variables verified", fg="green")
@@ -385,6 +393,7 @@ def _verify_deployment_step(app_service: str) -> None:
                     click.echo(f"   • {var}=<set>")
                 elif var == "DATABASE_URL":
                     click.echo(f"   • {var}=<linked to PostgreSQL>")
+                    database_url_present = True
                 else:
                     value = deployed_vars[var]
                     if len(value) > 50:
@@ -396,8 +405,12 @@ def _verify_deployment_step(app_service: str) -> None:
         click.secho("⚠️  Warning: Could not verify environment variables", fg="yellow")
         click.echo("💡 Check manually: railway variables")
 
+    return database_url_present
 
-def _display_summary(app_service: str, domain_url: str | None) -> None:
+
+def _display_summary(
+    app_service: str, domain_url: str | None, database_linked: bool
+) -> None:
     """Display deployment summary."""
     click.echo("\n" + "=" * 60)
     click.secho("🎉 DEPLOYMENT SUMMARY", fg="green", bold=True)
@@ -413,7 +426,10 @@ def _display_summary(app_service: str, domain_url: str | None) -> None:
     click.echo("\n✅ Services configured:")
     click.echo("   • PostgreSQL database")
     click.echo(f"   • {app_service} application")
-    click.echo("   • DATABASE_URL linked")
+    if database_linked:
+        click.echo("   • DATABASE_URL linked")
+    else:
+        click.echo("   • DATABASE_URL not linked (manual action required)")
     click.echo("   • Public domain generated")
 
     click.echo("\n📋 Next steps:")
@@ -432,6 +448,11 @@ def _display_summary(app_service: str, domain_url: str | None) -> None:
     click.echo("\n⚠️  Important:")
     click.echo("   • Monitor logs for startup errors: railway logs")
     click.echo("   • Verify DATABASE_URL in Railway dashboard > Variables")
+    if not database_linked:
+        click.echo(
+            "   • Link DB manually: railway variables --set "
+            f"'DATABASE_URL=${{{{Postgres.DATABASE_URL}}}}' --service {app_service}"
+        )
     click.echo("   • Check healthcheck status in Railway dashboard")
     click.echo("   • Migrations run automatically on first deploy")
 
@@ -489,7 +510,7 @@ def railway(project_name: str | None) -> None:
 
     # Step 6: Link DATABASE_URL from PostgreSQL to app service
     click.echo("\n🔗 Linking DATABASE_URL to app service...")
-    _link_database_step(app_service)
+    database_linked = _link_database_step(app_service)
 
     # Step 7: Generate public domain first
     click.echo("\n🌐 Generating public domain...")
@@ -506,7 +527,7 @@ def railway(project_name: str | None) -> None:
 
     # Step 10: Verify environment variables
     click.echo("\n🔍 Verifying environment configuration...")
-    _verify_deployment_step(app_service)
+    database_verified = _verify_deployment_step(app_service)
 
     # Step 11: Display deployment summary
-    _display_summary(app_service, domain_url)
+    _display_summary(app_service, domain_url, database_linked or database_verified)

@@ -486,11 +486,11 @@ class TestRemainingHelpers:
 
     def test_display_summary_with_domain(self):
         """Display summary with domain"""
-        _display_summary("myapp", "https://myapp.up.railway.app")
+        _display_summary("myapp", "https://myapp.up.railway.app", True)
 
     def test_display_summary_without_domain(self):
         """Display summary without domain"""
-        _display_summary("myapp", None)
+        _display_summary("myapp", None, False)
 
     @patch("quickscale_cli.commands.deployment_commands.link_database_to_service")
     def test_link_database_success(self, mock_link):

@@ -58,6 +58,7 @@ The `quickscale deploy railway` command automatically:
 - ✅ Initializes Railway project (if needed) - interactive prompts let you create/select project
 - ✅ Adds PostgreSQL 16 database service
 - ✅ Creates application service
+- ✅ Retries `DATABASE_URL` reference linking while PostgreSQL finishes provisioning
 - ✅ Generates and sets SECRET_KEY securely
 - ✅ Sets DEBUG=False for production
 - ✅ Sets DJANGO_SETTINGS_MODULE
@@ -154,13 +155,14 @@ The `quickscale deploy railway` command follows this config-first workflow:
 1. **Initialize Project** (interactive): Select or create Railway project
 2. **Add PostgreSQL**: Provisions PostgreSQL 16 database service
 3. **Create App Service**: Creates empty service container via `railway add --service <app-name>`
-4. **Generate Public Domain**: Auto-generates Railway domain (e.g., myapp-production-abc123.up.railway.app)
-5. **Configure Environment (Single Batch)**: Sets all variables in one command to trigger only ONE deployment
+4. **Link DATABASE_URL Reference**: Links app `DATABASE_URL` to PostgreSQL with retry/backoff
+5. **Generate Public Domain**: Auto-generates Railway domain (e.g., myapp-production-abc123.up.railway.app)
+6. **Configure Environment (Single Batch)**: Sets all variables in one command to trigger only ONE deployment
    - SECRET_KEY (auto-generated)
    - DEBUG=False
    - DJANGO_SETTINGS_MODULE
    - ALLOWED_HOSTS (using generated domain)
-6. **Deploy Application**: Deploys using railway.json config via `railway up --service <app-name>`
+7. **Deploy Application**: Deploys using railway.json config via `railway up --service <app-name>`
    - railway.json defines Dockerfile builder
    - Dockerfile builds the image (collectstatic runs at build time)
    - startCommand runs migrations at runtime (when DATABASE_URL is available) + starts gunicorn
@@ -444,6 +446,21 @@ railway login --browserless
 ```
 This displays a pairing code and URL you can use from any device.
 
+**Error: `bad substitution` when setting DATABASE_URL manually**:
+```bash
+bash: DATABASE_URL=${{Postgres.DATABASE_URL}}: bad substitution
+```
+**Cause**: Bash interprets `${{...}}` when double quotes are used.
+
+**Solution**: Use single quotes so Railway receives the literal reference syntax:
+```bash
+railway variables --set 'DATABASE_URL=${{Postgres.DATABASE_URL}}' --service <app-name>
+```
+If your database service is named `PostgreSQL` instead of `Postgres`, use:
+```bash
+railway variables --set 'DATABASE_URL=${{PostgreSQL.DATABASE_URL}}' --service <app-name>
+```
+
 **Pre-flight Check Failures**:
 
 **Missing railway.json**:
@@ -543,7 +560,15 @@ django.db.utils.OperationalError: connection to server at "localhost" (::1), por
    ```
    You should see `DATABASE_URL` in the list. If not, it means the PostgreSQL service is not linked.
 
-2. Link the PostgreSQL service to your app in Railway dashboard:
+2. Link the PostgreSQL service to your app (CLI or dashboard):
+   ```bash
+   railway variables --set 'DATABASE_URL=${{Postgres.DATABASE_URL}}' --service <app-name>
+   ```
+   If needed, try:
+   ```bash
+   railway variables --set 'DATABASE_URL=${{PostgreSQL.DATABASE_URL}}' --service <app-name>
+   ```
+   Or use dashboard linking:
    - Go to your Railway project dashboard
    - Click on your app service
    - Go to "Variables" tab
