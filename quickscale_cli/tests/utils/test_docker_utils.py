@@ -219,24 +219,31 @@ class TestIsPortAvailable:
 
     def test_port_available(self):
         """Test that an unused port is reported as available."""
-        # Use a high port number unlikely to be in use
-        result = is_port_available(54321)
+        mock_socket = Mock()
+        mock_socket.bind.return_value = None
+
+        with patch("quickscale_cli.utils.docker_utils.socket.socket") as mock_factory:
+            mock_factory.return_value = mock_socket
+
+            result = is_port_available(54321)
+
         assert result is True
+        mock_socket.bind.assert_called_once_with(("0.0.0.0", 54321))
+        mock_socket.close.assert_called_once()
 
     def test_port_unavailable(self):
         """Test that a port in use is reported as unavailable."""
-        import socket
+        mock_socket = Mock()
+        mock_socket.bind.side_effect = OSError("Address already in use")
 
-        # Bind to a port to make it unavailable
-        sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        sock.bind(("0.0.0.0", 54322))
-        sock.listen(1)
+        with patch("quickscale_cli.utils.docker_utils.socket.socket") as mock_factory:
+            mock_factory.return_value = mock_socket
 
-        try:
             result = is_port_available(54322)
-            assert result is False
-        finally:
-            sock.close()
+
+        assert result is False
+        mock_socket.bind.assert_called_once_with(("0.0.0.0", 54322))
+        mock_socket.close.assert_called_once()
 
 
 class TestWaitForPortRelease:
@@ -244,49 +251,41 @@ class TestWaitForPortRelease:
 
     def test_port_already_available(self):
         """Test when port is already available."""
-        result = wait_for_port_release(54323, timeout=1.0)
+        with patch(
+            "quickscale_cli.utils.docker_utils.is_port_available", return_value=True
+        ) as mock_is_available:
+            result = wait_for_port_release(54323, timeout=1.0)
+
         assert result is True
+        mock_is_available.assert_called_once_with(54323)
 
     def test_port_becomes_available(self):
         """Test when port becomes available during wait."""
-        import socket
-        import threading
-
-        # Bind to port temporarily
-        sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        sock.bind(("0.0.0.0", 54324))
-        sock.listen(1)
-
-        # Release port after short delay
-        def release_port():
-            import time
-
-            time.sleep(0.5)
-            sock.close()
-
-        thread = threading.Thread(target=release_port)
-        thread.start()
-
-        # Wait for port to become available
-        result = wait_for_port_release(54324, timeout=2.0)
-        thread.join()
+        with (
+            patch(
+                "quickscale_cli.utils.docker_utils.is_port_available",
+                side_effect=[False, False, True],
+            ) as mock_is_available,
+            patch("quickscale_cli.utils.docker_utils.time.sleep") as mock_sleep,
+        ):
+            result = wait_for_port_release(54324, timeout=2.0, interval=0.2)
 
         assert result is True
+        assert mock_is_available.call_count == 3
+        assert mock_sleep.call_count == 2
 
     def test_port_timeout(self):
         """Test timeout when port never becomes available."""
-        import socket
+        with (
+            patch(
+                "quickscale_cli.utils.docker_utils.is_port_available",
+                return_value=False,
+            ),
+            patch("quickscale_cli.utils.docker_utils.time.sleep"),
+        ):
+            result = wait_for_port_release(54325, timeout=0.5, interval=0.1)
 
-        # Bind to port and keep it busy
-        sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        sock.bind(("0.0.0.0", 54325))
-        sock.listen(1)
-
-        try:
-            result = wait_for_port_release(54325, timeout=0.5)
-            assert result is False
-        finally:
-            sock.close()
+        assert result is False
 
 
 class TestGetPortFromEnv:

@@ -102,6 +102,13 @@ SERVER_EMAIL = config("SERVER_EMAIL", default="server@{{ project_name }}.com")
 # Static files - WhiteNoise for efficient serving
 # STATIC_ROOT and STORAGES are inherited from base.py
 STATIC_ROOT = BASE_DIR / "staticfiles"  # noqa: F405
+{% if theme == 'showcase_react' %}
+# React (Vite) production builds can load additional ESM chunks by relative filename.
+# Manifest-based storage rewrites URLs and can break chunk resolution at runtime.
+STORAGES["staticfiles"] = {  # noqa: F405
+    "BACKEND": "whitenoise.storage.CompressedStaticFilesStorage",
+}
+{% endif %}
 
 # Media files - consider using cloud storage (S3, GCS) in production
 # MEDIA_URL = config("MEDIA_URL", default="/media/")

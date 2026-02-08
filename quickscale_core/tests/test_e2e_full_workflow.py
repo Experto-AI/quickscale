@@ -49,6 +49,19 @@ def _is_poetry_network_failure(output: str) -> bool:
     return any(marker in lowered for marker in markers)
 
 
+def _timeout_output(exc: subprocess.TimeoutExpired) -> str:
+    """Best-effort string output extraction from TimeoutExpired."""
+    parts: list[str] = []
+    for stream in (exc.stdout, exc.stderr):
+        if stream is None:
+            continue
+        if isinstance(stream, bytes):
+            parts.append(stream.decode(errors="ignore"))
+        else:
+            parts.append(stream)
+    return "\n".join(parts)
+
+
 @pytest.fixture(scope="session")
 def docker_available() -> None:
     """Skip E2E tests if Docker daemon is unavailable in this environment."""
@@ -581,21 +594,44 @@ class TestFullE2EWorkflow:
         self._ensure_pnpm_available()
         frontend_path = project_path / "frontend"
 
-        install_result = subprocess.run(
-            ["pnpm", "install"],
-            cwd=frontend_path,
-            capture_output=True,
-            text=True,
-            timeout=180,
-        )
-        combined_install_output = f"{install_result.stdout}\n{install_result.stderr}"
-        if install_result.returncode != 0 and _is_network_failure(
-            combined_install_output
-        ):
-            pytest.skip("npm registry is unreachable in this environment")
-        assert install_result.returncode == 0, (
-            f"pnpm install failed: {install_result.stderr}"
-        )
+        install_result: subprocess.CompletedProcess[str] | None = None
+        install_attempts = 2
+        install_timeout_seconds = 300
+
+        for attempt in range(1, install_attempts + 1):
+            try:
+                install_result = subprocess.run(
+                    ["pnpm", "install"],
+                    cwd=frontend_path,
+                    capture_output=True,
+                    text=True,
+                    timeout=install_timeout_seconds,
+                )
+            except subprocess.TimeoutExpired as exc:
+                timeout_output = _timeout_output(exc)
+                if _is_network_failure(timeout_output):
+                    if attempt == install_attempts:
+                        pytest.skip("npm registry is unreachable in this environment")
+                    time.sleep(2)
+                    continue
+                raise AssertionError(
+                    f"pnpm install timed out after {install_timeout_seconds}s"
+                ) from exc
+
+            combined_install_output = (
+                f"{install_result.stdout}\n{install_result.stderr}"
+            )
+            if install_result.returncode == 0:
+                break
+            if _is_network_failure(combined_install_output):
+                if attempt == install_attempts:
+                    pytest.skip("npm registry is unreachable in this environment")
+                time.sleep(2)
+                continue
+            raise AssertionError(f"pnpm install failed: {install_result.stderr}")
+
+        assert install_result is not None
+        assert install_result.returncode == 0, "pnpm install failed"
 
         build_result = subprocess.run(
             ["pnpm", "run", "build"],

@@ -168,6 +168,20 @@ class TestProjectGenerationWithTheme:
         assert "entryFileNames: 'assets/[name].js'" in vite_config
         assert "assetFileNames: 'assets/[name].[ext]'" in vite_config
 
+    def test_react_theme_production_settings_override_static_storage(self, tmp_path):
+        """React theme should disable manifest URL rewriting for staticfiles storage."""
+        generator = ProjectGenerator(theme="showcase_react")
+        project_name = "testproject_react"
+        output_path = tmp_path / project_name
+
+        generator.generate(project_name, output_path)
+
+        production_settings = (
+            output_path / project_name / "settings" / "production.py"
+        ).read_text()
+        assert 'STORAGES["staticfiles"]' in production_settings
+        assert "whitenoise.storage.CompressedStaticFilesStorage" in production_settings
+
     def test_generated_output_matches_v060(self, tmp_path):
         """Generated project structure should match v0.60.0 output"""
         generator = ProjectGenerator(theme="showcase_html")

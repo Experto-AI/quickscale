@@ -244,6 +244,58 @@ class TestRailwayCommand:
                                             in batch_vars["DJANGO_SETTINGS_MODULE"]
                                         )
 
+    def test_railway_with_hyphenated_project_name_option(self):
+        """Hyphenated project names should use underscore Django package path."""
+        runner = CliRunner()
+
+        with mock_preflight_checks():
+            with patch(
+                "quickscale_cli.commands.deployment_commands.is_railway_cli_installed"
+            ) as mock_installed:
+                with patch(
+                    "quickscale_cli.commands.deployment_commands.is_railway_authenticated"
+                ) as mock_auth:
+                    with patch(
+                        "quickscale_cli.commands.deployment_commands.is_railway_project_initialized"
+                    ) as mock_project_init:
+                        with patch(
+                            "quickscale_cli.commands.deployment_commands.run_railway_command"
+                        ) as mock_run:
+                            with patch(
+                                "quickscale_cli.commands.deployment_commands.set_railway_variables_batch"
+                            ) as mock_batch_set:
+                                with patch(
+                                    "quickscale_cli.commands.deployment_commands.generate_django_secret_key"
+                                ) as mock_secret:
+                                    with patch(
+                                        "quickscale_cli.commands.deployment_commands.generate_railway_domain"
+                                    ) as mock_domain:
+                                        mock_installed.return_value = True
+                                        mock_auth.return_value = True
+                                        mock_project_init.return_value = True
+                                        mock_run.return_value = Mock(
+                                            returncode=0,
+                                            stdout="postgres available",
+                                            stderr="",
+                                        )
+                                        mock_batch_set.return_value = (True, [])
+                                        mock_secret.return_value = "test-secret-key"
+                                        mock_domain.return_value = (
+                                            "https://bap-web-production.up.railway.app"
+                                        )
+
+                                        result = runner.invoke(
+                                            railway,
+                                            ["--project-name", "bap-web"],
+                                        )
+
+                                        assert result.exit_code == 0
+                                        batch_vars = mock_batch_set.call_args[0][0]
+                                        assert (
+                                            batch_vars["DJANGO_SETTINGS_MODULE"]
+                                            == "bap_web.settings.production"
+                                        )
+
     def test_railway_deployment_failure(self):
         """Test railway command when deployment fails."""
         runner = CliRunner()

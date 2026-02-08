@@ -541,3 +541,16 @@ class TestRemainingHelpers:
         mock_secret.return_value = "secret-key"
         mock_batch.return_value = (True, [])
         _configure_env_vars_step("myapp", None)
+
+    @patch("quickscale_cli.commands.deployment_commands.set_railway_variables_batch")
+    @patch("quickscale_cli.commands.deployment_commands.generate_django_secret_key")
+    def test_configure_env_vars_hyphenated_service_name(self, mock_secret, mock_batch):
+        """Hyphenated service names should map to valid Python settings module."""
+        mock_secret.return_value = "secret-key"
+        mock_batch.return_value = (True, [])
+
+        _configure_env_vars_step("bap-web", None)
+
+        batch_vars = mock_batch.call_args[0][0]
+        assert batch_vars["DJANGO_SETTINGS_MODULE"] == "bap_web.settings.production"
+        assert mock_batch.call_args[1]["service"] == "bap-web"

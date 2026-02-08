@@ -310,10 +310,13 @@ def _configure_env_vars_step(app_service: str, domain_name: str | None) -> None:
     click.echo(f"Setting variables for service: {app_service}")
     click.echo("💡 Setting all variables at once to minimize deployments")
 
+    # Django settings module must reference a valid Python package path.
+    django_package = app_service.replace("-", "_")
+
     env_vars = {
         "SECRET_KEY": generate_django_secret_key(),
         "DEBUG": "False",
-        "DJANGO_SETTINGS_MODULE": f"{app_service}.settings.production",
+        "DJANGO_SETTINGS_MODULE": f"{django_package}.settings.production",
     }
 
     if domain_name:
