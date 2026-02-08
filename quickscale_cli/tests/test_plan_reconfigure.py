@@ -1,11 +1,12 @@
 """Tests for quickscale plan --reconfigure workflow"""
 
 import os
+from pathlib import Path
 
 import yaml
 from click.testing import CliRunner
 
-from quickscale_cli.commands.plan_command import plan
+from quickscale_cli.commands.plan_command import _get_project_info_for_reconfig, plan
 
 
 class TestPlanReconfigureBasic:
@@ -27,6 +28,17 @@ class TestPlanReconfigureBasic:
 
         assert result.exit_code == 0
         assert "--reconfigure" in result.output
+
+    def test_get_project_info_fallback_uses_react_default(self):
+        """Fallback project info should use showcase_react when state/config missing."""
+        project_name, theme = _get_project_info_for_reconfig(
+            state=None,
+            existing_config=None,
+            project_path=Path("fallback-project"),
+        )
+
+        assert project_name == "fallback-project"
+        assert theme == "showcase_react"
 
 
 class TestPlanReconfigureWithState:

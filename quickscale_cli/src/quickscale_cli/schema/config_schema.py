@@ -46,7 +46,7 @@ class ProjectConfig:
     """Project-level configuration"""
 
     name: str
-    theme: str = "showcase_html"
+    theme: str = "showcase_react"
 
 
 @dataclass
@@ -134,7 +134,7 @@ def _validate_project_section(data: dict, yaml_content: str) -> tuple[str, str]:
     if "project" not in data:
         raise ConfigValidationError(
             "Missing required key 'project'",
-            suggestion="Add 'project:\\n  name: your_project_name\\n  theme: showcase_html'",
+            suggestion="Add 'project:\\n  name: your_project_name\\n  theme: showcase_react'",
         )
 
     project_data = data.get("project", {})
@@ -168,7 +168,7 @@ def _validate_project_section(data: dict, yaml_content: str) -> tuple[str, str]:
             suggestion="Project name must be a valid Python identifier (letters, numbers, underscores, hyphens, not starting with a number)",
         )
 
-    theme = project_data.get("theme", "showcase_html")
+    theme = project_data.get("theme", "showcase_react")
     if theme not in VALID_THEMES:
         line = _find_line_number(yaml_content, "theme")
         raise ConfigValidationError(

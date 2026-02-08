@@ -9,9 +9,9 @@ class TestThemeInitialization:
     """Test theme parameter initialization"""
 
     def test_default_theme(self, tmp_path):
-        """Generator should use showcase_html as default theme"""
+        """Generator should use showcase_react as default theme"""
         generator = ProjectGenerator()
-        assert generator.theme == "showcase_html"
+        assert generator.theme == "showcase_react"
 
     def test_explicit_theme(self, tmp_path):
         """Generator should accept explicit theme parameter"""
@@ -95,13 +95,12 @@ class TestProjectGenerationWithTheme:
 
         generator.generate(project_name, output_path)
 
-        # Verify frontend templates exist
+        # Verify React frontend and templates exist
+        assert (output_path / "frontend" / "package.json").exists()
+        assert (output_path / "frontend" / "vite.config.ts").exists()
+        assert (output_path / "frontend" / "src" / "App.tsx").exists()
         assert (output_path / "templates" / "base.html").exists()
         assert (output_path / "templates" / "index.html").exists()
-
-        # Verify static files exist
-        assert (output_path / "static" / "css" / "style.css").exists()
-        assert (output_path / "static" / "images" / "favicon.svg").exists()
 
         # Verify backend files exist
         assert (output_path / "manage.py").exists()

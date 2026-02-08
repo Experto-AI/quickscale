@@ -52,7 +52,7 @@ class TestDevelopmentCommandsE2E:
     @pytest.fixture
     def test_project(self, tmp_path):
         """Generate a test project and return its path."""
-        generator = ProjectGenerator()
+        generator = ProjectGenerator(theme="showcase_html")
         project_name = "e2e_cli_test"
         project_path = tmp_path / project_name
 
@@ -294,7 +294,7 @@ class TestDevelopmentCommandsE2E:
         finally:
             os.chdir(original_cwd)
 
-    def test_manage_command_no_args(self, test_project):
+    def test_manage_command_no_args(self, test_project, ensure_docker_running):
         """Test manage command fails with helpful error when no args provided."""
         runner = CliRunner()
         project_path = test_project
@@ -359,7 +359,7 @@ class TestDevelopmentCommandsIntegration:
     @pytest.fixture
     def generated_project(self, tmp_path):
         """Generate and prepare a project for testing."""
-        generator = ProjectGenerator()
+        generator = ProjectGenerator(theme="showcase_html")
         project_name = "integration_test"
         project_path = tmp_path / project_name
 

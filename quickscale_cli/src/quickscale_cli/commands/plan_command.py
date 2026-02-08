@@ -443,7 +443,7 @@ def _get_project_info_for_reconfig(
         return state.project.name, state.project.theme
     if existing_config:
         return existing_config.project.name, existing_config.project.theme
-    return project_path.name, "showcase_html"
+    return project_path.name, "showcase_react"
 
 
 def _collect_existing_modules(

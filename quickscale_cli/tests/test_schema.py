@@ -88,6 +88,7 @@ project:
 """
         config = validate_config(yaml_content)
 
+        assert config.project.theme == "showcase_react"
         assert config.docker.start is True
         assert config.docker.build is True
 
@@ -151,6 +152,7 @@ project:
 """
         config = parse_config(yaml_content)
         assert config.project.name == "myapp"
+        assert config.project.theme == "showcase_react"
 
 
 class TestInvalidConfigErrors:
@@ -478,7 +480,7 @@ class TestDataclasses:
         """Test ProjectConfig default values"""
         config = ProjectConfig(name="test")
         assert config.name == "test"
-        assert config.theme == "showcase_html"
+        assert config.theme == "showcase_react"
 
     def test_docker_config_defaults(self):
         """Test DockerConfig default values"""

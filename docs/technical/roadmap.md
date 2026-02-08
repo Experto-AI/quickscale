@@ -47,8 +47,8 @@ QuickScale follows an evolution-aligned roadmap that starts as a personal toolki
    - ✅ Plan/Apply Cleanup (v0.72.0) - Remove legacy init/embed commands
    - ✅ CRM module (v0.73.0) - native Django CRM app (API-only)
    - ✅ **React Default Theme** (v0.74.0) - React + shadcn/ui as default
-   - 📋 Listings Theme (v0.75.0) - React frontend for property listings (sell/rent)
-   - 📋 Social & Link Tree module (v0.76.0) - social links page + media embeds
+   - 📋 Social & Link Tree module (v0.75.0) - social links page + media embeds
+   - 📋 Listings Theme (v0.76.0) - React frontend for property listings (sell/rent)
    - 📋 CRM Theme (v0.77.0) - React frontend for CRM module
    - 📋 Billing module (v0.78.0) - Stripe integration
    - 📋 Teams module (v0.79.0) - multi-tenancy
@@ -82,7 +82,7 @@ QuickScale follows an evolution-aligned roadmap that starts as a personal toolki
 
 **Status:**
 - **Current Status:** v0.74.0 — React Default Theme ✅ Complete
-- **Next Milestone:** v0.75.0 - Listings Theme (React frontend for property listings)
+- **Next Milestone:** v0.75.0 - Social & Link Tree module (social links page + media embeds)
 - **Plan/Apply System:** v0.68.0-v0.71.0 - Terraform-style configuration ✅ Complete
 - **SaaS Parity:** v0.79.0 - auth, billing, teams modules complete
 
@@ -103,169 +103,7 @@ List of upcoming releases with detailed implementation tasks:
 
 ---
 
-### v0.73.0: `quickscale_modules.crm` - CRM Module
-
-**Status**: ✅ Complete
-
-**Release**: v0.73.0 — Lightweight, API-first Django CRM module with 7 core models, comprehensive REST API, and CLI integration. 97.38% test coverage (67 tests). See [release-v0.73.0-review.md](../releases/release-v0.73.0-review.md) and [release-v0.73.0-implementation.md](../releases-archive/release-v0.73.0-implementation.md) for details.
-
-**Key Results**:
-- ✅ 7 core CRM models: Tag, Company, Contact, Stage, Deal, ContactNote, DealNote
-- ✅ Complete REST API with DRF (ViewSets, filtering, bulk operations)
-- ✅ Django Admin integration with inline notes and stage ordering
-- ✅ CLI module embedding via `quickscale plan --add crm`
-- ✅ 97.38% test coverage (67 comprehensive tests)
-- ⏸️ Template integration correctly deferred to v0.74.0
-
-**Deferred Items**:
-- ❌ Template integration (showcase_html) → Deferred (React is now default)
-- ❌ Email synchronization → v0.79.0 (notifications module)
-- ❌ File attachments → Post-v0.73.0
-- ❌ Custom fields → v0.78.0+
-
----
-
-### v0.74.0: React Default Theme (showcase_react)
-
-**Status**: ✅ Complete
-
-**Release**: v0.74.0 — Established React + shadcn/ui as the default frontend foundation. Includes a fully functional `showcase_react` theme with Vite, TypeScript, TanStack Query, and Zustand. All CLI project generation defaults to this modern stack. See [release-v0.74.0.md](../releases/release-v0.74.0.md) for details.
-
-**Key Results**:
-- ✅ Brand new `showcase_react` theme with modern tech stack
-- ✅ CLI defaults to React for all new projects
-- ✅ Integrated shadcn/ui component library
-- ✅ Robust server state with TanStack Query
-- ✅ Lightweight client state with Zustand
-- ✅ Responsive App shell and Sidebar layouts
-- ✅ Pre-configured testing environment (Vitest)
-- ✅ Module-aware sidebar navigation (auth, blog, listings, crm, billing, teams)
-- ✅ Module pages for all available modules (Blog, Listings, CRM, Profile, Settings)
-- ✅ Runtime module detection via `window.__QUICKSCALE__` injected by Django template
-- ✅ CRM page with live API stats (TanStack Query → CRM REST API)
-- ✅ SPA catch-all routing for React client-side navigation
-
-**Implementation Tasks (Completed)**:
-
-| Priority | Task | Effort | Dependencies |
-|----------|------|--------|--------------|
-| **P0** | Create `showcase_react/` theme template structure | 1d | None |
-| **P0** | Set up Vite + TypeScript + pnpm project scaffold | 1d | T1 |
-| **P0** | Update CLI to default to `showcase_react` theme | 0.5d | T1, T2 |
-| **P1** | Integrate shadcn/ui with component configuration | 1d | T2 |
-| **P1** | Create base layouts (App shell, navigation, sidebar) | 1d | T3 |
-| **P1** | Set up Zustand stores for client state | 0.5d | T2 |
-| **P1** | Implement API integration with TanStack Query | 1d | T2 |
-| **P1** | Create sample pages (Dashboard, List, Detail views) | 1.5d | T4, T5, T6 |
-| **P1** | Update `quickscale plan` wizard prompts | 0.5d | T10 |
-| **P2** | Add React Hook Form + Zod for form handling | 0.5d | T3 |
-| **P2** | Configure Vitest + React Testing Library | 0.5d | T2 |
-
-**Total Estimated Effort**: ~9 days
-
-**Dependencies Graph**:
-```
-T1 (Theme Structure)
- │
- └──► T2 (Vite + TypeScript + pnpm)
-       │
-       ├──► T3 (shadcn/ui) ──► T4 (Layouts) ──┐
-       │                                       │
-       ├──► T5 (Zustand) ─────────────────────├──► T9 (Sample Pages)
-       │                                       │
-       ├──► T6 (TanStack Query) ──────────────┘
-       │
-       ├──► T7 (React Hook Form + Zod)
-       │
-       └──► T8 (Vitest)
-
-T1 + T2 ──► T10 (CLI Default) ──► T11 (Wizard Prompts)
-```
-
-**Generated Project Structure**:
-```
-myapp/
-├── frontend/                    # React + Vite application
-│   ├── src/
-│   │   ├── components/
-│   │   │   └── ui/             # shadcn/ui components
-│   │   ├── lib/
-│   │   │   └── utils.ts        # shadcn/ui utilities
-│   │   ├── stores/             # Zustand stores
-│   │   ├── hooks/              # Custom hooks (TanStack Query)
-│   │   ├── pages/
-│   │   ├── App.tsx
-│   │   └── main.tsx
-│   ├── components.json         # shadcn/ui config
-│   ├── tailwind.config.js
-│   ├── vite.config.ts
-│   ├── vitest.config.ts        # Vitest config
-│   ├── pnpm-lock.yaml          # pnpm lockfile
-│   └── package.json
-├── templates/
-│   └── index.html              # React entry point
-└── ... (Django project structure)
-```
-
-**Implementation Notes**:
-- Do NOT use `npx create-vite` at runtime — pre-build scaffold as templates
-- Use Jinja2 only for config files (`package.json.j2`, `vite.config.ts.j2`) — not React components
-- Minimal shadcn/ui components initially: Button, Card, Input, Badge, Sidebar
-- Include Motion (framer-motion) for animations
-- Test with CRM API (v0.73.0) to validate TanStack Query integration
-- Add `django-cors-headers` configuration for API access
-
-**Testing**:
-- [x] E2E tests: `quickscale plan` → `quickscale apply` → Working React project
-- [x] React app starts with `pnpm dev` in `frontend/` directory
-- [x] Verify shadcn/ui components render correctly
-- [x] Vitest unit tests pass with reasonable coverage
-- [x] TanStack Query fetches from Django REST Framework API
-- [x] Zustand stores work correctly
-- [x] CI passes (lint, test-all, test-e2e)
-
-**Success Criteria**:
-- [x] `quickscale plan myapp` defaults to `showcase_react` theme
-- [x] `quickscale apply` generates working React project (no errors)
-- [x] Generated React app builds and runs successfully
-- [x] Sample Dashboard page displays data from Django API
-- [x] All existing E2E tests continue to pass
-
----
-
-### v0.75.0: Listings Theme (React Frontend for Listings)
-
-**Status**: 📋 Planned
-
-**Strategic Context**: React frontend for property listings (sell & rent), building on the `showcase_react` foundation from v0.74.0 and the Listings module backend from v0.67.0. Prioritized for the Real Estate Agency use case.
-
-**Prerequisites**:
-- ✅ Listings Module (v0.67.0)
-- ✅ React Default Theme (v0.74.0)
-
-**Theme Features**:
-- **Extends**: `showcase_react` base patterns
-- **Components**: Property Cards, Search/Filter Bar, Detail View, Image Gallery, Map View
-- **API Integration**: Consumes Listings Module REST APIs
-- **Listing Types**: Sell and Rent with type-specific filters
-
-**Implementation Tasks**:
-- [ ] Listings-specific page layouts (grid, list, map views)
-- [ ] Property card component with image, price, type (sell/rent), location
-- [ ] Search and filter bar (price range, type, location, bedrooms, etc.)
-- [ ] Property detail view with image gallery and contact form
-- [ ] Listings dashboard with stats and featured properties
-- [ ] Responsive design for mobile property browsing
-- [ ] SEO-friendly property pages (meta tags, structured data)
-
-**Testing**:
-- [ ] E2E tests: Plan → Apply → Working Listings project
-- [ ] Unit tests for filter/search components
-- [ ] API integration tests with Listings backend
-
----
-
-### v0.76.0: `quickscale_modules.social` - Social & Link Tree Module
+### v0.75.0: `quickscale_modules.social` - Social & Link Tree Module
 
 **Status**: 📋 Planned
 
@@ -301,6 +139,38 @@ myapp/
 - [ ] Unit tests for social models and oEmbed resolver
 - [ ] Integration tests for embed components
 - [ ] E2E tests: Plan → Apply → Working social links project
+
+---
+
+### v0.76.0: Listings Theme (React Frontend for Listings)
+
+**Status**: 📋 Planned
+
+**Strategic Context**: React frontend for property listings (sell & rent), building on the `showcase_react` foundation from v0.74.0 and the Listings module backend from v0.67.0. Prioritized for the Real Estate Agency use case.
+
+**Prerequisites**:
+- ✅ Listings Module (v0.67.0)
+- ✅ React Default Theme (v0.74.0)
+
+**Theme Features**:
+- **Extends**: `showcase_react` base patterns
+- **Components**: Property Cards, Search/Filter Bar, Detail View, Image Gallery, Map View
+- **API Integration**: Consumes Listings Module REST APIs
+- **Listing Types**: Sell and Rent with type-specific filters
+
+**Implementation Tasks**:
+- [ ] Listings-specific page layouts (grid, list, map views)
+- [ ] Property card component with image, price, type (sell/rent), location
+- [ ] Search and filter bar (price range, type, location, bedrooms, etc.)
+- [ ] Property detail view with image gallery and contact form
+- [ ] Listings dashboard with stats and featured properties
+- [ ] Responsive design for mobile property browsing
+- [ ] SEO-friendly property pages (meta tags, structured data)
+
+**Testing**:
+- [ ] E2E tests: Plan → Apply → Working Listings project
+- [ ] Unit tests for filter/search components
+- [ ] API integration tests with Listings backend
 
 ---
 

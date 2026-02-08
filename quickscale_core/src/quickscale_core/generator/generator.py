@@ -18,14 +18,14 @@ from quickscale_core.utils.file_utils import (
 class ProjectGenerator:
     """Generate Django projects from templates"""
 
-    def __init__(self, template_dir: Path | None = None, theme: str = "showcase_html"):
+    def __init__(self, template_dir: Path | None = None, theme: str = "showcase_react"):
         """
         Initialize generator with template directory and theme
 
         Args:
         ----
             template_dir: Path to template directory (auto-detected if None)
-            theme: Theme name to use (default: showcase_html)
+            theme: Theme name to use (default: showcase_react)
 
         Raises:
         ------

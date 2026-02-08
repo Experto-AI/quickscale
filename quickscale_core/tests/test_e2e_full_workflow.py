@@ -49,26 +49,59 @@ def _is_poetry_network_failure(output: str) -> bool:
     return any(marker in lowered for marker in markers)
 
 
+@pytest.fixture(scope="session")
+def docker_available() -> None:
+    """Skip E2E tests if Docker daemon is unavailable in this environment."""
+    if shutil.which("docker") is None:
+        pytest.skip("Docker CLI is not installed")
+
+    check = subprocess.run(
+        ["docker", "info"],
+        capture_output=True,
+        text=True,
+    )
+    if check.returncode != 0:
+        pytest.skip("Docker daemon is not accessible in this environment")
+
+
+@pytest.fixture(scope="session")
+def playwright_browser_available() -> None:
+    """Skip browser E2E tests if Playwright Chromium cannot launch."""
+    try:
+        from playwright.sync_api import sync_playwright
+
+        with sync_playwright() as playwright:
+            browser = playwright.chromium.launch(headless=True, args=["--no-sandbox"])
+            browser.close()
+    except Exception as exc:  # pragma: no cover - environment-dependent
+        pytest.skip(f"Playwright browser is unavailable: {exc}")
+
+
+@pytest.fixture
+def e2e_postgres_url(docker_available, postgres_url: str) -> str:
+    """Ensure Docker is available before requesting postgres_url fixture."""
+    return postgres_url
+
+
+@pytest.fixture
+def e2e_page(playwright_browser_available, page):
+    """Ensure browser is launchable before requesting Playwright page fixture."""
+    return page
+
+
 @pytest.mark.e2e
 class TestFullE2EWorkflow:
     """Complete end-to-end workflow tests with PostgreSQL and browser automation."""
 
-    def test_complete_project_lifecycle(self, tmp_path, postgres_url, page, browser):
+    def test_complete_project_lifecycle(self, tmp_path, e2e_postgres_url, e2e_page):
         """
-        Test complete project lifecycle: generate → install → migrate → serve → browse.
-
-        This is the comprehensive E2E test that verifies:
-        - Project generation works
-        - Generated project can be installed
-        - Database migrations work with real PostgreSQL
-        - Django server starts successfully
-        - Frontend homepage loads in browser
-        - All essential files are present and valid
+        Test complete default lifecycle (React): generate → install → migrate → serve → browse.
         """
         from quickscale_core.generator import ProjectGenerator
 
         # Phase 1: Generate project
         generator = ProjectGenerator()
+        assert generator.theme == "showcase_react"
         project_name = "e2e_test_project"
         project_path = tmp_path / project_name
 
@@ -78,57 +111,44 @@ class TestFullE2EWorkflow:
         assert (project_path / "manage.py").exists()
         assert (project_path / "pyproject.toml").exists()
         assert (project_path / project_name).is_dir()
+        self._run_complete_theme_lifecycle(
+            project_path=project_path,
+            project_name=project_name,
+            postgres_url=e2e_postgres_url,
+            page=e2e_page,
+            tmp_path=tmp_path,
+            build_frontend=True,
+            screenshot_name="homepage_screenshot_react_default.png",
+        )
 
-        # Phase 2: Install dependencies in the generated project
-        self._install_project_dependencies(project_path)
+    def test_complete_html_project_lifecycle(
+        self, tmp_path, e2e_postgres_url, e2e_page
+    ):
+        """
+        Test complete explicit HTML lifecycle: generate → install → migrate → serve → browse.
+        """
+        from quickscale_core.generator import ProjectGenerator
 
-        # Phase 3: Configure database for E2E test
-        # Update settings to use test PostgreSQL
-        self._configure_test_database(project_path, project_name, postgres_url)
+        generator = ProjectGenerator(theme="showcase_html")
+        project_name = "e2e_html_project"
+        project_path = tmp_path / project_name
 
-        # Phase 4: Run Django management commands
-        self._run_django_checks(project_path)
-        self._run_migrations(project_path)
-        self._collect_static(project_path)
-
-        # Phase 5: Start development server in background
-        # Use a dynamically assigned free port to avoid conflicts
-        server_port = self._find_free_port()
-        server_process = self._start_dev_server(project_path, port=server_port)
-
-        try:
-            # Wait for server to be ready (increased timeout for initial startup)
-            self._wait_for_server(
-                f"http://localhost:{server_port}",
-                timeout=30,
-                server_process=server_process,
-            )
-
-            # Phase 6: Browser tests with Playwright
-            self._test_homepage_loads(page, port=server_port)
-            self._test_page_content(page, project_name, port=server_port)
-            self._test_static_files_load(page, port=server_port)
-
-            # Take screenshot for visual verification
-            screenshot_path = tmp_path / "homepage_screenshot.png"
-            page.screenshot(path=str(screenshot_path))
-            assert screenshot_path.exists()
-
-        finally:
-            # Cleanup: Stop server
-            try:
-                server_process.terminate()
-                server_process.wait(timeout=3)
-            except subprocess.TimeoutExpired:
-                # Force kill if terminate didn't work
-                server_process.kill()
-                server_process.wait(timeout=2)
+        generator.generate(project_name, project_path)
+        self._run_complete_theme_lifecycle(
+            project_path=project_path,
+            project_name=project_name,
+            postgres_url=e2e_postgres_url,
+            page=e2e_page,
+            tmp_path=tmp_path,
+            build_frontend=False,
+            screenshot_name="homepage_screenshot_html.png",
+        )
 
     def test_docker_compose_configuration(self, tmp_path):
         """Verify docker-compose.yml is valid and can be parsed."""
         from quickscale_core.generator import ProjectGenerator
 
-        generator = ProjectGenerator()
+        generator = ProjectGenerator(theme="showcase_html")
         project_name = "docker_test"
         project_path = tmp_path / project_name
 
@@ -149,11 +169,11 @@ class TestFullE2EWorkflow:
         # Should successfully parse the config
         assert result.returncode == 0, f"docker-compose config failed: {result.stderr}"
 
-    def test_generated_project_tests_run(self, tmp_path, postgres_url):
+    def test_generated_project_tests_run(self, tmp_path, e2e_postgres_url):
         """Verify the generated project's test suite runs successfully."""
         from quickscale_core.generator import ProjectGenerator
 
-        generator = ProjectGenerator()
+        generator = ProjectGenerator(theme="showcase_html")
         project_name = "test_runner_project"
         project_path = tmp_path / project_name
 
@@ -163,7 +183,7 @@ class TestFullE2EWorkflow:
         self._install_project_dependencies(project_path)
 
         # Configure test database
-        self._configure_test_database(project_path, project_name, postgres_url)
+        self._configure_test_database(project_path, project_name, e2e_postgres_url)
 
         # Run migrations first
         self._run_migrations(project_path)
@@ -189,7 +209,7 @@ class TestFullE2EWorkflow:
 
         project_name = "quality_ruff_check"
         project_path = tmp_path / project_name
-        ProjectGenerator().generate(project_name, project_path)
+        ProjectGenerator(theme="showcase_html").generate(project_name, project_path)
 
         result = self._run_repo_poetry_command(
             ["ruff", "check", str(project_path)],
@@ -205,7 +225,7 @@ class TestFullE2EWorkflow:
 
         project_name = "quality_ruff_format"
         project_path = tmp_path / project_name
-        ProjectGenerator().generate(project_name, project_path)
+        ProjectGenerator(theme="showcase_html").generate(project_name, project_path)
 
         result = self._run_repo_poetry_command(
             ["ruff", "format", "--check", str(project_path)],
@@ -221,7 +241,7 @@ class TestFullE2EWorkflow:
 
         project_name = "quality_mypy"
         project_path = tmp_path / project_name
-        ProjectGenerator().generate(project_name, project_path)
+        ProjectGenerator(theme="showcase_html").generate(project_name, project_path)
 
         current_pythonpath = os.environ.get("PYTHONPATH", "")
         pythonpath = (
@@ -351,7 +371,7 @@ class TestFullE2EWorkflow:
         """Verify GitHub Actions CI workflow is valid YAML."""
         from quickscale_core.generator import ProjectGenerator
 
-        generator = ProjectGenerator()
+        generator = ProjectGenerator(theme="showcase_html")
         project_name = "ci_test"
         project_path = tmp_path / project_name
 
@@ -372,6 +392,61 @@ class TestFullE2EWorkflow:
         assert ci_config["name"] == "CI"
 
     # Helper methods
+
+    def _run_complete_theme_lifecycle(
+        self,
+        project_path: Path,
+        project_name: str,
+        postgres_url: str,
+        page,
+        tmp_path: Path,
+        *,
+        build_frontend: bool,
+        screenshot_name: str,
+    ) -> None:
+        """Execute full lifecycle for a generated theme project."""
+        # Phase 2: Install dependencies in the generated project
+        self._install_project_dependencies(project_path)
+
+        # React theme requires frontend build before collectstatic/browser assertions
+        if build_frontend:
+            self._build_react_frontend(project_path)
+
+        # Phase 3: Configure database for E2E test
+        self._configure_test_database(project_path, project_name, postgres_url)
+
+        # Phase 4: Run Django management commands
+        self._run_django_checks(project_path)
+        self._run_migrations(project_path)
+        self._collect_static(project_path)
+
+        # Phase 5: Start development server in background
+        server_port = self._find_free_port()
+        server_process = self._start_dev_server(project_path, port=server_port)
+
+        try:
+            self._wait_for_server(
+                f"http://localhost:{server_port}",
+                timeout=30,
+                server_process=server_process,
+            )
+
+            # Phase 6: Browser tests with Playwright
+            self._test_homepage_loads(page, port=server_port)
+            self._test_page_content(page, project_name, port=server_port)
+            self._test_static_files_load(page, port=server_port)
+
+            screenshot_path = tmp_path / screenshot_name
+            page.screenshot(path=str(screenshot_path))
+            assert screenshot_path.exists()
+
+        finally:
+            try:
+                server_process.terminate()
+                server_process.wait(timeout=3)
+            except subprocess.TimeoutExpired:
+                server_process.kill()
+                server_process.wait(timeout=2)
 
     def _find_free_port(self) -> int:
         """Find a free port by binding to port 0 and letting the OS assign one."""
@@ -780,7 +855,7 @@ class TestDockerIntegration:
         """Verify Dockerfile can be built successfully."""
         from quickscale_core.generator import ProjectGenerator
 
-        generator = ProjectGenerator()
+        generator = ProjectGenerator(theme="showcase_html")
         project_name = "dockerfile_test"
         project_path = tmp_path / project_name
 
@@ -800,7 +875,7 @@ class TestDockerIntegration:
         """Verify .gitignore includes common patterns."""
         from quickscale_core.generator import ProjectGenerator
 
-        generator = ProjectGenerator()
+        generator = ProjectGenerator(theme="showcase_html")
         project_name = "gitignore_test"
         project_path = tmp_path / project_name
 
@@ -828,7 +903,7 @@ class TestProductionReadiness:
         """Verify production security settings exist."""
         from quickscale_core.generator import ProjectGenerator
 
-        generator = ProjectGenerator()
+        generator = ProjectGenerator(theme="showcase_html")
         project_name = "security_test"
         project_path = tmp_path / project_name
 
@@ -848,7 +923,7 @@ class TestProductionReadiness:
         """Verify environment variable configuration exists."""
         from quickscale_core.generator import ProjectGenerator
 
-        generator = ProjectGenerator()
+        generator = ProjectGenerator(theme="showcase_html")
         project_name = "env_test"
         project_path = tmp_path / project_name
 
