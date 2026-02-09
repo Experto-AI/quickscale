@@ -3,18 +3,15 @@ Local development settings for {{ project_name }}.
 
 This file contains settings specific to local development:
 - DEBUG mode enabled
-- SQLite database for quick setup (NOT for production!)
+- PostgreSQL database via DATABASE_URL (required)
 - Django Debug Toolbar (optional)
 - Relaxed security settings
 
 DO NOT use these settings in production!
-
-⚠️  IMPORTANT: SQLite is ONLY for quick local testing.
-   For production-like development, use Docker with PostgreSQL:
-   $ quickscale up
-
-   Production REQUIRES PostgreSQL - no SQLite fallback is available.
 """
+
+import dj_database_url
+from decouple import config
 
 from .base import *  # noqa: F403
 
@@ -24,13 +21,20 @@ DEBUG = True
 # Allow all hosts in development (including Docker containers running on 0.0.0.0)
 ALLOWED_HOSTS = ["localhost", "127.0.0.1", "[::1]", "0.0.0.0", "*"]
 
-# Database - SQLite for quick local development
-# For local PostgreSQL, use: postgresql://user:password@localhost:5432/{{ package_name }}
+# Database - PostgreSQL required for local development
+database_url = config("DATABASE_URL", default=None)
+if not database_url:
+    raise ValueError(
+        "DATABASE_URL is required in local settings. "
+        "Set DATABASE_URL in your .env file before running manage.py commands."
+    )
+
 DATABASES = {
-    "default": {
-        "ENGINE": "django.db.backends.sqlite3",
-        "NAME": BASE_DIR / "db.sqlite3",  # noqa: F405
-    }
+    "default": dj_database_url.parse(
+        database_url,
+        conn_max_age=0,
+        ssl_require=False,
+    )
 }
 
 # Django Debug Toolbar (uncomment to enable)

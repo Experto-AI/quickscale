@@ -26,6 +26,7 @@ from django.http import HttpRequest, HttpResponse
 from django.urls import include, path, re_path
 from django.views.generic import TemplateView
 
+from {{ package_name }}.urls_modules import MODULE_URLPATTERNS
 from {{ package_name }}.views import custom_404_view  # noqa: F401
 
 
@@ -43,6 +44,7 @@ urlpatterns = [
     path("admin/", admin.site.urls),
     path("", TemplateView.as_view(template_name="index.html"), name="home"),
 ]
+urlpatterns += MODULE_URLPATTERNS
 
 # Custom error handlers with helpful module installation hints
 handler404 = "{{ package_name }}.views.custom_404_view"

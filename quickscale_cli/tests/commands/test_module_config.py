@@ -28,21 +28,24 @@ class TestHasMigrationsBeenRun:
     """Tests for has_migrations_been_run function."""
 
     def test_sqlite_database_exists(self, tmp_path, monkeypatch):
-        """Test returns True when SQLite database file exists."""
+        """SQLite file presence no longer determines auth migration safety."""
         monkeypatch.chdir(tmp_path)
         (tmp_path / "db.sqlite3").touch()
 
         result = has_migrations_been_run()
 
-        assert result is True
+        assert result is False
 
     @patch("quickscale_cli.commands.module_config.subprocess.run")
     def test_postgres_migrations_applied(self, mock_run, tmp_path, monkeypatch):
         """Test returns True when PostgreSQL migrations have been run."""
         monkeypatch.chdir(tmp_path)
         mock_run.return_value = Mock(
-            returncode=0, stdout="admin\n [X] 0001_initial\n auth\n [X] 0001_initial"
+            returncode=0,
+            stdout='{"ok": true, "incompatible": true, "count": 2}',
+            stderr="",
         )
+        (tmp_path / "manage.py").write_text("#!/usr/bin/env python\n")
 
         result = has_migrations_been_run()
 
@@ -86,15 +89,16 @@ class TestAuthModuleConfig:
         """Test default auth configuration."""
         config = get_default_auth_config()
 
-        assert config["allow_registration"] is True
+        assert config["registration_enabled"] is True
         assert config["email_verification"] == "none"
         assert config["authentication_method"] == "email"
+        assert config["session_cookie_age"] == 1209600
 
     def test_configure_auth_module_non_interactive(self):
         """Test non-interactive auth configuration."""
         config = configure_auth_module(non_interactive=True)
 
-        assert config["allow_registration"] is True
+        assert config["registration_enabled"] is True
         assert config["email_verification"] == "none"
         assert config["authentication_method"] == "email"
 
@@ -107,7 +111,7 @@ class TestAuthModuleConfig:
 
         config = configure_auth_module(non_interactive=False)
 
-        assert config["allow_registration"] is False
+        assert config["registration_enabled"] is False
         assert config["email_verification"] == "mandatory"
         assert config["authentication_method"] == "username"
 
@@ -360,7 +364,7 @@ class TestModuleConfigurators:
 
         # Test configurator works
         config = configurator(non_interactive=True)
-        assert "allow_registration" in config
+        assert "registration_enabled" in config
 
     def test_blog_configurator_in_dict(self):
         """Test blog configurator is accessible from MODULE_CONFIGURATORS."""

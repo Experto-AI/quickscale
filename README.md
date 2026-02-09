@@ -82,6 +82,10 @@ See [decisions.md - Glossary section](./docs/technical/decisions.md#document-res
 5. Build your unique client application
 6. Deploy to Railway with `quickscale deploy railway` (or use standard Django deployment)
 
+`quickscale.yml` now uses explicit identity fields:
+- `project.slug`: filesystem/service slug (for directory names)
+- `project.package`: Python package/import name (for Django module paths)
+
 ℹ️ The [MVP Feature Matrix](./docs/technical/decisions.md#mvp-feature-matrix-authoritative) is the single source of truth for what's in or out.
 
 ### What You Get

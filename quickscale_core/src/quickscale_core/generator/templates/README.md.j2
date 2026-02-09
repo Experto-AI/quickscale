@@ -32,6 +32,10 @@ poetry run python manage.py runserver
 
 Visit http://127.0.0.1:8000 to see your application.
 
+### ⚠️ Auth Module Timing
+
+If you plan to use the QuickScale `auth` module (custom `AUTH_USER_MODEL`), embed/apply it **before your first migration** in a fresh database. Adding it after baseline Django auth migrations can require a destructive database reset.
+
 ### Setup (Docker)
 
 ```bash
@@ -58,7 +62,7 @@ Visit http://127.0.0.1:8000 to see your application.
 This project comes pre-configured with:
 
 - ✅ **Django 6.0+** - Latest stable Django version
-- ✅ **PostgreSQL** - Production database (SQLite for local dev by default)
+- ✅ **PostgreSQL** - Local and production database (no SQLite fallback)
 - ✅ **Docker** - Containerized development and production deployment
 - ✅ **Environment-based settings** - Separate configs for local/production
 - ✅ **Security best practices** - SECRET_KEY management, ALLOWED_HOSTS, security middleware
@@ -77,7 +81,7 @@ This project comes pre-configured with:
 poetry run pytest
 
 # Run with coverage
-poetry run pytest --cov={{ project_name }} --cov-report=html
+poetry run pytest --cov={{ package_name }} --cov-report=html
 
 # Run specific test file
 poetry run pytest tests/test_example.py
@@ -186,7 +190,7 @@ ALLOWED_HOSTS=yourdomain.com,www.yourdomain.com
 PORT=8000  # Change this if port 8000 is already in use
 
 # Database (if using PostgreSQL)
-DATABASE_URL=postgresql://user:password@localhost:5432/dbname
+DATABASE_URL=postgresql://postgres:postgres@localhost:5432/{{ package_name }}
 
 # Optional: Sentry error tracking
 # SENTRY_DSN=your-sentry-dsn-here
@@ -199,7 +203,7 @@ Before deploying to production:
 - [ ] Set `DEBUG=False` in production environment
 - [ ] Configure `ALLOWED_HOSTS` with your domain(s)
 - [ ] Set a strong `SECRET_KEY` (use `python -c 'from django.core.management.utils import get_random_secret_key; print(get_random_secret_key())'`)
-- [ ] Use PostgreSQL database (not SQLite)
+- [ ] Confirm `DATABASE_URL` points to your production PostgreSQL instance
 - [ ] Configure static files serving (WhiteNoise is included)
 - [ ] Set up HTTPS/SSL certificates
 - [ ] Review security settings in `settings/production.py`
@@ -224,7 +228,7 @@ docker-compose -f docker-compose.yml up -d
 
 ```
 {{ project_name }}/
-├── {{ project_name }}/           # Main Django project
+├── {{ package_name }}/           # Main Django project package
 │   ├── settings/                 # Split settings (base, local, production)
 │   ├── urls.py                   # Root URL configuration
 │   ├── wsgi.py                   # WSGI application
@@ -248,17 +252,17 @@ docker-compose -f docker-compose.yml up -d
 This project uses split settings for different environments:
 
 - `settings/base.py` - Common settings shared across all environments
-- `settings/local.py` - Local development settings (DEBUG=True, SQLite)
+- `settings/local.py` - Local development settings (DEBUG=True, PostgreSQL via `DATABASE_URL`)
 - `settings/production.py` - Production settings (DEBUG=False, PostgreSQL, security)
 
 The active settings module is controlled by the `DJANGO_SETTINGS_MODULE` environment variable:
 
 ```bash
 # Local development (default in manage.py)
-export DJANGO_SETTINGS_MODULE={{ project_name }}.settings.local
+export DJANGO_SETTINGS_MODULE={{ package_name }}.settings.local
 
 # Production
-export DJANGO_SETTINGS_MODULE={{ project_name }}.settings.production
+export DJANGO_SETTINGS_MODULE={{ package_name }}.settings.production
 ```
 
 ### Adding Dependencies
@@ -291,8 +295,7 @@ python manage.py <command>
 **Issue: Database connection errors**
 ```bash
 # Check your DATABASE_URL in .env
-# For local development, SQLite is used by default (no setup needed)
-# For production, ensure PostgreSQL is running and configured
+# Local and production use PostgreSQL
 ```
 
 **Issue: Static files not loading**

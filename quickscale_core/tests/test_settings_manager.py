@@ -160,6 +160,15 @@ class TestApplyMutableConfigChanges:
         # QuickScale uses project_name/settings/base.py
         settings_dir = project_path / "myproject" / "settings"
         settings_dir.mkdir(parents=True)
+        (project_path / "quickscale.yml").write_text(
+            'version: "1"\n'
+            "project:\n"
+            "  slug: myproject\n"
+            "  package: myproject\n"
+            "  theme: showcase_html\n"
+            "docker:\n"
+            "  start: false\n"
+        )
 
         settings_content = """
 ACCOUNT_ALLOW_REGISTRATION = True

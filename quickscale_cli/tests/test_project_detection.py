@@ -24,7 +24,8 @@ class TestDetectExistingProject:
                     """
 version: "1"
 project:
-  name: testapp
+  slug: testapp
+  package: testapp
   theme: showcase_html
 docker:
   start: false
@@ -36,7 +37,7 @@ docker:
 
             assert project_path is not None
             assert config is not None
-            assert config.project.name == "testapp"
+            assert config.project.slug == "testapp"
 
     def test_detect_project_with_state_only(self):
         """Test detection when only state file exists"""
@@ -48,7 +49,8 @@ docker:
                     {
                         "version": "1",
                         "project": {
-                            "name": "testapp",
+                            "slug": "testapp",
+                            "package": "testapp",
                             "theme": "showcase_html",
                             "created_at": "2025-12-01T10:00:00",
                             "last_applied": "2025-12-01T12:00:00",
@@ -87,7 +89,8 @@ class TestGetAppliedModules:
                     {
                         "version": "1",
                         "project": {
-                            "name": "testapp",
+                            "slug": "testapp",
+                            "package": "testapp",
                             "theme": "showcase_html",
                             "created_at": "2025-12-01T10:00:00",
                             "last_applied": "2025-12-01T12:00:00",
@@ -137,7 +140,8 @@ class TestGetAppliedModules:
                     {
                         "version": "1",
                         "project": {
-                            "name": "testapp",
+                            "slug": "testapp",
+                            "package": "testapp",
                             "theme": "showcase_html",
                             "created_at": "2025-12-01T10:00:00",
                             "last_applied": "2025-12-01T12:00:00",

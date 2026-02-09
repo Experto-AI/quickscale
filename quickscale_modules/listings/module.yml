@@ -1,0 +1,21 @@
+# Listings Module Manifest
+# Defines configuration options and their mutability for the listings module
+
+name: listings
+version: "0.73.0"
+description: "Generic listings module for marketplace-style products"
+
+config:
+  mutable:
+    listings_per_page:
+      type: integer
+      default: 12
+      django_setting: LISTINGS_PER_PAGE
+      description: "Number of listings per page"
+
+dependencies:
+  - django-filter>=25.0
+
+django_apps:
+  - django_filters
+  - quickscale_modules_listings

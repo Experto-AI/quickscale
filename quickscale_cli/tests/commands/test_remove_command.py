@@ -32,7 +32,8 @@ def project_with_module(tmp_path: Path) -> Path:
     state_content = """
 version: "1"
 project:
-  name: myproject
+  slug: myproject
+  package: myproject
   theme: html
   created_at: "2024-01-01T00:00:00"
   last_applied: "2024-01-01T00:00:00"
@@ -49,7 +50,8 @@ modules:
     # Create quickscale.yml config
     config_content = """
 project:
-  name: myproject
+  slug: myproject
+  package: myproject
   theme: html
 modules:
   auth:

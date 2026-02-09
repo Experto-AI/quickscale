@@ -7,11 +7,44 @@ import re
 from pathlib import Path
 from typing import Any
 
+import yaml
+
 
 class SettingsError(Exception):
     """Error updating settings file"""
 
     pass
+
+
+def _resolve_package_name(project_path: Path) -> str:
+    """Resolve project package from quickscale.yml or state file.
+
+    This intentionally avoids folder-name inference to support slug/package splits.
+    """
+    config_path = project_path / "quickscale.yml"
+    if config_path.exists():
+        try:
+            config_data = yaml.safe_load(config_path.read_text()) or {}
+            package_name = (config_data.get("project") or {}).get("package")
+            if isinstance(package_name, str) and package_name:
+                return package_name
+        except Exception:
+            pass
+
+    state_path = project_path / ".quickscale" / "state.yml"
+    if state_path.exists():
+        try:
+            state_data = yaml.safe_load(state_path.read_text()) or {}
+            package_name = (state_data.get("project") or {}).get("package")
+            if isinstance(package_name, str) and package_name:
+                return package_name
+        except Exception:
+            pass
+
+    raise SettingsError(
+        "Unable to resolve project package. Expected project.package in "
+        "quickscale.yml or .quickscale/state.yml."
+    )
 
 
 def _bool_to_string(value: bool) -> str:
@@ -193,12 +226,23 @@ def apply_mutable_config_changes(
         List of tuples (setting_name, success, message)
 
     """
-    # QuickScale uses settings/base.py structure
-    settings_path = project_path / project_path.name / "settings" / "base.py"
+    try:
+        package_name = _resolve_package_name(project_path)
+    except Exception as e:
+        return [
+            (
+                "settings",
+                False,
+                f"Unable to resolve project identity: {e}",
+            )
+        ]
+
+    # QuickScale uses package/settings/base.py structure
+    settings_path = project_path / package_name / "settings" / "base.py"
 
     if not settings_path.exists():
-        # Try alternative path
-        settings_path = project_path / project_path.name / "settings.py"
+        # Legacy fallback for single-file settings layout in the package path.
+        settings_path = project_path / package_name / "settings.py"
 
     if not settings_path.exists():
         return [

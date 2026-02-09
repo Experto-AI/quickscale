@@ -20,9 +20,9 @@ QuickScale implements a Terraform-style plan/apply workflow for project configur
 
 | Command | Purpose |
 |---------|---------|
-| `quickscale plan <name>` | Interactive wizard → creates `quickscale.yml` |
+| `quickscale plan <project-slug>` | Interactive wizard → creates `quickscale.yml` |
 | `quickscale plan --add` | Add modules to existing project |
-| `quickscale plan --edit` | Reconfigure existing modules |
+| `quickscale plan --reconfigure` | Reconfigure existing modules |
 | `quickscale apply [config]` | Execute configuration (default: `quickscale.yml`) |
 | `quickscale status` | Show current vs desired state |
 | `quickscale remove <module>` | Remove embedded module |
@@ -38,9 +38,9 @@ After v0.71.0, QuickScale uses a clean command structure:
 ```
 quickscale
 ├── Project Configuration (plan/apply)
-│   ├── plan <name>           Create new project config
+│   ├── plan <project-slug>   Create new project config
 │   ├── plan --add            Add modules to existing project
-│   ├── plan --edit           Reconfigure mutable options
+│   ├── plan --reconfigure    Reconfigure mutable options
 │   ├── apply                 Execute configuration
 │   ├── status                Show current vs desired state
 │   └── remove <module>       Remove embedded module
@@ -62,7 +62,7 @@ quickscale
 ```
 
 **Removed Commands** (replaced by plan/apply):
-- ~~`quickscale init`~~ → Use `quickscale plan <name>` + `quickscale apply`
+- ~~`quickscale init`~~ → Use `quickscale plan <project-slug>` + `quickscale apply`
 - ~~`quickscale embed`~~ → Use `quickscale plan --add` + `quickscale apply`
 
 **Two Orthogonal Concerns**:
@@ -97,12 +97,13 @@ myapp/
 version: 0.75.0
 
 project:
-  name: myapp
+  slug: myapp
+  package: myapp
   theme: showcase_html
 
 modules:
   auth:
-    registration: true           # Mutable
+    registration_enabled: true   # Mutable
     email_verification: false    # Mutable
     custom_user_model: true      # Immutable
   blog:
@@ -121,7 +122,8 @@ version: 0.75.0
 last_applied: "2025-11-28T10:30:00Z"
 
 project:
-  name: myapp
+  slug: myapp
+  package: myapp
   theme: showcase_html
   created_at: "2025-11-28T10:00:00Z"
 
@@ -132,7 +134,7 @@ modules:
     immutable:
       custom_user_model: true
     mutable:
-      registration: true
+      registration_enabled: true
       email_verification: false
 ```
 
@@ -144,7 +146,7 @@ version: 0.75.0
 
 config:
   mutable:                       # Can change after embed
-    registration:
+    registration_enabled:
       type: boolean
       default: true
       setting: AUTH_REGISTRATION_ENABLED

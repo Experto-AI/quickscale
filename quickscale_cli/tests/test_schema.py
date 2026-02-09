@@ -22,13 +22,14 @@ class TestValidConfigParsing:
         yaml_content = """
 version: "1"
 project:
-  name: myapp
+  slug: myapp
+  package: myapp
   theme: showcase_html
 """
         config = validate_config(yaml_content)
 
         assert config.version == "1"
-        assert config.project.name == "myapp"
+        assert config.project.slug == "myapp"
         assert config.project.theme == "showcase_html"
         assert config.modules == {}
         assert config.docker.start is True
@@ -39,7 +40,8 @@ project:
         yaml_content = """
 version: "1"
 project:
-  name: myproject
+  slug: myproject
+  package: myproject
   theme: showcase_html
 modules:
   auth:
@@ -53,7 +55,7 @@ docker:
 """
         config = validate_config(yaml_content)
 
-        assert config.project.name == "myproject"
+        assert config.project.slug == "myproject"
         assert "auth" in config.modules
         assert "blog" in config.modules
         assert config.modules["auth"].options["registration"] is True
@@ -66,7 +68,8 @@ docker:
         yaml_content = """
 version: "1"
 project:
-  name: myapp
+  slug: myapp
+  package: myapp
   theme: showcase_html
 modules:
   auth:
@@ -84,7 +87,8 @@ modules:
         yaml_content = """
 version: "1"
 project:
-  name: myapp
+  slug: myapp
+  package: myapp
 """
         config = validate_config(yaml_content)
 
@@ -97,7 +101,8 @@ project:
         yaml_content = """
 version: "1"
 project:
-  name: myapp
+  slug: myapp
+  package: myapp
 docker:
   start: false
   build: false
@@ -112,23 +117,26 @@ docker:
         yaml_content = """
 version: "1"
 project:
-  name: myapp
+  slug: myapp
+  package: myapp
 modules:
   auth:
   billing:
   teams:
   blog:
   listings:
+  crm:
 """
         config = validate_config(yaml_content)
 
-        assert len(config.modules) == 5
+        assert len(config.modules) == 6
         assert set(config.modules.keys()) == {
             "auth",
             "billing",
             "teams",
             "blog",
             "listings",
+            "crm",
         }
 
     def test_all_valid_themes(self):
@@ -137,7 +145,8 @@ modules:
             yaml_content = f"""
 version: "1"
 project:
-  name: myapp
+  slug: myapp
+  package: myapp
   theme: {theme}
 """
             config = validate_config(yaml_content)
@@ -148,10 +157,11 @@ project:
         yaml_content = """
 version: "1"
 project:
-  name: myapp
+  slug: myapp
+  package: myapp
 """
         config = parse_config(yaml_content)
-        assert config.project.name == "myapp"
+        assert config.project.slug == "myapp"
         assert config.project.theme == "showcase_react"
 
 
@@ -162,7 +172,8 @@ class TestInvalidConfigErrors:
         """Test error for missing version"""
         yaml_content = """
 project:
-  name: myapp
+  slug: myapp
+  package: myapp
 """
         with pytest.raises(ConfigValidationError) as exc:
             validate_config(yaml_content)
@@ -175,7 +186,8 @@ project:
         yaml_content = """
 version: "2"
 project:
-  name: myapp
+  slug: myapp
+  package: myapp
 """
         with pytest.raises(ConfigValidationError) as exc:
             validate_config(yaml_content)
@@ -194,7 +206,7 @@ version: "1"
         assert "Missing required key 'project'" in str(exc.value)
 
     def test_missing_project_name(self):
-        """Test error for missing project.name"""
+        """Test error for missing project.slug"""
         yaml_content = """
 version: "1"
 project:
@@ -203,27 +215,28 @@ project:
         with pytest.raises(ConfigValidationError) as exc:
             validate_config(yaml_content)
 
-        assert "Missing required key 'project.name'" in str(exc.value)
+        assert "Missing required key 'project.slug'" in str(exc.value)
 
     def test_invalid_project_name(self):
         """Test error for invalid project name"""
         yaml_content = """
 version: "1"
 project:
-  name: 123invalid
+  slug: 123invalid
+  package: 123invalid
 """
         with pytest.raises(ConfigValidationError) as exc:
             validate_config(yaml_content)
 
-        assert "Invalid project name '123invalid'" in str(exc.value)
-        assert "Python identifier" in str(exc.value)
+        assert "Invalid project slug '123invalid'" in str(exc.value)
 
     def test_empty_project_name(self):
         """Test error for empty project name"""
         yaml_content = """
 version: "1"
 project:
-  name: ""
+  slug: ""
+  package: ""
 """
         with pytest.raises(ConfigValidationError) as exc:
             validate_config(yaml_content)
@@ -235,7 +248,8 @@ project:
         yaml_content = """
 version: "1"
 project:
-  name: myapp
+  slug: myapp
+  package: myapp
   theme: unknown_theme
 """
         with pytest.raises(ConfigValidationError) as exc:
@@ -249,7 +263,8 @@ project:
         yaml_content = """
 version: "1"
 project:
-  name: myapp
+  slug: myapp
+  package: myapp
 modules:
   unknown_module:
 """
@@ -263,7 +278,8 @@ modules:
         yaml_content = """
 version: "1"
 project:
-  name: myapp
+  slug: myapp
+  package: myapp
 unknown_key: value
 """
         with pytest.raises(ConfigValidationError) as exc:
@@ -276,7 +292,8 @@ unknown_key: value
         yaml_content = """
 version: "1"
 project:
-  name: myapp
+  slug: myapp
+  package: myapp
   unknown_option: value
 """
         with pytest.raises(ConfigValidationError) as exc:
@@ -289,7 +306,8 @@ project:
         yaml_content = """
 version: "1"
 project:
-  name: myapp
+  slug: myapp
+  package: myapp
 docker:
   unknown_docker_option: true
 """
@@ -303,7 +321,8 @@ docker:
         yaml_content = """
 version: "1"
 project:
-  name: myapp
+  slug: myapp
+  package: myapp
   invalid: [unclosed bracket
 """
         with pytest.raises(ConfigValidationError) as exc:
@@ -325,7 +344,8 @@ project:
         yaml_content = """
 version: "1"
 project:
-  name: myapp
+  slug: myapp
+  package: myapp
 docker:
   start: "yes"
 """
@@ -339,7 +359,8 @@ docker:
         yaml_content = """
 version: "1"
 project:
-  name: myapp
+  slug: myapp
+  package: myapp
 docker:
   build: 1
 """
@@ -356,14 +377,15 @@ class TestLineNumberErrors:
         """Test that errors include line numbers"""
         yaml_content = """version: "1"
 project:
-  name: myapp
+  slug: myapp
+  package: myapp
 moduels:
   auth:
 """
         with pytest.raises(ConfigValidationError) as exc:
             validate_config(yaml_content)
 
-        assert "Line 4" in str(exc.value)
+        assert "Line 5" in str(exc.value)
         assert "moduels" in str(exc.value)
 
     def test_typo_suggestion_modules(self):
@@ -371,7 +393,8 @@ moduels:
         yaml_content = """
 version: "1"
 project:
-  name: myapp
+  slug: myapp
+  package: myapp
 moduels:
   auth:
 """
@@ -416,7 +439,7 @@ class TestGenerateYaml:
         """Test generating YAML from minimal config"""
         config = QuickScaleConfig(
             version="1",
-            project=ProjectConfig(name="myapp", theme="showcase_html"),
+            project=ProjectConfig(slug="myapp", package="myapp", theme="showcase_html"),
             modules={},
             docker=DockerConfig(start=True, build=True),
         )
@@ -424,14 +447,14 @@ class TestGenerateYaml:
 
         # Parse it back and verify
         parsed = validate_config(yaml_output)
-        assert parsed.project.name == "myapp"
+        assert parsed.project.slug == "myapp"
         assert parsed.project.theme == "showcase_html"
 
     def test_generate_config_with_modules(self):
         """Test generating YAML with modules"""
         config = QuickScaleConfig(
             version="1",
-            project=ProjectConfig(name="myapp", theme="showcase_html"),
+            project=ProjectConfig(slug="myapp", package="myapp", theme="showcase_html"),
             modules={
                 "auth": ModuleConfig(name="auth", options={"registration": True}),
                 "blog": ModuleConfig(name="blog", options={}),
@@ -450,7 +473,11 @@ class TestGenerateYaml:
         """Test that generate_yaml -> validate_config is lossless"""
         original = QuickScaleConfig(
             version="1",
-            project=ProjectConfig(name="testproject", theme="showcase_htmx"),
+            project=ProjectConfig(
+                slug="testproject",
+                package="testproject",
+                theme="showcase_htmx",
+            ),
             modules={
                 "auth": ModuleConfig(name="auth", options={"key": "value"}),
             },
@@ -460,7 +487,7 @@ class TestGenerateYaml:
         parsed = validate_config(yaml_output)
 
         assert parsed.version == original.version
-        assert parsed.project.name == original.project.name
+        assert parsed.project.slug == original.project.slug
         assert parsed.project.theme == original.project.theme
         assert set(parsed.modules.keys()) == set(original.modules.keys())
         assert parsed.docker.start == original.docker.start
@@ -478,8 +505,9 @@ class TestDataclasses:
 
     def test_project_config_defaults(self):
         """Test ProjectConfig default values"""
-        config = ProjectConfig(name="test")
-        assert config.name == "test"
+        config = ProjectConfig(slug="test", package="test")
+        assert config.slug == "test"
+        assert config.package == "test"
         assert config.theme == "showcase_react"
 
     def test_docker_config_defaults(self):
@@ -492,7 +520,7 @@ class TestDataclasses:
         """Test QuickScaleConfig default values"""
         config = QuickScaleConfig(
             version="1",
-            project=ProjectConfig(name="test"),
+            project=ProjectConfig(slug="test", package="test"),
         )
         assert config.modules == {}
         assert isinstance(config.docker, DockerConfig)

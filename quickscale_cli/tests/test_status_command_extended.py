@@ -164,12 +164,12 @@ class TestLoadConfig:
         """Load valid config"""
         config = tmp_path / "quickscale.yml"
         config.write_text(
-            'version: "1"\nproject:\n  name: myapp\n  theme: showcase_html\n'
+            'version: "1"\nproject:\n  slug: myapp\n  package: myapp\n  theme: showcase_html\n'
             "docker:\n  start: false\n"
         )
         result = _load_config(config)
         assert result is not None
-        assert result.project.name == "myapp"
+        assert result.project.slug == "myapp"
 
     def test_invalid_config(self, tmp_path):
         """Return None for invalid config"""
@@ -190,7 +190,7 @@ class TestDisplayFunctions:
     def test_display_project_info(self):
         """Display project information"""
         state = Mock()
-        state.project.name = "myapp"
+        state.project.slug = "myapp"
         state.project.theme = "showcase_html"
         state.project.created_at = "2025-01-01T00:00:00"
         state.project.last_applied = "2025-01-01T12:00:00"
@@ -228,7 +228,7 @@ class TestDisplayFunctions:
         """Display pending changes when changes exist"""
         config = Mock()
         config.version = "1"
-        config.project.name = "myapp"
+        config.project.slug = "myapp"
         config.project.theme = "showcase_html"
         config.modules = {"auth": Mock(options={})}
         config.docker.start = False
@@ -236,7 +236,7 @@ class TestDisplayFunctions:
 
         state = Mock()
         state.version = "1"
-        state.project.name = "myapp"
+        state.project.slug = "myapp"
         state.project.theme = "showcase_html"
         state.modules = {}
 
@@ -330,7 +330,7 @@ class TestBuildJsonOutput:
         """Build JSON with both state and config"""
         state = Mock()
         state.version = "1"
-        state.project.name = "myapp"
+        state.project.slug = "myapp"
         state.project.theme = "showcase_html"
         state.project.created_at = "2025-01-01"
         state.project.last_applied = "2025-01-01"
@@ -342,7 +342,7 @@ class TestBuildJsonOutput:
 
         config = Mock()
         config.version = "1"
-        config.project.name = "myapp"
+        config.project.slug = "myapp"
         config.project.theme = "showcase_html"
         config.modules = {"auth": Mock()}
         config.docker.start = False
@@ -416,7 +416,7 @@ class TestDisplayTextStatus:
     def test_with_state_only(self, tmp_path):
         """Display with state but no config"""
         state = Mock()
-        state.project.name = "myapp"
+        state.project.slug = "myapp"
         state.project.theme = "showcase_html"
         state.project.created_at = "2025-01-01"
         state.project.last_applied = "2025-01-01"
@@ -438,7 +438,7 @@ class TestDisplayTextStatus:
         """Display with config but no state"""
         config = Mock()
         config.version = "1"
-        config.project.name = "myapp"
+        config.project.slug = "myapp"
         config.project.theme = "showcase_html"
         config.modules = {}
         config.docker.start = False
@@ -483,7 +483,8 @@ class TestStatusCommandExtended:
                     {
                         "version": "1",
                         "project": {
-                            "name": "testapp",
+                            "slug": "testapp",
+                            "package": "testapp",
                             "theme": "showcase_html",
                             "created_at": "2025-12-01T10:00:00",
                             "last_applied": "2025-12-01T12:00:00",
@@ -501,7 +502,7 @@ class TestStatusCommandExtended:
                 )
             with open("quickscale.yml", "w") as f:
                 f.write(
-                    'version: "1"\nproject:\n  name: testapp\n  theme: showcase_html\nmodules:\n  auth:\ndocker:\n  start: false\n'
+                    'version: "1"\nproject:\n  slug: testapp\n  package: testapp\n  theme: showcase_html\nmodules:\n  auth:\ndocker:\n  start: false\n'
                 )
 
             result = runner.invoke(status)

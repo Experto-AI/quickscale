@@ -11,6 +11,8 @@ from pathlib import Path
 
 from decouple import config
 
+from .modules import MODULE_INSTALLED_APPS, MODULE_MIDDLEWARE, MODULE_SETTINGS
+
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent.parent
 
@@ -51,6 +53,11 @@ MIDDLEWARE = [
     "django.middleware.clickjacking.XFrameOptionsMiddleware",
 ]
 
+# QuickScale module wiring (managed)
+INSTALLED_APPS += MODULE_INSTALLED_APPS
+MIDDLEWARE += MODULE_MIDDLEWARE
+globals().update(MODULE_SETTINGS)
+
 ROOT_URLCONF = "{{ package_name }}.urls"
 
 TEMPLATES = [
@@ -73,14 +80,17 @@ TEMPLATES = [
 WSGI_APPLICATION = "{{ package_name }}.wsgi.application"
 
 
-# Database
+# Database defaults (PostgreSQL)
 # https://docs.djangoproject.com/en/stable/ref/settings/#databases
-# Override in local.py or production.py
-
+# Override in local.py or production.py when needed.
 DATABASES = {
     "default": {
-        "ENGINE": "django.db.backends.sqlite3",
-        "NAME": BASE_DIR / "db.sqlite3",
+        "ENGINE": "django.db.backends.postgresql",
+        "NAME": config("POSTGRES_DB", default="{{ package_name }}"),
+        "USER": config("POSTGRES_USER", default="postgres"),
+        "PASSWORD": config("POSTGRES_PASSWORD", default="postgres"),
+        "HOST": config("POSTGRES_HOST", default="localhost"),
+        "PORT": config("POSTGRES_PORT", default="5432"),
     }
 }
 

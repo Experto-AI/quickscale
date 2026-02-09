@@ -17,7 +17,7 @@ class TestPlanCommandBasic:
             result = runner.invoke(plan, ["123invalid"])
 
             assert result.exit_code != 0
-            assert "not a valid project name" in result.output
+            assert "not a valid project slug" in result.output
 
     def test_plan_help(self):
         """Test plan command help output"""
@@ -38,7 +38,7 @@ class TestPlanCommandBasic:
             result = runner.invoke(
                 plan,
                 ["myapp"],
-                input="1\n\ny\ny\ny\n",
+                input="\n1\n\ny\ny\ny\n",
             )
 
             assert result.exit_code == 0
@@ -54,7 +54,7 @@ class TestPlanCommandBasic:
             result = runner.invoke(
                 plan,
                 ["myapp", "--output", "custom/config.yml"],
-                input="1\n\ny\ny\ny\n",
+                input="\n1\n\ny\ny\ny\n",
             )
 
             assert result.exit_code == 0
@@ -71,11 +71,11 @@ class TestPlanCommandBasic:
             result = runner.invoke(
                 plan,
                 ["myapp"],
-                input="n\n",  # Don't overwrite
+                input="\nn\n",  # Default package, then don't overwrite
             )
 
             assert result.exit_code != 0
-            assert "Cancelled" in result.output
+            assert "Aborted" in result.output
 
     def test_plan_existing_file_overwrite(self):
         """Test plan command when file exists and user confirms overwrite"""
@@ -89,7 +89,7 @@ class TestPlanCommandBasic:
             result = runner.invoke(
                 plan,
                 ["myapp"],
-                input="y\n1\n\ny\ny\ny\n",
+                input="\ny\n1\n\ny\ny\ny\n",
             )
 
             assert result.exit_code == 0
@@ -107,7 +107,7 @@ class TestPlanThemeSelection:
             result = runner.invoke(
                 plan,
                 ["myapp"],
-                input="\n\ny\ny\ny\n",
+                input="\n\n\ny\ny\ny\n",
             )
 
             assert result.exit_code == 0
@@ -124,7 +124,7 @@ class TestPlanThemeSelection:
             result = runner.invoke(
                 plan,
                 ["myapp"],
-                input="1\n\ny\ny\ny\n",
+                input="\n1\n\ny\ny\ny\n",
             )
 
             assert result.exit_code == 0
@@ -141,7 +141,7 @@ class TestPlanThemeSelection:
             result = runner.invoke(
                 plan,
                 ["myapp"],
-                input="showcase_html\n\ny\ny\ny\n",
+                input="\nshowcase_html\n\ny\ny\ny\n",
             )
 
             assert result.exit_code == 0
@@ -162,7 +162,7 @@ class TestPlanModuleSelection:
             result = runner.invoke(
                 plan,
                 ["myapp"],
-                input="1\n\ny\ny\ny\n",
+                input="\n1\n\ny\ny\ny\n",
             )
 
             assert result.exit_code == 0
@@ -184,7 +184,7 @@ class TestPlanModuleSelection:
             result = runner.invoke(
                 plan,
                 ["myapp"],
-                input="1\n1\ny\ny\ny\n",
+                input="\n1\n1\ny\ny\ny\n",
             )
 
             assert result.exit_code == 0
@@ -201,7 +201,7 @@ class TestPlanModuleSelection:
             result = runner.invoke(
                 plan,
                 ["myapp"],
-                input="1\n1,3\ny\ny\ny\n",
+                input="\n1\n1,3\ny\ny\ny\n",
             )
 
             assert result.exit_code == 0
@@ -211,27 +211,32 @@ class TestPlanModuleSelection:
             assert "auth:" in content
             assert "listings:" in content
 
-    def test_placeholder_label_not_duplicated_in_module_menu(self):
-        """Billing/teams should show exactly one '(placeholder)' marker."""
+    def test_experimental_modules_hidden_by_default(self):
+        """Billing/teams should be hidden unless --include-experimental is used."""
         runner = CliRunner()
         with runner.isolated_filesystem():
             result = runner.invoke(
                 plan,
                 ["myapp"],
-                input="1\n\ny\ny\nn\n",
+                input="\n1\n\ny\ny\nn\n",
             )
 
-            assert (
-                "billing - Stripe integration (placeholder) (placeholder)"
-                not in result.output
+            assert "billing - Stripe integration" not in result.output
+            assert "teams - Multi-tenancy and team management" not in result.output
+
+    def test_experimental_modules_visible_with_flag(self):
+        """Billing/teams should appear with --include-experimental."""
+        runner = CliRunner()
+        with runner.isolated_filesystem():
+            result = runner.invoke(
+                plan,
+                ["myapp", "--include-experimental"],
+                input="\n1\n\ny\ny\nn\n",
             )
+
+            assert "billing - Stripe integration (experimental)" in result.output
             assert (
-                "teams - Multi-tenancy and team management (placeholder) (placeholder)"
-                not in result.output
-            )
-            assert "billing - Stripe integration (placeholder)" in result.output
-            assert (
-                "teams - Multi-tenancy and team management (placeholder)"
+                "teams - Multi-tenancy and team management (experimental)"
                 in result.output
             )
 
@@ -247,7 +252,7 @@ class TestPlanDockerConfiguration:
             result = runner.invoke(
                 plan,
                 ["myapp"],
-                input="1\n\ny\ny\ny\n",
+                input="\n1\n\ny\ny\ny\n",
             )
 
             assert result.exit_code == 0
@@ -265,7 +270,7 @@ class TestPlanDockerConfiguration:
             result = runner.invoke(
                 plan,
                 ["myapp"],
-                input="1\n\nn\ny\n",
+                input="\n1\n\nn\ny\n",
             )
 
             assert result.exit_code == 0
@@ -285,7 +290,7 @@ class TestPlanConfigPreview:
             result = runner.invoke(
                 plan,
                 ["myapp"],
-                input="1\n\ny\ny\ny\n",
+                input="\n1\n\ny\ny\ny\n",
             )
 
             assert "Configuration Preview" in result.output
@@ -300,7 +305,7 @@ class TestPlanConfigPreview:
             result = runner.invoke(
                 plan,
                 ["myapp"],
-                input="1\n\ny\ny\nn\n",
+                input="\n1\n\ny\ny\nn\n",
             )
 
             assert result.exit_code != 0
@@ -321,7 +326,7 @@ class TestPlanYamlValidation:
             result = runner.invoke(
                 plan,
                 ["myapp"],
-                input="1\n1\ny\ny\ny\n",
+                input="\n1\n1\ny\ny\ny\n",
             )
 
             assert result.exit_code == 0
@@ -331,6 +336,6 @@ class TestPlanYamlValidation:
 
             # Should be valid config
             config = validate_config(content)
-            assert config.project.name == "myapp"
+            assert config.project.slug == "myapp"
             assert config.project.theme == "showcase_react"
             assert "auth" in config.modules

@@ -10,6 +10,7 @@ import click
 import yaml
 
 from quickscale_cli.schema.state_schema import QuickScaleState, StateManager
+from quickscale_cli.utils.module_wiring_manager import regenerate_managed_wiring
 
 
 def _update_quickscale_yml(project_path: Path, module_name: str) -> bool:
@@ -47,75 +48,19 @@ def _remove_module_directory(project_path: Path, module_name: str) -> tuple[bool
         return False, f"Failed to remove module directory: {e}"
 
 
-def _update_settings_py(project_path: Path, module_name: str) -> tuple[bool, str]:
-    """Remove module configuration from settings.py"""
-    # QuickScale uses settings/base.py structure
-    settings_path = project_path / project_path.name / "settings" / "base.py"
-
-    if not settings_path.exists():
-        return True, "Settings file not found (skipped)"
-
-    try:
-        content = settings_path.read_text()
-
-        # Look for the module configuration block and remove it
-        # This is a best-effort removal - complex configurations may need manual cleanup
-        module_app_name = f"quickscale_modules_{module_name}"
-
-        # Simple approach: remove lines containing the module reference
-        lines = content.splitlines()
-        new_lines = []
-        skip_until_empty = False
-
-        for line in lines:
-            if module_app_name in line:
-                skip_until_empty = True
-                continue
-            if skip_until_empty and line.strip() == "":
-                skip_until_empty = False
-            if not skip_until_empty:
-                new_lines.append(line)
-
-        new_content = "\n".join(new_lines)
-
-        # Only write if we made changes
-        if new_content != content:
-            settings_path.write_text(new_content)
-            return True, "Removed module references from settings.py"
-
-        return True, "No module references found in settings.py"
-
-    except Exception as e:
-        return False, f"Failed to update settings.py: {e}"
-
-
-def _update_urls_py(project_path: Path, module_name: str) -> tuple[bool, str]:
-    """Remove module URLs from urls.py"""
-    urls_path = project_path / project_path.name / "urls.py"
-
-    if not urls_path.exists():
-        return True, "URLs file not found (skipped)"
-
-    try:
-        content = urls_path.read_text()
-
-        # Look for the module URL include and remove it
-        module_app_name = f"quickscale_modules_{module_name}"
-
-        lines = content.splitlines()
-        new_lines = [line for line in lines if module_app_name not in line]
-
-        new_content = "\n".join(new_lines)
-
-        # Only write if we made changes
-        if new_content != content:
-            urls_path.write_text(new_content)
-            return True, "Removed module URLs from urls.py"
-
-        return True, "No module URLs found in urls.py"
-
-    except Exception as e:
-        return False, f"Failed to update urls.py: {e}"
+def _regenerate_managed_wiring_after_removal(
+    project_path: Path,
+    state: QuickScaleState | None,
+) -> tuple[bool, str]:
+    """Regenerate managed module wiring from remaining modules."""
+    remaining_modules = sorted(state.modules.keys()) if state else []
+    success, message = regenerate_managed_wiring(
+        project_path,
+        module_names=remaining_modules,
+    )
+    if success:
+        return True, "Regenerated managed module wiring files"
+    return False, f"Failed to regenerate managed wiring files: {message}"
 
 
 def _check_module_exists(
@@ -163,7 +108,7 @@ def _show_removal_warning(module_name: str, keep_data: bool) -> None:
     click.echo(f"  • Remove modules/{module_name}/ directory")
     click.echo("  • Update .quickscale/state.yml")
     click.echo("  • Update quickscale.yml (if exists)")
-    click.echo("  • Clean up settings.py and urls.py references")
+    click.echo("  • Regenerate managed module wiring files")
 
     if not keep_data:
         click.secho(
@@ -195,10 +140,10 @@ def _log_step_result(success: bool, message: str, is_error: bool = False) -> Non
 
 def _update_state_for_removal(
     state: QuickScaleState | None, module_name: str, state_manager: StateManager
-) -> None:
+) -> QuickScaleState | None:
     """Remove module from state and save"""
     if not (state and module_name in state.modules):
-        return
+        return state
 
     del state.modules[module_name]
     try:
@@ -206,6 +151,7 @@ def _update_state_for_removal(
         click.secho("  ✅ Updated .quickscale/state.yml", fg="green")
     except Exception as e:
         click.secho(f"  ⚠️  Failed to update state: {e}", fg="yellow")
+    return state
 
 
 def _perform_removal_steps(
@@ -222,7 +168,7 @@ def _perform_removal_steps(
     _log_step_result(success, message, is_error=True)
 
     # Step 2: Update state.yml
-    _update_state_for_removal(state, module_name, state_manager)
+    updated_state = _update_state_for_removal(state, module_name, state_manager)
 
     # Step 3: Update quickscale.yml
     yml_success = _update_quickscale_yml(project_path, module_name)
@@ -231,12 +177,11 @@ def _perform_removal_steps(
         "Updated quickscale.yml" if yml_success else "Failed to update quickscale.yml",
     )
 
-    # Step 4: Update settings.py
-    success, message = _update_settings_py(project_path, module_name)
-    _log_step_result(success, message)
-
-    # Step 5: Update urls.py
-    success, message = _update_urls_py(project_path, module_name)
+    # Step 4: Regenerate managed wiring files
+    success, message = _regenerate_managed_wiring_after_removal(
+        project_path,
+        updated_state,
+    )
     _log_step_result(success, message)
 
 
@@ -247,8 +192,8 @@ def _show_success_message(module_name: str, keep_data: bool) -> None:
     )
 
     click.echo("\n📋 Next steps:")
-    click.echo("  1. Review settings.py for any remaining module references")
-    click.echo("  2. Review urls.py for any remaining module URL includes")
+    click.echo("  1. Review managed wiring files for expected module list")
+    click.echo("  2. Run quickscale apply to reconcile any remaining config drift")
     if not keep_data:
         click.echo(f"  3. If needed, manually remove database tables for {module_name}")
     click.echo("\n💡 To re-embed with different options:")
@@ -284,7 +229,7 @@ def remove(module_name: str, force: bool, keep_data: bool) -> None:
       1. Remove the module directory from modules/
       2. Update .quickscale/state.yml
       3. Update quickscale.yml (if exists)
-      4. Clean up settings.py and urls.py references (best effort)
+      4. Regenerate managed module wiring files
 
     \b
     ⚠️  WARNING: This may cause data loss!

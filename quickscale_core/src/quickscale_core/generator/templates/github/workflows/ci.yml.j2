@@ -52,7 +52,7 @@ jobs:
       run: poetry run ruff check .
 
     - name: Run tests with coverage
-      run: poetry run pytest --cov={{ project_name }} --cov-report=xml --cov-report=term-missing
+      run: poetry run pytest --cov={{ package_name }} --cov-report=xml --cov-report=term-missing
 
     - name: Upload coverage to Codecov
       uses: codecov/codecov-action@v4

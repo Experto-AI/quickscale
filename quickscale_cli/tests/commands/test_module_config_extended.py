@@ -41,6 +41,15 @@ def _make_project(tmp_path: Path, project_name: str = "myproject") -> Path:
     (project / "pyproject.toml").write_text(
         '[tool.poetry.dependencies]\npython = "^3.11"\nDjango = "^6.0"\n'
     )
+    (project / "quickscale.yml").write_text(
+        f'version: "1"\n'
+        f"project:\n"
+        f"  slug: {project_name}\n"
+        f"  package: {project_name}\n"
+        f"  theme: showcase_html\n"
+        f"docker:\n"
+        f"  start: false\n"
+    )
     return project
 
 
@@ -166,20 +175,25 @@ class TestApplyAuthConfiguration:
         # Should not raise – just prints warning
 
     def test_already_configured(self, tmp_path):
-        """Skip when auth already present in settings"""
+        """Managed wiring remains idempotent when auth reapplied."""
         project = _make_project(tmp_path)
-        settings = project / "myproject" / "settings" / "base.py"
-        settings.write_text("INSTALLED_APPS = []\nquickscale_modules_auth\n")
-        apply_auth_configuration(
-            project,
-            {
-                "allow_registration": True,
-                "email_verification": "none",
-                "authentication_method": "email",
-            },
+        auth_dir = project / "modules" / "auth"
+        auth_dir.mkdir(parents=True)
+        (auth_dir / "pyproject.toml").write_text(
+            '[tool.poetry.dependencies]\ndjango-allauth = "^0.60.0"\n'
         )
-        # No duplicate write
-        assert settings.read_text().count("quickscale_modules_auth") == 1
+        config = {
+            "registration_enabled": True,
+            "email_verification": "none",
+            "authentication_method": "email",
+        }
+        apply_auth_configuration(project, config)
+        apply_auth_configuration(project, config)
+
+        managed_settings = (
+            project / "myproject" / "settings" / "modules.py"
+        ).read_text()
+        assert managed_settings.count("'quickscale_modules_auth'") == 1
 
     def test_full_apply_auth(self, tmp_path):
         """Full auth configuration with all file writes"""
@@ -192,19 +206,22 @@ class TestApplyAuthConfiguration:
         )
 
         config = {
-            "allow_registration": True,
+            "registration_enabled": True,
             "email_verification": "none",
             "authentication_method": "email",
         }
         apply_auth_configuration(project, config)
 
-        settings_content = (project / "myproject" / "settings" / "base.py").read_text()
+        settings_content = (
+            project / "myproject" / "settings" / "modules.py"
+        ).read_text()
         assert "quickscale_modules_auth" in settings_content
         assert "allauth" in settings_content
         assert "AUTH_USER_MODEL" in settings_content
 
-        urls_content = (project / "myproject" / "urls.py").read_text()
-        assert "allauth.urls" in urls_content
+        urls_content = (project / "myproject" / "urls_modules.py").read_text()
+        assert "quickscale_modules_auth.urls" in urls_content
+        assert "allauth.urls" not in urls_content
 
     def test_urls_already_has_allauth(self, tmp_path):
         """Skip URL update when allauth already in urls"""
@@ -217,12 +234,13 @@ class TestApplyAuthConfiguration:
         (project / "myproject" / "urls.py").write_text("allauth already here\n")
 
         config = {
-            "allow_registration": True,
+            "registration_enabled": True,
             "email_verification": "none",
             "authentication_method": "email",
         }
         apply_auth_configuration(project, config)
-        # No error raised
+        managed_urls = (project / "myproject" / "urls_modules.py").read_text()
+        assert "quickscale_modules_auth.urls" in managed_urls
 
 
 # ============================================================================
@@ -290,11 +308,13 @@ class TestApplyBlogConfigurationFull:
         apply_blog_configuration(project, {"posts_per_page": 10, "enable_rss": True})
 
     def test_already_configured(self, tmp_path):
-        """Skip when blog already present"""
+        """Managed wiring remains idempotent when blog reapplied."""
         project = _make_project(tmp_path)
-        settings = project / "myproject" / "settings" / "base.py"
-        settings.write_text("quickscale_modules_blog\n")
-        apply_blog_configuration(project, {"posts_per_page": 10, "enable_rss": True})
+        config = {"posts_per_page": 10, "enable_rss": True}
+        apply_blog_configuration(project, config)
+        apply_blog_configuration(project, config)
+        settings = (project / "myproject" / "settings" / "modules.py").read_text()
+        assert settings.count("quickscale_modules_blog") == 1
 
     def test_full_apply_blog_with_rss(self, tmp_path):
         """Full blog config apply with RSS enabled"""
@@ -302,14 +322,14 @@ class TestApplyBlogConfigurationFull:
         config = {"posts_per_page": 15, "enable_rss": True}
         apply_blog_configuration(project, config)
 
-        settings = (project / "myproject" / "settings" / "base.py").read_text()
+        settings = (project / "myproject" / "settings" / "modules.py").read_text()
         assert "quickscale_modules_blog" in settings
-        assert "BLOG_POSTS_PER_PAGE = 15" in settings
+        assert "'BLOG_POSTS_PER_PAGE': 15" in settings
         assert "markdownx" in settings.lower() or "MARKDOWNX" in settings
 
-        urls = (project / "myproject" / "urls.py").read_text()
+        urls = (project / "myproject" / "urls_modules.py").read_text()
         assert "quickscale_modules_blog.urls" in urls
-        assert "markdownx" in urls
+        assert "markdownx.urls" in urls
 
     def test_full_apply_blog_without_rss(self, tmp_path):
         """Full blog config apply with RSS disabled"""
@@ -317,10 +337,10 @@ class TestApplyBlogConfigurationFull:
         config = {"posts_per_page": 5, "enable_rss": False}
         apply_blog_configuration(project, config)
 
-        urls = (project / "myproject" / "urls.py").read_text()
+        urls = (project / "myproject" / "urls_modules.py").read_text()
         assert "quickscale_modules_blog.urls" in urls
         # markdownx URL should not be added when RSS disabled
-        assert "markdownx" not in urls
+        assert "markdownx.urls" not in urls
 
     def test_blog_urls_already_present(self, tmp_path):
         """Skip URL update when blog urls already present"""
@@ -328,6 +348,8 @@ class TestApplyBlogConfigurationFull:
         (project / "myproject" / "urls.py").write_text("quickscale_modules_blog here\n")
         config = {"posts_per_page": 10, "enable_rss": True}
         apply_blog_configuration(project, config)
+        managed_urls = (project / "myproject" / "urls_modules.py").read_text()
+        assert "quickscale_modules_blog.urls" in managed_urls
 
 
 # ============================================================================
@@ -345,11 +367,18 @@ class TestApplyListingsConfigurationFull:
         apply_listings_configuration(project, {"listings_per_page": 12})
 
     def test_already_configured(self, tmp_path):
-        """Skip when listings already present"""
+        """Managed wiring remains idempotent when listings reapplied."""
         project = _make_project(tmp_path)
-        settings = project / "myproject" / "settings" / "base.py"
-        settings.write_text("quickscale_modules_listings\n")
-        apply_listings_configuration(project, {"listings_per_page": 12})
+        listings_dir = project / "modules" / "listings"
+        listings_dir.mkdir(parents=True)
+        (listings_dir / "pyproject.toml").write_text(
+            '[tool.poetry.dependencies]\ndjango-filter = "^23.0"\n'
+        )
+        config = {"listings_per_page": 12}
+        apply_listings_configuration(project, config)
+        apply_listings_configuration(project, config)
+        settings = (project / "myproject" / "settings" / "modules.py").read_text()
+        assert settings.count("quickscale_modules_listings") == 1
 
     def test_full_apply_listings(self, tmp_path):
         """Full listings config apply"""
@@ -364,11 +393,11 @@ class TestApplyListingsConfigurationFull:
         config = {"listings_per_page": 20}
         apply_listings_configuration(project, config)
 
-        settings = (project / "myproject" / "settings" / "base.py").read_text()
+        settings = (project / "myproject" / "settings" / "modules.py").read_text()
         assert "quickscale_modules_listings" in settings
-        assert "LISTINGS_PER_PAGE = 20" in settings
+        assert "'LISTINGS_PER_PAGE': 20" in settings
 
-        urls = (project / "myproject" / "urls.py").read_text()
+        urls = (project / "myproject" / "urls_modules.py").read_text()
         assert "quickscale_modules_listings.urls" in urls
 
     def test_listings_all_apps_already_present(self, tmp_path):
@@ -385,15 +414,16 @@ class TestApplyListingsConfigurationFull:
         )
 
         config = {"listings_per_page": 15}
-        # This should still write settings but not duplicate INSTALLED_APPS
-        # It fails because settings check passes at "already configured" since the string is present
-        # Actually, if quickscale_modules_listings is in settings, it returns early
-        # Let's test the _filter_new_apps path differently - settings has django_filters but not the module
         settings.write_text('INSTALLED_APPS = ["django_filters"]\n')
+        listings_dir = project / "modules" / "listings"
+        listings_dir.mkdir(parents=True)
+        (listings_dir / "pyproject.toml").write_text(
+            '[tool.poetry.dependencies]\ndjango-filter = "^23.0"\n'
+        )
         apply_listings_configuration(project, config)
 
-        content = settings.read_text()
-        assert "LISTINGS_PER_PAGE = 15" in content
+        content = (project / "myproject" / "settings" / "modules.py").read_text()
+        assert "'LISTINGS_PER_PAGE': 15" in content
 
     def test_listings_urls_already_present(self, tmp_path):
         """Skip URL update when listings URLs already present"""
@@ -411,6 +441,8 @@ class TestApplyListingsConfigurationFull:
 
         config = {"listings_per_page": 12}
         apply_listings_configuration(project, config)
+        managed_urls = (project / "myproject" / "urls_modules.py").read_text()
+        assert "quickscale_modules_listings.urls" in managed_urls
 
 
 # ============================================================================
@@ -583,11 +615,20 @@ class TestApplyCRMConfiguration:
         apply_crm_configuration(project, get_default_crm_config())
 
     def test_already_configured(self, tmp_path):
-        """Skip when CRM already present"""
+        """Managed wiring remains idempotent when CRM reapplied."""
         project = _make_project(tmp_path)
-        settings = project / "myproject" / "settings" / "base.py"
-        settings.write_text("quickscale_modules_crm\n")
-        apply_crm_configuration(project, get_default_crm_config())
+        crm_dir = project / "modules" / "crm"
+        crm_dir.mkdir(parents=True)
+        (crm_dir / "pyproject.toml").write_text(
+            "[tool.poetry.dependencies]\n"
+            'djangorestframework = "^3.15.0"\n'
+            'django-filter = "^23.0"\n'
+        )
+        config = get_default_crm_config()
+        apply_crm_configuration(project, config)
+        apply_crm_configuration(project, config)
+        settings = (project / "myproject" / "settings" / "modules.py").read_text()
+        assert settings.count("quickscale_modules_crm") == 1
 
     def test_full_apply_crm_with_api(self, tmp_path):
         """Full CRM config apply with API enabled"""
@@ -603,14 +644,14 @@ class TestApplyCRMConfiguration:
         config = {"enable_api": True, "deals_per_page": 25, "contacts_per_page": 50}
         apply_crm_configuration(project, config)
 
-        settings = (project / "myproject" / "settings" / "base.py").read_text()
+        settings = (project / "myproject" / "settings" / "modules.py").read_text()
         assert "quickscale_modules_crm" in settings
-        assert "CRM_DEALS_PER_PAGE = 25" in settings
-        assert "CRM_CONTACTS_PER_PAGE = 50" in settings
-        assert "CRM_ENABLE_API = True" in settings
+        assert "'CRM_DEALS_PER_PAGE': 25" in settings
+        assert "'CRM_CONTACTS_PER_PAGE': 50" in settings
+        assert "'CRM_ENABLE_API': True" in settings
         assert "REST_FRAMEWORK" in settings
 
-        urls = (project / "myproject" / "urls.py").read_text()
+        urls = (project / "myproject" / "urls_modules.py").read_text()
         assert "quickscale_modules_crm.urls" in urls
 
     def test_full_apply_crm_without_api(self, tmp_path):
@@ -627,8 +668,8 @@ class TestApplyCRMConfiguration:
         config = {"enable_api": False, "deals_per_page": 10, "contacts_per_page": 20}
         apply_crm_configuration(project, config)
 
-        settings = (project / "myproject" / "settings" / "base.py").read_text()
-        assert "CRM_ENABLE_API = False" in settings
+        settings = (project / "myproject" / "settings" / "modules.py").read_text()
+        assert "'CRM_ENABLE_API': False" in settings
         assert "REST_FRAMEWORK" not in settings
 
     def test_crm_all_apps_already_present(self, tmp_path):
@@ -647,7 +688,7 @@ class TestApplyCRMConfiguration:
         config = {"enable_api": True, "deals_per_page": 25, "contacts_per_page": 50}
         apply_crm_configuration(project, config)
 
-        content = settings.read_text()
+        content = (project / "myproject" / "settings" / "modules.py").read_text()
         assert "CRM_DEALS_PER_PAGE" in content
 
     def test_crm_urls_already_present(self, tmp_path):
@@ -660,6 +701,8 @@ class TestApplyCRMConfiguration:
 
         config = get_default_crm_config()
         apply_crm_configuration(project, config)
+        managed_urls = (project / "myproject" / "urls_modules.py").read_text()
+        assert "quickscale_modules_crm.urls" in managed_urls
 
     def test_crm_no_pyproject(self, tmp_path):
         """Apply CRM when no pyproject.toml exists"""
@@ -669,5 +712,5 @@ class TestApplyCRMConfiguration:
         config = get_default_crm_config()
         apply_crm_configuration(project, config)
 
-        settings = (project / "myproject" / "settings" / "base.py").read_text()
+        settings = (project / "myproject" / "settings" / "modules.py").read_text()
         assert "CRM_DEALS_PER_PAGE" in settings

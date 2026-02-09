@@ -192,7 +192,9 @@ quickscale --help
 quickscale --version
 
 # Create a project configuration (interactive wizard)
-quickscale plan <project_name>
+quickscale plan <project_slug>
+# Optional explicit Python package name
+quickscale plan <project_slug> --package <python_package>
 
 # Execute the configuration to generate a project
 quickscale apply
@@ -466,7 +468,7 @@ Run these scripts from the repository root.
 
 **CLI Commands (Current)**:
 - CLI help: `quickscale --help`
-- Create config: `quickscale plan <name>`
+- Create config: `quickscale plan <project-slug>`
 - Apply config: `quickscale apply [config.yml]`
 
 **CLI Commands (Development)**:

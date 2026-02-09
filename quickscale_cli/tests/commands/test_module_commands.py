@@ -1,5 +1,6 @@
 """Tests for module_commands.py - module management functionality."""
 
+from pathlib import Path
 from unittest.mock import Mock, patch
 
 import click
@@ -110,43 +111,79 @@ class TestValidateRemoteBranch:
 class TestCheckAuthModuleMigrations:
     """Tests for _check_auth_module_migrations function."""
 
-    @patch("quickscale_cli.commands.module_commands.has_migrations_been_run")
-    def test_no_migrations_run(self, mock_migrations):
+    @patch("quickscale_cli.commands.module_commands.assess_auth_migration_state")
+    def test_no_migrations_run(self, mock_assess):
         """Test check passes when no migrations have been run."""
-        mock_migrations.return_value = False
+        mock_assess.return_value = Mock(
+            compatible=True,
+            incompatible=False,
+            unverifiable=False,
+            reason="compatible",
+        )
 
-        result = _check_auth_module_migrations(non_interactive=True)
+        result = _check_auth_module_migrations(Path("/tmp"), non_interactive=True)
 
         assert result is True
 
-    @patch("quickscale_cli.commands.module_commands.has_migrations_been_run")
-    def test_migrations_exist_non_interactive(self, mock_migrations):
+    @patch("quickscale_cli.commands.module_commands.format_auth_migration_remediation")
+    @patch("quickscale_cli.commands.module_commands.assess_auth_migration_state")
+    def test_migrations_exist_non_interactive(self, mock_assess, mock_remediation):
         """Test check fails in non-interactive mode when migrations exist."""
-        mock_migrations.return_value = True
+        mock_assess.return_value = Mock(
+            compatible=False,
+            incompatible=True,
+            unverifiable=False,
+            reason="incompatible",
+        )
+        mock_remediation.return_value = "fix steps"
 
-        result = _check_auth_module_migrations(non_interactive=True)
+        result = _check_auth_module_migrations(Path("/tmp"), non_interactive=True)
 
         assert result is False
 
-    @patch("quickscale_cli.commands.module_commands.has_migrations_been_run")
+    @patch("quickscale_cli.commands.module_commands.format_auth_migration_remediation")
+    @patch("quickscale_cli.commands.module_commands.assess_auth_migration_state")
     @patch("quickscale_cli.commands.module_commands.click.confirm")
-    def test_migrations_exist_user_confirms(self, mock_confirm, mock_migrations):
+    def test_migrations_exist_user_confirms(
+        self,
+        mock_confirm,
+        mock_assess,
+        mock_remediation,
+    ):
         """Test check passes when user confirms to continue despite migrations."""
-        mock_migrations.return_value = True
+        mock_assess.return_value = Mock(
+            compatible=False,
+            incompatible=True,
+            unverifiable=False,
+            reason="incompatible",
+        )
+        mock_remediation.return_value = "fix steps"
         mock_confirm.return_value = True
 
-        result = _check_auth_module_migrations(non_interactive=False)
+        result = _check_auth_module_migrations(Path("/tmp"), non_interactive=False)
 
         assert result is True
 
-    @patch("quickscale_cli.commands.module_commands.has_migrations_been_run")
+    @patch("quickscale_cli.commands.module_commands.format_auth_migration_remediation")
+    @patch("quickscale_cli.commands.module_commands.assess_auth_migration_state")
     @patch("quickscale_cli.commands.module_commands.click.confirm")
-    def test_migrations_exist_user_cancels(self, mock_confirm, mock_migrations):
+    def test_migrations_exist_user_cancels(
+        self,
+        mock_confirm,
+        mock_assess,
+        mock_remediation,
+    ):
         """Test check fails when user cancels."""
-        mock_migrations.return_value = True
+        mock_assess.return_value = Mock(
+            compatible=False,
+            incompatible=True,
+            unverifiable=False,
+            reason="incompatible",
+        )
+        mock_remediation.return_value = "fix steps"
         mock_confirm.return_value = False
 
-        result = _check_auth_module_migrations(non_interactive=False)
+        result = _check_auth_module_migrations(Path("/tmp"), non_interactive=False)
 
         assert result is False
 

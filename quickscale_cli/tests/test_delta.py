@@ -22,7 +22,7 @@ class TestComputeDelta:
         # Desired config
         config = QuickScaleConfig(
             version="1",
-            project=ProjectConfig(name="myapp", theme="showcase_html"),
+            project=ProjectConfig(slug="myapp", package="myapp", theme="showcase_html"),
             modules={
                 "auth": ModuleConfig(name="auth", options={}),
                 "blog": ModuleConfig(name="blog", options={}),
@@ -45,7 +45,7 @@ class TestComputeDelta:
         # Desired config
         config = QuickScaleConfig(
             version="1",
-            project=ProjectConfig(name="myapp", theme="showcase_html"),
+            project=ProjectConfig(slug="myapp", package="myapp", theme="showcase_html"),
             modules={
                 "auth": ModuleConfig(name="auth", options={}),
             },
@@ -55,7 +55,7 @@ class TestComputeDelta:
         # Existing state matches config
         state = QuickScaleState(
             version="1",
-            project=ProjectState(name="myapp", theme="showcase_html"),
+            project=ProjectState(slug="myapp", package="myapp", theme="showcase_html"),
             modules={
                 "auth": ModuleState(name="auth", options={}),
             },
@@ -74,7 +74,7 @@ class TestComputeDelta:
         # Desired config with new module
         config = QuickScaleConfig(
             version="1",
-            project=ProjectConfig(name="myapp", theme="showcase_html"),
+            project=ProjectConfig(slug="myapp", package="myapp", theme="showcase_html"),
             modules={
                 "auth": ModuleConfig(name="auth", options={}),
                 "blog": ModuleConfig(name="blog", options={}),
@@ -85,7 +85,7 @@ class TestComputeDelta:
         # Existing state without blog module
         state = QuickScaleState(
             version="1",
-            project=ProjectState(name="myapp", theme="showcase_html"),
+            project=ProjectState(slug="myapp", package="myapp", theme="showcase_html"),
             modules={
                 "auth": ModuleState(name="auth", options={}),
             },
@@ -104,7 +104,7 @@ class TestComputeDelta:
         # Desired config without blog module
         config = QuickScaleConfig(
             version="1",
-            project=ProjectConfig(name="myapp", theme="showcase_html"),
+            project=ProjectConfig(slug="myapp", package="myapp", theme="showcase_html"),
             modules={
                 "auth": ModuleConfig(name="auth", options={}),
             },
@@ -114,7 +114,7 @@ class TestComputeDelta:
         # Existing state with blog module
         state = QuickScaleState(
             version="1",
-            project=ProjectState(name="myapp", theme="showcase_html"),
+            project=ProjectState(slug="myapp", package="myapp", theme="showcase_html"),
             modules={
                 "auth": ModuleState(name="auth", options={}),
                 "blog": ModuleState(name="blog", options={}),
@@ -134,7 +134,7 @@ class TestComputeDelta:
         # Desired config with different theme
         config = QuickScaleConfig(
             version="1",
-            project=ProjectConfig(name="myapp", theme="showcase_htmx"),
+            project=ProjectConfig(slug="myapp", package="myapp", theme="showcase_htmx"),
             modules={
                 "auth": ModuleConfig(name="auth", options={}),
             },
@@ -144,7 +144,7 @@ class TestComputeDelta:
         # Existing state with different theme
         state = QuickScaleState(
             version="1",
-            project=ProjectState(name="myapp", theme="showcase_html"),
+            project=ProjectState(slug="myapp", package="myapp", theme="showcase_html"),
             modules={
                 "auth": ModuleState(name="auth", options={}),
             },
@@ -165,7 +165,7 @@ class TestComputeDelta:
         # Desired config
         config = QuickScaleConfig(
             version="1",
-            project=ProjectConfig(name="myapp", theme="showcase_html"),
+            project=ProjectConfig(slug="myapp", package="myapp", theme="showcase_html"),
             modules={
                 "auth": ModuleConfig(name="auth", options={}),
                 "listings": ModuleConfig(name="listings", options={}),
@@ -176,7 +176,7 @@ class TestComputeDelta:
         # Existing state
         state = QuickScaleState(
             version="1",
-            project=ProjectState(name="myapp", theme="showcase_html"),
+            project=ProjectState(slug="myapp", package="myapp", theme="showcase_html"),
             modules={
                 "auth": ModuleState(name="auth", options={}),
                 "blog": ModuleState(name="blog", options={}),
@@ -200,7 +200,7 @@ class TestFormatDelta:
         # Create delta with no changes
         config = QuickScaleConfig(
             version="1",
-            project=ProjectConfig(name="myapp", theme="showcase_html"),
+            project=ProjectConfig(slug="myapp", package="myapp", theme="showcase_html"),
             modules={
                 "auth": ModuleConfig(name="auth", options={}),
             },
@@ -208,7 +208,7 @@ class TestFormatDelta:
         )
         state = QuickScaleState(
             version="1",
-            project=ProjectState(name="myapp", theme="showcase_html"),
+            project=ProjectState(slug="myapp", package="myapp", theme="showcase_html"),
             modules={
                 "auth": ModuleState(name="auth", options={}),
             },
@@ -224,7 +224,7 @@ class TestFormatDelta:
         """Test formatting delta with modules to add"""
         config = QuickScaleConfig(
             version="1",
-            project=ProjectConfig(name="myapp", theme="showcase_html"),
+            project=ProjectConfig(slug="myapp", package="myapp", theme="showcase_html"),
             modules={
                 "auth": ModuleConfig(name="auth", options={}),
                 "blog": ModuleConfig(name="blog", options={}),
@@ -233,7 +233,7 @@ class TestFormatDelta:
         )
         state = QuickScaleState(
             version="1",
-            project=ProjectState(name="myapp", theme="showcase_html"),
+            project=ProjectState(slug="myapp", package="myapp", theme="showcase_html"),
             modules={
                 "auth": ModuleState(name="auth", options={}),
             },
@@ -252,7 +252,7 @@ class TestFormatDelta:
         """Test formatting delta with modules to remove"""
         config = QuickScaleConfig(
             version="1",
-            project=ProjectConfig(name="myapp", theme="showcase_html"),
+            project=ProjectConfig(slug="myapp", package="myapp", theme="showcase_html"),
             modules={
                 "auth": ModuleConfig(name="auth", options={}),
             },
@@ -260,7 +260,7 @@ class TestFormatDelta:
         )
         state = QuickScaleState(
             version="1",
-            project=ProjectState(name="myapp", theme="showcase_html"),
+            project=ProjectState(slug="myapp", package="myapp", theme="showcase_html"),
             modules={
                 "auth": ModuleState(name="auth", options={}),
                 "blog": ModuleState(name="blog", options={}),
@@ -278,13 +278,13 @@ class TestFormatDelta:
         """Test formatting delta with theme change"""
         config = QuickScaleConfig(
             version="1",
-            project=ProjectConfig(name="myapp", theme="showcase_htmx"),
+            project=ProjectConfig(slug="myapp", package="myapp", theme="showcase_htmx"),
             modules={},
             docker=DockerConfig(start=True, build=True),
         )
         state = QuickScaleState(
             version="1",
-            project=ProjectState(name="myapp", theme="showcase_html"),
+            project=ProjectState(slug="myapp", package="myapp", theme="showcase_html"),
             modules={},
         )
         delta = compute_delta(config, state)

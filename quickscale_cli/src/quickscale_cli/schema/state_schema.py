@@ -33,7 +33,8 @@ class ModuleState:
 class ProjectState:
     """State tracking for the generated project"""
 
-    name: str
+    slug: str
+    package: str
     theme: str
     created_at: str = field(default_factory=lambda: datetime.now().isoformat())
     last_applied: str = field(default_factory=lambda: datetime.now().isoformat())
@@ -87,9 +88,35 @@ class StateManager:
             if not isinstance(project_data, dict):
                 raise StateError("'project' in state file must be a mapping")
 
+            if "name" in project_data and (
+                "slug" not in project_data or "package" not in project_data
+            ):
+                raise StateError(
+                    "Legacy state schema detected (project.name). "
+                    "This version requires project.slug and project.package. "
+                    "Regenerate state by re-running 'quickscale apply' with a "
+                    "quickscale.yml that defines project.slug/project.package."
+                )
+
+            project_slug = project_data.get("slug")
+            project_package = project_data.get("package")
+            project_theme = project_data.get("theme")
+
+            if not isinstance(project_slug, str) or not project_slug:
+                raise StateError("State file project.slug must be a non-empty string")
+
+            if not isinstance(project_package, str) or not project_package:
+                raise StateError(
+                    "State file project.package must be a non-empty string"
+                )
+
+            if not isinstance(project_theme, str) or not project_theme:
+                raise StateError("State file project.theme must be a non-empty string")
+
             project = ProjectState(
-                name=project_data.get("name", ""),
-                theme=project_data.get("theme", ""),
+                slug=project_slug,
+                package=project_package,
+                theme=project_theme,
                 created_at=project_data.get("created_at", datetime.now().isoformat()),
                 last_applied=project_data.get(
                     "last_applied", datetime.now().isoformat()
@@ -144,7 +171,8 @@ class StateManager:
             data: dict[str, Any] = {
                 "version": state.version,
                 "project": {
-                    "name": state.project.name,
+                    "slug": state.project.slug,
+                    "package": state.project.package,
                     "theme": state.project.theme,
                     "created_at": state.project.created_at,
                     "last_applied": state.project.last_applied,

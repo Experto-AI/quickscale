@@ -38,7 +38,8 @@ class TestPlanAddBasic:
                     """
 version: "1"
 project:
-  name: testapp
+  slug: testapp
+  package: testapp
   theme: showcase_html
 docker:
   start: false
@@ -62,7 +63,8 @@ docker:
                     {
                         "version": "1",
                         "project": {
-                            "name": "testapp",
+                            "slug": "testapp",
+                            "package": "testapp",
                             "theme": "showcase_html",
                             "created_at": "2025-12-01T10:00:00",
                             "last_applied": "2025-12-01T12:00:00",
@@ -92,7 +94,8 @@ class TestPlanAddShowsCurrentModules:
                     {
                         "version": "1",
                         "project": {
-                            "name": "testapp",
+                            "slug": "testapp",
+                            "package": "testapp",
                             "theme": "showcase_html",
                             "created_at": "2025-12-01T10:00:00",
                             "last_applied": "2025-12-01T12:00:00",
@@ -114,7 +117,8 @@ class TestPlanAddShowsCurrentModules:
                     """
 version: "1"
 project:
-  name: testapp
+  slug: testapp
+  package: testapp
   theme: showcase_html
 modules:
   auth:
@@ -144,7 +148,8 @@ class TestPlanAddSelectsNewModules:
                     {
                         "version": "1",
                         "project": {
-                            "name": "testapp",
+                            "slug": "testapp",
+                            "package": "testapp",
                             "theme": "showcase_html",
                             "created_at": "2025-12-01T10:00:00",
                             "last_applied": "2025-12-01T12:00:00",
@@ -166,7 +171,8 @@ class TestPlanAddSelectsNewModules:
                     """
 version: "1"
 project:
-  name: testapp
+  slug: testapp
+  package: testapp
   theme: showcase_html
 modules:
   auth:
@@ -203,7 +209,8 @@ docker:
                     """
 version: "1"
 project:
-  name: testapp
+  slug: testapp
+  package: testapp
   theme: showcase_html
 docker:
   start: false
@@ -232,7 +239,8 @@ class TestPlanAddNoModulesSelected:
                     """
 version: "1"
 project:
-  name: testapp
+  slug: testapp
+  package: testapp
   theme: showcase_html
 docker:
   start: false
@@ -261,7 +269,8 @@ class TestPlanAddAllModulesInstalled:
                     {
                         "version": "1",
                         "project": {
-                            "name": "testapp",
+                            "slug": "testapp",
+                            "package": "testapp",
                             "theme": "showcase_html",
                             "created_at": "2025-12-01T10:00:00",
                             "last_applied": "2025-12-01T12:00:00",
@@ -301,7 +310,8 @@ class TestPlanAddAllModulesInstalled:
                     """
 version: "1"
 project:
-  name: testapp
+  slug: testapp
+  package: testapp
   theme: showcase_html
 modules:
   auth:

@@ -66,7 +66,9 @@ class TestUpCommand:
         runner = CliRunner()
 
         with runner.isolated_filesystem():
-            Path("quickscale.yml").write_text("version: '1'\nproject:\n  name: test\n")
+            Path("quickscale.yml").write_text(
+                "version: '1'\nproject:\n  slug: test\n  package: test\n"
+            )
 
             with patch(
                 "quickscale_cli.commands.development_commands.is_in_quickscale_project"

@@ -109,7 +109,8 @@ def _load_module_manifests(
 def _display_project_info(state: QuickScaleState) -> None:
     """Display project information from state"""
     click.echo("\n📁 Project Information:")
-    click.echo(f"   Name: {state.project.name}")
+    click.echo(f"   Slug: {state.project.slug}")
+    click.echo(f"   Package: {state.project.package}")
     click.echo(f"   Theme: {state.project.theme}")
     click.echo(f"   Created: {_format_datetime(state.project.created_at)}")
     click.echo(f"   Last Applied: {_format_datetime(state.project.last_applied)}")
@@ -205,7 +206,8 @@ def _build_json_output(
         output["state"] = {
             "version": state.version,
             "project": {
-                "name": state.project.name,
+                "slug": state.project.slug,
+                "package": state.project.package,
                 "theme": state.project.theme,
                 "created_at": state.project.created_at,
                 "last_applied": state.project.last_applied,
@@ -224,7 +226,8 @@ def _build_json_output(
         output["config"] = {
             "version": config.version,
             "project": {
-                "name": config.project.name,
+                "slug": config.project.slug,
+                "package": config.project.package,
                 "theme": config.project.theme,
             },
             "modules": list(config.modules.keys()),

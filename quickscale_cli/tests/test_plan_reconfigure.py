@@ -31,13 +31,14 @@ class TestPlanReconfigureBasic:
 
     def test_get_project_info_fallback_uses_react_default(self):
         """Fallback project info should use showcase_react when state/config missing."""
-        project_name, theme = _get_project_info_for_reconfig(
+        project_slug, package_name, theme = _get_project_info_for_reconfig(
             state=None,
             existing_config=None,
             project_path=Path("fallback-project"),
         )
 
-        assert project_name == "fallback-project"
+        assert project_slug == "fallback-project"
+        assert package_name == "fallback_project"
         assert theme == "showcase_react"
 
 
@@ -54,7 +55,8 @@ class TestPlanReconfigureWithState:
                     {
                         "version": "1",
                         "project": {
-                            "name": "testapp",
+                            "slug": "testapp",
+                            "package": "testapp",
                             "theme": "showcase_html",
                             "created_at": "2025-12-01T10:00:00",
                             "last_applied": "2025-12-01T12:00:00",
@@ -80,7 +82,8 @@ class TestPlanReconfigureWithState:
                     {
                         "version": "1",
                         "project": {
-                            "name": "testapp",
+                            "slug": "testapp",
+                            "package": "testapp",
                             "theme": "showcase_html",
                             "created_at": "2025-12-01T10:00:00",
                             "last_applied": "2025-12-01T12:00:00",
@@ -108,7 +111,8 @@ class TestPlanReconfigureShowsModules:
                     {
                         "version": "1",
                         "project": {
-                            "name": "testapp",
+                            "slug": "testapp",
+                            "package": "testapp",
                             "theme": "showcase_html",
                             "created_at": "2025-12-01T10:00:00",
                             "last_applied": "2025-12-01T12:00:00",
@@ -128,7 +132,8 @@ class TestPlanReconfigureShowsModules:
                     """
 version: "1"
 project:
-  name: testapp
+  slug: testapp
+  package: testapp
   theme: showcase_html
 modules:
   auth:
@@ -151,7 +156,8 @@ docker:
                     {
                         "version": "1",
                         "project": {
-                            "name": "testapp",
+                            "slug": "testapp",
+                            "package": "testapp",
                             "theme": "showcase_html",
                             "created_at": "2025-12-01T10:00:00",
                             "last_applied": "2025-12-01T12:00:00",
@@ -172,7 +178,8 @@ docker:
                     """
 version: "1"
 project:
-  name: testapp
+  slug: testapp
+  package: testapp
   theme: showcase_html
 modules:
   auth:
@@ -201,7 +208,8 @@ class TestPlanReconfigureDocker:
                     {
                         "version": "1",
                         "project": {
-                            "name": "testapp",
+                            "slug": "testapp",
+                            "package": "testapp",
                             "theme": "showcase_html",
                             "created_at": "2025-12-01T10:00:00",
                             "last_applied": "2025-12-01T12:00:00",
@@ -234,7 +242,8 @@ class TestPlanReconfigureAddModules:
                     {
                         "version": "1",
                         "project": {
-                            "name": "testapp",
+                            "slug": "testapp",
+                            "package": "testapp",
                             "theme": "showcase_html",
                             "created_at": "2025-12-01T10:00:00",
                             "last_applied": "2025-12-01T12:00:00",
@@ -266,7 +275,8 @@ class TestPlanReconfigureSavesConfig:
                     {
                         "version": "1",
                         "project": {
-                            "name": "testapp",
+                            "slug": "testapp",
+                            "package": "testapp",
                             "theme": "showcase_html",
                             "created_at": "2025-12-01T10:00:00",
                             "last_applied": "2025-12-01T12:00:00",
@@ -295,7 +305,8 @@ class TestPlanReconfigureSavesConfig:
                     {
                         "version": "1",
                         "project": {
-                            "name": "testapp",
+                            "slug": "testapp",
+                            "package": "testapp",
                             "theme": "showcase_html",
                             "created_at": "2025-12-01T10:00:00",
                             "last_applied": "2025-12-01T12:00:00",

@@ -11,6 +11,7 @@ from pathlib import Path
 import click
 
 from quickscale_cli.commands.module_commands import embed_module
+from quickscale_cli.utils.module_wiring_manager import regenerate_managed_wiring
 from quickscale_cli.schema.config_schema import (
     ConfigValidationError,
     QuickScaleConfig,
@@ -41,6 +42,15 @@ class ApplyContext:
     existing_state: QuickScaleState | None
     manifests: dict[str, ModuleManifest]
     delta: ConfigDelta
+
+
+@dataclass
+class EmbedModulesResult:
+    """Result for module embedding step."""
+
+    success: bool
+    embedded_modules: list[str]
+    failed_module: str | None = None
 
 
 def _run_command(
@@ -89,7 +99,10 @@ def _run_command(
 def _generate_project(config: QuickScaleConfig, output_path: Path) -> bool:
     """Generate project using ProjectGenerator"""
     try:
-        click.echo(f"⏳ Generating project: {config.project.name}...")
+        click.echo(
+            f"⏳ Generating project: {config.project.slug} "
+            f"(package: {config.project.package})..."
+        )
 
         # Validate theme availability
         if config.project.theme == "showcase_htmx":
@@ -110,7 +123,11 @@ def _generate_project(config: QuickScaleConfig, output_path: Path) -> bool:
             return False
 
         generator = ProjectGenerator(theme=config.project.theme)
-        generator.generate(config.project.name, output_path)
+        generator.generate(
+            config.project.slug,
+            output_path,
+            package_name=config.project.package,
+        )
 
         click.secho(f"✅ Project generated: {output_path}", fg="green")
         return True
@@ -352,7 +369,10 @@ def _load_and_validate_config(config_path: Path) -> QuickScaleConfig:
         click.secho(
             f"❌ Configuration file not found: {config_path}", fg="red", err=True
         )
-        click.echo("\n💡 Create a configuration with: quickscale plan <name>", err=True)
+        click.echo(
+            "\n💡 Create a configuration with: quickscale plan <project-slug>",
+            err=True,
+        )
         raise click.Abort()
 
     click.echo(f"\n📋 Reading configuration: {config_path}")
@@ -367,18 +387,19 @@ def _load_and_validate_config(config_path: Path) -> QuickScaleConfig:
         raise click.Abort()
 
 
-def _determine_output_path(config_path: Path, project_name: str) -> Path:
+def _determine_output_path(config_path: Path, project_slug: str) -> Path:
     """Determine output directory for project."""
     config_path = config_path.resolve()
-    if config_path.parent.name == project_name:
+    if config_path.parent.name == project_slug:
         return config_path.parent
-    return Path.cwd() / project_name
+    return Path.cwd() / project_slug
 
 
 def _display_config_summary(qs_config: QuickScaleConfig) -> None:
     """Display configuration summary."""
     click.echo("\n🚀 Applying configuration:")
-    click.echo(f"   Project: {qs_config.project.name}")
+    click.echo(f"   Project slug: {qs_config.project.slug}")
+    click.echo(f"   Python package: {qs_config.project.package}")
     click.echo(f"   Theme: {qs_config.project.theme}")
     if qs_config.modules:
         click.echo(f"   Modules: {', '.join(qs_config.modules.keys())}")
@@ -495,7 +516,7 @@ def _generate_with_existing_config(
                     item.unlink()
 
     temp_dir = Path(tempfile.mkdtemp())
-    temp_project = temp_dir / qs_config.project.name
+    temp_project = temp_dir / qs_config.project.slug
 
     if not _generate_project(qs_config, temp_project):
         shutil.rmtree(temp_dir)
@@ -541,29 +562,34 @@ def _embed_modules_step(
     modules_to_embed: list[str],
     no_modules: bool,
     existing_state: QuickScaleState | None,
-) -> list[str]:
-    """Embed modules and return list of successfully embedded modules."""
+) -> EmbedModulesResult:
+    """Embed modules with fail-fast semantics."""
     embedded_modules: list[str] = []
 
     if no_modules or not modules_to_embed:
         if existing_state and not modules_to_embed:
             click.echo("⏭️  No new modules to embed")
-        return embedded_modules
+        return EmbedModulesResult(success=True, embedded_modules=embedded_modules)
 
     for module_name in modules_to_embed:
         if not _embed_module(output_path, module_name):
-            click.secho(
-                f"⚠️  Module embedding failed for {module_name}, continuing...",
-                fg="yellow",
-            )
-            # Commit any partial changes to allow subsequent modules to be embedded
             if not is_working_directory_clean(output_path):
                 _git_commit(output_path, f"Partial module: {module_name} (incomplete)")
+            click.secho(
+                f"❌ Module embedding failed for required module: {module_name}",
+                fg="red",
+                err=True,
+            )
+            return EmbedModulesResult(
+                success=False,
+                embedded_modules=embedded_modules,
+                failed_module=module_name,
+            )
         else:
             embedded_modules.append(module_name)
             _git_commit(output_path, f"Add module: {module_name}")
 
-    return embedded_modules
+    return EmbedModulesResult(success=True, embedded_modules=embedded_modules)
 
 
 def _run_post_generation_steps(output_path: Path) -> None:
@@ -590,7 +616,8 @@ def _save_project_state(
             new_state = QuickScaleState(
                 version="1",
                 project=ProjectState(
-                    name=qs_config.project.name,
+                    slug=qs_config.project.slug,
+                    package=qs_config.project.package,
                     theme=qs_config.project.theme,
                     created_at=datetime.now().isoformat(),
                     last_applied=datetime.now().isoformat(),
@@ -636,7 +663,7 @@ def _display_next_steps(
 
     click.echo("\n📋 Next steps:")
     if output_path != Path.cwd():
-        click.echo(f"  cd {qs_config.project.name}")
+        click.echo(f"  cd {qs_config.project.slug}")
 
     if qs_config.docker.start and not no_docker:
         if docker_started is False:
@@ -665,7 +692,7 @@ def _prepare_apply_context(config_path: Path) -> ApplyContext:
     qs_config = _load_and_validate_config(config_path)
 
     # Determine output path
-    output_path = _determine_output_path(config_path, qs_config.project.name)
+    output_path = _determine_output_path(config_path, qs_config.project.slug)
 
     # Load existing state if project exists
     state_manager = StateManager(output_path)
@@ -690,6 +717,57 @@ def _prepare_apply_context(config_path: Path) -> ApplyContext:
         manifests=manifests,
         delta=delta,
     )
+
+
+def _regenerate_managed_wiring_for_apply(
+    ctx: ApplyContext,
+    embedded_modules: list[str],
+) -> bool:
+    """Regenerate managed module wiring files after embed/config changes."""
+    desired_module_names = sorted(ctx.qs_config.modules.keys())
+    if ctx.existing_state is None:
+        selected_modules = embedded_modules
+    else:
+        # Existing state may include unchanged modules that should remain wired.
+        selected_modules = sorted(
+            set(ctx.delta.modules_unchanged) | set(embedded_modules)
+        )
+
+    # If no desired modules are configured, explicitly render empty managed files.
+    if not desired_module_names:
+        selected_modules = []
+
+    options = {
+        module_name: module_config.options
+        for module_name, module_config in ctx.qs_config.modules.items()
+    }
+
+    success, message = regenerate_managed_wiring(
+        ctx.output_path,
+        module_names=selected_modules,
+        option_overrides=options,
+        project_package=ctx.qs_config.project.package,
+    )
+    if success:
+        click.secho("✅ Managed module wiring regenerated", fg="green")
+        return True
+
+    click.secho(f"❌ Managed wiring regeneration failed: {message}", fg="red", err=True)
+    return False
+
+
+def _print_apply_failure_summary(failed_step: str, reason: str) -> None:
+    """Print explicit failure summary and skipped steps."""
+    click.echo("\n" + "=" * 50)
+    click.secho("❌ Apply failed", fg="red", bold=True)
+    click.echo("=" * 50)
+    click.echo(f"\nFailed step: {failed_step}")
+    click.echo(f"Reason: {reason}")
+    click.echo("\nSkipped downstream steps:")
+    click.echo("  • poetry install")
+    click.echo("  • migrations")
+    click.echo("  • docker start")
+    click.echo("  • success completion output")
 
 
 def _execute_apply_steps(
@@ -722,17 +800,50 @@ def _execute_apply_steps(
         if ctx.existing_state
         else list(ctx.qs_config.modules.keys())
     )
-    embedded_modules = _embed_modules_step(
+    embed_result = _embed_modules_step(
         ctx.output_path, modules_to_embed, no_modules, ctx.existing_state
     )
+    embedded_modules = embed_result.embedded_modules
+
+    if not embed_result.success:
+        # Persist successful partial embeds (explicit no-rollback contract).
+        _save_project_state(
+            ctx.output_path,
+            ctx.qs_config,
+            ctx.existing_state,
+            embedded_modules,
+            ctx.delta,
+        )
+        _print_apply_failure_summary(
+            failed_step="module embedding",
+            reason=f"required module '{embed_result.failed_module}' failed to embed",
+        )
+        raise click.Abort()
+
+    # Deterministic managed wiring generation for selected modules.
+    if not _regenerate_managed_wiring_for_apply(ctx, embedded_modules):
+        _save_project_state(
+            ctx.output_path,
+            ctx.qs_config,
+            ctx.existing_state,
+            embedded_modules,
+            ctx.delta,
+        )
+        _print_apply_failure_summary(
+            failed_step="managed module wiring generation",
+            reason="unable to render settings/modules.py and urls_modules.py",
+        )
+        raise click.Abort()
 
     # Run post-generation steps
     _run_post_generation_steps(ctx.output_path)
 
     # Apply mutable configuration changes
     if ctx.existing_state and ctx.delta.has_mutable_config_changes:
-        if not _apply_mutable_config(ctx.output_path, ctx.delta, ctx.manifests):
-            click.secho("⚠️  Some config changes failed to apply", fg="yellow")
+        click.secho(
+            "✅ Mutable configuration changes applied via managed wiring",
+            fg="green",
+        )
 
     # Start Docker
     docker_started: bool | None = None
@@ -806,10 +917,11 @@ def apply(
       1. Validate configuration
       2. Generate project
       3. Initialize git + initial commit
-      4. Embed modules (if configured)
-      5. Run poetry install
-      6. Run migrations
-      7. Start Docker (if configured)
+      4. Embed modules (if configured, fail-fast on required module failure)
+      5. Regenerate managed module wiring files
+      6. Run poetry install
+      7. Run migrations
+      8. Start Docker (if configured)
     """
     # Prepare context
     ctx = _prepare_apply_context(Path(config))

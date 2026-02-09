@@ -7,6 +7,7 @@ import click
 import pytest
 
 from quickscale_cli.commands.apply_command import (
+    EmbedModulesResult,
     _run_command,
     _generate_project,
     _init_git,
@@ -95,7 +96,7 @@ class TestGenerateProject:
     def test_success(self, mock_gen_cls):
         """Test successful project generation"""
         mock_config = Mock()
-        mock_config.project.name = "myapp"
+        mock_config.project.slug = "myapp"
         mock_config.project.theme = "showcase_html"
         result = _generate_project(mock_config, Path("/tmp/myapp"))
         assert result is True
@@ -104,7 +105,7 @@ class TestGenerateProject:
     def test_showcase_htmx_not_implemented(self, mock_gen_cls):
         """Test showcase_htmx theme is rejected"""
         mock_config = Mock()
-        mock_config.project.name = "myapp"
+        mock_config.project.slug = "myapp"
         mock_config.project.theme = "showcase_htmx"
         result = _generate_project(mock_config, Path("/tmp/myapp"))
         assert result is False
@@ -114,7 +115,7 @@ class TestGenerateProject:
         """Test FileExistsError handling"""
         mock_gen_cls.return_value.generate.side_effect = FileExistsError()
         mock_config = Mock()
-        mock_config.project.name = "myapp"
+        mock_config.project.slug = "myapp"
         mock_config.project.theme = "showcase_html"
         result = _generate_project(mock_config, Path("/tmp/myapp"))
         assert result is False
@@ -124,7 +125,7 @@ class TestGenerateProject:
         """Test ValueError handling"""
         mock_gen_cls.return_value.generate.side_effect = ValueError("bad config")
         mock_config = Mock()
-        mock_config.project.name = "myapp"
+        mock_config.project.slug = "myapp"
         mock_config.project.theme = "showcase_html"
         result = _generate_project(mock_config, Path("/tmp/myapp"))
         assert result is False
@@ -134,7 +135,7 @@ class TestGenerateProject:
         """Test generic exception handling"""
         mock_gen_cls.return_value.generate.side_effect = RuntimeError("oops")
         mock_config = Mock()
-        mock_config.project.name = "myapp"
+        mock_config.project.slug = "myapp"
         mock_config.project.theme = "showcase_html"
         result = _generate_project(mock_config, Path("/tmp/myapp"))
         assert result is False
@@ -409,10 +410,10 @@ class TestLoadAndValidateConfig:
         """Test valid config loading"""
         config = tmp_path / "quickscale.yml"
         config.write_text(
-            'version: "1"\nproject:\n  name: myapp\n  theme: showcase_html\ndocker:\n  start: false\n'
+            'version: "1"\nproject:\n  slug: myapp\n  package: myapp\n  theme: showcase_html\ndocker:\n  start: false\n'
         )
         result = _load_and_validate_config(config)
-        assert result.project.name == "myapp"
+        assert result.project.slug == "myapp"
 
     def test_read_error(self, tmp_path):
         """Test generic read error"""
@@ -460,7 +461,7 @@ class TestDisplayConfigSummary:
     def test_with_modules(self):
         """Test config summary display with modules"""
         config = Mock()
-        config.project.name = "myapp"
+        config.project.slug = "myapp"
         config.project.theme = "showcase_html"
         config.modules = {"auth": Mock(), "blog": Mock()}
         config.docker.start = True
@@ -470,7 +471,7 @@ class TestDisplayConfigSummary:
     def test_without_modules(self):
         """Test config summary display without modules"""
         config = Mock()
-        config.project.name = "myapp"
+        config.project.slug = "myapp"
         config.project.theme = "showcase_html"
         config.modules = {}
         config.docker.start = False
@@ -654,17 +655,29 @@ class TestEmbedModulesStep:
     def test_no_modules(self):
         """Test with no modules flag"""
         result = _embed_modules_step(Path("/tmp"), ["auth"], True, None)
-        assert result == []
+        assert result == EmbedModulesResult(
+            success=True,
+            embedded_modules=[],
+            failed_module=None,
+        )
 
     def test_empty_modules_list(self):
         """Test with empty modules list"""
         result = _embed_modules_step(Path("/tmp"), [], False, None)
-        assert result == []
+        assert result == EmbedModulesResult(
+            success=True,
+            embedded_modules=[],
+            failed_module=None,
+        )
 
     def test_empty_modules_existing_state(self):
         """Test empty modules with existing state"""
         result = _embed_modules_step(Path("/tmp"), [], False, Mock())
-        assert result == []
+        assert result == EmbedModulesResult(
+            success=True,
+            embedded_modules=[],
+            failed_module=None,
+        )
 
     @patch("quickscale_cli.commands.apply_command._git_commit")
     @patch("quickscale_cli.commands.apply_command._embed_module")
@@ -673,18 +686,26 @@ class TestEmbedModulesStep:
         mock_embed.return_value = True
         mock_commit.return_value = True
         result = _embed_modules_step(Path("/tmp"), ["auth"], False, None)
-        assert result == ["auth"]
+        assert result == EmbedModulesResult(
+            success=True,
+            embedded_modules=["auth"],
+            failed_module=None,
+        )
 
     @patch("quickscale_cli.commands.apply_command.is_working_directory_clean")
     @patch("quickscale_cli.commands.apply_command._git_commit")
     @patch("quickscale_cli.commands.apply_command._embed_module")
     def test_failed_embed(self, mock_embed, mock_commit, mock_clean):
-        """Test failed module embedding continues"""
+        """Test failed module embedding fails fast."""
         mock_embed.return_value = False
         mock_clean.return_value = False
         mock_commit.return_value = True
         result = _embed_modules_step(Path("/tmp"), ["auth"], False, None)
-        assert result == []
+        assert result == EmbedModulesResult(
+            success=False,
+            embedded_modules=[],
+            failed_module="auth",
+        )
 
 
 # ============================================================================
@@ -733,7 +754,8 @@ class TestSaveProjectState:
     def test_new_project_state(self, tmp_path):
         """Test saving state for new project"""
         config = Mock()
-        config.project.name = "myapp"
+        config.project.slug = "myapp"
+        config.project.package = "myapp"
         config.project.theme = "showcase_html"
         config.modules = {"auth": Mock(options={"key": "val"})}
         delta = Mock()
@@ -752,7 +774,8 @@ class TestSaveProjectState:
         existing_state.modules = {}
 
         config = Mock()
-        config.project.name = "myapp"
+        config.project.slug = "myapp"
+        config.project.package = "myapp"
         config.project.theme = "showcase_html"
         config.modules = {"blog": Mock(options={})}
         delta = Mock()
@@ -763,7 +786,8 @@ class TestSaveProjectState:
     def test_save_state_error(self, tmp_path):
         """Test state save error handling"""
         config = Mock()
-        config.project.name = "myapp"
+        config.project.slug = "myapp"
+        config.project.package = "myapp"
         config.project.theme = "showcase_html"
         config.modules = {}
         delta = Mock()
@@ -787,14 +811,14 @@ class TestDisplayNextSteps:
         """Test next steps display with Docker"""
         monkeypatch.chdir(tmp_path)
         config = Mock()
-        config.project.name = "myapp"
+        config.project.slug = "myapp"
         config.docker.start = True
         _display_next_steps(tmp_path / "myapp", config, False)
 
     def test_without_docker(self, monkeypatch, tmp_path):
         """Test next steps display without Docker"""
         config = Mock()
-        config.project.name = "myapp"
+        config.project.slug = "myapp"
         config.docker.start = False
         _display_next_steps(Path.cwd(), config, True)
 
@@ -802,7 +826,7 @@ class TestDisplayNextSteps:
         """Test next steps display when Docker auto-start fails."""
         monkeypatch.chdir(tmp_path)
         config = Mock()
-        config.project.name = "myapp"
+        config.project.slug = "myapp"
         config.docker.start = True
 
         _display_next_steps(tmp_path / "myapp", config, False, docker_started=False)
@@ -839,6 +863,7 @@ class TestExecuteApplySteps:
     @patch("quickscale_cli.commands.apply_command._save_project_state")
     @patch("quickscale_cli.commands.apply_command._start_docker")
     @patch("quickscale_cli.commands.apply_command._run_post_generation_steps")
+    @patch("quickscale_cli.commands.apply_command._regenerate_managed_wiring_for_apply")
     @patch("quickscale_cli.commands.apply_command._embed_modules_step")
     @patch("quickscale_cli.commands.apply_command._init_git_with_config")
     @patch("quickscale_cli.commands.apply_command._generate_new_project")
@@ -847,6 +872,7 @@ class TestExecuteApplySteps:
         mock_generate_new_project,
         mock_init_git,
         mock_embed_modules_step,
+        mock_regenerate_wiring,
         mock_run_post,
         mock_start_docker,
         mock_save_state,
@@ -854,7 +880,12 @@ class TestExecuteApplySteps:
         modules,
     ):
         """Docker startup flow should be identical for none/some/all module sets."""
-        mock_embed_modules_step.return_value = []
+        mock_embed_modules_step.return_value = EmbedModulesResult(
+            success=True,
+            embedded_modules=[],
+            failed_module=None,
+        )
+        mock_regenerate_wiring.return_value = True
         mock_start_docker.return_value = True
 
         ctx = Mock()
@@ -910,7 +941,7 @@ class TestGenerateWithExistingConfig:
         config_file.write_text("original config")
 
         mock_config = Mock()
-        mock_config.project.name = "myapp"
+        mock_config.project.slug = "myapp"
 
         # Mock _generate_project to create project structure in temp dir
         def fake_generate(config, path):
@@ -934,7 +965,7 @@ class TestGenerateWithExistingConfig:
 
         mock_gen.return_value = False
         mock_config = Mock()
-        mock_config.project.name = "myapp"
+        mock_config.project.slug = "myapp"
 
         with pytest.raises(click.Abort):
             _generate_with_existing_config(mock_config, output, config_file, False)
@@ -949,7 +980,7 @@ class TestGenerateWithExistingConfig:
         (output / "old_file.txt").touch()
 
         mock_config = Mock()
-        mock_config.project.name = "myapp"
+        mock_config.project.slug = "myapp"
 
         def fake_generate(config, path):
             path.mkdir(parents=True, exist_ok=True)

@@ -72,7 +72,8 @@ class TestApplyConfigValidation:
                     """
 version: "1"
 project:
-  name: 123invalid
+  slug: 123invalid
+  package: 123invalid
 """
                 )
 
@@ -90,7 +91,8 @@ project:
                     """
 version: "1"
 project:
-  name: myapp
+  slug: myapp
+  package: myapp
   theme: unknown_theme
 """
                 )
@@ -109,7 +111,8 @@ project:
                     """
 version: "1"
 project:
-  name: myapp
+  slug: myapp
+  package: myapp
 modules:
   unknown_module:
 """
@@ -134,7 +137,8 @@ class TestApplyDirectoryHandling:
                     """
 version: "1"
 project:
-  name: myapp
+  slug: myapp
+  package: myapp
 docker:
   start: false
 """
@@ -161,7 +165,8 @@ docker:
                     """
 version: "1"
 project:
-  name: myapp
+  slug: myapp
+  package: myapp
 docker:
   start: false
 """
@@ -191,7 +196,8 @@ class TestApplyProjectGeneration:
                     """
 version: "1"
 project:
-  name: testapp
+  slug: testapp
+  package: testapp
 docker:
   start: false
 """
@@ -218,7 +224,8 @@ docker:
                     """
 version: "1"
 project:
-  name: myapp
+  slug: myapp
+  package: myapp
 docker:
   start: false
 """
@@ -246,7 +253,8 @@ class TestApplyOptions:
                     """
 version: "1"
 project:
-  name: myapp
+  slug: myapp
+  package: myapp
 docker:
   start: true
   build: true
@@ -271,7 +279,8 @@ docker:
                     """
 version: "1"
 project:
-  name: myapp
+  slug: myapp
+  package: myapp
 modules:
   auth:
 docker:
@@ -301,7 +310,8 @@ class TestApplyConfigSummary:
                     """
 version: "1"
 project:
-  name: myapp
+  slug: myapp
+  package: myapp
   theme: showcase_html
 modules:
   auth:
@@ -335,7 +345,8 @@ class TestApplyUnimplementedThemes:
                     """
 version: "1"
 project:
-  name: myapp
+  slug: myapp
+  package: myapp
   theme: showcase_htmx
 docker:
   start: false
@@ -360,7 +371,8 @@ docker:
                     """
 version: "1"
 project:
-  name: myapp
+  slug: myapp
+  package: myapp
   theme: showcase_react
 docker:
   start: false
@@ -392,7 +404,8 @@ class TestApplyDefaultConfig:
                     """
 version: "1"
 project:
-  name: myapp
+  slug: myapp
+  package: myapp
 docker:
   start: false
 """
@@ -434,7 +447,8 @@ class TestApplyIncrementalApply:
                     """
 version: "1"
 project:
-  name: testapp
+  slug: testapp
+  package: testapp
   theme: showcase_html
 docker:
   start: false
@@ -460,7 +474,8 @@ docker:
                     """
 version: "1"
 project:
-  name: testapp
+  slug: testapp
+  package: testapp
   theme: showcase_html
 docker:
   start: false
@@ -481,7 +496,8 @@ docker:
                         """
 version: "1"
 project:
-  name: testapp
+  slug: testapp
+  package: testapp
   theme: showcase_html
 docker:
   start: false
@@ -512,7 +528,8 @@ docker:
                     """
 version: "1"
 project:
-  name: testapp
+  slug: testapp
+  package: testapp
   theme: showcase_html
 docker:
   start: false
@@ -532,7 +549,8 @@ docker:
                         """
 version: "1"
 project:
-  name: testapp
+  slug: testapp
+  package: testapp
   theme: showcase_html
 modules:
   auth:
@@ -569,7 +587,8 @@ class TestApplyStateRecovery:
                     """
 version: "1"
 project:
-  name: testapp
+  slug: testapp
+  package: testapp
   theme: showcase_html
 docker:
   start: false
@@ -595,7 +614,8 @@ docker:
                         """
 version: "1"
 project:
-  name: testapp
+  slug: testapp
+  package: testapp
   theme: showcase_html
 docker:
   start: false
@@ -625,7 +645,8 @@ docker:
                     {
                         "version": "1",
                         "project": {
-                            "name": "testapp",
+                            "slug": "testapp",
+                            "package": "testapp",
                             "theme": "showcase_html",
                             "created_at": "2025-01-01T00:00:00",
                             "last_applied": "2025-01-01T00:00:00",
@@ -648,7 +669,8 @@ docker:
                     """
 version: "1"
 project:
-  name: testapp
+  slug: testapp
+  package: testapp
   theme: showcase_html
 modules:
   auth:

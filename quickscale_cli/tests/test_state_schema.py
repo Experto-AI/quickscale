@@ -51,22 +51,23 @@ class TestProjectState:
     def test_project_state_creation(self):
         """Test creating a ProjectState"""
         project = ProjectState(
-            name="myapp",
+            slug="myapp",
+            package="myapp",
             theme="showcase_html",
             created_at="2025-01-01T00:00:00",
             last_applied="2025-01-02T00:00:00",
         )
 
-        assert project.name == "myapp"
+        assert project.slug == "myapp"
         assert project.theme == "showcase_html"
         assert project.created_at == "2025-01-01T00:00:00"
         assert project.last_applied == "2025-01-02T00:00:00"
 
     def test_project_state_defaults(self):
         """Test ProjectState with default timestamps"""
-        project = ProjectState(name="myapp", theme="showcase_html")
+        project = ProjectState(slug="myapp", package="myapp", theme="showcase_html")
 
-        assert project.name == "myapp"
+        assert project.slug == "myapp"
         assert project.theme == "showcase_html"
         assert isinstance(project.created_at, str)
         assert isinstance(project.last_applied, str)
@@ -77,7 +78,7 @@ class TestQuickScaleState:
 
     def test_quickscale_state_creation(self):
         """Test creating a complete QuickScaleState"""
-        project = ProjectState(name="myapp", theme="showcase_html")
+        project = ProjectState(slug="myapp", package="myapp", theme="showcase_html")
         auth_module = ModuleState(name="auth", version="1.0.0")
 
         state = QuickScaleState(
@@ -87,17 +88,17 @@ class TestQuickScaleState:
         )
 
         assert state.version == "1"
-        assert state.project.name == "myapp"
+        assert state.project.slug == "myapp"
         assert "auth" in state.modules
         assert state.modules["auth"].name == "auth"
 
     def test_quickscale_state_empty_modules(self):
         """Test QuickScaleState with no modules"""
-        project = ProjectState(name="myapp", theme="showcase_html")
+        project = ProjectState(slug="myapp", package="myapp", theme="showcase_html")
         state = QuickScaleState(version="1", project=project)
 
         assert state.version == "1"
-        assert state.project.name == "myapp"
+        assert state.project.slug == "myapp"
         assert state.modules == {}
 
 
@@ -130,7 +131,8 @@ class TestStateManager:
 
             # Create state
             project = ProjectState(
-                name="myapp",
+                slug="myapp",
+                package="myapp",
                 theme="showcase_html",
                 created_at="2025-01-01T00:00:00",
                 last_applied="2025-01-01T00:00:00",
@@ -159,7 +161,7 @@ class TestStateManager:
 
             assert loaded_state is not None
             assert loaded_state.version == "1"
-            assert loaded_state.project.name == "myapp"
+            assert loaded_state.project.slug == "myapp"
             assert loaded_state.project.theme == "showcase_html"
             assert "auth" in loaded_state.modules
             assert loaded_state.modules["auth"].name == "auth"
@@ -172,7 +174,7 @@ class TestStateManager:
             project_path = Path(tmpdir)
             manager = StateManager(project_path)
 
-            project = ProjectState(name="myapp", theme="showcase_html")
+            project = ProjectState(slug="myapp", package="myapp", theme="showcase_html")
             state = QuickScaleState(version="1", project=project)
 
             manager.save(state)
@@ -187,7 +189,8 @@ class TestStateManager:
             manager = StateManager(Path(tmpdir))
 
             project = ProjectState(
-                name="myapp",
+                slug="myapp",
+                package="myapp",
                 theme="showcase_html",
                 created_at="2025-01-01T00:00:00",
                 last_applied="2025-01-01T00:00:00",
@@ -249,7 +252,7 @@ class TestStateManager:
             manager = StateManager(project_path)
 
             # Create state without auth module
-            project = ProjectState(name="myapp", theme="showcase_html")
+            project = ProjectState(slug="myapp", package="myapp", theme="showcase_html")
             state = QuickScaleState(version="1", project=project, modules={})
             manager.save(state)
 
@@ -269,7 +272,7 @@ class TestStateManager:
             manager = StateManager(project_path)
 
             # Create state with auth module
-            project = ProjectState(name="myapp", theme="showcase_html")
+            project = ProjectState(slug="myapp", package="myapp", theme="showcase_html")
             auth_module = ModuleState(name="auth")
             state = QuickScaleState(
                 version="1", project=project, modules={"auth": auth_module}
@@ -290,7 +293,7 @@ class TestStateManager:
             manager = StateManager(project_path)
 
             # Create state with auth module
-            project = ProjectState(name="myapp", theme="showcase_html")
+            project = ProjectState(slug="myapp", package="myapp", theme="showcase_html")
             auth_module = ModuleState(name="auth")
             state = QuickScaleState(
                 version="1", project=project, modules={"auth": auth_module}

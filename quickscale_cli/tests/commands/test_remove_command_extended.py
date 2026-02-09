@@ -1,6 +1,5 @@
 """Extended tests for remove_command.py - covering helper functions and edge cases."""
 
-from pathlib import Path
 from unittest.mock import Mock, patch
 
 import yaml
@@ -9,14 +8,13 @@ from quickscale_cli.commands.remove_command import (
     _check_module_exists,
     _log_step_result,
     _perform_removal_steps,
+    _regenerate_managed_wiring_after_removal,
     _remove_module_directory,
     _show_module_not_found_error,
     _show_removal_warning,
     _show_success_message,
     _update_quickscale_yml,
-    _update_settings_py,
     _update_state_for_removal,
-    _update_urls_py,
     remove,
 )
 from quickscale_cli.schema.state_schema import StateManager
@@ -69,7 +67,7 @@ class TestUpdateQuickscaleYml:
     def test_no_modules_key(self, tmp_path):
         """Handle config without modules key"""
         (tmp_path / "quickscale.yml").write_text(
-            yaml.dump({"project": {"name": "test"}})
+            yaml.dump({"project": {"slug": "test", "package": "test"}})
         )
         result = _update_quickscale_yml(tmp_path, "auth")
         assert result is True
@@ -111,124 +109,32 @@ class TestRemoveModuleDirectory:
 
 
 # ============================================================================
-# _update_settings_py
+# _regenerate_managed_wiring_after_removal
 # ============================================================================
 
 
-class TestUpdateSettingsPy:
-    """Tests for _update_settings_py"""
+class TestRegenerateManagedWiringAfterRemoval:
+    """Tests for managed wiring regeneration after module removal."""
 
-    def test_settings_not_found(self, tmp_path):
-        """Return success when settings.py doesn't exist"""
-        project = tmp_path / "myproject"
-        project.mkdir()
-        success, msg = _update_settings_py(project, "auth")
+    @patch("quickscale_cli.commands.remove_command.regenerate_managed_wiring")
+    def test_success(self, mock_regenerate, tmp_path):
+        mock_regenerate.return_value = (True, "ok")
+        state = Mock(modules={"blog": Mock()})
+
+        success, msg = _regenerate_managed_wiring_after_removal(tmp_path, state)
+
         assert success is True
-        assert "not found" in msg
+        assert "Regenerated" in msg
 
-    def test_remove_module_references(self, tmp_path):
-        """Remove module references from settings"""
-        project = tmp_path / "myproject"
-        settings_dir = project / "myproject" / "settings"
-        settings_dir.mkdir(parents=True)
-        settings = settings_dir / "base.py"
-        settings.write_text(
-            "INSTALLED_APPS = [\n"
-            "    'django.contrib.admin',\n"
-            "    'quickscale_modules_auth',\n"
-            "\n"
-            "    'other_app',\n"
-            "]\n"
-        )
+    @patch("quickscale_cli.commands.remove_command.regenerate_managed_wiring")
+    def test_failure(self, mock_regenerate, tmp_path):
+        mock_regenerate.return_value = (False, "boom")
+        state = Mock(modules={})
 
-        success, msg = _update_settings_py(project, "auth")
-        assert success is True
-        assert "Removed" in msg
-        content = settings.read_text()
-        assert "quickscale_modules_auth" not in content
+        success, msg = _regenerate_managed_wiring_after_removal(tmp_path, state)
 
-    def test_no_module_references(self, tmp_path):
-        """No changes when module not referenced"""
-        project = tmp_path / "myproject"
-        settings_dir = project / "myproject" / "settings"
-        settings_dir.mkdir(parents=True)
-        settings = settings_dir / "base.py"
-        settings.write_text("INSTALLED_APPS = ['django.contrib.admin']\n")
-
-        success, msg = _update_settings_py(project, "auth")
-        assert success is True
-        assert "settings.py" in msg
-
-    def test_settings_write_error(self, tmp_path):
-        """Handle write error"""
-        project = tmp_path / "myproject"
-        settings_dir = project / "myproject" / "settings"
-        settings_dir.mkdir(parents=True)
-        settings = settings_dir / "base.py"
-        settings.write_text("quickscale_modules_auth\n")
-
-        with patch.object(Path, "write_text", side_effect=OSError("write error")):
-            success, msg = _update_settings_py(project, "auth")
-            assert success is False
-            assert "Failed" in msg
-
-
-# ============================================================================
-# _update_urls_py
-# ============================================================================
-
-
-class TestUpdateUrlsPy:
-    """Tests for _update_urls_py"""
-
-    def test_urls_not_found(self, tmp_path):
-        """Return success when urls.py doesn't exist"""
-        project = tmp_path / "myproject"
-        project.mkdir()
-        success, msg = _update_urls_py(project, "auth")
-        assert success is True
-        assert "not found" in msg
-
-    def test_remove_module_urls(self, tmp_path):
-        """Remove module URLs"""
-        project = tmp_path / "myproject"
-        (project / "myproject").mkdir(parents=True)
-        urls = project / "myproject" / "urls.py"
-        urls.write_text(
-            "urlpatterns = [\n"
-            '    path("admin/", admin.site.urls),\n'
-            '    path("auth/", include("quickscale_modules_auth.urls")),\n'
-            "]\n"
-        )
-
-        success, msg = _update_urls_py(project, "auth")
-        assert success is True
-        assert "Removed" in msg
-        content = urls.read_text()
-        assert "quickscale_modules_auth" not in content
-
-    def test_no_module_urls(self, tmp_path):
-        """No changes when module not in urls"""
-        project = tmp_path / "myproject"
-        (project / "myproject").mkdir(parents=True)
-        urls = project / "myproject" / "urls.py"
-        urls.write_text("urlpatterns = []\n")
-
-        success, msg = _update_urls_py(project, "auth")
-        assert success is True
-        assert "urls.py" in msg
-
-    def test_urls_write_error(self, tmp_path):
-        """Handle write error"""
-        project = tmp_path / "myproject"
-        (project / "myproject").mkdir(parents=True)
-        urls = project / "myproject" / "urls.py"
-        urls.write_text("quickscale_modules_auth\n")
-
-        with patch.object(Path, "write_text", side_effect=OSError("write error")):
-            success, msg = _update_urls_py(project, "auth")
-            assert success is False
-            assert "Failed" in msg
+        assert success is False
+        assert "Failed" in msg
 
 
 # ============================================================================
@@ -246,7 +152,8 @@ class TestCheckModuleExists:
         state_content = {
             "version": "1",
             "project": {
-                "name": "test",
+                "slug": "test",
+                "package": "test",
                 "theme": "html",
                 "created_at": "2025-01-01",
                 "last_applied": "2025-01-01",
@@ -357,7 +264,8 @@ class TestUpdateStateForRemoval:
         state_data = {
             "version": "1",
             "project": {
-                "name": "test",
+                "slug": "test",
+                "package": "test",
                 "theme": "html",
                 "created_at": "2025-01-01",
                 "last_applied": "2025-01-01",
@@ -384,7 +292,8 @@ class TestUpdateStateForRemoval:
         state_data = {
             "version": "1",
             "project": {
-                "name": "test",
+                "slug": "test",
+                "package": "test",
                 "theme": "html",
                 "created_at": "2025-01-01",
                 "last_applied": "2025-01-01",
@@ -430,7 +339,8 @@ class TestPerformRemovalSteps:
         state_data = {
             "version": "1",
             "project": {
-                "name": "myproject",
+                "slug": "myproject",
+                "package": "myproject",
                 "theme": "html",
                 "created_at": "2025-01-01",
                 "last_applied": "2025-01-01",
@@ -473,7 +383,8 @@ class TestRemoveCommandIntegration:
         state_data = {
             "version": "1",
             "project": {
-                "name": "myproject",
+                "slug": "myproject",
+                "package": "myproject",
                 "theme": "html",
                 "created_at": "2025-01-01",
                 "last_applied": "2025-01-01",
@@ -502,7 +413,8 @@ class TestRemoveCommandIntegration:
         state_data = {
             "version": "1",
             "project": {
-                "name": "myproject",
+                "slug": "myproject",
+                "package": "myproject",
                 "theme": "html",
                 "created_at": "2025-01-01",
                 "last_applied": "2025-01-01",

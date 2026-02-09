@@ -45,7 +45,8 @@ class TestStatusWithState:
                     {
                         "version": "1",
                         "project": {
-                            "name": "testapp",
+                            "slug": "testapp",
+                            "package": "testapp",
                             "theme": "showcase_html",
                             "created_at": "2025-12-01T10:00:00",
                             "last_applied": "2025-12-01T12:00:00",
@@ -71,7 +72,8 @@ class TestStatusWithState:
                     {
                         "version": "1",
                         "project": {
-                            "name": "testapp",
+                            "slug": "testapp",
+                            "package": "testapp",
                             "theme": "showcase_html",
                             "created_at": "2025-12-01T10:00:00",
                             "last_applied": "2025-12-01T12:00:00",
@@ -107,7 +109,8 @@ class TestStatusWithConfig:
                     """
 version: "1"
 project:
-  name: testapp
+  slug: testapp
+  package: testapp
   theme: showcase_html
 docker:
   start: false
@@ -134,7 +137,8 @@ class TestStatusPendingChanges:
                     {
                         "version": "1",
                         "project": {
-                            "name": "testapp",
+                            "slug": "testapp",
+                            "package": "testapp",
                             "theme": "showcase_html",
                             "created_at": "2025-12-01T10:00:00",
                             "last_applied": "2025-12-01T12:00:00",
@@ -150,7 +154,8 @@ class TestStatusPendingChanges:
                     """
 version: "1"
 project:
-  name: testapp
+  slug: testapp
+  package: testapp
   theme: showcase_html
 modules:
   auth:
@@ -176,7 +181,8 @@ docker:
                     {
                         "version": "1",
                         "project": {
-                            "name": "testapp",
+                            "slug": "testapp",
+                            "package": "testapp",
                             "theme": "showcase_html",
                             "created_at": "2025-12-01T10:00:00",
                             "last_applied": "2025-12-01T12:00:00",
@@ -198,7 +204,8 @@ docker:
                     """
 version: "1"
 project:
-  name: testapp
+  slug: testapp
+  package: testapp
   theme: showcase_html
 modules:
   auth:
@@ -229,7 +236,8 @@ class TestStatusJsonOutput:
                     {
                         "version": "1",
                         "project": {
-                            "name": "testapp",
+                            "slug": "testapp",
+                            "package": "testapp",
                             "theme": "showcase_html",
                             "created_at": "2025-12-01T10:00:00",
                             "last_applied": "2025-12-01T12:00:00",
@@ -257,7 +265,8 @@ class TestStatusJsonOutput:
                     {
                         "version": "1",
                         "project": {
-                            "name": "testapp",
+                            "slug": "testapp",
+                            "package": "testapp",
                             "theme": "showcase_html",
                             "created_at": "2025-12-01T10:00:00",
                             "last_applied": "2025-12-01T12:00:00",
@@ -279,7 +288,7 @@ class TestStatusJsonOutput:
             assert result.exit_code == 0
             data = json.loads(result.output)
             assert "state" in data
-            assert data["state"]["project"]["name"] == "testapp"
+            assert data["state"]["project"]["slug"] == "testapp"
             assert "auth" in data["state"]["modules"]
 
     def test_status_json_includes_pending_changes(self):
@@ -292,7 +301,8 @@ class TestStatusJsonOutput:
                     {
                         "version": "1",
                         "project": {
-                            "name": "testapp",
+                            "slug": "testapp",
+                            "package": "testapp",
                             "theme": "showcase_html",
                             "created_at": "2025-12-01T10:00:00",
                             "last_applied": "2025-12-01T12:00:00",
@@ -307,7 +317,8 @@ class TestStatusJsonOutput:
                     """
 version: "1"
 project:
-  name: testapp
+  slug: testapp
+  package: testapp
   theme: showcase_html
 modules:
   auth:
@@ -342,7 +353,8 @@ class TestStatusDriftDetection:
                     {
                         "version": "1",
                         "project": {
-                            "name": "testapp",
+                            "slug": "testapp",
+                            "package": "testapp",
                             "theme": "showcase_html",
                             "created_at": "2025-12-01T10:00:00",
                             "last_applied": "2025-12-01T12:00:00",
@@ -368,7 +380,8 @@ class TestStatusDriftDetection:
                     {
                         "version": "1",
                         "project": {
-                            "name": "testapp",
+                            "slug": "testapp",
+                            "package": "testapp",
                             "theme": "showcase_html",
                             "created_at": "2025-12-01T10:00:00",
                             "last_applied": "2025-12-01T12:00:00",

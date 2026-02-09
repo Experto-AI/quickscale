@@ -4,10 +4,13 @@ Implements `quickscale plan <name>` - interactive wizard that creates quickscale
 Also supports `--add` and `--reconfigure` flags for existing projects.
 """
 
+import keyword
+import re
 from pathlib import Path
 
 import click
 
+from quickscale_cli.module_catalog import get_module_entries
 from quickscale_cli.schema.config_schema import (
     DockerConfig,
     ModuleConfig,
@@ -17,6 +20,7 @@ from quickscale_cli.schema.config_schema import (
     validate_config,
 )
 from quickscale_cli.schema.state_schema import QuickScaleState, StateManager
+from quickscale_core.utils.file_utils import validate_project_name
 
 # Available themes for selection
 AVAILABLE_THEMES = [
@@ -25,15 +29,13 @@ AVAILABLE_THEMES = [
     ("showcase_htmx", "HTMX + Alpine.js (coming in v0.78.0)"),
 ]
 
-# Available modules for selection
-AVAILABLE_MODULES = [
-    ("auth", "Authentication with django-allauth"),
-    ("blog", "Markdown-powered blog with categories and RSS"),
-    ("listings", "Generic listings for marketplace verticals"),
-    ("crm", "Customer Relationship Management (contacts, deals, pipeline)"),
-    ("billing", "Stripe integration"),
-    ("teams", "Multi-tenancy and team management"),
-]
+
+def _get_module_choices(
+    *, include_experimental: bool = False
+) -> list[tuple[str, str, bool]]:
+    """Return module choices with experimental marker."""
+    entries = get_module_entries(include_experimental=include_experimental)
+    return [(entry.name, entry.description, entry.experimental) for entry in entries]
 
 
 def _get_theme_by_index(idx: int) -> str | None:
@@ -92,7 +94,9 @@ def _select_theme() -> str:
             click.secho("Invalid choice. Please try again.", fg="red")
 
 
-def _parse_module_choice(part: str, selected: list[str]) -> str | None:
+def _parse_module_choice(
+    part: str, available_modules: list[tuple[str, str, bool]]
+) -> str | None:
     """Parse a single module choice (number or name).
 
     Returns:
@@ -103,19 +107,22 @@ def _parse_module_choice(part: str, selected: list[str]) -> str | None:
     """
     if part.isdigit():
         idx = int(part) - 1
-        if 0 <= idx < len(AVAILABLE_MODULES):
-            return AVAILABLE_MODULES[idx][0]
+        if 0 <= idx < len(available_modules):
+            return available_modules[idx][0]
         raise ValueError(f"Invalid number: {part}")
 
     # Handle module name
-    for module_id, _ in AVAILABLE_MODULES:
+    for module_id, _, _ in available_modules:
         if part.lower() == module_id.lower():
             return module_id
 
     raise ValueError(f"Unknown module: {part}")
 
 
-def _parse_module_selection(choice: str) -> list[str]:
+def _parse_module_selection(
+    choice: str,
+    available_modules: list[tuple[str, str, bool]],
+) -> list[str]:
     """Parse comma-separated module selection.
 
     Returns:
@@ -131,19 +138,23 @@ def _parse_module_selection(choice: str) -> list[str]:
     parts = [p.strip() for p in choice.split(",")]
 
     for part in parts:
-        module_id = _parse_module_choice(part, selected)
+        module_id = _parse_module_choice(part, available_modules)
         if module_id and module_id not in selected:
             selected.append(module_id)
 
     return selected
 
 
-def _select_modules() -> list[str]:
+def _select_modules(*, include_experimental: bool = False) -> list[str]:
     """Interactive module selection"""
+    available_modules = _get_module_choices(include_experimental=include_experimental)
     click.echo("\n📦 Select modules to embed (optional):")
-    for i, (module_id, description) in enumerate(AVAILABLE_MODULES, start=1):
-        placeholder = " (placeholder)" if module_id in ("billing", "teams") else ""
-        click.echo(f"  {i}. {module_id} - {description}{placeholder}")
+    for i, (module_id, description, experimental) in enumerate(
+        available_modules,
+        start=1,
+    ):
+        experimental_label = " (experimental)" if experimental else ""
+        click.echo(f"  {i}. {module_id} - {description}{experimental_label}")
 
     click.echo(
         "\n  Enter numbers separated by commas (e.g., 1,3), or press Enter to skip"
@@ -157,7 +168,7 @@ def _select_modules() -> list[str]:
         )
 
         try:
-            return _parse_module_selection(choice)
+            return _parse_module_selection(choice, available_modules)
         except ValueError as e:
             click.secho(f"Invalid selection: {e}. Please try again.", fg="red")
 
@@ -226,6 +237,8 @@ def _display_current_modules(existing_modules: list[str]) -> None:
 
 def _get_available_modules(
     existing_modules: list[str],
+    *,
+    include_experimental: bool = False,
 ) -> list[tuple[str, str]]:
     """Get modules that are not yet installed.
 
@@ -233,7 +246,9 @@ def _get_available_modules(
         List of (module_id, description) tuples for available modules
     """
     available = []
-    for module_id, description in AVAILABLE_MODULES:
+    for module_id, description, _ in _get_module_choices(
+        include_experimental=include_experimental
+    ):
         if module_id not in existing_modules:
             available.append((module_id, description))
     return available
@@ -243,8 +258,7 @@ def _display_available_modules(available: list[tuple[str, str]]) -> None:
     """Display available modules for adding"""
     click.echo("\n📦 Available Modules to Add:")
     for i, (module_id, description) in enumerate(available, start=1):
-        placeholder = " (placeholder)" if module_id in ("billing", "teams") else ""
-        click.echo(f"  {i}. {module_id} - {description}{placeholder}")
+        click.echo(f"  {i}. {module_id} - {description}")
 
 
 def _get_module_by_index_from_available(
@@ -300,7 +314,11 @@ def _parse_add_module_selection(
     return selected
 
 
-def _select_modules_to_add(existing_modules: list[str]) -> list[str]:
+def _select_modules_to_add(
+    existing_modules: list[str],
+    *,
+    include_experimental: bool = False,
+) -> list[str]:
     """Interactive module selection for adding to existing project
 
     Shows which modules are already installed and lets user select new ones.
@@ -314,7 +332,10 @@ def _select_modules_to_add(existing_modules: list[str]) -> list[str]:
     """
     _display_current_modules(existing_modules)
 
-    available = _get_available_modules(existing_modules)
+    available = _get_available_modules(
+        existing_modules,
+        include_experimental=include_experimental,
+    )
 
     if not available:
         click.echo("\n📦 Available Modules to Add:")
@@ -341,7 +362,10 @@ def _select_modules_to_add(existing_modules: list[str]) -> list[str]:
 
 
 def _handle_add_modules(
-    project_path: Path, existing_config: QuickScaleConfig | None
+    project_path: Path,
+    existing_config: QuickScaleConfig | None,
+    *,
+    include_experimental: bool = False,
 ) -> None:
     """Handle --add flag: add modules to existing project
 
@@ -361,7 +385,10 @@ def _handle_add_modules(
     all_existing = list(set(applied_modules + config_modules))
 
     # Select new modules to add
-    new_modules = _select_modules_to_add(all_existing)
+    new_modules = _select_modules_to_add(
+        all_existing,
+        include_experimental=include_experimental,
+    )
 
     if not new_modules:
         click.echo("\n✅ No new modules selected")
@@ -385,7 +412,11 @@ def _handle_add_modules(
 
         config = QuickScaleConfig(
             version="1",
-            project=ProjectConfig(name=state.project.name, theme=state.project.theme),
+            project=ProjectConfig(
+                slug=state.project.slug,
+                package=state.project.package,
+                theme=state.project.theme,
+            ),
             modules={
                 name: ModuleConfig(name=name, options={})
                 for name in state.modules.keys()
@@ -433,17 +464,22 @@ def _get_project_info_for_reconfig(
     state: QuickScaleState | None,
     existing_config: QuickScaleConfig | None,
     project_path: Path,
-) -> tuple[str, str]:
-    """Get project name and theme for reconfiguration.
+) -> tuple[str, str, str]:
+    """Get project slug, package, and theme for reconfiguration.
 
     Returns:
-        Tuple of (project_name, current_theme)
+        Tuple of (project_slug, package_name, current_theme)
     """
     if state:
-        return state.project.name, state.project.theme
+        return state.project.slug, state.project.package, state.project.theme
     if existing_config:
-        return existing_config.project.name, existing_config.project.theme
-    return project_path.name, "showcase_react"
+        return (
+            existing_config.project.slug,
+            existing_config.project.package,
+            existing_config.project.theme,
+        )
+    project_slug = project_path.name
+    return project_slug, project_slug.replace("-", "_"), "showcase_react"
 
 
 def _collect_existing_modules(
@@ -468,7 +504,10 @@ def _display_reconfig_modules_status(
 
 
 def _handle_reconfigure(
-    project_path: Path, existing_config: QuickScaleConfig | None
+    project_path: Path,
+    existing_config: QuickScaleConfig | None,
+    *,
+    include_experimental: bool = False,
 ) -> None:
     """Handle --reconfigure flag: reconfigure existing project
 
@@ -493,11 +532,12 @@ def _handle_reconfigure(
         raise click.Abort()
 
     # Get current project info
-    project_name, current_theme = _get_project_info_for_reconfig(
+    project_slug, project_package, current_theme = _get_project_info_for_reconfig(
         state, existing_config, project_path
     )
 
-    click.echo(f"\n📁 Project: {project_name}")
+    click.echo(f"\n📁 Project: {project_slug}")
+    click.echo(f"   Package: {project_package}")
     click.secho(f"   Theme: {current_theme} (locked after creation)", fg="cyan")
 
     # Get applied modules
@@ -507,7 +547,10 @@ def _handle_reconfigure(
 
     # Ask if user wants to add more modules
     if click.confirm("\n   Add more modules?", default=False):
-        new_modules = _select_modules_to_add(all_existing)
+        new_modules = _select_modules_to_add(
+            all_existing,
+            include_experimental=include_experimental,
+        )
         all_modules = all_existing + new_modules
     else:
         all_modules = all_existing
@@ -522,7 +565,11 @@ def _handle_reconfigure(
 
     config = QuickScaleConfig(
         version="1",
-        project=ProjectConfig(name=project_name, theme=current_theme),
+        project=ProjectConfig(
+            slug=project_slug,
+            package=project_package,
+            theme=current_theme,
+        ),
         modules=modules,
         docker=DockerConfig(start=docker_start, build=docker_build),
     )
@@ -554,7 +601,12 @@ def _handle_reconfigure(
     click.echo("  quickscale apply     # Apply configuration changes")
 
 
-def _handle_existing_project_mode(add_modules: bool, reconfigure: bool) -> bool:
+def _handle_existing_project_mode(
+    add_modules: bool,
+    reconfigure: bool,
+    *,
+    include_experimental: bool = False,
+) -> bool:
     """Handle --add and --reconfigure flags for existing projects.
 
     Returns:
@@ -577,25 +629,33 @@ def _handle_existing_project_mode(add_modules: bool, reconfigure: bool) -> bool:
         raise click.Abort()
 
     if add_modules:
-        _handle_add_modules(project_path, existing_config)
+        _handle_add_modules(
+            project_path,
+            existing_config,
+            include_experimental=include_experimental,
+        )
     else:
-        _handle_reconfigure(project_path, existing_config)
+        _handle_reconfigure(
+            project_path,
+            existing_config,
+            include_experimental=include_experimental,
+        )
 
     return True
 
 
-def _validate_new_project_name(name: str | None) -> str:
-    """Validate project name for new projects.
+def _validate_new_project_slug(slug: str | None) -> str:
+    """Validate project slug for new projects.
 
     Returns:
-        Validated project name
+        Validated project slug
 
     Raises:
         click.Abort: If name is invalid
     """
-    if not name:
+    if not slug:
         click.secho(
-            "\n❌ Error: PROJECT_NAME is required for new projects",
+            "\n❌ Error: PROJECT_SLUG is required for new projects",
             fg="red",
             err=True,
         )
@@ -611,28 +671,58 @@ def _validate_new_project_name(name: str | None) -> str:
         )
         raise click.Abort()
 
-    package_name = name.replace("-", "_")
-    if not package_name.isidentifier():
+    is_valid, error_message = validate_project_name(slug)
+    if not is_valid:
         click.secho(
-            f"\n❌ Error: '{name}' is not a valid project name",
+            f"\n❌ Error: '{slug}' is not a valid project slug",
             fg="red",
             err=True,
         )
-        click.echo(
-            "   Project name must check out as a valid Python identifier when hyphens are replaced with underscores "
-            "(letters, numbers, underscores, hyphens, not starting with a number)",
-            err=True,
-        )
+        click.echo(f"   {error_message}", err=True)
         raise click.Abort()
 
-    return name
+    return slug
 
 
-def _determine_output_path_for_plan(name: str, output: str | None) -> Path:
+def _validate_package_name(package_name: str) -> None:
+    """Validate explicit project package value."""
+    if not package_name:
+        raise ValueError("Package name cannot be empty")
+    if not package_name.isidentifier():
+        raise ValueError("Package name must be a valid Python identifier")
+    if keyword.iskeyword(package_name):
+        raise ValueError(f"'{package_name}' is a Python keyword and cannot be used")
+    if not re.match(r"^[a-z][a-z0-9_]*$", package_name):
+        raise ValueError(
+            "Package name must start with a lowercase letter and use only lowercase "
+            "letters, numbers, and underscores"
+        )
+
+
+def _resolve_project_package(slug: str, explicit_package: str | None) -> str:
+    """Resolve package from option or prompt."""
+    default_package = slug.replace("-", "_")
+    package_name = explicit_package
+    if package_name is None:
+        package_name = click.prompt(
+            "\nPython package name",
+            default=default_package,
+            show_default=True,
+        )
+
+    try:
+        _validate_package_name(package_name)
+    except ValueError as e:
+        click.secho(f"\n❌ Error: {e}", fg="red", err=True)
+        raise click.Abort() from e
+    return package_name
+
+
+def _determine_output_path_for_plan(slug: str, output: str | None) -> Path:
     """Determine output path for configuration file."""
     if output:
         return Path(output)
-    return Path.cwd() / name / "quickscale.yml"
+    return Path.cwd() / slug / "quickscale.yml"
 
 
 def _check_output_path_exists(output_path: Path) -> None:
@@ -664,12 +754,17 @@ def _save_config_with_validation(yaml_content: str, output_path: Path) -> None:
 
 
 @click.command()
-@click.argument("name", required=False, metavar="PROJECT_NAME")
+@click.argument("slug", required=False, metavar="PROJECT_SLUG")
 @click.option(
     "--output",
     "-o",
     type=click.Path(),
-    help="Output path for quickscale.yml (default: <name>/quickscale.yml)",
+    help="Output path for quickscale.yml (default: <slug>/quickscale.yml)",
+)
+@click.option(
+    "--package",
+    type=str,
+    help="Explicit Python package name (default: slug with '-' replaced by '_')",
 )
 @click.option(
     "--add",
@@ -682,8 +777,18 @@ def _save_config_with_validation(yaml_content: str, output_path: Path) -> None:
     is_flag=True,
     help="Reconfigure existing project options",
 )
+@click.option(
+    "--include-experimental",
+    is_flag=True,
+    help="Show and allow experimental modules (billing, teams)",
+)
 def plan(
-    name: str | None, output: str | None, add_modules: bool, reconfigure: bool
+    slug: str | None,
+    output: str | None,
+    package: str | None,
+    add_modules: bool,
+    reconfigure: bool,
+    include_experimental: bool,
 ) -> None:
     """
     Create or update a project configuration via interactive wizard.
@@ -693,8 +798,9 @@ def plan(
 
     \b
     Examples:
-      quickscale plan myapp                # Create new project config
-      quickscale plan myapp -o ./config.yml  # Custom output path
+      quickscale plan my-app                # Create new project config
+      quickscale plan my-app --package my_app
+      quickscale plan my-app -o ./config.yml  # Custom output path
       quickscale plan --add                # Add modules to existing project
       quickscale plan --reconfigure        # Reconfigure existing project
 
@@ -710,21 +816,27 @@ def plan(
       --reconfigure  Modify Docker options and add modules
     """
     # Handle --add or --reconfigure flags
-    if _handle_existing_project_mode(add_modules, reconfigure):
+    if _handle_existing_project_mode(
+        add_modules,
+        reconfigure,
+        include_experimental=include_experimental,
+    ):
         return
 
     # Validate and prepare for new project
-    validated_name = _validate_new_project_name(name)
+    validated_slug = _validate_new_project_slug(slug)
+    resolved_package = _resolve_project_package(validated_slug, package)
 
     click.echo("\n🚀 QuickScale Project Planner")
-    click.echo(f"   Creating configuration for: {validated_name}")
+    click.echo(f"   Creating configuration for: {validated_slug}")
+    click.echo(f"   Package: {resolved_package}")
 
-    output_path = _determine_output_path_for_plan(validated_name, output)
+    output_path = _determine_output_path_for_plan(validated_slug, output)
     _check_output_path_exists(output_path)
 
     # Interactive wizard
     theme = _select_theme()
-    selected_modules = _select_modules()
+    selected_modules = _select_modules(include_experimental=include_experimental)
     docker_start, docker_build = _configure_docker()
 
     # Build configuration
@@ -735,7 +847,11 @@ def plan(
 
     config = QuickScaleConfig(
         version="1",
-        project=ProjectConfig(name=validated_name, theme=theme),
+        project=ProjectConfig(
+            slug=validated_slug,
+            package=resolved_package,
+            theme=theme,
+        ),
         modules=modules,
         docker=DockerConfig(start=docker_start, build=docker_build),
     )
@@ -762,8 +878,8 @@ def plan(
 
     # Next steps
     click.echo("\n📋 Next steps:")
-    if output_path.parent.name == validated_name:
-        click.echo(f"  cd {validated_name}")
+    if output_path.parent.name == validated_slug:
+        click.echo(f"  cd {validated_slug}")
         click.echo("  quickscale apply")
     else:
         click.echo(f"  quickscale apply {output_path}")

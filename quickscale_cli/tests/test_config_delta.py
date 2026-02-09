@@ -60,7 +60,7 @@ def base_config() -> QuickScaleConfig:
     """Create base config for testing"""
     return QuickScaleConfig(
         version="0.71.0",
-        project=ProjectConfig(name="testproject", theme="html"),
+        project=ProjectConfig(slug="testproject", package="testproject", theme="html"),
         modules={
             "auth": ModuleConfig(
                 name="auth",
@@ -81,7 +81,8 @@ def base_state() -> QuickScaleState:
     return QuickScaleState(
         version="1",
         project=ProjectState(
-            name="testproject",
+            slug="testproject",
+            package="testproject",
             theme="html",
             created_at="2024-01-01T00:00:00",
             last_applied="2024-01-01T00:00:00",

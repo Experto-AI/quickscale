@@ -13,6 +13,7 @@ config:
     enable_api:
       type: boolean
       default: true
+      django_setting: CRM_ENABLE_API
       description: "Enable REST API endpoints at /api/crm/"
 
     deals_per_page:
@@ -23,7 +24,7 @@ config:
 
     contacts_per_page:
       type: integer
-      default: 25
+      default: 50
       django_setting: CRM_CONTACTS_PER_PAGE
       description: "Number of contacts per page in list views"
 

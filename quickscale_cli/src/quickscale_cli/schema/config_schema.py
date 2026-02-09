@@ -4,10 +4,15 @@ Dataclasses and validation for quickscale.yml configuration files.
 Implements Terraform-style declarative project configuration.
 """
 
+import keyword
+import re
 from dataclasses import dataclass, field
 from typing import Any
 
 import yaml
+
+from quickscale_cli.module_catalog import get_module_names
+from quickscale_core.utils.file_utils import validate_project_name
 
 
 class ConfigValidationError(Exception):
@@ -45,7 +50,8 @@ class ModuleConfig:
 class ProjectConfig:
     """Project-level configuration"""
 
-    name: str
+    slug: str
+    package: str
     theme: str = "showcase_react"
 
 
@@ -69,10 +75,10 @@ class QuickScaleConfig:
 
 # Valid keys at each level
 VALID_TOP_LEVEL_KEYS = {"version", "project", "modules", "docker"}
-VALID_PROJECT_KEYS = {"name", "theme"}
+VALID_PROJECT_KEYS = {"slug", "package", "theme"}
 VALID_DOCKER_KEYS = {"start", "build"}
 VALID_THEMES = {"showcase_html", "showcase_htmx", "showcase_react"}
-AVAILABLE_MODULES = {"auth", "billing", "teams", "blog", "listings", "crm"}
+AVAILABLE_MODULES = set(get_module_names(include_experimental=True))
 
 
 def _find_line_number(yaml_content: str, key: str) -> int | None:
@@ -129,12 +135,55 @@ def _validate_version(data: dict, yaml_content: str) -> None:
         )
 
 
-def _validate_project_section(data: dict, yaml_content: str) -> tuple[str, str]:
-    """Validate project section and return (project_name, theme)."""
+def _validate_package_name(package_name: str, yaml_content: str) -> None:
+    """Validate Python package name field."""
+    if not package_name:
+        line = _find_line_number(yaml_content, "package")
+        raise ConfigValidationError(
+            "'project.package' must be a non-empty string",
+            line=line,
+        )
+
+    if not package_name.isidentifier():
+        line = _find_line_number(yaml_content, "package")
+        raise ConfigValidationError(
+            f"Invalid package name '{package_name}'",
+            line=line,
+            suggestion=(
+                "Package must be a valid Python identifier using lowercase letters, "
+                "numbers, and underscores"
+            ),
+        )
+
+    if keyword.iskeyword(package_name):
+        line = _find_line_number(yaml_content, "package")
+        raise ConfigValidationError(
+            f"Invalid package name '{package_name}'",
+            line=line,
+            suggestion=f"'{package_name}' is a Python keyword and cannot be used",
+        )
+
+    if not re.match(r"^[a-z][a-z0-9_]*$", package_name):
+        line = _find_line_number(yaml_content, "package")
+        raise ConfigValidationError(
+            f"Invalid package name '{package_name}'",
+            line=line,
+            suggestion=(
+                "Package must start with a lowercase letter and contain only "
+                "lowercase letters, numbers, and underscores"
+            ),
+        )
+
+
+def _validate_project_section(data: dict, yaml_content: str) -> tuple[str, str, str]:
+    """Validate project section and return (slug, package, theme)."""
     if "project" not in data:
         raise ConfigValidationError(
             "Missing required key 'project'",
-            suggestion="Add 'project:\\n  name: your_project_name\\n  theme: showcase_react'",
+            suggestion=(
+                "Add 'project:\\n  slug: your-project\\n  package: your_project\\n"
+                "  theme: showcase_react'"
+            ),
         )
 
     project_data = data.get("project", {})
@@ -144,29 +193,46 @@ def _validate_project_section(data: dict, yaml_content: str) -> tuple[str, str]:
 
     _validate_unknown_keys(project_data, VALID_PROJECT_KEYS, yaml_content, "project")
 
-    if "name" not in project_data:
+    if "slug" not in project_data:
         line = _find_line_number(yaml_content, "project")
         raise ConfigValidationError(
-            "Missing required key 'project.name'",
+            "Missing required key 'project.slug'",
             line=line,
-            suggestion="Add 'name: your_project_name' under project",
+            suggestion="Add 'slug: your-project-slug' under project",
         )
 
-    project_name = project_data["name"]
-    if not isinstance(project_name, str) or not project_name:
-        line = _find_line_number(yaml_content, "name")
+    if "package" not in project_data:
+        line = _find_line_number(yaml_content, "project")
         raise ConfigValidationError(
-            "'project.name' must be a non-empty string", line=line
+            "Missing required key 'project.package'",
+            line=line,
+            suggestion="Add 'package: your_python_package' under project",
         )
 
-    package_name = project_name.replace("-", "_")
-    if not package_name.isidentifier():
-        line = _find_line_number(yaml_content, "name")
+    project_slug = project_data["slug"]
+    if not isinstance(project_slug, str) or not project_slug:
+        line = _find_line_number(yaml_content, "slug")
         raise ConfigValidationError(
-            f"Invalid project name '{project_name}'",
-            line=line,
-            suggestion="Project name must be a valid Python identifier (letters, numbers, underscores, hyphens, not starting with a number)",
+            "'project.slug' must be a non-empty string", line=line
         )
+
+    is_valid_slug, slug_error = validate_project_name(project_slug)
+    if not is_valid_slug:
+        line = _find_line_number(yaml_content, "slug")
+        raise ConfigValidationError(
+            f"Invalid project slug '{project_slug}'",
+            line=line,
+            suggestion=slug_error,
+        )
+
+    package_name = project_data["package"]
+    if not isinstance(package_name, str):
+        line = _find_line_number(yaml_content, "package")
+        raise ConfigValidationError(
+            "'project.package' must be a non-empty string",
+            line=line,
+        )
+    _validate_package_name(package_name, yaml_content)
 
     theme = project_data.get("theme", "showcase_react")
     if theme not in VALID_THEMES:
@@ -177,7 +243,7 @@ def _validate_project_section(data: dict, yaml_content: str) -> tuple[str, str]:
             suggestion=f"Available themes: {', '.join(sorted(VALID_THEMES))}",
         )
 
-    return project_name, theme
+    return project_slug, package_name, theme
 
 
 def _validate_docker_section(data: dict, yaml_content: str) -> DockerConfig:
@@ -267,13 +333,17 @@ def validate_config(yaml_content: str) -> QuickScaleConfig:
     _validate_version(data, yaml_content)
 
     # Validate each section
-    project_name, theme = _validate_project_section(data, yaml_content)
+    project_slug, project_package, theme = _validate_project_section(data, yaml_content)
     docker_config = _validate_docker_section(data, yaml_content)
     modules = _validate_modules_section(data, yaml_content)
 
     return QuickScaleConfig(
         version=data["version"],
-        project=ProjectConfig(name=project_name, theme=theme),
+        project=ProjectConfig(
+            slug=project_slug,
+            package=project_package,
+            theme=theme,
+        ),
         modules=modules,
         docker=docker_config,
     )
@@ -300,7 +370,8 @@ def generate_yaml(config: QuickScaleConfig) -> str:
     data: dict[str, Any] = {
         "version": config.version,
         "project": {
-            "name": config.project.name,
+            "slug": config.project.slug,
+            "package": config.project.package,
             "theme": config.project.theme,
         },
     }

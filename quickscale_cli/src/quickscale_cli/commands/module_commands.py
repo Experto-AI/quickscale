@@ -6,6 +6,8 @@ from typing import Any
 
 import click
 
+from quickscale_cli.module_catalog import get_module_names
+
 from quickscale_core.config import add_module, load_config, update_module_version
 from quickscale_core.utils.git_utils import (
     GitError,
@@ -19,11 +21,12 @@ from quickscale_core.utils.git_utils import (
 
 from .module_config import (
     MODULE_CONFIGURATORS,
-    has_migrations_been_run,
+    assess_auth_migration_state,
+    format_auth_migration_remediation,
 )
 
-# Available modules
-AVAILABLE_MODULES = ["auth", "billing", "teams", "blog", "listings", "crm"]
+# Available modules (including experimental for explicit CLI usage).
+AVAILABLE_MODULES = get_module_names(include_experimental=True)
 
 
 def _validate_git_environment() -> bool:
@@ -96,42 +99,43 @@ def _validate_remote_branch(remote: str, branch: str, module: str) -> bool:
     return True
 
 
-def _check_auth_module_migrations(non_interactive: bool) -> bool:
-    """Check if auth module can be embedded (no existing migrations).
+def _check_auth_module_migrations(
+    project_path: Path,
+    non_interactive: bool,
+) -> bool:
+    """Check if auth module can be embedded safely.
 
     Returns:
         True if safe to proceed, False if blocked
     """
-    if not has_migrations_been_run():
+    assessment = assess_auth_migration_state(project_path)
+    if assessment.compatible:
         return True
 
     click.secho(
-        "\n⚠️  Warning: Django migrations have already been run!",
+        "\n⚠️  Auth module migration guardrail triggered",
         fg="yellow",
         bold=True,
     )
-    click.echo("\n❌ The auth module changes the User model (AUTH_USER_MODEL).")
+    click.echo(f"\nReason: {assessment.reason}")
     click.echo(
-        "   Embedding it after running migrations will cause migration conflicts."
+        "\n❌ The auth module sets AUTH_USER_MODEL and must be embedded before "
+        "incompatible baseline migrations."
     )
+    click.echo("")
+    click.echo(format_auth_migration_remediation(project_path))
 
     if non_interactive:
         click.secho(
             "\n❌ Cannot embed auth module in non-interactive mode when "
-            "migrations exist.",
+            "state is incompatible or unverifiable.",
             fg="red",
-            err=True,
-        )
-        click.echo(
-            "   Please reset the database first or embed auth module before "
-            "running migrations.",
             err=True,
         )
         return False
 
     click.echo(
-        "\n❓ Do you want to continue anyway? "
-        "(You'll need to reset the database manually)"
+        "\n❓ Continue anyway? (only if you intentionally accept data-loss remediation)"
     )
     if not click.confirm("Continue?", default=False):
         click.echo("\n❌ Embedding cancelled")
@@ -232,7 +236,9 @@ def embed_module(
             return False
 
         # Auth module special check
-        if module == "auth" and not _check_auth_module_migrations(non_interactive):
+        if module == "auth" and not _check_auth_module_migrations(
+            project_path, non_interactive
+        ):
             return False
 
         # Interactive module configuration

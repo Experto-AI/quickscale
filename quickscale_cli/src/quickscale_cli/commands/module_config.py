@@ -4,12 +4,20 @@ This module contains configuration functions for individual QuickScale modules,
 including interactive configuration prompts and settings application.
 """
 
+import json
 import re
 import subprocess
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Optional
 
 import click
+
+from quickscale_cli.utils.module_wiring_manager import regenerate_managed_wiring
+from quickscale_cli.utils.project_identity import (
+    derive_package_from_slug,
+    resolve_project_identity,
+)
 
 
 def _is_app_in_installed_apps(settings_content: str, app_name: str) -> bool:
@@ -41,27 +49,155 @@ def _filter_new_apps(settings_content: str, apps: list[str]) -> list[str]:
     return [app for app in apps if not _is_app_in_installed_apps(settings_content, app)]
 
 
-def has_migrations_been_run() -> bool:
-    """Check if Django migrations have been run in the current project"""
-    # Check for SQLite database file
-    if Path("db.sqlite3").exists():
-        return True
+@dataclass(frozen=True)
+class AuthMigrationAssessment:
+    """Auth migration safety assessment."""
 
-    # Check for PostgreSQL database by running Django check
+    status: str  # compatible | incompatible | unverifiable
+    reason: str
+
+    @property
+    def compatible(self) -> bool:
+        return self.status == "compatible"
+
+    @property
+    def incompatible(self) -> bool:
+        return self.status == "incompatible"
+
+    @property
+    def unverifiable(self) -> bool:
+        return self.status == "unverifiable"
+
+
+_CORE_AUTH_APPS = {"auth", "admin", "contenttypes", "sessions"}
+
+
+def _migration_probe_script() -> str:
+    """Return Python snippet for migration recorder probing via manage.py shell."""
+    return (
+        "import json;"
+        "from django.db import connection;"
+        "from django.db.migrations.recorder import MigrationRecorder;"
+        f"core_apps={sorted(_CORE_AUTH_APPS)!r};"
+        "recorder=MigrationRecorder(connection);"
+        "applied=[(m.app,m.name) for m in recorder.migration_qs];"
+        "incompatible=any(app in core_apps for app,_ in applied);"
+        "print(json.dumps({'ok': True, 'incompatible': incompatible, 'count': len(applied)}))"
+    )
+
+
+def assess_auth_migration_state(
+    project_path: Path | None = None,
+) -> AuthMigrationAssessment:
+    """Assess whether auth module can be embedded safely.
+
+    Uses Django's MigrationRecorder through project runtime instead of filesystem
+    heuristics.
+    """
+    if project_path is None:
+        project_path = Path.cwd()
+
+    manage_py = project_path / "manage.py"
+    if not manage_py.exists():
+        return AuthMigrationAssessment(
+            status="unverifiable",
+            reason=f"manage.py not found at {manage_py}",
+        )
+
     try:
         result = subprocess.run(
-            ["python", "manage.py", "showmigrations", "--plan"],
+            ["python", "manage.py", "shell", "-c", _migration_probe_script()],
+            cwd=project_path,
             capture_output=True,
             text=True,
-            timeout=5,
+            timeout=15,
+            check=False,
         )
-        # If we can run showmigrations and see any [X] marks, migrations have been applied
-        if result.returncode == 0 and "[X]" in result.stdout:
-            return True
-    except (subprocess.TimeoutExpired, FileNotFoundError):
-        pass
+    except (subprocess.TimeoutExpired, FileNotFoundError) as e:
+        return AuthMigrationAssessment(
+            status="unverifiable",
+            reason=f"failed to execute Django runtime check: {e}",
+        )
 
-    return False
+    if result.returncode != 0:
+        error = (result.stderr or result.stdout or "").strip() or "unknown error"
+        return AuthMigrationAssessment(
+            status="unverifiable",
+            reason=f"migration recorder check failed: {error}",
+        )
+
+    output_lines = [line.strip() for line in result.stdout.splitlines() if line.strip()]
+    if not output_lines:
+        return AuthMigrationAssessment(
+            status="unverifiable",
+            reason="migration recorder check produced no output",
+        )
+
+    try:
+        payload = json.loads(output_lines[-1])
+    except json.JSONDecodeError:
+        return AuthMigrationAssessment(
+            status="unverifiable",
+            reason=f"unexpected migration recorder output: {output_lines[-1]}",
+        )
+
+    if not payload.get("ok"):
+        return AuthMigrationAssessment(
+            status="unverifiable",
+            reason=payload.get("error", "unknown migration recorder error"),
+        )
+
+    if payload.get("incompatible"):
+        return AuthMigrationAssessment(
+            status="incompatible",
+            reason=(
+                "Default Django auth/admin/session/contenttypes migrations are already "
+                "applied in this database."
+            ),
+        )
+
+    return AuthMigrationAssessment(
+        status="compatible",
+        reason="No incompatible core auth migrations were detected.",
+    )
+
+
+def has_migrations_been_run(project_path: Path | None = None) -> bool:
+    """Backward-compatible helper for tests and existing callers."""
+    assessment = assess_auth_migration_state(project_path)
+    return assessment.incompatible
+
+
+def format_auth_migration_remediation(project_path: Path) -> str:
+    """Return actionable remediation commands for incompatible auth state."""
+    try:
+        identity = resolve_project_identity(project_path)
+        package_hint = identity.package
+    except Exception:
+        package_hint = derive_package_from_slug(project_path.name)
+
+    project_abs = project_path.resolve()
+    fresh_db_name = f"{package_hint}_fresh"
+
+    return (
+        "Remediation options (all may involve data loss):\n\n"
+        "1) Fresh disposable local database\n"
+        f"   cd {project_abs}\n"
+        f"   export DATABASE_URL=postgresql://postgres:postgres@localhost:5432/{fresh_db_name}\n"
+        "   poetry run python manage.py migrate\n"
+        "   quickscale apply\n\n"
+        "2) Docker volume reset (destructive)\n"
+        f"   cd {project_abs}\n"
+        "   docker compose down -v\n"
+        "   quickscale up --build\n"
+        "   poetry run python manage.py migrate\n"
+        "   quickscale apply\n\n"
+        "3) Explicitly destructive reset path\n"
+        f"   cd {project_abs}\n"
+        "   poetry run python manage.py flush --no-input\n"
+        "   poetry run python manage.py migrate\n\n"
+        "WARNING: These commands can permanently delete data."
+    )
 
 
 # ============================================================================
@@ -72,9 +208,11 @@ def has_migrations_been_run() -> bool:
 def get_default_auth_config() -> dict[str, Any]:
     """Get default configuration for auth module (non-interactive mode)"""
     return {
-        "allow_registration": True,
+        "registration_enabled": True,
         "email_verification": "none",
         "authentication_method": "email",
+        "social_providers": [],
+        "session_cookie_age": 1209600,
     }
 
 
@@ -92,7 +230,10 @@ def configure_auth_module(non_interactive: bool = False) -> dict[str, Any]:
     click.echo("Answer these questions to customize the authentication setup:\n")
 
     config = {
-        "allow_registration": click.confirm("Enable user registration?", default=True),
+        "registration_enabled": click.confirm(
+            "Enable user registration?",
+            default=True,
+        ),
         "email_verification": click.prompt(
             "Email verification",
             type=click.Choice(["none", "optional", "mandatory"], case_sensitive=False),
@@ -105,6 +246,8 @@ def configure_auth_module(non_interactive: bool = False) -> dict[str, Any]:
             default="email",
             show_choices=True,
         ),
+        "social_providers": [],
+        "session_cookie_age": 1209600,
     }
 
     return config
@@ -198,6 +341,12 @@ def _add_django_allauth_dependency(project_path: Path, pyproject_path: Path) -> 
 
 def _generate_auth_settings_addition(config: dict[str, Any]) -> str:
     """Generate the settings addition string for auth module."""
+    registration_enabled = config.get("registration_enabled")
+    if registration_enabled is None:
+        registration_enabled = config.get("allow_registration", True)
+
+    session_cookie_age = int(config.get("session_cookie_age", 1209600))
+
     settings_addition = """
 # QuickScale Auth Module - Added by quickscale embed
 INSTALLED_APPS += [
@@ -245,84 +394,77 @@ SITE_ID = 1
     settings_addition += (
         f'ACCOUNT_EMAIL_VERIFICATION = "{config["email_verification"]}"\n'
     )
-    settings_addition += (
-        f"ACCOUNT_ALLOW_REGISTRATION = {config['allow_registration']}\n"
-    )
+    settings_addition += f"ACCOUNT_ALLOW_REGISTRATION = {registration_enabled}\n"
     settings_addition += 'ACCOUNT_ADAPTER = "quickscale_modules_auth.adapters.QuickscaleAccountAdapter"\n'
     settings_addition += (
         'ACCOUNT_SIGNUP_FORM_CLASS = "quickscale_modules_auth.forms.SignupForm"\n'
     )
     settings_addition += 'LOGIN_REDIRECT_URL = "/accounts/profile/"\n'
     settings_addition += 'LOGOUT_REDIRECT_URL = "/"\n'
-    settings_addition += "SESSION_COOKIE_AGE = 1209600  # 2 weeks\n"
+    settings_addition += f"SESSION_COOKIE_AGE = {session_cookie_age}  # 2 weeks\n"
 
     return settings_addition
 
 
-def apply_auth_configuration(project_path: Path, config: dict[str, Any]) -> None:
-    """Apply auth module configuration to project settings"""
-    # QuickScale uses settings/base.py and project_name/urls.py structure
-    settings_path = project_path / f"{project_path.name}" / "settings" / "base.py"
-    urls_path = project_path / f"{project_path.name}" / "urls.py"
-    pyproject_path = project_path / "pyproject.toml"
+def _normalize_auth_config(config: dict[str, Any]) -> dict[str, Any]:
+    """Normalize legacy auth config keys to manifest-aligned keys."""
+    normalized = dict(config)
+    if "registration_enabled" not in normalized and "allow_registration" in normalized:
+        normalized["registration_enabled"] = normalized["allow_registration"]
+    normalized.setdefault("registration_enabled", True)
+    normalized.setdefault("email_verification", "none")
+    normalized.setdefault("authentication_method", "email")
+    normalized.setdefault("social_providers", [])
+    normalized.setdefault("session_cookie_age", 1209600)
+    return normalized
 
-    if not settings_path.exists():
+
+def _regenerate_wiring_for_module(
+    project_path: Path,
+    module_name: str,
+    module_config: dict[str, Any],
+) -> None:
+    """Regenerate deterministic managed wiring for module integrations."""
+    modules_dir = project_path / "modules"
+    discovered_modules = (
+        [p.name for p in modules_dir.iterdir() if p.is_dir()]
+        if modules_dir.exists()
+        else []
+    )
+    selected_modules = sorted(set(discovered_modules + [module_name]))
+
+    success, message = regenerate_managed_wiring(
+        project_path,
+        module_names=selected_modules,
+        option_overrides={module_name: module_config},
+    )
+    if not success:
         click.secho(
-            "⚠️  Warning: settings.py not found, skipping auto-configuration",
+            f"⚠️  Warning: managed wiring regeneration failed: {message}",
             fg="yellow",
         )
-        return
+    else:
+        click.secho("  ✅ Regenerated managed module wiring", fg="green")
 
-    # Read settings.py
-    with open(settings_path) as f:
-        settings_content = f.read()
 
-    # Check if already configured
-    if "quickscale_modules_auth" in settings_content:
-        click.echo("ℹ️  Auth module already configured in settings.py")
-        return
+def apply_auth_configuration(project_path: Path, config: dict[str, Any]) -> None:
+    """Apply auth module configuration via managed wiring files."""
+    normalized_config = _normalize_auth_config(config)
+    pyproject_path = project_path / "pyproject.toml"
 
     # Add django-allauth dependency to pyproject.toml
     if pyproject_path.exists():
         _add_django_allauth_dependency(project_path, pyproject_path)
 
-    # Generate settings addition
-    installed_apps_addition = _generate_auth_settings_addition(config)
-
-    # Append to settings.py
-    with open(settings_path, "a") as f:
-        f.write("\n" + installed_apps_addition)
-
-    click.secho("  ✅ Updated settings.py with auth configuration", fg="green")
-
-    # Update urls.py
-    if urls_path.exists():
-        with open(urls_path) as f:
-            urls_content = f.read()
-
-        if "allauth" not in urls_content:
-            # Find urlpatterns and add auth URLs
-            if "urlpatterns = [" in urls_content:
-                urls_addition = (
-                    '    path("accounts/", include("allauth.urls")),\n'
-                    '    path("accounts/", include("quickscale_modules_auth.urls")),  # Auth URLs\n'
-                )
-                urls_content = urls_content.replace(
-                    "urlpatterns = [", "urlpatterns = [\n" + urls_addition
-                )
-
-                with open(urls_path, "w") as f:
-                    f.write(urls_content)
-
-                click.secho("  ✅ Updated urls.py with auth URLs", fg="green")
+    # Auth module owns allauth URL inclusion inside quickscale_modules_auth.urls.
+    _regenerate_wiring_for_module(project_path, "auth", normalized_config)
 
     # Show configuration summary
     click.echo("\n📋 Configuration applied:")
-    click.echo(
-        f"  • Registration: {'Enabled' if config['allow_registration'] else 'Disabled'}"
-    )
-    click.echo(f"  • Email verification: {config['email_verification']}")
-    click.echo(f"  • Authentication: {config['authentication_method']}")
+    registration_enabled = normalized_config["registration_enabled"]
+    click.echo(f"  • Registration: {'Enabled' if registration_enabled else 'Disabled'}")
+    click.echo(f"  • Email verification: {normalized_config['email_verification']}")
+    click.echo(f"  • Authentication: {normalized_config['authentication_method']}")
 
 
 # ============================================================================
@@ -363,74 +505,8 @@ def configure_blog_module(non_interactive: bool = False) -> dict[str, Any]:
 
 
 def apply_blog_configuration(project_path: Path, config: dict[str, Any]) -> None:
-    """Apply blog module configuration to project settings"""
-    # QuickScale uses settings/base.py and project_name/urls.py structure
-    settings_path = project_path / f"{project_path.name}" / "settings" / "base.py"
-    urls_path = project_path / f"{project_path.name}" / "urls.py"
-
-    if not settings_path.exists():
-        click.secho(
-            "⚠️  Warning: settings.py not found, skipping auto-configuration",
-            fg="yellow",
-        )
-        return
-
-    # Read settings.py
-    with open(settings_path) as f:
-        settings_content = f.read()
-
-    # Check if already configured
-    if "quickscale_modules_blog" in settings_content:
-        click.echo("ℹ️  Blog module already configured in settings.py")
-        return
-
-    # Add required apps to INSTALLED_APPS
-    installed_apps_addition = """
-# QuickScale Blog Module - Added by quickscale embed
-INSTALLED_APPS += [
-    "markdownx",  # Markdown editor with image upload
-    "quickscale_modules_blog",  # Blog module
-]
-
-# Blog Module Settings
-"""
-
-    installed_apps_addition += f"BLOG_POSTS_PER_PAGE = {config['posts_per_page']}\n"
-    installed_apps_addition += """MARKDOWNX_MARKDOWN_EXTENSIONS = [
-    "markdown.extensions.fenced_code",
-    "markdown.extensions.tables",
-    "markdown.extensions.toc",
-]
-MARKDOWNX_MEDIA_PATH = "blog/markdownx/"
-"""
-
-    # Append to settings.py
-    with open(settings_path, "a") as f:
-        f.write("\n" + installed_apps_addition)
-
-    click.secho("  ✅ Updated settings.py with blog configuration", fg="green")
-
-    # Update urls.py
-    if urls_path.exists():
-        with open(urls_path) as f:
-            urls_content = f.read()
-
-        if "quickscale_modules_blog" not in urls_content:
-            # Find urlpatterns and add blog URLs
-            if "urlpatterns = [" in urls_content:
-                urls_addition = (
-                    '    path("blog/", include("quickscale_modules_blog.urls")),\n'
-                )
-                if config["enable_rss"]:
-                    urls_addition += '    path("markdownx/", include("markdownx.urls")),  # Markdown editor upload\n'
-                urls_content = urls_content.replace(
-                    "urlpatterns = [", "urlpatterns = [\n" + urls_addition
-                )
-
-                with open(urls_path, "w") as f:
-                    f.write(urls_content)
-
-                click.secho("  ✅ Updated urls.py with blog URLs", fg="green")
+    """Apply blog module configuration via managed wiring files."""
+    _regenerate_wiring_for_module(project_path, "blog", config)
 
     # Show configuration summary
     click.echo("\n📋 Configuration applied:")
@@ -563,79 +639,14 @@ def _add_django_filter_dependency(project_path: Path, pyproject_path: Path) -> N
 
 
 def apply_listings_configuration(project_path: Path, config: dict[str, Any]) -> None:
-    """Apply listings module configuration to project settings"""
-    # QuickScale uses settings/base.py and project_name/urls.py structure
-    settings_path = project_path / f"{project_path.name}" / "settings" / "base.py"
-    urls_path = project_path / f"{project_path.name}" / "urls.py"
+    """Apply listings module configuration via managed wiring files."""
     pyproject_path = project_path / "pyproject.toml"
-
-    if not settings_path.exists():
-        click.secho(
-            "⚠️  Warning: settings.py not found, skipping auto-configuration",
-            fg="yellow",
-        )
-        return
-
-    # Read settings.py
-    with open(settings_path) as f:
-        settings_content = f.read()
-
-    # Check if already configured
-    if "quickscale_modules_listings" in settings_content:
-        click.echo("ℹ️  Listings module already configured in settings.py")
-        return
 
     # Add django-filter dependency to pyproject.toml
     if pyproject_path.exists():
         _add_django_filter_dependency(project_path, pyproject_path)
 
-    # Determine which apps need to be added (avoid duplicates)
-    required_apps = ["django_filters", "quickscale_modules_listings"]
-    new_apps = _filter_new_apps(settings_content, required_apps)
-
-    if not new_apps:
-        click.echo("ℹ️  All required apps already in INSTALLED_APPS")
-    else:
-        # Build the INSTALLED_APPS addition with only new apps
-        apps_list = ",\n    ".join([f'"{app}"' for app in new_apps])
-        installed_apps_addition = f"""
-# QuickScale Listings Module - Added by quickscale embed
-INSTALLED_APPS += [
-    {apps_list},
-]
-"""
-        # Append to settings.py
-        with open(settings_path, "a") as f:
-            f.write("\n" + installed_apps_addition)
-
-    # Add settings (always add these)
-    settings_addition = f"""
-# Listings Module Settings
-LISTINGS_PER_PAGE = {config["listings_per_page"]}
-"""
-
-    with open(settings_path, "a") as f:
-        f.write(settings_addition)
-
-    click.secho("  ✅ Updated settings.py with listings configuration", fg="green")
-
-    # Update urls.py
-    if urls_path.exists():
-        with open(urls_path) as f:
-            urls_content = f.read()
-
-        if "quickscale_modules_listings" not in urls_content:
-            # Find urlpatterns and add listings URLs
-            if "urlpatterns = [" in urls_content:
-                urls_addition = '    path("listings/", include("quickscale_modules_listings.urls")),\n'
-                urls_content = urls_content.replace(
-                    "urlpatterns = [", "urlpatterns = [\n" + urls_addition
-                )
-
-                with open(urls_path, "w") as f:
-                    f.write(urls_content)
-
-                click.secho("  ✅ Updated urls.py with listings URLs", fg="green")
+    _regenerate_wiring_for_module(project_path, "listings", config)
 
     # Show configuration summary
     click.echo("\n📋 Configuration applied:")
@@ -653,6 +664,12 @@ def get_default_crm_config() -> dict[str, Any]:
         "enable_api": True,
         "deals_per_page": 25,
         "contacts_per_page": 50,
+        "default_pipeline_stages": [
+            "Prospecting",
+            "Negotiation",
+            "Closed-Won",
+            "Closed-Lost",
+        ],
     }
 
 
@@ -683,6 +700,12 @@ def configure_crm_module(non_interactive: bool = False) -> dict[str, Any]:
             type=int,
             default=50,
         ),
+        "default_pipeline_stages": [
+            "Prospecting",
+            "Negotiation",
+            "Closed-Won",
+            "Closed-Lost",
+        ],
     }
 
     return config
@@ -834,58 +857,14 @@ def _update_crm_urls(urls_path: Path) -> None:
 
 
 def apply_crm_configuration(project_path: Path, config: dict[str, Any]) -> None:
-    """Apply CRM module configuration to project settings"""
-    # QuickScale uses settings/base.py and project_name/urls.py structure
-    settings_path = project_path / f"{project_path.name}" / "settings" / "base.py"
-    urls_path = project_path / f"{project_path.name}" / "urls.py"
+    """Apply CRM module configuration via managed wiring files."""
     pyproject_path = project_path / "pyproject.toml"
-
-    if not settings_path.exists():
-        click.secho(
-            "⚠️  Warning: settings.py not found, skipping auto-configuration",
-            fg="yellow",
-        )
-        return
-
-    # Read settings.py
-    with open(settings_path) as f:
-        settings_content = f.read()
-
-    # Check if already configured
-    if "quickscale_modules_crm" in settings_content:
-        click.echo("ℹ️  CRM module already configured in settings.py")
-        return
 
     # Add DRF and django-filter dependencies to pyproject.toml
     if pyproject_path.exists():
         _add_drf_and_filter_dependencies(project_path, pyproject_path)
 
-    # Determine which apps need to be added (avoid duplicates)
-    required_apps = ["rest_framework", "django_filters", "quickscale_modules_crm"]
-    new_apps = _filter_new_apps(settings_content, required_apps)
-
-    if new_apps:
-        apps_list = ",\n    ".join([f'"{app}"' for app in new_apps])
-        installed_apps_addition = f"""
-# QuickScale CRM Module - Added by quickscale embed
-INSTALLED_APPS += [
-    {apps_list},
-]
-"""
-        with open(settings_path, "a") as f:
-            f.write("\n" + installed_apps_addition)
-    else:
-        click.echo("ℹ️  All required apps already in INSTALLED_APPS")
-
-    # Add CRM settings and REST framework settings
-    settings_addition = _get_crm_settings_addition(config)
-    with open(settings_path, "a") as f:
-        f.write(settings_addition)
-
-    click.secho("  ✅ Updated settings.py with CRM configuration", fg="green")
-
-    # Update urls.py
-    _update_crm_urls(urls_path)
+    _regenerate_wiring_for_module(project_path, "crm", config)
 
     # Show configuration summary
     click.echo("\n📋 Configuration applied:")

@@ -130,14 +130,21 @@ class ProjectGenerator:
         # Fall back to root template (for backward compatibility)
         return template_name
 
-    def generate(self, project_name: str, output_path: Path) -> None:
+    def generate(
+        self,
+        project_slug: str,
+        output_path: Path,
+        package_name: str | None = None,
+    ) -> None:
         """
         Generate Django project from templates
 
         Args:
         ----
-            project_name: Name of the project (must be valid Python identifier)
+            project_slug: Filesystem/service slug for the project
             output_path: Path where project will be created
+            package_name: Optional explicit Python package name. If omitted,
+                defaults to project_slug with hyphens replaced by underscores.
 
         Raises:
         ------
@@ -147,9 +154,12 @@ class ProjectGenerator:
 
         """
         # Validate project name
-        is_valid, error_msg = validate_project_name(project_name)
+        is_valid, error_msg = validate_project_name(project_slug)
         if not is_valid:
             raise ValueError(f"Invalid project name: {error_msg}")
+
+        if package_name is None:
+            package_name = project_slug.replace("-", "_")
 
         # Check if output path already exists
         if output_path.exists():
@@ -172,11 +182,11 @@ class ProjectGenerator:
             raise PermissionError(f"Parent directory is not writable: {parent}")
 
         # Generate project in temporary directory first (atomic creation)
-        temp_dir = Path(tempfile.mkdtemp(prefix=f"quickscale_{project_name}_"))
+        temp_dir = Path(tempfile.mkdtemp(prefix=f"quickscale_{project_slug}_"))
 
         try:
             # Generate project in temp directory
-            self._generate_project(project_name, temp_dir)
+            self._generate_project(project_slug, package_name, temp_dir)
 
             # Move to final location
             shutil.move(str(temp_dir), str(output_path))
@@ -187,14 +197,16 @@ class ProjectGenerator:
                 shutil.rmtree(temp_dir, ignore_errors=True)
             raise RuntimeError(f"Failed to generate project: {e}") from e
 
-    def _generate_project(self, project_name: str, output_path: Path) -> None:
+    def _generate_project(
+        self,
+        project_slug: str,
+        package_name: str,
+        output_path: Path,
+    ) -> None:
         """Generate project structure in specified directory"""
-        # Calculate package name (replace hyphens with underscores)
-        package_name = project_name.replace("-", "_")
-
         # Context for template rendering
         context = {
-            "project_name": project_name,
+            "project_name": project_slug,
             "package_name": package_name,
             "theme": self.theme,
             "host_uid": os.getuid() if hasattr(os, "getuid") else 1000,
@@ -222,6 +234,11 @@ class ProjectGenerator:
             # Project package files
             ("project_name/__init__.py.j2", f"{package_name}/__init__.py", False),
             ("project_name/urls.py.j2", f"{package_name}/urls.py", False),
+            (
+                "project_name/urls_modules.py.j2",
+                f"{package_name}/urls_modules.py",
+                False,
+            ),
             ("project_name/views.py.j2", f"{package_name}/views.py", False),
             ("project_name/wsgi.py.j2", f"{package_name}/wsgi.py", False),
             ("project_name/asgi.py.j2", f"{package_name}/asgi.py", False),
@@ -239,6 +256,11 @@ class ProjectGenerator:
             (
                 "project_name/settings/base.py.j2",
                 f"{package_name}/settings/base.py",
+                False,
+            ),
+            (
+                "project_name/settings/modules.py.j2",
+                f"{package_name}/settings/modules.py",
                 False,
             ),
             (
