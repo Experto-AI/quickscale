@@ -187,6 +187,12 @@ class TestEmbedModule:
         """Test successful module embedding"""
         mock_embed.return_value = True
         assert _embed_module(Path("/tmp/proj"), "auth") is True
+        mock_embed.assert_called_once_with(
+            module="auth",
+            project_path=Path("/tmp/proj"),
+            non_interactive=True,
+            allow_unverifiable_auth_state=True,
+        )
 
     @patch("quickscale_cli.commands.apply_command.embed_module")
     def test_failure(self, mock_embed):

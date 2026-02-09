@@ -189,6 +189,7 @@ def _embed_module(project_path: Path, module_name: str) -> bool:
             module=module_name,
             project_path=project_path,
             non_interactive=True,
+            allow_unverifiable_auth_state=True,
         )
 
         if success:

@@ -143,6 +143,52 @@ class TestCheckAuthModuleMigrations:
 
     @patch("quickscale_cli.commands.module_commands.format_auth_migration_remediation")
     @patch("quickscale_cli.commands.module_commands.assess_auth_migration_state")
+    def test_unverifiable_non_interactive_strict(
+        self,
+        mock_assess,
+        mock_remediation,
+    ):
+        """Test unverifiable state fails in strict non-interactive mode."""
+        mock_assess.return_value = Mock(
+            compatible=False,
+            incompatible=False,
+            unverifiable=True,
+            status="unverifiable",
+            reason="connection refused",
+        )
+        mock_remediation.return_value = "fix steps"
+
+        result = _check_auth_module_migrations(Path("/tmp"), non_interactive=True)
+
+        assert result is False
+
+    @patch("quickscale_cli.commands.module_commands.format_auth_migration_remediation")
+    @patch("quickscale_cli.commands.module_commands.assess_auth_migration_state")
+    def test_unverifiable_non_interactive_allowed(
+        self,
+        mock_assess,
+        mock_remediation,
+    ):
+        """Test unverifiable state can continue when explicitly allowed."""
+        mock_assess.return_value = Mock(
+            compatible=False,
+            incompatible=False,
+            unverifiable=True,
+            status="unverifiable",
+            reason="connection refused",
+        )
+        mock_remediation.return_value = "fix steps"
+
+        result = _check_auth_module_migrations(
+            Path("/tmp"),
+            non_interactive=True,
+            allow_unverifiable_auth_state=True,
+        )
+
+        assert result is True
+
+    @patch("quickscale_cli.commands.module_commands.format_auth_migration_remediation")
+    @patch("quickscale_cli.commands.module_commands.assess_auth_migration_state")
     @patch("quickscale_cli.commands.module_commands.click.confirm")
     def test_migrations_exist_user_confirms(
         self,
@@ -448,6 +494,38 @@ class TestEmbedModule:
         result = embed_module("auth", tmp_path, non_interactive=True)
 
         assert result is False
+
+    @patch("quickscale_cli.commands.module_commands._perform_module_embed")
+    @patch("quickscale_cli.commands.module_commands._check_auth_module_migrations")
+    @patch("quickscale_cli.commands.module_commands._validate_remote_branch")
+    @patch("quickscale_cli.commands.module_commands._validate_module_not_exists")
+    @patch("quickscale_cli.commands.module_commands._validate_git_environment")
+    @patch("quickscale_cli.commands.module_commands.MODULE_CONFIGURATORS", {})
+    def test_auth_migration_allow_unverifiable_forwarded(
+        self,
+        mock_git_env,
+        mock_not_exists,
+        mock_remote,
+        mock_auth_check,
+        mock_perform,
+        tmp_path,
+    ):
+        """Test embed_module forwards allow_unverifiable_auth_state to guardrail."""
+        mock_git_env.return_value = True
+        mock_not_exists.return_value = True
+        mock_remote.return_value = True
+        mock_auth_check.return_value = True
+        mock_perform.return_value = True
+
+        result = embed_module(
+            "auth",
+            tmp_path,
+            non_interactive=True,
+            allow_unverifiable_auth_state=True,
+        )
+
+        assert result is True
+        mock_auth_check.assert_called_once_with(tmp_path, True, True)
 
     @patch("quickscale_cli.commands.module_commands._perform_module_embed")
     @patch("quickscale_cli.commands.module_commands._validate_remote_branch")

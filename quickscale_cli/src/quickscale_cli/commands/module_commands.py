@@ -102,6 +102,7 @@ def _validate_remote_branch(remote: str, branch: str, module: str) -> bool:
 def _check_auth_module_migrations(
     project_path: Path,
     non_interactive: bool,
+    allow_unverifiable_auth_state: bool = False,
 ) -> bool:
     """Check if auth module can be embedded safely.
 
@@ -110,6 +111,25 @@ def _check_auth_module_migrations(
     """
     assessment = assess_auth_migration_state(project_path)
     if assessment.compatible:
+        return True
+
+    if assessment.unverifiable and allow_unverifiable_auth_state:
+        click.secho(
+            "\n⚠️  Auth module migration state could not be verified",
+            fg="yellow",
+            bold=True,
+        )
+        click.echo(f"\nReason: {assessment.reason}")
+        click.echo(
+            "\nContinuing because apply is configured to allow unverifiable "
+            "migration state checks."
+        )
+        click.echo(
+            "If your database already has baseline Django auth/admin/session/"
+            "contenttypes migrations, a destructive reset may still be required."
+        )
+        click.echo("")
+        click.echo(format_auth_migration_remediation(project_path))
         return True
 
     click.secho(
@@ -128,7 +148,7 @@ def _check_auth_module_migrations(
     if non_interactive:
         click.secho(
             "\n❌ Cannot embed auth module in non-interactive mode when "
-            "state is incompatible or unverifiable.",
+            f"state is {assessment.status}.",
             fg="red",
             err=True,
         )
@@ -193,6 +213,7 @@ def embed_module(
     project_path: Path | None = None,
     remote: str = "https://github.com/Experto-AI/quickscale.git",
     non_interactive: bool = True,
+    allow_unverifiable_auth_state: bool = False,
 ) -> bool:
     """
     Embed a QuickScale module into a project via git subtree.
@@ -205,6 +226,8 @@ def embed_module(
         project_path: Path to the project directory. If None, uses current directory.
         remote: Git remote URL (default: QuickScale repository)
         non_interactive: Use default configuration without prompts
+        allow_unverifiable_auth_state: Continue when auth migration state
+            cannot be verified (used by quickscale apply for fresh projects)
 
     Returns:
         True if embedding succeeded, False otherwise
@@ -237,7 +260,9 @@ def embed_module(
 
         # Auth module special check
         if module == "auth" and not _check_auth_module_migrations(
-            project_path, non_interactive
+            project_path,
+            non_interactive,
+            allow_unverifiable_auth_state,
         ):
             return False
 
