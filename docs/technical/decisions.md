@@ -734,7 +734,7 @@ Other documents (README.md, roadmap.md, scaffolding.md, commercial.md) MUST refe
 | Settings inheritance from `quickscale_core` into generated project | OPTIONAL | Default generated project uses standalone `settings.py`. If user explicitly embeds `quickscale_core`, optional settings inheritance is allowed and documented. |
 | **PRODUCTION-READY FOUNDATIONS (Competitive Requirement)** | | **See [competitive_analysis.md §1-3](../overview/competitive_analysis.md#-critical-for-mvp-viability-must-have)** |
 | Docker setup (Dockerfile + docker-compose.yml) | IN | Production-ready multi-stage Dockerfile + local dev docker-compose with PostgreSQL & Redis services. Match Cookiecutter quality. |
-| PostgreSQL configuration (dev + production) | IN | Split settings: SQLite for local dev, PostgreSQL for production. DATABASE_URL env var support via python-decouple/django-environ. |
+| PostgreSQL configuration (dev + production) | IN | PostgreSQL only for all environments. `DATABASE_URL` is required in local settings; no SQLite fallback or compatibility mode. |
 | Environment-based configuration (.env + split settings) | IN | settings/base.py, settings/local.py, settings/production.py pattern. Secure SECRET_KEY loading from environment. |
 | Security best practices | IN | ALLOWED_HOSTS, security middleware, SECURE_SSL_REDIRECT, SESSION_COOKIE_SECURE in production settings. Sentry scaffolding (commented). |
 | WhiteNoise static files configuration | IN | Production static file serving without CDN complexity. |
@@ -779,6 +779,12 @@ Other documents (README.md, roadmap.md, scaffolding.md, commercial.md) MUST refe
 - ✅ pytest-cov: Coverage reporting
 - ❌ NO Black (use Ruff format)
 - ❌ NO Flake8 (use Ruff check)
+
+**Database Policy (Breaking):**
+- ✅ PostgreSQL-only across dev and production
+- ✅ `DATABASE_URL` is required for local DB configuration
+- ❌ SQLite is unsupported
+- ❌ No backward compatibility layer, migration shim, or fallback mode for SQLite-based setups
 
 **Scripts Reference (AI Assistant Guidance):**
 - `./scripts/install_global.sh` - **Install Poetry globally** - use official installer (REQUIRED FIRST: avoids version conflicts, DO NOT use pip/pipx)

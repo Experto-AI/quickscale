@@ -7,6 +7,7 @@ import subprocess
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
+from typing import Any, cast
 
 import click
 
@@ -123,7 +124,9 @@ def _generate_project(config: QuickScaleConfig, output_path: Path) -> bool:
             return False
 
         generator = ProjectGenerator(theme=config.project.theme)
-        generator.generate(
+        # mypy can resolve an older installed quickscale-core signature here.
+        generate_project = cast(Any, generator.generate)
+        generate_project(
             config.project.slug,
             output_path,
             package_name=config.project.package,
