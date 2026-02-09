@@ -1,0 +1,27 @@
+# Blog Module Manifest
+# Defines configuration options and their mutability for the blog module
+
+name: blog
+version: "0.73.0"
+description: "Markdown-powered blog module"
+
+config:
+  mutable:
+    posts_per_page:
+      type: integer
+      default: 10
+      django_setting: BLOG_POSTS_PER_PAGE
+      description: "Number of blog posts per page"
+
+  immutable:
+    enable_rss:
+      type: boolean
+      default: true
+      description: "Enable RSS-related URL wiring at embed time"
+
+dependencies:
+  - django-markdownx>=4.0
+
+django_apps:
+  - markdownx
+  - quickscale_modules_blog
