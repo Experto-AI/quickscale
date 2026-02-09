@@ -184,7 +184,7 @@ INSTALLED_APPS += ['quickscale_modules.auth']
 {% endif %}
 
 {# Advanced filtering #}
-DATABASE_URL = '{{ database_url|default("sqlite:///db.sqlite3") }}'
+DATABASE_URL = '{{ database_url|default("postgresql://postgres:postgres@db:5432/app") }}'
 ```
 
 ### 3. Cleaner Template Files

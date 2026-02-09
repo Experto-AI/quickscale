@@ -46,7 +46,7 @@ Review changes for architectural compliance, flag any violations of tech stack r
 | Dependencies | Poetry | pip, requirements.txt |
 | Package Config | pyproject.toml | setup.py |
 | Testing | pytest | unittest (alone) |
-| Database | PostgreSQL | SQLite (prod) |
+| Database | PostgreSQL | SQLite |
 | Frontend | React + Vite | Create React App |
 | CSS | Tailwind | Bootstrap, custom CSS frameworks |
 
