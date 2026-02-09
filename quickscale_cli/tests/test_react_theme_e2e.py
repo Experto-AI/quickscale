@@ -54,8 +54,10 @@ class TestReactThemeUserWorkflow:
 
         with runner.isolated_filesystem(temp_dir=tmp_path):
             # Step 1: Plan the project (creates quickscale.yml)
-            # Provide input: theme=1 (showcase_react), no modules, docker start=N, save=Y
-            result = runner.invoke(cli, ["plan", project_name], input="1\n\nN\nY\n")
+            # Provide input:
+            # package(default), theme=1 (showcase_react), no modules,
+            # docker start=N, save=Y
+            result = runner.invoke(cli, ["plan", project_name], input="\n1\n\nN\nY\n")
             assert result.exit_code == 0, f"plan failed: {result.output}"
             # Default theme is showcase_react
             assert "showcase_react" in result.output
@@ -545,8 +547,9 @@ class TestReactThemeVerboseDockerOption:
     def test_apply_accepts_verbose_docker_flag(self, tmp_path, runner):
         """Verify apply command accepts --verbose-docker flag"""
         with runner.isolated_filesystem(temp_dir=tmp_path):
-            # Create plan first with inputs (theme=1, no modules, docker start=N, save=Y)
-            result = runner.invoke(cli, ["plan", "testapp"], input="1\n\nN\nY\n")
+            # Create plan first with inputs:
+            # package(default), theme=1, no modules, docker start=N, save=Y
+            result = runner.invoke(cli, ["plan", "testapp"], input="\n1\n\nN\nY\n")
             assert result.exit_code == 0
 
             # Change to project directory

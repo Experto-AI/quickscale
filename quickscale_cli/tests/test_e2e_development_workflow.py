@@ -15,6 +15,7 @@ Note: Requires Docker to be running
 """
 
 import subprocess
+import socket
 import time
 
 import pytest
@@ -27,6 +28,13 @@ from quickscale_core.generator import ProjectGenerator
 @pytest.mark.e2e
 class TestDevelopmentCommandsE2E:
     """End-to-end tests for development commands with real Docker containers."""
+
+    @staticmethod
+    def _get_free_port() -> int:
+        """Return an available host port for isolated e2e runs."""
+        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
+            sock.bind(("127.0.0.1", 0))
+            return int(sock.getsockname()[1])
 
     @pytest.fixture(autouse=True)
     def cleanup_before_test(self):
@@ -153,6 +161,46 @@ class TestDevelopmentCommandsE2E:
         finally:
             # Restore original directory
             os.chdir(original_cwd)
+
+    def test_apply_with_docker_runs_migrations_in_container(
+        self, tmp_path, ensure_docker_running
+    ):
+        """Apply with Docker auto-start should run migrations via backend container."""
+        runner = CliRunner()
+        project_name = "e2e_apply_docker"
+        port = self._get_free_port()
+        env = {"PORT": str(port)}
+
+        with runner.isolated_filesystem(temp_dir=tmp_path):
+            # package(default) -> theme=2(showcase_html) -> modules(skip)
+            # -> docker.start=Y -> docker.build=Y -> save=Y
+            plan_input = "\n2\n\nY\nY\nY\n"
+            result = runner.invoke(cli, ["plan", project_name], input=plan_input)
+            assert result.exit_code == 0, f"plan failed: {result.output}"
+
+            import os
+
+            original_cwd = os.getcwd()
+            os.chdir(project_name)
+
+            try:
+                # show_docker_output=N -> proceed=Y
+                apply_input = "n\ny\n"
+                result = runner.invoke(
+                    cli,
+                    ["apply"],
+                    input=apply_input,
+                    env=env,
+                )
+
+                assert result.exit_code == 0, f"apply failed: {result.output}"
+                assert "Running migrations (Docker)" in result.output
+                assert 'localhost" (127.0.0.1), port 5432' not in result.output
+                assert "Migrations failed" not in result.output
+
+            finally:
+                runner.invoke(cli, ["down"], env=env)
+                os.chdir(original_cwd)
 
     def test_up_down_lifecycle(self, test_project, ensure_docker_running):
         """Test container lifecycle: up → down → up again."""

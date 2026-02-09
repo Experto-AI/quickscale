@@ -528,6 +528,37 @@ class TestEmbedModule:
         mock_auth_check.assert_called_once_with(tmp_path, True, True)
 
     @patch("quickscale_cli.commands.module_commands._perform_module_embed")
+    @patch("quickscale_cli.commands.module_commands._check_auth_module_migrations")
+    @patch("quickscale_cli.commands.module_commands._validate_remote_branch")
+    @patch("quickscale_cli.commands.module_commands._validate_module_not_exists")
+    @patch("quickscale_cli.commands.module_commands._validate_git_environment")
+    @patch("quickscale_cli.commands.module_commands.MODULE_CONFIGURATORS", {})
+    def test_auth_migration_check_can_be_skipped(
+        self,
+        mock_git_env,
+        mock_not_exists,
+        mock_remote,
+        mock_auth_check,
+        mock_perform,
+        tmp_path,
+    ):
+        """Test embed_module can bypass auth migration check when requested."""
+        mock_git_env.return_value = True
+        mock_not_exists.return_value = True
+        mock_remote.return_value = True
+        mock_perform.return_value = True
+
+        result = embed_module(
+            "auth",
+            tmp_path,
+            non_interactive=True,
+            skip_auth_migration_check=True,
+        )
+
+        assert result is True
+        mock_auth_check.assert_not_called()
+
+    @patch("quickscale_cli.commands.module_commands._perform_module_embed")
     @patch("quickscale_cli.commands.module_commands._validate_remote_branch")
     @patch("quickscale_cli.commands.module_commands._validate_module_not_exists")
     @patch("quickscale_cli.commands.module_commands._validate_git_environment")

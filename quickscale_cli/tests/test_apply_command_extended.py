@@ -15,6 +15,7 @@ from quickscale_cli.commands.apply_command import (
     _embed_module,
     _run_poetry_install,
     _run_migrations,
+    _run_migrations_in_docker,
     _start_docker,
     _load_module_manifests,
     _apply_mutable_config,
@@ -192,6 +193,27 @@ class TestEmbedModule:
             project_path=Path("/tmp/proj"),
             non_interactive=True,
             allow_unverifiable_auth_state=True,
+            skip_auth_migration_check=False,
+        )
+
+    @patch("quickscale_cli.commands.apply_command.embed_module")
+    def test_success_skip_auth_migration_check(self, mock_embed):
+        """Test module embedding with auth migration check bypass."""
+        mock_embed.return_value = True
+        assert (
+            _embed_module(
+                Path("/tmp/proj"),
+                "auth",
+                skip_auth_migration_check=True,
+            )
+            is True
+        )
+        mock_embed.assert_called_once_with(
+            module="auth",
+            project_path=Path("/tmp/proj"),
+            non_interactive=True,
+            allow_unverifiable_auth_state=True,
+            skip_auth_migration_check=True,
         )
 
     @patch("quickscale_cli.commands.apply_command.embed_module")
@@ -226,6 +248,12 @@ class TestPostGenerationHelpers:
         """Test run migrations wrapper"""
         mock_run.return_value = (True, "")
         assert _run_migrations(Path("/tmp/proj")) is True
+
+    @patch("quickscale_cli.commands.apply_command._run_command")
+    def test_migrations_in_docker(self, mock_run):
+        """Test run migrations in docker wrapper"""
+        mock_run.return_value = (True, "")
+        assert _run_migrations_in_docker(Path("/tmp/proj")) is True
 
 
 # ============================================================================
@@ -697,6 +725,11 @@ class TestEmbedModulesStep:
             embedded_modules=["auth"],
             failed_module=None,
         )
+        mock_embed.assert_called_once_with(
+            Path("/tmp"),
+            "auth",
+            skip_auth_migration_check=True,
+        )
 
     @patch("quickscale_cli.commands.apply_command.is_working_directory_clean")
     @patch("quickscale_cli.commands.apply_command._git_commit")
@@ -711,6 +744,21 @@ class TestEmbedModulesStep:
             success=False,
             embedded_modules=[],
             failed_module="auth",
+        )
+
+    @patch("quickscale_cli.commands.apply_command._git_commit")
+    @patch("quickscale_cli.commands.apply_command._embed_module")
+    def test_existing_project_does_not_skip_auth_guard(self, mock_embed, mock_commit):
+        """Existing projects should still run auth migration guardrail."""
+        mock_embed.return_value = True
+        mock_commit.return_value = True
+
+        _embed_modules_step(Path("/tmp"), ["auth"], False, Mock())
+
+        mock_embed.assert_called_once_with(
+            Path("/tmp"),
+            "auth",
+            skip_auth_migration_check=False,
         )
 
 
@@ -747,6 +795,14 @@ class TestRunPostGenerationSteps:
         mock_migrate.return_value = False
         _run_post_generation_steps(Path("/tmp"))
         # Should not raise
+
+    @patch("quickscale_cli.commands.apply_command._run_migrations")
+    @patch("quickscale_cli.commands.apply_command._run_poetry_install")
+    def test_skip_migrations(self, mock_poetry, mock_migrate):
+        """Test migration step can be deferred."""
+        mock_poetry.return_value = True
+        _run_post_generation_steps(Path("/tmp"), run_migrations=False)
+        mock_migrate.assert_not_called()
 
 
 # ============================================================================
@@ -867,6 +923,7 @@ class TestExecuteApplySteps:
     )
     @patch("quickscale_cli.commands.apply_command._display_next_steps")
     @patch("quickscale_cli.commands.apply_command._save_project_state")
+    @patch("quickscale_cli.commands.apply_command._run_migrations_in_docker")
     @patch("quickscale_cli.commands.apply_command._start_docker")
     @patch("quickscale_cli.commands.apply_command._run_post_generation_steps")
     @patch("quickscale_cli.commands.apply_command._regenerate_managed_wiring_for_apply")
@@ -881,6 +938,7 @@ class TestExecuteApplySteps:
         mock_regenerate_wiring,
         mock_run_post,
         mock_start_docker,
+        mock_run_migrations_in_docker,
         mock_save_state,
         mock_display_next_steps,
         modules,
@@ -893,6 +951,7 @@ class TestExecuteApplySteps:
         )
         mock_regenerate_wiring.return_value = True
         mock_start_docker.return_value = True
+        mock_run_migrations_in_docker.return_value = True
 
         ctx = Mock()
         ctx.existing_state = None
@@ -921,13 +980,125 @@ class TestExecuteApplySteps:
             False,
             None,
         )
+        mock_run_post.assert_called_once_with(ctx.output_path, run_migrations=False)
         mock_start_docker.assert_called_once_with(ctx.output_path, True, False)
+        mock_run_migrations_in_docker.assert_called_once_with(ctx.output_path)
         mock_display_next_steps.assert_called_once_with(
             ctx.output_path,
             ctx.qs_config,
             False,
             True,
         )
+
+    @patch("quickscale_cli.commands.apply_command._display_next_steps")
+    @patch("quickscale_cli.commands.apply_command._save_project_state")
+    @patch("quickscale_cli.commands.apply_command._run_migrations_in_docker")
+    @patch("quickscale_cli.commands.apply_command._start_docker")
+    @patch("quickscale_cli.commands.apply_command._run_post_generation_steps")
+    @patch("quickscale_cli.commands.apply_command._regenerate_managed_wiring_for_apply")
+    @patch("quickscale_cli.commands.apply_command._embed_modules_step")
+    @patch("quickscale_cli.commands.apply_command._init_git_with_config")
+    @patch("quickscale_cli.commands.apply_command._generate_new_project")
+    def test_new_project_without_docker_autostart_runs_migrations_in_post_step(
+        self,
+        mock_generate_new_project,
+        mock_init_git,
+        mock_embed_modules_step,
+        mock_regenerate_wiring,
+        mock_run_post,
+        mock_start_docker,
+        mock_run_migrations_in_docker,
+        mock_save_state,
+        mock_display_next_steps,
+    ):
+        """When Docker auto-start is off, migrations stay in post-generation step."""
+        mock_embed_modules_step.return_value = EmbedModulesResult(
+            success=True,
+            embedded_modules=[],
+            failed_module=None,
+        )
+        mock_regenerate_wiring.return_value = True
+
+        ctx = Mock()
+        ctx.existing_state = None
+        ctx.output_path = Path("/tmp/proj")
+        ctx.manifests = {}
+        ctx.delta = Mock()
+        ctx.delta.modules_to_add = []
+        ctx.delta.has_mutable_config_changes = False
+        ctx.qs_config = Mock()
+        ctx.qs_config.modules = {"blog": Mock(options={})}
+        ctx.qs_config.docker.start = False
+        ctx.qs_config.docker.build = True
+
+        _execute_apply_steps(
+            ctx,
+            force=False,
+            no_docker=False,
+            no_modules=False,
+            verbose_docker=False,
+        )
+
+        mock_run_post.assert_called_once_with(ctx.output_path, run_migrations=True)
+        mock_start_docker.assert_not_called()
+        mock_run_migrations_in_docker.assert_not_called()
+
+    @patch("quickscale_cli.commands.apply_command._display_next_steps")
+    @patch("quickscale_cli.commands.apply_command._save_project_state")
+    @patch("quickscale_cli.commands.apply_command._run_migrations")
+    @patch("quickscale_cli.commands.apply_command._run_migrations_in_docker")
+    @patch("quickscale_cli.commands.apply_command._start_docker")
+    @patch("quickscale_cli.commands.apply_command._run_post_generation_steps")
+    @patch("quickscale_cli.commands.apply_command._regenerate_managed_wiring_for_apply")
+    @patch("quickscale_cli.commands.apply_command._embed_modules_step")
+    @patch("quickscale_cli.commands.apply_command._init_git_with_config")
+    @patch("quickscale_cli.commands.apply_command._generate_new_project")
+    def test_docker_autostart_failure_falls_back_to_local_migrations(
+        self,
+        mock_generate_new_project,
+        mock_init_git,
+        mock_embed_modules_step,
+        mock_regenerate_wiring,
+        mock_run_post,
+        mock_start_docker,
+        mock_run_migrations_in_docker,
+        mock_run_migrations,
+        mock_save_state,
+        mock_display_next_steps,
+    ):
+        """If Docker startup fails, apply falls back to local migration attempt."""
+        mock_embed_modules_step.return_value = EmbedModulesResult(
+            success=True,
+            embedded_modules=[],
+            failed_module=None,
+        )
+        mock_regenerate_wiring.return_value = True
+        mock_start_docker.return_value = False
+        mock_run_migrations.return_value = True
+
+        ctx = Mock()
+        ctx.existing_state = None
+        ctx.output_path = Path("/tmp/proj")
+        ctx.manifests = {}
+        ctx.delta = Mock()
+        ctx.delta.modules_to_add = []
+        ctx.delta.has_mutable_config_changes = False
+        ctx.qs_config = Mock()
+        ctx.qs_config.modules = {"listings": Mock(options={})}
+        ctx.qs_config.docker.start = True
+        ctx.qs_config.docker.build = True
+
+        _execute_apply_steps(
+            ctx,
+            force=False,
+            no_docker=False,
+            no_modules=False,
+            verbose_docker=False,
+        )
+
+        mock_run_post.assert_called_once_with(ctx.output_path, run_migrations=False)
+        mock_run_migrations_in_docker.assert_not_called()
+        mock_run_migrations.assert_called_once_with(ctx.output_path)
 
 
 # ============================================================================

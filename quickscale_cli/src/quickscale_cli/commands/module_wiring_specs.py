@@ -56,7 +56,12 @@ def _auth_wiring(options: Mapping[str, Any]) -> ModuleWiringSpec:
         ),
         middleware=("allauth.account.middleware.AccountMiddleware",),
         settings=settings,
-        url_includes=(("accounts/", "quickscale_modules_auth.urls"),),
+        # Include allauth globally so reverse("account_login") /
+        # reverse("account_signup") resolve outside auth namespace.
+        url_includes=(
+            ("accounts/", "allauth.urls"),
+            ("accounts/", "quickscale_modules_auth.urls"),
+        ),
     )
 
 

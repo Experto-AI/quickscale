@@ -220,8 +220,8 @@ class TestApplyAuthConfiguration:
         assert "AUTH_USER_MODEL" in settings_content
 
         urls_content = (project / "myproject" / "urls_modules.py").read_text()
+        assert "allauth.urls" in urls_content
         assert "quickscale_modules_auth.urls" in urls_content
-        assert "allauth.urls" not in urls_content
 
     def test_urls_already_has_allauth(self, tmp_path):
         """Skip URL update when allauth already in urls"""

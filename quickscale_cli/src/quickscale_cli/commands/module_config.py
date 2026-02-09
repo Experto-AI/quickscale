@@ -456,7 +456,7 @@ def apply_auth_configuration(project_path: Path, config: dict[str, Any]) -> None
     if pyproject_path.exists():
         _add_django_allauth_dependency(project_path, pyproject_path)
 
-    # Auth module owns allauth URL inclusion inside quickscale_modules_auth.urls.
+    # Managed wiring includes django-allauth + auth module URL routes.
     _regenerate_wiring_for_module(project_path, "auth", normalized_config)
 
     # Show configuration summary

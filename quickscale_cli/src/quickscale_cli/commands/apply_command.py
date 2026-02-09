@@ -180,7 +180,11 @@ def _git_commit(project_path: Path, message: str) -> bool:
     return success
 
 
-def _embed_module(project_path: Path, module_name: str) -> bool:
+def _embed_module(
+    project_path: Path,
+    module_name: str,
+    skip_auth_migration_check: bool = False,
+) -> bool:
     """Embed a module using the embed_module function with non-interactive mode"""
     click.echo(f"⏳ Embedding module: {module_name}...")
 
@@ -190,6 +194,7 @@ def _embed_module(project_path: Path, module_name: str) -> bool:
             project_path=project_path,
             non_interactive=True,
             allow_unverifiable_auth_state=True,
+            skip_auth_migration_check=skip_auth_migration_check,
         )
 
         if success:
@@ -218,6 +223,15 @@ def _run_migrations(project_path: Path) -> bool:
         ["poetry", "run", "python", "manage.py", "migrate"],
         project_path,
         "Running migrations",
+    )[0]
+
+
+def _run_migrations_in_docker(project_path: Path) -> bool:
+    """Run Django migrations inside the backend Docker container."""
+    return _run_command(
+        ["quickscale", "manage", "migrate"],
+        project_path,
+        "Running migrations (Docker)",
     )[0]
 
 
@@ -575,8 +589,14 @@ def _embed_modules_step(
             click.echo("⏭️  No new modules to embed")
         return EmbedModulesResult(success=True, embedded_modules=embedded_modules)
 
+    skip_auth_migration_check = existing_state is None
+
     for module_name in modules_to_embed:
-        if not _embed_module(output_path, module_name):
+        if not _embed_module(
+            output_path,
+            module_name,
+            skip_auth_migration_check=skip_auth_migration_check,
+        ):
             if not is_working_directory_clean(output_path):
                 _git_commit(output_path, f"Partial module: {module_name} (incomplete)")
             click.secho(
@@ -596,12 +616,12 @@ def _embed_modules_step(
     return EmbedModulesResult(success=True, embedded_modules=embedded_modules)
 
 
-def _run_post_generation_steps(output_path: Path) -> None:
-    """Run poetry install and migrations."""
+def _run_post_generation_steps(output_path: Path, run_migrations: bool = True) -> None:
+    """Run poetry install and optionally migrations."""
     if not _run_poetry_install(output_path):
         click.secho("⚠️  Poetry install failed, continuing...", fg="yellow")
 
-    if not _run_migrations(output_path):
+    if run_migrations and not _run_migrations(output_path):
         click.secho("⚠️  Migrations failed, continuing...", fg="yellow")
 
 
@@ -839,8 +859,14 @@ def _execute_apply_steps(
         )
         raise click.Abort()
 
-    # Run post-generation steps
-    _run_post_generation_steps(ctx.output_path)
+    should_auto_start_docker = not no_docker and ctx.qs_config.docker.start
+
+    # Run post-generation steps. Defer migrations until after Docker startup
+    # when auto-start is enabled, so PostgreSQL is reachable.
+    _run_post_generation_steps(
+        ctx.output_path,
+        run_migrations=not should_auto_start_docker,
+    )
 
     # Apply mutable configuration changes
     if ctx.existing_state and ctx.delta.has_mutable_config_changes:
@@ -851,12 +877,21 @@ def _execute_apply_steps(
 
     # Start Docker
     docker_started: bool | None = None
-    if not no_docker and ctx.qs_config.docker.start:
+    if should_auto_start_docker:
         docker_started = _start_docker(
             ctx.output_path, ctx.qs_config.docker.build, verbose_docker
         )
         if not docker_started:
             click.secho("⚠️  Docker start failed, continuing...", fg="yellow")
+
+    # For Docker auto-start projects, run migrations in the backend container
+    # so database connectivity uses the internal Docker network.
+    if should_auto_start_docker:
+        if docker_started:
+            if not _run_migrations_in_docker(ctx.output_path):
+                click.secho("⚠️  Migrations failed, continuing...", fg="yellow")
+        elif not _run_migrations(ctx.output_path):
+            click.secho("⚠️  Migrations failed, continuing...", fg="yellow")
 
     # Save state
     _save_project_state(
@@ -924,8 +959,8 @@ def apply(
       4. Embed modules (if configured, fail-fast on required module failure)
       5. Regenerate managed module wiring files
       6. Run poetry install
-      7. Run migrations
-      8. Start Docker (if configured)
+      7. Start Docker (if configured)
+      8. Run migrations (after Docker auto-start when enabled)
     """
     # Prepare context
     ctx = _prepare_apply_context(Path(config))

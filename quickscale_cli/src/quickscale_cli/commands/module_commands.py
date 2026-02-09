@@ -214,6 +214,7 @@ def embed_module(
     remote: str = "https://github.com/Experto-AI/quickscale.git",
     non_interactive: bool = True,
     allow_unverifiable_auth_state: bool = False,
+    skip_auth_migration_check: bool = False,
 ) -> bool:
     """
     Embed a QuickScale module into a project via git subtree.
@@ -228,6 +229,8 @@ def embed_module(
         non_interactive: Use default configuration without prompts
         allow_unverifiable_auth_state: Continue when auth migration state
             cannot be verified (used by quickscale apply for fresh projects)
+        skip_auth_migration_check: Skip auth migration guardrail entirely
+            (used by quickscale apply for freshly generated projects)
 
     Returns:
         True if embedding succeeded, False otherwise
@@ -259,12 +262,13 @@ def embed_module(
             return False
 
         # Auth module special check
-        if module == "auth" and not _check_auth_module_migrations(
-            project_path,
-            non_interactive,
-            allow_unverifiable_auth_state,
-        ):
-            return False
+        if module == "auth" and not skip_auth_migration_check:
+            if not _check_auth_module_migrations(
+                project_path,
+                non_interactive,
+                allow_unverifiable_auth_state,
+            ):
+                return False
 
         # Interactive module configuration
         config: dict[str, Any] = {}
