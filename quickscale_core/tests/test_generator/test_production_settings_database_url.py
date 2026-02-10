@@ -10,7 +10,7 @@ class TestProductionSettingsValidation:
         """Test that error message provides helpful Railway-specific guidance."""
         # This is the error message that should appear in the template
         expected_error_message = (
-            "DATABASE_URL environment variable is not set. "
+            "DATABASE_URL environment variable is not set or is empty. "
             "Railway requires DATABASE_URL to connect to PostgreSQL. "
             "Ensure the database service is linked to your app service in Railway dashboard."
         )

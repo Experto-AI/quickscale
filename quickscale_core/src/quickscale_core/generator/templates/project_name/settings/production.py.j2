@@ -66,12 +66,13 @@ X_FRAME_OPTIONS = "DENY"
 # Validate DATABASE_URL is set in production
 database_url = config("DATABASE_URL", default=None)
 
-if database_url is None:
+if not database_url:
+    # Catches both None and empty string "" (e.g. unresolved Railway reference)
     # Only raise error for production commands that need database
     # Allow collectstatic and other non-DB commands to run
     if "collectstatic" not in sys.argv and "compilemessages" not in sys.argv:
         raise ValueError(
-            "DATABASE_URL environment variable is not set. "
+            "DATABASE_URL environment variable is not set or is empty. "
             "Railway requires DATABASE_URL to connect to PostgreSQL. "
             "Ensure the database service is linked to your app service in Railway dashboard."
         )

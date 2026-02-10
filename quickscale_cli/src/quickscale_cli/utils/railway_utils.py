@@ -620,6 +620,9 @@ def get_railway_variables(service: str | None = None) -> dict[str, str] | None:
     """
     Get all environment variables for a Railway service.
 
+    Tries JSON output first (--json flag) for reliable structured parsing,
+    then falls back to KEY=VALUE line parsing for older CLI versions.
+
     Args:
     ----
         service: Service name (optional)
@@ -634,6 +637,12 @@ def get_railway_variables(service: str | None = None) -> dict[str, str] | None:
         if service:
             cmd.extend(["--service", service])
 
+        # Try JSON output first for reliable parsing
+        json_vars = _get_railway_variables_json(cmd)
+        if json_vars is not None:
+            return json_vars
+
+        # Fall back to text parsing for older CLI versions
         result = run_railway_command(cmd, timeout=30)
 
         if result.returncode == 0:
@@ -651,6 +660,39 @@ def get_railway_variables(service: str | None = None) -> dict[str, str] | None:
             return variables
         return None
     except Exception:
+        return None
+
+
+def _get_railway_variables_json(
+    base_cmd: list[str],
+) -> dict[str, str] | None:
+    """Try to get variables using Railway CLI --json flag.
+
+    Args:
+    ----
+        base_cmd: Base command list (e.g. ["variables", "--service", "myapp"])
+
+    Returns:
+    -------
+        Dictionary of variable names and values, or None if JSON output unavailable
+
+    """
+    try:
+        result = run_railway_command(base_cmd + ["--json"], timeout=30)
+        if result.returncode != 0:
+            return None
+        data = json.loads(result.stdout)
+        # Railway JSON output can be a dict of {key: value} or a list of objects
+        if isinstance(data, dict):
+            return {k: str(v) for k, v in data.items()}
+        if isinstance(data, list):
+            variables: dict[str, str] = {}
+            for item in data:
+                if isinstance(item, dict) and "name" in item and "value" in item:
+                    variables[item["name"]] = str(item["value"])
+            return variables if variables else None
+        return None
+    except (json.JSONDecodeError, TimeoutError, Exception):
         return None
 
 
@@ -714,7 +756,18 @@ def link_database_to_service(service: str) -> tuple[bool, str]:
                 continue
 
             if result.returncode == 0:
-                return True, "DATABASE_URL reference linked successfully"
+                # Verify the reference actually resolves to a non-empty value
+                time.sleep(3)
+                deployed_vars = get_railway_variables(service)
+                db_val = (deployed_vars or {}).get("DATABASE_URL", "")
+                if db_val and not db_val.startswith("${"):
+                    return True, "DATABASE_URL reference linked successfully"
+                # Reference was set but hasn't resolved yet — continue retry
+                last_error = (
+                    "DATABASE_URL reference was set but resolved to "
+                    "empty value (database may still be provisioning)"
+                )
+                continue
 
             error_text = (result.stderr or result.stdout or "").strip()
             if error_text:
@@ -724,8 +777,10 @@ def link_database_to_service(service: str) -> tuple[bool, str]:
                 return False, f"Failed to link DATABASE_URL: {error_text}"
 
         deployed_vars = get_railway_variables(service)
-        if deployed_vars and "DATABASE_URL" in deployed_vars:
-            return True, "DATABASE_URL reference linked successfully"
+        if deployed_vars:
+            db_val = deployed_vars.get("DATABASE_URL", "")
+            if db_val and not db_val.startswith("${"):
+                return True, "DATABASE_URL reference linked successfully"
 
         if attempt < max_attempts and time.monotonic() - start_time < max_wait_seconds:
             time.sleep(retry_delay_seconds)

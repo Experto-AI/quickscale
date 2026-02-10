@@ -382,7 +382,6 @@ def _verify_deployment_step(app_service: str) -> bool:
     database_url_present = False
 
     if deployed_vars:
-        click.secho("✅ Environment variables verified", fg="green")
         required_vars = [
             "DATABASE_URL",
             "SECRET_KEY",
@@ -390,20 +389,35 @@ def _verify_deployment_step(app_service: str) -> bool:
             "DJANGO_SETTINGS_MODULE",
             "ALLOWED_HOSTS",
         ]
+        missing_vars: list[str] = []
+        present_vars: list[tuple[str, str]] = []
         for var in required_vars:
-            if var in deployed_vars:
+            if var in deployed_vars and deployed_vars[var]:
                 if var == "SECRET_KEY":
-                    click.echo(f"   • {var}=<set>")
+                    present_vars.append((var, "<set>"))
                 elif var == "DATABASE_URL":
-                    click.echo(f"   • {var}=<linked to PostgreSQL>")
+                    present_vars.append((var, "<linked to PostgreSQL>"))
                     database_url_present = True
                 else:
                     value = deployed_vars[var]
                     if len(value) > 50:
                         value = value[:50] + "..."
-                    click.echo(f"   • {var}={value}")
+                    present_vars.append((var, value))
             else:
-                click.secho(f"   ⚠️  {var} not set", fg="yellow")
+                missing_vars.append(var)
+
+        if not missing_vars:
+            click.secho("✅ Environment variables verified", fg="green")
+        else:
+            click.secho(
+                f"⚠️  Environment variables partially configured "
+                f"({len(missing_vars)} missing)",
+                fg="yellow",
+            )
+        for var, value in present_vars:
+            click.echo(f"   • {var}={value}")
+        for var in missing_vars:
+            click.secho(f"   ⚠️  {var} not set", fg="yellow")
     else:
         click.secho("⚠️  Warning: Could not verify environment variables", fg="yellow")
         click.echo("💡 Check manually: railway variables")
