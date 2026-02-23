@@ -47,7 +47,7 @@ QuickScale follows an evolution-aligned roadmap that starts as a personal toolki
    - ✅ Plan/Apply Cleanup (v0.72.0) - Remove legacy init/embed commands
    - ✅ CRM module (v0.73.0) - native Django CRM app (API-only)
    - ✅ **React Default Theme** (v0.74.0) - React + shadcn/ui as default
-   - 📋 Forms module (v0.75.0) - generic customizable form builder + contact form
+   - 🚧 **Forms module** (v0.75.0) - backend complete; React frontend components pending
    - 📋 Social & Link Tree module (v0.76.0) - social links page + media embeds
    - 📋 Listings Theme (v0.77.0) - React frontend for property listings (sell/rent)
    - 📋 CRM Theme (v0.78.0) - React frontend for CRM module
@@ -77,13 +77,14 @@ QuickScale follows an evolution-aligned roadmap that starts as a personal toolki
 - **v0.71.0:** Plan/Apply System Complete ✅
 - **v0.72.0:** Plan/Apply Cleanup (remove legacy commands) ✅
 - **v0.74.0:** React Default Theme (React + shadcn/ui) ✅
+- **v0.75.0:** Forms Module (generic form builder with DRF API, spam protection, GDPR anonymization) 🚧 Backend ✅ / React ⏳
 - **v0.77.0:** Real Estate MVP (static + listings + social links) 🎯
 - **v0.80.0:** SaaS Feature Parity (auth, billing, teams) 🎯
 - **v1.0.0+:** Community platform (if demand exists)
 
 **Status:**
-- **Current Status:** v0.74.0 — React Default Theme ✅ Complete
-- **Next Milestone:** v0.75.0 - Forms module (generic customizable form builder)
+- **Current Status:** v0.75.0 — Forms Module 🚧 Backend complete, React frontend pending
+- **Next Milestone:** v0.76.0 - Social & Link Tree module
 - **Plan/Apply System:** v0.68.0-v0.71.0 - Terraform-style configuration ✅ Complete
 - **SaaS Parity:** v0.80.0 - auth, billing, teams modules complete
 
@@ -106,7 +107,7 @@ List of upcoming releases with detailed implementation tasks:
 
 ### v0.75.0: `quickscale_modules.forms` - Generic Forms Module
 
-**Status**: 📋 Planned
+**Status**: 🚧 Backend Complete — React Frontend Pending
 
 **Strategic Context**: A generic, fully customizable form-builder module for Django SaaS projects. Enables developers to define, render, and manage any kind of form (contact, feedback, support, newsletter) through a data-driven admin interface, with no code changes required to add or modify forms. The first production use case is the **experto.ai/contact** page — a professional inquiry form collecting Name, Email, Company, Subject, and Project Context, with email notifications to the site owner.
 
@@ -116,20 +117,59 @@ List of upcoming releases with detailed implementation tasks:
 
 ---
 
+#### Implementation Checklist
+
+**Backend**:
+- [x] Data Models (`Form`, `FormField`, `FormSubmission`, `FormFieldValue` + migration)
+- [x] REST API Endpoints (schema, submit, admin CRUD, CSV export)
+- [x] Serializers (`FormFieldSerializer`, `FormSchemaSerializer`, `FormSubmissionCreateSerializer`, admin serializers)
+- [x] Views (`FormSchemaAPIView`, `FormSubmitAPIView`, admin views, `AdminSubmissionExportView`, `FormPageView`)
+- [x] Django Admin (`FormAdmin` + `FormFieldInline`, `FormSubmissionAdmin` + `FormFieldValueInline`)
+- [x] URL Configuration (`app_name = "quickscale_forms"`)
+- [x] Spam Protection — honeypot (`_hp_name`) + `ScopedRateThrottle` (`throttles.py`)
+- [x] Email Notifications (`notifications.py` — `notify_submission()` helper + email templates)
+- [x] Data retention management command (`forms_anonymize_submissions`)
+- [x] Built-in presets management command (`forms_seed_presets`: contact, newsletter, feedback, support)
+- [x] `module.yml` manifest
+- [x] Templates (`form_page.html` React mount point, `form_email.html` notification template)
+
+**React Frontend** (`src/components/forms/`):
+- [ ] `FormRenderer` — dynamic form component (TanStack Query + React Hook Form + Zod)
+- [ ] `FormFieldRenderer` — field type switch (shadcn/ui `Input`, `Textarea`, `Select`, `Checkbox`, `RadioGroup`)
+- [ ] `FormSuccess` — success message display
+- [ ] `useFormSchema(slug)` — TanStack Query hook
+
+**Testing**:
+- [x] `test_models.py` — Form/Field CRUD, ordering, submission creation, value snapshot
+- [x] `test_serializers.py` — schema serialization, dynamic submission validation
+- [x] `test_views.py` — public API (schema, submit, spam, rate limit), admin API (list, detail, CSV)
+- [x] `test_admin.py` — admin registration, list_display, actions, CSV export
+- [x] `test_notifications.py` — email triggered on submit, spam silenced, SMTP failure safe
+- [x] `test_validators.py` — dynamic field-level validator factory
+- [x] `test_management.py` — seed presets command, anonymize submissions command
+- [ ] E2E test: Plan → Apply → Working contact form project (seed `contact` preset, submit, verify in admin)
+
+---
+
 #### Core Design Principles
 
-- **Data-driven**: Forms and their fields are defined entirely through admin or fixtures — no code changes needed to add a new form.
-- **Generic**: Supports any use case — contact, feedback, support ticket, newsletter sign-up, RFQ, etc.
-- **Customizable**: Per-field validation rules, ordering, conditional visibility (roadmap), and layout hints (full-width, two-column).
-- **Theme-agnostic backend**: Django models and DRF API are fully decoupled from the React frontend.
-- **React frontend**: Dynamic form renderer using React Hook Form + Zod (v0.74.0 mandated stack); fetches schema from the REST API.
-- **Spam protection**: Honeypot field + configurable rate limiting (no external CAPTCHA dependency).
-- **Notification-ready**: Email notification hooks on every submission; plugs into future `quickscale_modules.notifications` (v0.82.0).
-- **GDPR-aware**: Configurable data retention period; submission anonymization support.
+- [x] **Data-driven**: Forms and their fields are defined entirely through admin or fixtures — no code changes needed to add a new form.
+- [x] **Generic**: Supports any use case — contact, feedback, support ticket, newsletter sign-up, RFQ, etc.
+- [x] **Customizable**: Per-field validation rules, ordering, conditional visibility (roadmap), and layout hints (full-width, two-column).
+- [x] **Theme-agnostic backend**: Django models and DRF API are fully decoupled from the React frontend.
+- [ ] **React frontend**: Dynamic form renderer using React Hook Form + Zod (v0.74.0 mandated stack); fetches schema from the REST API.
+- [x] **Spam protection**: Honeypot field + configurable rate limiting (no external CAPTCHA dependency).
+- [x] **Notification-ready**: Email notification hooks on every submission; plugs into future `quickscale_modules.notifications` (v0.82.0).
+- [x] **GDPR-aware**: Configurable data retention period; submission anonymization support.
 
 ---
 
 #### Data Models
+
+- [x] `Form` model implemented
+- [x] `FormField` model implemented
+- [x] `FormSubmission` model implemented
+- [x] `FormFieldValue` model implemented
 
 **`Form`** — top-level form definition:
 - `title` (CharField) — human-readable name shown in the admin
@@ -182,6 +222,14 @@ List of upcoming releases with detailed implementation tasks:
 
 #### REST API Endpoints
 
+- [x] `GET /api/forms/{slug}/` (public schema)
+- [x] `POST /api/forms/{slug}/submit/` (public submit)
+- [x] `GET /api/admin/forms/` (staff list)
+- [x] `GET /api/admin/forms/{id}/submissions/` (staff submissions list)
+- [x] `GET /api/admin/forms/{id}/submissions/{sub_id}/` (staff submission detail)
+- [x] `PATCH /api/admin/forms/{id}/submissions/{sub_id}/` (staff submission update)
+- [x] `GET /api/admin/forms/{id}/submissions/export/` (staff CSV export)
+
 All endpoints live under the prefix configured via `urls.py` (recommended: `/forms/api/`):
 
 | Method | Path | Auth | Description |
@@ -221,27 +269,33 @@ All endpoints live under the prefix configured via `urls.py` (recommended: `/for
 
 #### Serializers (`serializers.py`)
 
-- `FormFieldSerializer` — read-only schema serializer for public API (excludes `validation_rules` internals exposed only partially as needed by Zod)
-- `FormSchemaSerializer` — wraps `Form` + nested `FormFieldSerializer` list for `GET /api/forms/{slug}/`
-- `FormSubmissionCreateSerializer` — write-only; validates against the form's fields dynamically; raises field-level `ValidationError` keyed by `field.name`
-- `FormSubmissionAdminSerializer` — full submission detail for admin endpoints
-- `FormFieldValueSerializer` — value snapshot for admin submission detail
+- [x] `FormFieldSerializer` — read-only schema serializer for public API (excludes `validation_rules` internals exposed only partially as needed by Zod)
+- [x] `FormSchemaSerializer` — wraps `Form` + nested `FormFieldSerializer` list for `GET /api/forms/{slug}/`
+- [x] `FormSubmissionCreateSerializer` — write-only; validates against the form's fields dynamically; raises field-level `ValidationError` keyed by `field.name`
+- [x] `FormSubmissionAdminSerializer` — full submission detail for admin endpoints
+- [x] `FormFieldValueSerializer` — value snapshot for admin submission detail
 
 ---
 
 #### Views (`views.py`)
 
-- `FormSchemaAPIView(RetrieveAPIView)` — returns `FormSchemaSerializer`; permission: `AllowAny`; filters out inactive forms via `get_object()`
-- `FormSubmitAPIView(CreateAPIView)` — processes submission; invokes spam check (honeypot); triggers notification; permission: `AllowAny`; throttled via `ScopedRateThrottle`
-- `AdminFormListAPIView(ListAPIView)` — staff-only; annotates with `submission_count`
-- `AdminSubmissionListAPIView(ListAPIView)` — staff-only; filterable by `status`, `is_spam`, date range
-- `AdminSubmissionDetailAPIView(RetrieveUpdateAPIView)` — staff-only; `PATCH` allows updating `status`/`is_spam`
-- `AdminSubmissionExportView(View)` — staff-only; streams CSV response with all field values
-- `FormPageView(TemplateView)` — optional server-side entry point; renders a placeholder `<div id="form-root">` that the React `FormRenderer` component mounts into; passes `slug` to React via `data-*` attribute
+- [x] `FormSchemaAPIView(RetrieveAPIView)` — returns `FormSchemaSerializer`; permission: `AllowAny`; filters out inactive forms via `get_object()`
+- [x] `FormSubmitAPIView(CreateAPIView)` — processes submission; invokes spam check (honeypot); triggers notification; permission: `AllowAny`; throttled via `ScopedRateThrottle`
+- [x] `AdminFormListAPIView(ListAPIView)` — staff-only; annotates with `submission_count`
+- [x] `AdminSubmissionListAPIView(ListAPIView)` — staff-only; filterable by `status`, `is_spam`, date range
+- [x] `AdminSubmissionDetailAPIView(RetrieveUpdateAPIView)` — staff-only; `PATCH` allows updating `status`/`is_spam`
+- [x] `AdminSubmissionExportView(View)` — staff-only; streams CSV response with all field values
+- [x] `FormPageView(TemplateView)` — optional server-side entry point; renders a placeholder `<div id="form-root">` that the React `FormRenderer` component mounts into; passes `slug` to React via `data-*` attribute
 
 ---
 
 #### Admin (`admin.py`)
+
+- [x] `FormFieldInline(admin.TabularInline)` configured
+- [x] `FormAdmin(admin.ModelAdmin)` registered and configured
+- [x] `FormFieldValueInline(admin.TabularInline)` configured read-only
+- [x] `FormSubmissionAdmin(admin.ModelAdmin)` registered and configured
+- [x] Admin actions implemented (`mark_inactive/active`, `mark_as_spam/read/replied/archived`)
 
 **`FormFieldInline(admin.TabularInline)`**:
 - Model: `FormField`
@@ -281,6 +335,16 @@ All endpoints live under the prefix configured via `urls.py` (recommended: `/for
 
 #### URL Configuration (`urls.py`)
 
+- [x] `GET /forms/` → `FormPageView`
+- [x] `GET /forms/<slug:slug>/` → `FormPageView`
+- [x] `GET /api/forms/<slug:slug>/` → `FormSchemaAPIView`
+- [x] `POST /api/forms/<slug:slug>/submit/` → `FormSubmitAPIView`
+- [x] `GET /api/admin/forms/` → `AdminFormListAPIView`
+- [x] `GET /api/admin/forms/<int:pk>/submissions/` → `AdminSubmissionListAPIView`
+- [x] `GET /api/admin/forms/<int:pk>/submissions/<int:sub_pk>/` → `AdminSubmissionDetailAPIView`
+- [x] `PATCH /api/admin/forms/<int:pk>/submissions/<int:sub_pk>/` → `AdminSubmissionDetailAPIView`
+- [x] `GET /api/admin/forms/<int:pk>/submissions/export/` → `AdminSubmissionExportView`
+
 ```
 app_name = "quickscale_forms"
 urlpatterns:
@@ -301,39 +365,45 @@ urlpatterns:
 
 All components live in the generated project's React frontend under `src/components/forms/`:
 
-- **`FormRenderer`** — the top-level dynamic form component
-  - Receives `slug` prop (read from the host element's `data-form-slug` attribute by the entry point)
-  - Fetches form schema from `GET /api/forms/{slug}/` using `TanStack Query`
-  - Builds Zod validation schema dynamically from the returned `fields` array (`required`, `field_type` → Zod types, `validation_rules` → `.min()/.max()/.regex()`)
-  - Passes schema to `useForm()` from React Hook Form (`zodResolver`)
-  - Renders `<FormFieldRenderer>` for each field, in order
-  - On submit: `POST /api/forms/{slug}/submit/`; maps server-side field errors back to React Hook Form `setError()`
-  - Shows `<FormSuccess>` or redirects on success
-- **`FormFieldRenderer`** — switches on `field_type` to render the correct input component (shadcn/ui `Input`, `Textarea`, `Select`, `Checkbox`, `RadioGroup`)
-- **`FormSuccess`** — displays the `success_message` returned from the API
-- **`useFormSchema(slug)`** — TanStack Query hook for fetching and caching the form schema
+- [ ] **`FormRenderer`** — the top-level dynamic form component
+  - [ ] Receives `slug` prop (read from the host element's `data-form-slug` attribute by the entry point)
+  - [ ] Fetches form schema from `GET /api/forms/{slug}/` using `TanStack Query`
+  - [ ] Builds Zod validation schema dynamically from the returned `fields` array (`required`, `field_type` → Zod types, `validation_rules` → `.min()/.max()/.regex()`)
+  - [ ] Passes schema to `useForm()` from React Hook Form (`zodResolver`)
+  - [ ] Renders `<FormFieldRenderer>` for each field, in order
+  - [ ] On submit: `POST /api/forms/{slug}/submit/`; maps server-side field errors back to React Hook Form `setError()`
+  - [ ] Shows `<FormSuccess>` or redirects on success
+- [ ] **`FormFieldRenderer`** — switches on `field_type` to render the correct input component (shadcn/ui `Input`, `Textarea`, `Select`, `Checkbox`, `RadioGroup`)
+- [ ] **`FormSuccess`** — displays the `success_message` returned from the API
+- [ ] **`useFormSchema(slug)`** — TanStack Query hook for fetching and caching the form schema
 
 ---
 
 #### Spam Protection
 
-- **Honeypot**: `FormSubmitAPIView` injects a hidden `_hp_name` field into the schema response; if non-empty on submit, the submission is silently marked `is_spam=True` and returns `201` (no error revealed to bot)
-- **Rate limiting**: `ScopedRateThrottle` with scope `form_submit`; default rate `5/hour` per IP; configurable via `FORMS_RATE_LIMIT` Django setting
+- [x] **Honeypot**: `FormSubmitAPIView` injects a hidden `_hp_name` field into the schema response; if non-empty on submit, the submission is silently marked `is_spam=True` and returns `201` (no error revealed to bot)
+- [x] **Rate limiting**: `ScopedRateThrottle` with scope `form_submit`; default rate `5/hour` per IP; configurable via `FORMS_RATE_LIMIT` Django setting
 
 ---
 
 #### Email Notifications
 
-- On successful (non-spam) submission, `FormSubmitAPIView` calls `notify_submission(submission)` from `quickscale_modules_forms.notifications`
-- `notify_submission()` sends a plain-text + HTML email to all addresses in `Form.notify_emails`
-- Uses Django's built-in `send_mail()` (no external dependency); plugs seamlessly into future `quickscale_modules.notifications` (v0.82.0)
-- Email subject: `"[{form.title}] New submission from {name_field_value}"`
-- Email body: all field label → value pairs, IP address, timestamp
-- Silently swallows `SMTPException` — submission is never blocked by a notification failure
+- [x] On successful (non-spam) submission, `FormSubmitAPIView` calls `notify_submission(submission)` from `quickscale_modules_forms.notifications`
+- [x] `notify_submission()` sends a plain-text + HTML email to all addresses in `Form.notify_emails`
+- [x] Uses Django's built-in `send_mail()` (no external dependency); plugs seamlessly into future `quickscale_modules.notifications` (v0.82.0)
+- [x] Email subject: `"[{form.title}] New submission from {name_field_value}"`
+- [x] Email body: all field label → value pairs, IP address, timestamp
+- [x] Silently swallows `SMTPException` — submission is never blocked by a notification failure
 
 ---
 
 #### Built-in Presets (Management Command)
+
+- [x] Management command `forms_seed_presets` implemented
+- [x] `contact` preset implemented
+- [x] `newsletter` preset implemented
+- [x] `feedback` preset implemented
+- [x] `support` preset implemented
 
 Management command `python manage.py forms_seed_presets` creates ready-to-use form fixtures:
 
@@ -349,6 +419,13 @@ The `contact` preset directly maps to **experto.ai/contact** fields and can be u
 ---
 
 #### `module.yml` Manifest
+
+- [x] Manifest file created (`quickscale_modules/forms/module.yml`)
+- [x] Module metadata defined (`name`, `version`, `description`)
+- [x] Mutable config options defined
+- [x] Immutable config options defined
+- [x] Dependencies declared
+- [x] Django app registration declared
 
 ```yaml
 name: forms
@@ -445,48 +522,48 @@ quickscale_modules/forms/
 **Coverage target**: ≥80% per file, ≥90% overall (CI enforced).
 
 **`test_models.py`**:
-- `Form` creation, `__str__`, `slug` uniqueness constraint
-- `FormField` ordering (ordered by `order`), `unique_together` enforcement on `(form, name)`
-- `FormSubmission` creation with status default `pending`
-- `FormFieldValue` preserves field snapshot when `FormField` is deleted (SET_NULL + `field_name` snapshot)
-- `data_retention_days` default value
-- `is_active=False` does not expose form through API
+- [x] `Form` creation, `__str__`, `slug` uniqueness constraint
+- [x] `FormField` ordering (ordered by `order`), `unique_together` enforcement on `(form, name)`
+- [x] `FormSubmission` creation with status default `pending`
+- [x] `FormFieldValue` preserves field snapshot when `FormField` is deleted (SET_NULL + `field_name` snapshot)
+- [x] `data_retention_days` default value
+- [x] `is_active=False` does not expose form through API
 
 **`test_serializers.py`**:
-- `FormSchemaSerializer` returns all active fields ordered by `order`
-- `FormSchemaSerializer` excludes inactive fields
-- `FormSubmissionCreateSerializer` validates required fields
-- `FormSubmissionCreateSerializer` raises field-named error on invalid `email` field type
-- `FormSubmissionCreateSerializer` accepts optional fields when `required=False`
-- `FormSubmissionCreateSerializer` rejects unknown field names
-- Dynamic Zod schema hint: `validation_rules` `{max_length: N}` reflected in serializer validation
+- [x] `FormSchemaSerializer` returns all active fields ordered by `order`
+- [x] `FormSchemaSerializer` excludes inactive fields
+- [x] `FormSubmissionCreateSerializer` validates required fields
+- [x] `FormSubmissionCreateSerializer` raises field-named error on invalid `email` field type
+- [x] `FormSubmissionCreateSerializer` accepts optional fields when `required=False`
+- [x] `FormSubmissionCreateSerializer` rejects unknown field names
+- [x] Dynamic Zod schema hint: `validation_rules` `{max_length: N}` reflected in serializer validation
 
 **`test_views.py`**:
-- `GET /api/forms/{slug}/` → 200 with correct schema shape; 404 for unknown/inactive slug
-- `POST /api/forms/{slug}/submit/` → 201 with success message; 400 with field errors; honeypot flag sets `is_spam=True` silently returns 201; 404 for inactive form
-- Rate limit: 6th request within hour returns 429
-- Admin `GET /api/admin/forms/` → 403 for anonymous; 200 with submission count for staff
-- Admin CSV export → `text/csv` content-type; all field values present in rows
-- `PATCH submission` → status update `pending → read` reflects in DB
+- [x] `GET /api/forms/{slug}/` → 200 with correct schema shape; 404 for unknown/inactive slug
+- [x] `POST /api/forms/{slug}/submit/` → 201 with success message; 400 with field errors; honeypot flag sets `is_spam=True` silently returns 201; 404 for inactive form
+- [x] Rate limit: 6th request within hour returns 429
+- [x] Admin `GET /api/admin/forms/` → 403 for anonymous; 200 with submission count for staff
+- [x] Admin CSV export → `text/csv` content-type; all field values present in rows
+- [x] `PATCH submission` → status update `pending → read` reflects in DB
 
 **`test_admin.py`**:
-- `FormAdmin` registered; `list_display` includes `submission_count`; `prepopulated_fields` slug
-- `FormFieldInline` present in `FormAdmin`
-- `FormSubmissionAdmin` registered; `list_display` includes `status`, `is_spam`
-- `FormFieldValueInline` read-only with `can_delete=False`
-- Bulk action `mark_as_spam` updates `is_spam=True` for all selected
-- `save_model` sets `created_by = request.user`
+- [x] `FormAdmin` registered; `list_display` includes `submission_count`; `prepopulated_fields` slug
+- [x] `FormFieldInline` present in `FormAdmin`
+- [x] `FormSubmissionAdmin` registered; `list_display` includes `status`, `is_spam`
+- [x] `FormFieldValueInline` read-only with `can_delete=False`
+- [x] Bulk action `mark_as_spam` updates `is_spam=True` for all selected
+- [x] `save_model` sets `created_by = request.user`
 
 **`test_notifications.py`**:
-- `notify_submission()` sends one email to all `notify_emails` addresses
-- Email subject contains form title and submitter name
-- Email body contains all field labels and values
-- No email sent when `notify_emails` is empty
-- Spam submission does not trigger notification
-- `SMTPException` raised by backend does not propagate (submission is not rolled back)
+- [x] `notify_submission()` sends one email to all `notify_emails` addresses
+- [x] Email subject contains form title and submitter name
+- [x] Email body contains all field labels and values
+- [x] No email sent when `notify_emails` is empty
+- [x] Spam submission does not trigger notification
+- [x] `SMTPException` raised by backend does not propagate (submission is not rolled back)
 
 **E2E tests**:
-- `Plan → Apply → Working contact form project` — seed `contact` preset, submit form, verify submission in admin
+- [ ] `Plan → Apply → Working contact form project` — seed `contact` preset, submit form, verify submission in admin
 
 ---
 

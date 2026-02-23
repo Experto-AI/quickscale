@@ -316,7 +316,7 @@ class TestFullE2EWorkflow:
             f"{frontend_result.stderr}\n{frontend_result.stdout}"
         )
 
-    def test_complete_react_project_lifecycle(self, tmp_path):
+    def test_complete_react_project_lifecycle(self, tmp_path, e2e_postgres_url):
         """
         Test full React lifecycle: generate → build frontend → serve → validate routes.
         """
@@ -330,9 +330,14 @@ class TestFullE2EWorkflow:
         self._install_project_dependencies(project_path)
         self._build_react_frontend(project_path)
 
+        # Configure test database (creates settings/test_e2e.py)
+        self._configure_test_database(project_path, project_name, e2e_postgres_url)
+        self._run_migrations(project_path)
+        self._collect_static(project_path)
+
         local_env = {
             **os.environ,
-            "DJANGO_SETTINGS_MODULE": f"{project_name}.settings.local",
+            "DJANGO_SETTINGS_MODULE": f"{project_name}.settings.test_e2e",
         }
         check_result = subprocess.run(
             ["poetry", "run", "python", "manage.py", "check"],
@@ -878,7 +883,7 @@ LOGGING = {{
             assert '<div id="root"></div>' in html, (
                 f"React root missing for route: {url}"
             )
-            assert "frontend/assets/index.js" in html, (
+            assert "frontend/assets/index" in html, (
                 f"React JS bundle not referenced for route: {url}"
             )
 

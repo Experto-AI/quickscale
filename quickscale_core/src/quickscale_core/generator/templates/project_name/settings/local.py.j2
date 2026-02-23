@@ -10,6 +10,8 @@ This file contains settings specific to local development:
 DO NOT use these settings in production!
 """
 
+from typing import Any
+
 import dj_database_url
 from decouple import config
 
@@ -29,7 +31,7 @@ if not database_url:
         "Set DATABASE_URL in your .env file before running manage.py commands."
     )
 
-DATABASES = {
+DATABASES: dict[str, Any] = {  # type: ignore[no-redef]  # noqa: F405
     "default": dj_database_url.parse(
         database_url,
         conn_max_age=0,

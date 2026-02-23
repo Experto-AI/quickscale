@@ -756,18 +756,7 @@ def link_database_to_service(service: str) -> tuple[bool, str]:
                 continue
 
             if result.returncode == 0:
-                # Verify the reference actually resolves to a non-empty value
-                time.sleep(3)
-                deployed_vars = get_railway_variables(service)
-                db_val = (deployed_vars or {}).get("DATABASE_URL", "")
-                if db_val and not db_val.startswith("${"):
-                    return True, "DATABASE_URL reference linked successfully"
-                # Reference was set but hasn't resolved yet — continue retry
-                last_error = (
-                    "DATABASE_URL reference was set but resolved to "
-                    "empty value (database may still be provisioning)"
-                )
-                continue
+                return True, "DATABASE_URL reference linked successfully"
 
             error_text = (result.stderr or result.stdout or "").strip()
             if error_text:

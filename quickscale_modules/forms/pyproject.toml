@@ -1,0 +1,52 @@
+[tool.poetry]
+name = "quickscale-module-forms"
+version = "0.75.0"
+description = "QuickScale generic form-builder module with admin management and React frontend renderer"
+authors = ["Experto-AI <contact@experto.ai>"]
+license = "Apache-2.0"
+readme = "README.md"
+packages = [{include = "quickscale_modules_forms", from = "src"}]
+
+[tool.poetry.dependencies]
+python = "^3.12"
+Django = "^6.0"
+djangorestframework = "^3.16.1"
+django-filter = "^25.2"
+
+[tool.poetry.group.dev.dependencies]
+# Minimal dev dependencies for standalone testing
+# pytest, pytest-cov, ruff, mypy centralized in root pyproject.toml (monorepo)
+# or provided by user's project (standalone embed)
+pytest-django = "^4.11.1"
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"
+
+# Ruff and mypy configurations centralized in root ruff.toml and mypy.ini
+# Package-specific overrides:
+
+[tool.ruff]
+target-version = "py312"  # This package requires Python 3.12+
+
+[[tool.mypy.overrides]]
+module = "rest_framework.*"
+ignore_missing_imports = true
+
+[[tool.mypy.overrides]]
+module = "django_filters.*"
+ignore_missing_imports = true
+
+[tool.django-stubs]
+django_settings_module = "tests.settings"
+
+[tool.pytest.ini_options]
+DJANGO_SETTINGS_MODULE = "tests.settings"
+pythonpath = [".", "src"]
+python_files = ["test_*.py"]
+testpaths = ["tests"]
+addopts = "-v --cov=quickscale_modules_forms --cov-report=html --cov-report=term-missing --cov-fail-under=90"
+
+[tool.coverage.report]
+fail_under = 90
+# Per-file minimum target: 80% (enforced via code review)

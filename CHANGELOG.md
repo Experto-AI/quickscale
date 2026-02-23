@@ -2,6 +2,7 @@
 
 See docs/releases/ for detailed release notes.
 
+- v0.75.0 — 2026-02-23 — Forms Module (generic customizable form builder with admin, DRF API, spam protection, GDPR anonymization, and React mount point)
 - v0.74.0 — 2026-02-05 — React Default Theme (showcase_react theme with Vite, TypeScript, TanStack Query, and Zustand)
 - v0.73.0 — 2026-02-04 — CRM Module (API-first Django CRM with 7 core models and CLI integration)
 - v0.72.0 — 2025-12-07 — Plan/Apply Cleanup (removed legacy init/embed commands, full transition to plan/apply)

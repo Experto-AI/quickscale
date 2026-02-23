@@ -1,0 +1,59 @@
+# Forms Module Manifest
+# Defines configuration options and their mutability for the Forms module
+# See decisions.md §Module Manifest Architecture for schema specification
+
+name: forms
+version: "0.75.0"
+description: "Generic, customizable form builder module with admin management and React frontend renderer."
+
+config:
+  # Mutable options - can be changed after embed via quickscale apply
+  # These update Django settings.py automatically
+  mutable:
+    forms_per_page:
+      type: integer
+      default: 25
+      django_setting: FORMS_PER_PAGE
+      description: "Number of submissions shown per page in admin."
+
+    spam_protection_enabled:
+      type: boolean
+      default: true
+      django_setting: FORMS_SPAM_PROTECTION
+      description: "Enable honeypot spam protection globally."
+
+    rate_limit:
+      type: string
+      default: "5/hour"
+      django_setting: FORMS_RATE_LIMIT
+      description: "Throttle rate for form submissions (per IP). Format: '<count>/<period>'."
+
+    data_retention_days:
+      type: integer
+      default: 365
+      django_setting: FORMS_DATA_RETENTION_DAYS
+      description: "Days to keep submission data before anonymization (0 = keep forever)."
+
+    submissions_api_enabled:
+      type: boolean
+      default: true
+      django_setting: FORMS_SUBMISSIONS_API
+      description: "Enable REST API endpoints for admin submission management."
+
+  # Immutable options - locked at embed time, require remove + re-embed to change
+  immutable:
+    storage_backend:
+      type: string
+      default: "django"
+      description: "Storage backend for form data. 'django' uses the project database."
+
+# Dependencies required by this module
+dependencies:
+  - djangorestframework>=3.16.1
+  - django-filter>=25.2
+
+# Django apps that must be in INSTALLED_APPS
+django_apps:
+  - rest_framework
+  - django_filters
+  - quickscale_modules_forms
