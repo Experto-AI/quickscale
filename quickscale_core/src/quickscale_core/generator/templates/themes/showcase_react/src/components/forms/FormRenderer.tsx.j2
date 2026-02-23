@@ -34,7 +34,9 @@ function buildZodSchema(fields: FormFieldSchema[]): z.ZodObject<Record<string, z
     } else if (field.field_type === 'url') {
       schema = z.string().url('Please enter a valid URL')
     } else if (field.field_type === 'number') {
-      schema = z.string().refine((v) => !isNaN(Number(v)), { message: 'Please enter a valid number' })
+      schema = z
+        .string()
+        .refine((v) => !isNaN(Number(v)), { message: 'Please enter a valid number' })
     } else {
       schema = z.string()
     }
@@ -76,22 +78,20 @@ export function FormRenderer({ slug }: FormRendererProps) {
   const [submitted, setSubmitted] = useState(false)
   const [globalError, setGlobalError] = useState<string | null>(null)
 
-  const zodSchema = useMemo(
-    () => (schema ? buildZodSchema(schema.fields) : z.object({})),
-    [schema],
-  )
+  const zodSchema = useMemo(() => (schema ? buildZodSchema(schema.fields) : z.object({})), [schema])
 
-  const defaultValues = useMemo(
-    () => (schema ? buildDefaultValues(schema.fields) : {}),
-    [schema],
-  )
+  const defaultValues = useMemo(() => (schema ? buildDefaultValues(schema.fields) : {}), [schema])
 
   const form = useForm<FormValues>({
     resolver: zodResolver(zodSchema),
     defaultValues,
   })
 
-  const { handleSubmit, setError, formState: { isSubmitting } } = form
+  const {
+    handleSubmit,
+    setError,
+    formState: { isSubmitting },
+  } = form
 
   async function onSubmit(data: FormValues) {
     setGlobalError(null)
@@ -112,7 +112,7 @@ export function FormRenderer({ slug }: FormRendererProps) {
       }
 
       if (response.status === 400) {
-        const errors = await response.json() as Record<string, string[]>
+        const errors = (await response.json()) as Record<string, string[]>
         for (const [fieldName, messages] of Object.entries(errors)) {
           if (fieldName === 'non_field_errors' || fieldName === 'detail') {
             setGlobalError(messages.join(', '))
@@ -166,9 +166,7 @@ export function FormRenderer({ slug }: FormRendererProps) {
 
   return (
     <div className="space-y-4">
-      {schema.description && (
-        <p className="text-muted-foreground">{schema.description}</p>
-      )}
+      {schema.description && <p className="text-muted-foreground">{schema.description}</p>}
       {globalError && (
         <div className="flex items-center gap-2 rounded-md border border-destructive/50 bg-destructive/10 px-4 py-3 text-sm text-destructive">
           <AlertCircle className="h-4 w-4 flex-shrink-0" />
@@ -204,4 +202,4 @@ function getCsrfToken(): string {
   if (parts.length === 2) return parts.pop()?.split(';').shift() ?? ''
   return ''
 }
-{%- endraw -%}
+{% endraw %}

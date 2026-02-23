@@ -1,9 +1,22 @@
 {%- raw -%}
 import { Control } from 'react-hook-form'
-import { FormControl, FormDescription, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form'
+import {
+  FormControl,
+  FormDescription,
+  FormField,
+  FormItem,
+  FormLabel,
+  FormMessage,
+} from '@/components/ui/form'
 import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select'
 import { Checkbox } from '@/components/ui/checkbox'
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group'
 import { Label } from '@/components/ui/label'
@@ -27,9 +40,7 @@ export function FormFieldRenderer({ field, control, disabled }: FormFieldRendere
       <FormField
         control={control}
         name={field.name}
-        render={({ field: formField }) => (
-          <input type="hidden" {...formField} />
-        )}
+        render={({ field: formField }) => <input type="hidden" {...formField} />}
       />
     )
   }
@@ -41,14 +52,13 @@ export function FormFieldRenderer({ field, control, disabled }: FormFieldRendere
         name={field.name}
         render={({ field: formField }) => (
           <FormItem>
-            <FormLabel>{field.label}{field.required && <span className="ml-1 text-destructive">*</span>}</FormLabel>
+            <FormLabel>
+              {field.label}
+              {field.required && <span className="ml-1 text-destructive">*</span>}
+            </FormLabel>
             <FormControl>
               {field.field_type === 'textarea' ? (
-                <Textarea
-                  placeholder={field.placeholder}
-                  disabled={disabled}
-                  {...formField}
-                />
+                <Textarea placeholder={field.placeholder} disabled={disabled} {...formField} />
               ) : field.field_type === 'select' ? (
                 <Select
                   disabled={disabled}
@@ -111,4 +121,4 @@ export function FormFieldRenderer({ field, control, disabled }: FormFieldRendere
     </div>
   )
 }
-{%- endraw -%}
+{% endraw %}
