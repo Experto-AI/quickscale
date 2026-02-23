@@ -1,0 +1,18 @@
+<!DOCTYPE html>
+<html lang="en">
+<head><meta charset="UTF-8"><title>Form Submission</title></head>
+<body>
+<h2>New submission: {{ form_title }}</h2>
+<p>Received: {{ submitted_at }}</p>
+<table border="1" cellpadding="4" cellspacing="0">
+  <thead><tr><th>Field</th><th>Value</th></tr></thead>
+  <tbody>
+    {% for label, value in fields %}
+    <tr><th>{{ label }}</th><td>{{ value }}</td></tr>
+    {% endfor %}
+  </tbody>
+</table>
+<p>IP address: {{ ip_address }}</p>
+<p>Status: {{ status }}</p>
+</body>
+</html>
