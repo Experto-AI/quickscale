@@ -47,20 +47,21 @@ QuickScale follows an evolution-aligned roadmap that starts as a personal toolki
    - ✅ Plan/Apply Cleanup (v0.72.0) - Remove legacy init/embed commands
    - ✅ CRM module (v0.73.0) - native Django CRM app (API-only)
    - ✅ **React Default Theme** (v0.74.0) - React + shadcn/ui as default
-   - 📋 Social & Link Tree module (v0.75.0) - social links page + media embeds
-   - 📋 Listings Theme (v0.76.0) - React frontend for property listings (sell/rent)
-   - 📋 CRM Theme (v0.77.0) - React frontend for CRM module
-   - 📋 Billing module (v0.78.0) - Stripe integration
-   - 📋 Teams module (v0.79.0) - multi-tenancy
+   - 📋 Forms module (v0.75.0) - generic customizable form builder + contact form
+   - 📋 Social & Link Tree module (v0.76.0) - social links page + media embeds
+   - 📋 Listings Theme (v0.77.0) - React frontend for property listings (sell/rent)
+   - 📋 CRM Theme (v0.78.0) - React frontend for CRM module
+   - 📋 Billing module (v0.79.0) - Stripe integration
+   - 📋 Teams module (v0.80.0) - multi-tenancy
 
 2. **Phase 2: Additional Themes (Secondary Options)** 📋 _Planned_
-   - 📋 HTMX theme with Alpine.js (v0.80.0+) - alternative for progressive enhancement
+   - 📋 HTMX theme with Alpine.js (v0.81.0+) - alternative for progressive enhancement
    - HTML theme remains as secondary option (simpler projects)
 
 3. **Phase 3: Expand Features (All Themes)** 📋 _Planned_
-   - 📋 Notifications module with email infrastructure (v0.81.0)
-   - 📋 Advanced module management features (v0.82.0)
-   - 📋 Workflow validation and real-world testing (v0.83.0)
+   - 📋 Notifications module with email infrastructure (v0.82.0)
+   - 📋 Advanced module management features (v0.83.0)
+   - 📋 Workflow validation and real-world testing (v0.84.0)
 
 4. **Phase 4: Community Platform (Optional v1.0.0+)** 📋 _Future_
    - 📋 PyPI package distribution
@@ -76,15 +77,15 @@ QuickScale follows an evolution-aligned roadmap that starts as a personal toolki
 - **v0.71.0:** Plan/Apply System Complete ✅
 - **v0.72.0:** Plan/Apply Cleanup (remove legacy commands) ✅
 - **v0.74.0:** React Default Theme (React + shadcn/ui) ✅
-- **v0.76.0:** Real Estate MVP (static + listings + social links) 🎯
-- **v0.79.0:** SaaS Feature Parity (auth, billing, teams) 🎯
+- **v0.77.0:** Real Estate MVP (static + listings + social links) 🎯
+- **v0.80.0:** SaaS Feature Parity (auth, billing, teams) 🎯
 - **v1.0.0+:** Community platform (if demand exists)
 
 **Status:**
 - **Current Status:** v0.74.0 — React Default Theme ✅ Complete
-- **Next Milestone:** v0.75.0 - Social & Link Tree module (social links page + media embeds)
+- **Next Milestone:** v0.75.0 - Forms module (generic customizable form builder)
 - **Plan/Apply System:** v0.68.0-v0.71.0 - Terraform-style configuration ✅ Complete
-- **SaaS Parity:** v0.79.0 - auth, billing, teams modules complete
+- **SaaS Parity:** v0.80.0 - auth, billing, teams modules complete
 
 ## Notes and References
 
@@ -103,7 +104,404 @@ List of upcoming releases with detailed implementation tasks:
 
 ---
 
-### v0.75.0: `quickscale_modules.social` - Social & Link Tree Module
+### v0.75.0: `quickscale_modules.forms` - Generic Forms Module
+
+**Status**: 📋 Planned
+
+**Strategic Context**: A generic, fully customizable form-builder module for Django SaaS projects. Enables developers to define, render, and manage any kind of form (contact, feedback, support, newsletter) through a data-driven admin interface, with no code changes required to add or modify forms. The first production use case is the **experto.ai/contact** page — a professional inquiry form collecting Name, Email, Company, Subject, and Project Context, with email notifications to the site owner.
+
+**Prerequisites**:
+- ✅ React Default Theme (v0.74.0)
+- ✅ Auth Module (v0.63.0) — optional dependency; anonymous submissions must also work
+
+---
+
+#### Core Design Principles
+
+- **Data-driven**: Forms and their fields are defined entirely through admin or fixtures — no code changes needed to add a new form.
+- **Generic**: Supports any use case — contact, feedback, support ticket, newsletter sign-up, RFQ, etc.
+- **Customizable**: Per-field validation rules, ordering, conditional visibility (roadmap), and layout hints (full-width, two-column).
+- **Theme-agnostic backend**: Django models and DRF API are fully decoupled from the React frontend.
+- **React frontend**: Dynamic form renderer using React Hook Form + Zod (v0.74.0 mandated stack); fetches schema from the REST API.
+- **Spam protection**: Honeypot field + configurable rate limiting (no external CAPTCHA dependency).
+- **Notification-ready**: Email notification hooks on every submission; plugs into future `quickscale_modules.notifications` (v0.82.0).
+- **GDPR-aware**: Configurable data retention period; submission anonymization support.
+
+---
+
+#### Data Models
+
+**`Form`** — top-level form definition:
+- `title` (CharField) — human-readable name shown in the admin
+- `slug` (SlugField, unique) — URL-friendly identifier; used in the API endpoint (`/api/forms/{slug}/`)
+- `description` (TextField, blank) — optional intro text rendered above the form
+- `success_message` (TextField) — shown after successful submission (default: "Thank you, we'll be in touch.")
+- `redirect_url` (URLField, blank) — optional redirect after submission instead of inline success message
+- `is_active` (BooleanField, default True) — disables the form without deleting it
+- `spam_protection_enabled` (BooleanField, default True) — enables honeypot field injection
+- `notify_emails` (TextField, blank) — comma-separated list of notification recipient emails
+- `data_retention_days` (PositiveIntegerField, default 365) — submissions older than this are eligible for anonymization
+- `created_by` (ForeignKey to `settings.AUTH_USER_MODEL`, null/blank, SET_NULL) — tracks creating admin
+- `created_at`, `updated_at` (auto timestamps)
+- DB table: `quickscale_modules_forms_form`
+
+**`FormField`** — an individual field belonging to a form:
+- `form` (ForeignKey to `Form`, related_name `fields`)
+- `field_type` (CharField with choices): `text`, `email`, `textarea`, `select`, `checkbox`, `radio`, `number`, `url`, `tel`, `date`, `hidden`
+- `label` (CharField) — visible label (e.g., "Project Context")
+- `name` (SlugField) — machine name used as the key in submission data (e.g., `project_context`)
+- `placeholder` (CharField, blank)
+- `help_text` (CharField, blank)
+- `required` (BooleanField, default True)
+- `order` (PositiveIntegerField) — display order within the form
+- `options` (JSONField, blank) — list of `{value, label}` dicts for `select`, `radio`, `checkbox` types
+- `validation_rules` (JSONField, blank) — e.g., `{"min_length": 10, "max_length": 500, "regex": "^[a-z]+$"}`
+- `layout_hint` (CharField, choices: `full`, `half_left`, `half_right`, default `full`) — layout hint for the React renderer
+- `is_active` (BooleanField, default True)
+- DB table: `quickscale_modules_forms_formfield`
+- Constraint: `unique_together = [["form", "name"]]`
+
+**`FormSubmission`** — a single form fill event:
+- `form` (ForeignKey to `Form`, related_name `submissions`, on_delete=PROTECT)
+- `ip_address` (GenericIPAddressField, null/blank) — anonymized to null when retention expires
+- `user_agent` (CharField, blank) — browser info for spam scoring
+- `submitted_at` (DateTimeField, auto_now_add)
+- `is_spam` (BooleanField, default False) — manually or automatically flagged
+- `status` (CharField, choices: `pending`, `read`, `replied`, `archived`, default `pending`)
+- DB table: `quickscale_modules_forms_formsubmission`
+
+**`FormFieldValue`** — the value for a single field in a submission:
+- `submission` (ForeignKey to `FormSubmission`, related_name `values`)
+- `field` (ForeignKey to `FormField`, null/blank, SET_NULL) — null-safe for deleted fields; historical data preserved
+- `field_name` (CharField) — snapshot of `FormField.name` at submission time (protects historical data)
+- `field_label` (CharField) — snapshot of `FormField.label` at submission time
+- `value` (TextField) — the submitted value as text
+- DB table: `quickscale_modules_forms_formfieldvalue`
+
+---
+
+#### REST API Endpoints
+
+All endpoints live under the prefix configured via `urls.py` (recommended: `/forms/api/`):
+
+| Method | Path | Auth | Description |
+|--------|------|------|-------------|
+| `GET` | `/api/forms/{slug}/` | Public | Fetch form schema (fields, metadata). Returns 404 if inactive. |
+| `POST` | `/api/forms/{slug}/submit/` | Public | Submit form data. Returns 201 on success, 400 on validation error. |
+| `GET` | `/api/admin/forms/` | Staff only | List all forms with submission counts. |
+| `GET` | `/api/admin/forms/{id}/submissions/` | Staff only | List submissions for a form (paginated). |
+| `GET` | `/api/admin/forms/{id}/submissions/{sub_id}/` | Staff only | Single submission detail with all field values. |
+| `PATCH` | `/api/admin/forms/{id}/submissions/{sub_id}/` | Staff only | Update `status` or `is_spam` flag. |
+| `GET` | `/api/admin/forms/{id}/submissions/export/` | Staff only | Download submissions as CSV. |
+
+**Public schema response example** (`GET /api/forms/contact/`):
+```json
+{
+  "slug": "contact",
+  "title": "Get in Touch",
+  "description": "Share your current constraints, timeline, and target outcomes.",
+  "success_message": "Thank you, we will respond within 24 hours.",
+  "fields": [
+    {"name": "full_name", "field_type": "text", "label": "Name", "required": true, "order": 1, "layout_hint": "half_left"},
+    {"name": "email", "field_type": "email", "label": "Email", "required": true, "order": 2, "layout_hint": "half_right"},
+    {"name": "company", "field_type": "text", "label": "Company", "required": false, "order": 3, "layout_hint": "half_left"},
+    {"name": "subject", "field_type": "text", "label": "Subject", "required": true, "order": 4, "layout_hint": "half_right"},
+    {"name": "project_context", "field_type": "textarea", "label": "Project Context", "required": true, "order": 5, "layout_hint": "full", "placeholder": "Describe your constraints, timeline, and target outcomes..."}
+  ]
+}
+```
+
+**Submit response** (`POST /api/forms/contact/submit/`):
+- `201 Created` → `{"message": "Thank you, we will respond within 24 hours.", "redirect_url": null}`
+- `400 Bad Request` → `{"errors": {"email": ["Enter a valid email address."]}}`
+- `429 Too Many Requests` → when rate limit exceeded
+- `404 Not Found` → form slug does not exist or is inactive
+
+---
+
+#### Serializers (`serializers.py`)
+
+- `FormFieldSerializer` — read-only schema serializer for public API (excludes `validation_rules` internals exposed only partially as needed by Zod)
+- `FormSchemaSerializer` — wraps `Form` + nested `FormFieldSerializer` list for `GET /api/forms/{slug}/`
+- `FormSubmissionCreateSerializer` — write-only; validates against the form's fields dynamically; raises field-level `ValidationError` keyed by `field.name`
+- `FormSubmissionAdminSerializer` — full submission detail for admin endpoints
+- `FormFieldValueSerializer` — value snapshot for admin submission detail
+
+---
+
+#### Views (`views.py`)
+
+- `FormSchemaAPIView(RetrieveAPIView)` — returns `FormSchemaSerializer`; permission: `AllowAny`; filters out inactive forms via `get_object()`
+- `FormSubmitAPIView(CreateAPIView)` — processes submission; invokes spam check (honeypot); triggers notification; permission: `AllowAny`; throttled via `ScopedRateThrottle`
+- `AdminFormListAPIView(ListAPIView)` — staff-only; annotates with `submission_count`
+- `AdminSubmissionListAPIView(ListAPIView)` — staff-only; filterable by `status`, `is_spam`, date range
+- `AdminSubmissionDetailAPIView(RetrieveUpdateAPIView)` — staff-only; `PATCH` allows updating `status`/`is_spam`
+- `AdminSubmissionExportView(View)` — staff-only; streams CSV response with all field values
+- `FormPageView(TemplateView)` — optional server-side entry point; renders a placeholder `<div id="form-root">` that the React `FormRenderer` component mounts into; passes `slug` to React via `data-*` attribute
+
+---
+
+#### Admin (`admin.py`)
+
+**`FormFieldInline(admin.TabularInline)`**:
+- Model: `FormField`
+- `extra = 1`
+- `fields`: `field_type`, `label`, `name`, `required`, `order`, `is_active`
+- Sortable by `order`
+
+**`@admin.register(Form) class FormAdmin(admin.ModelAdmin)`**:
+- `list_display`: `title`, `slug`, `is_active`, `submission_count`, `created_at`
+- `list_filter`: `is_active`, `created_at`
+- `search_fields`: `title`, `slug`
+- `prepopulated_fields`: `{"slug": ("title",)}`
+- `readonly_fields`: `created_at`, `updated_at`, `created_by`
+- `fieldsets`: General (title, slug, description), Behaviour (is_active, spam_protection_enabled), Notifications (notify_emails), Data Retention (data_retention_days, success_message, redirect_url), Metadata (created_by, created_at, updated_at)
+- `inlines`: `[FormFieldInline]`
+- `save_model()` override: sets `created_by = request.user` on creation
+- `get_queryset()` annotates `submission_count`
+- `submission_count()` method with `short_description = "Submissions"`
+- Actions: `mark_inactive`, `mark_active`
+
+**`FormFieldValueInline(admin.TabularInline)`**:
+- Model: `FormFieldValue`
+- `readonly_fields`: all fields
+- `extra = 0`
+- `can_delete = False`
+
+**`@admin.register(FormSubmission) class FormSubmissionAdmin(admin.ModelAdmin)`**:
+- `list_display`: `form`, `status`, `is_spam`, `submitted_at`, `ip_address`
+- `list_filter`: `status`, `is_spam`, `form`, `submitted_at`
+- `search_fields`: `values__value`, `ip_address`
+- `readonly_fields`: `form`, `ip_address`, `user_agent`, `submitted_at`
+- `inlines`: `[FormFieldValueInline]`
+- Actions: `mark_as_spam`, `mark_as_read`, `mark_as_replied`, `mark_as_archived`
+- CSV export action via `AdminSubmissionExportView`
+
+---
+
+#### URL Configuration (`urls.py`)
+
+```
+app_name = "quickscale_forms"
+urlpatterns:
+  GET  /forms/                           → FormPageView (React mount point, optional)
+  GET  /forms/<slug:slug>/               → FormPageView with slug context
+  GET  /api/forms/<slug:slug>/           → FormSchemaAPIView
+  POST /api/forms/<slug:slug>/submit/    → FormSubmitAPIView
+  GET  /api/admin/forms/                         → AdminFormListAPIView
+  GET  /api/admin/forms/<int:pk>/submissions/    → AdminSubmissionListAPIView
+  GET  /api/admin/forms/<int:pk>/submissions/<int:sub_pk>/   → AdminSubmissionDetailAPIView
+  PATCH /api/admin/forms/<int:pk>/submissions/<int:sub_pk>/  → AdminSubmissionDetailAPIView
+  GET  /api/admin/forms/<int:pk>/submissions/export/  → AdminSubmissionExportView
+```
+
+---
+
+#### React Frontend Components
+
+All components live in the generated project's React frontend under `src/components/forms/`:
+
+- **`FormRenderer`** — the top-level dynamic form component
+  - Receives `slug` prop (read from the host element's `data-form-slug` attribute by the entry point)
+  - Fetches form schema from `GET /api/forms/{slug}/` using `TanStack Query`
+  - Builds Zod validation schema dynamically from the returned `fields` array (`required`, `field_type` → Zod types, `validation_rules` → `.min()/.max()/.regex()`)
+  - Passes schema to `useForm()` from React Hook Form (`zodResolver`)
+  - Renders `<FormFieldRenderer>` for each field, in order
+  - On submit: `POST /api/forms/{slug}/submit/`; maps server-side field errors back to React Hook Form `setError()`
+  - Shows `<FormSuccess>` or redirects on success
+- **`FormFieldRenderer`** — switches on `field_type` to render the correct input component (shadcn/ui `Input`, `Textarea`, `Select`, `Checkbox`, `RadioGroup`)
+- **`FormSuccess`** — displays the `success_message` returned from the API
+- **`useFormSchema(slug)`** — TanStack Query hook for fetching and caching the form schema
+
+---
+
+#### Spam Protection
+
+- **Honeypot**: `FormSubmitAPIView` injects a hidden `_hp_name` field into the schema response; if non-empty on submit, the submission is silently marked `is_spam=True` and returns `201` (no error revealed to bot)
+- **Rate limiting**: `ScopedRateThrottle` with scope `form_submit`; default rate `5/hour` per IP; configurable via `FORMS_RATE_LIMIT` Django setting
+
+---
+
+#### Email Notifications
+
+- On successful (non-spam) submission, `FormSubmitAPIView` calls `notify_submission(submission)` from `quickscale_modules_forms.notifications`
+- `notify_submission()` sends a plain-text + HTML email to all addresses in `Form.notify_emails`
+- Uses Django's built-in `send_mail()` (no external dependency); plugs seamlessly into future `quickscale_modules.notifications` (v0.82.0)
+- Email subject: `"[{form.title}] New submission from {name_field_value}"`
+- Email body: all field label → value pairs, IP address, timestamp
+- Silently swallows `SMTPException` — submission is never blocked by a notification failure
+
+---
+
+#### Built-in Presets (Management Command)
+
+Management command `python manage.py forms_seed_presets` creates ready-to-use form fixtures:
+
+| Preset slug | Fields |
+|-------------|--------|
+| `contact` | full_name (text), email (email), company (text, optional), subject (text), project_context (textarea) |
+| `newsletter` | full_name (text), email (email) |
+| `feedback` | full_name (text, optional), email (email, optional), rating (select 1–5), message (textarea) |
+| `support` | full_name (text), email (email), subject (text), priority (select: low/medium/high), description (textarea) |
+
+The `contact` preset directly maps to **experto.ai/contact** fields and can be used out of the box.
+
+---
+
+#### `module.yml` Manifest
+
+```yaml
+name: forms
+version: "0.75.0"
+description: "Generic, customizable form builder module with admin management and React frontend renderer."
+config:
+  mutable:
+    forms_per_page:
+      type: integer
+      default: 25
+      django_setting: FORMS_PER_PAGE
+      description: "Number of submissions shown per page in admin."
+    spam_protection_enabled:
+      type: boolean
+      default: true
+      django_setting: FORMS_SPAM_PROTECTION
+      description: "Enable honeypot spam protection globally."
+    rate_limit:
+      type: string
+      default: "5/hour"
+      django_setting: FORMS_RATE_LIMIT
+      description: "Throttle rate for form submissions (per IP). Format: '<count>/<period>'."
+    data_retention_days:
+      type: integer
+      default: 365
+      django_setting: FORMS_DATA_RETENTION_DAYS
+      description: "Days to keep submission data before anonymization (0 = keep forever)."
+    submissions_api_enabled:
+      type: boolean
+      default: true
+      django_setting: FORMS_SUBMISSIONS_API
+      description: "Enable REST API endpoints for admin submission management."
+  immutable:
+    storage_backend:
+      type: string
+      default: "django"
+      description: "Storage backend for form data. 'django' uses the project database."
+dependencies:
+  - djangorestframework>=3.14
+  - django-filter>=23.0
+django_apps:
+  - quickscale_modules_forms
+```
+
+---
+
+#### Package Structure
+
+```
+quickscale_modules/forms/
+├── README.md
+├── module.yml
+├── pyproject.toml                   # Package: quickscale-module-forms
+├── poetry.lock
+├── poetry.toml
+├── src/
+│   └── quickscale_modules_forms/
+│       ├── __init__.py
+│       ├── apps.py                  # QuickscaleFormsConfig
+│       ├── models.py                # Form, FormField, FormSubmission, FormFieldValue
+│       ├── serializers.py           # FormSchema, Submit, Admin serializers
+│       ├── views.py                 # Schema, Submit, Admin, Export views
+│       ├── admin.py                 # FormAdmin, FormSubmissionAdmin + inlines
+│       ├── urls.py                  # app_name = "quickscale_forms"
+│       ├── notifications.py         # notify_submission() helper
+│       ├── throttles.py             # FormSubmitThrottle (ScopedRateThrottle)
+│       ├── validators.py            # Dynamic field-level validator factory
+│       ├── management/
+│       │   └── commands/
+│       │       └── forms_seed_presets.py  # Seeds contact/newsletter/feedback/support fixtures
+│       ├── migrations/
+│       │   └── 0001_initial.py
+│       └── templates/
+│           └── quickscale_modules_forms/
+│               └── forms/
+│                   ├── form_page.html    # React mount point (<div id="form-root">)
+│                   └── form_email.html   # Notification email template
+└── tests/
+    ├── __init__.py
+    ├── conftest.py                  # Fixtures: form, field, submission, api_client, staff_client
+    ├── settings.py                  # TEST Django settings
+    ├── urls.py                      # Test URL config
+    ├── test_models.py               # Form/Field CRUD, ordering, submission creation, value snapshot
+    ├── test_serializers.py          # Schema serialization, dynamic submission validation
+    ├── test_views.py                # Public API: schema, submit, spam, rate limit; Admin API: list, detail, CSV
+    ├── test_admin.py                # Admin registration, list_display, actions, CSV export
+    └── test_notifications.py        # Email triggered on submit; silenced on spam; SMTP failure safe
+```
+
+---
+
+#### Testing Plan
+
+**Coverage target**: ≥80% per file, ≥90% overall (CI enforced).
+
+**`test_models.py`**:
+- `Form` creation, `__str__`, `slug` uniqueness constraint
+- `FormField` ordering (ordered by `order`), `unique_together` enforcement on `(form, name)`
+- `FormSubmission` creation with status default `pending`
+- `FormFieldValue` preserves field snapshot when `FormField` is deleted (SET_NULL + `field_name` snapshot)
+- `data_retention_days` default value
+- `is_active=False` does not expose form through API
+
+**`test_serializers.py`**:
+- `FormSchemaSerializer` returns all active fields ordered by `order`
+- `FormSchemaSerializer` excludes inactive fields
+- `FormSubmissionCreateSerializer` validates required fields
+- `FormSubmissionCreateSerializer` raises field-named error on invalid `email` field type
+- `FormSubmissionCreateSerializer` accepts optional fields when `required=False`
+- `FormSubmissionCreateSerializer` rejects unknown field names
+- Dynamic Zod schema hint: `validation_rules` `{max_length: N}` reflected in serializer validation
+
+**`test_views.py`**:
+- `GET /api/forms/{slug}/` → 200 with correct schema shape; 404 for unknown/inactive slug
+- `POST /api/forms/{slug}/submit/` → 201 with success message; 400 with field errors; honeypot flag sets `is_spam=True` silently returns 201; 404 for inactive form
+- Rate limit: 6th request within hour returns 429
+- Admin `GET /api/admin/forms/` → 403 for anonymous; 200 with submission count for staff
+- Admin CSV export → `text/csv` content-type; all field values present in rows
+- `PATCH submission` → status update `pending → read` reflects in DB
+
+**`test_admin.py`**:
+- `FormAdmin` registered; `list_display` includes `submission_count`; `prepopulated_fields` slug
+- `FormFieldInline` present in `FormAdmin`
+- `FormSubmissionAdmin` registered; `list_display` includes `status`, `is_spam`
+- `FormFieldValueInline` read-only with `can_delete=False`
+- Bulk action `mark_as_spam` updates `is_spam=True` for all selected
+- `save_model` sets `created_by = request.user`
+
+**`test_notifications.py`**:
+- `notify_submission()` sends one email to all `notify_emails` addresses
+- Email subject contains form title and submitter name
+- Email body contains all field labels and values
+- No email sent when `notify_emails` is empty
+- Spam submission does not trigger notification
+- `SMTPException` raised by backend does not propagate (submission is not rolled back)
+
+**E2E tests**:
+- `Plan → Apply → Working contact form project` — seed `contact` preset, submit form, verify submission in admin
+
+---
+
+#### Integration with Future Modules
+
+| Future Module | Integration Point |
+|--------------|-------------------|
+| `notifications` (v0.82.0) | Replace `notify_submission()` Django `send_mail` call with `notifications.send()` for template-based emails, tracking, and queue |
+| `auth` (v0.63.0, existing) | Optional: associate submission with authenticated user if logged in; expose "My Submissions" view |
+| `billing` (v0.79.0) | Not directly integrated; forms can collect payment intent context before Stripe checkout |
+| `teams` (v0.80.0) | Team-scoped forms: filter admin views by team membership |
+
+---
+
+### v0.76.0: `quickscale_modules.social` - Social & Link Tree Module
 
 **Status**: 📋 Planned
 
@@ -142,7 +540,7 @@ List of upcoming releases with detailed implementation tasks:
 
 ---
 
-### v0.76.0: Listings Theme (React Frontend for Listings)
+### v0.77.0: Listings Theme (React Frontend for Listings)
 
 **Status**: 📋 Planned
 
@@ -174,7 +572,7 @@ List of upcoming releases with detailed implementation tasks:
 
 ---
 
-### v0.77.0: CRM Theme (React Frontend for CRM)
+### v0.78.0: CRM Theme (React Frontend for CRM)
 
 **Status**: 📋 Planned
 
@@ -201,7 +599,7 @@ List of upcoming releases with detailed implementation tasks:
 
 ---
 
-### v0.78.0: `quickscale_modules.billing` - Billing Module
+### v0.79.0: `quickscale_modules.billing` - Billing Module
 
 **Status**: 📋 Planned
 
@@ -230,7 +628,7 @@ List of upcoming releases with detailed implementation tasks:
 
 ---
 
-### v0.79.0: `quickscale_modules.teams` - Teams/Multi-tenancy Module
+### v0.80.0: `quickscale_modules.teams` - Teams/Multi-tenancy Module
 
 **Status**: 📋 Planned
 
@@ -259,9 +657,9 @@ List of upcoming releases with detailed implementation tasks:
 
 ---
 
-### Module Showcase Architecture (Deferred to Post-v0.77.0)
+### Module Showcase Architecture (Deferred to Post-v0.78.0)
 
-**Status**: 🚧 **NOT YET IMPLEMENTED** - Deferred to post-v0.79.0
+**Status**: 🚧 **NOT YET IMPLEMENTED** - Deferred to post-v0.80.0
 
 **Current Reality** (v0.66.0):
 - ✅ Basic context processor exists (`quickscale_core/context_processors.py`)
@@ -271,11 +669,11 @@ List of upcoming releases with detailed implementation tasks:
 - ❌ Current `index.html.j2`: Simple welcome page only
 
 **Why Deferred**:
-- Focus on Plan/Apply system and core modules first (v0.68-v0.79)
+- Focus on Plan/Apply system and core modules first (v0.68-v0.80)
 - Showcase architecture provides maximum value when multiple modules exist
 - Current simple welcome page is adequate for MVP
 
-**Implementation Plan**: After v0.79.0 (SaaS Feature Parity milestone), evaluate whether to implement showcase architecture or keep simple welcome page. Decision criteria:
+**Implementation Plan**: After v0.80.0 (SaaS Feature Parity milestone), evaluate whether to implement showcase architecture or keep simple welcome page. Decision criteria:
 - Are 3+ modules complete and production-ready?
 - Is module discovery a user pain point?
 - Would showcase provide meaningful marketing value?
@@ -284,7 +682,7 @@ List of upcoming releases with detailed implementation tasks:
 
 ---
 
-### v0.80.0+: HTMX Frontend Theme (Optional)
+### v0.81.0+: HTMX Frontend Theme (Optional)
 
 **Status**: 📋 Planned (low priority, after SaaS Feature Parity)
 
@@ -296,7 +694,7 @@ List of upcoming releases with detailed implementation tasks:
 
 ---
 
-### v0.81.0: `quickscale_modules.notifications` - Notifications Module
+### v0.82.0: `quickscale_modules.notifications` - Notifications Module
 
 **Status**: 📋 Planned (after SaaS Feature Parity)
 
@@ -328,7 +726,7 @@ List of upcoming releases with detailed implementation tasks:
 
 ---
 
-### v0.82.0: Advanced Module Management Features
+### v0.83.0: Advanced Module Management Features
 
 **Note**: Basic module management commands (`quickscale update`, `quickscale push`) are implemented in **v0.62.0**. Plan/Apply system implemented in **v0.68.0-v0.71.0**. This release adds advanced features for managing multiple modules.
 
@@ -354,7 +752,7 @@ List of upcoming releases with detailed implementation tasks:
 - [ ] Test conflict resolution workflows
 - [ ] E2E testing of enhanced UX features
 
-**Future Enhancements** (v0.83.0+, evaluate after v0.79.0):
+**Future Enhancements** (v0.84.0+, evaluate after v0.80.0):
 - [ ] Module versioning: `quickscale plan --add auth@v0.63.0` - Pin specific module version
 - [ ] Semantic versioning compatibility checks
 - [ ] Automatic migration scripts for breaking changes
@@ -366,7 +764,7 @@ List of upcoming releases with detailed implementation tasks:
 
 ---
 
-### v0.83.0: Module Workflow Validation & Real-World Testing
+### v0.84.0: Module Workflow Validation & Real-World Testing
 
 **Objective**: Validate that module updates work safely in real client projects and don't affect user's custom code.
 

@@ -36,8 +36,17 @@ _allowed_hosts = config(
 
 # Railway healthchecks come from healthcheck.railway.app - always allow this
 # See: https://docs.railway.com/guides/healthchecks
-# Use list(set(...)) to avoid duplicates if healthcheck.railway.app is already in env var
-ALLOWED_HOSTS = list(set(_allowed_hosts + ["healthcheck.railway.app"]))
+# Also include RAILWAY_PUBLIC_DOMAIN (auto-injected per environment by Railway).
+# This means copying an environment in Railway will automatically use the new domain
+# without requiring a manual update to the ALLOWED_HOSTS variable.
+_railway_public_domain = config("RAILWAY_PUBLIC_DOMAIN", default="")
+ALLOWED_HOSTS = list(
+    set(
+        _allowed_hosts
+        + ["healthcheck.railway.app"]
+        + ([_railway_public_domain] if _railway_public_domain else [])
+    )
+)
 
 # SECURITY: Require HTTPS in production
 SECURE_SSL_REDIRECT = config("SECURE_SSL_REDIRECT", default=True, cast=bool)
