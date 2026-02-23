@@ -550,9 +550,9 @@ class TestReactThemeModuleActivationMatrix:
                 rf"true\{{%\s*else\s*%\}}false\{{%\s*endif\s*%\}}"
             )
             match = re.search(pattern, index_html)
-            assert match is not None, (
-                f"Missing module activation condition for '{module}' in templates/index.html"
-            )
+            assert (
+                match is not None
+            ), f"Missing module activation condition for '{module}' in templates/index.html"
             mapping[module] = match.group(1)
         return mapping
 

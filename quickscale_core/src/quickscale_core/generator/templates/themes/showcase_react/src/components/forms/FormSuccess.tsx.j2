@@ -1,0 +1,24 @@
+{%- raw -%}
+import { CheckCircle2 } from 'lucide-react'
+import { Button } from '@/components/ui/button'
+import { Card, CardContent } from '@/components/ui/card'
+
+interface FormSuccessProps {
+  message: string
+  onReset: () => void
+}
+
+export function FormSuccess({ message, onReset }: FormSuccessProps) {
+  return (
+    <Card>
+      <CardContent className="flex flex-col items-center gap-4 py-10 text-center">
+        <CheckCircle2 className="h-12 w-12 text-green-500" />
+        <p className="text-lg font-medium">{message}</p>
+        <Button variant="outline" onClick={onReset}>
+          Submit another response
+        </Button>
+      </CardContent>
+    </Card>
+  )
+}
+{%- endraw -%}

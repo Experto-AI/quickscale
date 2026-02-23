@@ -1,0 +1,114 @@
+{%- raw -%}
+import { Control } from 'react-hook-form'
+import { FormControl, FormDescription, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form'
+import { Input } from '@/components/ui/input'
+import { Textarea } from '@/components/ui/textarea'
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
+import { Checkbox } from '@/components/ui/checkbox'
+import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group'
+import { Label } from '@/components/ui/label'
+import type { FormFieldSchema } from '@/hooks/useFormSchema'
+
+interface FormFieldRendererProps {
+  field: FormFieldSchema
+  control: Control<Record<string, string>>
+  disabled: boolean
+}
+
+function getColSpanClass(layoutHint: FormFieldSchema['layout_hint']): string {
+  return layoutHint === 'full' ? 'col-span-2' : 'col-span-1'
+}
+
+export function FormFieldRenderer({ field, control, disabled }: FormFieldRendererProps) {
+  const colSpanClass = getColSpanClass(field.layout_hint)
+
+  if (field.field_type === 'hidden') {
+    return (
+      <FormField
+        control={control}
+        name={field.name}
+        render={({ field: formField }) => (
+          <input type="hidden" {...formField} />
+        )}
+      />
+    )
+  }
+
+  return (
+    <div className={colSpanClass}>
+      <FormField
+        control={control}
+        name={field.name}
+        render={({ field: formField }) => (
+          <FormItem>
+            <FormLabel>{field.label}{field.required && <span className="ml-1 text-destructive">*</span>}</FormLabel>
+            <FormControl>
+              {field.field_type === 'textarea' ? (
+                <Textarea
+                  placeholder={field.placeholder}
+                  disabled={disabled}
+                  {...formField}
+                />
+              ) : field.field_type === 'select' ? (
+                <Select
+                  disabled={disabled}
+                  onValueChange={formField.onChange}
+                  defaultValue={formField.value}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder={field.placeholder || `Select ${field.label}`} />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {field.options.map((opt) => (
+                      <SelectItem key={opt.value} value={opt.value}>
+                        {opt.label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              ) : field.field_type === 'checkbox' ? (
+                <div className="flex items-center space-x-2">
+                  <Checkbox
+                    id={field.name}
+                    checked={formField.value === 'true'}
+                    onCheckedChange={(checked) => formField.onChange(checked ? 'true' : 'false')}
+                    disabled={disabled}
+                  />
+                  <Label htmlFor={field.name} className="text-sm font-normal">
+                    {field.placeholder || field.label}
+                  </Label>
+                </div>
+              ) : field.field_type === 'radio' ? (
+                <RadioGroup
+                  onValueChange={formField.onChange}
+                  defaultValue={formField.value}
+                  disabled={disabled}
+                  className="flex flex-col space-y-1"
+                >
+                  {field.options.map((opt) => (
+                    <div key={opt.value} className="flex items-center space-x-2">
+                      <RadioGroupItem value={opt.value} id={`${field.name}-${opt.value}`} />
+                      <Label htmlFor={`${field.name}-${opt.value}`} className="font-normal">
+                        {opt.label}
+                      </Label>
+                    </div>
+                  ))}
+                </RadioGroup>
+              ) : (
+                <Input
+                  type={field.field_type}
+                  placeholder={field.placeholder}
+                  disabled={disabled}
+                  {...formField}
+                />
+              )}
+            </FormControl>
+            {field.help_text && <FormDescription>{field.help_text}</FormDescription>}
+            <FormMessage />
+          </FormItem>
+        )}
+      />
+    </div>
+  )
+}
+{%- endraw -%}

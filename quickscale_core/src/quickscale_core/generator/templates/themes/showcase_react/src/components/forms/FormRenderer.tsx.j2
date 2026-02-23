@@ -1,0 +1,207 @@
+{%- raw -%}
+import { useState, useMemo } from 'react'
+import { useForm } from 'react-hook-form'
+import { zodResolver } from '@hookform/resolvers/zod'
+import * as z from 'zod'
+import { Form } from '@/components/ui/form'
+import { Button } from '@/components/ui/button'
+import { Card, CardContent } from '@/components/ui/card'
+import { Loader2, AlertCircle } from 'lucide-react'
+import { FormFieldRenderer } from '@/components/forms/FormFieldRenderer'
+import { FormSuccess } from '@/components/forms/FormSuccess'
+import { useFormSchema } from '@/hooks/useFormSchema'
+import type { FormFieldSchema } from '@/hooks/useFormSchema'
+
+interface FormRendererProps {
+  slug: string
+}
+
+type FormValues = Record<string, string>
+
+function buildZodSchema(fields: FormFieldSchema[]): z.ZodObject<Record<string, z.ZodTypeAny>> {
+  const shape: Record<string, z.ZodTypeAny> = {}
+  for (const field of fields) {
+    // Honeypot: always optional, always empty
+    if (field.name === '_hp_name') {
+      shape[field.name] = z.string().default('')
+      continue
+    }
+
+    let schema: z.ZodTypeAny
+
+    if (field.field_type === 'email') {
+      schema = z.string().email('Please enter a valid email address')
+    } else if (field.field_type === 'url') {
+      schema = z.string().url('Please enter a valid URL')
+    } else if (field.field_type === 'number') {
+      schema = z.string().refine((v) => !isNaN(Number(v)), { message: 'Please enter a valid number' })
+    } else {
+      schema = z.string()
+    }
+
+    const rules = field.validation_rules
+    if (rules.min_length !== undefined && schema instanceof z.ZodString) {
+      schema = schema.min(rules.min_length, `Minimum ${rules.min_length} characters`)
+    }
+    if (rules.max_length !== undefined && schema instanceof z.ZodString) {
+      schema = schema.max(rules.max_length, `Maximum ${rules.max_length} characters`)
+    }
+    if (rules.regex !== undefined && schema instanceof z.ZodString) {
+      schema = schema.regex(new RegExp(rules.regex), 'Invalid format')
+    }
+
+    if (field.required) {
+      if (schema instanceof z.ZodString) {
+        schema = schema.min(1, `${field.label} is required`)
+      }
+    } else {
+      schema = schema.optional()
+    }
+
+    shape[field.name] = schema
+  }
+  return z.object(shape)
+}
+
+function buildDefaultValues(fields: FormFieldSchema[]): FormValues {
+  const defaults: FormValues = {}
+  for (const field of fields) {
+    defaults[field.name] = ''
+  }
+  return defaults
+}
+
+export function FormRenderer({ slug }: FormRendererProps) {
+  const { data: schema, isLoading, isError, error } = useFormSchema(slug)
+  const [submitted, setSubmitted] = useState(false)
+  const [globalError, setGlobalError] = useState<string | null>(null)
+
+  const zodSchema = useMemo(
+    () => (schema ? buildZodSchema(schema.fields) : z.object({})),
+    [schema],
+  )
+
+  const defaultValues = useMemo(
+    () => (schema ? buildDefaultValues(schema.fields) : {}),
+    [schema],
+  )
+
+  const form = useForm<FormValues>({
+    resolver: zodResolver(zodSchema),
+    defaultValues,
+  })
+
+  const { handleSubmit, setError, formState: { isSubmitting } } = form
+
+  async function onSubmit(data: FormValues) {
+    setGlobalError(null)
+    try {
+      const response = await fetch(`/api/forms/${slug}/submit/`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'X-CSRFToken': getCsrfToken() },
+        body: JSON.stringify(data),
+      })
+
+      if (response.status === 201) {
+        if (schema?.redirect_url) {
+          window.location.href = schema.redirect_url
+        } else {
+          setSubmitted(true)
+        }
+        return
+      }
+
+      if (response.status === 400) {
+        const errors = await response.json() as Record<string, string[]>
+        for (const [fieldName, messages] of Object.entries(errors)) {
+          if (fieldName === 'non_field_errors' || fieldName === 'detail') {
+            setGlobalError(messages.join(', '))
+          } else {
+            setError(fieldName as keyof FormValues, { message: messages.join(', ') })
+          }
+        }
+        return
+      }
+
+      if (response.status === 429) {
+        setGlobalError('Too many submissions. Please try again later.')
+        return
+      }
+
+      setGlobalError('An unexpected error occurred. Please try again.')
+    } catch {
+      setGlobalError('Network error. Please check your connection and try again.')
+    }
+  }
+
+  function handleReset() {
+    setSubmitted(false)
+    form.reset(defaultValues)
+  }
+
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center py-12">
+        <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+      </div>
+    )
+  }
+
+  if (isError || !schema) {
+    return (
+      <Card>
+        <CardContent className="flex items-center gap-3 py-8 text-destructive">
+          <AlertCircle className="h-5 w-5 flex-shrink-0" />
+          <p>{error?.message ?? 'Failed to load form. Please try again.'}</p>
+        </CardContent>
+      </Card>
+    )
+  }
+
+  if (submitted) {
+    return <FormSuccess message={schema.success_message} onReset={handleReset} />
+  }
+
+  const activeFields = schema.fields.filter((f) => f.is_active).sort((a, b) => a.order - b.order)
+
+  return (
+    <div className="space-y-4">
+      {schema.description && (
+        <p className="text-muted-foreground">{schema.description}</p>
+      )}
+      {globalError && (
+        <div className="flex items-center gap-2 rounded-md border border-destructive/50 bg-destructive/10 px-4 py-3 text-sm text-destructive">
+          <AlertCircle className="h-4 w-4 flex-shrink-0" />
+          <p>{globalError}</p>
+        </div>
+      )}
+      <Form {...form}>
+        <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
+          <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+            {activeFields.map((field) => (
+              <FormFieldRenderer
+                key={field.name}
+                field={field}
+                control={form.control}
+                disabled={isSubmitting}
+              />
+            ))}
+          </div>
+          <Button type="submit" disabled={isSubmitting} className="w-full sm:w-auto">
+            {isSubmitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+            {isSubmitting ? 'Submitting...' : 'Submit'}
+          </Button>
+        </form>
+      </Form>
+    </div>
+  )
+}
+
+function getCsrfToken(): string {
+  const name = 'csrftoken'
+  const value = `; ${document.cookie}`
+  const parts = value.split(`; ${name}=`)
+  if (parts.length === 2) return parts.pop()?.split(';').shift() ?? ''
+  return ''
+}
+{%- endraw -%}

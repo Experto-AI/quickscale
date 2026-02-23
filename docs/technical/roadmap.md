@@ -47,7 +47,7 @@ QuickScale follows an evolution-aligned roadmap that starts as a personal toolki
    - ✅ Plan/Apply Cleanup (v0.72.0) - Remove legacy init/embed commands
    - ✅ CRM module (v0.73.0) - native Django CRM app (API-only)
    - ✅ **React Default Theme** (v0.74.0) - React + shadcn/ui as default
-   - 🚧 **Forms module** (v0.75.0) - backend complete; React frontend components pending
+   - ✅ **Forms module** (v0.75.0) - backend + React frontend complete
    - 📋 Social & Link Tree module (v0.76.0) - social links page + media embeds
    - 📋 Listings Theme (v0.77.0) - React frontend for property listings (sell/rent)
    - 📋 CRM Theme (v0.78.0) - React frontend for CRM module
@@ -77,13 +77,14 @@ QuickScale follows an evolution-aligned roadmap that starts as a personal toolki
 - **v0.71.0:** Plan/Apply System Complete ✅
 - **v0.72.0:** Plan/Apply Cleanup (remove legacy commands) ✅
 - **v0.74.0:** React Default Theme (React + shadcn/ui) ✅
-- **v0.75.0:** Forms Module (generic form builder with DRF API, spam protection, GDPR anonymization) 🚧 Backend ✅ / React ⏳
+- **v0.75.0:** Forms Module (generic form builder with DRF API, spam protection, GDPR anonymization) ✅ Complete
 - **v0.77.0:** Real Estate MVP (static + listings + social links) 🎯
 - **v0.80.0:** SaaS Feature Parity (auth, billing, teams) 🎯
 - **v1.0.0+:** Community platform (if demand exists)
 
 **Status:**
-- **Current Status:** v0.75.0 — Forms Module 🚧 Backend complete, React frontend pending
+- **Current Status:** v0.76.0 — Social & Link Tree module 📋 Planned
+- **Completed:** v0.75.0 — Forms Module ✅ Backend + React frontend complete
 - **Next Milestone:** v0.76.0 - Social & Link Tree module
 - **Plan/Apply System:** v0.68.0-v0.71.0 - Terraform-style configuration ✅ Complete
 - **SaaS Parity:** v0.80.0 - auth, billing, teams modules complete
@@ -107,7 +108,7 @@ List of upcoming releases with detailed implementation tasks:
 
 ### v0.75.0: `quickscale_modules.forms` - Generic Forms Module
 
-**Status**: 🚧 Backend Complete — React Frontend Pending
+**Status**: ✅ Complete
 
 **Strategic Context**: A generic, fully customizable form-builder module for Django SaaS projects. Enables developers to define, render, and manage any kind of form (contact, feedback, support, newsletter) through a data-driven admin interface, with no code changes required to add or modify forms. The first production use case is the **experto.ai/contact** page — a professional inquiry form collecting Name, Email, Company, Subject, and Project Context, with email notifications to the site owner.
 
@@ -134,10 +135,22 @@ List of upcoming releases with detailed implementation tasks:
 - [x] Templates (`form_page.html` React mount point, `form_email.html` notification template)
 
 **React Frontend** (`src/components/forms/`):
-- [ ] `FormRenderer` — dynamic form component (TanStack Query + React Hook Form + Zod)
-- [ ] `FormFieldRenderer` — field type switch (shadcn/ui `Input`, `Textarea`, `Select`, `Checkbox`, `RadioGroup`)
-- [ ] `FormSuccess` — success message display
-- [ ] `useFormSchema(slug)` — TanStack Query hook
+- [x] `FormRenderer` — dynamic form component (TanStack Query + React Hook Form + Zod)
+- [x] `FormFieldRenderer` — field type switch (shadcn/ui `Input`, `Textarea`, `Select`, `Checkbox`, `RadioGroup`)
+- [x] `FormSuccess` — success message display
+- [x] `useFormSchema(slug)` — TanStack Query hook
+
+**New shadcn/ui components added to showcase_react theme**:
+- [x] `components/ui/textarea.tsx` — Textarea input
+- [x] `components/ui/select.tsx` — Select dropdown (Radix)
+- [x] `components/ui/checkbox.tsx` — Checkbox (Radix)
+- [x] `components/ui/radio-group.tsx` — Radio group (Radix)
+- [x] `components/ui/form.tsx` — Form wrapper (React Hook Form integration)
+
+**Route integration**:
+- [x] `pages/FormsPage.tsx` — SPA page at `/forms/:slug`
+- [x] `App.tsx` — `/forms/:slug` route added
+- [x] `Dashboard.tsx` — Forms module card added to installed modules grid
 
 **Testing**:
 - [x] `test_models.py` — Form/Field CRUD, ordering, submission creation, value snapshot
@@ -147,7 +160,7 @@ List of upcoming releases with detailed implementation tasks:
 - [x] `test_notifications.py` — email triggered on submit, spam silenced, SMTP failure safe
 - [x] `test_validators.py` — dynamic field-level validator factory
 - [x] `test_management.py` — seed presets command, anonymize submissions command
-- [ ] E2E test: Plan → Apply → Working contact form project (seed `contact` preset, submit, verify in admin)
+- [x] E2E test: Plan → Apply → Working contact form project (seed `contact` preset, submit, verify in admin)
 
 ---
 
@@ -157,7 +170,7 @@ List of upcoming releases with detailed implementation tasks:
 - [x] **Generic**: Supports any use case — contact, feedback, support ticket, newsletter sign-up, RFQ, etc.
 - [x] **Customizable**: Per-field validation rules, ordering, conditional visibility (roadmap), and layout hints (full-width, two-column).
 - [x] **Theme-agnostic backend**: Django models and DRF API are fully decoupled from the React frontend.
-- [ ] **React frontend**: Dynamic form renderer using React Hook Form + Zod (v0.74.0 mandated stack); fetches schema from the REST API.
+- [x] **React frontend**: Dynamic form renderer using React Hook Form + Zod (v0.74.0 mandated stack); fetches schema from the REST API.
 - [x] **Spam protection**: Honeypot field + configurable rate limiting (no external CAPTCHA dependency).
 - [x] **Notification-ready**: Email notification hooks on every submission; plugs into future `quickscale_modules.notifications` (v0.82.0).
 - [x] **GDPR-aware**: Configurable data retention period; submission anonymization support.
@@ -365,17 +378,17 @@ urlpatterns:
 
 All components live in the generated project's React frontend under `src/components/forms/`:
 
-- [ ] **`FormRenderer`** — the top-level dynamic form component
-  - [ ] Receives `slug` prop (read from the host element's `data-form-slug` attribute by the entry point)
-  - [ ] Fetches form schema from `GET /api/forms/{slug}/` using `TanStack Query`
-  - [ ] Builds Zod validation schema dynamically from the returned `fields` array (`required`, `field_type` → Zod types, `validation_rules` → `.min()/.max()/.regex()`)
-  - [ ] Passes schema to `useForm()` from React Hook Form (`zodResolver`)
-  - [ ] Renders `<FormFieldRenderer>` for each field, in order
-  - [ ] On submit: `POST /api/forms/{slug}/submit/`; maps server-side field errors back to React Hook Form `setError()`
-  - [ ] Shows `<FormSuccess>` or redirects on success
-- [ ] **`FormFieldRenderer`** — switches on `field_type` to render the correct input component (shadcn/ui `Input`, `Textarea`, `Select`, `Checkbox`, `RadioGroup`)
-- [ ] **`FormSuccess`** — displays the `success_message` returned from the API
-- [ ] **`useFormSchema(slug)`** — TanStack Query hook for fetching and caching the form schema
+- [x] **`FormRenderer`** — the top-level dynamic form component
+  - [x] Receives `slug` prop via React Router `useParams`
+  - [x] Fetches form schema from `GET /api/forms/{slug}/` using `TanStack Query`
+  - [x] Builds Zod validation schema dynamically from the returned `fields` array (`required`, `field_type` → Zod types, `validation_rules` → `.min()/.max()/.regex()`)
+  - [x] Passes schema to `useForm()` from React Hook Form (`zodResolver`)
+  - [x] Renders `<FormFieldRenderer>` for each field, in order
+  - [x] On submit: `POST /api/forms/{slug}/submit/`; maps server-side field errors back to React Hook Form `setError()`
+  - [x] Shows `<FormSuccess>` or redirects on success
+- [x] **`FormFieldRenderer`** — switches on `field_type` to render the correct input component (shadcn/ui `Input`, `Textarea`, `Select`, `Checkbox`, `RadioGroup`)
+- [x] **`FormSuccess`** — displays the `success_message` returned from the API
+- [x] **`useFormSchema(slug)`** — TanStack Query hook for fetching and caching the form schema
 
 ---
 
@@ -563,7 +576,7 @@ quickscale_modules/forms/
 - [x] `SMTPException` raised by backend does not propagate (submission is not rolled back)
 
 **E2E tests**:
-- [ ] `Plan → Apply → Working contact form project` — seed `contact` preset, submit form, verify submission in admin
+- [x] `Plan → Apply → Working contact form project` — seed `contact` preset, submit form, verify submission in admin
 
 ---
 

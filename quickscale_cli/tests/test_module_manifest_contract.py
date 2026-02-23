@@ -60,9 +60,9 @@ def test_mutable_options_map_to_valid_django_settings() -> None:
         manifest = load_manifest_from_path(_manifest_path(entry.name))
 
         for option_name, option in manifest.mutable_options.items():
-            assert option.django_setting, (
-                f"Mutable option '{entry.name}.{option_name}' must define django_setting"
-            )
+            assert (
+                option.django_setting
+            ), f"Mutable option '{entry.name}.{option_name}' must define django_setting"
             assert SETTING_NAME_PATTERN.match(option.django_setting), (
                 f"Invalid django_setting for '{entry.name}.{option_name}': "
                 f"{option.django_setting}"

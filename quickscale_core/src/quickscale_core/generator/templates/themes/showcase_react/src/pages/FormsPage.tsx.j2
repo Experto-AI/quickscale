@@ -1,0 +1,27 @@
+{%- raw -%}
+import { useParams } from 'react-router-dom'
+import { FormRenderer } from '@/components/forms/FormRenderer'
+
+export function FormsPage() {
+  const { slug } = useParams<{ slug: string }>()
+
+  if (!slug) {
+    return (
+      <div className="space-y-4">
+        <h1 className="text-3xl font-bold tracking-tight">Forms</h1>
+        <p className="text-muted-foreground">No form specified.</p>
+      </div>
+    )
+  }
+
+  return (
+    <div className="space-y-6">
+      <div>
+        <h1 className="text-3xl font-bold tracking-tight">Contact</h1>
+        <p className="mt-1 text-muted-foreground">Fill out the form below and we'll get back to you.</p>
+      </div>
+      <FormRenderer slug={slug} />
+    </div>
+  )
+}
+{%- endraw -%}
