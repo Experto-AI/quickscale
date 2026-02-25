@@ -33,6 +33,7 @@ class FormFieldSerializer(serializers.ModelSerializer):
             "layout_hint",
             "options",
             "validation_rules",
+            "is_active",
         ]
         read_only_fields = fields
 
@@ -81,6 +82,7 @@ class FormSchemaSerializer(serializers.ModelSerializer):
                     "layout_hint": FormField.LAYOUT_FULL,
                     "options": [],
                     "validation_rules": {},
+                    "is_active": True,
                 }
             )
 

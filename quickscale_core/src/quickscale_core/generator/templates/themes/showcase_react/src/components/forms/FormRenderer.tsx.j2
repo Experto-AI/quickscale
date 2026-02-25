@@ -85,6 +85,7 @@ export function FormRenderer({ slug }: FormRendererProps) {
   const form = useForm<FormValues>({
     resolver: zodResolver(zodSchema),
     defaultValues,
+    values: defaultValues,
   })
 
   const {
