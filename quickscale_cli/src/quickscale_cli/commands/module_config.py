@@ -755,38 +755,44 @@ def _update_pyproject_toml(
         click.secho("  ✅ Added django-filter to pyproject.toml", fg="green")
 
 
-def _add_drf_and_filter_dependencies(project_path: Path, pyproject_path: Path) -> None:
-    """Add djangorestframework and django-filter dependencies to project's pyproject.toml."""
+def _add_drf_and_filter_dependencies(
+    project_path: Path,
+    pyproject_path: Path,
+    source_module: str = "crm",
+) -> None:
+    """Add djangorestframework and django-filter dependencies to project's pyproject.toml.
+
+    Reads the required versions from the already-embedded source_module's pyproject.toml.
+    """
     with open(pyproject_path) as f:
         pyproject_content = f.read()
 
-    # Read versions from the embedded CRM module
-    crm_pyproject_path = project_path / "modules" / "crm" / "pyproject.toml"
+    module_pyproject_path = project_path / "modules" / source_module / "pyproject.toml"
 
-    if not crm_pyproject_path.exists():
+    if not module_pyproject_path.exists():
         click.secho(
-            "❌ Error: CRM module pyproject.toml not found. "
+            f"❌ Error: {source_module} module pyproject.toml not found. "
             "Cannot determine dependency version requirements.",
             fg="red",
             err=True,
         )
-        click.echo(f"Expected file: {crm_pyproject_path}", err=True)
+        click.echo(f"Expected file: {module_pyproject_path}", err=True)
         raise click.Abort()
 
     try:
-        with open(crm_pyproject_path) as f:
-            crm_pyproject_content = f.read()
+        with open(module_pyproject_path) as f:
+            module_pyproject_content = f.read()
 
         drf_version = None
         if "djangorestframework" not in pyproject_content:
             drf_version = _get_dependency_version(
-                crm_pyproject_content, "djangorestframework"
+                module_pyproject_content, "djangorestframework"
             )
 
         filter_version = None
         if "django-filter" not in pyproject_content:
             filter_version = _get_dependency_version(
-                crm_pyproject_content, "django-filter"
+                module_pyproject_content, "django-filter"
             )
 
         if drf_version or filter_version:
@@ -796,7 +802,7 @@ def _add_drf_and_filter_dependencies(project_path: Path, pyproject_path: Path) -
 
     except (FileNotFoundError, AttributeError) as e:
         click.secho(
-            f"❌ Error: Failed to parse dependencies from CRM module: {e}",
+            f"❌ Error: Failed to parse dependencies from {source_module} module: {e}",
             fg="red",
             err=True,
         )
@@ -862,7 +868,9 @@ def apply_crm_configuration(project_path: Path, config: dict[str, Any]) -> None:
 
     # Add DRF and django-filter dependencies to pyproject.toml
     if pyproject_path.exists():
-        _add_drf_and_filter_dependencies(project_path, pyproject_path)
+        _add_drf_and_filter_dependencies(
+            project_path, pyproject_path, source_module="crm"
+        )
 
     _regenerate_wiring_for_module(project_path, "crm", config)
 
@@ -927,6 +935,14 @@ def configure_forms_module(non_interactive: bool = False) -> dict[str, Any]:
 
 def apply_forms_configuration(project_path: Path, config: dict[str, Any]) -> None:
     """Apply forms module configuration to the project."""
+    pyproject_path = project_path / "pyproject.toml"
+
+    # Add DRF and django-filter dependencies to pyproject.toml
+    if pyproject_path.exists():
+        _add_drf_and_filter_dependencies(
+            project_path, pyproject_path, source_module="forms"
+        )
+
     _regenerate_wiring_for_module(project_path, "forms", config)
     click.echo("\n\U0001f4cb Configuration applied:")
     click.echo(f"  \u2022 Forms per page: {config['forms_per_page']}")
