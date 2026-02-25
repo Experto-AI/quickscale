@@ -126,6 +126,7 @@ install:
 # --- Testing ---
 
 # Run all tests
+test:
 	@$(PYTHON) -m pytest $(TEST_DIRS) -v --tb=short
 
 # Run unit tests only (core and cli packages, no integration)
