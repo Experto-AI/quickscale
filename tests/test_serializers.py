@@ -43,8 +43,8 @@ class TestFormSchemaSerializer:
     def test_formschema_serializer_contains_slug_and_title(self, form):
         """Serialized data includes slug and title"""
         data = FormSchemaSerializer(form).data
-        assert data["slug"] == "contact"
-        assert data["title"] == "Contact"
+        assert data["slug"] == "test-contact"
+        assert data["title"] == "Test Contact"
 
 
 @pytest.mark.django_db

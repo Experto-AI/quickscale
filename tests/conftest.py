@@ -51,14 +51,17 @@ def staff_client(api_client, staff_user):
 @pytest.fixture
 def form(db):
     """Active form with notify email set"""
-    return Form.objects.create(
-        title="Contact",
-        slug="contact",
-        description="Get in touch.",
-        success_message="Thank you, we will be in touch.",
-        notify_emails="admin@example.com",
-        spam_protection_enabled=True,
+    form, _ = Form.objects.update_or_create(
+        slug="test-contact",
+        defaults={
+            "title": "Test Contact",
+            "description": "Get in touch.",
+            "success_message": "Thank you, we will be in touch.",
+            "notify_emails": "admin@example.com",
+            "spam_protection_enabled": True,
+        },
     )
+    return form
 
 
 @pytest.fixture
