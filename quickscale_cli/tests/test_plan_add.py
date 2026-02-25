@@ -196,9 +196,9 @@ docker:
                 elif available_section:
                     # In the available section, auth should not be numbered for selection
                     if ". auth" in line.lower():
-                        assert (
-                            False
-                        ), "auth should not appear as available for selection"
+                        assert False, (
+                            "auth should not appear as available for selection"
+                        )
 
     def test_plan_add_updates_config(self):
         """Test that adding module updates quickscale.yml"""
@@ -292,6 +292,10 @@ class TestPlanAddAllModulesInstalled:
                                 "version": None,
                                 "embedded_at": "2025-12-01T11:00:00",
                             },
+                            "forms": {
+                                "version": None,
+                                "embedded_at": "2025-12-01T11:00:00",
+                            },
                             "billing": {
                                 "version": None,
                                 "embedded_at": "2025-12-01T11:00:00",
@@ -318,6 +322,7 @@ modules:
   blog:
   listings:
   crm:
+  forms:
   billing:
   teams:
 docker:

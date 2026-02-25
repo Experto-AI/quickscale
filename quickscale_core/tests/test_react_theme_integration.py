@@ -538,7 +538,7 @@ class TestReactThemeAuthUrls:
 class TestReactThemeModuleActivationMatrix:
     """Validate React module activation behavior for none/some/all selections."""
 
-    MODULES = ["auth", "blog", "listings", "crm", "billing", "teams"]
+    MODULES = ["auth", "blog", "listings", "crm", "forms", "billing", "teams"]
 
     @staticmethod
     def _extract_template_module_app_map(index_html: str) -> dict[str, str]:
@@ -550,9 +550,9 @@ class TestReactThemeModuleActivationMatrix:
                 rf"true\{{%\s*else\s*%\}}false\{{%\s*endif\s*%\}}"
             )
             match = re.search(pattern, index_html)
-            assert (
-                match is not None
-            ), f"Missing module activation condition for '{module}' in templates/index.html"
+            assert match is not None, (
+                f"Missing module activation condition for '{module}' in templates/index.html"
+            )
             mapping[module] = match.group(1)
         return mapping
 
@@ -586,10 +586,11 @@ class TestReactThemeModuleActivationMatrix:
                     "quickscale_modules_blog",
                     "quickscale_modules_listings",
                     "quickscale_modules_crm",
+                    "quickscale_modules_forms",
                     "quickscale_modules_billing",
                     "quickscale_modules_teams",
                 ],
-                {"auth", "blog", "listings", "crm", "billing", "teams"},
+                {"auth", "blog", "listings", "crm", "forms", "billing", "teams"},
             ),
         ],
     )

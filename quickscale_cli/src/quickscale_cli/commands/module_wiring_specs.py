@@ -135,11 +135,54 @@ def _crm_wiring(options: Mapping[str, Any]) -> ModuleWiringSpec:
     )
 
 
+def _forms_wiring(options: Mapping[str, Any]) -> ModuleWiringSpec:
+    submissions_api_enabled = bool(options.get("submissions_api_enabled", True))
+    forms_per_page = int(options.get("forms_per_page", 25))
+    spam_protection_enabled = bool(options.get("spam_protection_enabled", True))
+    rate_limit = str(options.get("rate_limit", "5/hour"))
+    data_retention_days = int(options.get("data_retention_days", 365))
+
+    settings: dict[str, Any] = {
+        "FORMS_PER_PAGE": forms_per_page,
+        "FORMS_SPAM_PROTECTION": spam_protection_enabled,
+        "FORMS_RATE_LIMIT": rate_limit,
+        "FORMS_DATA_RETENTION_DAYS": data_retention_days,
+        "FORMS_SUBMISSIONS_API": submissions_api_enabled,
+    }
+
+    if submissions_api_enabled:
+        # NOTE: REST_FRAMEWORK uses last-writer-wins keyed by setting name (not merged).
+        # This dict is intentionally identical to _crm_wiring's REST_FRAMEWORK dict.
+        # Any divergence will silently drop the other module's settings.
+        settings["REST_FRAMEWORK"] = {
+            "DEFAULT_AUTHENTICATION_CLASSES": [
+                "rest_framework.authentication.SessionAuthentication"
+            ],
+            "DEFAULT_PERMISSION_CLASSES": [
+                "rest_framework.permissions.IsAuthenticated"
+            ],
+            "DEFAULT_PAGINATION_CLASS": "rest_framework.pagination.PageNumberPagination",
+            "PAGE_SIZE": forms_per_page,
+            "DEFAULT_FILTER_BACKENDS": [
+                "django_filters.rest_framework.DjangoFilterBackend",
+                "rest_framework.filters.SearchFilter",
+                "rest_framework.filters.OrderingFilter",
+            ],
+        }
+
+    return ModuleWiringSpec(
+        apps=("rest_framework", "django_filters", "quickscale_modules_forms"),
+        settings=settings,
+        url_includes=(("forms/", "quickscale_modules_forms.urls"),),
+    )
+
+
 MODULE_WIRING_BUILDERS = {
     "auth": _auth_wiring,
     "blog": _blog_wiring,
     "listings": _listings_wiring,
     "crm": _crm_wiring,
+    "forms": _forms_wiring,
 }
 
 

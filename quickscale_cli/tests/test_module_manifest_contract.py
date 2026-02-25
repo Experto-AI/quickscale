@@ -9,6 +9,7 @@ from quickscale_cli.commands.module_config import (
     get_default_auth_config,
     get_default_blog_config,
     get_default_crm_config,
+    get_default_forms_config,
     get_default_listings_config,
 )
 from quickscale_cli.module_catalog import get_module_entries
@@ -22,6 +23,7 @@ DEFAULT_CONFIG_FACTORIES = {
     "blog": get_default_blog_config,
     "listings": get_default_listings_config,
     "crm": get_default_crm_config,
+    "forms": get_default_forms_config,
 }
 
 SETTING_NAME_PATTERN = re.compile(r"^[A-Z][A-Z0-9_]*$")
@@ -60,9 +62,9 @@ def test_mutable_options_map_to_valid_django_settings() -> None:
         manifest = load_manifest_from_path(_manifest_path(entry.name))
 
         for option_name, option in manifest.mutable_options.items():
-            assert (
-                option.django_setting
-            ), f"Mutable option '{entry.name}.{option_name}' must define django_setting"
+            assert option.django_setting, (
+                f"Mutable option '{entry.name}.{option_name}' must define django_setting"
+            )
             assert SETTING_NAME_PATTERN.match(option.django_setting), (
                 f"Invalid django_setting for '{entry.name}.{option_name}': "
                 f"{option.django_setting}"

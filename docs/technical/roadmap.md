@@ -47,7 +47,7 @@ QuickScale follows an evolution-aligned roadmap that starts as a personal toolki
    - ✅ Plan/Apply Cleanup (v0.72.0) - Remove legacy init/embed commands
    - ✅ CRM module (v0.73.0) - native Django CRM app (API-only)
    - ✅ **React Default Theme** (v0.74.0) - React + shadcn/ui as default
-   - ✅ **Forms module** (v0.75.0) - backend + React frontend complete
+   - ✅ **Forms module** (v0.75.0) - generic form builder with CLI integration ✅ Complete
    - 📋 Social & Link Tree module (v0.76.0) - social links page + media embeds
    - 📋 Listings Theme (v0.77.0) - React frontend for property listings (sell/rent)
    - 📋 CRM Theme (v0.78.0) - React frontend for CRM module
@@ -77,15 +77,15 @@ QuickScale follows an evolution-aligned roadmap that starts as a personal toolki
 - **v0.71.0:** Plan/Apply System Complete ✅
 - **v0.72.0:** Plan/Apply Cleanup (remove legacy commands) ✅
 - **v0.74.0:** React Default Theme (React + shadcn/ui) ✅
-- **v0.75.0:** Forms Module (generic form builder with DRF API, spam protection, GDPR anonymization) ✅ Complete
+- **v0.75.0:** Forms Module (generic form builder with DRF API, spam protection, GDPR anonymization) ✅
 - **v0.77.0:** Real Estate MVP (static + listings + social links) 🎯
 - **v0.80.0:** SaaS Feature Parity (auth, billing, teams) 🎯
 - **v1.0.0+:** Community platform (if demand exists)
 
 **Status:**
-- **Current Status:** v0.76.0 — Social & Link Tree module 📋 Planned
-- **Completed:** v0.75.0 — Forms Module ✅ Backend + React frontend complete
-- **Next Milestone:** v0.76.0 - Social & Link Tree module
+- **Current Status:** v0.75.0 — Forms Module ✅ Complete
+- **In Progress:** v0.76.0 — Social & Link Tree module
+- **Next Milestone:** v0.77.0 - Real Estate MVP
 - **Plan/Apply System:** v0.68.0-v0.71.0 - Terraform-style configuration ✅ Complete
 - **SaaS Parity:** v0.80.0 - auth, billing, teams modules complete
 
@@ -108,7 +108,7 @@ List of upcoming releases with detailed implementation tasks:
 
 ### v0.75.0: `quickscale_modules.forms` - Generic Forms Module
 
-**Status**: ✅ Complete
+**Status**: ✅ Complete — Backend + React frontend + CLI integration done
 
 **Strategic Context**: A generic, fully customizable form-builder module for Django SaaS projects. Enables developers to define, render, and manage any kind of form (contact, feedback, support, newsletter) through a data-driven admin interface, with no code changes required to add or modify forms. The first production use case is the **experto.ai/contact** page — a professional inquiry form collecting Name, Email, Company, Subject, and Project Context, with email notifications to the site owner.
 
@@ -161,6 +161,41 @@ List of upcoming releases with detailed implementation tasks:
 - [x] `test_validators.py` — dynamic field-level validator factory
 - [x] `test_management.py` — seed presets command, anonymize submissions command
 - [x] E2E test: Plan → Apply → Working contact form project (seed `contact` preset, submit, verify in admin)
+
+---
+
+#### CLI Integration Checklist
+
+**Status: ✅ Complete** — All CLI integration tasks implemented in v0.75.0.
+
+**React showcase theme integration is already complete** — `FormsPage.tsx`, the `/forms/:slug` route in `App.tsx`, and the Dashboard module card are already part of the generated theme template files and require no apply-step injection (same pattern as all other modules). The `forms` module activation condition was also added to `index.html.j2`.
+
+**Files changed** (5 files):
+
+**1. `quickscale_cli/src/quickscale_cli/module_catalog.py`** — Register `forms` as a ready module:
+- [x] Added `ModuleCatalogEntry(name="forms", ...)` after `crm` entry and before `billing`
+- [x] `get_module_entries(include_experimental=False)` now returns 5 entries (auth, blog, listings, crm, forms)
+
+**2. `quickscale_cli/src/quickscale_cli/commands/module_wiring_specs.py`** — Wiring spec added:
+- [x] Added `_forms_wiring(options)` function with full settings injection (`FORMS_*` settings + `REST_FRAMEWORK` when `submissions_api_enabled=True`)
+- [x] Registered in `MODULE_WIRING_BUILDERS` after `crm`
+
+**3. `quickscale_cli/src/quickscale_cli/commands/module_config.py`** — Config + apply functions added:
+- [x] `get_default_forms_config()` returns all 6 manifest option keys
+- [x] `configure_forms_module(non_interactive)` for interactive and non-interactive modes
+- [x] `apply_forms_configuration(project_path, config)` calls `_regenerate_wiring_for_module`
+- [x] Added `"forms": (configure_forms_module, apply_forms_configuration)` to `MODULE_CONFIGURATORS`
+
+**4. `quickscale_cli/src/quickscale_cli/commands/module_commands.py`** — Dependency install:
+- [x] Added `"forms"` to the dependency install list in `_perform_module_embed`
+
+**5. `quickscale_cli/tests/test_module_manifest_contract.py`** — Contract tests extended:
+- [x] Imported `get_default_forms_config` and added to `DEFAULT_CONFIG_FACTORIES`
+
+**Additional changes**:
+- [x] `quickscale_core/src/quickscale_core/generator/templates/themes/showcase_react/templates/index.html.j2` — Added `forms` module activation condition
+- [x] `quickscale_core/tests/test_react_theme_integration.py` — Updated `MODULES` list to include `forms`
+- [x] `quickscale_cli/tests/test_plan_add.py` — Updated `TestPlanAddAllModulesInstalled` to include `forms` in state
 
 ---
 

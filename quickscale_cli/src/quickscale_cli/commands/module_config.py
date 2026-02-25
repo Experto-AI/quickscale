@@ -874,6 +874,73 @@ def apply_crm_configuration(project_path: Path, config: dict[str, Any]) -> None:
 
 
 # ============================================================================
+# FORMS MODULE CONFIGURATION
+# ============================================================================
+
+
+def get_default_forms_config() -> dict[str, Any]:
+    """Return default configuration for the forms module."""
+    return {
+        "forms_per_page": 25,
+        "spam_protection_enabled": True,
+        "rate_limit": "5/hour",
+        "data_retention_days": 365,
+        "submissions_api_enabled": True,
+        "storage_backend": "django",
+    }
+
+
+def configure_forms_module(non_interactive: bool = False) -> dict[str, Any]:
+    """Configure the forms module interactively or using defaults."""
+    if non_interactive:
+        click.echo("\n⚙️  Using default forms module configuration...")
+        config = get_default_forms_config()
+        click.echo(f"  \u2022 Forms per page: {config['forms_per_page']}")
+        click.echo("  \u2022 Spam protection: Enabled")
+        click.echo(f"  \u2022 Rate limit: {config['rate_limit']}")
+        click.echo(f"  \u2022 Data retention: {config['data_retention_days']} days")
+        click.echo("  \u2022 Submissions API: Enabled")
+        return config
+
+    click.echo("\n⚙️  Configuring forms module...")
+    config = {
+        "forms_per_page": click.prompt(
+            "Submissions per page (admin)", type=int, default=25
+        ),
+        "spam_protection_enabled": click.confirm(
+            "Enable honeypot spam protection?", default=True
+        ),
+        "rate_limit": click.prompt(
+            "Rate limit for submissions (e.g. 5/hour, 10/minute)",
+            default="5/hour",
+        ),
+        "data_retention_days": click.prompt(
+            "Data retention days (0 = keep forever)", type=int, default=365
+        ),
+        "submissions_api_enabled": click.confirm(
+            "Enable REST API for admin submissions?", default=True
+        ),
+        "storage_backend": "django",
+    }
+    return config
+
+
+def apply_forms_configuration(project_path: Path, config: dict[str, Any]) -> None:
+    """Apply forms module configuration to the project."""
+    _regenerate_wiring_for_module(project_path, "forms", config)
+    click.echo("\n\U0001f4cb Configuration applied:")
+    click.echo(f"  \u2022 Forms per page: {config['forms_per_page']}")
+    click.echo(
+        f"  \u2022 Spam protection: {'Enabled' if config['spam_protection_enabled'] else 'Disabled'}"
+    )
+    click.echo(f"  \u2022 Rate limit: {config['rate_limit']}")
+    click.echo(f"  \u2022 Data retention: {config['data_retention_days']} days")
+    click.echo(
+        f"  \u2022 Submissions API: {'Enabled' if config['submissions_api_enabled'] else 'Disabled'}"
+    )
+
+
+# ============================================================================
 # MODULE CONFIGURATORS REGISTRY
 # ============================================================================
 
@@ -882,4 +949,5 @@ MODULE_CONFIGURATORS = {
     "blog": (configure_blog_module, apply_blog_configuration),
     "listings": (configure_listings_module, apply_listings_configuration),
     "crm": (configure_crm_module, apply_crm_configuration),
+    "forms": (configure_forms_module, apply_forms_configuration),
 }

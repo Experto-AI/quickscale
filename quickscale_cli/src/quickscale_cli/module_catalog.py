@@ -35,6 +35,12 @@ MODULE_CATALOG: tuple[ModuleCatalogEntry, ...] = (
         ready=True,
     ),
     ModuleCatalogEntry(
+        name="forms",
+        description="Generic form builder with admin management and React renderer",
+        ready=False,
+        experimental=True,
+    ),
+    ModuleCatalogEntry(
         name="billing",
         description="Stripe integration",
         ready=False,
