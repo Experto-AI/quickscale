@@ -5,21 +5,46 @@
 # Secondary: Windows (via WSL or Git Bash)
 #
 # Usage:
-#   make setup                - Initialize Poetry environment and dependencies
+#   make setup                - Bootstrap Poetry environment and dependencies
 #   make check                - Run all checks (lint, typecheck, test)
 #   make test                 - Run all tests
-#   make test-unit            - Run unit tests only (quickscale_core + quickscale_cli)
+#   make test-unit            - Run unit tests only
 #   make test-cov             - Run tests with coverage
+#   make test-e2e             - Run E2E tests (needs Docker + Playwright)
+#   make test-agent           - Run agentic flow adapter tests
 #   make lint                 - Run linting
 #   make lint-fix             - Fix linting issues
+#   make lint-frontend        - Lint React theme templates
+#   make lint-agent           - Lint .agent adapter system
 #   make typecheck            - Run type checking
 #   make format               - Format code with ruff
-#   make build                - Build distribution packages
+#   make quality              - Run full code quality analysis
+#   make ci                   - Run same checks as GitHub Actions CI
+#   make ci-e2e               - Run CI checks including E2E tests
+#   make docs                 - Compile contributing docs
+#   make install              - Install QuickScale globally
+#   make build                - Build all distribution packages
+#   make publish-build        - Build packages only (no publish)
+#   make publish-test         - Publish to TestPyPI
+#   make publish-prod         - Publish to production PyPI
+#   make publish-full         - Publish to TestPyPI then PyPI
+#   make publish-module       - Publish module to split branch (MODULE=<name>)
+#   make legacy-mount         - Mount legacy quickscale symlink
+#   make legacy-unmount       - Unmount legacy quickscale symlink
+#   make legacy-status        - Show legacy symlink status
 #   make clean                - Remove build artifacts
 
-.PHONY: setup test test-unit test-cov lint lint-fix typecheck format check build clean help \
+.PHONY: setup bootstrap install \
+        test test-unit test-cov test-e2e test-agent \
+        lint lint-fix lint-frontend lint-agent typecheck format \
+        quality check ci ci-e2e \
+        docs \
+        build clean \
+        publish-build publish-test publish-prod publish-full publish-module \
+        legacy-mount legacy-unmount legacy-status \
         version-check version-update bump-version \
-        check-llm lint-llm typecheck-llm test-llm test-cov-llm
+        check-llm lint-llm typecheck-llm test-llm test-cov-llm \
+        help
 
 # Default Python command (uses root Poetry environment)
 PYTHON ?= poetry run python
@@ -34,43 +59,86 @@ help:
 	@echo "QuickScale Development Commands"
 	@echo ""
 	@echo "Setup:"
-	@echo "  make setup                - Initialize Poetry environment and dependencies"
+	@echo "  make setup                - Initialize Poetry environment (bootstrap + install)"
+	@echo "  make bootstrap            - Full bootstrap (Python check + poetry install)"
+	@echo "  make install              - Install QuickScale CLI globally"
 	@echo ""
-	@echo "Quality Checks (via poetry run):"
-	@echo "  make test                 - Run all tests"
-	@echo "  make test-unit            - Run unit tests (core + cli only)"
-	@echo "  make test-cov             - Run tests with coverage"
+	@echo "Testing:"
+	@echo "  make test                 - Run all unit + integration tests"
+	@echo "  make test-unit            - Run unit tests only (no integration)"
+	@echo "  make test-cov             - Run tests with coverage report"
+	@echo "  make test-e2e             - Run E2E tests (needs Docker + Playwright)"
+	@echo "  make test-agent           - Run agentic flow adapter tests"
+	@echo ""
+	@echo "Quality Checks:"
 	@echo "  make lint                 - Check linting (no changes)"
 	@echo "  make lint-fix             - Fix linting issues"
-	@echo "  make typecheck            - Run type checking"
+	@echo "  make lint-frontend        - Lint React theme templates (ESLint + TypeScript)"
+	@echo "  make lint-agent           - Lint .agent adapter shell scripts"
+	@echo "  make typecheck            - Run mypy type checking"
 	@echo "  make format               - Format code with ruff"
+	@echo "  make quality              - Full quality analysis (dead code, complexity, duplication)"
 	@echo "  make check                - Run all checks (lint, typecheck, test)"
+	@echo "  make ci                   - Run same checks as GitHub Actions"
+	@echo "  make ci-e2e               - Run CI checks including E2E tests"
+	@echo ""
+	@echo "Docs:"
+	@echo "  make docs                 - Compile contributing docs from docs/contrib/"
+	@echo ""
+	@echo "Build & Publish:"
+	@echo "  make build                - Build all distribution packages"
+	@echo "  make publish-build        - Build packages only (no publish)"
+	@echo "  make publish-test         - Publish to TestPyPI"
+	@echo "  make publish-prod         - Publish to production PyPI"
+	@echo "  make publish-full         - Publish TestPyPI → verify → PyPI"
+	@echo "  make publish-module       - Publish module to split branch (MODULE=<name>)"
+	@echo "  make clean                - Remove build artifacts"
+	@echo ""
+	@echo "Legacy:"
+	@echo "  make legacy-mount         - Create symlink to ../quickscale-legacy"
+	@echo "  make legacy-unmount       - Remove legacy symlink"
+	@echo "  make legacy-status        - Show legacy symlink status"
 	@echo ""
 	@echo "LLM Optimized Checks (Quiet on success):"
 	@echo "  make check-llm            - Run all checks quietly"
 	@echo "  make test-cov-llm         - Run coverage quietly"
-	@echo ""
-	@echo "Build:"
-	@echo "  make build                - Build all distribution packages"
-	@echo "  make clean                - Remove build artifacts"
 	@echo ""
 	@echo "Version Management:"
 	@echo "  make version-check        - Verify VERSION matches all pyproject.toml files"
 	@echo "  make version-update       - Sync all pyproject.toml files from VERSION file"
 	@echo "  make bump-version X.Y.Z   - Set new version and update all files"
 
-# Setup development environment
+# --- Setup ---
+
+# Bootstrap full development environment (Python check + poetry install)
+bootstrap:
+	@scripts/bootstrap.sh
+
+# Setup development environment (alias kept for familiarity)
 setup:
 	@poetry install
 	@echo "✅ Dependencies installed!"
 
+# Install QuickScale CLI globally
+install:
+	@scripts/install_global.sh
+
+# --- Testing ---
+
 # Run all tests
-test:
 	@$(PYTHON) -m pytest $(TEST_DIRS) -v --tb=short
 
-# Run unit tests only (core and cli packages)
+# Run unit tests only (core and cli packages, no integration)
 test-unit:
 	@$(PYTHON) -m pytest quickscale_core/tests quickscale_cli/tests -v --tb=short -m "not integration"
+
+# Run E2E tests (starts PostgreSQL container, installs Playwright browsers)
+test-e2e:
+	@scripts/test_e2e.sh
+
+# Run agentic flow adapter tests only
+test-agent:
+	@scripts/test_agentic_flow.sh
 
 # Run tests with coverage (90% total, 80% per-file threshold)
 test-cov:
@@ -82,6 +150,8 @@ test-cov:
 		--cov-report=json \
 		--cov-fail-under=90
 	@echo "📊 Coverage report: htmlcov/index.html"
+
+# --- Lint / Format ---
 
 # Run linting (check only, no changes)
 lint:
@@ -100,15 +170,46 @@ typecheck:
 	@$(PYTHON) -m mypy $(SRC_DIRS) --show-error-codes
 	@echo "✅ Type checking passed!"
 
+# Lint React theme templates (renders to tmp dir, runs ESLint + TypeScript check)
+lint-frontend:
+	@scripts/lint_frontend.sh
+
+# Lint .agent adapter shell scripts for syntax errors
+lint-agent:
+	@scripts/lint_agentic_flow.sh
+
 # Format code with ruff
 format:
 	@$(PYTHON) -m ruff format $(SRC_DIRS)
 	@echo "✅ Formatting done!"
 
-# Run all checks
+# --- Combined Checks ---
+
+# Run all checks (lint + typecheck + test)
 check: lint typecheck test
 	@echo ""
 	@echo "🎉 All checks passed!"
+
+# Full code quality analysis: dead code (vulture), complexity (radon), duplication (pylint)
+# Reports saved to .quickscale/quality_report.{json,md}
+quality:
+	@scripts/check_quality.sh
+
+# Run the same checks as GitHub Actions CI (lint + typecheck + unit tests)
+ci:
+	@scripts/check_ci_locally.sh
+
+# Run full CI including E2E tests (slow — needs Docker + Playwright)
+ci-e2e:
+	@scripts/check_ci_locally.sh --e2e
+
+# --- Docs ---
+
+# Compile docs/contrib/ into contributing.md and .cursor/rules/
+docs:
+	@scripts/compile_docs.sh
+
+# --- Build & Publish ---
 
 # Build all distribution packages
 build:
@@ -118,6 +219,27 @@ build:
 	@cd quickscale_cli && poetry build
 	@echo "✅ Build complete! See dist/ in each package."
 
+# Build packages only (no upload)
+publish-build:
+	@scripts/publish.sh build
+
+# Publish to TestPyPI
+publish-test:
+	@scripts/publish.sh test
+
+# Publish to production PyPI
+publish-prod:
+	@scripts/publish.sh prod
+
+# Publish to TestPyPI, verify, then production PyPI
+publish-full:
+	@scripts/publish.sh full
+
+# Publish module changes to its split branch (e.g. make publish-module MODULE=auth)
+publish-module:
+	@if [ -z "$(MODULE)" ]; then echo "Error: MODULE is required (e.g. make publish-module MODULE=auth)"; exit 1; fi
+	@scripts/publish_module.sh $(MODULE)
+
 # Clean build artifacts
 clean:
 	rm -rf quickscale/dist/ quickscale_core/dist/ quickscale_cli/dist/
@@ -125,6 +247,20 @@ clean:
 	rm -rf htmlcov/ .coverage coverage.json
 	find . -type d -name "__pycache__" -exec rm -rf {} + 2>/dev/null || true
 	@echo "✅ Cleaned!"
+
+# --- Legacy Symlink ---
+
+# Mount symlink pointing to ../quickscale-legacy
+legacy-mount:
+	@scripts/quickscale_legacy_symlink.sh mount
+
+# Remove legacy symlink
+legacy-unmount:
+	@scripts/quickscale_legacy_symlink.sh unmount
+
+# Show legacy symlink status
+legacy-status:
+	@scripts/quickscale_legacy_symlink.sh status
 
 # --- Version Management ---
 # Single source of truth: VERSION file
