@@ -17,10 +17,11 @@ export function useHealthCheck() {
   })
 }
 
-export function useApiData<T>(endpoint: string, queryKey: string[]) {
+export function useApiData<T>(endpoint: string, queryKey: string[], options: { retry?: boolean } = {}) {
   return useQuery({
     queryKey,
     queryFn: () => fetchApi<T>(endpoint),
+    retry: options.retry ?? false,
   })
 }
 {% endraw -%}

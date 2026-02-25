@@ -9,6 +9,7 @@ import {
   CreditCard,
   Users,
   UserCircle,
+  ClipboardList,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { Separator } from '@/components/ui/separator'
@@ -30,12 +31,13 @@ export function Sidebar() {
     { name: 'Blog', href: '/blog', icon: BookOpen, show: modules.blog },
     { name: 'Listings', href: '/listings', icon: Store, show: modules.listings },
     { name: 'CRM', href: '/crm', icon: Briefcase, show: modules.crm },
+    { name: 'Forms', href: '/forms', icon: ClipboardList, show: modules.forms },
     { name: 'Billing', href: '/billing', icon: CreditCard, show: modules.billing },
     { name: 'Teams', href: '/teams', icon: Users, show: modules.teams },
   ]
 
   const bottomNavigation: NavItem[] = [
-    { name: 'Profile', href: '/profile', icon: UserCircle, show: modules.auth },
+    { name: 'Auth', href: '/profile', icon: UserCircle, show: modules.auth },
     { name: 'Settings', href: '/settings', icon: Settings, show: true },
   ]
 

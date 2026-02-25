@@ -12,8 +12,8 @@ class TestFormModel:
 
     def test_form_str_returns_title(self):
         """__str__ returns the form title"""
-        form = Form.objects.create(title="Contact", slug="contact")
-        assert str(form) == "Contact"
+        form = Form.objects.create(title="Test Contact", slug="test-contact")
+        assert str(form) == "Test Contact"
 
     def test_form_slug_uniqueness_constraint(self):
         """Form slug must be unique across forms"""
@@ -69,7 +69,7 @@ class TestFormFieldModel:
 
     def test_formfield_str(self, form, form_field):
         """__str__ returns form title and field label"""
-        assert "Contact" in str(form_field)
+        assert "Test Contact" in str(form_field)
         assert "Name" in str(form_field)
 
     def test_formfield_is_active_defaults_to_true(self, form):
@@ -97,7 +97,7 @@ class TestFormSubmissionModel:
     def test_formsubmission_str(self, submission):
         """__str__ includes submission id and form title"""
         assert str(submission.pk) in str(submission)
-        assert "Contact" in str(submission)
+        assert "Test Contact" in str(submission)
 
 
 @pytest.mark.django_db

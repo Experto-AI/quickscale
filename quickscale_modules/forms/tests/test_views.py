@@ -14,10 +14,10 @@ class TestFormSchemaAPIView:
 
     def test_returns_200_for_valid_active_slug(self, api_client, form, form_field):
         """Active form returns 200 with schema data"""
-        url = reverse("quickscale_forms:form-schema", kwargs={"slug": "contact"})
+        url = reverse("quickscale_forms:form-schema", kwargs={"slug": "test-contact"})
         response = api_client.get(url)
         assert response.status_code == 200
-        assert response.data["slug"] == "contact"
+        assert response.data["slug"] == "test-contact"
 
     def test_returns_404_for_unknown_slug(self, api_client):
         """Non-existent slug returns 404"""
@@ -33,7 +33,7 @@ class TestFormSchemaAPIView:
 
     def test_injects_honeypot_marker_in_schema(self, api_client, form, form_field):
         """Schema response includes hidden _hp_name marker when spam protection is enabled"""
-        url = reverse("quickscale_forms:form-schema", kwargs={"slug": "contact"})
+        url = reverse("quickscale_forms:form-schema", kwargs={"slug": "test-contact"})
         response = api_client.get(url)
         assert response.status_code == 200
         field_names = [field["name"] for field in response.data["fields"]]
@@ -48,7 +48,7 @@ class TestFormSubmitAPIView:
         self, api_client, form, form_field, email_field
     ):
         """Valid submission returns 201 with success message"""
-        url = reverse("quickscale_forms:form-submit", kwargs={"slug": "contact"})
+        url = reverse("quickscale_forms:form-submit", kwargs={"slug": "test-contact"})
         data = {"full_name": "Alice", "email": "alice@example.com"}
         response = api_client.post(url, data=data, format="json")
         assert response.status_code == 201
@@ -58,7 +58,7 @@ class TestFormSubmitAPIView:
         self, api_client, form, form_field, email_field
     ):
         """Missing required field returns 400 with field errors"""
-        url = reverse("quickscale_forms:form-submit", kwargs={"slug": "contact"})
+        url = reverse("quickscale_forms:form-submit", kwargs={"slug": "test-contact"})
         data = {"full_name": "Alice"}  # missing email
         response = api_client.post(url, data=data, format="json")
         assert response.status_code == 400
@@ -68,7 +68,7 @@ class TestFormSubmitAPIView:
         self, api_client, form, form_field, email_field
     ):
         """Filled honeypot field is treated as spam — returns 201 silently"""
-        url = reverse("quickscale_forms:form-submit", kwargs={"slug": "contact"})
+        url = reverse("quickscale_forms:form-submit", kwargs={"slug": "test-contact"})
         data = {"full_name": "Bot", "email": "bot@spam.com", "_hp_name": "I am a bot"}
         response = api_client.post(url, data=data, format="json")
         assert response.status_code == 201
@@ -86,7 +86,7 @@ class TestFormSubmitAPIView:
         self, api_client, form, form_field, email_field
     ):
         """Valid submission creates a FormSubmission and FormFieldValue records"""
-        url = reverse("quickscale_forms:form-submit", kwargs={"slug": "contact"})
+        url = reverse("quickscale_forms:form-submit", kwargs={"slug": "test-contact"})
         data = {"full_name": "Alice", "email": "alice@example.com"}
         api_client.post(url, data=data, format="json")
         sub = FormSubmission.objects.filter(form=form).first()
@@ -99,7 +99,7 @@ class TestFormSubmitAPIView:
     ):
         """Submit endpoint returns 429 after configured FORMS_RATE_LIMIT is exceeded"""
         cache.clear()
-        url = reverse("quickscale_forms:form-submit", kwargs={"slug": "contact"})
+        url = reverse("quickscale_forms:form-submit", kwargs={"slug": "test-contact"})
         data = {"full_name": "Alice", "email": "alice@example.com"}
 
         first = api_client.post(url, data=data, format="json")

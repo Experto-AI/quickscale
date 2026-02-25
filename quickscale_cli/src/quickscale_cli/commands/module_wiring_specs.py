@@ -173,7 +173,7 @@ def _forms_wiring(options: Mapping[str, Any]) -> ModuleWiringSpec:
     return ModuleWiringSpec(
         apps=("rest_framework", "django_filters", "quickscale_modules_forms"),
         settings=settings,
-        url_includes=(("forms/", "quickscale_modules_forms.urls"),),
+        url_includes=(("", "quickscale_modules_forms.urls"),),
     )
 
 

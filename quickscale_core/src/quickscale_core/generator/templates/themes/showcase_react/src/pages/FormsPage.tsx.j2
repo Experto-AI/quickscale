@@ -1,17 +1,12 @@
 {%- raw -%}
-import { useParams } from 'react-router-dom'
+import { useParams, Navigate } from 'react-router-dom'
 import { FormRenderer } from '@/components/forms/FormRenderer'
 
 export function FormsPage() {
   const { slug } = useParams<{ slug: string }>()
 
   if (!slug) {
-    return (
-      <div className="space-y-4">
-        <h1 className="text-3xl font-bold tracking-tight">Forms</h1>
-        <p className="text-muted-foreground">No form specified.</p>
-      </div>
-    )
+    return <Navigate to="/forms/contact" replace />
   }
 
   return (
