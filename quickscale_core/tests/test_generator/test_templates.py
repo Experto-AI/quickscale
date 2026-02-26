@@ -540,6 +540,11 @@ class TestDevOpsTemplateLoading:
         template = jinja_env.get_template("scripts/lint.sh.j2")
         assert template is not None
 
+    def test_start_sh_loads(self, jinja_env: Environment) -> None:
+        """Test start.sh template loads without errors."""
+        template = jinja_env.get_template("start.sh.j2")
+        assert template is not None
+
 
 class TestDevOpsTemplateRendering:
     """Verify DevOps templates render correctly with sample context data."""
@@ -643,6 +648,53 @@ class TestDevOpsTemplateRendering:
         assert "ruff check ." in output
         assert "ruff format --check ." in output
         assert "pnpm format:check" in output
+
+    def test_start_sh_renders(
+        self, jinja_env: Environment, test_context: dict[str, str]
+    ) -> None:
+        """Test start.sh renders with package name and all required steps."""
+        template = jinja_env.get_template("start.sh.j2")
+        output = template.render(test_context)
+        assert output is not None
+        assert len(output) > 0
+        assert "#!/usr/bin/env bash" in output
+        assert "testproject" in output
+        assert "Step 1/6" in output
+        assert "Step 2/6" in output
+        assert "Step 3/6" in output
+        assert "Step 4/6" in output
+        assert "Step 5/6" in output
+        assert "Step 6/6" in output
+
+    def test_start_sh_superuser_setup(
+        self, jinja_env: Environment, test_context: dict[str, str]
+    ) -> None:
+        """Test start.sh contains idiomatic superuser creation via env vars."""
+        template = jinja_env.get_template("start.sh.j2")
+        output = template.render(test_context)
+        assert "DJANGO_SUPERUSER_USERNAME" in output
+        assert "DJANGO_SUPERUSER_EMAIL" in output
+        assert "DJANGO_SUPERUSER_PASSWORD" in output
+        assert "create_superuser" in output
+        assert "already exists, skipping" in output
+
+    def test_start_sh_superuser_is_nonfatal(
+        self, jinja_env: Environment, test_context: dict[str, str]
+    ) -> None:
+        """Test superuser step does not abort deployment on failure."""
+        template = jinja_env.get_template("start.sh.j2")
+        output = template.render(test_context)
+        # A failure in the superuser step should not kill the process
+        assert "|| echo" in output
+        assert "non-fatal" in output
+
+    def test_start_sh_gunicorn_uses_package_name(
+        self, jinja_env: Environment, test_context: dict[str, str]
+    ) -> None:
+        """Test Gunicorn is started with the rendered package name."""
+        template = jinja_env.get_template("start.sh.j2")
+        output = template.render(test_context)
+        assert "gunicorn testproject.wsgi:application" in output
 
 
 class TestPyprojectTomlContent:
@@ -896,9 +948,9 @@ class TestEnvExampleContent:
         output = template.render(test_context)
 
         # Check that 0.0.0.0 is included for Docker compatibility
-        assert (
-            "0.0.0.0" in output
-        ), ".env.example should include 0.0.0.0 in ALLOWED_HOSTS for Docker containers"
+        assert "0.0.0.0" in output, (
+            ".env.example should include 0.0.0.0 in ALLOWED_HOSTS for Docker containers"
+        )
         # Verify standard localhost entries are also present
         assert "localhost" in output, ".env.example should include localhost"
         assert "127.0.0.1" in output, ".env.example should include 127.0.0.1"
@@ -915,13 +967,13 @@ class TestEnvExampleContent:
         output = template.render(test_context)
 
         # Check that 0.0.0.0 is included in ALLOWED_HOSTS for Docker compatibility
-        assert (
-            "0.0.0.0" in output
-        ), "local.py should include 0.0.0.0 in ALLOWED_HOSTS for Docker containers"
+        assert "0.0.0.0" in output, (
+            "local.py should include 0.0.0.0 in ALLOWED_HOSTS for Docker containers"
+        )
         # Also check for the catch-all wildcard for development flexibility
-        assert (
-            '"*"' in output or "'*'" in output
-        ), "local.py should allow all hosts (* wildcard) for development"
+        assert '"*"' in output or "'*'" in output, (
+            "local.py should allow all hosts (* wildcard) for development"
+        )
 
     def test_database_url(
         self, jinja_env: Environment, test_context: dict[str, str]

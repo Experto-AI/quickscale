@@ -575,6 +575,45 @@ def _init_git_with_config(output_path: Path) -> None:
         click.secho("⚠️  Initial commit failed, continuing...", fg="yellow")
 
 
+def _commit_pending_config_changes(output_path: Path) -> None:
+    """Commit pending QuickScale config changes before module embedding
+
+    Stages and commits quickscale.yml and .quickscale/ directory changes so
+    git subtree operations have a clean working directory.  Called before
+    embedding modules in existing projects.
+
+    Args:
+        output_path: Path to the project directory
+
+    """
+    if is_working_directory_clean(output_path):
+        return
+
+    # Stage only QuickScale-managed config files
+    subprocess.run(
+        ["git", "add", "quickscale.yml", ".quickscale/"],
+        cwd=output_path,
+        capture_output=True,
+        check=False,
+    )
+
+    # Check if anything was staged
+    result = subprocess.run(
+        ["git", "diff", "--cached", "--name-only"],
+        cwd=output_path,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+
+    if result.stdout.strip():
+        _run_command(
+            ["git", "commit", "-m", "Update QuickScale configuration"],
+            output_path,
+            "Committing pending QuickScale configuration changes",
+        )
+
+
 def _embed_modules_step(
     output_path: Path,
     modules_to_embed: list[str],
@@ -824,6 +863,13 @@ def _execute_apply_steps(
         if ctx.existing_state
         else list(ctx.qs_config.modules.keys())
     )
+
+    # For existing projects, commit any pending QuickScale config changes
+    # (e.g. quickscale.yml updated by `quickscale plan`) before embedding
+    # modules, so git subtree has a clean working directory to operate on.
+    if ctx.existing_state is not None and modules_to_embed:
+        _commit_pending_config_changes(ctx.output_path)
+
     embed_result = _embed_modules_step(
         ctx.output_path, modules_to_embed, no_modules, ctx.existing_state
     )

@@ -713,7 +713,9 @@ The generated URL format is: `<service-name>-<environment>-<hash>.up.railway.app
   - ✅ ALLOWED_HOSTS auto-configured
   - ✅ Deployment via railway.json (migrations + static files run automatically)
 - [ ] Wait for deployment to complete (5-10 minutes for first deploy)
-- [ ] Create superuser: `railway run --service myapp python manage.py createsuperuser`
+- [ ] Create superuser (choose one option):
+  - **Automatic (recommended)**: Set `DJANGO_SUPERUSER_USERNAME`, `DJANGO_SUPERUSER_EMAIL`, `DJANGO_SUPERUSER_PASSWORD` in Railway dashboard variables — start.sh creates it on next deploy
+  - **Manual**: `railway run --service myapp python manage.py createsuperuser`
 - [ ] Verify site is accessible at provided URL (should load without errors)
 - [ ] Test all critical functionality
 - [ ] Configure custom domain (optional): Railway dashboard
@@ -735,7 +737,9 @@ The generated URL format is: `<service-name>-<environment>-<hash>.up.railway.app
 - [ ] Deploy to Railway: `railway up --service myapp`
   - ✅ railway.json automatically runs migrations + collectstatic + gunicorn
 - [ ] Wait for deployment to complete (5-10 minutes)
-- [ ] Create superuser account: `railway run --service myapp python manage.py createsuperuser`
+- [ ] Create superuser account (choose one option):
+  - **Automatic (recommended)**: Set `DJANGO_SUPERUSER_USERNAME`, `DJANGO_SUPERUSER_EMAIL`, `DJANGO_SUPERUSER_PASSWORD` in Railway dashboard variables — start.sh creates it on next deploy
+  - **Manual**: `railway run --service myapp python manage.py createsuperuser`
 - [ ] Verify site is accessible (should load without errors)
 - [ ] Test all critical functionality
 - [ ] Configure custom domain (optional): Railway dashboard

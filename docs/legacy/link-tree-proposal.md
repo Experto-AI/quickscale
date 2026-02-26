@@ -1698,7 +1698,7 @@ quickscale_modules/linktree/
 
 ```yaml
 name: linktree
-version: "1.0.0"
+version: 0.76.0
 description: "Privacy-first link-in-bio module with analytics and custom domains"
 
 config:

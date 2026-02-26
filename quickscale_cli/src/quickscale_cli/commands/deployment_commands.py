@@ -457,7 +457,12 @@ def _display_summary(
     else:
         click.echo("   3. Get URL: railway status")
     click.echo(
-        f"   4. Create superuser: railway run --service {app_service} "
+        "   4. Create superuser automatically: set DJANGO_SUPERUSER_USERNAME, "
+        "DJANGO_SUPERUSER_EMAIL and DJANGO_SUPERUSER_PASSWORD variables in Railway "
+        "dashboard — start.sh will create it on next deploy"
+    )
+    click.echo(
+        f"      Or manually: railway run --service {app_service} "
         f"python manage.py createsuperuser"
     )
     click.echo("   5. Configure custom domain (optional): railway domain")

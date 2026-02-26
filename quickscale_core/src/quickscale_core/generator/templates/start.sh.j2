@@ -13,12 +13,12 @@ echo "🚀 Starting deployment..."
 echo "========================================"
 echo ""
 
-echo "📋 Step 1/5: Environment check"
+echo "📋 Step 1/6: Environment check"
 echo "Checking critical environment variables..."
 env | grep -E '(DATABASE_URL|SECRET_KEY|DEBUG|DJANGO_SETTINGS_MODULE|ALLOWED_HOSTS|PORT)' || echo "⚠️  Some variables may be missing"
 echo ""
 
-echo "📋 Step 2/5: Python environment"
+echo "📋 Step 2/6: Python environment"
 python --version
 echo "Python location: $(which python)"
 echo "Installed packages:"
@@ -28,17 +28,39 @@ echo "Django configuration check:"
 python -c "from django.conf import settings; print(f'ALLOWED_HOSTS: {settings.ALLOWED_HOSTS}')" || echo "⚠️  Could not load Django settings"
 echo ""
 
-echo "📋 Step 3/5: Database migrations"
+echo "📋 Step 3/6: Database migrations"
 echo "Running migrations..."
 python manage.py migrate --noinput
 echo "✅ Migrations completed successfully"
 echo ""
 
-echo "📋 Step 4/5: WSGI application check"
+echo "📋 Step 4/6: Superuser setup"
+DJANGO_SUPERUSER_USERNAME="${DJANGO_SUPERUSER_USERNAME:-}"
+DJANGO_SUPERUSER_EMAIL="${DJANGO_SUPERUSER_EMAIL:-}"
+DJANGO_SUPERUSER_PASSWORD="${DJANGO_SUPERUSER_PASSWORD:-}"
+if [[ -n "$DJANGO_SUPERUSER_USERNAME" && -n "$DJANGO_SUPERUSER_EMAIL" && -n "$DJANGO_SUPERUSER_PASSWORD" ]]; then
+  echo "Attempting to create superuser '$DJANGO_SUPERUSER_USERNAME' (skipped if already exists)..."
+  python manage.py shell -c "
+import os
+from django.contrib.auth import get_user_model
+User = get_user_model()
+username = os.environ['DJANGO_SUPERUSER_USERNAME']
+if User.objects.filter(username=username).exists():
+    print(f'Superuser {username!r} already exists, skipping.')
+else:
+    User.objects.create_superuser(username, os.environ['DJANGO_SUPERUSER_EMAIL'], os.environ['DJANGO_SUPERUSER_PASSWORD'])
+    print(f'Superuser {username!r} created successfully.')
+" || echo "⚠️  Superuser setup failed (non-fatal), continuing..."
+else
+  echo "ℹ️  DJANGO_SUPERUSER_* vars not set, skipping superuser creation."
+fi
+echo ""
+
+echo "📋 Step 5/6: WSGI application check"
 python -c "from {{ package_name }}.wsgi import application; print(f'✅ WSGI app loaded: {type(application).__name__}')"
 echo ""
 
-echo "📋 Step 5/5: Starting Gunicorn"
+echo "📋 Step 6/6: Starting Gunicorn"
 echo "Binding to 0.0.0.0:${PORT:-8000} with 4 workers"
 echo "Gunicorn will log all requests below..."
 echo "========================================"

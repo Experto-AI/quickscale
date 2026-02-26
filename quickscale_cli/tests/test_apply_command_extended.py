@@ -28,6 +28,7 @@ from quickscale_cli.commands.apply_command import (
     _check_output_directory,
     _generate_with_existing_config,
     _init_git_with_config,
+    _commit_pending_config_changes,
     _embed_modules_step,
     _run_post_generation_steps,
     _save_project_state,
@@ -676,6 +677,91 @@ class TestInitGitWithConfig:
         mock_commit.return_value = False
         _init_git_with_config(Path("/tmp/proj"))
         # Should not raise
+
+
+# ============================================================================
+# _commit_pending_config_changes
+# ============================================================================
+
+
+class TestCommitPendingConfigChanges:
+    """Tests for _commit_pending_config_changes"""
+
+    @patch("quickscale_cli.commands.apply_command.is_working_directory_clean")
+    def test_no_op_when_working_directory_is_clean(self, mock_clean):
+        """Test that function does nothing when working directory is already clean"""
+        mock_clean.return_value = True
+
+        with patch("quickscale_cli.commands.apply_command.subprocess.run") as mock_run:
+            _commit_pending_config_changes(Path("/tmp/test"))
+
+        mock_run.assert_not_called()
+
+    @patch("quickscale_cli.commands.apply_command._run_command")
+    @patch("quickscale_cli.commands.apply_command.subprocess.run")
+    @patch("quickscale_cli.commands.apply_command.is_working_directory_clean")
+    def test_stages_and_commits_config_files_when_dirty(
+        self, mock_clean, mock_subprocess, mock_run_command
+    ):
+        """Test that config files are staged and committed when working directory is dirty"""
+        mock_clean.return_value = False
+        # First subprocess.run: git add; second: git diff --cached
+        mock_subprocess.side_effect = [
+            Mock(returncode=0),
+            Mock(returncode=0, stdout="quickscale.yml\n", stderr=""),
+        ]
+
+        _commit_pending_config_changes(Path("/tmp/test"))
+
+        # Verify git add was called with config files
+        first_call_args = mock_subprocess.call_args_list[0]
+        assert first_call_args[0][0] == ["git", "add", "quickscale.yml", ".quickscale/"]
+
+        # Verify commit was created
+        mock_run_command.assert_called_once_with(
+            ["git", "commit", "-m", "Update QuickScale configuration"],
+            Path("/tmp/test"),
+            "Committing pending QuickScale configuration changes",
+        )
+
+    @patch("quickscale_cli.commands.apply_command._run_command")
+    @patch("quickscale_cli.commands.apply_command.subprocess.run")
+    @patch("quickscale_cli.commands.apply_command.is_working_directory_clean")
+    def test_no_commit_when_config_files_not_modified(
+        self, mock_clean, mock_subprocess, mock_run_command
+    ):
+        """Test that no commit is created when config files have no staged changes"""
+        mock_clean.return_value = False
+        # git add finds nothing for the config files, git diff shows nothing staged
+        mock_subprocess.side_effect = [
+            Mock(returncode=0),
+            Mock(returncode=0, stdout="", stderr=""),
+        ]
+
+        _commit_pending_config_changes(Path("/tmp/test"))
+
+        mock_run_command.assert_not_called()
+
+    @patch("quickscale_cli.commands.apply_command._run_command")
+    @patch("quickscale_cli.commands.apply_command.subprocess.run")
+    @patch("quickscale_cli.commands.apply_command.is_working_directory_clean")
+    def test_commits_both_quickscale_yml_and_state_yml(
+        self, mock_clean, mock_subprocess, mock_run_command
+    ):
+        """Test that both quickscale.yml and .quickscale/state.yml changes are committed"""
+        mock_clean.return_value = False
+        mock_subprocess.side_effect = [
+            Mock(returncode=0),
+            Mock(
+                returncode=0,
+                stdout="quickscale.yml\n.quickscale/state.yml\n",
+                stderr="",
+            ),
+        ]
+
+        _commit_pending_config_changes(Path("/tmp/test"))
+
+        mock_run_command.assert_called_once()
 
 
 # ============================================================================

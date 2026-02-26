@@ -477,7 +477,7 @@ The `contact` preset directly maps to **experto.ai/contact** fields and can be u
 
 ```yaml
 name: forms
-version: "0.75.0"
+version: 0.76.0
 description: "Generic, customizable form builder module with admin management and React frontend renderer."
 config:
   mutable:

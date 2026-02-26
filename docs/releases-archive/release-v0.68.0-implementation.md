@@ -44,7 +44,7 @@ Features:
 Declarative configuration format:
 
 ```yaml
-version: 0.75.0
+version: 0.76.0
 project:
   name: myapp
   theme: showcase_html
