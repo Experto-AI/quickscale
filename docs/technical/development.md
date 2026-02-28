@@ -148,6 +148,33 @@ poetry run pytest
 
 ---
 
+## Troubleshooting
+
+### `poetry install` fails with `[Errno 13] Permission denied: 'proxy.py'`
+
+Root cause: your project `.venv/` was created as `root` (usually from running Poetry with `sudo`), so Poetry cannot delete or recreate files.
+
+Use one of these fixes from project root:
+
+```bash
+# Preferred: keep existing env path, restore ownership
+sudo chown -R "$USER:$USER" .venv
+
+# Alternative: remove broken env and let Poetry recreate it
+sudo rm -rf .venv
+poetry install
+
+# No-sudo workaround (if parent directory is writable):
+mv .venv .venv.root-owned.backup.$(date +%Y%m%d-%H%M%S)
+poetry install
+```
+
+Prevention:
+- Never run `poetry` commands with `sudo` in this repository
+- Use `./scripts/bootstrap.sh` (it now detects and handles root-owned `.venv`)
+
+---
+
 ## Development Workflow
 
 ### Daily Commands

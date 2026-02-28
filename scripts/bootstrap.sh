@@ -3,6 +3,12 @@
 
 set -e
 
+if [[ "${EUID:-$(id -u)}" -eq 0 ]]; then
+    echo "❌ Do not run bootstrap with sudo/root."
+    echo "Running as root creates root-owned cache/.venv files that break local Poetry workflows."
+    exit 1
+fi
+
 echo "🚀 Bootstrapping QuickScale development environment..."
 echo ""
 
@@ -14,16 +20,39 @@ if ! command -v python3 &> /dev/null; then
 fi
 
 python_version=$(python3 --version | cut -d' ' -f2 | cut -d'.' -f1,2)
-required_version="3.10"
+required_version="3.14"
 
 echo "✓ Python version: $(python3 --version)"
 
 # Check if version is sufficient (basic comparison for major.minor)
-if ! python3 -c "import sys; exit(0 if sys.version_info >= (3, 10) else 1)"; then
+if ! python3 -c "import sys; exit(0 if sys.version_info >= (3, 14) else 1)"; then
     echo "❌ Python $required_version or higher is required (found $python_version)"
     exit 1
 fi
 echo ""
+
+if [[ -d ".venv" ]]; then
+    venv_uid="$(stat -c '%u' .venv 2>/dev/null || echo '')"
+    current_uid="$(id -u)"
+
+    if [[ -n "$venv_uid" && "$venv_uid" != "$current_uid" ]]; then
+        backup_path=".venv.root-owned.backup.$(date +%Y%m%d-%H%M%S)"
+        echo "⚠️  Found .venv not owned by current user (uid=$venv_uid, current=$current_uid)."
+        echo "   This usually happens after running Poetry with sudo."
+        echo "   Moving broken .venv to $backup_path so Poetry can recreate it..."
+
+        if mv .venv "$backup_path"; then
+            echo "✓ Moved old .venv to $backup_path"
+        else
+            echo "❌ Could not move .venv automatically."
+            echo "Run one of:"
+            echo "  sudo chown -R \"$USER:$USER\" .venv"
+            echo "  sudo rm -rf .venv"
+            exit 1
+        fi
+        echo ""
+    fi
+fi
 
 # Check if Poetry is installed
 echo "📋 Checking Poetry installation..."

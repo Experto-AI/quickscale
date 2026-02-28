@@ -1139,7 +1139,7 @@ class TestExecuteApplySteps:
     @patch("quickscale_cli.commands.apply_command._embed_modules_step")
     @patch("quickscale_cli.commands.apply_command._init_git_with_config")
     @patch("quickscale_cli.commands.apply_command._generate_new_project")
-    def test_docker_autostart_failure_falls_back_to_local_migrations(
+    def test_docker_autostart_failure_aborts_apply(
         self,
         mock_generate_new_project,
         mock_init_git,
@@ -1152,7 +1152,7 @@ class TestExecuteApplySteps:
         mock_save_state,
         mock_display_next_steps,
     ):
-        """If Docker startup fails, apply falls back to local migration attempt."""
+        """If Docker startup fails, apply aborts without local migration fallback."""
         mock_embed_modules_step.return_value = EmbedModulesResult(
             success=True,
             embedded_modules=[],
@@ -1160,7 +1160,6 @@ class TestExecuteApplySteps:
         )
         mock_regenerate_wiring.return_value = True
         mock_start_docker.return_value = False
-        mock_run_migrations.return_value = True
 
         ctx = Mock()
         ctx.existing_state = None
@@ -1174,17 +1173,80 @@ class TestExecuteApplySteps:
         ctx.qs_config.docker.start = True
         ctx.qs_config.docker.build = True
 
-        _execute_apply_steps(
-            ctx,
-            force=False,
-            no_docker=False,
-            no_modules=False,
-            verbose_docker=False,
-        )
+        with pytest.raises(click.Abort):
+            _execute_apply_steps(
+                ctx,
+                force=False,
+                no_docker=False,
+                no_modules=False,
+                verbose_docker=False,
+            )
 
         mock_run_post.assert_called_once_with(ctx.output_path, run_migrations=False)
         mock_run_migrations_in_docker.assert_not_called()
-        mock_run_migrations.assert_called_once_with(ctx.output_path)
+        mock_run_migrations.assert_not_called()
+        mock_save_state.assert_called_once()
+        mock_display_next_steps.assert_not_called()
+
+    @patch("quickscale_cli.commands.apply_command._display_next_steps")
+    @patch("quickscale_cli.commands.apply_command._save_project_state")
+    @patch("quickscale_cli.commands.apply_command._run_migrations")
+    @patch("quickscale_cli.commands.apply_command._run_migrations_in_docker")
+    @patch("quickscale_cli.commands.apply_command._start_docker")
+    @patch("quickscale_cli.commands.apply_command._run_post_generation_steps")
+    @patch("quickscale_cli.commands.apply_command._regenerate_managed_wiring_for_apply")
+    @patch("quickscale_cli.commands.apply_command._embed_modules_step")
+    @patch("quickscale_cli.commands.apply_command._init_git_with_config")
+    @patch("quickscale_cli.commands.apply_command._generate_new_project")
+    def test_docker_migrations_failure_aborts_apply(
+        self,
+        mock_generate_new_project,
+        mock_init_git,
+        mock_embed_modules_step,
+        mock_regenerate_wiring,
+        mock_run_post,
+        mock_start_docker,
+        mock_run_migrations_in_docker,
+        mock_run_migrations,
+        mock_save_state,
+        mock_display_next_steps,
+    ):
+        """If Docker migrations fail, apply aborts and does not continue."""
+        mock_embed_modules_step.return_value = EmbedModulesResult(
+            success=True,
+            embedded_modules=[],
+            failed_module=None,
+        )
+        mock_regenerate_wiring.return_value = True
+        mock_start_docker.return_value = True
+        mock_run_migrations_in_docker.return_value = False
+
+        ctx = Mock()
+        ctx.existing_state = None
+        ctx.output_path = Path("/tmp/proj")
+        ctx.manifests = {}
+        ctx.delta = Mock()
+        ctx.delta.modules_to_add = []
+        ctx.delta.has_mutable_config_changes = False
+        ctx.qs_config = Mock()
+        ctx.qs_config.modules = {"listings": Mock(options={})}
+        ctx.qs_config.docker.start = True
+        ctx.qs_config.docker.build = True
+
+        with pytest.raises(click.Abort):
+            _execute_apply_steps(
+                ctx,
+                force=False,
+                no_docker=False,
+                no_modules=False,
+                verbose_docker=False,
+            )
+
+        mock_run_post.assert_called_once_with(ctx.output_path, run_migrations=False)
+        mock_run_migrations_in_docker.assert_called_once_with(ctx.output_path)
+        mock_run_migrations.assert_not_called()
+        mock_save_state.assert_called_once()
+        mock_display_next_steps.assert_not_called()
 
 
 # ============================================================================

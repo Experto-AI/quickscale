@@ -928,16 +928,36 @@ def _execute_apply_steps(
             ctx.output_path, ctx.qs_config.docker.build, verbose_docker
         )
         if not docker_started:
-            click.secho("⚠️  Docker start failed, continuing...", fg="yellow")
+            _save_project_state(
+                ctx.output_path,
+                ctx.qs_config,
+                ctx.existing_state,
+                embedded_modules,
+                ctx.delta,
+            )
+            _print_apply_failure_summary(
+                failed_step="docker startup",
+                reason="Docker auto-start failed. Run 'quickscale logs' to inspect the failing service.",
+            )
+            raise click.Abort()
 
     # For Docker auto-start projects, run migrations in the backend container
     # so database connectivity uses the internal Docker network.
     if should_auto_start_docker:
         if docker_started:
             if not _run_migrations_in_docker(ctx.output_path):
-                click.secho("⚠️  Migrations failed, continuing...", fg="yellow")
-        elif not _run_migrations(ctx.output_path):
-            click.secho("⚠️  Migrations failed, continuing...", fg="yellow")
+                _save_project_state(
+                    ctx.output_path,
+                    ctx.qs_config,
+                    ctx.existing_state,
+                    embedded_modules,
+                    ctx.delta,
+                )
+                _print_apply_failure_summary(
+                    failed_step="database migrations",
+                    reason="Migrations failed inside Docker backend container. Run 'quickscale logs backend' for details.",
+                )
+                raise click.Abort()
 
     # Save state
     _save_project_state(
