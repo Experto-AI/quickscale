@@ -26,11 +26,11 @@ def mock_dependencies(monkeypatch):
     monkeypatch.setenv("QUICKSCALE_SKIP_DEPENDENCY_CHECKS", "1")
 
     mock_deps = [
-        DependencyStatus("Python", True, "3.12.0", True, "Runtime"),
+        DependencyStatus("Python", True, "3.14.0", True, "Runtime"),
         DependencyStatus("Poetry", True, "1.8.0", True, "Dependency management"),
         DependencyStatus("Git", True, "2.40.0", True, "Version control"),
         DependencyStatus("Docker", True, "24.0.0", True, "Containerization"),
-        DependencyStatus("PostgreSQL", True, "15.0", True, "Database"),
+        DependencyStatus("PostgreSQL", True, "18.0", True, "Database"),
     ]
 
     with patch(

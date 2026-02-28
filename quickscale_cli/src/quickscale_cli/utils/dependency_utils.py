@@ -42,13 +42,13 @@ class DependencyStatus(NamedTuple):
 
 
 def check_python_version() -> DependencyStatus:
-    """Check Python version (3.11+ required)."""
+    """Check Python version (3.14+ required)."""
     import sys
 
     version = (
         f"{sys.version_info.major}.{sys.version_info.minor}.{sys.version_info.micro}"
     )
-    meets_requirement = sys.version_info >= (3, 11)
+    meets_requirement = sys.version_info >= (3, 14)
 
     return DependencyStatus(
         name="Python",

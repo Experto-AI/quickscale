@@ -56,7 +56,7 @@ The `quickscale deploy railway` command automatically:
 
 **Deployment Setup:**
 - ✅ Initializes Railway project (if needed) - interactive prompts let you create/select project
-- ✅ Adds PostgreSQL 16 database service
+- ✅ Adds PostgreSQL 18 database service
 - ✅ Creates application service
 - ✅ Retries `DATABASE_URL` reference linking while PostgreSQL finishes provisioning
 - ✅ Generates and sets SECRET_KEY securely
@@ -153,7 +153,7 @@ Railway projects support multiple services within a single project. When you dep
 The `quickscale deploy railway` command follows this config-first workflow:
 
 1. **Initialize Project** (interactive): Select or create Railway project
-2. **Add PostgreSQL**: Provisions PostgreSQL 16 database service
+2. **Add PostgreSQL**: Provisions PostgreSQL 18 database service
 3. **Create App Service**: Creates empty service container via `railway add --service <app-name>`
 4. **Link DATABASE_URL Reference**: Links app `DATABASE_URL` to PostgreSQL with retry/backoff
 5. **Generate Public Domain**: Auto-generates Railway domain (e.g., myapp-production-abc123.up.railway.app)
@@ -752,7 +752,7 @@ The generated URL format is: `<service-name>-<environment>-<hash>.up.railway.app
 
 **Test Results**:
 - ✅ Automated deployment flow works end-to-end
-- ✅ PostgreSQL 16 provisioning successful
+- ✅ PostgreSQL 18 provisioning successful
 - ✅ railway.json config-as-code working correctly
 - ✅ Automatic domain generation functional
 - ✅ Auto-ALLOWED_HOSTS configuration working

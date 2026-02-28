@@ -8,7 +8,7 @@ readme = "README.md"
 packages = [{include = "quickscale_modules_blog", from = "src"}]
 
 [tool.poetry.dependencies]
-python = "^3.12"
+python = "^3.14"
 Django = "^6.0"
 django-markdownx = "^4.0.9"
 Pillow = "^12.1.0"
@@ -27,7 +27,7 @@ build-backend = "poetry.core.masonry.api"
 # Package-specific overrides:
 
 [tool.ruff]
-target-version = "py312"  # This package requires Python 3.12+
+target-version = "py314"  # This package requires Python 3.14+
 
 [[tool.mypy.overrides]]
 module = "markdownx.*"

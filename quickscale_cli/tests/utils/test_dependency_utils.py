@@ -1,5 +1,7 @@
 """Tests for system dependency checking utilities."""
 
+import sys
+from collections import namedtuple
 from unittest.mock import Mock, patch
 
 import pytest
@@ -27,8 +29,9 @@ class TestCheckPythonVersion:
 
     def test_python_version_meets_requirement(self):
         """Test Python version check when requirement is met."""
-        # Current test environment should have Python 3.11+
-        status = check_python_version()
+        version_info = namedtuple("version_info", ["major", "minor", "micro"])
+        with patch.object(sys, "version_info", version_info(3, 14, 2)):
+            status = check_python_version()
 
         assert status.name == "Python"
         assert status.installed is True
@@ -38,10 +41,13 @@ class TestCheckPythonVersion:
 
     def test_python_version_format(self):
         """Test Python version format is correct."""
-        status = check_python_version()
+        version_info = namedtuple("version_info", ["major", "minor", "micro"])
+        with patch.object(sys, "version_info", version_info(3, 14, 7)):
+            status = check_python_version()
 
         # Version should be in format "X.Y.Z"
         assert status.version is not None
+        assert status.version == "3.14.7"
         parts = status.version.split(".")
         assert len(parts) == 3
         assert all(part.isdigit() for part in parts)
@@ -163,14 +169,14 @@ class TestCheckPostgreSQLInstalled:
             mock_which.return_value = "/usr/bin/psql"
             mock_run.return_value = Mock(
                 returncode=0,
-                stdout="psql (PostgreSQL) 16.0",
+                stdout="psql (PostgreSQL) 18.0",
             )
 
             status = check_postgresql_installed()
 
             assert status.name == "PostgreSQL"
             assert status.installed is True
-            assert status.version == "16.0"
+            assert status.version == "18.0"
             assert status.required is False
             assert "Database server" in status.purpose
 
@@ -210,7 +216,7 @@ class TestVerifyRequiredDependencies:
             "quickscale_cli.utils.dependency_utils.check_all_dependencies"
         ) as mock_check:
             mock_check.return_value = [
-                DependencyStatus("Python", True, "3.11.0", True, "Runtime"),
+                DependencyStatus("Python", True, "3.14.0", True, "Runtime"),
                 DependencyStatus("Poetry", True, "1.7.0", True, "Dependency mgmt"),
                 DependencyStatus("Git", False, None, False, "Version control"),
             ]
@@ -229,7 +235,7 @@ class TestVerifyRequiredDependencies:
                 "Poetry", False, None, True, "Dependency mgmt"
             )
             mock_check.return_value = [
-                DependencyStatus("Python", True, "3.11.0", True, "Runtime"),
+                DependencyStatus("Python", True, "3.14.0", True, "Runtime"),
                 poetry_missing,
                 DependencyStatus("Git", False, None, False, "Version control"),
             ]

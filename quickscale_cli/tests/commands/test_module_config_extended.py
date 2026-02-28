@@ -39,7 +39,7 @@ def _make_project(tmp_path: Path, project_name: str = "myproject") -> Path:
         'from django.urls import include, path\nurlpatterns = [\n    path("admin/", include("admin")),\n]\n'
     )
     (project / "pyproject.toml").write_text(
-        '[tool.poetry.dependencies]\npython = "^3.11"\nDjango = "^6.0"\n'
+        '[tool.poetry.dependencies]\npython = "^3.14"\nDjango = "^6.0"\n'
     )
     (project / "quickscale.yml").write_text(
         f'version: "1"\n'
@@ -254,7 +254,7 @@ class TestAddDjangoAllauthDependencyEdgeCases:
     def test_no_version_match_in_auth_pyproject(self, tmp_path):
         """Abort when version cannot be parsed from auth pyproject"""
         pyproject = tmp_path / "pyproject.toml"
-        pyproject.write_text('[tool.poetry.dependencies]\npython = "^3.11"\n')
+        pyproject.write_text('[tool.poetry.dependencies]\npython = "^3.14"\n')
         auth_dir = tmp_path / "modules" / "auth"
         auth_dir.mkdir(parents=True)
         (auth_dir / "pyproject.toml").write_text("[tool.poetry.dependencies]\n")
@@ -265,7 +265,7 @@ class TestAddDjangoAllauthDependencyEdgeCases:
     def test_file_read_error(self, tmp_path):
         """Abort on file read error"""
         pyproject = tmp_path / "pyproject.toml"
-        pyproject.write_text('[tool.poetry.dependencies]\npython = "^3.11"\n')
+        pyproject.write_text('[tool.poetry.dependencies]\npython = "^3.14"\n')
         auth_dir = tmp_path / "modules" / "auth"
         auth_dir.mkdir(parents=True)
         auth_pyproject = auth_dir / "pyproject.toml"
@@ -410,7 +410,7 @@ class TestApplyListingsConfigurationFull:
         # No listings module dir needed since we already have the apps
         # but need pyproject for dependency
         (project / "pyproject.toml").write_text(
-            '[tool.poetry.dependencies]\npython = "^3.11"\ndjango-filter = "^23.0"\n'
+            '[tool.poetry.dependencies]\npython = "^3.14"\ndjango-filter = "^23.0"\n'
         )
 
         config = {"listings_per_page": 15}
@@ -456,7 +456,7 @@ class TestAddDjangoFilterDependencyEdgeCases:
     def test_no_version_match(self, tmp_path):
         """Abort when version cannot be parsed"""
         pyproject = tmp_path / "pyproject.toml"
-        pyproject.write_text('[tool.poetry.dependencies]\npython = "^3.11"\n')
+        pyproject.write_text('[tool.poetry.dependencies]\npython = "^3.14"\n')
         listings_dir = tmp_path / "modules" / "listings"
         listings_dir.mkdir(parents=True)
         (listings_dir / "pyproject.toml").write_text("[tool.poetry.dependencies]\n")
@@ -467,7 +467,7 @@ class TestAddDjangoFilterDependencyEdgeCases:
     def test_file_read_error(self, tmp_path):
         """Abort on file read error"""
         pyproject = tmp_path / "pyproject.toml"
-        pyproject.write_text('[tool.poetry.dependencies]\npython = "^3.11"\n')
+        pyproject.write_text('[tool.poetry.dependencies]\npython = "^3.14"\n')
         listings_dir = tmp_path / "modules" / "listings"
         listings_dir.mkdir(parents=True)
         (listings_dir / "pyproject.toml").write_text(
@@ -546,7 +546,7 @@ class TestAddDrfAndFilterDependencies:
     def test_crm_module_pyproject_missing(self, tmp_path):
         """Abort when CRM module pyproject.toml not found"""
         pyproject = tmp_path / "pyproject.toml"
-        pyproject.write_text('[tool.poetry.dependencies]\npython = "^3.11"\n')
+        pyproject.write_text('[tool.poetry.dependencies]\npython = "^3.14"\n')
 
         with pytest.raises(click.Abort):
             _add_drf_and_filter_dependencies(tmp_path, pyproject)
@@ -554,7 +554,7 @@ class TestAddDrfAndFilterDependencies:
     def test_adds_both_dependencies(self, tmp_path):
         """Add both DRF and django-filter when missing"""
         pyproject = tmp_path / "pyproject.toml"
-        pyproject.write_text('[tool.poetry.dependencies]\npython = "^3.11"\n')
+        pyproject.write_text('[tool.poetry.dependencies]\npython = "^3.14"\n')
         crm_dir = tmp_path / "modules" / "crm"
         crm_dir.mkdir(parents=True)
         (crm_dir / "pyproject.toml").write_text(
@@ -573,7 +573,7 @@ class TestAddDrfAndFilterDependencies:
         """Skip deps that already exist in pyproject"""
         pyproject = tmp_path / "pyproject.toml"
         pyproject.write_text(
-            '[tool.poetry.dependencies]\npython = "^3.11"\n'
+            '[tool.poetry.dependencies]\npython = "^3.14"\n'
             'djangorestframework = "^3.14.0"\n'
             'django-filter = "^23.0"\n'
         )
@@ -591,7 +591,7 @@ class TestAddDrfAndFilterDependencies:
     def test_parse_error(self, tmp_path):
         """Abort on parse error"""
         pyproject = tmp_path / "pyproject.toml"
-        pyproject.write_text('[tool.poetry.dependencies]\npython = "^3.11"\n')
+        pyproject.write_text('[tool.poetry.dependencies]\npython = "^3.14"\n')
         crm_dir = tmp_path / "modules" / "crm"
         crm_dir.mkdir(parents=True)
         (crm_dir / "pyproject.toml").write_text("invalid content")

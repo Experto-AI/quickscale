@@ -11,7 +11,7 @@ keywords = ["django", "cli", "scaffolding", "project-generator"]
 readme = "../README.md"
 
 [tool.poetry.dependencies]
-python = "^3.12"
+python = "^3.14"
 quickscale-core = "^0.76.0"
 quickscale-cli = "^0.76.0"
 

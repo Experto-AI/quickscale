@@ -2,7 +2,7 @@
 # Lint React theme templates by rendering them to a temporary directory
 # and running ESLint + TypeScript checks on the output.
 #
-# Prerequisites: Node.js 18+ and pnpm installed
+# Prerequisites: Node.js 24+ and pnpm installed
 # Usage: ./scripts/lint_frontend.sh
 
 set -e
@@ -17,13 +17,13 @@ echo ""
 # Check prerequisites
 if ! command -v node &> /dev/null; then
 	echo "❌ Node.js is required but not installed."
-	echo "   Install Node.js 18+ from https://nodejs.org/"
+	echo "   Install Node.js 24+ from https://nodejs.org/"
 	exit 1
 fi
 
 NODE_VERSION=$(node --version | sed 's/v//' | cut -d. -f1)
-if [ "$NODE_VERSION" -lt 18 ]; then
-	echo "❌ Node.js 18+ is required (found v$(node --version))"
+if [ "$NODE_VERSION" -lt 24 ]; then
+	echo "❌ Node.js 24+ is required (found v$(node --version))"
 	exit 1
 fi
 

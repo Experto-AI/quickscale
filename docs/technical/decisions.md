@@ -589,7 +589,7 @@ readme = "README.md"
 packages = [{include = "quickscale_modules_<name>", from = "src"}]
 
 [tool.poetry.dependencies]
-python = "^3.12"
+python = "^3.14"
 Django = "^6.0"
 # Add module-specific runtime dependencies here (e.g., django-allauth, Pillow)
 
@@ -740,7 +740,7 @@ Other documents (README.md, roadmap.md, scaffolding.md, commercial.md) MUST refe
 | WhiteNoise static files configuration | IN | Production static file serving without CDN complexity. |
 | Gunicorn WSGI server | IN | Production-ready WSGI server declared in `pyproject.toml` (Poetry). |
 | pytest + factory_boy test setup | IN | Modern testing with pytest-django, factory_boy for fixtures. Sample tests demonstrating patterns. |
-| GitHub Actions CI/CD pipeline | IN | .github/workflows/ci.yml for automated testing on push/PR. Test matrix: Python 3.10-3.12, Django 5.0-6.0. |
+| GitHub Actions CI/CD pipeline | IN | .github/workflows/ci.yml for automated testing on push/PR. Test matrix: Python 3.14, Django 6.0. |
 | Pre-commit hooks (ruff) | IN | .pre-commit-config.yaml for code quality enforcement before commits. |
 | Comprehensive README with setup instructions | IN | README.md.j2 with Docker setup, local dev, testing, deployment instructions. |
 | **MODULES & DISTRIBUTION** |
@@ -922,7 +922,7 @@ Other documents (README.md, roadmap.md, scaffolding.md, commercial.md) MUST refe
 **Purpose**: Validate complete user workflows with real database and browser automation before releases.
 
 **Requirements:**
-- ✅ PostgreSQL 16 container via pytest-docker
+- ✅ PostgreSQL 18 container via pytest-docker
 - ✅ Playwright browser automation (Chromium)
 - ✅ Full project lifecycle testing (generate → install → migrate → serve → browse)
 - ✅ Separate from fast CI using pytest markers (`@pytest.mark.e2e`)
@@ -937,7 +937,7 @@ Other documents (README.md, roadmap.md, scaffolding.md, commercial.md) MUST refe
 **Tech Stack:**
 - `pytest-docker`: Container orchestration for PostgreSQL
 - `pytest-playwright`: Browser automation for frontend testing
-- `docker-compose.test.yml`: Test infrastructure definition (PostgreSQL 16 with health checks)
+- `docker-compose.test.yml`: Test infrastructure definition (PostgreSQL 18 with health checks)
 - Playwright Chromium: Headless/headed browser for UI testing
 
 **Execution Time**: 5-10 minutes for full suite (acceptable for release gates, excludes from fast CI)

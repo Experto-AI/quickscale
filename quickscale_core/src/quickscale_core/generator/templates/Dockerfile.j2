@@ -3,7 +3,7 @@
 
 # Stage 0: Frontend Builder (Conditional)
 {% if theme == 'showcase_react' %}
-FROM node:20-slim as frontend-builder
+FROM node:24-slim as frontend-builder
 WORKDIR /app/frontend
 RUN corepack enable
 # Copy dependency files
@@ -16,7 +16,7 @@ RUN pnpm run build
 {% endif %}
 
 # Stage 1: Builder - Install dependencies and build artifacts
-FROM python:3.12-slim as builder
+FROM python:3.14-slim as builder
 
 # Set environment variables for Python
 ENV PYTHONUNBUFFERED=1 \
@@ -77,7 +77,7 @@ RUN echo "📦 Installing Python dependencies (INSTALL_DEV=$INSTALL_DEV)..." && 
     echo "✅ Python dependencies installed"
 
 # Stage 2: Runtime - Create minimal production image
-FROM python:3.12-slim
+FROM python:3.14-slim
 
 # Set environment variables
 ENV PYTHONUNBUFFERED=1 \
@@ -105,7 +105,7 @@ WORKDIR /app
 
 # Copy installed dependencies from builder stage
 RUN echo "📦 Copying Python packages from builder..."
-COPY --from=builder /usr/local/lib/python3.12/site-packages /usr/local/lib/python3.12/site-packages
+COPY --from=builder /usr/local/lib/python3.14/site-packages /usr/local/lib/python3.14/site-packages
 COPY --from=builder /usr/local/bin /usr/local/bin
 RUN echo "✅ Python packages copied"
 

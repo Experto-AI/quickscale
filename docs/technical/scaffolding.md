@@ -990,7 +990,7 @@ quickscale_core/tests/
 │   ├── TestFullE2EWorkflow        # Complete lifecycle tests
 │   ├── TestDockerIntegration      # Docker/compose validation
 │   └── TestProductionReadiness    # Security/environment tests
-├── docker-compose.test.yml        # PostgreSQL 16 test service definition
+├── docker-compose.test.yml        # PostgreSQL 18 test service definition
 └── conftest.py                    # E2E fixtures (postgres_url, page, browser)
 ```
 

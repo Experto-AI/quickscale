@@ -221,9 +221,9 @@ See: [quickscale_modules/](./quickscale_modules/) for README in each module
 Workflow: PLAN → CODE → REVIEW → TEST → DEBUG
 
 ### "Which Python/Django version?"
-- **Python**: 3.11+ required
-- **Django**: 4.2+ (LTS)
-- **Poetry**: 1.5+ (package manager)
+- **Python**: 3.14+ required
+- **Django**: 6.0+
+- **Poetry**: 2.0+ (package manager)
 
 See: [development.md - Prerequisites](./docs/technical/development.md#prerequisites)
 

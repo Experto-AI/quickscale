@@ -275,10 +275,10 @@ class TestCheckPostgresqlInstalled:
     def test_psql_success(self, mock_run, mock_which):
         """Test successful psql check"""
         mock_which.return_value = "/usr/bin/psql"
-        mock_run.return_value = MagicMock(stdout="psql (PostgreSQL) 16.1", returncode=0)
+        mock_run.return_value = MagicMock(stdout="psql (PostgreSQL) 18.1", returncode=0)
         result = check_postgresql_installed()
         assert result.installed is True
-        assert result.version == "16.1"
+        assert result.version == "18.1"
 
 
 # ============================================================================
@@ -315,7 +315,7 @@ class TestCheckAllDependencies:
     def test_verify_missing_required(self, mock_all):
         """Test verify_required_dependencies with missing required dep"""
         mock_all.return_value = [
-            DependencyStatus("Python", True, "3.12", True, "test"),
+            DependencyStatus("Python", True, "3.14", True, "test"),
             DependencyStatus("Poetry", False, None, True, "test"),
             DependencyStatus("Git", True, "2.0", False, "test"),
             DependencyStatus("Docker", True, "24.0", False, "test"),
@@ -324,9 +324,9 @@ class TestCheckAllDependencies:
 
         ok, missing = verify_required_dependencies()
         assert ok is False, f"Expected False but got {ok}, missing={missing}"
-        assert (
-            len(missing) == 1
-        ), f"Expected 1 missing but got {len(missing)}: {missing}"
+        assert len(missing) == 1, (
+            f"Expected 1 missing but got {len(missing)}: {missing}"
+        )
         assert missing[0].name == "Poetry"
 
     @patch("quickscale_cli.utils.dependency_utils.check_postgresql_installed")

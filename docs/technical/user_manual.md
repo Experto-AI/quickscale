@@ -86,7 +86,7 @@ Purpose: get a development environment ready to run tests and use the CLI.
 Recommended sequence:
 
 ```bash
-# 1. Ensure prerequisites are installed (Python 3.11+, Git, and Poetry)
+# 1. Ensure prerequisites are installed (Python 3.14+, Git, and Poetry)
 # 2. Run the repository bootstrap script
 ./scripts/bootstrap.sh
 
@@ -212,9 +212,9 @@ quickscale plan myapp
 ```
 
 **Available themes**:
-- `showcase_html` - Pure HTML + CSS (default, production-ready)
-- `showcase_htmx` - HTMX + Alpine.js (coming in v0.73.0)
-- `showcase_react` - React + TypeScript SPA (coming in v0.74.0)
+- `showcase_html` - Pure HTML + CSS
+- `showcase_htmx` - HTMX + Alpine.js
+- `showcase_react` - React + TypeScript SPA (default)
 
 **Important**: Theme selection is one-time during project generation. Generated code is yours to own and customize - no updates or tracking after initialization.
 

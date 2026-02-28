@@ -7,7 +7,7 @@ readme = "README.md"
 packages = [{include = "{{ package_name }}"}]
 
 [tool.poetry.dependencies]
-python = "^3.12"
+python = "^3.14"
 Django = "^6.0"
 psycopg2-binary = "^2.9.11"
 python-decouple = "^3.8"
@@ -43,7 +43,7 @@ fail_under = 90
 
 [tool.ruff]
 line-length = 100
-target-version = "py312"
+target-version = "py314"
 exclude = [
     ".git",
     ".venv",
@@ -70,7 +70,7 @@ ignore = [
 "__init__.py" = ["F401"]
 
 [tool.mypy]
-python_version = "3.12"
+python_version = "3.14"
 warn_return_any = true
 warn_unused_configs = true
 disallow_untyped_defs = true

@@ -1,6 +1,6 @@
 services:
   db:
-    image: postgres:17-alpine
+    image: postgres:18-alpine
     container_name: {{ project_name }}_db
     environment:
       POSTGRES_DB: {{ package_name }}
@@ -21,7 +21,7 @@ services:
 
 {% if theme == 'showcase_react' %}
   frontend:
-    image: node:20-slim
+    image: node:24-slim
     container_name: {{ project_name }}_frontend
     # Map to host user to prevent root-owned files in mounted volumes
     user: "${DOCKER_UID:-1000}:${DOCKER_GID:-1000}"

@@ -142,7 +142,7 @@ class TestAuthModuleConfig:
     def test_add_django_allauth_dependency_no_auth_module(self, tmp_path):
         """Test adding django-allauth when auth module is missing."""
         pyproject_path = tmp_path / "pyproject.toml"
-        pyproject_path.write_text('[tool.poetry.dependencies]\npython = "^3.11"\n')
+        pyproject_path.write_text('[tool.poetry.dependencies]\npython = "^3.14"\n')
 
         with pytest.raises(click.Abort):
             _add_django_allauth_dependency(tmp_path, pyproject_path)
@@ -152,7 +152,7 @@ class TestAuthModuleConfig:
         # Create main pyproject.toml
         pyproject_path = tmp_path / "pyproject.toml"
         pyproject_path.write_text(
-            '[tool.poetry.dependencies]\npython = "^3.11"\nDjango = "^6.0"\n'
+            '[tool.poetry.dependencies]\npython = "^3.14"\nDjango = "^6.0"\n'
         )
 
         # Create auth module pyproject.toml with django-allauth
@@ -290,7 +290,7 @@ class TestListingsModuleConfig:
     def test_add_django_filter_dependency_no_listings_module(self, tmp_path):
         """Test adding django-filter when listings module is missing."""
         pyproject_path = tmp_path / "pyproject.toml"
-        pyproject_path.write_text('[tool.poetry.dependencies]\npython = "^3.11"\n')
+        pyproject_path.write_text('[tool.poetry.dependencies]\npython = "^3.14"\n')
 
         with pytest.raises(click.Abort):
             _add_django_filter_dependency(tmp_path, pyproject_path)
@@ -300,7 +300,7 @@ class TestListingsModuleConfig:
         # Create main pyproject.toml
         pyproject_path = tmp_path / "pyproject.toml"
         pyproject_path.write_text(
-            '[tool.poetry.dependencies]\npython = "^3.11"\nDjango = "^6.0"\n'
+            '[tool.poetry.dependencies]\npython = "^3.14"\nDjango = "^6.0"\n'
         )
 
         # Create listings module pyproject.toml with django-filter

@@ -4,7 +4,7 @@ This is the React frontend for {{ project_name }}, built with QuickScale.
 
 ## Tech Stack
 
-- **React 18** - UI library
+- **React 19** - UI library
 - **TypeScript** - Type safety
 - **Vite** - Build tool and dev server
 - **Tailwind CSS** - Utility-first CSS
@@ -19,7 +19,7 @@ This is the React frontend for {{ project_name }}, built with QuickScale.
 
 ### Prerequisites
 
-- Node.js 18+
+- Node.js 24+
 - pnpm (required)
 
 ### Installation

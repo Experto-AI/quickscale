@@ -6,7 +6,7 @@ authors = ["Experto AI <victor@experto.ai>"]
 package-mode = false
 
 [tool.poetry.dependencies]
-python = "^3.12"
+python = "^3.14"
 quickscale = {path = "./quickscale", develop = true}
 quickscale-core = {path = "./quickscale_core", develop = true}
 quickscale-cli = {path = "./quickscale_cli", develop = true}
@@ -48,7 +48,7 @@ build-backend = "poetry.core.masonry.api"
 jobs = 0  # Auto-detect CPU count
 
 # Python version target
-py-version = "3.12"
+py-version = "3.14"
 
 # Paths to analyze
 recursive = true
