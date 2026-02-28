@@ -27,7 +27,7 @@ class PostAdminForm(forms.ModelForm):
             author is None
             and self.instance
             and self.instance.pk
-            and self.instance.author_id
+            and getattr(self.instance, "author_id", None)
         ):
             return self.instance.author
         if author is None and self.request and self.request.user.is_authenticated:
@@ -115,6 +115,7 @@ class PostAdmin(MarkdownxModelAdmin):
         if db_field.name == "author":
             user_model = get_user_model()
             allowed_author_ids = {request.user.pk}
+            kwargs["required"] = False
 
             object_id = (
                 request.resolver_match.kwargs.get("object_id")
@@ -123,9 +124,8 @@ class PostAdmin(MarkdownxModelAdmin):
             )
             if object_id:
                 try:
-                    current_author_id = (
-                        Post.objects.only("author_id").get(pk=object_id).author_id
-                    )
+                    current_post = Post.objects.only("author_id").get(pk=object_id)
+                    current_author_id = getattr(current_post, "author_id", None)
                     allowed_author_ids.add(current_author_id)
                 except (Post.DoesNotExist, ValueError, TypeError):
                     pass
@@ -140,16 +140,19 @@ class PostAdmin(MarkdownxModelAdmin):
     def save_model(self, request, obj, form, change):  # type: ignore[no-untyped-def]
         """Save the model and set author if creating new post"""
         if not change:  # Creating new post
-            if not obj.author_id:
+            if not getattr(obj, "author_id", None):
                 obj.author = request.user
         super().save_model(request, obj, form, change)
 
     def get_form(self, request, obj=None, change=False, **kwargs):  # type: ignore[no-untyped-def]
         form_class = super().get_form(request, obj, change, **kwargs)
 
-        class RequestAwareForm(form_class):
+        if "author" in form_class.base_fields:
+            form_class.base_fields["author"].required = False
+
+        class RequestAwareForm(form_class):  # type: ignore[misc, valid-type]
             def __init__(self, *args, **inner_kwargs):  # type: ignore[no-untyped-def]
                 inner_kwargs["request"] = request
                 super().__init__(*args, **inner_kwargs)
 
-        return RequestAwareForm
+        return RequestAwareForm  # type: ignore[return-value]

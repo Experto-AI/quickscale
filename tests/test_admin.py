@@ -206,6 +206,41 @@ class TestPostAdmin:
 
         assert form.clean_author() == request_user
 
+    def test_get_form_submission_blank_author_is_valid_on_create(self):
+        """Test full admin form submission accepts blank author on create"""
+        site = AdminSite()
+        admin = PostAdmin(Post, site)
+        factory = RequestFactory()
+
+        request_user = User.objects.create_user(
+            username="form_submit_create_user",
+            email="form_submit_create@example.com",
+            password="pass123",
+        )
+        request = factory.post("/admin/")
+        request.user = request_user
+
+        form_class = admin.get_form(request, obj=None, change=False)
+        form = form_class(
+            data={
+                "title": "Blank Author Create",
+                "slug": "",
+                "author": "",
+                "content": "Content",
+                "excerpt": "",
+                "featured_image": "",
+                "featured_image_alt": "",
+                "status": "draft",
+                "category": "",
+                "tags": [],
+                "published_date_0": "",
+                "published_date_1": "",
+            }
+        )
+
+        assert form.is_valid(), form.errors.as_text()
+        assert form.cleaned_data["author"] == request_user
+
     def test_get_form_clean_author_preserves_existing_author_on_edit(self):
         """Test form clean_author keeps current instance author on edit when blank"""
         site = AdminSite()
@@ -230,9 +265,59 @@ class TestPostAdmin:
 
         request = factory.post(f"/admin/{post.pk}/change/")
         request.user = editor
+        request.resolver_match = SimpleNamespace(kwargs={"object_id": str(post.pk)})
 
         form_class = admin.get_form(request, obj=post, change=True)
         form = form_class(instance=post)
         form.cleaned_data = {"author": None}
 
         assert form.clean_author() == existing_author
+
+    def test_get_form_submission_blank_author_is_valid_on_edit(self):
+        """Test full admin form submission keeps existing author when blank on edit"""
+        site = AdminSite()
+        admin = PostAdmin(Post, site)
+        factory = RequestFactory()
+
+        existing_author = User.objects.create_user(
+            username="form_submit_existing_author",
+            email="form_submit_existing@example.com",
+            password="pass123",
+        )
+        editor = User.objects.create_superuser(
+            username="form_submit_editor",
+            email="form_submit_editor@example.com",
+            password="pass123",
+        )
+        post = Post.objects.create(
+            title="Blank Author Edit",
+            author=existing_author,
+            content="Content",
+            status="draft",
+        )
+
+        request = factory.post(f"/admin/{post.pk}/change/")
+        request.user = editor
+        request.resolver_match = SimpleNamespace(kwargs={"object_id": str(post.pk)})
+
+        form_class = admin.get_form(request, obj=post, change=True)
+        form = form_class(
+            data={
+                "title": post.title,
+                "slug": post.slug,
+                "author": "",
+                "content": post.content,
+                "excerpt": post.excerpt,
+                "featured_image": "",
+                "featured_image_alt": post.featured_image_alt,
+                "status": post.status,
+                "category": "",
+                "tags": [],
+                "published_date_0": "",
+                "published_date_1": "",
+            },
+            instance=post,
+        )
+
+        assert form.is_valid(), form.errors.as_text()
+        assert form.cleaned_data["author"] == existing_author
