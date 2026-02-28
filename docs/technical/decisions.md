@@ -178,7 +178,7 @@ myproject/
 | # | Category | Technology | Rationale |
 |---|----------|------------|-----------|
 | | **Core** | | |
-| 1 | Framework | React 18+ | Industry standard, excellent ecosystem |
+| 1 | Framework | React 19+ | Industry standard, excellent ecosystem |
 | 2 | Language | TypeScript | Type safety, better developer experience |
 | 3 | Build Tool | Vite | Fast HMR, modern bundling |
 | 4 | Package Manager | pnpm | Best disk efficiency, fast installs, enterprise adoption |

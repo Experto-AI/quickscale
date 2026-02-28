@@ -828,7 +828,7 @@ class TestVerifyDockerfile:
         """Test Dockerfile exists."""
         monkeypatch.chdir(tmp_path)
         dockerfile = tmp_path / "Dockerfile"
-        dockerfile.write_text("FROM python:3.12")
+        dockerfile.write_text("FROM python:3.14")
 
         exists, error_msg = verify_dockerfile()
         assert exists is True
@@ -853,7 +853,7 @@ class TestVerifyRailwayDependencies:
         pyproject.write_text(
             """
 [tool.poetry.dependencies]
-python = "^3.12"
+python = "^3.14"
 gunicorn = "^21.0"
 psycopg2-binary = "^2.9"
 dj-database-url = "^2.1"
@@ -872,7 +872,7 @@ whitenoise = "^6.6"
         pyproject.write_text(
             """
 [tool.poetry.dependencies]
-python = "^3.12"
+python = "^3.14"
 gunicorn = "^21.0"
         """
         )
@@ -896,7 +896,7 @@ gunicorn = "^21.0"
         """Test error reading pyproject.toml file."""
         monkeypatch.chdir(tmp_path)
         pyproject = tmp_path / "pyproject.toml"
-        pyproject.write_text('[tool.poetry.dependencies]\npython = "^3.12"')
+        pyproject.write_text('[tool.poetry.dependencies]\npython = "^3.14"')
 
         # Mock open to raise a generic exception (e.g., permission denied)
         with patch("builtins.open", side_effect=OSError("Permission denied")):
@@ -914,7 +914,7 @@ class TestCheckPoetryLockConsistency:
         """Test poetry.lock is consistent with pyproject.toml."""
         monkeypatch.chdir(tmp_path)
         pyproject = tmp_path / "pyproject.toml"
-        pyproject.write_text('[tool.poetry.dependencies]\npython = "^3.12"')
+        pyproject.write_text('[tool.poetry.dependencies]\npython = "^3.14"')
         poetry_lock = tmp_path / "poetry.lock"
         poetry_lock.write_text("")
 
@@ -929,7 +929,7 @@ class TestCheckPoetryLockConsistency:
         """Test poetry.lock is inconsistent with pyproject.toml."""
         monkeypatch.chdir(tmp_path)
         pyproject = tmp_path / "pyproject.toml"
-        pyproject.write_text('[tool.poetry.dependencies]\npython = "^3.12"')
+        pyproject.write_text('[tool.poetry.dependencies]\npython = "^3.14"')
         poetry_lock = tmp_path / "poetry.lock"
         poetry_lock.write_text("")
 
@@ -952,7 +952,7 @@ class TestCheckPoetryLockConsistency:
         """Test poetry.lock not found."""
         monkeypatch.chdir(tmp_path)
         pyproject = tmp_path / "pyproject.toml"
-        pyproject.write_text('[tool.poetry.dependencies]\npython = "^3.12"')
+        pyproject.write_text('[tool.poetry.dependencies]\npython = "^3.14"')
 
         is_consistent, message = check_poetry_lock_consistency()
         assert is_consistent is False
@@ -963,7 +963,7 @@ class TestCheckPoetryLockConsistency:
         """Test when poetry command is not available."""
         monkeypatch.chdir(tmp_path)
         pyproject = tmp_path / "pyproject.toml"
-        pyproject.write_text('[tool.poetry.dependencies]\npython = "^3.12"')
+        pyproject.write_text('[tool.poetry.dependencies]\npython = "^3.14"')
         poetry_lock = tmp_path / "poetry.lock"
         poetry_lock.write_text("")
 
@@ -979,7 +979,7 @@ class TestCheckPoetryLockConsistency:
         """Test when poetry check times out."""
         monkeypatch.chdir(tmp_path)
         pyproject = tmp_path / "pyproject.toml"
-        pyproject.write_text('[tool.poetry.dependencies]\npython = "^3.12"')
+        pyproject.write_text('[tool.poetry.dependencies]\npython = "^3.14"')
         poetry_lock = tmp_path / "poetry.lock"
         poetry_lock.write_text("")
 
