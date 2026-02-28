@@ -167,14 +167,14 @@ class TestDevelopmentCommandsE2E:
     ):
         """Apply with Docker auto-start should run migrations via backend container."""
         runner = CliRunner()
-        project_name = "e2e_apply_docker"
+        project_name = f"e2e_apply_docker_{int(time.time())}"
         port = self._get_free_port()
         env = {"PORT": str(port)}
 
         with runner.isolated_filesystem(temp_dir=tmp_path):
             # package(default) -> theme=2(showcase_html) -> modules(skip)
-            # -> docker.start=Y -> docker.build=Y -> save=Y
-            plan_input = "\n2\n\nY\nY\nY\n"
+            # -> docker.start=Y -> docker.build=Y -> create_superuser=Y -> save=Y
+            plan_input = "\n2\n\nY\nY\nY\nY\n"
             result = runner.invoke(cli, ["plan", project_name], input=plan_input)
             assert result.exit_code == 0, f"plan failed: {result.output}"
 
@@ -184,6 +184,9 @@ class TestDevelopmentCommandsE2E:
             os.chdir(project_name)
 
             try:
+                # Remove stale volumes from previous interrupted runs for this project name.
+                runner.invoke(cli, ["down", "--volumes"], env=env)
+
                 # show_docker_output=N -> proceed=Y
                 apply_input = "n\ny\n"
                 result = runner.invoke(
@@ -199,7 +202,7 @@ class TestDevelopmentCommandsE2E:
                 assert "Migrations failed" not in result.output
 
             finally:
-                runner.invoke(cli, ["down"], env=env)
+                runner.invoke(cli, ["down", "--volumes"], env=env)
                 os.chdir(original_cwd)
 
     def test_up_down_lifecycle(self, test_project, ensure_docker_running):

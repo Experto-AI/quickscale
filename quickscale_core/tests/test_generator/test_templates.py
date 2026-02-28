@@ -422,6 +422,8 @@ class TestHTMLTemplateStructure:
         # Read the raw template file to check extends directive
         import pathlib
 
+        assert isinstance(jinja_env.loader, FileSystemLoader)
+
         template_path = (
             pathlib.Path(jinja_env.loader.searchpath[0]) / "templates" / "index.html.j2"
         )
@@ -857,7 +859,7 @@ class TestDockerComposeContent:
         template = jinja_env.get_template("docker-compose.yml.j2")
         output = template.render(test_context)
         assert "db:" in output
-        assert "postgres:" in output
+        assert "postgres:18-alpine" in output
         assert "POSTGRES_DB" in output
 
     def test_backend_service(
@@ -888,6 +890,15 @@ class TestDockerComposeContent:
         assert "postgres_data:" in output
         assert "static_volume:" in output
         assert "media_volume:" in output
+
+    def test_postgres_18_uses_parent_data_mount(
+        self, jinja_env: Environment, test_context: dict[str, str]
+    ) -> None:
+        """Test docker-compose.yml uses Postgres 18-compatible data mount point."""
+        template = jinja_env.get_template("docker-compose.yml.j2")
+        output = template.render(test_context)
+        assert "- postgres_data:/var/lib/postgresql" in output
+        assert "- postgres_data:/var/lib/postgresql/data" not in output
 
     def test_healthchecks(
         self, jinja_env: Environment, test_context: dict[str, str]

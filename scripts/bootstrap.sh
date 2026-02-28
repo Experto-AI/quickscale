@@ -14,21 +14,29 @@ echo ""
 
 # Check Python version
 echo "📋 Checking Python version..."
-if ! command -v python3 &> /dev/null; then
-    echo "❌ Python 3 is required but not found"
-    exit 1
-fi
-
-python_version=$(python3 --version | cut -d' ' -f2 | cut -d'.' -f1,2)
 required_version="3.14"
 
-echo "✓ Python version: $(python3 --version)"
+PYTHON_CMD=""
+if command -v python3.14 &> /dev/null; then
+    PYTHON_CMD="python3.14"
+elif command -v python3 &> /dev/null; then
+    if python3 -c "import sys; exit(0 if sys.version_info >= (3, 14) else 1)"; then
+        PYTHON_CMD="python3"
+    fi
+fi
 
-# Check if version is sufficient (basic comparison for major.minor)
-if ! python3 -c "import sys; exit(0 if sys.version_info >= (3, 14) else 1)"; then
-    echo "❌ Python $required_version or higher is required (found $python_version)"
+if [[ -z "$PYTHON_CMD" ]]; then
+    detected_version="unknown"
+    if command -v python3 &> /dev/null; then
+        detected_version="$(python3 --version | cut -d' ' -f2 | cut -d'.' -f1,2)"
+    fi
+
+    echo "❌ Python $required_version or higher is required (found $detected_version)"
+    echo "Install python3.14 and retry (or ensure python3 points to 3.14+)"
     exit 1
 fi
+
+echo "✓ Python version: $($PYTHON_CMD --version)"
 echo ""
 
 if [[ -d ".venv" ]]; then
@@ -59,7 +67,7 @@ echo "📋 Checking Poetry installation..."
 if ! command -v poetry &> /dev/null; then
     echo "❌ Poetry is not installed"
     echo "📦 Installing Poetry..."
-    curl -sSL https://install.python-poetry.org | python3 -
+    curl -sSL https://install.python-poetry.org | "$PYTHON_CMD" -
     echo ""
     echo "✓ Poetry installed"
     echo "⚠️  Please restart your shell or run: source $HOME/.local/bin/env"
@@ -74,6 +82,22 @@ echo ""
 echo "🔧 Configuring Poetry..."
 poetry config virtualenvs.in-project true
 echo "✓ Poetry configured to use .venv in project"
+echo ""
+
+echo "🔧 Ensuring root Poetry environment uses $PYTHON_CMD..."
+poetry env use "$PYTHON_CMD" >/dev/null
+ROOT_VENV_PATH="$(poetry env info -p 2>/dev/null || true)"
+
+if [[ -z "$ROOT_VENV_PATH" ]]; then
+    echo "❌ Could not resolve Poetry virtual environment path"
+    exit 1
+fi
+
+export VIRTUAL_ENV="$ROOT_VENV_PATH"
+export PATH="$ROOT_VENV_PATH/bin:$PATH"
+export POETRY_ACTIVE=1
+
+echo "✓ Using root virtual environment: $ROOT_VENV_PATH"
 echo ""
 
 # Install quickscale_core with dev dependencies

@@ -7,7 +7,7 @@ services:
       POSTGRES_USER: postgres
       POSTGRES_PASSWORD: postgres
     volumes:
-      - postgres_data:/var/lib/postgresql/data
+      - postgres_data:/var/lib/postgresql
     # Port mapping removed to avoid conflicts with system PostgreSQL
     # The backend service can still access the database via the internal Docker network
     # If you need to access PostgreSQL from your host, uncomment the next 2 lines:
