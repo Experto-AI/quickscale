@@ -8,6 +8,7 @@ from pathlib import Path
 
 import click
 
+from quickscale_cli.schema.config_schema import QuickScaleConfig
 from quickscale_cli.utils.docker_utils import (
     get_docker_compose_command,
     get_port_from_env,
@@ -140,6 +141,92 @@ def _handle_up_error(error: subprocess.CalledProcessError) -> None:
         )
 
 
+def _run_migrations_after_up() -> None:
+    """Run Django migrations in backend container after services start"""
+    click.echo("⏳ Applying database migrations...")
+    container_name = get_backend_container_name()
+    _run_docker_exec_command(
+        container_name,
+        ["python", "manage.py", "migrate"],
+        capture=True,
+    )
+    click.secho("✅ Database migrations applied", fg="green")
+
+
+def _superuser_exists_in_backend(container_name: str) -> bool:
+    """Check whether a Django superuser already exists"""
+    check_cmd = [
+        "docker",
+        "exec",
+        container_name,
+        "python",
+        "manage.py",
+        "shell",
+        "-c",
+        (
+            "from django.contrib.auth import get_user_model; import sys; "
+            "sys.exit(0 if get_user_model().objects.filter(is_superuser=True).exists() else 1)"
+        ),
+    ]
+    result = subprocess.run(check_cmd, capture_output=True, text=True)
+    if result.returncode == 0:
+        return True
+
+    stdout_output = (result.stdout or "").strip()
+    stderr_output = (result.stderr or "").strip()
+
+    if result.returncode == 1 and not stdout_output and not stderr_output:
+        return False
+
+    click.secho(
+        "⚠️  Could not verify superuser status. Skipping auto-createsuperuser.",
+        fg="yellow",
+    )
+    if stderr_output:
+        click.echo(f"   {stderr_output}", err=True)
+    return True
+
+
+def _handle_superuser_after_up(config: QuickScaleConfig | None) -> None:
+    """Create superuser if configured and one does not already exist"""
+    if config is None or config.docker is None:
+        return
+
+    if not getattr(config.docker, "create_superuser", False):
+        return
+
+    container_name = get_backend_container_name()
+
+    if _superuser_exists_in_backend(container_name):
+        click.echo("ℹ️  Superuser already exists. Skipping createsuperuser step.")
+        return
+
+    if not is_interactive():
+        click.secho(
+            "⚠️  Superuser creation is enabled but requires interactive input.",
+            fg="yellow",
+        )
+        click.echo("   Run: quickscale manage createsuperuser")
+        return
+
+    click.echo("👤 Creating Django superuser...")
+    _run_docker_exec_command(
+        container_name,
+        ["python", "manage.py", "createsuperuser"],
+        capture=False,
+    )
+
+
+def _command_contains(error: subprocess.CalledProcessError, *tokens: str) -> bool:
+    """Check whether error command contains all tokens"""
+    cmd = error.cmd
+    if isinstance(cmd, list):
+        cmd_text = " ".join(str(part) for part in cmd)
+    else:
+        cmd_text = str(cmd)
+    return all(token in cmd_text for token in tokens)
+
+
 @click.command()
 @click.option("--build", is_flag=True, help="Rebuild containers before starting")
 @click.option("--no-cache", is_flag=True, help="Build without using cache")
@@ -180,8 +267,33 @@ def up(build: bool, no_cache: bool) -> None:
         if should_build:
             _update_last_build_timestamp()
 
+        _run_migrations_after_up()
+        _handle_superuser_after_up(config)
+
     except subprocess.CalledProcessError as e:
-        _handle_up_error(e)
+        if _command_contains(e, "manage.py", "migrate"):
+            click.secho(
+                "❌ Error: Services started but database migration failed",
+                fg="red",
+                err=True,
+            )
+            if e.stderr:
+                click.echo(f"\nError output:\n{e.stderr}", err=True)
+            click.echo(
+                "💡 Tip: Run 'quickscale manage migrate' and inspect logs with 'quickscale logs backend'",
+                err=True,
+            )
+        elif _command_contains(e, "manage.py", "createsuperuser"):
+            click.secho(
+                "❌ Error: Services started but superuser creation failed",
+                fg="red",
+                err=True,
+            )
+            click.echo(
+                "💡 Tip: Run 'quickscale manage createsuperuser' manually", err=True
+            )
+        else:
+            _handle_up_error(e)
         sys.exit(1)
     except KeyboardInterrupt:
         click.echo("\n⚠️  Interrupted by user")

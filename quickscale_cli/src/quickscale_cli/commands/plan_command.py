@@ -173,12 +173,20 @@ def _select_modules(*, include_experimental: bool = False) -> list[str]:
             click.secho(f"Invalid selection: {e}. Please try again.", fg="red")
 
 
-def _configure_docker() -> tuple[bool, bool]:
+def _configure_docker() -> tuple[bool, bool, bool]:
     """Interactive Docker configuration"""
     click.echo("\n🐳 Docker Configuration:")
     start = click.confirm("  Start Docker services after apply?", default=True)
     build = click.confirm("  Build Docker images?", default=True) if start else False
-    return start, build
+    create_superuser = (
+        click.confirm(
+            "  Create Django superuser on first startup?",
+            default=False,
+        )
+        if start
+        else False
+    )
+    return start, build, create_superuser
 
 
 def _detect_existing_project() -> tuple[Path | None, QuickScaleConfig | None]:
@@ -421,7 +429,7 @@ def _handle_add_modules(
                 name: ModuleConfig(name=name, options={})
                 for name in state.modules.keys()
             },
-            docker=DockerConfig(start=False, build=False),
+            docker=DockerConfig(start=False, build=False, create_superuser=False),
         )
 
     # Add new modules to config
@@ -556,7 +564,7 @@ def _handle_reconfigure(
         all_modules = all_existing
 
     # Configure Docker
-    docker_start, docker_build = _configure_docker()
+    docker_start, docker_build, docker_create_superuser = _configure_docker()
 
     # Build configuration
     modules = {
@@ -571,7 +579,11 @@ def _handle_reconfigure(
             theme=current_theme,
         ),
         modules=modules,
-        docker=DockerConfig(start=docker_start, build=docker_build),
+        docker=DockerConfig(
+            start=docker_start,
+            build=docker_build,
+            create_superuser=docker_create_superuser,
+        ),
     )
 
     # Generate YAML
@@ -808,7 +820,7 @@ def plan(
     New project wizard:
       - Theme selection (showcase_html, showcase_htmx, showcase_react)
       - Module selection (auth, blog, listings, etc.)
-      - Docker configuration (start, build)
+            - Docker configuration (start, build, create superuser)
 
     \b
     Existing project modes:
@@ -837,7 +849,7 @@ def plan(
     # Interactive wizard
     theme = _select_theme()
     selected_modules = _select_modules(include_experimental=include_experimental)
-    docker_start, docker_build = _configure_docker()
+    docker_start, docker_build, docker_create_superuser = _configure_docker()
 
     # Build configuration
     modules = {
@@ -853,7 +865,11 @@ def plan(
             theme=theme,
         ),
         modules=modules,
-        docker=DockerConfig(start=docker_start, build=docker_build),
+        docker=DockerConfig(
+            start=docker_start,
+            build=docker_build,
+            create_superuser=docker_create_superuser,
+        ),
     )
 
     # Generate YAML

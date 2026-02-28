@@ -219,8 +219,8 @@ class TestPlanReconfigureDocker:
                     f,
                 )
 
-            # Don't add modules (n), docker start (y), build (y), save (y)
-            result = runner.invoke(plan, ["--reconfigure"], input="n\ny\ny\ny\n")
+            # Don't add modules (n), docker start/build, create_superuser (n), save (y)
+            result = runner.invoke(plan, ["--reconfigure"], input="n\ny\ny\nn\ny\n")
 
             if result.exit_code == 0:
                 with open("quickscale.yml") as f:
@@ -286,8 +286,8 @@ class TestPlanReconfigureSavesConfig:
                     f,
                 )
 
-            # Don't add modules, docker start (y), build (n), save (y)
-            result = runner.invoke(plan, ["--reconfigure"], input="n\ny\nn\ny\n")
+            # Don't add modules, docker start (y), build (n), create_superuser (n), save (y)
+            result = runner.invoke(plan, ["--reconfigure"], input="n\ny\nn\nn\ny\n")
 
             assert result.exit_code == 0
             assert os.path.exists("quickscale.yml")

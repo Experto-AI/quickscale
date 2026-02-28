@@ -286,9 +286,10 @@ quickscale logs backend              # View logs
 # OR if you need to start manually:
 # (e.g., after 'quickscale down' or if docker.start: false)
 quickscale up
+# ↑ Runs Django migrations automatically (idempotent)
 
 # Development
-quickscale manage migrate        # Run migrations
+quickscale manage migrate        # Optional manual migration run
 quickscale manage createsuperuser  # Create admin user
 quickscale shell                 # Access container shell
 quickscale manage test           # Run tests
@@ -346,7 +347,7 @@ quickscale plan myapp --overwrite
 The wizard guides you through:
 1. **Theme selection**: Choose from available themes (showcase_html, showcase_htmx, showcase_react)
 2. **Module selection**: Select optional modules to include (blog, listings, billing, teams)
-3. **Docker configuration**: Configure Docker build and startup options
+3. **Docker configuration**: Configure Docker build/start options and optional first-start superuser creation
 
 **Generated `quickscale.yml` example**:
 ```yaml
@@ -360,6 +361,7 @@ modules:
 docker:
   build: true
   start: true
+  create_superuser: false
 ```
 
 **The `apply` command** executes a configuration file to generate the project:

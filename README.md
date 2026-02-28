@@ -254,6 +254,7 @@ quickscale up
 docker:
   start: true   # Auto-start services during apply?
   build: true   # Rebuild images? (slower but ensures latest)
+  create_superuser: false  # Run interactive createsuperuser on first quickscale up?
 ```
 
 - `start: true` + `build: true` → Full rebuild + start (slowest, most reliable)
@@ -288,7 +289,8 @@ quickscale apply
 # Start all services (backend + database)
 quickscale up
 
-# Run migrations
+# Migrations run automatically on quickscale up (safe to run repeatedly)
+# Optional manual run:
 quickscale manage migrate
 
 # Create superuser

@@ -35,17 +35,22 @@ class TestUpCommand:
                     with patch(
                         "quickscale_cli.commands.development_commands.get_docker_compose_command"
                     ) as mock_cmd:
-                        with patch("subprocess.run") as mock_run:
-                            mock_in_project.return_value = True
-                            mock_docker.return_value = True
-                            mock_port.return_value = True
-                            mock_cmd.return_value = ["docker-compose"]
-                            mock_run.return_value = Mock(returncode=0)
+                        with patch(
+                            "quickscale_cli.commands.development_commands.get_backend_container_name"
+                        ) as mock_backend:
+                            with patch("subprocess.run") as mock_run:
+                                mock_in_project.return_value = True
+                                mock_docker.return_value = True
+                                mock_port.return_value = True
+                                mock_cmd.return_value = ["docker-compose"]
+                                mock_backend.return_value = "myproject-backend-1"
+                                mock_run.return_value = Mock(returncode=0)
 
-                            result = runner.invoke(up)
+                                result = runner.invoke(up)
 
-                            assert result.exit_code == 0
-                            assert "Services started successfully!" in result.output
+                                assert result.exit_code == 0
+                                assert "Services started successfully!" in result.output
+                                assert "Database migrations applied" in result.output
 
     def test_up_not_in_project(self):
         """Test up command when not in project directory."""
@@ -114,19 +119,30 @@ class TestUpCommand:
                     with patch(
                         "quickscale_cli.commands.development_commands.get_docker_compose_command"
                     ) as mock_cmd:
-                        with patch("subprocess.run") as mock_run:
-                            mock_in_project.return_value = True
-                            mock_docker.return_value = True
-                            mock_port.return_value = True
-                            mock_cmd.return_value = ["docker-compose"]
-                            mock_run.return_value = Mock(returncode=0)
+                        with patch(
+                            "quickscale_cli.commands.development_commands.get_backend_container_name"
+                        ) as mock_backend:
+                            with patch("subprocess.run") as mock_run:
+                                mock_in_project.return_value = True
+                                mock_docker.return_value = True
+                                mock_port.return_value = True
+                                mock_cmd.return_value = ["docker-compose"]
+                                mock_backend.return_value = "myproject-backend-1"
+                                mock_run.return_value = Mock(returncode=0)
 
-                            result = runner.invoke(up, ["--build"])
+                                result = runner.invoke(up, ["--build"])
 
-                            assert result.exit_code == 0
-                            # Verify --build was passed to docker-compose
-                            call_args = mock_run.call_args[0][0]
-                            assert "--build" in call_args
+                                assert result.exit_code == 0
+                                # Verify --build was passed in at least one docker-compose call
+                                all_calls = [
+                                    call.args[0] for call in mock_run.call_args_list
+                                ]
+                                assert any(
+                                    "--build" in call_args for call_args in all_calls
+                                )
+                                assert any(
+                                    "migrate" in call_args for call_args in all_calls
+                                )
 
     def test_up_with_no_cache_flag(self):
         """Test up command with --no-cache flag."""
@@ -144,20 +160,33 @@ class TestUpCommand:
                     with patch(
                         "quickscale_cli.commands.development_commands.get_docker_compose_command"
                     ) as mock_cmd:
-                        with patch("subprocess.run") as mock_run:
-                            mock_in_project.return_value = True
-                            mock_docker.return_value = True
-                            mock_port.return_value = True
-                            mock_cmd.return_value = ["docker-compose"]
-                            mock_run.return_value = Mock(returncode=0)
+                        with patch(
+                            "quickscale_cli.commands.development_commands.get_backend_container_name"
+                        ) as mock_backend:
+                            with patch("subprocess.run") as mock_run:
+                                mock_in_project.return_value = True
+                                mock_docker.return_value = True
+                                mock_port.return_value = True
+                                mock_cmd.return_value = ["docker-compose"]
+                                mock_backend.return_value = "myproject-backend-1"
+                                mock_run.return_value = Mock(returncode=0)
 
-                            result = runner.invoke(up, ["--no-cache"])
+                                result = runner.invoke(up, ["--no-cache"])
 
-                            assert result.exit_code == 0
-                            # Verify --build and --no-cache were passed to docker-compose
-                            call_args = mock_run.call_args[0][0]
-                            assert "--build" in call_args
-                            assert "--no-cache" in call_args
+                                assert result.exit_code == 0
+                                # Verify --build and --no-cache were passed in compose call
+                                all_calls = [
+                                    call.args[0] for call in mock_run.call_args_list
+                                ]
+                                assert any(
+                                    "--build" in call_args for call_args in all_calls
+                                )
+                                assert any(
+                                    "--no-cache" in call_args for call_args in all_calls
+                                )
+                                assert any(
+                                    "migrate" in call_args for call_args in all_calls
+                                )
 
 
 class TestDownCommand:

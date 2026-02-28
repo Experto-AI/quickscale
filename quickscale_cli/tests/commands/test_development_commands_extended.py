@@ -11,6 +11,7 @@ from quickscale_cli.commands.development_commands import (
     _handle_up_error,
     _run_docker_exec_command,
     _show_port_conflict_error,
+    _superuser_exists_in_backend,
     _update_last_build_timestamp,
     _validate_project_and_docker,
     down,
@@ -137,6 +138,40 @@ class TestRunDockerExecCommand:
         """Run command in interactive mode"""
         mock_run.return_value = Mock(returncode=0)
         _run_docker_exec_command("container", ["bash"])
+
+
+# ============================================================================
+# _superuser_exists_in_backend
+# ============================================================================
+
+
+class TestSuperuserExistsInBackend:
+    """Tests for _superuser_exists_in_backend"""
+
+    @patch("subprocess.run")
+    def test_superuser_exists_returns_true(self, mock_run):
+        """Return True when check command exits 0"""
+        mock_run.return_value = Mock(returncode=0, stdout="", stderr="")
+
+        assert _superuser_exists_in_backend("myproject-backend-1") is True
+
+    @patch("subprocess.run")
+    def test_superuser_exists_returns_false_when_none_exists(self, mock_run):
+        """Return False when command returns 1 with no output"""
+        mock_run.return_value = Mock(returncode=1, stdout="", stderr="")
+
+        assert _superuser_exists_in_backend("myproject-backend-1") is False
+
+    @patch("subprocess.run")
+    def test_superuser_exists_handles_command_error(self, mock_run):
+        """Return True (skip flow) when command returns 1 with stderr"""
+        mock_run.return_value = Mock(
+            returncode=1,
+            stdout="",
+            stderr="django.db.utils.OperationalError",
+        )
+
+        assert _superuser_exists_in_backend("myproject-backend-1") is True
 
 
 # ============================================================================
@@ -319,11 +354,17 @@ class TestUpCommandExtended:
                             return_value=["docker-compose"],
                         ):
                             with patch(
-                                "subprocess.run", return_value=Mock(returncode=0)
+                                "quickscale_cli.commands.development_commands.get_backend_container_name",
+                                return_value="myproject-backend-1",
                             ):
-                                result = runner.invoke(up)
-                                assert result.exit_code == 0
-                                assert "Dependencies may have changed" in result.output
+                                with patch(
+                                    "subprocess.run", return_value=Mock(returncode=0)
+                                ):
+                                    result = runner.invoke(up)
+                                    assert result.exit_code == 0
+                                    assert (
+                                        "Dependencies may have changed" in result.output
+                                    )
 
 
 # ============================================================================

@@ -1467,7 +1467,7 @@ files = [
 
 [[package]]
 name = "quickscale"
-version = "0.74.0"
+version = "0.76.0"
 description = "Meta-package that installs quickscale-core and quickscale-cli together"
 optional = false
 python-versions = "^3.12"
@@ -1476,8 +1476,8 @@ files = []
 develop = true
 
 [package.dependencies]
-quickscale-cli = "^0.74.0"
-quickscale-core = "^0.74.0"
+quickscale-cli = "^0.76.0"
+quickscale-core = "^0.76.0"
 
 [package.source]
 type = "directory"
@@ -1485,7 +1485,7 @@ url = "quickscale"
 
 [[package]]
 name = "quickscale-cli"
-version = "0.74.0"
+version = "0.76.0"
 description = "Command-line interface for QuickScale Django project generator"
 optional = false
 python-versions = "^3.12"
@@ -1503,7 +1503,7 @@ url = "quickscale_cli"
 
 [[package]]
 name = "quickscale-core"
-version = "0.74.0"
+version = "0.76.0"
 description = "Core scaffolding and utilities for QuickScale Django project generator"
 optional = false
 python-versions = "^3.12"
@@ -1574,6 +1574,25 @@ djangorestframework = "^3.16.1"
 [package.source]
 type = "directory"
 url = "quickscale_modules/crm"
+
+[[package]]
+name = "quickscale-module-forms"
+version = "0.75.0"
+description = "QuickScale generic form-builder module with admin management and React frontend renderer"
+optional = false
+python-versions = "^3.12"
+groups = ["main"]
+files = []
+develop = true
+
+[package.dependencies]
+Django = "^6.0"
+django-filter = "^25.2"
+djangorestframework = "^3.16.1"
+
+[package.source]
+type = "directory"
+url = "quickscale_modules/forms"
 
 [[package]]
 name = "quickscale-module-listings"
@@ -1785,4 +1804,4 @@ files = [
 [metadata]
 lock-version = "2.1"
 python-versions = "^3.12"
-content-hash = "518bed6a66c48be01b7bbe27d0f1126c018175f1a33b2df4bc73bc27412121ae"
+content-hash = "95eac2999d545db9facc945b9cf0afa7ea3e6526866c36b49ffe7548ec5788ee"

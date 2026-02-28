@@ -34,11 +34,11 @@ class TestPlanCommandBasic:
         """Test that plan creates the project directory with quickscale.yml"""
         runner = CliRunner()
         with runner.isolated_filesystem():
-            # Provide input: theme (1), modules (skip), docker start (y), docker build (y), save (y)
+            # Provide input: theme (1), modules (skip), docker start/build, create_superuser (n), save (y)
             result = runner.invoke(
                 plan,
                 ["myapp"],
-                input="\n1\n\ny\ny\ny\n",
+                input="\n1\n\ny\ny\nn\ny\n",
             )
 
             assert result.exit_code == 0
@@ -54,7 +54,7 @@ class TestPlanCommandBasic:
             result = runner.invoke(
                 plan,
                 ["myapp", "--output", "custom/config.yml"],
-                input="\n1\n\ny\ny\ny\n",
+                input="\n1\n\ny\ny\nn\ny\n",
             )
 
             assert result.exit_code == 0
@@ -85,11 +85,11 @@ class TestPlanCommandBasic:
             with open("myapp/quickscale.yml", "w") as f:
                 f.write("existing content")
 
-            # y (overwrite), 1 (theme), empty (no modules), y,y (docker), y (save)
+            # y (overwrite), 1 (theme), empty (no modules), y,y,n (docker), y (save)
             result = runner.invoke(
                 plan,
                 ["myapp"],
-                input="\ny\n1\n\ny\ny\ny\n",
+                input="\ny\n1\n\ny\ny\nn\ny\n",
             )
 
             assert result.exit_code == 0
@@ -107,7 +107,7 @@ class TestPlanThemeSelection:
             result = runner.invoke(
                 plan,
                 ["myapp"],
-                input="\n\n\ny\ny\ny\n",
+                input="\n\n\ny\ny\nn\ny\n",
             )
 
             assert result.exit_code == 0
@@ -124,7 +124,7 @@ class TestPlanThemeSelection:
             result = runner.invoke(
                 plan,
                 ["myapp"],
-                input="\n1\n\ny\ny\ny\n",
+                input="\n1\n\ny\ny\nn\ny\n",
             )
 
             assert result.exit_code == 0
@@ -141,7 +141,7 @@ class TestPlanThemeSelection:
             result = runner.invoke(
                 plan,
                 ["myapp"],
-                input="\nshowcase_html\n\ny\ny\ny\n",
+                input="\nshowcase_html\n\ny\ny\nn\ny\n",
             )
 
             assert result.exit_code == 0
@@ -162,7 +162,7 @@ class TestPlanModuleSelection:
             result = runner.invoke(
                 plan,
                 ["myapp"],
-                input="\n1\n\ny\ny\ny\n",
+                input="\n1\n\ny\ny\nn\ny\n",
             )
 
             assert result.exit_code == 0
@@ -184,7 +184,7 @@ class TestPlanModuleSelection:
             result = runner.invoke(
                 plan,
                 ["myapp"],
-                input="\n1\n1\ny\ny\ny\n",
+                input="\n1\n1\ny\ny\nn\ny\n",
             )
 
             assert result.exit_code == 0
@@ -201,7 +201,7 @@ class TestPlanModuleSelection:
             result = runner.invoke(
                 plan,
                 ["myapp"],
-                input="\n1\n1,3\ny\ny\ny\n",
+                input="\n1\n1,3\ny\ny\nn\ny\n",
             )
 
             assert result.exit_code == 0
@@ -231,7 +231,7 @@ class TestPlanModuleSelection:
             result = runner.invoke(
                 plan,
                 ["myapp", "--include-experimental"],
-                input="\n1\n\ny\ny\nn\n",
+                input="\n1\n\ny\ny\nn\nn\n",
             )
 
             assert "billing - Stripe integration (experimental)" in result.output
@@ -248,11 +248,11 @@ class TestPlanDockerConfiguration:
         """Test plan with Docker start and build enabled"""
         runner = CliRunner()
         with runner.isolated_filesystem():
-            # Select theme 1, no modules, docker start (y), build (y), save
+            # Select theme 1, no modules, docker start/build, create_superuser (n), save
             result = runner.invoke(
                 plan,
                 ["myapp"],
-                input="\n1\n\ny\ny\ny\n",
+                input="\n1\n\ny\ny\nn\ny\n",
             )
 
             assert result.exit_code == 0
@@ -261,6 +261,23 @@ class TestPlanDockerConfiguration:
                 content = f.read()
             assert "start: true" in content
             assert "build: true" in content
+            assert "create_superuser: false" in content
+
+    def test_plan_docker_create_superuser_enabled(self):
+        """Test plan with create_superuser enabled"""
+        runner = CliRunner()
+        with runner.isolated_filesystem():
+            result = runner.invoke(
+                plan,
+                ["myapp"],
+                input="\n1\n\ny\ny\ny\ny\n",
+            )
+
+            assert result.exit_code == 0
+
+            with open("myapp/quickscale.yml") as f:
+                content = f.read()
+            assert "create_superuser: true" in content
 
     def test_plan_docker_disabled(self):
         """Test plan with Docker disabled"""
@@ -290,7 +307,7 @@ class TestPlanConfigPreview:
             result = runner.invoke(
                 plan,
                 ["myapp"],
-                input="\n1\n\ny\ny\ny\n",
+                input="\n1\n\ny\ny\nn\ny\n",
             )
 
             assert "Configuration Preview" in result.output
@@ -305,7 +322,7 @@ class TestPlanConfigPreview:
             result = runner.invoke(
                 plan,
                 ["myapp"],
-                input="\n1\n\ny\ny\nn\n",
+                input="\n1\n\ny\ny\nn\nn\n",
             )
 
             assert result.exit_code != 0
@@ -326,7 +343,7 @@ class TestPlanYamlValidation:
             result = runner.invoke(
                 plan,
                 ["myapp"],
-                input="\n1\n1\ny\ny\ny\n",
+                input="\n1\n1\ny\ny\nn\ny\n",
             )
 
             assert result.exit_code == 0

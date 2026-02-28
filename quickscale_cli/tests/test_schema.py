@@ -34,6 +34,7 @@ project:
         assert config.modules == {}
         assert config.docker.start is True
         assert config.docker.build is True
+        assert config.docker.create_superuser is False
 
     def test_full_config_with_modules(self):
         """Test parsing full configuration with modules"""
@@ -62,6 +63,7 @@ docker:
         assert config.modules["blog"].options["posts_per_page"] == 10
         assert config.docker.start is True
         assert config.docker.build is False
+        assert config.docker.create_superuser is False
 
     def test_config_with_empty_modules(self):
         """Test config with modules section but empty options"""
@@ -95,6 +97,7 @@ project:
         assert config.project.theme == "showcase_react"
         assert config.docker.start is True
         assert config.docker.build is True
+        assert config.docker.create_superuser is False
 
     def test_config_with_docker_disabled(self):
         """Test config with docker disabled"""
@@ -111,6 +114,24 @@ docker:
 
         assert config.docker.start is False
         assert config.docker.build is False
+
+    def test_config_with_create_superuser_enabled(self):
+        """Test config with docker.create_superuser enabled"""
+        yaml_content = """
+version: "1"
+project:
+  slug: myapp
+  package: myapp
+docker:
+  start: true
+  build: false
+  create_superuser: true
+"""
+        config = validate_config(yaml_content)
+
+        assert config.docker.start is True
+        assert config.docker.build is False
+        assert config.docker.create_superuser is True
 
     def test_all_valid_modules(self):
         """Test that all valid modules are accepted"""
@@ -369,6 +390,21 @@ docker:
 
         assert "'docker.build' must be a boolean" in str(exc.value)
 
+    def test_docker_create_superuser_not_bool(self):
+        """Test error when docker.create_superuser is not a boolean"""
+        yaml_content = """
+version: "1"
+project:
+  slug: myapp
+  package: myapp
+docker:
+  create_superuser: "yes"
+"""
+        with pytest.raises(ConfigValidationError) as exc:
+            validate_config(yaml_content)
+
+        assert "'docker.create_superuser' must be a boolean" in str(exc.value)
+
 
 class TestLineNumberErrors:
     """Tests for error messages with line numbers"""
@@ -492,6 +528,7 @@ class TestGenerateYaml:
         assert set(parsed.modules.keys()) == set(original.modules.keys())
         assert parsed.docker.start == original.docker.start
         assert parsed.docker.build == original.docker.build
+        assert parsed.docker.create_superuser == original.docker.create_superuser
 
 
 class TestDataclasses:
@@ -515,6 +552,7 @@ class TestDataclasses:
         config = DockerConfig()
         assert config.start is True
         assert config.build is True
+        assert config.create_superuser is False
 
     def test_quickscale_config_defaults(self):
         """Test QuickScaleConfig default values"""

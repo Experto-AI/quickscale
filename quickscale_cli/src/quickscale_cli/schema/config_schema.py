@@ -61,6 +61,7 @@ class DockerConfig:
 
     start: bool = True
     build: bool = True
+    create_superuser: bool = False
 
 
 @dataclass
@@ -76,7 +77,7 @@ class QuickScaleConfig:
 # Valid keys at each level
 VALID_TOP_LEVEL_KEYS = {"version", "project", "modules", "docker"}
 VALID_PROJECT_KEYS = {"slug", "package", "theme"}
-VALID_DOCKER_KEYS = {"start", "build"}
+VALID_DOCKER_KEYS = {"start", "build", "create_superuser"}
 VALID_THEMES = {"showcase_html", "showcase_htmx", "showcase_react"}
 AVAILABLE_MODULES = set(get_module_names(include_experimental=True))
 
@@ -257,6 +258,7 @@ def _validate_docker_section(data: dict, yaml_content: str) -> DockerConfig:
 
     docker_start = docker_data.get("start", True)
     docker_build = docker_data.get("build", True)
+    docker_create_superuser = docker_data.get("create_superuser", False)
 
     if not isinstance(docker_start, bool):
         line = _find_line_number(yaml_content, "start")
@@ -270,7 +272,18 @@ def _validate_docker_section(data: dict, yaml_content: str) -> DockerConfig:
             "'docker.build' must be a boolean (true/false)", line=line
         )
 
-    return DockerConfig(start=docker_start, build=docker_build)
+    if not isinstance(docker_create_superuser, bool):
+        line = _find_line_number(yaml_content, "create_superuser")
+        raise ConfigValidationError(
+            "'docker.create_superuser' must be a boolean (true/false)",
+            line=line,
+        )
+
+    return DockerConfig(
+        start=docker_start,
+        build=docker_build,
+        create_superuser=docker_create_superuser,
+    )
 
 
 def _validate_modules_section(data: dict, yaml_content: str) -> dict[str, ModuleConfig]:
@@ -385,6 +398,7 @@ def generate_yaml(config: QuickScaleConfig) -> str:
     data["docker"] = {
         "start": config.docker.start,
         "build": config.docker.build,
+        "create_superuser": config.docker.create_superuser,
     }
 
     return yaml.dump(data, default_flow_style=False, sort_keys=False)
