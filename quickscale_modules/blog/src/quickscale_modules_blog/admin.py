@@ -1,9 +1,38 @@
 """Admin configuration for QuickScale blog module"""
 
+from django import forms
 from django.contrib import admin
+from django.contrib.auth import get_user_model
 from markdownx.admin import MarkdownxModelAdmin
 
 from .models import AuthorProfile, Category, Post, Tag
+
+
+class PostAdminForm(forms.ModelForm):
+    """Admin form for blog posts."""
+
+    class Meta:
+        model = Post
+        fields = "__all__"
+
+    def __init__(self, *args, **kwargs):  # type: ignore[no-untyped-def]
+        self.request = kwargs.pop("request", None)
+        super().__init__(*args, **kwargs)
+        if "author" in self.fields:
+            self.fields["author"].required = False
+
+    def clean_author(self):  # type: ignore[no-untyped-def]
+        author = self.cleaned_data.get("author")
+        if (
+            author is None
+            and self.instance
+            and self.instance.pk
+            and self.instance.author_id
+        ):
+            return self.instance.author
+        if author is None and self.request and self.request.user.is_authenticated:
+            return self.request.user
+        return author
 
 
 @admin.register(Category)
@@ -37,6 +66,8 @@ class AuthorProfileAdmin(admin.ModelAdmin):
 class PostAdmin(MarkdownxModelAdmin):
     """Admin for blog posts with Markdown support"""
 
+    form = PostAdminForm
+
     list_display = [
         "title",
         "author",
@@ -48,7 +79,6 @@ class PostAdmin(MarkdownxModelAdmin):
     list_filter = ["status", "category", "created_at", "published_date"]
     search_fields = ["title", "content", "author__username"]
     prepopulated_fields = {"slug": ("title",)}
-    raw_id_fields = ["author"]
     filter_horizontal = ["tags"]
     date_hierarchy = "published_date"
 
@@ -80,9 +110,46 @@ class PostAdmin(MarkdownxModelAdmin):
         ),
     ]
 
+    def formfield_for_foreignkey(self, db_field, request, **kwargs):  # type: ignore[no-untyped-def]
+        """Show author as dropdown with blank default and current user option."""
+        if db_field.name == "author":
+            user_model = get_user_model()
+            allowed_author_ids = {request.user.pk}
+
+            object_id = (
+                request.resolver_match.kwargs.get("object_id")
+                if request.resolver_match
+                else None
+            )
+            if object_id:
+                try:
+                    current_author_id = (
+                        Post.objects.only("author_id").get(pk=object_id).author_id
+                    )
+                    allowed_author_ids.add(current_author_id)
+                except (Post.DoesNotExist, ValueError, TypeError):
+                    pass
+
+            kwargs["empty_label"] = "No author"
+
+            kwargs["queryset"] = user_model.objects.filter(
+                pk__in=allowed_author_ids
+            ).order_by("username")
+        return super().formfield_for_foreignkey(db_field, request, **kwargs)
+
     def save_model(self, request, obj, form, change):  # type: ignore[no-untyped-def]
         """Save the model and set author if creating new post"""
         if not change:  # Creating new post
             if not obj.author_id:
                 obj.author = request.user
         super().save_model(request, obj, form, change)
+
+    def get_form(self, request, obj=None, change=False, **kwargs):  # type: ignore[no-untyped-def]
+        form_class = super().get_form(request, obj, change, **kwargs)
+
+        class RequestAwareForm(form_class):
+            def __init__(self, *args, **inner_kwargs):  # type: ignore[no-untyped-def]
+                inner_kwargs["request"] = request
+                super().__init__(*args, **inner_kwargs)
+
+        return RequestAwareForm
