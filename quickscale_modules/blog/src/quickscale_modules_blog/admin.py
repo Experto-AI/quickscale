@@ -122,7 +122,7 @@ class PostAdmin(MarkdownxModelAdmin):
             kwargs["empty_label"] = "No author"
 
             kwargs["queryset"] = user_model.objects.filter(
-                pk__in=allowed_author_ids
+                pk__in=list(allowed_author_ids)
             ).order_by("username")
         return super().formfield_for_foreignkey(db_field, request, **kwargs)
 

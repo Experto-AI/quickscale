@@ -151,6 +151,24 @@ class TestPostAdmin:
             request.user.pk
         ]
 
+    def test_formfield_for_foreignkey_create_is_not_required(self):
+        """Test author dropdown is optional on create"""
+        site = AdminSite()
+        admin = PostAdmin(Post, site)
+        factory = RequestFactory()
+        request = factory.get("/admin/")
+        request.user = User.objects.create_user(
+            username="optional_author_user",
+            email="optional_author@example.com",
+            password="pass123",
+        )
+
+        form_field = admin.formfield_for_foreignkey(
+            Post._meta.get_field("author"), request
+        )
+
+        assert form_field.required is False
+
     def test_formfield_for_foreignkey_edit_includes_existing_author(self):
         """Test author dropdown keeps existing author option on edit"""
         site = AdminSite()
