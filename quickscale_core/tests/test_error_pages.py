@@ -71,9 +71,9 @@ class TestErrorHandlerViews:
         assert "def custom_404_view" in content, "Should have custom_404_view function"
         assert "request: HttpRequest" in content, "Should have proper type hints"
         assert "exception: Exception" in content, "Should accept exception parameter"
-        assert (
-            "render(request, " in content and '"404.html"' in content
-        ), "Should render 404.html"
+        assert "render(request, " in content and '"404.html"' in content, (
+            "Should render 404.html"
+        )
         assert "status=404" in content, "Should return 404 status code"
         assert "request_path" in content, "Should pass request path to template"
 
@@ -85,9 +85,9 @@ class TestErrorHandlerViews:
         content = views_file.read_text()
 
         assert "def custom_500_view" in content, "Should have custom_500_view function"
-        assert (
-            "render(request, " in content and '"500.html"' in content
-        ), "Should render 500.html"
+        assert "render(request, " in content and '"500.html"' in content, (
+            "Should render 500.html"
+        )
         assert "status=500" in content, "Should return 500 status code"
 
 
@@ -102,9 +102,9 @@ class TestErrorHandlerConfiguration:
         content = urls_file.read_text()
 
         assert "handler404" in content, "Should configure handler404"
-        assert (
-            f'"{project_name}.views.custom_404_view"' in content
-        ), "Should point to custom_404_view"
+        assert f'"{project_name}.views.custom_404_view"' in content, (
+            "Should point to custom_404_view"
+        )
 
     def test_handler500_configured(
         self, generated_project_path: Path, project_name: str
@@ -114,9 +114,9 @@ class TestErrorHandlerConfiguration:
         content = urls_file.read_text()
 
         assert "handler500" in content, "Should configure handler500"
-        assert (
-            f'"{project_name}.views.custom_500_view"' in content
-        ), "Should point to custom_500_view"
+        assert f'"{project_name}.views.custom_500_view"' in content, (
+            "Should point to custom_500_view"
+        )
 
 
 class TestModuleInstallationHints:
@@ -129,12 +129,12 @@ class TestModuleInstallationHints:
 
         # Should detect /accounts/ URLs
         assert "accounts/" in content, "Should check for accounts/ in request path"
-        assert (
-            "Looking for authentication" in content
-        ), "Should provide auth-specific hint"
-        assert (
-            "quickscale embed --module auth" in content
-        ), "Should provide auth module installation command"
+        assert "Looking for authentication" in content, (
+            "Should provide auth-specific hint"
+        )
+        assert "quickscale embed --module auth" in content, (
+            "Should provide auth module installation command"
+        )
 
     def test_billing_module_hint(self, generated_project_path: Path) -> None:
         """Test that 404 page detects billing module URLs and provides hints"""
@@ -143,12 +143,12 @@ class TestModuleInstallationHints:
 
         # Should detect /billing/ URLs
         assert "billing/" in content, "Should check for billing/ in request path"
-        assert (
-            "billing features" in content.lower()
-        ), "Should provide billing-specific hint"
-        assert (
-            "quickscale embed --module billing" in content
-        ), "Should provide billing module installation command"
+        assert "billing features" in content.lower(), (
+            "Should provide billing-specific hint"
+        )
+        assert "quickscale embed --module billing" in content, (
+            "Should provide billing module installation command"
+        )
 
     def test_teams_module_hint(self, generated_project_path: Path) -> None:
         """Test that 404 page detects teams module URLs and provides hints"""
@@ -157,12 +157,12 @@ class TestModuleInstallationHints:
 
         # Should detect /teams/ URLs
         assert "teams/" in content, "Should check for teams/ in request path"
-        assert (
-            "team management" in content.lower()
-        ), "Should provide teams-specific hint"
-        assert (
-            "quickscale embed --module teams" in content
-        ), "Should provide teams module installation command"
+        assert "team management" in content.lower(), (
+            "Should provide teams-specific hint"
+        )
+        assert "quickscale embed --module teams" in content, (
+            "Should provide teams module installation command"
+        )
 
     def test_generic_404_guidance(self, generated_project_path: Path) -> None:
         """Test that 404 page provides generic guidance for other URLs"""
@@ -208,9 +208,9 @@ class TestErrorPageUserExperience:
         content = template_404.read_text()
 
         assert 'href="/"' in content, "Should have link to homepage"
-        assert (
-            "Go to Homepage" in content or "homepage" in content.lower()
-        ), "Should have clear homepage navigation"
+        assert "Go to Homepage" in content or "homepage" in content.lower(), (
+            "Should have clear homepage navigation"
+        )
 
     def test_500_has_navigation(self, generated_project_path: Path) -> None:
         """Test that 500 page has navigation and recovery options"""
@@ -218,9 +218,9 @@ class TestErrorPageUserExperience:
         content = template_500.read_text()
 
         assert 'href="/"' in content, "Should have link to homepage"
-        assert (
-            "refresh" in content.lower() or "reload" in content.lower()
-        ), "Should suggest refreshing the page"
+        assert "refresh" in content.lower() or "reload" in content.lower(), (
+            "Should suggest refreshing the page"
+        )
 
     def test_error_pages_extend_base(self, generated_project_path: Path) -> None:
         """Test that error pages extend the base template"""
@@ -228,7 +228,7 @@ class TestErrorPageUserExperience:
             template_file = generated_project_path / "templates" / template_name
             content = template_file.read_text()
 
-            assert (
-                '{% extends "base.html" %}' in content
-            ), f"{template_name} should extend base.html template"
+            assert '{% extends "base.html" %}' in content, (
+                f"{template_name} should extend base.html template"
+            )
             assert "{% block" in content, f"{template_name} should use template blocks"

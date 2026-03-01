@@ -9,6 +9,10 @@
 #   make check                - Run all checks (lint, typecheck, test)
 #   make test                 - Run all tests
 #   make test-unit            - Run unit tests only
+#   make lint -- --modules    - Run lint only for quickscale_modules/*
+#   make test-unit -- -m      - Run unit tests only for quickscale_modules/*
+#   make check -- --core      - Run checks only for quickscale_core
+#   make MODULE=blog test -- --modules - Run tests only for quickscale_modules/blog
 #   make test-cov             - Run tests with coverage
 #   make test-e2e             - Run E2E tests (needs Docker + Playwright)
 #   make test-agent           - Run agentic flow adapter tests
@@ -48,6 +52,22 @@
 
 # Default Python command (uses root Poetry environment)
 PYTHON ?= poetry run python
+RUFF_CACHE_DIR ?= .ruff_cache/make
+
+# Section flags must be passed after `--` so GNU make does not treat them as its
+# own options, e.g. `make lint -- --modules` or `make test-unit -- -m`.
+SECTION_FLAG_ARGS := $(filter --quickscale -q --core -c --cli -l --module --modules -m,$(MAKECMDGOALS))
+ifneq ($(strip $(SECTION_FLAG_ARGS)),)
+  $(eval $(SECTION_FLAG_ARGS):;@:)
+endif
+
+define map_section
+$(if $(filter --quickscale -q,$(1)),quickscale,$(if $(filter --core -c,$(1)),core,$(if $(filter --cli -l,$(1)),cli,$(if $(filter --module --modules -m,$(1)),modules,))))
+endef
+
+SELECTED_SECTIONS := $(strip $(foreach arg,$(SECTION_FLAG_ARGS),$(call map_section,$(arg))))
+ACTIVE_SECTIONS := $(if $(SELECTED_SECTIONS),$(SELECTED_SECTIONS),quickscale core cli modules)
+MODULE_DIRS := $(if $(MODULE),quickscale_modules/$(MODULE),$(wildcard quickscale_modules/*))
 
 # Source directories for linting and type checking
 SRC_DIRS := quickscale/src quickscale_core/src quickscale_cli/src
@@ -66,6 +86,8 @@ help:
 	@echo "Testing:"
 	@echo "  make test                 - Run all unit + integration tests"
 	@echo "  make test-unit            - Run unit tests only (no integration)"
+	@echo "  make test -- --modules    - Run tests only for quickscale_modules/*"
+	@echo "  make test-unit -- --core  - Run unit tests only for quickscale_core"
 	@echo "  make test-cov             - Run tests with coverage report"
 	@echo "  make test-e2e             - Run E2E tests (needs Docker + Playwright)"
 	@echo "  make test-agent           - Run agentic flow adapter tests"
@@ -81,6 +103,12 @@ help:
 	@echo "  make check                - Run all checks (lint, typecheck, test)"
 	@echo "  make ci                   - Run same checks as GitHub Actions"
 	@echo "  make ci-e2e               - Run CI checks including E2E tests"
+	@echo ""
+	@echo "Section Flags:"
+	@echo "  Pass flags after `--`: --quickscale/-q, --core/-c, --cli/-l, --modules/-m"
+	@echo "  Examples: make lint -- -m | make typecheck -- --core | make check -- --cli --modules"
+	@echo "  Optional: MODULE=blog limits the modules scope to one module"
+	@echo "  Example: make MODULE=blog test-unit -- --modules"
 	@echo ""
 	@echo "Docs:"
 	@echo "  make docs                 - Compile contributing docs from docs/contrib/"
@@ -127,11 +155,69 @@ install:
 
 # Run all tests
 test:
-	@$(PYTHON) -m pytest $(TEST_DIRS) -v --tb=short
+	@set -e; \
+	if [ -n "$(filter quickscale,$(ACTIVE_SECTIONS))" ]; then \
+		echo "ℹ️ quickscale has no test suite to run."; \
+	fi; \
+	if [ -n "$(filter core,$(ACTIVE_SECTIONS))" ]; then \
+		echo "📦 Testing quickscale_core..."; \
+		$(PYTHON) -m pytest quickscale_core/tests -v --tb=short -m "not e2e"; \
+	fi; \
+	if [ -n "$(filter cli,$(ACTIVE_SECTIONS))" ]; then \
+		echo "📦 Testing quickscale_cli..."; \
+		$(PYTHON) -m pytest quickscale_cli/tests -v --tb=short -m "not e2e"; \
+	fi; \
+	if [ -n "$(filter modules,$(ACTIVE_SECTIONS))" ]; then \
+		if [ -n "$(MODULE)" ] && [ ! -d "quickscale_modules/$(MODULE)" ]; then \
+			echo "Error: MODULE=$(MODULE) does not exist."; \
+			exit 1; \
+		fi; \
+		mod_found=0; \
+		for mod in $(MODULE_DIRS); do \
+			if [ -d "$$mod/tests" ]; then \
+				mod_found=1; \
+				mod_name=$$(basename "$$mod"); \
+				echo "📦 Testing module: $$mod_name..."; \
+				PYTHONPATH="$$mod:$$mod/src" $(PYTHON) -m pytest "$$mod/tests/" -v --tb=short -o "addopts=" -m "not e2e" -p pytest_django --ds=tests.settings; \
+			fi; \
+		done; \
+		if [ "$$mod_found" -eq 0 ]; then \
+			echo "ℹ️ No module test suites matched the current filters."; \
+		fi; \
+	fi
 
-# Run unit tests only (core and cli packages, no integration)
+# Run unit tests only (selected sections, no integration)
 test-unit:
-	@$(PYTHON) -m pytest quickscale_core/tests quickscale_cli/tests -v --tb=short -m "not integration"
+	@set -e; \
+	if [ -n "$(filter quickscale,$(ACTIVE_SECTIONS))" ]; then \
+		echo "ℹ️ quickscale has no test suite to run."; \
+	fi; \
+	if [ -n "$(filter core,$(ACTIVE_SECTIONS))" ]; then \
+		echo "📦 Unit testing quickscale_core..."; \
+		$(PYTHON) -m pytest quickscale_core/tests -v --tb=short -m "not integration and not e2e"; \
+	fi; \
+	if [ -n "$(filter cli,$(ACTIVE_SECTIONS))" ]; then \
+		echo "📦 Unit testing quickscale_cli..."; \
+		$(PYTHON) -m pytest quickscale_cli/tests -v --tb=short -m "not integration and not e2e"; \
+	fi; \
+	if [ -n "$(filter modules,$(ACTIVE_SECTIONS))" ]; then \
+		if [ -n "$(MODULE)" ] && [ ! -d "quickscale_modules/$(MODULE)" ]; then \
+			echo "Error: MODULE=$(MODULE) does not exist."; \
+			exit 1; \
+		fi; \
+		mod_found=0; \
+		for mod in $(MODULE_DIRS); do \
+			if [ -d "$$mod/tests" ]; then \
+				mod_found=1; \
+				mod_name=$$(basename "$$mod"); \
+				echo "📦 Unit testing module: $$mod_name..."; \
+				PYTHONPATH="$$mod:$$mod/src" $(PYTHON) -m pytest "$$mod/tests/" -v --tb=short -o "addopts=" -m "not integration and not e2e" -p pytest_django --ds=tests.settings; \
+			fi; \
+		done; \
+		if [ "$$mod_found" -eq 0 ]; then \
+			echo "ℹ️ No module test suites matched the current filters."; \
+		fi; \
+	fi
 
 # Run E2E tests (starts PostgreSQL container, installs Playwright browsers)
 test-e2e:
@@ -156,19 +242,123 @@ test-cov:
 
 # Run linting (check only, no changes)
 lint:
-	@$(PYTHON) -m ruff check $(SRC_DIRS)
-	@$(PYTHON) -m ruff format --check $(SRC_DIRS)
+	@set -e; \
+	if [ -n "$(filter quickscale,$(ACTIVE_SECTIONS))" ]; then \
+		echo "📦 Linting quickscale..."; \
+		$(PYTHON) -m ruff check --cache-dir $(RUFF_CACHE_DIR) quickscale/src; \
+		$(PYTHON) -m ruff format --cache-dir $(RUFF_CACHE_DIR) --check quickscale/src; \
+	fi; \
+	if [ -n "$(filter core,$(ACTIVE_SECTIONS))" ]; then \
+		echo "📦 Linting quickscale_core..."; \
+		$(PYTHON) -m ruff check --cache-dir $(RUFF_CACHE_DIR) quickscale_core/src quickscale_core/tests; \
+		$(PYTHON) -m ruff format --cache-dir $(RUFF_CACHE_DIR) --check quickscale_core/src quickscale_core/tests; \
+	fi; \
+	if [ -n "$(filter cli,$(ACTIVE_SECTIONS))" ]; then \
+		echo "📦 Linting quickscale_cli..."; \
+		$(PYTHON) -m ruff check --cache-dir $(RUFF_CACHE_DIR) quickscale_cli/src quickscale_cli/tests; \
+		$(PYTHON) -m ruff format --cache-dir $(RUFF_CACHE_DIR) --check quickscale_cli/src quickscale_cli/tests; \
+	fi; \
+	if [ -n "$(filter modules,$(ACTIVE_SECTIONS))" ]; then \
+		if [ -n "$(MODULE)" ] && [ ! -d "quickscale_modules/$(MODULE)" ]; then \
+			echo "Error: MODULE=$(MODULE) does not exist."; \
+			exit 1; \
+		fi; \
+		mod_found=0; \
+		for mod in $(MODULE_DIRS); do \
+			if [ -d "$$mod/src" ]; then \
+				mod_found=1; \
+				mod_name=$$(basename "$$mod"); \
+				echo "📦 Linting module: $$mod_name..."; \
+				lint_args="$$mod/src"; \
+				if [ -d "$$mod/tests" ]; then \
+					lint_args="$$lint_args $$mod/tests"; \
+				fi; \
+				$(PYTHON) -m ruff check --cache-dir $(RUFF_CACHE_DIR) $$lint_args; \
+				$(PYTHON) -m ruff format --cache-dir $(RUFF_CACHE_DIR) --check $$lint_args; \
+			fi; \
+		done; \
+		if [ "$$mod_found" -eq 0 ]; then \
+			echo "ℹ️ No modules matched the current filters."; \
+		fi; \
+	fi
 	@echo "✅ Linting passed!"
 
 # Run linting with auto-fix
 lint-fix:
-	@$(PYTHON) -m ruff check $(SRC_DIRS) --fix
-	@$(PYTHON) -m ruff format $(SRC_DIRS)
+	@set -e; \
+	if [ -n "$(filter quickscale,$(ACTIVE_SECTIONS))" ]; then \
+		echo "📦 Lint-fixing quickscale..."; \
+		$(PYTHON) -m ruff check --cache-dir $(RUFF_CACHE_DIR) quickscale/src --fix; \
+		$(PYTHON) -m ruff format --cache-dir $(RUFF_CACHE_DIR) quickscale/src; \
+	fi; \
+	if [ -n "$(filter core,$(ACTIVE_SECTIONS))" ]; then \
+		echo "📦 Lint-fixing quickscale_core..."; \
+		$(PYTHON) -m ruff check --cache-dir $(RUFF_CACHE_DIR) quickscale_core/src quickscale_core/tests --fix; \
+		$(PYTHON) -m ruff format --cache-dir $(RUFF_CACHE_DIR) quickscale_core/src quickscale_core/tests; \
+	fi; \
+	if [ -n "$(filter cli,$(ACTIVE_SECTIONS))" ]; then \
+		echo "📦 Lint-fixing quickscale_cli..."; \
+		$(PYTHON) -m ruff check --cache-dir $(RUFF_CACHE_DIR) quickscale_cli/src quickscale_cli/tests --fix; \
+		$(PYTHON) -m ruff format --cache-dir $(RUFF_CACHE_DIR) quickscale_cli/src quickscale_cli/tests; \
+	fi; \
+	if [ -n "$(filter modules,$(ACTIVE_SECTIONS))" ]; then \
+		if [ -n "$(MODULE)" ] && [ ! -d "quickscale_modules/$(MODULE)" ]; then \
+			echo "Error: MODULE=$(MODULE) does not exist."; \
+			exit 1; \
+		fi; \
+		mod_found=0; \
+		for mod in $(MODULE_DIRS); do \
+			if [ -d "$$mod/src" ]; then \
+				mod_found=1; \
+				mod_name=$$(basename "$$mod"); \
+				echo "📦 Lint-fixing module: $$mod_name..."; \
+				lint_args="$$mod/src"; \
+				if [ -d "$$mod/tests" ]; then \
+					lint_args="$$lint_args $$mod/tests"; \
+				fi; \
+				$(PYTHON) -m ruff check --cache-dir $(RUFF_CACHE_DIR) $$lint_args --fix; \
+				$(PYTHON) -m ruff format --cache-dir $(RUFF_CACHE_DIR) $$lint_args; \
+			fi; \
+		done; \
+		if [ "$$mod_found" -eq 0 ]; then \
+			echo "ℹ️ No modules matched the current filters."; \
+		fi; \
+	fi
 	@echo "✅ Linting fixed!"
 
 # Run type checking (uses mypy.ini config from project root)
 typecheck:
-	@$(PYTHON) -m mypy $(SRC_DIRS) --show-error-codes
+	@set -e; \
+	if [ -n "$(filter quickscale,$(ACTIVE_SECTIONS))" ]; then \
+		echo "📦 Type checking quickscale..."; \
+		$(PYTHON) -m mypy quickscale/src --show-error-codes; \
+	fi; \
+	if [ -n "$(filter core,$(ACTIVE_SECTIONS))" ]; then \
+		echo "📦 Type checking quickscale_core..."; \
+		$(PYTHON) -m mypy quickscale_core/src --show-error-codes; \
+	fi; \
+	if [ -n "$(filter cli,$(ACTIVE_SECTIONS))" ]; then \
+		echo "📦 Type checking quickscale_cli..."; \
+		$(PYTHON) -m mypy quickscale_cli/src --show-error-codes; \
+	fi; \
+	if [ -n "$(filter modules,$(ACTIVE_SECTIONS))" ]; then \
+		if [ -n "$(MODULE)" ] && [ ! -d "quickscale_modules/$(MODULE)" ]; then \
+			echo "Error: MODULE=$(MODULE) does not exist."; \
+			exit 1; \
+		fi; \
+		mod_found=0; \
+		for mod in $(MODULE_DIRS); do \
+			if [ -d "$$mod/src" ]; then \
+				mod_found=1; \
+				mod_name=$$(basename "$$mod"); \
+				echo "📦 Type checking module: $$mod_name..."; \
+				$(PYTHON) -m mypy "$$mod/src" --show-error-codes; \
+			fi; \
+		done; \
+		if [ "$$mod_found" -eq 0 ]; then \
+			echo "ℹ️ No modules matched the current filters."; \
+		fi; \
+	fi
 	@echo "✅ Type checking passed!"
 
 # Lint React theme templates (renders to tmp dir, runs ESLint + TypeScript check)
@@ -181,7 +371,41 @@ lint-agent:
 
 # Format code with ruff
 format:
-	@$(PYTHON) -m ruff format $(SRC_DIRS)
+	@set -e; \
+	if [ -n "$(filter quickscale,$(ACTIVE_SECTIONS))" ]; then \
+		echo "📦 Formatting quickscale..."; \
+		$(PYTHON) -m ruff format --cache-dir $(RUFF_CACHE_DIR) quickscale/src; \
+	fi; \
+	if [ -n "$(filter core,$(ACTIVE_SECTIONS))" ]; then \
+		echo "📦 Formatting quickscale_core..."; \
+		$(PYTHON) -m ruff format --cache-dir $(RUFF_CACHE_DIR) quickscale_core/src quickscale_core/tests; \
+	fi; \
+	if [ -n "$(filter cli,$(ACTIVE_SECTIONS))" ]; then \
+		echo "📦 Formatting quickscale_cli..."; \
+		$(PYTHON) -m ruff format --cache-dir $(RUFF_CACHE_DIR) quickscale_cli/src quickscale_cli/tests; \
+	fi; \
+	if [ -n "$(filter modules,$(ACTIVE_SECTIONS))" ]; then \
+		if [ -n "$(MODULE)" ] && [ ! -d "quickscale_modules/$(MODULE)" ]; then \
+			echo "Error: MODULE=$(MODULE) does not exist."; \
+			exit 1; \
+		fi; \
+		mod_found=0; \
+		for mod in $(MODULE_DIRS); do \
+			if [ -d "$$mod/src" ]; then \
+				mod_found=1; \
+				mod_name=$$(basename "$$mod"); \
+				echo "📦 Formatting module: $$mod_name..."; \
+				format_args="$$mod/src"; \
+				if [ -d "$$mod/tests" ]; then \
+					format_args="$$format_args $$mod/tests"; \
+				fi; \
+				$(PYTHON) -m ruff format --cache-dir $(RUFF_CACHE_DIR) $$format_args; \
+			fi; \
+		done; \
+		if [ "$$mod_found" -eq 0 ]; then \
+			echo "ℹ️ No modules matched the current filters."; \
+		fi; \
+	fi
 	@echo "✅ Formatting done!"
 
 # --- Combined Checks ---

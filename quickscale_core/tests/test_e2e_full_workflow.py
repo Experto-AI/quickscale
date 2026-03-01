@@ -228,9 +228,9 @@ class TestFullE2EWorkflow:
             ["ruff", "check", str(project_path)],
             timeout=120,
         )
-        assert (
-            result.returncode == 0
-        ), f"ruff check failed:\n{result.stderr}\n{result.stdout}"
+        assert result.returncode == 0, (
+            f"ruff check failed:\n{result.stderr}\n{result.stdout}"
+        )
 
     def test_generated_project_python_ruff_format_check(self, tmp_path):
         """Generated Python project should pass Ruff formatter check mode."""
@@ -244,9 +244,9 @@ class TestFullE2EWorkflow:
             ["ruff", "format", "--check", str(project_path)],
             timeout=120,
         )
-        assert (
-            result.returncode == 0
-        ), f"ruff format --check failed:\n{result.stderr}\n{result.stdout}"
+        assert result.returncode == 0, (
+            f"ruff format --check failed:\n{result.stderr}\n{result.stdout}"
+        )
 
     def test_generated_project_python_mypy_check(self, tmp_path):
         """Generated Python project should pass mypy type checking."""
@@ -346,9 +346,9 @@ class TestFullE2EWorkflow:
             text=True,
             env=local_env,
         )
-        assert (
-            check_result.returncode == 0
-        ), f"Django checks failed: {check_result.stderr}"
+        assert check_result.returncode == 0, (
+            f"Django checks failed: {check_result.stderr}"
+        )
 
         server_port = self._find_free_port()
         server_process = subprocess.Popen(
@@ -590,9 +590,9 @@ class TestFullE2EWorkflow:
             install_output
         ):
             pytest.skip("PyPI is unreachable in this environment")
-        assert (
-            install_result.returncode == 0
-        ), f"Poetry install failed: {install_result.stderr}"
+        assert install_result.returncode == 0, (
+            f"Poetry install failed: {install_result.stderr}"
+        )
 
     def _build_react_frontend(self, project_path: Path) -> None:
         """Install and build React frontend assets for generated project."""
@@ -880,12 +880,12 @@ LOGGING = {{
             assert response.status == 200, f"Route failed: {url}"
 
             html = response.read().decode("utf-8")
-            assert (
-                '<div id="root"></div>' in html
-            ), f"React root missing for route: {url}"
-            assert (
-                "frontend/assets/index" in html
-            ), f"React JS bundle not referenced for route: {url}"
+            assert '<div id="root"></div>' in html, (
+                f"React root missing for route: {url}"
+            )
+            assert "frontend/assets/index" in html, (
+                f"React JS bundle not referenced for route: {url}"
+            )
 
 
 @pytest.mark.e2e
