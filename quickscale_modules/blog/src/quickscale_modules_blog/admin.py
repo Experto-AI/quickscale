@@ -16,6 +16,7 @@ class PostAdminForm(forms.ModelForm):
         fields = "__all__"
 
     def __init__(self, *args, **kwargs):  # type: ignore[no-untyped-def]
+        self.request = kwargs.pop("request", None)
         super().__init__(*args, **kwargs)
         if "author" in self.fields:
             self.fields["author"].required = False
@@ -29,6 +30,8 @@ class PostAdminForm(forms.ModelForm):
             and self.instance.author_id
         ):
             return self.instance.author
+        if author is None and self.request and self.request.user.is_authenticated:
+            return self.request.user
         return author
 
 
@@ -147,6 +150,10 @@ class PostAdmin(MarkdownxModelAdmin):
 
     def get_form(self, request, obj=None, change=False, **kwargs):  # type: ignore[no-untyped-def]
         form_class = super().get_form(request, obj, change, **kwargs)
-        if "author" in form_class.base_fields:
-            form_class.base_fields["author"].required = False
-        return form_class
+
+        class RequestAwareForm(form_class):  # type: ignore[valid-type,misc]
+            def __init__(self, *args, **inner_kwargs):  # type: ignore[no-untyped-def]
+                inner_kwargs["request"] = request
+                super().__init__(*args, **inner_kwargs)
+
+        return RequestAwareForm
