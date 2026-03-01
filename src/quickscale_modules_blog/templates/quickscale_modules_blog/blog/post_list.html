@@ -19,7 +19,11 @@
 
             <footer>
                 <p>
-                    By {{ post.author.get_full_name|default:post.author.username }} on
+                    {% if post.author %}
+                        By
+                        {{ post.author.get_full_name|default:post.author.username }}
+                        on
+                    {% endif %}
                     <time datetime="{{ post.published_date|date:'Y-m-d' }}">
                         {{ post.published_date|date:"F d, Y" }}
                     </time>

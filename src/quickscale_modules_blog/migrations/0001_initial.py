@@ -148,6 +148,8 @@ class Migration(migrations.Migration):
                 (
                     "author",
                     models.ForeignKey(
+                        blank=True,
+                        null=True,
                         on_delete=django.db.models.deletion.CASCADE,
                         related_name="blog_posts",
                         to=settings.AUTH_USER_MODEL,

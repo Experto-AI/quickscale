@@ -95,6 +95,8 @@ class Post(models.Model):
         settings.AUTH_USER_MODEL,
         on_delete=models.CASCADE,
         related_name="blog_posts",
+        null=True,
+        blank=True,
     )
     content = MarkdownxField(help_text="Post content in Markdown format")
     excerpt = models.TextField(

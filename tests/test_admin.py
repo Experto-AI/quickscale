@@ -17,8 +17,8 @@ User = get_user_model()
 class TestPostAdmin:
     """Tests for PostAdmin save_model behavior"""
 
-    def test_save_model_sets_author_on_create(self):
-        """Test that save_model sets author to request user for new posts"""
+    def test_save_model_keeps_blank_author_on_create(self):
+        """Test that save_model keeps blank author as None for new posts"""
         site = AdminSite()
         admin = PostAdmin(Post, site)
         factory = RequestFactory()
@@ -39,7 +39,7 @@ class TestPostAdmin:
         admin.save_model(request, post, form=None, change=False)
 
         assert post.pk is not None
-        assert post.author == request.user
+        assert post.author is None
 
     def test_save_model_preserves_author_on_edit(self):
         """Test that save_model preserves existing author on edit"""
@@ -104,8 +104,8 @@ class TestPostAdmin:
 
         assert post.author == explicit_author
 
-    def test_save_model_blank_author_defaults_to_request_user(self):
-        """Test that blank author selection still resolves to request user on create"""
+    def test_save_model_blank_author_remains_none(self):
+        """Test that blank author selection remains None on create"""
         site = AdminSite()
         admin = PostAdmin(Post, site)
         factory = RequestFactory()
@@ -128,7 +128,7 @@ class TestPostAdmin:
 
         admin.save_model(request, post, form=explicit_none_form, change=False)
 
-        assert post.author == request_user
+        assert post.author is None
 
     def test_formfield_for_foreignkey_create_includes_current_user_and_blank(self):
         """Test author dropdown includes no-author and current user options on create"""
@@ -186,26 +186,6 @@ class TestPostAdmin:
             existing_author.pk,
         }
 
-    def test_get_form_clean_author_defaults_to_request_user_on_create(self):
-        """Test form clean_author maps blank author to request user on create"""
-        site = AdminSite()
-        admin = PostAdmin(Post, site)
-        factory = RequestFactory()
-
-        request_user = User.objects.create_user(
-            username="form_create_user",
-            email="form_create@example.com",
-            password="pass123",
-        )
-        request = factory.post("/admin/")
-        request.user = request_user
-
-        form_class = admin.get_form(request, obj=None, change=False)
-        form = form_class()
-        form.cleaned_data = {"author": None}
-
-        assert form.clean_author() == request_user
-
     def test_get_form_submission_blank_author_is_valid_on_create(self):
         """Test full admin form submission accepts blank author on create"""
         site = AdminSite()
@@ -239,42 +219,10 @@ class TestPostAdmin:
         )
 
         assert form.is_valid(), form.errors.as_text()
-        assert form.cleaned_data["author"] == request_user
-
-    def test_get_form_clean_author_preserves_existing_author_on_edit(self):
-        """Test form clean_author keeps current instance author on edit when blank"""
-        site = AdminSite()
-        admin = PostAdmin(Post, site)
-        factory = RequestFactory()
-
-        existing_author = User.objects.create_user(
-            username="form_existing_author",
-            email="form_existing@example.com",
-            password="pass123",
-        )
-        editor = User.objects.create_user(
-            username="form_editor_user",
-            email="form_editor@example.com",
-            password="pass123",
-        )
-        post = Post.objects.create(
-            title="Form Edit Post",
-            author=existing_author,
-            content="Content",
-        )
-
-        request = factory.post(f"/admin/{post.pk}/change/")
-        request.user = editor
-        request.resolver_match = SimpleNamespace(kwargs={"object_id": str(post.pk)})
-
-        form_class = admin.get_form(request, obj=post, change=True)
-        form = form_class(instance=post)
-        form.cleaned_data = {"author": None}
-
-        assert form.clean_author() == existing_author
+        assert form.cleaned_data["author"] is None
 
     def test_get_form_submission_blank_author_is_valid_on_edit(self):
-        """Test full admin form submission keeps existing author when blank on edit"""
+        """Test full admin form submission allows clearing author on edit"""
         site = AdminSite()
         admin = PostAdmin(Post, site)
         factory = RequestFactory()
@@ -320,4 +268,4 @@ class TestPostAdmin:
         )
 
         assert form.is_valid(), form.errors.as_text()
-        assert form.cleaned_data["author"] == existing_author
+        assert form.cleaned_data["author"] is None

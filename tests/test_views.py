@@ -132,3 +132,33 @@ class TestTagListView:
 
         with pytest.raises(Tag.DoesNotExist):
             client.get(reverse("quickscale_blog:tag_list", args=["nonexistent"]))
+
+
+@pytest.mark.django_db
+class TestAuthorlessPostRendering:
+    """Tests for rendering pages with authorless posts"""
+
+    def test_authorless_post_omits_author_label_on_all_pages(self, client):
+        """Test authorless post omits fallback label across list/detail/category/tag pages"""
+        category = Category.objects.create(name="Authorless Category")
+        tag = Tag.objects.create(name="Authorless Tag")
+        post = Post.objects.create(
+            title="Authorless Post",
+            author=None,
+            content="Authorless content",
+            status="published",
+            category=category,
+        )
+        post.tags.add(tag)
+
+        page_urls = [
+            reverse("quickscale_blog:post_list"),
+            reverse("quickscale_blog:post_detail", args=[post.slug]),
+            reverse("quickscale_blog:category_list", args=[category.slug]),
+            reverse("quickscale_blog:tag_list", args=[tag.slug]),
+        ]
+
+        for url in page_urls:
+            response = client.get(url)
+            assert response.status_code == 200
+            assert "Unknown author" not in response.content.decode()
