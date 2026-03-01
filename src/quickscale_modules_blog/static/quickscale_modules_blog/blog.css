@@ -1,0 +1,24 @@
+.blog-markdown-content {
+    line-height: 1.7;
+}
+
+.blog-markdown-content :is(h1, h2, h3, h4, h5, h6) {
+    margin-top: 1.5rem;
+    margin-bottom: 0.75rem;
+}
+
+.blog-markdown-content p,
+.blog-markdown-content ul,
+.blog-markdown-content ol,
+.blog-markdown-content blockquote,
+.blog-markdown-content pre {
+    margin-bottom: 1rem;
+}
+
+.blog-markdown-content code {
+    font-family: monospace;
+}
+
+.blog-markdown-content pre {
+    overflow-x: auto;
+}

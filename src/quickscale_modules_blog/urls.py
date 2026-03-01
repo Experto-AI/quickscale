@@ -10,6 +10,7 @@ app_name = "quickscale_blog"
 urlpatterns = [
     path("", views.PostListView.as_view(), name="post_list"),
     path("post/<slug:slug>/", views.PostDetailView.as_view(), name="post_detail"),
+    path("api/publish/", views.publish_post_api, name="api_publish_post"),
     path(
         "category/<slug:slug>/", views.CategoryListView.as_view(), name="category_list"
     ),
