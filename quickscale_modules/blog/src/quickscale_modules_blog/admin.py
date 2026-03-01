@@ -20,19 +20,12 @@ class PostAdminForm(forms.ModelForm):
         super().__init__(*args, **kwargs)
         if "author" in self.fields:
             self.fields["author"].required = False
-
-    def clean_author(self):  # type: ignore[no-untyped-def]
-        author = self.cleaned_data.get("author")
-        if (
-            author is None
-            and self.instance
-            and self.instance.pk
-            and self.instance.author_id
-        ):
-            return self.instance.author
-        if author is None and self.request and self.request.user.is_authenticated:
-            return self.request.user
-        return author
+            if (
+                not self.instance.pk
+                and self.request
+                and self.request.user.is_authenticated
+            ):
+                self.fields["author"].initial = self.request.user
 
 
 @admin.register(Category)
@@ -142,10 +135,7 @@ class PostAdmin(MarkdownxModelAdmin):
         return super().formfield_for_foreignkey(db_field, request, **kwargs)
 
     def save_model(self, request, obj, form, change):  # type: ignore[no-untyped-def]
-        """Save the model and set author if creating new post."""
-        if not change:  # Creating new post
-            if not obj.author_id:
-                obj.author = request.user
+        """Save the model."""
         super().save_model(request, obj, form, change)
 
     def get_form(self, request, obj=None, change=False, **kwargs):  # type: ignore[no-untyped-def]
