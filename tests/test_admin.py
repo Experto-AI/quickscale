@@ -335,7 +335,7 @@ class TestPostAdmin:
         )
 
         assert form.is_valid(), form.errors.as_text()
-        assert form.cleaned_data["author"] is None
+        assert form.cleaned_data["author"] == request_user
 
     def test_get_form_submission_blank_author_preserves_existing_author_on_edit(self):
         """Test full admin form submission keeps existing author on edit"""
