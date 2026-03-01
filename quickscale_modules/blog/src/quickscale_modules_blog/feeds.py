@@ -35,8 +35,10 @@ class LatestPostsFeed(Feed):
         """Return post publication date"""
         return item.published_date
 
-    def item_author_name(self, item: Post) -> str:
+    def item_author_name(self, item: Post) -> str | None:
         """Return post author name"""
+        if item.author is None:
+            return None
         return item.author.get_full_name() or item.author.username
 
     def item_categories(self, item: Post) -> list[str]:

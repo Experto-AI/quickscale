@@ -16,23 +16,9 @@ class PostAdminForm(forms.ModelForm):
         fields = "__all__"
 
     def __init__(self, *args, **kwargs):  # type: ignore[no-untyped-def]
-        self.request = kwargs.pop("request", None)
         super().__init__(*args, **kwargs)
         if "author" in self.fields:
             self.fields["author"].required = False
-
-    def clean_author(self):  # type: ignore[no-untyped-def]
-        author = self.cleaned_data.get("author")
-        if (
-            author is None
-            and self.instance
-            and self.instance.pk
-            and getattr(self.instance, "author_id", None)
-        ):
-            return self.instance.author
-        if author is None and self.request and self.request.user.is_authenticated:
-            return self.request.user
-        return author
 
 
 @admin.register(Category)
@@ -114,7 +100,9 @@ class PostAdmin(MarkdownxModelAdmin):
         """Show author as dropdown with blank default and current user option."""
         if db_field.name == "author":
             user_model = get_user_model()
-            allowed_author_ids = {request.user.pk}
+            allowed_author_ids: set[object] = set()
+            if request.user.is_authenticated and request.user.pk is not None:
+                allowed_author_ids.add(request.user.pk)
             kwargs["required"] = False
 
             object_id = (
@@ -126,8 +114,9 @@ class PostAdmin(MarkdownxModelAdmin):
                 try:
                     current_post = Post.objects.only("author_id").get(pk=object_id)
                     current_author_id = getattr(current_post, "author_id", None)
-                    allowed_author_ids.add(current_author_id)
-                except (Post.DoesNotExist, ValueError, TypeError):
+                    if current_author_id is not None:
+                        allowed_author_ids.add(current_author_id)
+                except Post.DoesNotExist, ValueError, TypeError:
                     pass
 
             kwargs["empty_label"] = "No author"
@@ -138,10 +127,7 @@ class PostAdmin(MarkdownxModelAdmin):
         return super().formfield_for_foreignkey(db_field, request, **kwargs)
 
     def save_model(self, request, obj, form, change):  # type: ignore[no-untyped-def]
-        """Save the model and set author if creating new post"""
-        if not change:  # Creating new post
-            if not getattr(obj, "author_id", None):
-                obj.author = request.user
+        """Save the model with explicit author selection from admin form."""
         super().save_model(request, obj, form, change)
 
     def get_form(self, request, obj=None, change=False, **kwargs):  # type: ignore[no-untyped-def]
@@ -149,10 +135,4 @@ class PostAdmin(MarkdownxModelAdmin):
 
         if "author" in form_class.base_fields:
             form_class.base_fields["author"].required = False
-
-        class RequestAwareForm(form_class):  # type: ignore[misc, valid-type]
-            def __init__(self, *args, **inner_kwargs):  # type: ignore[no-untyped-def]
-                inner_kwargs["request"] = request
-                super().__init__(*args, **inner_kwargs)
-
-        return RequestAwareForm  # type: ignore[return-value]
+        return form_class

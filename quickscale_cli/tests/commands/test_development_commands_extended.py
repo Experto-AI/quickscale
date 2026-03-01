@@ -164,14 +164,14 @@ class TestSuperuserExistsInBackend:
 
     @patch("subprocess.run")
     def test_superuser_exists_handles_command_error(self, mock_run):
-        """Return True (skip flow) when command returns 1 with stderr"""
+        """Return None when command cannot verify superuser status"""
         mock_run.return_value = Mock(
             returncode=1,
             stdout="",
             stderr="django.db.utils.OperationalError",
         )
 
-        assert _superuser_exists_in_backend("myproject-backend-1") is True
+        assert _superuser_exists_in_backend("myproject-backend-1") is None
 
 
 # ============================================================================

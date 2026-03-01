@@ -28,3 +28,18 @@ class TestLatestPostsFeed:
         assert response.status_code == 200
         assert "Published Post" in str(response.content)
         assert "Draft Post" not in str(response.content)
+
+    def test_feed_handles_published_post_without_author(self, client):
+        """Test feed renders when a published post has no author"""
+        Post.objects.create(
+            title="Authorless Post",
+            author=None,
+            content="Content",
+            status="published",
+        )
+
+        response = client.get(reverse("quickscale_blog:feed"))
+
+        assert response.status_code == 200
+        assert "Authorless Post" in response.content.decode()
+        assert "Unknown author" not in response.content.decode()

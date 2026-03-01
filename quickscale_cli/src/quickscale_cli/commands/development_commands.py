@@ -153,8 +153,14 @@ def _run_migrations_after_up() -> None:
     click.secho("✅ Database migrations applied", fg="green")
 
 
-def _superuser_exists_in_backend(container_name: str) -> bool:
-    """Check whether a Django superuser already exists"""
+def _superuser_exists_in_backend(container_name: str) -> bool | None:
+    """Check whether a Django superuser already exists
+
+    Returns:
+        True when at least one superuser exists
+        False when no superuser exists
+        None when status cannot be verified reliably
+    """
     check_cmd = [
         "docker",
         "exec",
@@ -178,13 +184,7 @@ def _superuser_exists_in_backend(container_name: str) -> bool:
     if result.returncode == 1 and not stdout_output and not stderr_output:
         return False
 
-    click.secho(
-        "⚠️  Could not verify superuser status. Skipping auto-createsuperuser.",
-        fg="yellow",
-    )
-    if stderr_output:
-        click.echo(f"   {stderr_output}", err=True)
-    return True
+    return None
 
 
 def _handle_superuser_after_up(config: QuickScaleConfig | None) -> None:
@@ -196,12 +196,20 @@ def _handle_superuser_after_up(config: QuickScaleConfig | None) -> None:
         return
 
     container_name = get_backend_container_name()
+    superuser_exists = _superuser_exists_in_backend(container_name)
+    interactive_session = is_interactive()
 
-    if _superuser_exists_in_backend(container_name):
+    if superuser_exists is True:
         click.echo("ℹ️  Superuser already exists. Skipping createsuperuser step.")
         return
 
-    if not is_interactive():
+    if superuser_exists is None:
+        click.secho("⚠️  Could not verify superuser status.", fg="yellow")
+        if not interactive_session:
+            click.echo("   Run: quickscale manage createsuperuser")
+            return
+        click.echo("   Proceeding with interactive superuser creation.")
+    elif not interactive_session:
         click.secho(
             "⚠️  Superuser creation is enabled but requires interactive input.",
             fg="yellow",

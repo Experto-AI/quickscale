@@ -270,6 +270,12 @@ class TestStartDocker:
         """Test Docker start without verbose"""
         mock_run.return_value = (True, "")
         assert _start_docker(Path("/tmp/proj"), build=True, verbose=False) is True
+        mock_run.assert_called_once_with(
+            ["quickscale", "up", "--build"],
+            Path("/tmp/proj"),
+            "Starting Docker services",
+            capture=False,
+        )
 
     @patch("quickscale_cli.commands.apply_command.subprocess.run")
     def test_start_docker_verbose_success(self, mock_run):

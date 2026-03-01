@@ -281,6 +281,7 @@ def _start_docker(
             cmd,
             project_path,
             "Starting Docker services",
+            capture=False,
         )
         return success
 
