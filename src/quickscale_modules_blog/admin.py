@@ -20,6 +20,17 @@ class PostAdminForm(forms.ModelForm):
         if "author" in self.fields:
             self.fields["author"].required = False
 
+    def clean_author(self):  # type: ignore[no-untyped-def]
+        author = self.cleaned_data.get("author")
+        if (
+            author is None
+            and self.instance
+            and self.instance.pk
+            and self.instance.author_id
+        ):
+            return self.instance.author
+        return author
+
 
 @admin.register(Category)
 class CategoryAdmin(admin.ModelAdmin):
@@ -96,26 +107,46 @@ class PostAdmin(MarkdownxModelAdmin):
         ),
     ]
 
-    def _get_author_queryset(self):
-        """Return the full set of users that can be assigned as authors."""
-        user_model = get_user_model()
-        return user_model._default_manager.order_by(user_model.USERNAME_FIELD)
-
     def formfield_for_foreignkey(self, db_field, request, **kwargs):  # type: ignore[no-untyped-def]
-        """Show author as an optional dropdown of available users."""
+        """Show author as dropdown with blank default and current user option."""
         if db_field.name == "author":
-            kwargs["required"] = False
+            user_model = get_user_model()
+            allowed_author_ids = {request.user.pk}
+
+            object_id = (
+                request.resolver_match.kwargs.get("object_id")
+                if request.resolver_match
+                else None
+            )
+            if object_id:
+                try:
+                    current_author_id = Post.objects.values_list(
+                        "author_id", flat=True
+                    ).get(pk=object_id)
+                    allowed_author_ids.add(current_author_id)
+                except Post.DoesNotExist:
+                    pass
+                except ValueError:
+                    pass
+                except TypeError:
+                    pass
+
             kwargs["empty_label"] = "No author"
-            kwargs["queryset"] = self._get_author_queryset()
+
+            kwargs["queryset"] = user_model.objects.filter(
+                pk__in=allowed_author_ids
+            ).order_by("username")
         return super().formfield_for_foreignkey(db_field, request, **kwargs)
 
     def save_model(self, request, obj, form, change):  # type: ignore[no-untyped-def]
-        """Save the model with explicit author selection from admin form."""
+        """Save the model and set author if creating new post."""
+        if not change:  # Creating new post
+            if not obj.author_id:
+                obj.author = request.user
         super().save_model(request, obj, form, change)
 
     def get_form(self, request, obj=None, change=False, **kwargs):  # type: ignore[no-untyped-def]
         form_class = super().get_form(request, obj, change, **kwargs)
-
         if "author" in form_class.base_fields:
             form_class.base_fields["author"].required = False
         return form_class

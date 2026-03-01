@@ -18,8 +18,8 @@ User = get_user_model()
 class TestPostAdmin:
     """Tests for PostAdmin save_model behavior"""
 
-    def test_save_model_keeps_blank_author_on_create(self):
-        """Test that save_model keeps blank author as None for new posts"""
+    def test_save_model_sets_request_user_when_author_blank_on_create(self):
+        """Test that save_model sets request user when author is blank on create"""
         site = AdminSite()
         admin = PostAdmin(Post, site)
         factory = RequestFactory()
@@ -40,7 +40,7 @@ class TestPostAdmin:
         admin.save_model(request, post, form=None, change=False)
 
         assert post.pk is not None
-        assert post.author is None
+        assert post.author == request.user
 
     def test_save_model_preserves_author_on_edit(self):
         """Test that save_model preserves existing author on edit"""
@@ -105,8 +105,8 @@ class TestPostAdmin:
 
         assert post.author == explicit_author
 
-    def test_save_model_blank_author_remains_none(self):
-        """Test that blank author selection remains None on create"""
+    def test_save_model_blank_author_defaults_to_request_user(self):
+        """Test that blank author selection defaults to request user on create"""
         site = AdminSite()
         admin = PostAdmin(Post, site)
         factory = RequestFactory()
@@ -129,10 +129,10 @@ class TestPostAdmin:
 
         admin.save_model(request, post, form=explicit_none_form, change=False)
 
-        assert post.author is None
+        assert post.author == request_user
 
-    def test_formfield_for_foreignkey_create_includes_all_users_and_blank(self):
-        """Test author dropdown includes all users and a blank option on create"""
+    def test_formfield_for_foreignkey_create_includes_request_user_and_blank(self):
+        """Test author dropdown includes request user and a blank option on create"""
         site = AdminSite()
         admin = PostAdmin(Post, site)
         factory = RequestFactory()
@@ -142,7 +142,7 @@ class TestPostAdmin:
             email="dropdown@example.com",
             password="pass123",
         )
-        another_user = User.objects.create_user(
+        User.objects.create_user(
             username="another_dropdown_user",
             email="another_dropdown@example.com",
             password="pass123",
@@ -154,7 +154,6 @@ class TestPostAdmin:
 
         assert form_field.empty_label == "No author"
         assert list(form_field.queryset.values_list("pk", flat=True)) == [
-            another_user.pk,
             request.user.pk,
         ]
 
@@ -212,16 +211,11 @@ class TestPostAdmin:
         }
 
     @override_settings(ALLOWED_HOSTS=["testserver"])
-    def test_admin_add_view_renders_author_dropdown_with_all_users(self, client):
-        """Test the real admin add view exposes all users as author choices."""
+    def test_admin_add_view_renders_author_dropdown_with_request_user(self, client):
+        """Test the real admin add view exposes request user as author choice."""
         admin_user = User.objects.create_superuser(
             username="admin_dropdown_user",
             email="admin_dropdown@example.com",
-            password="pass123",
-        )
-        selectable_author = User.objects.create_user(
-            username="selectable_author",
-            email="selectable_author@example.com",
             password="pass123",
         )
 
@@ -236,12 +230,11 @@ class TestPostAdmin:
         assert author_field.empty_label == "No author"
         assert list(author_field.queryset.values_list("pk", flat=True)) == [
             admin_user.pk,
-            selectable_author.pk,
         ]
 
     @override_settings(ALLOWED_HOSTS=["testserver"])
-    def test_admin_add_view_accepts_selecting_another_user_as_author(self, client):
-        """Test posting the admin add form accepts a user other than the request user."""
+    def test_admin_add_view_rejects_selecting_non_allowed_user_as_author(self, client):
+        """Test posting the admin add form rejects selecting non-allowed user author."""
         admin_user = User.objects.create_superuser(
             username="posting_admin_user",
             email="posting_admin@example.com",
@@ -273,9 +266,41 @@ class TestPostAdmin:
             },
         )
 
+        assert response.status_code == 200
+        assert "Select a valid choice" in response.content.decode()
+
+    @override_settings(ALLOWED_HOSTS=["testserver"])
+    def test_admin_add_view_blank_author_defaults_to_request_user(self, client):
+        """Test posting admin add form with blank author defaults to request user."""
+        admin_user = User.objects.create_superuser(
+            username="posting_admin_blank_user",
+            email="posting_admin_blank@example.com",
+            password="pass123",
+        )
+
+        client.force_login(admin_user)
+        response = client.post(
+            "/admin/quickscale_modules_blog/post/add/",
+            data={
+                "title": "Admin Blank Author Post",
+                "slug": "",
+                "author": "",
+                "content": "Content",
+                "excerpt": "",
+                "featured_image": "",
+                "featured_image_alt": "",
+                "status": "draft",
+                "category": "",
+                "tags": [],
+                "published_date_0": "",
+                "published_date_1": "",
+                "_save": "Save",
+            },
+        )
+
         assert response.status_code == 302
-        post = Post.objects.get(title="Admin Selected Author Post")
-        assert post.author == selectable_author
+        post = Post.objects.get(title="Admin Blank Author Post")
+        assert post.author == admin_user
 
     def test_get_form_submission_blank_author_is_valid_on_create(self):
         """Test full admin form submission accepts blank author on create"""
@@ -312,8 +337,8 @@ class TestPostAdmin:
         assert form.is_valid(), form.errors.as_text()
         assert form.cleaned_data["author"] is None
 
-    def test_get_form_submission_blank_author_is_valid_on_edit(self):
-        """Test full admin form submission allows clearing author on edit"""
+    def test_get_form_submission_blank_author_preserves_existing_author_on_edit(self):
+        """Test full admin form submission keeps existing author on edit"""
         site = AdminSite()
         admin = PostAdmin(Post, site)
         factory = RequestFactory()
@@ -359,4 +384,4 @@ class TestPostAdmin:
         )
 
         assert form.is_valid(), form.errors.as_text()
-        assert form.cleaned_data["author"] is None
+        assert form.cleaned_data["author"] == existing_author
