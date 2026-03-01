@@ -13,6 +13,8 @@
 #   make test-unit -- -m      - Run unit tests only for quickscale_modules/*
 #   make check -- --core      - Run checks only for quickscale_core
 #   make MODULE=blog test -- --modules - Run tests only for quickscale_modules/blog
+#   make test-unit SECTION=modules - Run unit tests only for quickscale_modules/*
+#   make check SECTIONS="core modules" - Run checks for multiple sections without `--`
 #   make test-cov             - Run tests with coverage
 #   make test-e2e             - Run E2E tests (needs Docker + Playwright)
 #   make test-agent           - Run agentic flow adapter tests
@@ -65,8 +67,10 @@ define map_section
 $(if $(filter --quickscale -q,$(1)),quickscale,$(if $(filter --core -c,$(1)),core,$(if $(filter --cli -l,$(1)),cli,$(if $(filter --module --modules -m,$(1)),modules,))))
 endef
 
+RAW_SECTION_VARS := $(strip $(SECTIONS) $(SECTION))
+SECTION_VARS := $(foreach section,$(RAW_SECTION_VARS),$(if $(filter module,$(section)),modules,$(section)))
 SELECTED_SECTIONS := $(strip $(foreach arg,$(SECTION_FLAG_ARGS),$(call map_section,$(arg))))
-ACTIVE_SECTIONS := $(if $(SELECTED_SECTIONS),$(SELECTED_SECTIONS),quickscale core cli modules)
+ACTIVE_SECTIONS := $(if $(SECTION_VARS),$(SECTION_VARS),$(if $(SELECTED_SECTIONS),$(SELECTED_SECTIONS),quickscale core cli modules))
 MODULE_DIRS := $(if $(MODULE),quickscale_modules/$(MODULE),$(wildcard quickscale_modules/*))
 
 # Source directories for linting and type checking
@@ -88,6 +92,7 @@ help:
 	@echo "  make test-unit            - Run unit tests only (no integration)"
 	@echo "  make test -- --modules    - Run tests only for quickscale_modules/*"
 	@echo "  make test-unit -- --core  - Run unit tests only for quickscale_core"
+	@echo "  make test-unit SECTION=modules - Run unit tests only for quickscale_modules/*"
 	@echo "  make test-cov             - Run tests with coverage report"
 	@echo "  make test-e2e             - Run E2E tests (needs Docker + Playwright)"
 	@echo "  make test-agent           - Run agentic flow adapter tests"
@@ -105,8 +110,9 @@ help:
 	@echo "  make ci-e2e               - Run CI checks including E2E tests"
 	@echo ""
 	@echo "Section Flags:"
-	@echo "  Pass flags after `--`: --quickscale/-q, --core/-c, --cli/-l, --modules/-m"
+	@echo "  Pass flags after \`--\`: --quickscale/-q, --core/-c, --cli/-l, --modules/-m"
 	@echo "  Examples: make lint -- -m | make typecheck -- --core | make check -- --cli --modules"
+	@echo "  Variable alternative: SECTION=modules or SECTIONS=\"core modules\""
 	@echo "  Optional: MODULE=blog limits the modules scope to one module"
 	@echo "  Example: make MODULE=blog test-unit -- --modules"
 	@echo ""
