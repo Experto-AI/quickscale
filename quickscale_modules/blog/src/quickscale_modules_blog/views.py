@@ -1,8 +1,142 @@
-"""Views for QuickScale blog module"""
+"""Views for QuickScale blog module."""
 
+import json
+from typing import Any, Mapping
+
+from django.db import IntegrityError
+from django.http import HttpRequest, JsonResponse
+from django.utils.text import slugify
 from django.views.generic import DetailView, ListView
+from markdownx.utils import markdownify
 
 from .models import Category, Post, Tag
+
+
+class BlogPublishValidationError(Exception):
+    """Validation error for blog publish API payload"""
+
+    def __init__(self, errors: dict[str, str]) -> None:
+        super().__init__("Invalid payload")
+        self.errors = errors
+
+
+def create_published_post_from_payload(payload: Mapping[str, Any], author: Any) -> Post:
+    """Create and return a published blog post from validated API payload"""
+    errors: dict[str, str] = {}
+
+    title = payload.get("title")
+    if not isinstance(title, str) or not title.strip():
+        errors["title"] = "This field is required"
+    elif not slugify(title.strip()):
+        errors["title"] = "Must include at least one letter or number"
+
+    content = payload.get("content")
+    if not isinstance(content, str) or not content.strip():
+        errors["content"] = "This field is required"
+
+    excerpt = payload.get("excerpt")
+    if excerpt is not None and not isinstance(excerpt, str):
+        errors["excerpt"] = "Must be a string"
+
+    category = None
+    category_slug = payload.get("category_slug")
+    if category_slug is not None:
+        if not isinstance(category_slug, str) or not category_slug.strip():
+            errors["category_slug"] = "Must be a non-empty string"
+        else:
+            category = Category.objects.filter(slug=category_slug.strip()).first()
+            if category is None:
+                errors["category_slug"] = "Category not found"
+
+    tag_names: list[str] = []
+    tags = payload.get("tags")
+    if tags is not None:
+        if not isinstance(tags, list):
+            errors["tags"] = "Must be a list of strings"
+        else:
+            for tag in tags:
+                if not isinstance(tag, str) or not tag.strip():
+                    errors["tags"] = "Must be a list of non-empty strings"
+                    break
+                if not slugify(tag.strip()):
+                    errors["tags"] = (
+                        "Each tag must include at least one letter or number"
+                    )
+                    break
+                tag_names.append(tag.strip())
+
+    if errors:
+        raise BlogPublishValidationError(errors)
+
+    title_text = str(title).strip()
+    content_text = str(content).strip()
+
+    post = Post.objects.create(
+        title=title_text,
+        content=content_text,
+        excerpt=excerpt.strip() if isinstance(excerpt, str) else "",
+        status="published",
+        author=author,
+        category=category,
+    )
+
+    if tag_names:
+        tag_objects: list[Tag] = []
+        for tag_name in tag_names:
+            tag_slug = slugify(tag_name)
+            tag_obj, _ = Tag.objects.get_or_create(
+                slug=tag_slug,
+                defaults={"name": tag_name},
+            )
+            tag_objects.append(tag_obj)
+        post.tags.add(*tag_objects)
+
+    return post
+
+
+def publish_post_api(request: HttpRequest) -> JsonResponse:
+    """Create and publish a blog post from JSON payload for authenticated staff users"""
+    if request.method != "POST":
+        return JsonResponse(
+            {"error": "Method not allowed", "allowed_methods": ["POST"]},
+            status=405,
+        )
+
+    if not request.user.is_authenticated:
+        return JsonResponse({"error": "Authentication required"}, status=401)
+
+    if not getattr(request.user, "is_staff", False):
+        return JsonResponse({"error": "Staff access required"}, status=403)
+
+    try:
+        payload = json.loads(request.body.decode("utf-8") or "{}")
+    except UnicodeDecodeError:
+        return JsonResponse({"error": "Invalid JSON payload"}, status=400)
+    except json.JSONDecodeError:
+        return JsonResponse({"error": "Invalid JSON payload"}, status=400)
+
+    if not isinstance(payload, dict):
+        return JsonResponse({"error": "JSON object payload expected"}, status=400)
+
+    try:
+        post = create_published_post_from_payload(payload, request.user)
+    except BlogPublishValidationError as exc:
+        return JsonResponse({"errors": exc.errors}, status=400)
+    except IntegrityError:
+        return JsonResponse(
+            {"error": "Post already exists for generated slug"},
+            status=409,
+        )
+
+    return JsonResponse(
+        {
+            "id": post.pk,
+            "slug": post.slug,
+            "url": post.get_absolute_url(),
+            "status": post.status,
+        },
+        status=201,
+    )
 
 
 class PostListView(ListView):
@@ -36,6 +170,12 @@ class PostDetailView(DetailView):
             .select_related("author", "category")
             .prefetch_related("tags")
         )
+
+    def get_context_data(self, **kwargs):  # type: ignore[no-untyped-def]
+        """Add rendered markdown content to context"""
+        context = super().get_context_data(**kwargs)
+        context["rendered_content"] = markdownify(self.object.content)
+        return context
 
 
 class CategoryListView(ListView):

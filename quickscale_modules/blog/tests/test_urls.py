@@ -16,6 +16,11 @@ class TestBlogUrls:
         url = reverse("quickscale_blog:post_detail", args=["test-slug"])
         assert url == "/blog/post/test-slug/"
 
+    def test_publish_api_url(self):
+        """Test publish API URL resolves correctly"""
+        url = reverse("quickscale_blog:api_publish_post")
+        assert url == "/blog/api/publish/"
+
     def test_category_list_url(self):
         """Test category list URL resolves correctly"""
         url = reverse("quickscale_blog:category_list", args=["tech"])

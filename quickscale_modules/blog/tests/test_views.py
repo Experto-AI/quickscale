@@ -58,6 +58,22 @@ class TestPostDetailView:
         response = client.get(reverse("quickscale_blog:post_detail", args=[post.slug]))
         assert response.status_code == 404
 
+    def test_post_detail_styling_hooks_present_when_rendered(self, client, author_user):
+        """Test post detail includes markdown wrapper and module stylesheet"""
+        post = Post.objects.create(
+            title="Styled Post",
+            author=author_user,
+            content="# Heading\n\nStyled content",
+            status="published",
+        )
+
+        response = client.get(reverse("quickscale_blog:post_detail", args=[post.slug]))
+
+        assert response.status_code == 200
+        html = response.content.decode()
+        assert 'class="blog-markdown-content"' in html
+        assert "quickscale_modules_blog/blog.css" in html
+
 
 @pytest.mark.django_db
 class TestCategoryListView:
