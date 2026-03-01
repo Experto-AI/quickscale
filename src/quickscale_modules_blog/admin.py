@@ -96,34 +96,17 @@ class PostAdmin(MarkdownxModelAdmin):
         ),
     ]
 
+    def _get_author_queryset(self):
+        """Return the full set of users that can be assigned as authors."""
+        user_model = get_user_model()
+        return user_model._default_manager.order_by(user_model.USERNAME_FIELD)
+
     def formfield_for_foreignkey(self, db_field, request, **kwargs):  # type: ignore[no-untyped-def]
-        """Show author as dropdown with blank default and current user option."""
+        """Show author as an optional dropdown of available users."""
         if db_field.name == "author":
-            user_model = get_user_model()
-            allowed_author_ids: set[object] = set()
-            if request.user.is_authenticated and request.user.pk is not None:
-                allowed_author_ids.add(request.user.pk)
             kwargs["required"] = False
-
-            object_id = (
-                request.resolver_match.kwargs.get("object_id")
-                if request.resolver_match
-                else None
-            )
-            if object_id:
-                try:
-                    current_post = Post.objects.only("author_id").get(pk=object_id)
-                    current_author_id = getattr(current_post, "author_id", None)
-                    if current_author_id is not None:
-                        allowed_author_ids.add(current_author_id)
-                except Post.DoesNotExist, ValueError, TypeError:
-                    pass
-
             kwargs["empty_label"] = "No author"
-
-            kwargs["queryset"] = user_model.objects.filter(
-                pk__in=list(allowed_author_ids)
-            ).order_by("username")
+            kwargs["queryset"] = self._get_author_queryset()
         return super().formfield_for_foreignkey(db_field, request, **kwargs)
 
     def save_model(self, request, obj, form, change):  # type: ignore[no-untyped-def]

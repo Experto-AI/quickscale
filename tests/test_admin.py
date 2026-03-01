@@ -6,6 +6,7 @@ import pytest
 from django.contrib.admin.sites import AdminSite
 from django.contrib.auth import get_user_model
 from django.test import RequestFactory
+from django.test.utils import override_settings
 
 from quickscale_modules_blog.admin import PostAdmin
 from quickscale_modules_blog.models import Post
@@ -130,8 +131,8 @@ class TestPostAdmin:
 
         assert post.author is None
 
-    def test_formfield_for_foreignkey_create_includes_current_user_and_blank(self):
-        """Test author dropdown includes no-author and current user options on create"""
+    def test_formfield_for_foreignkey_create_includes_all_users_and_blank(self):
+        """Test author dropdown includes all users and a blank option on create"""
         site = AdminSite()
         admin = PostAdmin(Post, site)
         factory = RequestFactory()
@@ -141,6 +142,11 @@ class TestPostAdmin:
             email="dropdown@example.com",
             password="pass123",
         )
+        another_user = User.objects.create_user(
+            username="another_dropdown_user",
+            email="another_dropdown@example.com",
+            password="pass123",
+        )
 
         form_field = admin.formfield_for_foreignkey(
             Post._meta.get_field("author"), request
@@ -148,7 +154,8 @@ class TestPostAdmin:
 
         assert form_field.empty_label == "No author"
         assert list(form_field.queryset.values_list("pk", flat=True)) == [
-            request.user.pk
+            another_user.pk,
+            request.user.pk,
         ]
 
     def test_formfield_for_foreignkey_create_is_not_required(self):
@@ -169,8 +176,8 @@ class TestPostAdmin:
 
         assert form_field.required is False
 
-    def test_formfield_for_foreignkey_edit_includes_existing_author(self):
-        """Test author dropdown keeps existing author option on edit"""
+    def test_formfield_for_foreignkey_edit_includes_all_users(self):
+        """Test author dropdown keeps all user options on edit"""
         site = AdminSite()
         admin = PostAdmin(Post, site)
         factory = RequestFactory()
@@ -203,6 +210,72 @@ class TestPostAdmin:
             editor.pk,
             existing_author.pk,
         }
+
+    @override_settings(ALLOWED_HOSTS=["testserver"])
+    def test_admin_add_view_renders_author_dropdown_with_all_users(self, client):
+        """Test the real admin add view exposes all users as author choices."""
+        admin_user = User.objects.create_superuser(
+            username="admin_dropdown_user",
+            email="admin_dropdown@example.com",
+            password="pass123",
+        )
+        selectable_author = User.objects.create_user(
+            username="selectable_author",
+            email="selectable_author@example.com",
+            password="pass123",
+        )
+
+        client.force_login(admin_user)
+        response = client.get("/admin/quickscale_modules_blog/post/add/")
+
+        assert response.status_code == 200
+        assert '<select name="author"' in response.content.decode()
+
+        author_field = response.context["adminform"].form.fields["author"]
+        assert author_field.required is False
+        assert author_field.empty_label == "No author"
+        assert list(author_field.queryset.values_list("pk", flat=True)) == [
+            admin_user.pk,
+            selectable_author.pk,
+        ]
+
+    @override_settings(ALLOWED_HOSTS=["testserver"])
+    def test_admin_add_view_accepts_selecting_another_user_as_author(self, client):
+        """Test posting the admin add form accepts a user other than the request user."""
+        admin_user = User.objects.create_superuser(
+            username="posting_admin_user",
+            email="posting_admin@example.com",
+            password="pass123",
+        )
+        selectable_author = User.objects.create_user(
+            username="posting_selectable_author",
+            email="posting_selectable_author@example.com",
+            password="pass123",
+        )
+
+        client.force_login(admin_user)
+        response = client.post(
+            "/admin/quickscale_modules_blog/post/add/",
+            data={
+                "title": "Admin Selected Author Post",
+                "slug": "",
+                "author": str(selectable_author.pk),
+                "content": "Content",
+                "excerpt": "",
+                "featured_image": "",
+                "featured_image_alt": "",
+                "status": "draft",
+                "category": "",
+                "tags": [],
+                "published_date_0": "",
+                "published_date_1": "",
+                "_save": "Save",
+            },
+        )
+
+        assert response.status_code == 302
+        post = Post.objects.get(title="Admin Selected Author Post")
+        assert post.author == selectable_author
 
     def test_get_form_submission_blank_author_is_valid_on_create(self):
         """Test full admin form submission accepts blank author on create"""
