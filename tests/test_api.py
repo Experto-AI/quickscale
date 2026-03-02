@@ -1,9 +1,12 @@
 """Tests for blog publish API endpoint"""
 
 import json
+from unittest.mock import MagicMock, patch
 
 import pytest
 from django.contrib.auth import get_user_model
+from django.db import IntegrityError
+from django.test import Client
 from django.urls import reverse
 
 from quickscale_modules_blog.models import Category, Post, Tag
@@ -55,6 +58,19 @@ class TestPublishPostApi:
 
         assert response.status_code == 403
         assert response.json()["error"] == "Staff access required"
+
+    def test_publish_post_api_missing_csrf_returns_403(self, staff_user):
+        """Test API enforces CSRF protection for session-authenticated requests"""
+        csrf_client = Client(enforce_csrf_checks=True)
+        csrf_client.force_login(staff_user)
+
+        response = csrf_client.post(
+            reverse("quickscale_blog:api_publish_post"),
+            data=json.dumps({"title": "Post", "content": "Content"}),
+            content_type="application/json",
+        )
+
+        assert response.status_code == 403
 
     def test_publish_post_api_invalid_json_returns_400(self, client, staff_user):
         """Test API validates JSON format"""
@@ -159,6 +175,54 @@ class TestPublishPostApi:
         assert response.status_code == 400
         assert response.json()["errors"] == {"category_slug": "Category not found"}
 
+    def test_publish_post_api_non_string_excerpt_returns_400(
+        self,
+        client,
+        staff_user,
+    ):
+        """Test API validates excerpt type"""
+        client.force_login(staff_user)
+
+        response = client.post(
+            reverse("quickscale_blog:api_publish_post"),
+            data=json.dumps(
+                {
+                    "title": "API Post",
+                    "content": "Post content",
+                    "excerpt": 123,
+                }
+            ),
+            content_type="application/json",
+        )
+
+        assert response.status_code == 400
+        assert response.json()["errors"] == {"excerpt": "Must be a string"}
+
+    def test_publish_post_api_non_string_category_slug_returns_400(
+        self,
+        client,
+        staff_user,
+    ):
+        """Test API validates category_slug type"""
+        client.force_login(staff_user)
+
+        response = client.post(
+            reverse("quickscale_blog:api_publish_post"),
+            data=json.dumps(
+                {
+                    "title": "API Post",
+                    "content": "Post content",
+                    "category_slug": 1,
+                }
+            ),
+            content_type="application/json",
+        )
+
+        assert response.status_code == 400
+        assert response.json()["errors"] == {
+            "category_slug": "Must be a non-empty string"
+        }
+
     def test_publish_post_api_valid_payload_creates_published_post(
         self,
         client,
@@ -244,6 +308,76 @@ class TestPublishPostApi:
         assert response.json()["errors"] == {
             "tags": "Each tag must include at least one letter or number"
         }
+
+    def test_publish_post_api_non_string_tag_value_returns_400(
+        self, client, staff_user
+    ):
+        """Test API validates each tag value type"""
+        client.force_login(staff_user)
+
+        response = client.post(
+            reverse("quickscale_blog:api_publish_post"),
+            data=json.dumps({"title": "API Post", "content": "Body", "tags": [1]}),
+            content_type="application/json",
+        )
+
+        assert response.status_code == 400
+        assert response.json()["errors"] == {
+            "tags": "Must be a list of non-empty strings"
+        }
+
+    def test_publish_post_api_unexpected_integrity_error_returns_500(
+        self,
+        client,
+        staff_user,
+    ):
+        """Test API returns server error for non-conflict integrity failures"""
+        client.force_login(staff_user)
+
+        with patch(
+            "quickscale_modules_blog.views.create_published_post_from_payload",
+            side_effect=IntegrityError("other integrity error"),
+        ):
+            response = client.post(
+                reverse("quickscale_blog:api_publish_post"),
+                data=json.dumps({"title": "API Post", "content": "Body"}),
+                content_type="application/json",
+            )
+
+        assert response.status_code == 500
+        assert response.json()["error"] == "Unable to publish post"
+
+    def test_publish_post_api_conflict_detected_after_race_returns_409(
+        self,
+        client,
+        staff_user,
+    ):
+        """Test API maps race-condition slug conflicts to conflict response"""
+        client.force_login(staff_user)
+
+        initial_slug_lookup = MagicMock()
+        initial_slug_lookup.exists.return_value = False
+        race_check_slug_lookup = MagicMock()
+        race_check_slug_lookup.exists.return_value = True
+
+        with (
+            patch(
+                "quickscale_modules_blog.views.Post.objects.filter",
+                side_effect=[initial_slug_lookup, race_check_slug_lookup],
+            ),
+            patch(
+                "quickscale_modules_blog.views.Post.objects.create",
+                side_effect=IntegrityError("slug conflict"),
+            ),
+        ):
+            response = client.post(
+                reverse("quickscale_blog:api_publish_post"),
+                data=json.dumps({"title": "API Post", "content": "Body"}),
+                content_type="application/json",
+            )
+
+        assert response.status_code == 409
+        assert response.json()["error"] == "Post already exists for generated slug"
 
     def test_publish_post_api_creates_missing_tags(self, client, staff_user):
         """Test API creates new tags when they do not exist"""
