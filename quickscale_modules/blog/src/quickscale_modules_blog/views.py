@@ -1,15 +1,20 @@
 """Views for QuickScale blog module."""
 
 import json
+import logging
 from typing import Any, Mapping
 
 from django.db import IntegrityError
 from django.http import HttpRequest, JsonResponse
+from django.utils.html import escape
 from django.utils.text import slugify
 from django.views.generic import DetailView, ListView
 from markdownx.utils import markdownify
 
 from .models import Category, Post, Tag
+
+
+logger = logging.getLogger(__name__)
 
 
 class BlogPublishValidationError(Exception):
@@ -18,6 +23,10 @@ class BlogPublishValidationError(Exception):
     def __init__(self, errors: dict[str, str]) -> None:
         super().__init__("Invalid payload")
         self.errors = errors
+
+
+class BlogPublishConflictError(Exception):
+    """Conflict error for blog publish API payload"""
 
 
 def create_published_post_from_payload(payload: Mapping[str, Any], author: Any) -> Post:
@@ -70,15 +79,27 @@ def create_published_post_from_payload(payload: Mapping[str, Any], author: Any) 
 
     title_text = str(title).strip()
     content_text = str(content).strip()
+    generated_slug = slugify(title_text)
 
-    post = Post.objects.create(
-        title=title_text,
-        content=content_text,
-        excerpt=excerpt.strip() if isinstance(excerpt, str) else "",
-        status="published",
-        author=author,
-        category=category,
-    )
+    if Post.objects.filter(slug=generated_slug).exists():
+        raise BlogPublishConflictError("Post already exists for generated slug")
+
+    try:
+        post = Post.objects.create(
+            title=title_text,
+            slug=generated_slug,
+            content=content_text,
+            excerpt=excerpt.strip() if isinstance(excerpt, str) else "",
+            status="published",
+            author=author,
+            category=category,
+        )
+    except IntegrityError as exc:
+        if Post.objects.filter(slug=generated_slug).exists():
+            raise BlogPublishConflictError(
+                "Post already exists for generated slug"
+            ) from exc
+        raise
 
     if tag_names:
         tag_objects: list[Tag] = []
@@ -122,10 +143,13 @@ def publish_post_api(request: HttpRequest) -> JsonResponse:
         post = create_published_post_from_payload(payload, request.user)
     except BlogPublishValidationError as exc:
         return JsonResponse({"errors": exc.errors}, status=400)
+    except BlogPublishConflictError as exc:
+        return JsonResponse({"error": str(exc)}, status=409)
     except IntegrityError:
+        logger.exception("Unexpected integrity error while publishing post")
         return JsonResponse(
-            {"error": "Post already exists for generated slug"},
-            status=409,
+            {"error": "Unable to publish post"},
+            status=500,
         )
 
     return JsonResponse(
@@ -174,7 +198,7 @@ class PostDetailView(DetailView):
     def get_context_data(self, **kwargs):  # type: ignore[no-untyped-def]
         """Add rendered markdown content to context"""
         context = super().get_context_data(**kwargs)
-        context["rendered_content"] = markdownify(self.object.content)
+        context["rendered_content"] = markdownify(escape(self.object.content))
         return context
 
 

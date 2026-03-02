@@ -74,6 +74,22 @@ class TestPostDetailView:
         assert 'class="blog-markdown-content"' in html
         assert "quickscale_modules_blog/blog.css" in html
 
+    def test_post_detail_escapes_inline_html_in_markdown(self, client, author_user):
+        """Test markdown rendering escapes raw HTML from post content"""
+        post = Post.objects.create(
+            title="Unsafe Post",
+            author=author_user,
+            content="# Heading\n\n<script>alert('xss')</script>",
+            status="published",
+        )
+
+        response = client.get(reverse("quickscale_blog:post_detail", args=[post.slug]))
+
+        assert response.status_code == 200
+        html = response.content.decode()
+        assert "<script>alert('xss')</script>" not in html
+        assert "&lt;script&gt;alert(&#x27;xss&#x27;)&lt;/script&gt;" in html
+
 
 @pytest.mark.django_db
 class TestCategoryListView:
