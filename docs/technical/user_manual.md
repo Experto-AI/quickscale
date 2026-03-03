@@ -421,6 +421,43 @@ quickscale manage createsuperuser
 - ✅ Reviewable: Preview before execution
 - ✅ Modular: Includes module embedding in one step
 
+### 4.4) Module Reconfiguration Lifecycle (Remove → Re-add)
+
+Use this workflow when you need to change immutable module options or fully refresh a module embed.
+
+**Step-by-step runbook**:
+
+```bash
+# 1) Remove module from current project
+quickscale remove <module>
+
+# 2) Re-add module through plan wizard (can update options)
+quickscale plan --add <module>
+
+# 3) Re-apply desired state (re-embeds module and reconciles state/wiring)
+quickscale apply
+```
+
+**Do you need `quickscale apply` after remove?**
+- **Yes** when you re-add a module or want QuickScale to reconcile desired/applied state and managed wiring.
+- **Recommended** even after remove-only operations to ensure no config drift remains.
+
+**Do you need `quickscale down` / `quickscale up`?**
+- **Usually no** for incremental module changes while services are already running.
+- Use `quickscale down` + `quickscale up` only if:
+  - you already stopped services,
+  - you changed Docker/runtime settings and want a clean restart,
+  - or you need to verify startup from a clean container state.
+
+**Database note**:
+- `quickscale remove` removes module code and state references, but does not automatically drop module tables.
+- If you need full data removal, run reverse migrations before/after removal as appropriate for your module.
+
+**Quick decision guide**:
+- Change mutable options only → `quickscale plan --reconfigure` + `quickscale apply`
+- Change immutable options → `quickscale remove <module>` + `quickscale plan --add <module>` + `quickscale apply`
+- Update embedded module code from upstream split branch → `quickscale update`
+
 ### Docker deployment
 
 Generated projects include Docker support for both development and production. After generating a project:
