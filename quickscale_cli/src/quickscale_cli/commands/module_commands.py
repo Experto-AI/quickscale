@@ -440,7 +440,7 @@ def _validate_update_environment() -> None:
 
 def _update_single_module(
     name: str, info: Any, default_remote: str, no_preview: bool
-) -> None:
+) -> bool:
     """Update a single module via git subtree pull."""
     click.echo(f"\n📥 Updating {name} module...")
 
@@ -455,15 +455,62 @@ def _update_single_module(
         # Update version in config
         update_module_version(name, "v0.62.0")  # Placeholder version
 
+        _commit_module_update(name, info.prefix)
+
         click.secho(f"✅ Updated {name} successfully", fg="green")
 
         if output and not no_preview:
             click.echo("\n📋 Changes summary:")
             click.echo(output[:500])  # Show first 500 chars
 
+        return True
+
     except GitError as e:
         click.secho(f"❌ Failed to update {name}: {e}", fg="red", err=True)
         click.echo(f"💡 Tip: Check for conflicts in modules/{name}/", err=True)
+        return False
+
+
+def _commit_module_update(module_name: str, module_prefix: str) -> None:
+    """Create a commit for a successfully updated module."""
+    tracked_paths = [module_prefix]
+    config_path = Path(".quickscale") / "config.yml"
+    if config_path.exists():
+        tracked_paths.append(str(config_path))
+
+    try:
+        subprocess.run(
+            ["git", "add", *tracked_paths],
+            check=True,
+            capture_output=True,
+            text=True,
+        )
+    except subprocess.CalledProcessError as e:
+        raise GitError(f"Failed to stage {module_name} update commit: {e.stderr}")
+
+    cached_diff = subprocess.run(
+        ["git", "diff", "--cached", "--quiet"],
+        capture_output=True,
+        text=True,
+    )
+
+    if cached_diff.returncode == 0:
+        click.echo(f"ℹ️  No staged changes detected for {module_name}; skipping commit")
+        return
+
+    if cached_diff.returncode != 1:
+        raise GitError("Failed to inspect staged changes before module update commit")
+
+    commit_message = f"chore(modules): update {module_name} module"
+    try:
+        subprocess.run(
+            ["git", "commit", "-m", commit_message],
+            check=True,
+            capture_output=True,
+            text=True,
+        )
+    except subprocess.CalledProcessError as e:
+        raise GitError(f"Failed to commit {module_name} update: {e.stderr}")
 
 
 @click.command()
@@ -487,6 +534,7 @@ def update(no_preview: bool) -> None:
       - Updates ONLY modules you've explicitly installed
       - Shows a diff preview before updating (unless --no-preview)
       - Updates the installed version in config after successful update
+            - Commits each successful module update before continuing
     """
     try:
         _validate_update_environment()
@@ -514,15 +562,34 @@ def update(no_preview: bool) -> None:
             click.echo("❌ Update cancelled")
             return
 
+        failed_modules: list[str] = []
+
         # Update each module
         for name, info in config.modules.items():
-            _update_single_module(name, info, config.default_remote, no_preview)
+            if not _update_single_module(name, info, config.default_remote, no_preview):
+                failed_modules.append(name)
+                break
+
+        if failed_modules:
+            click.secho(
+                "\n❌ Module update stopped due to failure",
+                fg="red",
+                bold=True,
+                err=True,
+            )
+            click.echo(
+                f"Failed module(s): {', '.join(failed_modules)}",
+                err=True,
+            )
+            raise click.Abort()
 
         click.secho("\n🎉 Module update complete!", fg="green", bold=True)
 
     except GitError as e:
         click.secho(f"❌ Git error: {e}", fg="red", err=True)
         raise click.Abort()
+    except click.Abort:
+        raise
     except Exception as e:
         click.secho(f"❌ Unexpected error: {e}", fg="red", err=True)
         raise click.Abort()

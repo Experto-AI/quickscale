@@ -94,7 +94,14 @@ class TestDevelopmentCommandsE2E:
         if result.returncode != 0:
             pytest.skip("Docker is not running")
 
-    def test_full_development_workflow(self, test_project, ensure_docker_running):
+    @pytest.fixture
+    def docker_env(self) -> dict[str, str]:
+        """Provide isolated environment for Docker e2e commands"""
+        return {"PORT": str(self._get_free_port())}
+
+    def test_full_development_workflow(
+        self, test_project, ensure_docker_running, docker_env
+    ):
         """
         Test complete development workflow end-to-end.
 
@@ -117,7 +124,7 @@ class TestDevelopmentCommandsE2E:
 
         try:
             # Step 1: Start services
-            result = runner.invoke(cli, ["up"])
+            result = runner.invoke(cli, ["up"], env=docker_env)
             assert result.exit_code == 0, f"up failed: {result.output}"
             assert "Services started successfully!" in result.output
 
@@ -125,18 +132,20 @@ class TestDevelopmentCommandsE2E:
             time.sleep(5)
 
             # Step 2: Check service status
-            result = runner.invoke(cli, ["ps"])
+            result = runner.invoke(cli, ["ps"], env=docker_env)
             assert result.exit_code == 0, f"ps failed: {result.output}"
 
             # Step 3: Wait for database to be ready and run migrations
             # The containers need time to fully initialize
             time.sleep(10)
 
-            result = runner.invoke(cli, ["manage", "migrate", "--noinput"])
+            result = runner.invoke(
+                cli, ["manage", "migrate", "--noinput"], env=docker_env
+            )
             assert result.exit_code == 0, f"manage migrate failed: {result.output}"
 
             # Step 4: Run generated project tests (verifies pytest is available)
-            result = runner.invoke(cli, ["manage", "test"])
+            result = runner.invoke(cli, ["manage", "test"], env=docker_env)
             assert result.exit_code == 0, f"manage test failed: {result.output}"
             # Verify test command ran (generated project may not have tests yet)
             assert (
@@ -146,15 +155,17 @@ class TestDevelopmentCommandsE2E:
             ), f"Test command didn't run properly: {result.output}"
 
             # Step 5: Execute shell command
-            result = runner.invoke(cli, ["shell", "-c", "echo 'E2E test'"])
+            result = runner.invoke(
+                cli, ["shell", "-c", "echo 'E2E test'"], env=docker_env
+            )
             assert result.exit_code == 0, f"shell failed: {result.output}"
 
             # Step 6: Retrieve logs
-            result = runner.invoke(cli, ["logs", "--tail", "10"])
+            result = runner.invoke(cli, ["logs", "--tail", "10"], env=docker_env)
             assert result.exit_code == 0, f"logs failed: {result.output}"
 
             # Step 7: Stop services
-            result = runner.invoke(cli, ["down"])
+            result = runner.invoke(cli, ["down"], env=docker_env)
             assert result.exit_code == 0, f"down failed: {result.output}"
             assert "Services stopped successfully!" in result.output
 
@@ -205,7 +216,7 @@ class TestDevelopmentCommandsE2E:
                 runner.invoke(cli, ["down", "--volumes"], env=env)
                 os.chdir(original_cwd)
 
-    def test_up_down_lifecycle(self, test_project, ensure_docker_running):
+    def test_up_down_lifecycle(self, test_project, ensure_docker_running, docker_env):
         """Test container lifecycle: up → down → up again."""
         runner = CliRunner()
         project_path = test_project
@@ -217,28 +228,28 @@ class TestDevelopmentCommandsE2E:
 
         try:
             # First up
-            result = runner.invoke(cli, ["up"])
+            result = runner.invoke(cli, ["up"], env=docker_env)
             assert result.exit_code == 0
             time.sleep(3)
 
             # Down
-            result = runner.invoke(cli, ["down"])
+            result = runner.invoke(cli, ["down"], env=docker_env)
             assert result.exit_code == 0
             time.sleep(2)
 
             # Second up (verify can restart)
-            result = runner.invoke(cli, ["up"])
+            result = runner.invoke(cli, ["up"], env=docker_env)
             assert result.exit_code == 0
             time.sleep(3)
 
             # Final cleanup
-            result = runner.invoke(cli, ["down"])
+            result = runner.invoke(cli, ["down"], env=docker_env)
             assert result.exit_code == 0
 
         finally:
             os.chdir(original_cwd)
 
-    def test_up_with_build_flag(self, test_project, ensure_docker_running):
+    def test_up_with_build_flag(self, test_project, ensure_docker_running, docker_env):
         """Test up command with --build flag."""
         runner = CliRunner()
         project_path = test_project
@@ -250,18 +261,18 @@ class TestDevelopmentCommandsE2E:
 
         try:
             # Up with build
-            result = runner.invoke(cli, ["up", "--build"])
+            result = runner.invoke(cli, ["up", "--build"], env=docker_env)
             assert result.exit_code == 0
             assert "Services started successfully!" in result.output
             time.sleep(3)
 
             # Cleanup
-            runner.invoke(cli, ["down"])
+            runner.invoke(cli, ["down"], env=docker_env)
 
         finally:
             os.chdir(original_cwd)
 
-    def test_down_with_volumes(self, test_project, ensure_docker_running):
+    def test_down_with_volumes(self, test_project, ensure_docker_running, docker_env):
         """Test down command with --volumes flag."""
         runner = CliRunner()
         project_path = test_project
@@ -273,18 +284,18 @@ class TestDevelopmentCommandsE2E:
 
         try:
             # Start services
-            runner.invoke(cli, ["up"])
+            runner.invoke(cli, ["up"], env=docker_env)
             time.sleep(3)
 
             # Down with volumes
-            result = runner.invoke(cli, ["down", "--volumes"])
+            result = runner.invoke(cli, ["down", "--volumes"], env=docker_env)
             assert result.exit_code == 0
             assert "Services stopped successfully!" in result.output
 
         finally:
             os.chdir(original_cwd)
 
-    def test_logs_with_options(self, test_project, ensure_docker_running):
+    def test_logs_with_options(self, test_project, ensure_docker_running, docker_env):
         """Test logs command with various options."""
         runner = CliRunner()
         project_path = test_project
@@ -296,23 +307,23 @@ class TestDevelopmentCommandsE2E:
 
         try:
             # Start services
-            runner.invoke(cli, ["up"])
+            runner.invoke(cli, ["up"], env=docker_env)
             time.sleep(3)
 
             # Test logs with tail
-            result = runner.invoke(cli, ["logs", "--tail", "5"])
+            result = runner.invoke(cli, ["logs", "--tail", "5"], env=docker_env)
             assert result.exit_code == 0
 
             # Test logs with timestamps
-            result = runner.invoke(cli, ["logs", "--timestamps"])
+            result = runner.invoke(cli, ["logs", "--timestamps"], env=docker_env)
             assert result.exit_code == 0
 
             # Test logs for specific service
-            result = runner.invoke(cli, ["logs", "backend"])
+            result = runner.invoke(cli, ["logs", "backend"], env=docker_env)
             assert result.exit_code == 0
 
             # Cleanup
-            runner.invoke(cli, ["down"])
+            runner.invoke(cli, ["down"], env=docker_env)
 
         finally:
             os.chdir(original_cwd)
@@ -363,7 +374,7 @@ class TestDevelopmentCommandsE2E:
         finally:
             os.chdir(original_cwd)
 
-    def test_manage_test_command(self, test_project, ensure_docker_running):
+    def test_manage_test_command(self, test_project, ensure_docker_running, docker_env):
         """Test that generated project tests can run (verifies pytest is installed)."""
         runner = CliRunner()
         project_path = test_project
@@ -375,7 +386,7 @@ class TestDevelopmentCommandsE2E:
 
         try:
             # Start services
-            result = runner.invoke(cli, ["up"])
+            result = runner.invoke(cli, ["up"], env=docker_env)
             assert result.exit_code == 0
             time.sleep(5)
 
@@ -383,11 +394,13 @@ class TestDevelopmentCommandsE2E:
             time.sleep(10)
 
             # Run migrations first
-            result = runner.invoke(cli, ["manage", "migrate", "--noinput"])
+            result = runner.invoke(
+                cli, ["manage", "migrate", "--noinput"], env=docker_env
+            )
             assert result.exit_code == 0
 
             # Run the generated project's tests
-            result = runner.invoke(cli, ["manage", "test"])
+            result = runner.invoke(cli, ["manage", "test"], env=docker_env)
             assert result.exit_code == 0, f"Tests failed: {result.output}"
             # Verify test command ran (generated project may not have tests yet)
             assert (
@@ -397,7 +410,7 @@ class TestDevelopmentCommandsE2E:
             ), f"Test command didn't run properly: {result.output}"
 
             # Cleanup
-            runner.invoke(cli, ["down"])
+            runner.invoke(cli, ["down"], env=docker_env)
 
         finally:
             os.chdir(original_cwd)

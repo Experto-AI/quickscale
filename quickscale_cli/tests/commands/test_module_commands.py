@@ -8,6 +8,7 @@ import pytest
 
 from quickscale_cli.commands.module_commands import (
     _check_auth_module_migrations,
+    _commit_module_update,
     _install_module_dependencies,
     _perform_module_embed,
     _print_installation_error,
@@ -657,17 +658,24 @@ class TestValidateUpdateEnvironment:
 class TestUpdateSingleModule:
     """Tests for _update_single_module function."""
 
+    @patch("quickscale_cli.commands.module_commands._commit_module_update")
     @patch("quickscale_cli.commands.module_commands.update_module_version")
     @patch("quickscale_cli.commands.module_commands.run_git_subtree_pull")
-    def test_successful_update(self, mock_pull, mock_update_version):
+    def test_successful_update(
+        self,
+        mock_pull,
+        mock_update_version,
+        mock_commit,
+    ):
         """Test successful module update."""
         mock_pull.return_value = "Changes applied successfully"
         module_info = Mock(prefix="modules/auth", branch="splits/auth-module")
 
-        _update_single_module(
+        result = _update_single_module(
             "auth", module_info, "https://example.com/repo.git", no_preview=False
         )
 
+        assert result is True
         mock_pull.assert_called_once_with(
             prefix="modules/auth",
             remote="https://example.com/repo.git",
@@ -675,19 +683,28 @@ class TestUpdateSingleModule:
             squash=True,
         )
         mock_update_version.assert_called_once()
+        mock_commit.assert_called_once_with("auth", "modules/auth")
 
+    @patch("quickscale_cli.commands.module_commands._commit_module_update")
     @patch("quickscale_cli.commands.module_commands.update_module_version")
     @patch("quickscale_cli.commands.module_commands.run_git_subtree_pull")
-    def test_update_with_no_preview(self, mock_pull, mock_update_version):
+    def test_update_with_no_preview(
+        self,
+        mock_pull,
+        mock_update_version,
+        mock_commit,
+    ):
         """Test update with preview disabled."""
         mock_pull.return_value = "Changes"
         module_info = Mock(prefix="modules/blog", branch="splits/blog-module")
 
-        _update_single_module(
+        result = _update_single_module(
             "blog", module_info, "https://example.com/repo.git", no_preview=True
         )
 
+        assert result is True
         mock_pull.assert_called_once()
+        mock_commit.assert_called_once_with("blog", "modules/blog")
 
     @patch("quickscale_cli.commands.module_commands.run_git_subtree_pull")
     def test_update_git_error(self, mock_pull):
@@ -698,9 +715,50 @@ class TestUpdateSingleModule:
         module_info = Mock(prefix="modules/auth", branch="splits/auth-module")
 
         # Should not raise - error is handled internally
-        _update_single_module(
+        result = _update_single_module(
             "auth", module_info, "https://example.com/repo.git", no_preview=False
         )
+        assert result is False
+
+
+class TestCommitModuleUpdate:
+    """Tests for _commit_module_update function."""
+
+    @patch("quickscale_cli.commands.module_commands.subprocess.run")
+    def test_commit_module_update_commits_changes(self, mock_run):
+        """Test commit helper stages paths and commits when changes exist."""
+        mock_run.side_effect = [
+            Mock(returncode=0),  # git add
+            Mock(returncode=1),  # git diff --cached --quiet (changes staged)
+            Mock(returncode=0),  # git commit
+        ]
+
+        _commit_module_update("auth", "modules/auth")
+
+        add_call = mock_run.call_args_list[0]
+        assert add_call.kwargs["check"] is True
+        assert add_call.args[0][:2] == ["git", "add"]
+
+        commit_call = mock_run.call_args_list[2]
+        assert commit_call.kwargs["check"] is True
+        assert commit_call.args[0] == [
+            "git",
+            "commit",
+            "-m",
+            "chore(modules): update auth module",
+        ]
+
+    @patch("quickscale_cli.commands.module_commands.subprocess.run")
+    def test_commit_module_update_skips_when_no_changes(self, mock_run):
+        """Test commit helper returns early when no staged changes exist."""
+        mock_run.side_effect = [
+            Mock(returncode=0),  # git add
+            Mock(returncode=0),  # git diff --cached --quiet (no changes)
+        ]
+
+        _commit_module_update("listings", "modules/listings")
+
+        assert len(mock_run.call_args_list) == 2
 
 
 class TestUpdateCommand:
@@ -731,6 +789,41 @@ class TestUpdateCommand:
         result = runner.invoke(update, ["--no-preview"])
 
         assert result.exit_code == 0
+
+    @patch("quickscale_cli.commands.module_commands._update_single_module")
+    @patch("quickscale_cli.commands.module_commands.load_config")
+    @patch("quickscale_cli.commands.module_commands._validate_update_environment")
+    @patch("quickscale_cli.commands.module_commands.click.confirm")
+    def test_update_stops_and_aborts_on_module_failure(
+        self, mock_confirm, mock_validate, mock_load, mock_update
+    ):
+        """Test update aborts when a module fails to update."""
+        mock_confirm.return_value = True
+        auth_info = Mock(
+            installed_version="v0.70.0",
+            prefix="modules/auth",
+            branch="splits/auth-module",
+        )
+        listings_info = Mock(
+            installed_version="v0.70.0",
+            prefix="modules/listings",
+            branch="splits/listings-module",
+        )
+        config = Mock(
+            modules={"auth": auth_info, "listings": listings_info},
+            default_remote="https://example.com/repo.git",
+        )
+        mock_load.return_value = config
+        mock_update.side_effect = [True, False]
+
+        from click.testing import CliRunner
+
+        runner = CliRunner()
+        result = runner.invoke(update, ["--no-preview"])
+
+        assert result.exit_code != 0
+        assert "Module update stopped due to failure" in result.output
+        assert "Unexpected error" not in result.output
 
     @patch("quickscale_cli.commands.module_commands.load_config")
     @patch("quickscale_cli.commands.module_commands._validate_update_environment")

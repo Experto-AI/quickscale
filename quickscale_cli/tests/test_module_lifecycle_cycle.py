@@ -1,5 +1,7 @@
 """Tests for module lifecycle cycle coverage."""
 
+import os
+import subprocess
 from pathlib import Path
 from typing import Any
 from unittest.mock import Mock, patch
@@ -165,7 +167,7 @@ def test_update_after_removal_only_targets_remaining_modules() -> None:
         ),
         patch(
             "quickscale_cli.commands.module_commands._update_single_module",
-            return_value=None,
+            return_value=True,
         ) as mock_update_single_module,
     ):
         result = runner.invoke(update, ["--no-preview"])
@@ -177,3 +179,112 @@ def test_update_after_removal_only_targets_remaining_modules() -> None:
     assert call_args[1] is module_info
     assert call_args[2] == "https://github.com/Experto-AI/quickscale.git"
     assert call_args[3] is True
+
+
+@pytest.mark.e2e
+def test_update_auto_commits_each_module_e2e(tmp_path: Path) -> None:
+    """Test update creates one git commit per successful module update"""
+    project_path = tmp_path / "update-e2e"
+    project_path.mkdir()
+
+    subprocess.run(["git", "init"], cwd=project_path, check=True)
+    subprocess.run(
+        ["git", "config", "user.name", "QuickScale Test"],
+        cwd=project_path,
+        check=True,
+    )
+    subprocess.run(
+        ["git", "config", "user.email", "test@quickscale.dev"],
+        cwd=project_path,
+        check=True,
+    )
+
+    module_names = ["auth", "listings"]
+    for module_name in module_names:
+        module_dir = project_path / "modules" / module_name
+        module_dir.mkdir(parents=True, exist_ok=True)
+        (module_dir / "README.md").write_text(f"{module_name} baseline\n")
+
+    subprocess.run(["git", "add", "."], cwd=project_path, check=True)
+    subprocess.run(
+        ["git", "commit", "-m", "chore: baseline"],
+        cwd=project_path,
+        check=True,
+    )
+
+    baseline_count = subprocess.run(
+        ["git", "rev-list", "--count", "HEAD"],
+        cwd=project_path,
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+
+    auth_info = Mock(
+        prefix="modules/auth",
+        branch="splits/auth-module",
+        installed_version="v0.1.0",
+    )
+    listings_info = Mock(
+        prefix="modules/listings",
+        branch="splits/listings-module",
+        installed_version="v0.1.0",
+    )
+    config = Mock(
+        modules={"auth": auth_info, "listings": listings_info},
+        default_remote="https://github.com/Experto-AI/quickscale.git",
+    )
+
+    def _fake_subtree_pull(prefix: str, remote: str, branch: str, squash: bool) -> str:
+        del remote, branch, squash
+        touched_file = project_path / prefix / "README.md"
+        current = touched_file.read_text()
+        touched_file.write_text(current + "updated\n")
+        return "updated"
+
+    runner = CliRunner()
+    original_cwd = Path.cwd()
+    try:
+        os.chdir(project_path)
+        with (
+            patch(
+                "quickscale_cli.commands.module_commands.load_config",
+                return_value=config,
+            ),
+            patch(
+                "quickscale_cli.commands.module_commands.run_git_subtree_pull",
+                side_effect=_fake_subtree_pull,
+            ),
+            patch(
+                "quickscale_cli.commands.module_commands.update_module_version",
+                return_value=None,
+            ),
+            patch(
+                "quickscale_cli.commands.module_commands.click.confirm",
+                return_value=True,
+            ),
+        ):
+            result = runner.invoke(update, ["--no-preview"], catch_exceptions=False)
+    finally:
+        os.chdir(original_cwd)
+
+    assert result.exit_code == 0
+
+    log_result = subprocess.run(
+        ["git", "log", "--pretty=%s", "-n", "3"],
+        cwd=project_path,
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    final_count = subprocess.run(
+        ["git", "rev-list", "--count", "HEAD"],
+        cwd=project_path,
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    commit_messages = log_result.stdout.splitlines()
+    assert "chore(modules): update auth module" in commit_messages
+    assert "chore(modules): update listings module" in commit_messages
+    assert int(final_count.stdout.strip()) == int(baseline_count.stdout.strip()) + 2
