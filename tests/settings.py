@@ -18,6 +18,7 @@ INSTALLED_APPS = [
     "django.contrib.messages",
     "django.contrib.staticfiles",
     "django_filters",
+    "markdownx",
     "quickscale_modules_listings",
     "tests",  # Required for ConcreteListing model
 ]
@@ -69,5 +70,17 @@ MEDIA_ROOT = BASE_DIR / "tests" / "media"
 # Default primary key field type
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 
+# Logging settings required when tests configure this module as default settings
+LOGGING_CONFIG = None
+LOGGING: dict[str, object] = {}
+
 # Listings module settings
 LISTINGS_PER_PAGE = 12
+
+# Markdownx settings
+MARKDOWNX_MARKDOWN_EXTENSIONS = [
+    "markdown.extensions.fenced_code",
+    "markdown.extensions.tables",
+    "markdown.extensions.toc",
+]
+MARKDOWNX_MEDIA_PATH = "listings/markdownx/"

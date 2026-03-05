@@ -175,3 +175,37 @@ class TestListingDetailView:
         response = client.get(reverse("concrete_listing_detail", args=[listing.slug]))
         assert response.status_code == 200
         assert "Contact for price" in str(response.content)
+
+    def test_listing_detail_styling_hooks_present_when_rendered(
+        self, client, listing_factory
+    ):
+        """Test listing detail includes markdown wrapper"""
+        listing = listing_factory(
+            title="Styled Listing",
+            status="published",
+            description="# Heading\n\nStyled content",
+        )
+
+        response = client.get(reverse("concrete_listing_detail", args=[listing.slug]))
+
+        assert response.status_code == 200
+        html = response.content.decode()
+        assert 'class="listing-markdown-content"' in html
+        assert "quickscale_modules_listings/listings.css" in html
+
+    def test_listing_detail_escapes_inline_html_in_markdown(
+        self, client, listing_factory
+    ):
+        """Test markdown rendering escapes raw HTML from listing description"""
+        listing = listing_factory(
+            title="Unsafe Listing",
+            status="published",
+            description="# Heading\n\n<script>alert('xss')</script>",
+        )
+
+        response = client.get(reverse("concrete_listing_detail", args=[listing.slug]))
+
+        assert response.status_code == 200
+        html = response.content.decode()
+        assert "<script>alert('xss')</script>" not in html
+        assert "&lt;script&gt;alert(&#x27;xss&#x27;)&lt;/script&gt;" in html

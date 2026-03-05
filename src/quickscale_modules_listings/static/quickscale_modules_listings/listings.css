@@ -1,0 +1,15 @@
+.listing-markdown-content {
+    line-height: 1.6;
+}
+
+.listing-markdown-content h1,
+.listing-markdown-content h2,
+.listing-markdown-content h3,
+.listing-markdown-content h4 {
+    margin-top: 1rem;
+    margin-bottom: 0.5rem;
+}
+
+.listing-markdown-content p {
+    margin-bottom: 0.75rem;
+}

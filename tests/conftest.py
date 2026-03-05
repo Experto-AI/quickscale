@@ -4,13 +4,18 @@ from decimal import Decimal
 
 import django
 import pytest
-from django.conf import settings
+from django.conf import global_settings, settings
 
 # Configure Django before importing models
 if not settings.configured:
     from tests import settings as test_settings
 
-    settings.configure(default_settings=test_settings)
+    overrides = {
+        name: getattr(test_settings, name)
+        for name in dir(test_settings)
+        if name.isupper()
+    }
+    settings.configure(default_settings=global_settings, **overrides)
     django.setup()
 
 from tests.models import ConcreteListing

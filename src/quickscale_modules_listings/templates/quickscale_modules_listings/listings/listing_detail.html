@@ -36,7 +36,9 @@
     {% if listing.description %}
     <section>
         <h2>Description</h2>
-        <p>{{ listing.description|linebreaks }}</p>
+        <div class="listing-markdown-content">
+            {{ rendered_description|safe }}
+        </div>
     </section>
     {% endif %}
 

@@ -18,6 +18,11 @@ class TestListingUrls:
         url = reverse("quickscale_listings:listing_detail", args=["test-slug"])
         assert url == "/listings/test-slug/"
 
+    def test_publish_api_url(self):
+        """Test publish API URL resolves correctly"""
+        url = reverse("quickscale_listings:api_publish_listing")
+        assert url == "/listings/api/publish/"
+
     def test_listing_list_view_name(self):
         """Test listing list URL resolves to correct view name"""
         resolver = resolve("/listings/")
