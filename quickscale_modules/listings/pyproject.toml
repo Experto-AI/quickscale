@@ -11,6 +11,7 @@ packages = [{include = "quickscale_modules_listings", from = "src"}]
 python = "^3.14"
 Django = "^6.0"
 django-filter = "^25.2"
+django-markdownx = "^4.0.9"
 Pillow = "^12.1.0"
 
 [tool.poetry.group.dev.dependencies]
@@ -33,6 +34,10 @@ target-version = "py314"  # This package requires Python 3.14+
 module = "django_filters.*"
 ignore_missing_imports = true
 
+[[tool.mypy.overrides]]
+module = "markdownx.*"
+ignore_missing_imports = true
+
 [tool.mypy]
 plugins = ["mypy_django_plugin.main"]
 
@@ -44,7 +49,7 @@ DJANGO_SETTINGS_MODULE = "tests.settings"
 pythonpath = ["."]
 python_files = ["test_*.py"]
 testpaths = ["tests"]
-addopts = "-v --cov=src/quickscale_modules_listings --cov-report=html --cov-report=term-missing --cov-fail-under=90"
+addopts = "-v --cov=quickscale_modules_listings --cov-report=html --cov-report=term-missing --cov-fail-under=90"
 
 [tool.coverage.report]
 fail_under = 90

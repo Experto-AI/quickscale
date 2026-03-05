@@ -96,8 +96,15 @@ def _blog_wiring(options: Mapping[str, Any]) -> ModuleWiringSpec:
 def _listings_wiring(options: Mapping[str, Any]) -> ModuleWiringSpec:
     listings_per_page = int(options.get("listings_per_page", 12))
     return ModuleWiringSpec(
-        apps=("django_filters", "quickscale_modules_listings"),
-        settings={"LISTINGS_PER_PAGE": listings_per_page},
+        apps=("django_filters", "markdownx", "quickscale_modules_listings"),
+        settings={
+            "LISTINGS_PER_PAGE": listings_per_page,
+            "MARKDOWNX_MARKDOWN_EXTENSIONS": [
+                "markdown.extensions.fenced_code",
+                "markdown.extensions.tables",
+                "markdown.extensions.toc",
+            ],
+        },
         url_includes=(("listings/", "quickscale_modules_listings.urls"),),
     )
 

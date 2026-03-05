@@ -550,12 +550,15 @@ def configure_listings_module(non_interactive: bool = False) -> dict[str, Any]:
     return config
 
 
-def _add_django_filter_dependency(project_path: Path, pyproject_path: Path) -> None:
-    """Add django-filter dependency to project's pyproject.toml."""
+def _add_listings_dependencies(project_path: Path, pyproject_path: Path) -> None:
+    """Add listings runtime dependencies to project's pyproject.toml."""
     with open(pyproject_path) as f:
         pyproject_content = f.read()
 
-    if "django-filter" in pyproject_content:
+    has_django_filter = "django-filter" in pyproject_content
+    has_django_markdownx = "django-markdownx" in pyproject_content
+
+    if has_django_filter and has_django_markdownx:
         return
 
     # Read django-filter version from the embedded listings module
@@ -575,16 +578,15 @@ def _add_django_filter_dependency(project_path: Path, pyproject_path: Path) -> N
         )
         raise click.Abort()
 
-    # Extract django-filter version using regex
+    # Extract listings dependency versions using regex
     try:
         with open(listings_pyproject_path) as f:
             listings_pyproject_content = f.read()
 
-        version_match = re.search(
-            r'django-filter\s*=\s*["\']([^"\']+)["\']',
-            listings_pyproject_content,
+        django_filter_match = re.search(
+            r'django-filter\s*=\s*["\']([^"\']+)["\']', listings_pyproject_content
         )
-        if not version_match:
+        if not django_filter_match:
             click.secho(
                 "❌ Error: Cannot find django-filter version in listings "
                 "module's pyproject.toml",
@@ -595,11 +597,18 @@ def _add_django_filter_dependency(project_path: Path, pyproject_path: Path) -> N
             click.echo('Expected format: django-filter = "^x.x.x"', err=True)
             click.echo("Please check the listings module's dependencies.", err=True)
             raise click.Abort()
-        django_filter_version = version_match.group(1)
+
+        django_markdownx_match = re.search(
+            r'django-markdownx\s*=\s*["\']([^"\']+)["\']',
+            listings_pyproject_content,
+        )
+        django_filter_version = django_filter_match.group(1)
+        django_markdownx_version = (
+            django_markdownx_match.group(1) if django_markdownx_match else "^4.0"
+        )
     except (FileNotFoundError, AttributeError) as e:
         click.secho(
-            f"❌ Error: Failed to parse django-filter version from listings "
-            f"module: {e}",
+            f"❌ Error: Failed to parse dependency versions from listings module: {e}",
             fg="red",
             err=True,
         )
@@ -616,7 +625,98 @@ def _add_django_filter_dependency(project_path: Path, pyproject_path: Path) -> N
     match = re.search(dependencies_pattern, pyproject_content, re.DOTALL)
     if match:
         dependencies_section = match.group(1)
-        # Add django-filter after the python version line
+        additions = ""
+        if not has_django_filter:
+            additions += f'\ndjango-filter = "{django_filter_version}"'
+        if not has_django_markdownx:
+            additions += f'\ndjango-markdownx = "{django_markdownx_version}"'
+
+        # Add dependencies after the python version line
+        updated_dependencies = re.sub(
+            r'(python = "[^"]*")',
+            rf"\1{additions}",
+            dependencies_section,
+        )
+        pyproject_content = pyproject_content.replace(
+            dependencies_section, updated_dependencies
+        )
+
+        with open(pyproject_path, "w") as f:
+            f.write(pyproject_content)
+
+        if not has_django_filter:
+            click.secho("  ✅ Added django-filter to pyproject.toml", fg="green")
+        if not has_django_markdownx:
+            click.secho("  ✅ Added django-markdownx to pyproject.toml", fg="green")
+    else:
+        click.secho(
+            "⚠️  Warning: Could not find [tool.poetry.dependencies] section in "
+            "pyproject.toml",
+            fg="yellow",
+        )
+
+
+def _add_django_filter_dependency(project_path: Path, pyproject_path: Path) -> None:
+    """Backward-compatible helper that only injects django-filter dependency."""
+    with open(pyproject_path) as f:
+        pyproject_content = f.read()
+
+    if "django-filter" in pyproject_content:
+        return
+
+    listings_pyproject_path = project_path / "modules" / "listings" / "pyproject.toml"
+    if not listings_pyproject_path.exists():
+        click.secho(
+            "❌ Error: Listings module pyproject.toml not found. "
+            "Cannot determine django-filter version requirement.",
+            fg="red",
+            err=True,
+        )
+        click.echo(f"Expected file: {listings_pyproject_path}", err=True)
+        click.echo(
+            "This indicates the listings module was not embedded correctly.",
+            err=True,
+        )
+        raise click.Abort()
+
+    try:
+        with open(listings_pyproject_path) as f:
+            listings_pyproject_content = f.read()
+
+        version_match = re.search(
+            r'django-filter\s*=\s*["\']([^"\']+)["\']', listings_pyproject_content
+        )
+        if not version_match:
+            click.secho(
+                "❌ Error: Cannot find django-filter version in listings "
+                "module's pyproject.toml",
+                fg="red",
+                err=True,
+            )
+            click.echo(f"File: {listings_pyproject_path}", err=True)
+            click.echo('Expected format: django-filter = "^x.x.x"', err=True)
+            click.echo("Please check the listings module's dependencies.", err=True)
+            raise click.Abort()
+
+        django_filter_version = version_match.group(1)
+    except (FileNotFoundError, AttributeError) as e:
+        click.secho(
+            f"❌ Error: Failed to parse django-filter version from listings module: {e}",
+            fg="red",
+            err=True,
+        )
+        click.echo(f"File: {listings_pyproject_path}", err=True)
+        click.echo(
+            "Please ensure the listings module is properly embedded and its "
+            "pyproject.toml is valid.",
+            err=True,
+        )
+        raise click.Abort()
+
+    dependencies_pattern = r"(\[tool\.poetry\.dependencies\][^\[]*)"
+    match = re.search(dependencies_pattern, pyproject_content, re.DOTALL)
+    if match:
+        dependencies_section = match.group(1)
         updated_dependencies = re.sub(
             r'(python = "[^"]*")',
             rf'\1\ndjango-filter = "{django_filter_version}"',
@@ -642,9 +742,9 @@ def apply_listings_configuration(project_path: Path, config: dict[str, Any]) -> 
     """Apply listings module configuration via managed wiring files."""
     pyproject_path = project_path / "pyproject.toml"
 
-    # Add django-filter dependency to pyproject.toml
+    # Add listings runtime dependencies to pyproject.toml
     if pyproject_path.exists():
-        _add_django_filter_dependency(project_path, pyproject_path)
+        _add_listings_dependencies(project_path, pyproject_path)
 
     _regenerate_wiring_for_module(project_path, "listings", config)
 

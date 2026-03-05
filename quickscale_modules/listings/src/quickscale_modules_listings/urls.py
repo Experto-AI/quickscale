@@ -28,5 +28,6 @@ app_name = "quickscale_listings"
 urlpatterns = [
     # These patterns use the base views - override with concrete model views in your project
     path("", views.ListingListView.as_view(), name="listing_list"),
+    path("api/publish/", views.publish_listing_api, name="api_publish_listing"),
     path("<slug:slug>/", views.ListingDetailView.as_view(), name="listing_detail"),
 ]

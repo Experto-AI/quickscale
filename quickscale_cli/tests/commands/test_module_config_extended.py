@@ -21,6 +21,8 @@ from quickscale_cli.commands.module_config import (
     configure_crm_module,
     get_default_crm_config,
 )
+from quickscale_cli.commands.module_wiring_specs import build_module_wiring_specs
+from quickscale_core.module_wiring import collect_wiring
 
 
 # ============================================================================
@@ -400,6 +402,23 @@ class TestApplyListingsConfigurationFull:
         urls = (project / "myproject" / "urls_modules.py").read_text()
         assert "quickscale_modules_listings.urls" in urls
 
+    def test_full_apply_listings_injects_django_markdownx_dependency(self, tmp_path):
+        """Listings apply injects django-markdownx dependency into project pyproject"""
+        project = _make_project(tmp_path)
+        listings_dir = project / "modules" / "listings"
+        listings_dir.mkdir(parents=True)
+        (listings_dir / "pyproject.toml").write_text(
+            "[tool.poetry.dependencies]\n"
+            'django-filter = "^23.0"\n'
+            'django-markdownx = "^4.0"\n'
+        )
+
+        apply_listings_configuration(project, {"listings_per_page": 20})
+
+        pyproject_content = (project / "pyproject.toml").read_text()
+        assert "django-filter" in pyproject_content
+        assert "django-markdownx" in pyproject_content
+
     def test_listings_all_apps_already_present(self, tmp_path):
         """All required apps already in INSTALLED_APPS"""
         project = _make_project(tmp_path)
@@ -491,6 +510,22 @@ class TestAddDjangoFilterDependencyEdgeCases:
         )
 
         _add_django_filter_dependency(tmp_path, pyproject)
+
+
+class TestModuleWiringSpecs:
+    """Regression tests for module wiring spec collisions"""
+
+    def test_blog_and_listings_markdownx_media_path_uses_blog_value(self):
+        """MARKDOWNX_MEDIA_PATH should remain stable when blog and listings are enabled"""
+        specs = build_module_wiring_specs(
+            {
+                "blog": {"posts_per_page": 10, "enable_rss": True},
+                "listings": {"listings_per_page": 12},
+            }
+        )
+        _, _, settings, _ = collect_wiring(specs)
+
+        assert settings["MARKDOWNX_MEDIA_PATH"] == "blog/markdownx/"
 
 
 # ============================================================================

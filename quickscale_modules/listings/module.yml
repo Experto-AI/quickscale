@@ -15,7 +15,9 @@ config:
 
 dependencies:
   - django-filter>=25.0
+  - django-markdownx>=4.0
 
 django_apps:
   - django_filters
+  - markdownx
   - quickscale_modules_listings
