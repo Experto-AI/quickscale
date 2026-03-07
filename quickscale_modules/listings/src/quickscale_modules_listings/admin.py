@@ -1,6 +1,12 @@
 """Admin configuration for QuickScale listings module"""
 
+from typing import Any
+
+from django import forms
 from django.contrib import admin
+from django.db.models import Model
+from django.http import HttpRequest
+from markdownx.widgets import AdminMarkdownxWidget
 
 from .models import Listing
 
@@ -50,6 +56,20 @@ class AbstractListingAdmin(admin.ModelAdmin):
     ]
 
     readonly_fields = ["created_at", "updated_at"]
+
+    def get_form(
+        self,
+        request: HttpRequest,
+        obj: Model | None = None,
+        change: bool = False,
+        **kwargs: Any,
+    ) -> type[forms.ModelForm]:
+        """Return an admin form with a Markdown editor for description"""
+        form_class = super().get_form(request, obj, change, **kwargs)
+        description_field = form_class.base_fields.get("description")
+        if description_field is not None:
+            description_field.widget = AdminMarkdownxWidget()
+        return form_class
 
 
 @admin.register(Listing)

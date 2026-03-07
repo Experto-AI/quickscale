@@ -401,6 +401,7 @@ class TestApplyListingsConfigurationFull:
 
         urls = (project / "myproject" / "urls_modules.py").read_text()
         assert "quickscale_modules_listings.urls" in urls
+        assert "markdownx.urls" in urls
 
     def test_full_apply_listings_injects_django_markdownx_dependency(self, tmp_path):
         """Listings apply injects django-markdownx dependency into project pyproject"""
@@ -462,6 +463,7 @@ class TestApplyListingsConfigurationFull:
         apply_listings_configuration(project, config)
         managed_urls = (project / "myproject" / "urls_modules.py").read_text()
         assert "quickscale_modules_listings.urls" in managed_urls
+        assert "markdownx.urls" in managed_urls
 
 
 # ============================================================================
@@ -526,6 +528,15 @@ class TestModuleWiringSpecs:
         _, _, settings, _ = collect_wiring(specs)
 
         assert settings["MARKDOWNX_MEDIA_PATH"] == "blog/markdownx/"
+
+    def test_listings_wiring_includes_markdownx_urls(self):
+        """Listings wiring should include markdownx URLs for admin uploads"""
+        specs = build_module_wiring_specs({"listings": {"listings_per_page": 12}})
+
+        assert specs["listings"].url_includes == (
+            ("listings/", "quickscale_modules_listings.urls"),
+            ("markdownx/", "markdownx.urls"),
+        )
 
 
 # ============================================================================

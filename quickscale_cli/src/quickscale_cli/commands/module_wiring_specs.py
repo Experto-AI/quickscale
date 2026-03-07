@@ -105,7 +105,10 @@ def _listings_wiring(options: Mapping[str, Any]) -> ModuleWiringSpec:
                 "markdown.extensions.toc",
             ],
         },
-        url_includes=(("listings/", "quickscale_modules_listings.urls"),),
+        url_includes=(
+            ("listings/", "quickscale_modules_listings.urls"),
+            ("markdownx/", "markdownx.urls"),
+        ),
     )
 
 

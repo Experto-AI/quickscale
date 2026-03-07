@@ -3,9 +3,15 @@
 import pytest
 from django.contrib import admin
 from django.contrib.admin.sites import AdminSite
+from django.contrib.auth import get_user_model
+from django.db import models
+from django.test import RequestFactory
+from markdownx.widgets import AdminMarkdownxWidget
 
 from quickscale_modules_listings.admin import AbstractListingAdmin
 from tests.models import ConcreteListing
+
+User = get_user_model()
 
 
 @pytest.mark.django_db
@@ -15,6 +21,11 @@ class TestAbstractListingAdmin:
     def test_admin_class_exists(self):
         """Test AbstractListingAdmin class is defined"""
         assert AbstractListingAdmin is not None
+
+    def test_description_field_remains_text_field(self):
+        """Test description model field remains a standard text field"""
+        description_field = ConcreteListing._meta.get_field("description")
+        assert isinstance(description_field, models.TextField)
 
     def test_list_display_fields(self):
         """Test admin list_display contains expected fields"""
@@ -66,6 +77,38 @@ class TestAbstractListingAdmin:
         """Test admin readonly_fields is set correctly"""
         expected = ["created_at", "updated_at"]
         assert AbstractListingAdmin.readonly_fields == expected
+
+    def test_get_form_uses_markdownx_widget_for_description(self):
+        """Test description uses the markdown admin widget"""
+        test_site = AdminSite()
+        admin_instance = AbstractListingAdmin(ConcreteListing, test_site)
+        request = RequestFactory().get("/admin/")
+        request.user = User.objects.create_superuser(
+            username="listings-admin",
+            email="listings-admin@example.com",
+            password="pass123",
+        )
+
+        form_class = admin_instance.get_form(request)
+        form = form_class()
+
+        assert isinstance(form.fields["description"].widget, AdminMarkdownxWidget)
+
+    def test_get_form_keeps_non_description_widgets_unchanged(self):
+        """Test markdown widget is only applied to description"""
+        test_site = AdminSite()
+        admin_instance = AbstractListingAdmin(ConcreteListing, test_site)
+        request = RequestFactory().get("/admin/")
+        request.user = User.objects.create_superuser(
+            username="listings-admin-widgets",
+            email="listings-admin-widgets@example.com",
+            password="pass123",
+        )
+
+        form_class = admin_instance.get_form(request)
+        form = form_class()
+
+        assert not isinstance(form.fields["title"].widget, AdminMarkdownxWidget)
 
 
 @pytest.mark.django_db

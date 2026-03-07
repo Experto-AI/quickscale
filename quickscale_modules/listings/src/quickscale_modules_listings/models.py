@@ -20,7 +20,7 @@ class AbstractListing(models.Model):
     slug = models.SlugField(max_length=200, unique=True, blank=True)
     description = models.TextField(
         blank=True,
-        help_text="Plain text description of the listing",
+        help_text="Listing description in Markdown format",
     )
     price = models.DecimalField(
         max_digits=12,
