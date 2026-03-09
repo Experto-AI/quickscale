@@ -1,0 +1,16 @@
+# adaptive.yml - Global Configuration
+# tech_profile: The architectural style of the project
+# domains: The root-level bounded contexts (directories)
+# precedence_order: How conflicting rules are resolved (e.g. global > local)
+# max_depth: How many directories deep the AI should traverse for rules
+
+tech_profile: standard
+domains:
+  - quickscale
+  - quickscale_cli
+  - quickscale_core
+  - quickscale_modules
+precedence_order:
+  - global
+  - local
+max_depth: 4
