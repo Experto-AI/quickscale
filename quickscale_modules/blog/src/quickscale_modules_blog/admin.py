@@ -5,7 +5,7 @@ from django.contrib import admin
 from django.contrib.auth import get_user_model
 from markdownx.admin import MarkdownxModelAdmin
 
-from .models import AuthorProfile, Category, Post, Tag
+from .models import AuthorProfile, BlogMediaAsset, Category, Post, Tag
 
 
 class PostAdminForm(forms.ModelForm):
@@ -53,6 +53,23 @@ class AuthorProfileAdmin(admin.ModelAdmin):
     list_display = ["user", "bio"]
     search_fields = ["user__username", "user__email", "bio"]
     raw_id_fields = ["user"]
+
+
+@admin.register(BlogMediaAsset)
+class BlogMediaAssetAdmin(admin.ModelAdmin):
+    """Admin for uploaded blog media assets."""
+
+    list_display = [
+        "original_filename",
+        "kind",
+        "uploaded_by",
+        "width",
+        "height",
+        "created_at",
+    ]
+    list_filter = ["kind", "created_at"]
+    search_fields = ["original_filename", "alt", "uploaded_by__username"]
+    readonly_fields = ["width", "height", "created_at"]
 
 
 @admin.register(Post)

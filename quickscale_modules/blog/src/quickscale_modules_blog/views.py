@@ -2,19 +2,30 @@
 
 import json
 import logging
-from typing import Any, Mapping
+import secrets
+from collections.abc import Mapping
+from typing import Any, cast
 
+from django.conf import settings
+from django.contrib.auth import get_user_model
+from django.core.files.uploadedfile import UploadedFile
 from django.db import IntegrityError
-from django.http import HttpRequest, JsonResponse
+from django.http import HttpRequest, HttpResponse, JsonResponse
+from django.middleware.csrf import CsrfViewMiddleware
 from django.utils.html import escape
 from django.utils.text import slugify
+from django.views.decorators.csrf import csrf_exempt
 from django.views.generic import DetailView, ListView
 from markdownx.utils import markdownify
+from PIL import Image, UnidentifiedImageError
 
-from .models import Category, Post, Tag
+from .models import BlogMediaAsset, Category, Post, Tag
 
 
 logger = logging.getLogger(__name__)
+
+DEFAULT_BLOG_API_ALLOWED_IMAGE_FORMATS = ("PNG", "JPEG", "WEBP", "GIF")
+DEFAULT_BLOG_API_UPLOAD_MAX_BYTES = 10 * 1024 * 1024
 
 
 class BlogPublishValidationError(Exception):
@@ -27,6 +38,192 @@ class BlogPublishValidationError(Exception):
 
 class BlogPublishConflictError(Exception):
     """Conflict error for blog publish API payload"""
+
+
+class BlogMediaUploadValidationError(Exception):
+    """Validation error for blog media upload payload."""
+
+    def __init__(self, errors: dict[str, str]) -> None:
+        super().__init__("Invalid media upload payload")
+        self.errors = errors
+
+
+def _get_blog_api_tokens() -> list[tuple[str, str]]:
+    """Return configured token-to-username mappings for machine authentication."""
+    configured_tokens = getattr(settings, "BLOG_API_TOKENS", [])
+    if not isinstance(configured_tokens, list):
+        logger.warning("BLOG_API_TOKENS must be configured as a list")
+        return []
+
+    valid_tokens: list[tuple[str, str]] = []
+    for entry in configured_tokens:
+        if not isinstance(entry, Mapping):
+            continue
+        raw_token = entry.get("token")
+        username = entry.get("username")
+        if not isinstance(raw_token, str) or not raw_token.strip():
+            continue
+        if not isinstance(username, str) or not username.strip():
+            continue
+        valid_tokens.append((raw_token.strip(), username.strip()))
+    return valid_tokens
+
+
+def _get_authorization_token(request: HttpRequest) -> str | None:
+    """Extract a Bearer or Token authorization token from the request."""
+    header_value = request.META.get("HTTP_AUTHORIZATION", "").strip()
+    if not header_value:
+        return None
+
+    parts = header_value.split(None, 1)
+    if len(parts) != 2:
+        return ""
+
+    scheme, token = parts
+    if scheme.lower() not in {"bearer", "token"}:
+        return ""
+
+    return token.strip()
+
+
+def _enforce_csrf(request: HttpRequest) -> HttpResponse | None:
+    """Apply Django's CSRF validation for session-authenticated API requests."""
+    middleware = CsrfViewMiddleware(lambda req: JsonResponse({"error": "Forbidden"}))
+    return middleware.process_view(request, lambda req: JsonResponse({}), (), {})
+
+
+def authenticate_blog_api_request(
+    request: HttpRequest,
+) -> tuple[Any | None, HttpResponse | None]:
+    """Authenticate session or token-based blog API access.
+
+    Session-authenticated requests keep Django CSRF protection.
+    Token-authenticated requests bypass CSRF and are intended for automation.
+    """
+    token = _get_authorization_token(request)
+    if token is not None:
+        if not token:
+            return None, JsonResponse(
+                {"error": "Invalid Authorization header"},
+                status=401,
+            )
+
+        user_model = get_user_model()
+        for configured_token, username in _get_blog_api_tokens():
+            if not secrets.compare_digest(token, configured_token):
+                continue
+
+            user = user_model.objects.filter(username=username, is_active=True).first()
+            if user is None:
+                logger.warning(
+                    "BLOG_API_TOKENS references missing user '%s'",
+                    username,
+                )
+                return None, JsonResponse({"error": "Invalid API token"}, status=401)
+            if not getattr(user, "is_staff", False):
+                return None, JsonResponse(
+                    {"error": "Staff access required"},
+                    status=403,
+                )
+            return user, None
+
+        return None, JsonResponse({"error": "Invalid API token"}, status=401)
+
+    if not request.user.is_authenticated:
+        return None, JsonResponse({"error": "Authentication required"}, status=401)
+
+    if not getattr(request.user, "is_staff", False):
+        return None, JsonResponse({"error": "Staff access required"}, status=403)
+
+    csrf_response = _enforce_csrf(request)
+    if csrf_response is not None:
+        return None, csrf_response
+
+    return request.user, None
+
+
+def _validate_blog_image_upload(uploaded_file: UploadedFile) -> tuple[int, int]:
+    """Validate the uploaded image and return its dimensions."""
+    max_upload_bytes_setting = getattr(
+        settings,
+        "BLOG_API_UPLOAD_MAX_BYTES",
+        DEFAULT_BLOG_API_UPLOAD_MAX_BYTES,
+    )
+    max_upload_bytes = int(
+        max_upload_bytes_setting or DEFAULT_BLOG_API_UPLOAD_MAX_BYTES
+    )
+    allowed_formats = {
+        str(image_format).upper()
+        for image_format in getattr(
+            settings,
+            "BLOG_API_ALLOWED_IMAGE_FORMATS",
+            DEFAULT_BLOG_API_ALLOWED_IMAGE_FORMATS,
+        )
+    }
+
+    uploaded_file_size = uploaded_file.size or 0
+    if uploaded_file_size > max_upload_bytes:
+        raise BlogMediaUploadValidationError(
+            {"file": f"File exceeds maximum upload size of {max_upload_bytes} bytes"}
+        )
+
+    try:
+        uploaded_file.seek(0)
+        image = Image.open(uploaded_file)
+        image.load()
+    except UnidentifiedImageError, OSError:
+        raise BlogMediaUploadValidationError(
+            {"file": "Unsupported or invalid image file"}
+        ) from None
+    finally:
+        uploaded_file.seek(0)
+
+    image_format = (image.format or "").upper()
+    if image_format not in allowed_formats:
+        allowed_list = ", ".join(sorted(allowed_formats))
+        raise BlogMediaUploadValidationError(
+            {"file": f"Unsupported image format. Allowed formats: {allowed_list}"}
+        )
+
+    return image.width, image.height
+
+
+def create_blog_media_asset_from_request(
+    request: HttpRequest,
+    author: Any,
+) -> BlogMediaAsset:
+    """Create and return a stored media asset from a multipart upload request."""
+    errors: dict[str, str] = {}
+
+    uploaded_file = request.FILES.get("file")
+    if not isinstance(uploaded_file, UploadedFile):
+        errors["file"] = "This field is required"
+
+    alt = request.POST.get("alt", "")
+    if len(alt.strip()) > 200:
+        errors["alt"] = "Must be 200 characters or fewer"
+
+    kind = request.POST.get("kind", BlogMediaAsset.Kind.INLINE)
+    if not kind.strip():
+        errors["kind"] = "Must be a non-empty string"
+    elif kind.strip() not in BlogMediaAsset.Kind.values:
+        errors["kind"] = "Must be one of: " + ", ".join(BlogMediaAsset.Kind.values)
+
+    if errors:
+        raise BlogMediaUploadValidationError(errors)
+
+    validated_upload = cast(UploadedFile, uploaded_file)
+    width, height = _validate_blog_image_upload(validated_upload)
+
+    return BlogMediaAsset.objects.create(
+        file=validated_upload,
+        alt=alt.strip(),
+        kind=kind.strip(),
+        original_filename=validated_upload.name,
+        width=width,
+        height=height,
+        uploaded_by=author,
+    )
 
 
 def create_published_post_from_payload(payload: Mapping[str, Any], author: Any) -> Post:
@@ -46,6 +243,27 @@ def create_published_post_from_payload(payload: Mapping[str, Any], author: Any) 
     excerpt = payload.get("excerpt")
     if excerpt is not None and not isinstance(excerpt, str):
         errors["excerpt"] = "Must be a string"
+
+    featured_image_alt = payload.get("featured_image_alt")
+    if featured_image_alt is not None and not isinstance(featured_image_alt, str):
+        errors["featured_image_alt"] = "Must be a string"
+
+    featured_media_asset = None
+    featured_image_id = payload.get("featured_image_id")
+    if featured_image_id is not None:
+        if isinstance(featured_image_id, str) and featured_image_id.strip().isdigit():
+            featured_image_id = int(featured_image_id.strip())
+
+        if not isinstance(featured_image_id, int):
+            errors["featured_image_id"] = "Must be an integer"
+        else:
+            featured_media_asset = BlogMediaAsset.objects.filter(
+                pk=featured_image_id
+            ).first()
+            if featured_media_asset is None:
+                errors["featured_image_id"] = "Media asset not found"
+    elif featured_image_alt is not None and str(featured_image_alt).strip():
+        errors["featured_image_alt"] = "featured_image_alt requires featured_image_id"
 
     category = None
     category_slug = payload.get("category_slug")
@@ -90,6 +308,14 @@ def create_published_post_from_payload(payload: Mapping[str, Any], author: Any) 
             slug=generated_slug,
             content=content_text,
             excerpt=excerpt.strip() if isinstance(excerpt, str) else "",
+            featured_image=(
+                featured_media_asset.file.name if featured_media_asset else None
+            ),
+            featured_image_alt=(
+                featured_image_alt.strip()
+                if isinstance(featured_image_alt, str)
+                else (featured_media_asset.alt if featured_media_asset else "")
+            ),
             status="published",
             author=author,
             category=category,
@@ -115,6 +341,38 @@ def create_published_post_from_payload(payload: Mapping[str, Any], author: Any) 
     return post
 
 
+@csrf_exempt
+def upload_media_api(request: HttpRequest) -> JsonResponse:
+    """Upload a blog image for later use in Markdown or as a featured image."""
+    if request.method != "POST":
+        return JsonResponse(
+            {"error": "Method not allowed", "allowed_methods": ["POST"]},
+            status=405,
+        )
+
+    author, auth_error = authenticate_blog_api_request(request)
+    if auth_error is not None:
+        return auth_error  # type: ignore[return-value]
+
+    try:
+        asset = create_blog_media_asset_from_request(request, author)
+    except BlogMediaUploadValidationError as exc:
+        return JsonResponse({"errors": exc.errors}, status=400)
+
+    return JsonResponse(
+        {
+            "id": asset.pk,
+            "url": request.build_absolute_uri(asset.file.url),
+            "alt": asset.alt,
+            "kind": asset.kind,
+            "width": asset.width,
+            "height": asset.height,
+        },
+        status=201,
+    )
+
+
+@csrf_exempt
 def publish_post_api(request: HttpRequest) -> JsonResponse:
     """Create and publish a blog post from JSON payload for authenticated staff users"""
     if request.method != "POST":
@@ -123,11 +381,9 @@ def publish_post_api(request: HttpRequest) -> JsonResponse:
             status=405,
         )
 
-    if not request.user.is_authenticated:
-        return JsonResponse({"error": "Authentication required"}, status=401)
-
-    if not getattr(request.user, "is_staff", False):
-        return JsonResponse({"error": "Staff access required"}, status=403)
+    author, auth_error = authenticate_blog_api_request(request)
+    if auth_error is not None:
+        return auth_error  # type: ignore[return-value]
 
     try:
         payload = json.loads(request.body.decode("utf-8") or "{}")
@@ -140,7 +396,7 @@ def publish_post_api(request: HttpRequest) -> JsonResponse:
         return JsonResponse({"error": "JSON object payload expected"}, status=400)
 
     try:
-        post = create_published_post_from_payload(payload, request.user)
+        post = create_published_post_from_payload(payload, author)
     except BlogPublishValidationError as exc:
         return JsonResponse({"errors": exc.errors}, status=400)
     except BlogPublishConflictError as exc:

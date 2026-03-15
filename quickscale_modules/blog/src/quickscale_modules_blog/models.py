@@ -1,5 +1,9 @@
 """Blog models for QuickScale blog module"""
 
+import os
+from pathlib import Path
+from uuid import uuid4
+
 from django.conf import settings
 from django.db import models
 from django.urls import reverse
@@ -7,7 +11,13 @@ from django.utils import timezone
 from django.utils.text import slugify
 from markdownx.models import MarkdownxField
 from PIL import Image
-import os
+
+
+def blog_media_upload_to(_: "BlogMediaAsset", filename: str) -> str:
+    """Build a stable, collision-resistant upload path for blog media assets."""
+    extension = Path(filename).suffix.lower() or ".bin"
+    stem = slugify(Path(filename).stem) or "image"
+    return f"blog/uploads/{timezone.now():%Y/%m}/{stem}-{uuid4().hex[:12]}{extension}"
 
 
 class Category(models.Model):
@@ -79,6 +89,45 @@ class AuthorProfile(models.Model):
 
     def __str__(self) -> str:
         return f"{self.user.username} - Author Profile"
+
+
+class BlogMediaAsset(models.Model):
+    """Uploaded media asset that can be referenced by blog automation workflows."""
+
+    class Kind(models.TextChoices):
+        INLINE = "inline", "Inline"
+        FEATURED = "featured", "Featured"
+        GENERAL = "general", "General"
+
+    file = models.ImageField(upload_to=blog_media_upload_to)
+    alt = models.CharField(
+        max_length=200,
+        blank=True,
+        help_text="Alt text for the uploaded image (accessibility)",
+    )
+    kind = models.CharField(
+        max_length=20,
+        choices=Kind.choices,
+        default=Kind.INLINE,
+        help_text="How the asset is intended to be used by the blog workflow",
+    )
+    original_filename = models.CharField(max_length=255)
+    width = models.PositiveIntegerField(null=True, blank=True)
+    height = models.PositiveIntegerField(null=True, blank=True)
+    uploaded_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="uploaded_blog_media_assets",
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["-created_at"]
+
+    def __str__(self) -> str:
+        return self.original_filename
 
 
 class Post(models.Model):

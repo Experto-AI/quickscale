@@ -5,11 +5,32 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 from django.contrib.auth import get_user_model
+from django.core.files.uploadedfile import SimpleUploadedFile
 from django.db import IntegrityError
 from django.test import Client
 from django.urls import reverse
+from PIL import Image
 
-from quickscale_modules_blog.models import Category, Post, Tag
+from quickscale_modules_blog.models import BlogMediaAsset, Category, Post, Tag
+
+
+def make_uploaded_test_image(
+    *,
+    filename: str = "upload.png",
+    image_format: str = "PNG",
+    size: tuple[int, int] = (1200, 800),
+) -> SimpleUploadedFile:
+    """Create an in-memory uploaded image file for API tests."""
+    from io import BytesIO
+
+    image_bytes = BytesIO()
+    image = Image.new("RGB", size, color="orange")
+    image.save(image_bytes, format=image_format)
+    return SimpleUploadedFile(
+        filename,
+        image_bytes.getvalue(),
+        content_type=f"image/{image_format.lower()}",
+    )
 
 
 @pytest.fixture
@@ -71,6 +92,28 @@ class TestPublishPostApi:
         )
 
         assert response.status_code == 403
+
+    def test_publish_post_api_token_auth_bypasses_csrf(
+        self,
+        settings,
+        staff_user,
+    ):
+        """Test machine-authenticated publish requests can use bearer tokens."""
+        settings.BLOG_API_TOKENS = [
+            {"token": "publish-token", "username": staff_user.username}
+        ]
+        csrf_client = Client(enforce_csrf_checks=True)
+
+        response = csrf_client.post(
+            reverse("quickscale_blog:api_publish_post"),
+            data=json.dumps({"title": "Token Post", "content": "Body"}),
+            content_type="application/json",
+            HTTP_AUTHORIZATION="Bearer publish-token",
+        )
+
+        assert response.status_code == 201
+        post = Post.objects.get(slug="token-post")
+        assert post.author == staff_user
 
     def test_publish_post_api_invalid_json_returns_400(self, client, staff_user):
         """Test API validates JSON format"""
@@ -262,6 +305,93 @@ class TestPublishPostApi:
             "automation",
         }
 
+    def test_publish_post_api_featured_image_id_assigns_uploaded_asset(
+        self,
+        client,
+        staff_user,
+        tmp_path,
+        settings,
+    ):
+        """Test publish API can attach a previously uploaded media asset."""
+        settings.MEDIA_ROOT = str(tmp_path)
+        asset = BlogMediaAsset.objects.create(
+            file=make_uploaded_test_image(filename="featured.png"),
+            alt="Generated cover image",
+            kind=BlogMediaAsset.Kind.FEATURED,
+            original_filename="featured.png",
+            width=1200,
+            height=800,
+            uploaded_by=staff_user,
+        )
+        client.force_login(staff_user)
+
+        response = client.post(
+            reverse("quickscale_blog:api_publish_post"),
+            data=json.dumps(
+                {
+                    "title": "Featured Asset Post",
+                    "content": "Body",
+                    "featured_image_id": asset.pk,
+                }
+            ),
+            content_type="application/json",
+        )
+
+        assert response.status_code == 201
+        post = Post.objects.get(slug="featured-asset-post")
+        assert post.featured_image.name == asset.file.name
+        assert post.featured_image_alt == "Generated cover image"
+
+    def test_publish_post_api_unknown_featured_image_returns_400(
+        self,
+        client,
+        staff_user,
+    ):
+        """Test publish API validates the uploaded featured image reference."""
+        client.force_login(staff_user)
+
+        response = client.post(
+            reverse("quickscale_blog:api_publish_post"),
+            data=json.dumps(
+                {
+                    "title": "Missing Asset Post",
+                    "content": "Body",
+                    "featured_image_id": 99999,
+                }
+            ),
+            content_type="application/json",
+        )
+
+        assert response.status_code == 400
+        assert response.json()["errors"] == {
+            "featured_image_id": "Media asset not found"
+        }
+
+    def test_publish_post_api_featured_image_alt_requires_image(
+        self,
+        client,
+        staff_user,
+    ):
+        """Test publish API rejects a featured image alt without an image."""
+        client.force_login(staff_user)
+
+        response = client.post(
+            reverse("quickscale_blog:api_publish_post"),
+            data=json.dumps(
+                {
+                    "title": "Alt Without Image",
+                    "content": "Body",
+                    "featured_image_alt": "No asset",
+                }
+            ),
+            content_type="application/json",
+        )
+
+        assert response.status_code == 400
+        assert response.json()["errors"] == {
+            "featured_image_alt": "featured_image_alt requires featured_image_id"
+        }
+
     def test_publish_post_api_duplicate_slug_returns_409(self, client, staff_user):
         """Test API handles duplicate generated slug as conflict"""
         Post.objects.create(
@@ -398,3 +528,112 @@ class TestPublishPostApi:
 
         assert response.status_code == 201
         assert Tag.objects.filter(slug="launch", name="Launch").exists()
+
+
+@pytest.mark.django_db
+class TestUploadMediaApi:
+    """Tests for blog media upload API."""
+
+    def test_upload_media_api_requires_authentication(self, client):
+        """Test media uploads require authentication."""
+        response = client.post(reverse("quickscale_blog:api_upload_media"))
+
+        assert response.status_code == 401
+        assert response.json()["error"] == "Authentication required"
+
+    def test_upload_media_api_non_staff_returns_403(self, client, user):
+        """Test media uploads require staff access."""
+        client.force_login(user)
+
+        response = client.post(
+            reverse("quickscale_blog:api_upload_media"),
+            data={"file": make_uploaded_test_image()},
+        )
+
+        assert response.status_code == 403
+        assert response.json()["error"] == "Staff access required"
+
+    def test_upload_media_api_missing_csrf_returns_403(self, staff_user):
+        """Test session-authenticated media uploads enforce CSRF protection."""
+        csrf_client = Client(enforce_csrf_checks=True)
+        csrf_client.force_login(staff_user)
+
+        response = csrf_client.post(
+            reverse("quickscale_blog:api_upload_media"),
+            data={"file": make_uploaded_test_image()},
+        )
+
+        assert response.status_code == 403
+
+    def test_upload_media_api_valid_png_returns_metadata(
+        self,
+        client,
+        staff_user,
+        tmp_path,
+        settings,
+    ):
+        """Test upload API stores the file and returns stable metadata."""
+        settings.MEDIA_ROOT = str(tmp_path)
+        client.force_login(staff_user)
+
+        response = client.post(
+            reverse("quickscale_blog:api_upload_media"),
+            data={
+                "file": make_uploaded_test_image(size=(1600, 900)),
+                "alt": "Pep Martorell interview diagram",
+                "kind": BlogMediaAsset.Kind.INLINE,
+            },
+        )
+
+        assert response.status_code == 201
+        payload = response.json()
+        assert payload["alt"] == "Pep Martorell interview diagram"
+        assert payload["kind"] == BlogMediaAsset.Kind.INLINE
+        assert payload["width"] == 1600
+        assert payload["height"] == 900
+        assert payload["url"].startswith("http://testserver/media/blog/uploads/")
+        assert BlogMediaAsset.objects.filter(pk=payload["id"]).exists()
+
+    def test_upload_media_api_rejects_unsupported_file_type(
+        self,
+        client,
+        staff_user,
+    ):
+        """Test upload API rejects files that are not valid supported images."""
+        client.force_login(staff_user)
+        bad_file = SimpleUploadedFile(
+            "notes.txt",
+            b"not an image",
+            content_type="text/plain",
+        )
+
+        response = client.post(
+            reverse("quickscale_blog:api_upload_media"),
+            data={"file": bad_file},
+        )
+
+        assert response.status_code == 400
+        assert response.json()["errors"] == {
+            "file": "Unsupported or invalid image file"
+        }
+
+    def test_upload_media_api_token_auth_bypasses_csrf(
+        self,
+        settings,
+        staff_user,
+        tmp_path,
+    ):
+        """Test machine-authenticated media uploads can use bearer tokens."""
+        settings.MEDIA_ROOT = str(tmp_path)
+        settings.BLOG_API_TOKENS = [
+            {"token": "upload-token", "username": staff_user.username}
+        ]
+        csrf_client = Client(enforce_csrf_checks=True)
+
+        response = csrf_client.post(
+            reverse("quickscale_blog:api_upload_media"),
+            data={"file": make_uploaded_test_image()},
+            HTTP_AUTHORIZATION="Bearer upload-token",
+        )
+
+        assert response.status_code == 201

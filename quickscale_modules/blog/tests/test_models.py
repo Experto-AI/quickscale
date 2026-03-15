@@ -7,7 +7,13 @@ from django.contrib.auth import get_user_model
 from django.core.files.uploadedfile import SimpleUploadedFile
 from PIL import Image
 
-from quickscale_modules_blog.models import AuthorProfile, Category, Post, Tag
+from quickscale_modules_blog.models import (
+    AuthorProfile,
+    BlogMediaAsset,
+    Category,
+    Post,
+    Tag,
+)
 
 User = get_user_model()
 
@@ -247,3 +253,40 @@ class TestPost:
         )
         assert post.get_thumbnail_url() == ""
         assert post.get_thumbnail_url("small") == ""
+
+
+@pytest.mark.django_db
+class TestBlogMediaAsset:
+    """Tests for BlogMediaAsset model."""
+
+    def test_blog_media_asset_creation(self, author_user, tmp_path, settings):
+        """Test creating a blog media asset stores metadata."""
+        settings.MEDIA_ROOT = str(tmp_path)
+
+        image = Image.new("RGB", (640, 360), color="green")
+        image_path = tmp_path / "asset.png"
+        image.save(str(image_path), format="PNG")
+
+        with open(image_path, "rb") as image_handle:
+            uploaded_file = SimpleUploadedFile(
+                "asset.png",
+                image_handle.read(),
+                content_type="image/png",
+            )
+
+        asset = BlogMediaAsset.objects.create(
+            file=uploaded_file,
+            alt="Diagram",
+            kind=BlogMediaAsset.Kind.INLINE,
+            original_filename="asset.png",
+            width=640,
+            height=360,
+            uploaded_by=author_user,
+        )
+
+        assert asset.alt == "Diagram"
+        assert asset.kind == BlogMediaAsset.Kind.INLINE
+        assert asset.width == 640
+        assert asset.height == 360
+        assert asset.uploaded_by == author_user
+        assert asset.file.name.startswith("blog/uploads/")
