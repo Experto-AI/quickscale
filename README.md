@@ -11,6 +11,7 @@ Production-ready blog module for Django projects with Markdown support, featured
 - **Organization**: Categories and tags for content classification
 - **Author Profiles**: Extended user profiles with bio and avatar
 - **Featured Images**: Auto-generated thumbnails (300x200, 800x450)
+- **Automation API**: Upload images over API, then publish Markdown posts with a featured image reference
 - **RSS Feed**: Latest 20 published posts with full metadata
 - **Zero-Style Templates**: Semantic HTML base templates (no CSS classes)
 - **Pagination**: 10 posts per page (configurable)
@@ -94,6 +95,89 @@ After embedding, these URLs are available:
 - `/blog/category/<slug>/` - Posts by category
 - `/blog/tag/<slug>/` - Posts by tag
 - `/blog/feed/` - RSS feed
+- `/blog/api/media/` - Staff upload endpoint for blog images
+- `/blog/api/publish/` - Staff publish endpoint for Markdown blog posts
+
+### Automation API
+
+The blog module now supports a two-step automation flow:
+
+1. Upload each image with `POST /blog/api/media/`
+2. Rewrite Markdown image links to the returned URLs
+3. Publish the post with `POST /blog/api/publish/`
+
+#### Upload media
+
+**Request**
+
+- `POST /blog/api/media/`
+- Auth: staff session + CSRF, or bearer token configured in `BLOG_API_TOKENS`
+- `multipart/form-data`
+- Fields:
+    - `file` (required)
+    - `alt` (optional)
+    - `kind` (optional: `inline`, `featured`, `general`)
+
+**Response**
+
+```json
+{
+    "id": 12,
+    "url": "https://example.com/media/blog/uploads/2026/03/diagram-a1b2c3d4e5f6.png",
+    "alt": "Pep Martorell interview diagram",
+    "kind": "inline",
+    "width": 1600,
+    "height": 900
+}
+```
+
+#### Publish post
+
+**Request**
+
+- `POST /blog/api/publish/`
+- Auth: staff session + CSRF, or bearer token configured in `BLOG_API_TOKENS`
+- `application/json`
+- Fields:
+    - `title` (required)
+    - `content` (required Markdown)
+    - `excerpt` (optional)
+    - `category_slug` (optional)
+    - `tags` (optional)
+    - `featured_image_id` (optional; id from `/blog/api/media/`)
+    - `featured_image_alt` (optional override for the uploaded asset alt)
+
+**Response**
+
+```json
+{
+    "id": 42,
+    "slug": "pep-martorell-interview",
+    "url": "/blog/post/pep-martorell-interview/",
+    "status": "published"
+}
+```
+
+#### Non-browser automation auth
+
+For pipelines, configure bearer tokens in Django settings:
+
+```python
+BLOG_API_TOKENS = [
+        {
+                "token": os.environ["BLOG_API_TOKEN"],
+                "username": "blogpublisher",
+        },
+]
+```
+
+Then send:
+
+```http
+Authorization: Bearer <BLOG_API_TOKEN>
+```
+
+If you do not configure bearer tokens, both endpoints continue to work with standard Django staff sessions and CSRF protection.
 
 ### Creating Posts
 
@@ -274,6 +358,11 @@ MARKDOWNX_MARKDOWN_EXTENSIONS = [
 MARKDOWNX_MEDIA_PATH = 'blog/markdownx/'
 MARKDOWNX_UPLOAD_MAX_SIZE = 5 * 1024 * 1024  # 5MB
 MARKDOWNX_IMAGE_MAX_SIZE = {'size': (1920, 1080), 'quality': 90}
+
+# Blog automation API settings
+BLOG_API_UPLOAD_MAX_BYTES = 10 * 1024 * 1024
+BLOG_API_ALLOWED_IMAGE_FORMATS = ['PNG', 'JPEG', 'WEBP', 'GIF']
+BLOG_API_TOKENS = []  # Optional machine-auth tokens for automation pipelines
 
 # Featured image settings
 BLOG_THUMBNAIL_SIZES = {
