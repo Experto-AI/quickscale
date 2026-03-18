@@ -1,7 +1,10 @@
 """Blog models for QuickScale blog module"""
 
-import os
+import posixpath
+from collections.abc import Callable
+from importlib import import_module
 from pathlib import Path
+from typing import Any
 from uuid import uuid4
 
 from django.conf import settings
@@ -12,9 +15,22 @@ from django.utils.text import slugify
 from markdownx.models import MarkdownxField
 from PIL import Image
 
+storage_build_upload_path: Callable[..., str] | None = None
+storage_helpers: Any | None
+try:
+    storage_helpers = import_module("quickscale_modules_storage.helpers")
+except ModuleNotFoundError:
+    storage_helpers = None
+
+if storage_helpers is not None:
+    storage_build_upload_path = getattr(storage_helpers, "build_upload_path", None)
+
 
 def blog_media_upload_to(_: "BlogMediaAsset", filename: str) -> str:
     """Build a stable, collision-resistant upload path for blog media assets."""
+    if storage_build_upload_path is not None:
+        return storage_build_upload_path("blog", "uploads", filename)
+
     extension = Path(filename).suffix.lower() or ".bin"
     stem = slugify(Path(filename).stem) or "image"
     return f"blog/uploads/{timezone.now():%Y/%m}/{stem}-{uuid4().hex[:12]}{extension}"
@@ -220,44 +236,48 @@ class Post(models.Model):
         if not self.featured_image:
             return
 
-        image_path = self.featured_image.path
-        img = Image.open(image_path)
+        try:
+            image_path = self.featured_image.path
+        except NotImplementedError, ValueError, AttributeError:
+            return
 
-        # Define thumbnail sizes
         sizes = {
             "small": (300, 200),
             "medium": (800, 450),
         }
 
-        for size_name, dimensions in sizes.items():
-            # Create thumbnail directory
-            thumb_dir = os.path.join(
-                os.path.dirname(image_path),
-                "thumbnails",
-            )
-            os.makedirs(thumb_dir, exist_ok=True)
+        image_path_obj = Path(image_path)
+        thumb_dir = image_path_obj.parent / "thumbnails"
+        thumb_dir.mkdir(parents=True, exist_ok=True)
 
-            # Generate thumbnail
-            img_copy = img.copy()
-            img_copy.thumbnail(dimensions, Image.Resampling.LANCZOS)
-
-            # Save thumbnail
-            filename = os.path.basename(image_path)
-            name, ext = os.path.splitext(filename)
-            thumb_filename = f"{name}_{size_name}{ext}"
-            thumb_path = os.path.join(thumb_dir, thumb_filename)
-            img_copy.save(thumb_path, quality=85, optimize=True)
+        with Image.open(image_path) as img:
+            for size_name, dimensions in sizes.items():
+                img_copy = img.copy()
+                img_copy.thumbnail(dimensions, Image.Resampling.LANCZOS)
+                thumb_path = (
+                    thumb_dir
+                    / f"{image_path_obj.stem}_{size_name}{image_path_obj.suffix}"
+                )
+                img_copy.save(thumb_path, quality=85, optimize=True)
 
     def get_thumbnail_url(self, size: str = "medium") -> str:
         """Get URL for thumbnail of specified size"""
         if not self.featured_image:
             return ""
 
-        # Construct thumbnail URL
-        base_url = self.featured_image.url
-        path_parts = base_url.rsplit("/", 1)
-        filename = path_parts[1]
-        name, ext = os.path.splitext(filename)
-        thumb_filename = f"{name}_{size}{ext}"
+        file_name = str(self.featured_image.name)
+        directory, filename = posixpath.split(file_name)
+        stem, extension = posixpath.splitext(filename)
+        thumbnail_name = posixpath.join(
+            directory,
+            "thumbnails",
+            f"{stem}_{size}{extension}",
+        )
 
-        return f"{path_parts[0]}/thumbnails/{thumb_filename}"
+        try:
+            if self.featured_image.storage.exists(thumbnail_name):
+                return self.featured_image.storage.url(thumbnail_name)
+        except Exception:
+            return self.featured_image.url
+
+        return self.featured_image.url

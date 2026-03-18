@@ -3,8 +3,10 @@
 import json
 import logging
 import secrets
-from collections.abc import Mapping
+from collections.abc import Callable, Mapping
+from importlib import import_module
 from typing import Any, cast
+from urllib.parse import urlparse
 
 from django.conf import settings
 from django.contrib.auth import get_user_model
@@ -21,11 +23,67 @@ from PIL import Image, UnidentifiedImageError
 
 from .models import BlogMediaAsset, Category, Post, Tag
 
+storage_build_public_media_url: Callable[..., str] | None = None
+storage_validate_file_upload: Callable[..., Any] | None = None
+storage_helpers: Any | None
+try:
+    storage_helpers = import_module("quickscale_modules_storage.helpers")
+except ModuleNotFoundError:
+    storage_helpers = None
+
+if storage_helpers is not None:
+    storage_build_public_media_url = getattr(
+        storage_helpers, "build_public_media_url", None
+    )
+    storage_validate_file_upload = getattr(
+        storage_helpers, "validate_file_upload", None
+    )
+
 
 logger = logging.getLogger(__name__)
 
 DEFAULT_BLOG_API_ALLOWED_IMAGE_FORMATS = ("PNG", "JPEG", "WEBP", "GIF")
 DEFAULT_BLOG_API_UPLOAD_MAX_BYTES = 10 * 1024 * 1024
+
+
+def _build_media_response_url(request: HttpRequest, stored_reference: str) -> str:
+    """Build a public media URL using storage helper when available, with local fallback."""
+    public_base_url = str(
+        getattr(settings, "QUICKSCALE_STORAGE_PUBLIC_BASE_URL", "")
+    ).strip()
+    media_url = str(getattr(settings, "MEDIA_URL", "/media/")).strip() or "/media/"
+
+    if storage_build_public_media_url is not None:
+        return storage_build_public_media_url(
+            stored_reference,
+            request=request,
+            public_base_url=public_base_url,
+            media_url=media_url,
+        )
+
+    reference = (stored_reference or "").strip()
+    if not reference:
+        return ""
+
+    parsed = urlparse(reference)
+    if parsed.scheme and parsed.netloc:
+        return reference
+
+    if public_base_url:
+        return f"{public_base_url.rstrip('/')}/{reference.lstrip('/')}"
+
+    if reference.startswith("/"):
+        return request.build_absolute_uri(reference)
+
+    normalized_media_url = media_url
+    if not normalized_media_url.startswith("/") and not normalized_media_url.startswith(
+        "http"
+    ):
+        normalized_media_url = "/" + normalized_media_url
+    if not normalized_media_url.endswith("/"):
+        normalized_media_url += "/"
+
+    return request.build_absolute_uri(f"{normalized_media_url}{reference.lstrip('/')}")
 
 
 class BlogPublishValidationError(Exception):
@@ -166,6 +224,17 @@ def _validate_blog_image_upload(uploaded_file: UploadedFile) -> tuple[int, int]:
         raise BlogMediaUploadValidationError(
             {"file": f"File exceeds maximum upload size of {max_upload_bytes} bytes"}
         )
+
+    if storage_validate_file_upload is not None:
+        try:
+            validated = storage_validate_file_upload(
+                uploaded_file,
+                max_size_bytes=max_upload_bytes,
+                allowed_image_formats=allowed_formats,
+            )
+        except ValueError as exc:
+            raise BlogMediaUploadValidationError({"file": str(exc)}) from None
+        return validated.width, validated.height
 
     try:
         uploaded_file.seek(0)
@@ -362,7 +431,7 @@ def upload_media_api(request: HttpRequest) -> JsonResponse:
     return JsonResponse(
         {
             "id": asset.pk,
-            "url": request.build_absolute_uri(asset.file.url),
+            "url": _build_media_response_url(request, asset.file.url),
             "alt": asset.alt,
             "kind": asset.kind,
             "width": asset.width,
