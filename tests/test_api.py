@@ -619,6 +619,80 @@ class TestUploadMediaApi:
         payload = response.json()
         assert payload["url"].startswith("https://cdn.example.com/media/")
 
+    @patch("quickscale_modules_blog.views.create_blog_media_asset_from_request")
+    def test_upload_media_api_uses_stored_key_not_provider_url_for_public_base(
+        self,
+        mock_create_asset,
+        client,
+        staff_user,
+        settings,
+    ):
+        """Upload API should build canonical CDN URLs from the stored key, not provider URLs."""
+        settings.QUICKSCALE_STORAGE_PUBLIC_BASE_URL = "https://cdn.example.com/media"
+        client.force_login(staff_user)
+
+        file_mock = MagicMock()
+        file_mock.name = "blog/uploads/2026/03/hero-image.png"
+        file_mock.url = "https://bucket.s3.amazonaws.com/blog/uploads/2026/03/hero-image.png?signature=abc"
+
+        asset = MagicMock()
+        asset.pk = 123
+        asset.file = file_mock
+        asset.alt = "CDN image"
+        asset.kind = BlogMediaAsset.Kind.GENERAL
+        asset.width = 900
+        asset.height = 600
+        mock_create_asset.return_value = asset
+
+        response = client.post(
+            reverse("quickscale_blog:api_upload_media"),
+            data={"file": make_uploaded_test_image(size=(900, 600))},
+        )
+
+        assert response.status_code == 201
+        payload = response.json()
+        assert (
+            payload["url"]
+            == "https://cdn.example.com/media/blog/uploads/2026/03/hero-image.png"
+        )
+
+    @patch("quickscale_modules_blog.views.create_blog_media_asset_from_request")
+    def test_upload_media_api_uses_provider_url_when_cloud_base_url_is_unset(
+        self,
+        mock_create_asset,
+        client,
+        staff_user,
+        settings,
+    ):
+        """Upload API should preserve provider URLs when cloud storage has no public base URL."""
+        settings.QUICKSCALE_STORAGE_PUBLIC_BASE_URL = ""
+        client.force_login(staff_user)
+
+        file_mock = MagicMock()
+        file_mock.name = "blog/uploads/2026/03/hero-image.png"
+        file_mock.url = "https://bucket.s3.amazonaws.com/blog/uploads/2026/03/hero-image.png?signature=abc"
+
+        asset = MagicMock()
+        asset.pk = 456
+        asset.file = file_mock
+        asset.alt = "Provider image"
+        asset.kind = BlogMediaAsset.Kind.GENERAL
+        asset.width = 900
+        asset.height = 600
+        mock_create_asset.return_value = asset
+
+        response = client.post(
+            reverse("quickscale_blog:api_upload_media"),
+            data={"file": make_uploaded_test_image(size=(900, 600))},
+        )
+
+        assert response.status_code == 201
+        payload = response.json()
+        assert (
+            payload["url"]
+            == "https://bucket.s3.amazonaws.com/blog/uploads/2026/03/hero-image.png?signature=abc"
+        )
+
     def test_upload_media_api_rejects_unsupported_file_type(
         self,
         client,
