@@ -48,20 +48,21 @@ QuickScale follows an evolution-aligned roadmap that starts as a personal toolki
    - ✅ CRM module (v0.73.0) - native Django CRM app (API-only)
    - ✅ **React Default Theme** (v0.74.0) - React + shadcn/ui as default
    - ✅ **Forms module** (v0.75.0) - generic form builder with CLI integration ✅ Complete
-   - 📋 Social & Link Tree module (v0.76.0) - social links page + media embeds
-   - 📋 Listings Theme (v0.77.0) - React frontend for property listings (sell/rent)
-   - 📋 CRM Theme (v0.78.0) - React frontend for CRM module
-   - 📋 Billing module (v0.79.0) - Stripe integration
-   - 📋 Teams module (v0.80.0) - multi-tenancy
+  - 🚧 Storage module (v0.76.0) - cloud file hosting, media storage adapters, CDN integration
+  - 📋 Social & Link Tree module (v0.77.0) - social links page + media embeds
+  - 📋 Listings Theme (v0.78.0) - React frontend for property listings (sell/rent)
+  - 📋 CRM Theme (v0.79.0) - React frontend for CRM module
+  - 📋 Billing module (v0.80.0) - Stripe integration
+  - 📋 Teams module (v0.81.0) - multi-tenancy
 
 2. **Phase 2: Additional Themes (Secondary Options)** 📋 _Planned_
-   - 📋 HTMX theme with Alpine.js (v0.81.0+) - alternative for progressive enhancement
+  - 📋 HTMX theme with Alpine.js (v0.82.0+) - alternative for progressive enhancement
    - HTML theme remains as secondary option (simpler projects)
 
 3. **Phase 3: Expand Features (All Themes)** 📋 _Planned_
-   - 📋 Notifications module with email infrastructure (v0.82.0)
-   - 📋 Advanced module management features (v0.83.0)
-   - 📋 Workflow validation and real-world testing (v0.84.0)
+  - 📋 Notifications module with email infrastructure (v0.83.0)
+  - 📋 Advanced module management features (v0.84.0)
+  - 📋 Workflow validation and real-world testing (v0.85.0)
 
 4. **Phase 4: Community Platform (Optional v1.0.0+)** 📋 _Future_
    - 📋 PyPI package distribution
@@ -78,16 +79,17 @@ QuickScale follows an evolution-aligned roadmap that starts as a personal toolki
 - **v0.72.0:** Plan/Apply Cleanup (remove legacy commands) ✅
 - **v0.74.0:** React Default Theme (React + shadcn/ui) ✅
 - **v0.75.0:** Forms Module (generic form builder with DRF API, spam protection, GDPR anonymization) ✅
-- **v0.77.0:** Real Estate MVP (static + listings + social links) 🎯
-- **v0.80.0:** SaaS Feature Parity (auth, billing, teams) 🎯
+- **v0.76.0:** Storage Module (cloud file hosting + CDN-ready media infrastructure) 🎯
+- **v0.78.0:** Real Estate MVP (static + listings + social links) 🎯
+- **v0.81.0:** SaaS Feature Parity (auth, billing, teams) 🎯
 - **v1.0.0+:** Community platform (if demand exists)
 
 **Status:**
 - **Current Status:** v0.75.0 — Forms Module ✅ Complete
-- **In Progress:** v0.76.0 — Social & Link Tree module
-- **Next Milestone:** v0.77.0 - Real Estate MVP
+- **In Progress:** v0.76.0 — Storage Module
+- **Next Milestone:** v0.78.0 - Real Estate MVP
 - **Plan/Apply System:** v0.68.0-v0.71.0 - Terraform-style configuration ✅ Complete
-- **SaaS Parity:** v0.80.0 - auth, billing, teams modules complete
+- **SaaS Parity:** v0.81.0 - auth, billing, teams modules complete
 
 ## Notes and References
 
@@ -207,7 +209,7 @@ List of upcoming releases with detailed implementation tasks:
 - [x] **Theme-agnostic backend**: Django models and DRF API are fully decoupled from the React frontend.
 - [x] **React frontend**: Dynamic form renderer using React Hook Form + Zod (v0.74.0 mandated stack); fetches schema from the REST API.
 - [x] **Spam protection**: Honeypot field + configurable rate limiting (no external CAPTCHA dependency).
-- [x] **Notification-ready**: Email notification hooks on every submission; plugs into future `quickscale_modules.notifications` (v0.82.0).
+- [x] **Notification-ready**: Email notification hooks on every submission; plugs into future `quickscale_modules.notifications` (v0.83.0).
 - [x] **GDPR-aware**: Configurable data retention period; submission anonymization support.
 
 ---
@@ -438,7 +440,7 @@ All components live in the generated project's React frontend under `src/compone
 
 - [x] On successful (non-spam) submission, `FormSubmitAPIView` calls `notify_submission(submission)` from `quickscale_modules_forms.notifications`
 - [x] `notify_submission()` sends a plain-text + HTML email to all addresses in `Form.notify_emails`
-- [x] Uses Django's built-in `send_mail()` (no external dependency); plugs seamlessly into future `quickscale_modules.notifications` (v0.82.0)
+- [x] Uses Django's built-in `send_mail()` (no external dependency); plugs seamlessly into future `quickscale_modules.notifications` (v0.83.0)
 - [x] Email subject: `"[{form.title}] New submission from {name_field_value}"`
 - [x] Email body: all field label → value pairs, IP address, timestamp
 - [x] Silently swallows `SMTPException` — submission is never blocked by a notification failure
@@ -619,14 +621,127 @@ quickscale_modules/forms/
 
 | Future Module | Integration Point |
 |--------------|-------------------|
-| `notifications` (v0.82.0) | Replace `notify_submission()` Django `send_mail` call with `notifications.send()` for template-based emails, tracking, and queue |
+| `notifications` (v0.83.0) | Replace `notify_submission()` Django `send_mail` call with `notifications.send()` for template-based emails, tracking, and queue |
 | `auth` (v0.63.0, existing) | Optional: associate submission with authenticated user if logged in; expose "My Submissions" view |
-| `billing` (v0.79.0) | Not directly integrated; forms can collect payment intent context before Stripe checkout |
-| `teams` (v0.80.0) | Team-scoped forms: filter admin views by team membership |
+| `billing` (v0.80.0) | Not directly integrated; forms can collect payment intent context before Stripe checkout |
+| `teams` (v0.81.0) | Team-scoped forms: filter admin views by team membership |
 
 ---
 
-### v0.76.0: `quickscale_modules.social` - Social & Link Tree Module
+### v0.76.0: `quickscale_modules.storage` - Media Storage & CDN Integration Module
+
+**Status**: 🚧 In Progress — core module, CLI wiring, and blog compatibility implemented
+
+**Strategic Context**: Shared infrastructure module for user-uploaded files and media delivery. Provides a production-ready path beyond local filesystem storage by standardizing cloud object storage, CDN URL generation, image handling, and deployment wiring across QuickScale modules.
+
+QuickScale-generated projects already work well in local development, but production media handling is still a project-by-project concern. That becomes a serious limitation when a workflow depends on uploaded files being durable across redeployments, publicly accessible at stable URLs, and efficiently cacheable through a CDN. The first concrete use case is **experto.ai blog automation**, where the publishing pipeline must upload images first, receive final public URLs, rewrite Markdown content to those URLs, and then publish the post without relying on local container disk.
+
+This module should solve that infrastructure concern once, centrally, instead of repeating custom storage setup in every generated project or feature module. It should be a reusable dependency layer for media storage concerns, while business modules such as `blog`, `listings`, or future attachment-heavy modules continue to own their domain logic. In practice:
+
+- `quickscale_modules.blog` should continue owning publishing workflows and content models.
+- `quickscale_modules.storage` should own where uploaded files live, how their public URLs are built, and how production-safe delivery is configured.
+- local filesystem storage must remain the default for development and simple projects.
+- cloud-backed storage must be a documented, opt-in path for production projects that need durable media.
+
+**Primary Objectives**:
+- [x] Standardize media storage across QuickScale modules
+- [x] Make uploaded files durable across Railway redeployments and container restarts
+- [x] Provide stable, CDN-ready public URLs for uploaded assets
+- [x] Reduce repeated per-project storage and CDN configuration work
+- [x] Create a reusable foundation for blog images, avatars, galleries, and future attachments
+
+**Non-Goals for v0.76.0**:
+- [ ] No infrastructure provisioning / Terraform automation
+- [ ] No video transcoding or advanced media pipeline
+- [ ] No full DAM/media-library product scope
+- [ ] No forced migration of existing local-media projects
+- [ ] No provider-specific premium features unless they fit the shared abstraction cleanly
+
+**Prerequisites**:
+- ✅ React Default Theme (v0.74.0)
+- ✅ Blog API image upload support available in the blog module
+
+**Implementation Approach**:
+- Build this as an infrastructure module, not a vertical feature module
+- Keep local filesystem as the default development mode
+- Add explicit opt-in configuration for cloud storage providers
+- Prefer S3-compatible interfaces first so AWS S3 and Cloudflare R2 share most of the implementation
+- Expose simple project-level helpers that other modules can use without importing provider-specific logic
+
+#### Implementation Checklist
+
+**Architecture & Boundaries**:
+- [x] Define module boundary: what belongs in `storage` vs what remains in `blog` and other modules
+- [x] Define supported provider matrix for v0.76.0 (minimum: local + S3-compatible + Cloudflare R2)
+- [x] Define stable public URL contract for uploaded files and CDN fronting
+- [x] Define upload path strategy by module / asset type / date / collision-safe suffix
+- [x] Define fallback strategy so projects can remain on local storage if desired
+- [x] Define the future extension point for private media even if v0.76.0 only ships public media delivery
+
+**Core Storage Features**:
+- [x] Storage backend abstraction: local filesystem, S3-compatible, Cloudflare R2
+- [x] Provider configuration contract with explicit required and optional fields
+- [x] Project-level settings wiring for Django `STORAGES["default"]`
+- [x] Canonical media URL generation helpers
+- [x] CDN base URL support for uploaded media
+- [x] Upload path conventions for images, documents, and generic assets
+- [x] Validation helpers for file size, content type, and image dimensions
+- [x] Shared helper for converting stored file references into final public URLs
+- [x] Shared helper for generating immutable, cache-friendly asset names
+
+**Image & Media Processing**:
+- [ ] Reusable image variant helpers (thumbnail, medium, original)
+- [ ] Optional WebP/optimized image generation hooks
+- [x] Cache-friendly filename/versioning strategy for immutable media URLs
+- [x] Shared utilities for modules that attach uploaded files to models
+- [ ] Decide whether image processing is synchronous for v0.76.0 or deferred to future async integration
+- [ ] Define a clean extension point for future background processing without blocking the initial release
+
+**Module Integrations**:
+- [x] Blog integration: use storage module for uploaded featured and inline images
+- [ ] Author/avatar compatibility for existing blog author profiles
+- [ ] React showcase guidance for consuming CDN-backed media URLs safely
+- [ ] Future-ready integration hooks for listings galleries, CRM attachments, and social embeds
+- [x] Ensure blog upload/publish APIs continue working when the storage backend changes from local to cloud
+- [x] Define how feature modules should depend on `storage` without importing provider-specific code
+
+**CLI & Plan/Apply Integration**:
+- [x] Add `module.yml` manifest with mutable and immutable config boundaries
+- [x] Define `quickscale plan --add storage` prompts / defaults
+- [x] Add CLI wiring so generated projects receive provider-specific settings only when enabled
+- [x] Ensure `quickscale apply` can regenerate settings safely without clobbering unrelated project code
+- [ ] Decide whether `blog` should optionally detect and integrate with `storage` automatically during apply
+
+**Configuration & Deployment**:
+- [ ] Environment variable contract (`AWS_*`, bucket, endpoint, CDN URL)
+- [ ] Document minimum environment variables for AWS S3 and Cloudflare R2
+- [ ] Railway deployment guide for external media storage
+- [ ] Local development fallback preserving current filesystem behavior
+- [ ] Staging vs production guidance for media storage
+- [ ] Explicit note that Railway local disk should not be treated as durable production media storage
+- [ ] CDN cache guidance for immutable uploaded assets
+- [ ] Migration guide for moving existing local-media projects to cloud-backed storage
+
+**Documentation & Acceptance Criteria**:
+- [x] Add a module README with local/dev, staging, and production setup paths
+- [ ] Add troubleshooting guidance for missing credentials, invalid buckets, and broken CDN URLs
+- [ ] Document how other modules should integrate with storage helpers
+- [x] Acceptance: a generated project can run locally with filesystem storage and no cloud credentials
+- [x] Acceptance: a generated project can switch to S3-compatible storage via documented environment variables
+- [x] Acceptance: blog image upload + publish workflow works end-to-end with cloud-backed URLs
+- [x] Acceptance: resulting media URLs are stable and cache-friendly for CDN delivery
+- [ ] Acceptance: Railway deployment guidance is documented and production-safe
+
+**Testing**:
+- [x] Unit tests for storage backend selection and URL helpers
+- [ ] Integration tests for upload/write/read flows against local and mocked S3-compatible storage
+- [x] Blog integration tests for uploaded images using storage-backed URLs
+- [ ] E2E tests: Plan → Apply → Blog publish with uploaded CDN-backed images
+- [x] Regression tests proving local-development behavior still works without cloud configuration
+
+---
+
+### v0.77.0: `quickscale_modules.social` - Social & Link Tree Module
 
 **Status**: 📋 Planned
 
@@ -665,7 +780,7 @@ quickscale_modules/forms/
 
 ---
 
-### v0.77.0: Listings Theme (React Frontend for Listings)
+### v0.78.0: Listings Theme (React Frontend for Listings)
 
 **Status**: 📋 Planned
 
@@ -697,7 +812,7 @@ quickscale_modules/forms/
 
 ---
 
-### v0.78.0: CRM Theme (React Frontend for CRM)
+### v0.79.0: CRM Theme (React Frontend for CRM)
 
 **Status**: 📋 Planned
 
@@ -724,7 +839,7 @@ quickscale_modules/forms/
 
 ---
 
-### v0.79.0: `quickscale_modules.billing` - Billing Module
+### v0.80.0: `quickscale_modules.billing` - Billing Module
 
 **Status**: 📋 Planned
 
@@ -753,7 +868,7 @@ quickscale_modules/forms/
 
 ---
 
-### v0.80.0: `quickscale_modules.teams` - Teams/Multi-tenancy Module
+### v0.81.0: `quickscale_modules.teams` - Teams/Multi-tenancy Module
 
 **Status**: 📋 Planned
 
@@ -782,9 +897,9 @@ quickscale_modules/forms/
 
 ---
 
-### Module Showcase Architecture (Deferred to Post-v0.78.0)
+### Module Showcase Architecture (Deferred to Post-v0.81.0)
 
-**Status**: 🚧 **NOT YET IMPLEMENTED** - Deferred to post-v0.80.0
+**Status**: 🚧 **NOT YET IMPLEMENTED** - Deferred to post-v0.81.0
 
 **Current Reality** (v0.66.0):
 - ✅ Basic context processor exists (`quickscale_core/context_processors.py`)
@@ -794,11 +909,11 @@ quickscale_modules/forms/
 - ❌ Current `index.html.j2`: Simple welcome page only
 
 **Why Deferred**:
-- Focus on Plan/Apply system and core modules first (v0.68-v0.80)
+- Focus on Plan/Apply system and core modules first (v0.68-v0.81)
 - Showcase architecture provides maximum value when multiple modules exist
 - Current simple welcome page is adequate for MVP
 
-**Implementation Plan**: After v0.80.0 (SaaS Feature Parity milestone), evaluate whether to implement showcase architecture or keep simple welcome page. Decision criteria:
+**Implementation Plan**: After v0.81.0 (SaaS Feature Parity milestone), evaluate whether to implement showcase architecture or keep simple welcome page. Decision criteria:
 - Are 3+ modules complete and production-ready?
 - Is module discovery a user pain point?
 - Would showcase provide meaningful marketing value?
@@ -807,7 +922,7 @@ quickscale_modules/forms/
 
 ---
 
-### v0.81.0+: HTMX Frontend Theme (Optional)
+### v0.82.0+: HTMX Frontend Theme (Optional)
 
 **Status**: 📋 Planned (low priority, after SaaS Feature Parity)
 
@@ -819,7 +934,7 @@ quickscale_modules/forms/
 
 ---
 
-### v0.82.0: `quickscale_modules.notifications` - Notifications Module
+### v0.83.0: `quickscale_modules.notifications` - Notifications Module
 
 **Status**: 📋 Planned (after SaaS Feature Parity)
 
@@ -851,7 +966,7 @@ quickscale_modules/forms/
 
 ---
 
-### v0.83.0: Advanced Module Management Features
+### v0.84.0: Advanced Module Management Features
 
 **Note**: Basic module management commands (`quickscale update`, `quickscale push`) are implemented in **v0.62.0**. Plan/Apply system implemented in **v0.68.0-v0.71.0**. This release adds advanced features for managing multiple modules.
 
@@ -877,7 +992,7 @@ quickscale_modules/forms/
 - [ ] Test conflict resolution workflows
 - [ ] E2E testing of enhanced UX features
 
-**Future Enhancements** (v0.84.0+, evaluate after v0.80.0):
+**Future Enhancements** (v0.85.0+, evaluate after v0.81.0):
 - [ ] Module versioning: `quickscale plan --add auth@v0.63.0` - Pin specific module version
 - [ ] Semantic versioning compatibility checks
 - [ ] Automatic migration scripts for breaking changes
@@ -889,7 +1004,7 @@ quickscale_modules/forms/
 
 ---
 
-### v0.84.0: Module Workflow Validation & Real-World Testing
+### v0.85.0: Module Workflow Validation & Real-World Testing
 
 **Objective**: Validate that module updates work safely in real client projects and don't affect user's custom code.
 

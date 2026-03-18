@@ -11,6 +11,7 @@ from quickscale_cli.commands.module_config import (
     get_default_crm_config,
     get_default_forms_config,
     get_default_listings_config,
+    get_default_storage_config,
 )
 from quickscale_cli.module_catalog import get_module_entries
 from quickscale_core.manifest.loader import load_manifest_from_path
@@ -24,6 +25,7 @@ DEFAULT_CONFIG_FACTORIES = {
     "listings": get_default_listings_config,
     "crm": get_default_crm_config,
     "forms": get_default_forms_config,
+    "storage": get_default_storage_config,
 }
 
 SETTING_NAME_PATTERN = re.compile(r"^[A-Z][A-Z0-9_]*$")

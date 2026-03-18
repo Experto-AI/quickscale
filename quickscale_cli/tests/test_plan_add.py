@@ -296,6 +296,10 @@ class TestPlanAddAllModulesInstalled:
                                 "version": None,
                                 "embedded_at": "2025-12-01T11:00:00",
                             },
+                            "storage": {
+                                "version": None,
+                                "embedded_at": "2025-12-01T11:00:00",
+                            },
                             "billing": {
                                 "version": None,
                                 "embedded_at": "2025-12-01T11:00:00",
@@ -323,6 +327,7 @@ modules:
   listings:
   crm:
   forms:
+    storage:
   billing:
   teams:
 docker:

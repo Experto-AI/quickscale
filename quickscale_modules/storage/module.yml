@@ -1,0 +1,80 @@
+name: storage
+version: "0.76.0"
+description: "Shared media storage infrastructure with local and S3-compatible backends"
+
+config:
+  mutable:
+    backend:
+      type: string
+      default: "local"
+      django_setting: QUICKSCALE_STORAGE_BACKEND
+      description: "Storage backend: local, s3, or r2"
+      validation:
+        choices: ["local", "s3", "r2"]
+
+    media_url:
+      type: string
+      default: "/media/"
+      django_setting: MEDIA_URL
+      description: "Base media URL for local/public delivery"
+
+    public_base_url:
+      type: string
+      default: ""
+      django_setting: QUICKSCALE_STORAGE_PUBLIC_BASE_URL
+      description: "Optional absolute CDN/base URL used to build final public media URLs"
+
+    bucket_name:
+      type: string
+      default: ""
+      django_setting: AWS_STORAGE_BUCKET_NAME
+      description: "S3-compatible bucket name when cloud storage is enabled"
+
+    endpoint_url:
+      type: string
+      default: ""
+      django_setting: AWS_S3_ENDPOINT_URL
+      description: "Optional S3 endpoint URL (required for Cloudflare R2)"
+
+    region_name:
+      type: string
+      default: ""
+      django_setting: AWS_S3_REGION_NAME
+      description: "Cloud provider region name (or auto for endpoint providers)"
+
+    access_key_id:
+      type: string
+      default: ""
+      django_setting: AWS_ACCESS_KEY_ID
+      description: "S3-compatible access key id"
+
+    secret_access_key:
+      type: string
+      default: ""
+      django_setting: AWS_SECRET_ACCESS_KEY
+      description: "S3-compatible secret access key"
+
+    default_acl:
+      type: string
+      default: ""
+      django_setting: AWS_DEFAULT_ACL
+      description: "Default ACL for uploaded objects (blank recommended for modern buckets)"
+
+    querystring_auth:
+      type: boolean
+      default: false
+      django_setting: AWS_QUERYSTRING_AUTH
+      description: "When false, media URLs are public and cache-friendly"
+
+  immutable:
+    private_media_enabled:
+      type: boolean
+      default: false
+      description: "Reserved extension point for future private media authorization flows"
+
+dependencies:
+  - django-storages>=1.14.4
+  - boto3>=1.35.0
+
+django_apps:
+  - quickscale_modules_storage

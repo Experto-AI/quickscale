@@ -18,8 +18,10 @@ from quickscale_cli.commands.module_config import (
     apply_blog_configuration,
     apply_crm_configuration,
     apply_listings_configuration,
+    configure_storage_module,
     configure_crm_module,
     get_default_crm_config,
+    get_default_storage_config,
 )
 from quickscale_cli.commands.module_wiring_specs import build_module_wiring_specs
 from quickscale_core.module_wiring import collect_wiring
@@ -537,6 +539,70 @@ class TestModuleWiringSpecs:
             ("listings/", "quickscale_modules_listings.urls"),
             ("markdownx/", "markdownx.urls"),
         )
+
+    def test_storage_wiring_local_keeps_filesystem_defaults(self):
+        """Storage wiring should not force STORAGES override for local backend."""
+        specs = build_module_wiring_specs(
+            {
+                "storage": {
+                    "backend": "local",
+                    "media_url": "/media/",
+                    "public_base_url": "",
+                    "private_media_enabled": False,
+                }
+            }
+        )
+
+        _, _, settings, _ = collect_wiring(specs)
+
+        assert settings["QUICKSCALE_STORAGE_BACKEND"] == "local"
+        assert settings["MEDIA_URL"] == "/media/"
+        assert "STORAGES" not in settings
+
+    def test_storage_wiring_s3_sets_s3_backend(self):
+        """Storage wiring should configure S3-compatible backend in cloud mode."""
+        specs = build_module_wiring_specs(
+            {
+                "storage": {
+                    "backend": "s3",
+                    "media_url": "/media/",
+                    "public_base_url": "https://cdn.example.com/media",
+                    "bucket_name": "assets",
+                    "endpoint_url": "",
+                    "region_name": "us-east-1",
+                    "access_key_id": "key",
+                    "secret_access_key": "secret",
+                    "default_acl": "",
+                    "querystring_auth": False,
+                    "private_media_enabled": False,
+                }
+            }
+        )
+
+        _, _, settings, _ = collect_wiring(specs)
+
+        assert settings["QUICKSCALE_STORAGE_BACKEND"] == "s3"
+        assert (
+            settings["STORAGES"]["default"]["BACKEND"]
+            == "storages.backends.s3.S3Storage"
+        )
+        assert settings["AWS_STORAGE_BUCKET_NAME"] == "assets"
+        assert settings["AWS_QUERYSTRING_AUTH"] is False
+
+
+class TestStorageModuleConfig:
+    """Tests for storage module configurator registration and defaults."""
+
+    def test_storage_default_config_keys_match_manifest_contract_intent(self):
+        config = get_default_storage_config()
+        assert config["backend"] == "local"
+        assert config["media_url"] == "/media/"
+        assert config["querystring_auth"] is False
+
+    def test_storage_in_module_configurators(self):
+        assert "storage" in MODULE_CONFIGURATORS
+        config = configure_storage_module(non_interactive=True)
+        assert config["backend"] == "local"
 
 
 # ============================================================================

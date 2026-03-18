@@ -594,6 +594,31 @@ class TestUploadMediaApi:
         assert payload["url"].startswith("http://testserver/media/blog/uploads/")
         assert BlogMediaAsset.objects.filter(pk=payload["id"]).exists()
 
+    def test_upload_media_api_uses_public_base_url_when_configured(
+        self,
+        client,
+        staff_user,
+        tmp_path,
+        settings,
+    ):
+        """Test upload API returns CDN/public base URL when configured."""
+        settings.MEDIA_ROOT = str(tmp_path)
+        settings.QUICKSCALE_STORAGE_PUBLIC_BASE_URL = "https://cdn.example.com/media"
+        client.force_login(staff_user)
+
+        response = client.post(
+            reverse("quickscale_blog:api_upload_media"),
+            data={
+                "file": make_uploaded_test_image(size=(900, 600)),
+                "alt": "CDN image",
+                "kind": BlogMediaAsset.Kind.GENERAL,
+            },
+        )
+
+        assert response.status_code == 201
+        payload = response.json()
+        assert payload["url"].startswith("https://cdn.example.com/media/")
+
     def test_upload_media_api_rejects_unsupported_file_type(
         self,
         client,

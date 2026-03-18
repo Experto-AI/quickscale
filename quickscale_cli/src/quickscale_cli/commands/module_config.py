@@ -1057,6 +1057,198 @@ def apply_forms_configuration(project_path: Path, config: dict[str, Any]) -> Non
 
 
 # ============================================================================
+# STORAGE MODULE CONFIGURATION
+# ============================================================================
+
+
+def get_default_storage_config() -> dict[str, Any]:
+    """Return default configuration for the storage module."""
+    return {
+        "backend": "local",
+        "media_url": "/media/",
+        "public_base_url": "",
+        "bucket_name": "",
+        "endpoint_url": "",
+        "region_name": "",
+        "access_key_id": "",
+        "secret_access_key": "",
+        "default_acl": "",
+        "querystring_auth": False,
+        "private_media_enabled": False,
+    }
+
+
+def configure_storage_module(non_interactive: bool = False) -> dict[str, Any]:
+    """Configure storage module settings interactively or with defaults."""
+    if non_interactive:
+        click.echo("\n⚙️  Using default storage module configuration...")
+        config = get_default_storage_config()
+        click.echo(f"  • Backend: {config['backend']}")
+        click.echo(f"  • Media URL: {config['media_url']}")
+        click.echo("  • Public base URL: not configured")
+        return config
+
+    click.echo("\n⚙️  Configuring storage module...")
+    click.echo("Configure media storage backend for local or cloud delivery.\n")
+
+    backend = click.prompt(
+        "Storage backend",
+        type=click.Choice(["local", "s3", "r2"], case_sensitive=False),
+        default="local",
+        show_choices=True,
+    ).lower()
+
+    config = {
+        "backend": backend,
+        "media_url": click.prompt(
+            "Media URL prefix",
+            default="/media/",
+        ).strip()
+        or "/media/",
+        "public_base_url": click.prompt(
+            "Optional public base URL (CDN/domain)",
+            default="",
+            show_default=False,
+        ).strip(),
+        "bucket_name": "",
+        "endpoint_url": "",
+        "region_name": "",
+        "access_key_id": "",
+        "secret_access_key": "",
+        "default_acl": "",
+        "querystring_auth": False,
+        "private_media_enabled": False,
+    }
+
+    if backend in {"s3", "r2"}:
+        click.echo("\nCloud backend selected. Provide bucket/provider settings.")
+        config["bucket_name"] = click.prompt("Bucket name", default="").strip()
+        config["endpoint_url"] = click.prompt(
+            "Endpoint URL (required for R2)", default=""
+        ).strip()
+        config["region_name"] = click.prompt("Region name", default="").strip()
+        config["access_key_id"] = click.prompt("Access key id", default="").strip()
+        config["secret_access_key"] = click.prompt(
+            "Secret access key", default=""
+        ).strip()
+        config["default_acl"] = click.prompt(
+            "Default ACL (blank recommended)", default=""
+        ).strip()
+        config["querystring_auth"] = click.confirm(
+            "Enable querystring auth (signed URLs)?",
+            default=False,
+        )
+
+    return config
+
+
+def _add_storage_dependencies(project_path: Path, pyproject_path: Path) -> None:
+    """Add storage runtime dependencies when cloud backend is enabled."""
+    with open(pyproject_path) as f:
+        pyproject_content = f.read()
+
+    has_storages = "django-storages" in pyproject_content
+    has_boto3 = "boto3" in pyproject_content
+
+    if has_storages and has_boto3:
+        return
+
+    storage_pyproject_path = project_path / "modules" / "storage" / "pyproject.toml"
+    if not storage_pyproject_path.exists():
+        click.secho(
+            "❌ Error: Storage module pyproject.toml not found. "
+            "Cannot determine storage dependency versions.",
+            fg="red",
+            err=True,
+        )
+        click.echo(f"Expected file: {storage_pyproject_path}", err=True)
+        raise click.Abort()
+
+    try:
+        with open(storage_pyproject_path) as f:
+            storage_pyproject_content = f.read()
+
+        storages_version = None
+        if not has_storages:
+            storages_version = _get_dependency_version(
+                storage_pyproject_content, "django-storages"
+            )
+
+        boto3_version = None
+        if not has_boto3:
+            boto3_version = _get_dependency_version(storage_pyproject_content, "boto3")
+    except (FileNotFoundError, AttributeError) as e:
+        click.secho(
+            f"❌ Error: Failed to parse storage dependencies: {e}",
+            fg="red",
+            err=True,
+        )
+        raise click.Abort()
+
+    dependencies_pattern = r"(\[tool\.poetry\.dependencies\][^\[]*)"
+    match = re.search(dependencies_pattern, pyproject_content, re.DOTALL)
+    if not match:
+        click.secho(
+            "⚠️  Warning: Could not find [tool.poetry.dependencies] section in "
+            "pyproject.toml",
+            fg="yellow",
+        )
+        return
+
+    dependencies_section = match.group(1)
+    additions = ""
+    if storages_version:
+        additions += f'\ndjango-storages = "{storages_version}"'
+    if boto3_version:
+        additions += f'\nboto3 = "{boto3_version}"'
+
+    if not additions:
+        return
+
+    updated_dependencies = re.sub(
+        r'(python = "[^"]*")',
+        rf"\1{additions}",
+        dependencies_section,
+    )
+    pyproject_content = pyproject_content.replace(
+        dependencies_section, updated_dependencies
+    )
+
+    with open(pyproject_path, "w") as f:
+        f.write(pyproject_content)
+
+    if storages_version:
+        click.secho("  ✅ Added django-storages to pyproject.toml", fg="green")
+    if boto3_version:
+        click.secho("  ✅ Added boto3 to pyproject.toml", fg="green")
+
+
+def apply_storage_configuration(project_path: Path, config: dict[str, Any]) -> None:
+    """Apply storage module configuration via managed wiring files."""
+    normalized = get_default_storage_config() | config
+
+    pyproject_path = project_path / "pyproject.toml"
+    if pyproject_path.exists() and normalized.get("backend") in {"s3", "r2"}:
+        _add_storage_dependencies(project_path, pyproject_path)
+
+    _regenerate_wiring_for_module(project_path, "storage", normalized)
+
+    click.echo("\n📋 Configuration applied:")
+    click.echo(f"  • Backend: {normalized['backend']}")
+    click.echo(f"  • Media URL: {normalized['media_url']}")
+    public_base_url = str(normalized.get("public_base_url") or "").strip()
+    click.echo(
+        "  • Public base URL: "
+        + (public_base_url if public_base_url else "not configured")
+    )
+    if normalized["backend"] in {"s3", "r2"}:
+        click.echo(
+            "  • Bucket: "
+            + (str(normalized.get("bucket_name") or "").strip() or "not configured")
+        )
+
+
+# ============================================================================
 # MODULE CONFIGURATORS REGISTRY
 # ============================================================================
 
@@ -1066,4 +1258,5 @@ MODULE_CONFIGURATORS = {
     "listings": (configure_listings_module, apply_listings_configuration),
     "crm": (configure_crm_module, apply_crm_configuration),
     "forms": (configure_forms_module, apply_forms_configuration),
+    "storage": (configure_storage_module, apply_storage_configuration),
 }

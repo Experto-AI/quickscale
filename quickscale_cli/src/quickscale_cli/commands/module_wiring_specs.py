@@ -7,6 +7,15 @@ from typing import Any, Mapping
 from quickscale_core.module_wiring import ModuleWiringSpec
 
 
+def _normalize_media_url(media_url: str) -> str:
+    normalized = (media_url or "/media/").strip()
+    if not normalized.startswith("/") and not normalized.startswith("http"):
+        normalized = "/" + normalized
+    if not normalized.endswith("/"):
+        normalized += "/"
+    return normalized
+
+
 def _auth_wiring(options: Mapping[str, Any]) -> ModuleWiringSpec:
     registration_enabled = options.get("registration_enabled")
     if registration_enabled is None:
@@ -187,12 +196,82 @@ def _forms_wiring(options: Mapping[str, Any]) -> ModuleWiringSpec:
     )
 
 
+def _storage_wiring(options: Mapping[str, Any]) -> ModuleWiringSpec:
+    backend = str(options.get("backend", "local")).lower()
+    if backend not in {"local", "s3", "r2"}:
+        backend = "local"
+
+    media_url = _normalize_media_url(str(options.get("media_url", "/media/")))
+    public_base_url = str(options.get("public_base_url", "")).strip()
+
+    settings: dict[str, Any] = {
+        "QUICKSCALE_STORAGE_BACKEND": backend,
+        "QUICKSCALE_STORAGE_PUBLIC_BASE_URL": public_base_url,
+        "MEDIA_URL": media_url,
+        "QUICKSCALE_STORAGE_PRIVATE_MEDIA_ENABLED": bool(
+            options.get("private_media_enabled", False)
+        ),
+    }
+
+    if backend in {"s3", "r2"}:
+        bucket_name = str(options.get("bucket_name", "")).strip()
+        endpoint_url = str(options.get("endpoint_url", "")).strip()
+        region_name = str(options.get("region_name", "")).strip()
+        access_key_id = str(options.get("access_key_id", "")).strip()
+        secret_access_key = str(options.get("secret_access_key", "")).strip()
+        default_acl = str(options.get("default_acl", "")).strip()
+        querystring_auth = bool(options.get("querystring_auth", False))
+
+        storage_options: dict[str, Any] = {
+            "querystring_auth": querystring_auth,
+        }
+        if access_key_id:
+            storage_options["access_key"] = access_key_id
+        if secret_access_key:
+            storage_options["secret_key"] = secret_access_key
+        if bucket_name:
+            storage_options["bucket_name"] = bucket_name
+        if endpoint_url:
+            storage_options["endpoint_url"] = endpoint_url
+        if region_name:
+            storage_options["region_name"] = region_name
+        if default_acl:
+            storage_options["default_acl"] = default_acl
+
+        settings["STORAGES"] = {
+            "default": {
+                "BACKEND": "storages.backends.s3.S3Storage",
+                "OPTIONS": storage_options,
+            },
+        }
+
+        settings["AWS_QUERYSTRING_AUTH"] = querystring_auth
+        if bucket_name:
+            settings["AWS_STORAGE_BUCKET_NAME"] = bucket_name
+        if endpoint_url:
+            settings["AWS_S3_ENDPOINT_URL"] = endpoint_url
+        if region_name:
+            settings["AWS_S3_REGION_NAME"] = region_name
+        if access_key_id:
+            settings["AWS_ACCESS_KEY_ID"] = access_key_id
+        if secret_access_key:
+            settings["AWS_SECRET_ACCESS_KEY"] = secret_access_key
+        if default_acl:
+            settings["AWS_DEFAULT_ACL"] = default_acl
+
+    return ModuleWiringSpec(
+        apps=("quickscale_modules_storage",),
+        settings=settings,
+    )
+
+
 MODULE_WIRING_BUILDERS = {
     "auth": _auth_wiring,
     "blog": _blog_wiring,
     "listings": _listings_wiring,
     "crm": _crm_wiring,
     "forms": _forms_wiring,
+    "storage": _storage_wiring,
 }
 
 

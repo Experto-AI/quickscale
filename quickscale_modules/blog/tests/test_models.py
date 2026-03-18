@@ -1,6 +1,7 @@
 """Tests for blog models"""
 
 import os
+from io import BytesIO
 
 import pytest
 from django.contrib.auth import get_user_model
@@ -253,6 +254,65 @@ class TestPost:
         )
         assert post.get_thumbnail_url() == ""
         assert post.get_thumbnail_url("small") == ""
+
+    def test_get_thumbnail_url_falls_back_to_original_if_missing_variant(
+        self,
+        author_user,
+        tmp_path,
+        settings,
+    ):
+        """Test thumbnail URL falls back to the original image when variant is absent."""
+        settings.MEDIA_ROOT = str(tmp_path)
+
+        img_dir = tmp_path / "blog" / "images"
+        img_dir.mkdir(parents=True)
+        img_path = img_dir / "fallback.jpg"
+        img = Image.new("RGB", (1200, 800), color="purple")
+        img.save(str(img_path), format="JPEG")
+
+        with open(str(img_path), "rb") as f:
+            image_file = SimpleUploadedFile(
+                "fallback.jpg", f.read(), content_type="image/jpeg"
+            )
+        post = Post.objects.create(
+            title="Fallback Post",
+            author=author_user,
+            content="Content",
+            featured_image=image_file,
+        )
+
+        assert post.get_thumbnail_url("large") == post.featured_image.url
+
+    def test_generate_thumbnails_skips_non_filesystem_storage_path(
+        self,
+        author_user,
+        tmp_path,
+        settings,
+        monkeypatch,
+    ):
+        """Test thumbnail generation exits cleanly when storage has no local path support."""
+        settings.MEDIA_ROOT = str(tmp_path)
+
+        image_bytes = BytesIO()
+        Image.new("RGB", (400, 300), color="black").save(image_bytes, format="JPEG")
+        image_file = SimpleUploadedFile(
+            "remote.jpg",
+            image_bytes.getvalue(),
+            content_type="image/jpeg",
+        )
+
+        post = Post.objects.create(
+            title="Remote Storage Post",
+            author=author_user,
+            content="Content",
+            featured_image=image_file,
+        )
+
+        def _raise_not_implemented(_: str) -> str:
+            raise NotImplementedError
+
+        monkeypatch.setattr(post.featured_image.storage, "path", _raise_not_implemented)
+        post._generate_thumbnails()
 
 
 @pytest.mark.django_db

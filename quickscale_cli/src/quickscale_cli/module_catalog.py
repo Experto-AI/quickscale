@@ -40,6 +40,11 @@ MODULE_CATALOG: tuple[ModuleCatalogEntry, ...] = (
         ready=True,
     ),
     ModuleCatalogEntry(
+        name="storage",
+        description="Shared media storage infrastructure (local + S3-compatible)",
+        ready=True,
+    ),
+    ModuleCatalogEntry(
         name="billing",
         description="Stripe integration",
         ready=False,
