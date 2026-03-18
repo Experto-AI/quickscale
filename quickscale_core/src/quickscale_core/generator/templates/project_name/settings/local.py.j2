@@ -50,14 +50,10 @@ EMAIL_BACKEND = "django.core.mail.backends.console.EmailBackend"
 # Disable password validation in development (optional, for convenience)
 # AUTH_PASSWORD_VALIDATORS = []  # noqa: F405
 
-# Simplified static file serving in development
-STORAGES = {
-    "default": {
-        "BACKEND": "django.core.files.storage.FileSystemStorage",
-    },
-    "staticfiles": {
-        "BACKEND": "django.contrib.staticfiles.storage.StaticFilesStorage",
-    },
+# Simplified static file serving in development while preserving the selected
+# default media storage backend from base settings/module wiring.
+STORAGES["staticfiles"] = {
+    "BACKEND": "django.contrib.staticfiles.storage.StaticFilesStorage",
 }
 
 # CORS settings (if using Django CORS Headers)

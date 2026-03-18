@@ -56,7 +56,6 @@ MIDDLEWARE = [
 # QuickScale module wiring (managed)
 INSTALLED_APPS += MODULE_INSTALLED_APPS
 MIDDLEWARE += MODULE_MIDDLEWARE
-globals().update(MODULE_SETTINGS)
 
 ROOT_URLCONF = "{{ package_name }}.urls"
 
@@ -146,6 +145,10 @@ STORAGES = {
 # Media files (user uploads)
 MEDIA_URL = "media/"
 MEDIA_ROOT = BASE_DIR / "media"
+
+# Apply managed module settings after base defaults so module-provided overrides
+# (e.g. storage backend, MEDIA_URL) are not clobbered by the template defaults.
+globals().update(MODULE_SETTINGS)
 
 
 # Default primary key field type

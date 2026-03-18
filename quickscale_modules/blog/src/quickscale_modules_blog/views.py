@@ -428,10 +428,20 @@ def upload_media_api(request: HttpRequest) -> JsonResponse:
     except BlogMediaUploadValidationError as exc:
         return JsonResponse({"errors": exc.errors}, status=400)
 
+    public_base_url = str(
+        getattr(settings, "QUICKSCALE_STORAGE_PUBLIC_BASE_URL", "")
+    ).strip()
+    response_reference = asset.file.name
+    if not public_base_url:
+        try:
+            response_reference = str(asset.file.url)
+        except AttributeError, ValueError:
+            response_reference = asset.file.name
+
     return JsonResponse(
         {
             "id": asset.pk,
-            "url": _build_media_response_url(request, asset.file.url),
+            "url": _build_media_response_url(request, response_reference),
             "alt": asset.alt,
             "kind": asset.kind,
             "width": asset.width,

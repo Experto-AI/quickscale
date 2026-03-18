@@ -373,6 +373,32 @@ class TestProductionReadyFeatures:
         assert "from decouple import config" in output
         assert "SECRET_KEY = config(" in output
 
+    def test_module_settings_applied_after_storage_defaults(
+        self, jinja_env: Environment, test_context: dict[str, str]
+    ) -> None:
+        """Managed module settings must be applied after base storage/media defaults."""
+        template = jinja_env.get_template("project_name/settings/base.py.j2")
+        output = template.render(test_context)
+
+        storages_index = output.index("STORAGES = {")
+        media_index = output.index('MEDIA_URL = "media/"')
+        module_settings_index = output.index("globals().update(MODULE_SETTINGS)")
+
+        assert storages_index < module_settings_index
+        assert media_index < module_settings_index
+
+    def test_local_settings_preserve_default_storage_backend(
+        self, jinja_env: Environment, test_context: dict[str, str]
+    ) -> None:
+        """Local settings should only relax staticfiles storage, not replace media storage."""
+        template = jinja_env.get_template("project_name/settings/local.py.j2")
+        output = template.render(test_context)
+
+        assert 'STORAGES["staticfiles"] = {' in output
+        assert '"django.contrib.staticfiles.storage.StaticFilesStorage"' in output
+        assert '"django.core.files.storage.FileSystemStorage"' not in output
+        assert "STORAGES = {" not in output
+
 
 class TestHTMLTemplateStructure:
     """Verify HTML templates contain required structural elements."""

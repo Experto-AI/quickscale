@@ -243,6 +243,9 @@ def _storage_wiring(options: Mapping[str, Any]) -> ModuleWiringSpec:
                 "BACKEND": "storages.backends.s3.S3Storage",
                 "OPTIONS": storage_options,
             },
+            "staticfiles": {
+                "BACKEND": "whitenoise.storage.CompressedManifestStaticFilesStorage",
+            },
         }
 
         settings["AWS_QUERYSTRING_AUTH"] = querystring_auth

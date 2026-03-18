@@ -11,6 +11,7 @@ from quickscale_cli.commands.module_config import (
     _add_django_allauth_dependency,
     _add_django_filter_dependency,
     _add_drf_and_filter_dependencies,
+    _add_storage_dependencies,
     _filter_new_apps,
     _generate_auth_settings_addition,
     _is_app_in_installed_apps,
@@ -18,6 +19,7 @@ from quickscale_cli.commands.module_config import (
     apply_blog_configuration,
     apply_crm_configuration,
     apply_listings_configuration,
+    apply_storage_configuration,
     configure_storage_module,
     configure_crm_module,
     get_default_crm_config,
@@ -586,8 +588,146 @@ class TestModuleWiringSpecs:
             settings["STORAGES"]["default"]["BACKEND"]
             == "storages.backends.s3.S3Storage"
         )
+        assert (
+            settings["STORAGES"]["staticfiles"]["BACKEND"]
+            == "whitenoise.storage.CompressedManifestStaticFilesStorage"
+        )
         assert settings["AWS_STORAGE_BUCKET_NAME"] == "assets"
         assert settings["AWS_QUERYSTRING_AUTH"] is False
+
+    def test_storage_wiring_invalid_backend_and_media_url_are_normalized(self):
+        """Storage wiring should normalize invalid backend names and relative media URLs."""
+        specs = build_module_wiring_specs(
+            {
+                "storage": {
+                    "backend": "invalid",
+                    "media_url": "media",
+                    "public_base_url": "",
+                    "private_media_enabled": True,
+                }
+            }
+        )
+
+        _, _, settings, _ = collect_wiring(specs)
+
+        assert settings["QUICKSCALE_STORAGE_BACKEND"] == "local"
+        assert settings["MEDIA_URL"] == "/media/"
+        assert settings["QUICKSCALE_STORAGE_PRIVATE_MEDIA_ENABLED"] is True
+
+    def test_storage_wiring_r2_sets_optional_provider_settings(self):
+        """Storage wiring should emit optional provider fields for R2/S3-compatible mode."""
+        specs = build_module_wiring_specs(
+            {
+                "storage": {
+                    "backend": "r2",
+                    "media_url": "https://cdn.example.com/media/",
+                    "public_base_url": "https://cdn.example.com/media",
+                    "bucket_name": "assets",
+                    "endpoint_url": "https://account.r2.cloudflarestorage.com",
+                    "region_name": "auto",
+                    "access_key_id": "key-id",
+                    "secret_access_key": "secret-key",
+                    "default_acl": "public-read",
+                    "querystring_auth": True,
+                    "private_media_enabled": False,
+                }
+            }
+        )
+
+        _, _, settings, _ = collect_wiring(specs)
+
+        assert settings["QUICKSCALE_STORAGE_BACKEND"] == "r2"
+        assert settings["MEDIA_URL"] == "https://cdn.example.com/media/"
+        assert (
+            settings["QUICKSCALE_STORAGE_PUBLIC_BASE_URL"]
+            == "https://cdn.example.com/media"
+        )
+        assert (
+            settings["AWS_S3_ENDPOINT_URL"]
+            == "https://account.r2.cloudflarestorage.com"
+        )
+        assert settings["AWS_S3_REGION_NAME"] == "auto"
+        assert settings["AWS_ACCESS_KEY_ID"] == "key-id"
+        assert settings["AWS_SECRET_ACCESS_KEY"] == "secret-key"
+        assert settings["AWS_DEFAULT_ACL"] == "public-read"
+        assert settings["AWS_QUERYSTRING_AUTH"] is True
+
+    def test_auth_wiring_supports_legacy_allow_registration_and_username_mode(self):
+        """Auth wiring should keep legacy config compatibility paths covered."""
+        specs = build_module_wiring_specs(
+            {
+                "auth": {
+                    "allow_registration": False,
+                    "authentication_method": "username",
+                    "email_verification": "mandatory",
+                }
+            }
+        )
+
+        _, _, settings, urls = collect_wiring(specs)
+
+        assert settings["ACCOUNT_ALLOW_REGISTRATION"] is False
+        assert settings["ACCOUNT_LOGIN_METHODS"] == {"username"}
+        assert settings["ACCOUNT_SIGNUP_FIELDS"] == [
+            "username*",
+            "password1*",
+            "password2*",
+        ]
+        assert ("accounts/", "allauth.urls") in urls
+
+    def test_auth_wiring_supports_both_authentication_mode(self):
+        """Auth wiring should generate combined login/signup fields for both mode."""
+        specs = build_module_wiring_specs(
+            {
+                "auth": {
+                    "registration_enabled": True,
+                    "authentication_method": "both",
+                    "email_verification": "optional",
+                }
+            }
+        )
+
+        _, _, settings, _ = collect_wiring(specs)
+
+        assert settings["ACCOUNT_LOGIN_METHODS"] == {"email", "username"}
+        assert settings["ACCOUNT_SIGNUP_FIELDS"] == [
+            "email*",
+            "username*",
+            "password1*",
+            "password2*",
+        ]
+
+    def test_forms_wiring_without_submissions_api_omits_rest_framework(self):
+        """Forms wiring should avoid REST_FRAMEWORK when submissions API is disabled."""
+        specs = build_module_wiring_specs(
+            {
+                "forms": {
+                    "forms_per_page": 15,
+                    "spam_protection_enabled": False,
+                    "rate_limit": "10/minute",
+                    "data_retention_days": 14,
+                    "submissions_api_enabled": False,
+                }
+            }
+        )
+
+        _, _, settings, _ = collect_wiring(specs)
+
+        assert settings["FORMS_PER_PAGE"] == 15
+        assert settings["FORMS_SPAM_PROTECTION"] is False
+        assert settings["FORMS_RATE_LIMIT"] == "10/minute"
+        assert settings["FORMS_DATA_RETENTION_DAYS"] == 14
+        assert settings["FORMS_SUBMISSIONS_API"] is False
+        assert "REST_FRAMEWORK" not in settings
+
+    def test_build_module_wiring_specs_skips_unknown_modules(self):
+        """Unknown modules should be ignored by the wiring builder registry."""
+        specs = build_module_wiring_specs(
+            {"unknown": {}, "storage": {"backend": "local"}}
+        )
+
+        assert "unknown" not in specs
+        assert "storage" in specs
 
 
 class TestStorageModuleConfig:
@@ -603,6 +743,152 @@ class TestStorageModuleConfig:
         assert "storage" in MODULE_CONFIGURATORS
         config = configure_storage_module(non_interactive=True)
         assert config["backend"] == "local"
+
+    @patch("quickscale_cli.commands.module_config.click.prompt")
+    @patch("quickscale_cli.commands.module_config.click.confirm")
+    def test_configure_storage_interactive_local(self, mock_confirm, mock_prompt):
+        """Interactive local storage configuration should skip cloud-only prompts."""
+        mock_confirm.return_value = False
+        mock_prompt.side_effect = ["local", "media", "https://cdn.example.com/media"]
+
+        config = configure_storage_module(non_interactive=False)
+
+        assert config["backend"] == "local"
+        assert config["media_url"] == "media"
+        assert config["public_base_url"] == "https://cdn.example.com/media"
+        assert config["bucket_name"] == ""
+
+    @patch("quickscale_cli.commands.module_config.click.prompt")
+    @patch("quickscale_cli.commands.module_config.click.confirm")
+    def test_configure_storage_interactive_cloud(self, mock_confirm, mock_prompt):
+        """Interactive cloud storage configuration should collect provider settings."""
+        mock_confirm.return_value = True
+        mock_prompt.side_effect = [
+            "r2",
+            "/media/",
+            "https://cdn.example.com/media",
+            "assets",
+            "https://account.r2.cloudflarestorage.com",
+            "auto",
+            "key-id",
+            "secret-key",
+            "public-read",
+        ]
+
+        config = configure_storage_module(non_interactive=False)
+
+        assert config["backend"] == "r2"
+        assert config["bucket_name"] == "assets"
+        assert config["endpoint_url"] == "https://account.r2.cloudflarestorage.com"
+        assert config["region_name"] == "auto"
+        assert config["access_key_id"] == "key-id"
+        assert config["secret_access_key"] == "secret-key"
+        assert config["default_acl"] == "public-read"
+        assert config["querystring_auth"] is True
+
+    def test_add_storage_dependencies_aborts_when_module_pyproject_missing(
+        self, tmp_path
+    ):
+        """Storage dependency installation should abort if the embedded module is missing."""
+        pyproject = tmp_path / "pyproject.toml"
+        pyproject.write_text('[tool.poetry.dependencies]\npython = "^3.14"\n')
+
+        with pytest.raises(click.Abort):
+            _add_storage_dependencies(tmp_path, pyproject)
+
+    def test_add_storage_dependencies_adds_missing_packages(self, tmp_path):
+        """Storage dependency installation should add django-storages and boto3 when absent."""
+        pyproject = tmp_path / "pyproject.toml"
+        pyproject.write_text(
+            '[tool.poetry.dependencies]\npython = "^3.14"\nDjango = "^6.0"\n'
+        )
+        storage_dir = tmp_path / "modules" / "storage"
+        storage_dir.mkdir(parents=True)
+        (storage_dir / "pyproject.toml").write_text(
+            "[tool.poetry.dependencies]\n"
+            'django-storages = "^1.14.4"\n'
+            'boto3 = "^1.35.0"\n'
+        )
+
+        _add_storage_dependencies(tmp_path, pyproject)
+
+        content = pyproject.read_text()
+        assert 'django-storages = "^1.14.4"' in content
+        assert 'boto3 = "^1.35.0"' in content
+
+    def test_add_storage_dependencies_skips_when_present(self, tmp_path):
+        """Storage dependency installation should be a no-op when both packages already exist."""
+        pyproject = tmp_path / "pyproject.toml"
+        original = (
+            '[tool.poetry.dependencies]\npython = "^3.14"\n'
+            'django-storages = "^1.14.4"\n'
+            'boto3 = "^1.35.0"\n'
+        )
+        pyproject.write_text(original)
+
+        _add_storage_dependencies(tmp_path, pyproject)
+
+        assert pyproject.read_text() == original
+
+    def test_add_storage_dependencies_handles_missing_dependencies_section(
+        self, tmp_path
+    ):
+        """Storage dependency installation should return cleanly without a Poetry dependency section."""
+        pyproject = tmp_path / "pyproject.toml"
+        pyproject.write_text('[tool.poetry.group.dev.dependencies]\npytest = "^9.0"\n')
+        storage_dir = tmp_path / "modules" / "storage"
+        storage_dir.mkdir(parents=True)
+        (storage_dir / "pyproject.toml").write_text(
+            "[tool.poetry.dependencies]\n"
+            'django-storages = "^1.14.4"\n'
+            'boto3 = "^1.35.0"\n'
+        )
+
+        _add_storage_dependencies(tmp_path, pyproject)
+
+        assert "django-storages" not in pyproject.read_text()
+
+    @patch("quickscale_cli.commands.module_config._regenerate_wiring_for_module")
+    @patch("quickscale_cli.commands.module_config._add_storage_dependencies")
+    def test_apply_storage_configuration_cloud_adds_dependencies(
+        self,
+        mock_add_storage_dependencies,
+        mock_regenerate,
+        tmp_path,
+    ):
+        """Applying cloud storage config should install deps and regenerate wiring."""
+        project = _make_project(tmp_path)
+
+        apply_storage_configuration(
+            project,
+            {
+                "backend": "s3",
+                "bucket_name": "assets",
+            },
+        )
+
+        mock_add_storage_dependencies.assert_called_once()
+        mock_regenerate.assert_called_once()
+
+    @patch("quickscale_cli.commands.module_config._regenerate_wiring_for_module")
+    @patch("quickscale_cli.commands.module_config._add_storage_dependencies")
+    def test_apply_storage_configuration_local_skips_dependency_install(
+        self,
+        mock_add_storage_dependencies,
+        mock_regenerate,
+        tmp_path,
+    ):
+        """Applying local storage config should regenerate wiring without cloud deps."""
+        project = _make_project(tmp_path)
+
+        apply_storage_configuration(project, {"backend": "local"})
+
+        mock_add_storage_dependencies.assert_not_called()
+        mock_regenerate.assert_called_once_with(
+            project,
+            "storage",
+            get_default_storage_config() | {"backend": "local"},
+        )
 
 
 # ============================================================================
