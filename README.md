@@ -20,11 +20,45 @@ Shared storage infrastructure for QuickScale modules.
 Use QuickScale plan/apply:
 
 ```bash
-quickscale plan --add storage
+quickscale plan myapp
+# or, for an existing project:
+quickscale plan --add
 quickscale apply
 ```
 
 Default configuration keeps local filesystem behavior unchanged.
+
+### Current `quickscale plan` workflow
+
+Today, `quickscale plan` lets you select the `storage` module, but it does not yet
+ask the storage-specific CDN/provider questions inside the planner wizard.
+
+Current workflow:
+
+1. Run `quickscale plan myapp` for a new project, or `quickscale plan --add` for an
+   existing project.
+2. Select `storage` in the module list.
+3. Open `quickscale.yml`.
+4. Fill in `modules.storage`.
+5. Run `quickscale apply`.
+
+That means the authoritative config shape is:
+
+```yaml
+modules:
+  storage:
+    backend: s3
+    media_url: /media/
+    public_base_url: https://cdn.example.com
+    custom_domain: cdn.example.com
+    bucket_name: your-media-bucket
+    endpoint_url: ""
+    region_name: eu-west-1
+    access_key_id: YOUR_ACCESS_KEY_ID
+    secret_access_key: YOUR_SECRET_ACCESS_KEY
+    default_acl: ""
+    querystring_auth: false
+```
 
 ## S3 + CDN setup for media
 
