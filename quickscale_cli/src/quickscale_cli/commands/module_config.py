@@ -1067,6 +1067,7 @@ def get_default_storage_config() -> dict[str, Any]:
         "backend": "local",
         "media_url": "/media/",
         "public_base_url": "",
+        "custom_domain": "",
         "bucket_name": "",
         "endpoint_url": "",
         "region_name": "",
@@ -1110,6 +1111,7 @@ def configure_storage_module(non_interactive: bool = False) -> dict[str, Any]:
             default="",
             show_default=False,
         ).strip(),
+        "custom_domain": "",
         "bucket_name": "",
         "endpoint_url": "",
         "region_name": "",
@@ -1122,6 +1124,11 @@ def configure_storage_module(non_interactive: bool = False) -> dict[str, Any]:
 
     if backend in {"s3", "r2"}:
         click.echo("\nCloud backend selected. Provide bucket/provider settings.")
+        config["custom_domain"] = click.prompt(
+            "Optional storage custom domain (host only, e.g. cdn.example.com)",
+            default="",
+            show_default=False,
+        ).strip()
         config["bucket_name"] = click.prompt("Bucket name", default="").strip()
         config["endpoint_url"] = click.prompt(
             "Endpoint URL (required for R2)", default=""
@@ -1242,6 +1249,10 @@ def apply_storage_configuration(project_path: Path, config: dict[str, Any]) -> N
         + (public_base_url if public_base_url else "not configured")
     )
     if normalized["backend"] in {"s3", "r2"}:
+        click.echo(
+            "  • Custom domain: "
+            + (str(normalized.get("custom_domain") or "").strip() or "not configured")
+        )
         click.echo(
             "  • Bucket: "
             + (str(normalized.get("bucket_name") or "").strip() or "not configured")

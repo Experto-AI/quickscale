@@ -1,4 +1,7 @@
-"""Extended tests for module_config.py - covering CRM, listings apply, auth apply and edge cases."""
+"""Extended tests for `module_config.py`.
+
+Covers CRM, listings apply, auth apply, and edge cases.
+"""
 
 from pathlib import Path
 from unittest.mock import patch
@@ -42,7 +45,10 @@ def _make_project(tmp_path: Path, project_name: str = "myproject") -> Path:
     settings_dir.mkdir(parents=True)
     (settings_dir / "base.py").write_text("INSTALLED_APPS = []\nMIDDLEWARE = []\n")
     (project / project_name / "urls.py").write_text(
-        'from django.urls import include, path\nurlpatterns = [\n    path("admin/", include("admin")),\n]\n'
+        "from django.urls import include, path\n"
+        "urlpatterns = [\n"
+        '    path("admin/", include("admin")),\n'
+        "]\n"
     )
     (project / "pyproject.toml").write_text(
         '[tool.poetry.dependencies]\npython = "^3.14"\nDjango = "^6.0"\n'
@@ -522,7 +528,7 @@ class TestModuleWiringSpecs:
     """Regression tests for module wiring spec collisions"""
 
     def test_blog_and_listings_markdownx_media_path_uses_blog_value(self):
-        """MARKDOWNX_MEDIA_PATH should remain stable when blog and listings are enabled"""
+        """`MARKDOWNX_MEDIA_PATH` should remain stable with blog and listings."""
         specs = build_module_wiring_specs(
             {
                 "blog": {"posts_per_page": 10, "enable_rss": True},
@@ -568,7 +574,8 @@ class TestModuleWiringSpecs:
                 "storage": {
                     "backend": "s3",
                     "media_url": "/media/",
-                    "public_base_url": "https://cdn.example.com/media",
+                    "public_base_url": "",
+                    "custom_domain": "cdn.example.com",
                     "bucket_name": "assets",
                     "endpoint_url": "",
                     "region_name": "us-east-1",
@@ -589,14 +596,22 @@ class TestModuleWiringSpecs:
             == "storages.backends.s3.S3Storage"
         )
         assert (
+            settings["STORAGES"]["default"]["OPTIONS"]["custom_domain"]
+            == "cdn.example.com"
+        )
+        assert (
             settings["STORAGES"]["staticfiles"]["BACKEND"]
             == "whitenoise.storage.CompressedManifestStaticFilesStorage"
         )
+        assert (
+            settings["QUICKSCALE_STORAGE_PUBLIC_BASE_URL"] == "https://cdn.example.com"
+        )
+        assert settings["AWS_S3_CUSTOM_DOMAIN"] == "cdn.example.com"
         assert settings["AWS_STORAGE_BUCKET_NAME"] == "assets"
         assert settings["AWS_QUERYSTRING_AUTH"] is False
 
     def test_storage_wiring_invalid_backend_and_media_url_are_normalized(self):
-        """Storage wiring should normalize invalid backend names and relative media URLs."""
+        """Storage wiring should normalize invalid backends and relative URLs."""
         specs = build_module_wiring_specs(
             {
                 "storage": {
@@ -615,13 +630,14 @@ class TestModuleWiringSpecs:
         assert settings["QUICKSCALE_STORAGE_PRIVATE_MEDIA_ENABLED"] is True
 
     def test_storage_wiring_r2_sets_optional_provider_settings(self):
-        """Storage wiring should emit optional provider fields for R2/S3-compatible mode."""
+        """Storage wiring should emit optional provider fields for R2 mode."""
         specs = build_module_wiring_specs(
             {
                 "storage": {
                     "backend": "r2",
-                    "media_url": "https://cdn.example.com/media/",
-                    "public_base_url": "https://cdn.example.com/media",
+                    "media_url": "https://cdn.example.com/",
+                    "public_base_url": "https://cdn.example.com",
+                    "custom_domain": "https://cdn.example.com/",
                     "bucket_name": "assets",
                     "endpoint_url": "https://account.r2.cloudflarestorage.com",
                     "region_name": "auto",
@@ -637,11 +653,11 @@ class TestModuleWiringSpecs:
         _, _, settings, _ = collect_wiring(specs)
 
         assert settings["QUICKSCALE_STORAGE_BACKEND"] == "r2"
-        assert settings["MEDIA_URL"] == "https://cdn.example.com/media/"
+        assert settings["MEDIA_URL"] == "https://cdn.example.com/"
         assert (
-            settings["QUICKSCALE_STORAGE_PUBLIC_BASE_URL"]
-            == "https://cdn.example.com/media"
+            settings["QUICKSCALE_STORAGE_PUBLIC_BASE_URL"] == "https://cdn.example.com"
         )
+        assert settings["AWS_S3_CUSTOM_DOMAIN"] == "cdn.example.com"
         assert (
             settings["AWS_S3_ENDPOINT_URL"]
             == "https://account.r2.cloudflarestorage.com"
@@ -737,6 +753,7 @@ class TestStorageModuleConfig:
         config = get_default_storage_config()
         assert config["backend"] == "local"
         assert config["media_url"] == "/media/"
+        assert config["custom_domain"] == ""
         assert config["querystring_auth"] is False
 
     def test_storage_in_module_configurators(self):
@@ -767,6 +784,7 @@ class TestStorageModuleConfig:
             "r2",
             "/media/",
             "https://cdn.example.com/media",
+            "cdn.example.com",
             "assets",
             "https://account.r2.cloudflarestorage.com",
             "auto",
@@ -778,6 +796,7 @@ class TestStorageModuleConfig:
         config = configure_storage_module(non_interactive=False)
 
         assert config["backend"] == "r2"
+        assert config["custom_domain"] == "cdn.example.com"
         assert config["bucket_name"] == "assets"
         assert config["endpoint_url"] == "https://account.r2.cloudflarestorage.com"
         assert config["region_name"] == "auto"
@@ -789,7 +808,7 @@ class TestStorageModuleConfig:
     def test_add_storage_dependencies_aborts_when_module_pyproject_missing(
         self, tmp_path
     ):
-        """Storage dependency installation should abort if the embedded module is missing."""
+        """Abort if the embedded storage module `pyproject.toml` is missing."""
         pyproject = tmp_path / "pyproject.toml"
         pyproject.write_text('[tool.poetry.dependencies]\npython = "^3.14"\n')
 
@@ -797,7 +816,7 @@ class TestStorageModuleConfig:
             _add_storage_dependencies(tmp_path, pyproject)
 
     def test_add_storage_dependencies_adds_missing_packages(self, tmp_path):
-        """Storage dependency installation should add django-storages and boto3 when absent."""
+        """Add `django-storages` and `boto3` when they are absent."""
         pyproject = tmp_path / "pyproject.toml"
         pyproject.write_text(
             '[tool.poetry.dependencies]\npython = "^3.14"\nDjango = "^6.0"\n'
@@ -817,7 +836,7 @@ class TestStorageModuleConfig:
         assert 'boto3 = "^1.35.0"' in content
 
     def test_add_storage_dependencies_skips_when_present(self, tmp_path):
-        """Storage dependency installation should be a no-op when both packages already exist."""
+        """Be a no-op when both storage dependency packages already exist."""
         pyproject = tmp_path / "pyproject.toml"
         original = (
             '[tool.poetry.dependencies]\npython = "^3.14"\n'
@@ -833,7 +852,7 @@ class TestStorageModuleConfig:
     def test_add_storage_dependencies_handles_missing_dependencies_section(
         self, tmp_path
     ):
-        """Storage dependency installation should return cleanly without a Poetry dependency section."""
+        """Return cleanly without a Poetry dependency section."""
         pyproject = tmp_path / "pyproject.toml"
         pyproject.write_text('[tool.poetry.group.dev.dependencies]\npytest = "^9.0"\n')
         storage_dir = tmp_path / "modules" / "storage"

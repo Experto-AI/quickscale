@@ -12,6 +12,7 @@ from django.urls import reverse
 from PIL import Image
 
 from quickscale_modules_blog.models import BlogMediaAsset, Category, Post, Tag
+from quickscale_modules_blog.views import _build_media_response_url
 
 
 def make_uploaded_test_image(
@@ -627,13 +628,16 @@ class TestUploadMediaApi:
         staff_user,
         settings,
     ):
-        """Upload API should build canonical CDN URLs from the stored key, not provider URLs."""
+        """Upload API should build canonical CDN URLs from the stored key."""
         settings.QUICKSCALE_STORAGE_PUBLIC_BASE_URL = "https://cdn.example.com/media"
         client.force_login(staff_user)
 
         file_mock = MagicMock()
         file_mock.name = "blog/uploads/2026/03/hero-image.png"
-        file_mock.url = "https://bucket.s3.amazonaws.com/blog/uploads/2026/03/hero-image.png?signature=abc"
+        file_mock.url = (
+            "https://bucket.s3.amazonaws.com/blog/uploads/2026/03/"
+            "hero-image.png?signature=abc"
+        )
 
         asset = MagicMock()
         asset.pk = 123
@@ -664,13 +668,16 @@ class TestUploadMediaApi:
         staff_user,
         settings,
     ):
-        """Upload API should preserve provider URLs when cloud storage has no public base URL."""
+        """Upload API should preserve provider URLs without a public base URL."""
         settings.QUICKSCALE_STORAGE_PUBLIC_BASE_URL = ""
         client.force_login(staff_user)
 
         file_mock = MagicMock()
         file_mock.name = "blog/uploads/2026/03/hero-image.png"
-        file_mock.url = "https://bucket.s3.amazonaws.com/blog/uploads/2026/03/hero-image.png?signature=abc"
+        file_mock.url = (
+            "https://bucket.s3.amazonaws.com/blog/uploads/2026/03/"
+            "hero-image.png?signature=abc"
+        )
 
         asset = MagicMock()
         asset.pk = 456
@@ -689,8 +696,68 @@ class TestUploadMediaApi:
         assert response.status_code == 201
         payload = response.json()
         assert (
+            payload["url"] == "https://bucket.s3.amazonaws.com/blog/uploads/2026/03/"
+            "hero-image.png?signature=abc"
+        )
+
+    def test_build_media_response_url_uses_custom_domain_when_public_base_url_is_unset(
+        self,
+        rf,
+        settings,
+    ):
+        """Media response helper should fall back to the storage custom domain."""
+        settings.QUICKSCALE_STORAGE_PUBLIC_BASE_URL = ""
+        settings.AWS_S3_CUSTOM_DOMAIN = "cdn.example.com"
+
+        request = rf.get(reverse("quickscale_blog:api_upload_media"))
+
+        assert (
+            _build_media_response_url(
+                request,
+                "blog/uploads/2026/03/hero-image.png",
+            )
+            == "https://cdn.example.com/blog/uploads/2026/03/hero-image.png"
+        )
+
+    @patch("quickscale_modules_blog.views.create_blog_media_asset_from_request")
+    def test_upload_media_api_uses_custom_domain_when_public_base_url_is_unset(
+        self,
+        mock_create_asset,
+        client,
+        staff_user,
+        settings,
+    ):
+        """Upload API should prefer the storage custom domain over provider URLs."""
+        settings.QUICKSCALE_STORAGE_PUBLIC_BASE_URL = ""
+        settings.AWS_S3_CUSTOM_DOMAIN = "cdn.example.com"
+        client.force_login(staff_user)
+
+        file_mock = MagicMock()
+        file_mock.name = "blog/uploads/2026/03/hero-image.png"
+        file_mock.url = (
+            "https://bucket.s3.amazonaws.com/blog/uploads/2026/03/"
+            "hero-image.png?signature=abc"
+        )
+
+        asset = MagicMock()
+        asset.pk = 789
+        asset.file = file_mock
+        asset.alt = "CDN image"
+        asset.kind = BlogMediaAsset.Kind.GENERAL
+        asset.width = 900
+        asset.height = 600
+        mock_create_asset.return_value = asset
+
+        response = client.post(
+            reverse("quickscale_blog:api_upload_media"),
+            data={"file": make_uploaded_test_image(size=(900, 600))},
+        )
+
+        assert response.status_code == 201
+        payload = response.json()
+        assert (
             payload["url"]
-            == "https://bucket.s3.amazonaws.com/blog/uploads/2026/03/hero-image.png?signature=abc"
+            == "https://cdn.example.com/blog/uploads/2026/03/hero-image.png"
         )
 
     def test_upload_media_api_rejects_unsupported_file_type(

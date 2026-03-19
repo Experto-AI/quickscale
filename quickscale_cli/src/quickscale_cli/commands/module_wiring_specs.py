@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from typing import Any, Mapping
+from urllib.parse import urlparse
 
 from quickscale_core.module_wiring import ModuleWiringSpec
 
@@ -14,6 +15,16 @@ def _normalize_media_url(media_url: str) -> str:
     if not normalized.endswith("/"):
         normalized += "/"
     return normalized
+
+
+def _normalize_custom_domain(value: str) -> str:
+    normalized = (value or "").strip().rstrip("/")
+    if not normalized:
+        return ""
+    if normalized.startswith(("http://", "https://")):
+        parsed = urlparse(normalized)
+        return parsed.netloc.strip()
+    return normalized.split("/", 1)[0].strip()
 
 
 def _auth_wiring(options: Mapping[str, Any]) -> ModuleWiringSpec:
@@ -203,10 +214,14 @@ def _storage_wiring(options: Mapping[str, Any]) -> ModuleWiringSpec:
 
     media_url = _normalize_media_url(str(options.get("media_url", "/media/")))
     public_base_url = str(options.get("public_base_url", "")).strip()
+    custom_domain = _normalize_custom_domain(str(options.get("custom_domain", "")))
+    derived_public_base_url = public_base_url or (
+        f"https://{custom_domain}" if custom_domain else ""
+    )
 
     settings: dict[str, Any] = {
         "QUICKSCALE_STORAGE_BACKEND": backend,
-        "QUICKSCALE_STORAGE_PUBLIC_BASE_URL": public_base_url,
+        "QUICKSCALE_STORAGE_PUBLIC_BASE_URL": derived_public_base_url,
         "MEDIA_URL": media_url,
         "QUICKSCALE_STORAGE_PRIVATE_MEDIA_ENABLED": bool(
             options.get("private_media_enabled", False)
@@ -237,6 +252,8 @@ def _storage_wiring(options: Mapping[str, Any]) -> ModuleWiringSpec:
             storage_options["region_name"] = region_name
         if default_acl:
             storage_options["default_acl"] = default_acl
+        if custom_domain:
+            storage_options["custom_domain"] = custom_domain
 
         settings["STORAGES"] = {
             "default": {
@@ -261,6 +278,8 @@ def _storage_wiring(options: Mapping[str, Any]) -> ModuleWiringSpec:
             settings["AWS_SECRET_ACCESS_KEY"] = secret_access_key
         if default_acl:
             settings["AWS_DEFAULT_ACL"] = default_acl
+        if custom_domain:
+            settings["AWS_S3_CUSTOM_DOMAIN"] = custom_domain
 
     return ModuleWiringSpec(
         apps=("quickscale_modules_storage",),
