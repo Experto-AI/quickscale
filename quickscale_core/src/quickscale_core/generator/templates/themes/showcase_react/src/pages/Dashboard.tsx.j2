@@ -16,6 +16,7 @@ import {
   Rocket,
   Code,
   Database,
+  HardDrive,
   Shield,
 } from 'lucide-react'
 import { useModules } from '@/hooks/useModules'
@@ -69,6 +70,13 @@ const moduleInfo = [
     icon: ClipboardList,
     description: 'Dynamic form builder with spam protection and submission management',
     href: '/forms/contact',
+  },
+  {
+    key: 'storage',
+    name: 'Storage',
+    icon: HardDrive,
+    description: 'Shared media storage infrastructure for local and S3-compatible backends',
+    href: '/settings',
   },
 ] as const
 

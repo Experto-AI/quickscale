@@ -538,7 +538,16 @@ class TestReactThemeAuthUrls:
 class TestReactThemeModuleActivationMatrix:
     """Validate React module activation behavior for none/some/all selections."""
 
-    MODULES = ["auth", "blog", "listings", "crm", "forms", "billing", "teams"]
+    MODULES = [
+        "auth",
+        "blog",
+        "listings",
+        "crm",
+        "forms",
+        "storage",
+        "billing",
+        "teams",
+    ]
 
     @staticmethod
     def _extract_template_module_app_map(index_html: str) -> dict[str, str]:
@@ -577,8 +586,9 @@ class TestReactThemeModuleActivationMatrix:
                     "quickscale_modules_auth",
                     "quickscale_modules_blog",
                     "quickscale_modules_crm",
+                    "quickscale_modules_storage",
                 ],
-                {"auth", "blog", "crm"},
+                {"auth", "blog", "crm", "storage"},
             ),
             (  # all
                 [
@@ -587,10 +597,20 @@ class TestReactThemeModuleActivationMatrix:
                     "quickscale_modules_listings",
                     "quickscale_modules_crm",
                     "quickscale_modules_forms",
+                    "quickscale_modules_storage",
                     "quickscale_modules_billing",
                     "quickscale_modules_teams",
                 ],
-                {"auth", "blog", "listings", "crm", "forms", "billing", "teams"},
+                {
+                    "auth",
+                    "blog",
+                    "listings",
+                    "crm",
+                    "forms",
+                    "storage",
+                    "billing",
+                    "teams",
+                },
             ),
         ],
     )
@@ -611,6 +631,26 @@ class TestReactThemeModuleActivationMatrix:
         expected_flags = {module: module in expected_true for module in self.MODULES}
 
         assert resolved_flags == expected_flags
+
+    def test_react_theme_storage_module_appears_in_frontend_config_and_dashboard(
+        self, tmp_path
+    ):
+        """Generated React theme should expose storage in module config and dashboard UI."""
+        generator = ProjectGenerator(theme="showcase_react")
+        output_path = tmp_path / "react_storage_visibility"
+        generator.generate("react_storage_visibility", output_path)
+
+        use_modules = (
+            output_path / "frontend" / "src" / "hooks" / "useModules.ts"
+        ).read_text()
+        dashboard = (
+            output_path / "frontend" / "src" / "pages" / "Dashboard.tsx"
+        ).read_text()
+
+        assert "storage: false" in use_modules
+        assert "key: 'storage'" in dashboard
+        assert "name: 'Storage'" in dashboard
+        assert "href: '/settings'" in dashboard
 
     def test_react_routes_cover_all_module_navigation_targets(self, tmp_path):
         """React router should include routes for every module link exposed by the UI."""
