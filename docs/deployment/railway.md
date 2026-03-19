@@ -221,6 +221,10 @@ Apply the config with:
 quickscale apply
 ```
 
+If you added `storage` through `quickscale plan`, edit `quickscale.yml` after the
+planner step and put these values under `modules.storage` before running
+`quickscale apply`.
+
 For full CloudFront consistency, point the CloudFront distribution at your
 S3-compatible media origin and use:
 

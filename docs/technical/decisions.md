@@ -333,13 +333,18 @@ Projects are managed through two configuration files with clear separation of co
 User-editable configuration file with this structure:
 
 ```yaml
-version: 0.76.0
+version: "1"
 project:
-  name: myapp
+  slug: myapp
+  package: myapp
   theme: showcase_react
 modules:
-  - name: auth
-  - name: listings
+  auth: {}
+  listings: {}
+  storage:
+    backend: s3
+    public_base_url: https://cdn.example.com
+    custom_domain: cdn.example.com
 docker:
   build: true
   start: true
@@ -421,43 +426,46 @@ last_apply_at: 2025-12-03T14:32:00Z
 
 ### Module Configuration Strategy {#module-configuration-strategy}
 
-**Architectural Decision (v0.72.0):** Modules require configuration when embedded. QuickScale uses an **interactive wizard during plan**:
+**Architectural Decision (v0.72.0):** Modules require configuration when embedded. QuickScale uses a **plan/apply workflow with declarative YAML configuration**:
 
-#### **Interactive Configuration via Plan/Apply**
+#### **Configuration via Plan/Apply**
 
 **How**:
 - `quickscale plan myapp --add auth` → adds auth module to configuration
-- The `plan` wizard asks interactive questions for module-specific options
+- `quickscale plan` selects modules and writes `quickscale.yml`
+- Module-specific options are configured in `quickscale.yml` before `quickscale apply`
 - `quickscale apply` → embeds modules and applies configuration automatically
 - User does NOT manually edit settings.py, urls.py, or INSTALLED_APPS
 - Configuration is tracked in `.quickscale/state.yml`
 
 **Example**:
 ```bash
-$ quickscale plan myapp --add auth
+$ quickscale plan myapp
 ? Select theme (showcase_react): showcase_react
-? Enable user registration? (y/n) [y]: y
-? Email verification required? (y/n) [n]: n
+? Select modules: auth,storage
 
 ✅ Configuration saved to quickscale.yml
 
+$ vim quickscale.yml
+# add module-specific values such as modules.storage.custom_domain
+
 $ quickscale apply
-✅ Module 'auth' embedded successfully!
+✅ Modules embedded successfully!
 Automatic changes made:
-  ✅ Added 'modules.auth' to INSTALLED_APPS
-  ✅ Added allauth configuration to settings
-  ✅ Added auth URLs to urls.py
-  ✅ Ran initial migrations
+  ✅ Added selected modules to INSTALLED_APPS
+  ✅ Added module-specific settings wiring
+  ✅ Added module URLs where needed
+  ✅ Ran initial migrations where applicable
 ```
 
 **Benefits**:
 - ✅ Declarative configuration (version-controllable quickscale.yml)
 - ✅ Reproducible project generation
-- ✅ No manual settings editing required
+- ✅ No manual settings.py / urls.py editing required
 - ✅ Terraform-style workflow (plan → review → apply)
 
 **Implementation Requirements**:
-1. Each module defines configuration prompts (via click.confirm/click.prompt in plan wizard)
+1. `quickscale plan` selects modules and writes `quickscale.yml`
 2. Apply handler automatically updates:
    - INSTALLED_APPS in settings.py
    - Module-specific settings (e.g., ACCOUNT_ALLOW_REGISTRATION)
@@ -465,50 +473,42 @@ Automatic changes made:
    - Runs initial migration (`python manage.py migrate`)
 3. Configuration state stored in `.quickscale/state.yml` for tracking/updates
 
-**When to Use Interactive Config**:
-- ✅ Simple yes/no options (enable registration, require verification)
-- ✅ 1-5 modules being embedded
-- ✅ User wants declarative configuration they can version control
+**Current workflow**:
+- ✅ Use `quickscale plan` to select modules and generate `quickscale.yml`
+- ✅ Edit module-specific values directly in `quickscale.yml` as needed
+- ✅ Use `quickscale apply` to materialize the configuration
 
 ---
 
-#### **Phase 2 (Post-MVP): YAML Configuration (Optional)**
+#### **Current YAML Workflow**
 
-**When**: v1.0.0+ (optional convenience feature)
-
-**Why Defer**:
-- 📋 MVP MVP focuses on 3 core modules — interactive prompts work fine
-- 🎯 Complexity threshold not reached until 5+ modules
-- 🚀 Faster to ship MVP with simple interactive UX
-- 🔄 Interactive approach creates foundation for YAML
-
-**Future workflow** (v1.0.0+):
+**Current workflow**:
 ```yaml
 # quickscale.yml (v0.68.0+)
-version: 0.76.0
+version: "1"
 project:
-  name: myproject
+  slug: myproject
+  package: myproject
   theme: showcase_react
 modules:
-  auth:
-    options:
-      ACCOUNT_ALLOW_REGISTRATION: true
-      ACCOUNT_EMAIL_VERIFICATION: "optional"
-  billing:
-    options:
-      STRIPE_API_KEY: "${STRIPE_API_KEY}"
-      BILLING_CURRENCY: "usd"
+  auth: {}
+  storage:
+    backend: s3
+    public_base_url: https://cdn.example.com
+    custom_domain: cdn.example.com
 docker:
   start: true
   build: true
 
 # Usage: quickscale plan myproject → creates quickscale.yml
+#        edit quickscale.yml module values as needed
 #        quickscale apply → executes configuration
 ```
 
 **Decision Rule**:
 - **v0.72.0+**: Plan/apply is the primary workflow
-- Interactive prompts guide configuration during `quickscale plan`
+- `quickscale plan` selects modules and creates `quickscale.yml`
+- Module-specific values are configured in `quickscale.yml` before apply
 
 **Authoritative Reference**: [roadmap.md §Plan/Apply Architecture](./roadmap.md#-planapply-architecture-v06800)
 
@@ -728,7 +728,7 @@ Other documents (README.md, roadmap.md, scaffolding.md, commercial.md) MUST refe
 | `quickscale_core` embedding via git-subtree (manual documented workflow) | IN (manual) | Manual subtree commands are documented and supported; embedding is opt-in and advanced. |
 | CLI development commands (`up`, `down`, `shell`, `manage`, `logs`, `ps`) | IN (v0.59.0) | User-friendly wrappers for Docker/Django operations to improve developer experience. |
 | CLI module management commands (`update`, `push`) | IN (v0.62.0) | Module update/push via split branches. Module embedding now handled by `quickscale apply`. |
-| Module configuration (interactive prompts via plan wizard) | IN (v0.63.0+) | Modules configured via interactive questions during `quickscale plan`. See [§Module Configuration Strategy](#module-configuration-strategy). |
+| Module configuration (plan/apply + declarative options) | IN (v0.63.0+) | Modules are configured through `quickscale plan` and `quickscale.yml`, then materialized by `quickscale apply`. Current planner behavior selects modules and writes configuration; module-specific values are edited in `quickscale.yml` before apply. See [§Module Configuration Strategy](#module-configuration-strategy). |
 | Module manifests (`module.yml`) with mutable/immutable config | IN (v0.71.0+) | **v0.71.0**: Each module includes `module.yml` declaring config options as mutable or immutable. `quickscale apply` updates settings.py for mutable changes. See [§Module Manifest Architecture](#module-manifest-architecture). |
 | `quickscale remove <module>` command | IN (v0.71.0+) | **v0.71.0**: Remove embedded modules with cleanup. Data loss warning required. Re-embed for new config. |
 | Settings inheritance from `quickscale_core` into generated project | OPTIONAL | Default generated project uses standalone `settings.py`. If user explicitly embeds `quickscale_core`, optional settings inheritance is allowed and documented. |
