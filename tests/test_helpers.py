@@ -46,6 +46,7 @@ class TestSelectStorageBackend:
             {
                 "QUICKSCALE_STORAGE_BACKEND": "s3",
                 "AWS_STORAGE_BUCKET_NAME": "my-bucket",
+                "AWS_S3_CUSTOM_DOMAIN": "cdn.example.com",
                 "AWS_S3_ENDPOINT_URL": "",
             }
         )
@@ -53,6 +54,7 @@ class TestSelectStorageBackend:
         assert resolved.use_s3_compatible is True
         assert resolved.django_backend == "storages.backends.s3.S3Storage"
         assert resolved.options["bucket_name"] == "my-bucket"
+        assert resolved.options["custom_domain"] == "cdn.example.com"
 
     def test_r2_backend_accepts_endpoint_mode(self) -> None:
         resolved = select_storage_backend(
@@ -102,6 +104,13 @@ class TestPublicUrlHelpers:
             media_url="/media/",
         )
         assert resolved == "/media/blog/uploads/image.png"
+
+    def test_build_public_media_url_with_custom_domain_fallback(self) -> None:
+        resolved = build_public_media_url(
+            "blog/uploads/image.png",
+            custom_domain="cdn.example.com",
+        )
+        assert resolved == "https://cdn.example.com/blog/uploads/image.png"
 
 
 class TestValidateFileUpload:
