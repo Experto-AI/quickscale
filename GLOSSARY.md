@@ -113,7 +113,7 @@ quickscale/
 **Definition**: Phase 1 of QuickScale (v0.56-v0.77.0) - Production-focused "Personal Toolkit" for solo developers and development agencies to build client projects faster with first-party modules and themes.
 
 **Scope**:
-- ✅ Django project generator (`quickscale plan` + `quickscale apply`)
+- ✅ Django project generator (`quickscale plan`, then enter the generated directory and run `quickscale apply`)
 - ✅ Git subtree module distribution
 - ✅ Production-ready foundations (Docker, PostgreSQL, testing, CI/CD)
 - ✅ `showcase_react` starter theme as the default frontend

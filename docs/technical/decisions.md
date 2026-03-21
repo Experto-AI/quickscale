@@ -82,11 +82,11 @@ TARGET AUDIENCE: Maintainers, core contributors, community package developers, C
 **Terminology:**
 - Foundation Phase: v0.52-v0.55 (incremental foundation)
 - MVP: v0.56-v0.77.0 (production-focused personal toolkit with first-party modules/themes)
-- Post-MVP: v0.78+ (broader ecosystem, packaging, marketplace)
+- Post-MVP: v0.78+ (broader post-MVP expansion; community-platform capabilities remain optional at v1.0.0+)
 
 **MVP (v0.56-v0.77.0):**
 - ✅ `quickscale_core`: Scaffolding + git subtree integration (monolithic package)
-- ✅ `quickscale_cli`: Plan/apply workflow (`quickscale plan` + `quickscale apply`)
+- ✅ `quickscale_cli`: Plan/apply workflow (`quickscale plan`, enter the generated directory, then run `quickscale apply`)
 - ✅ Generated project: Standalone Django (user owns completely)
 - ✅ Settings: Standalone settings.py (NO inheritance from core by default)
 - ✅ First-party modules and themes within the repository
@@ -102,6 +102,8 @@ TARGET AUDIENCE: Maintainers, core contributors, community package developers, C
 
 **Purpose:** Reusable Django apps that users embed and update over project lifetime.
 
+<a id="integration-note-personal-toolkit-git-subtree"></a>
+<a id="module-extraction-workflow"></a>
 **Distribution Strategy:**
 1. Develop modules on `main` branch in `quickscale_modules/`
 2. Auto-split to `splits/{module}-module` branches on release (GitHub Actions)
@@ -579,6 +581,7 @@ config:
 
 #### **Required Components (All Modules)**
 
+<a id="package-structure-and-naming-conventions"></a>
 **1. Package Structure:**
 - [ ] `quickscale_modules/<name>/pyproject.toml` — Package config (see template below)
 - [ ] `quickscale_modules/<name>/README.md` — Installation, configuration, and usage guide

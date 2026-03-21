@@ -111,139 +111,24 @@ List of upcoming releases with detailed implementation tasks:
 
 ---
 
-Release summaries currently exist in [docs/releases/](../releases/) for selected completed releases. Detailed implementation/review artifacts remain in [docs/releases-archive/](../releases-archive/). Keep v0.76.0 tracked here and in the changelog until a reader-facing summary is actually published.
+Release summaries currently exist in [docs/releases/](../releases/) for selected completed releases. Detailed implementation/review artifacts remain in [docs/releases-archive/](../releases-archive/). When a completed release is archived, keep a concise pointer here and move the detailed implementation checklist into the corresponding release documents.
 
 ---
 
 ### v0.76.0: `quickscale_modules.storage` - Media Storage & CDN Integration Module
 
-**Status**: ✅ Complete — storage contract cleanup, canonical blog media URLs, permanent deployment/docs alignment, and targeted regression coverage landed; deeper integration/E2E expansion moved to v0.85.0 workflow validation
+**Status**: ✅ Released and archived on 2026-03-21
 
-**Strategic Context**: Shared infrastructure module for user-uploaded files and media delivery. Provides a production-ready path beyond local filesystem storage by standardizing cloud object storage, CDN URL generation, image handling, and deployment wiring across QuickScale modules.
+This release completed QuickScale's shared media-storage milestone: the storage contract now uses `public_base_url` as the single public media URL source, the deprecated `custom_domain` path was removed from module/CLI/planner behavior, and blog uploads plus thumbnails resolve through canonical helper-built URLs.
 
-QuickScale-generated projects already work well in local development, but production media handling is still a project-by-project concern. That becomes a serious limitation when a workflow depends on uploaded files being durable across redeployments, publicly accessible at stable URLs, and efficiently cacheable through a CDN. The first concrete use case is **experto.ai blog automation**, where the publishing pipeline must upload images first, receive final public URLs, rewrite Markdown content to those URLs, and then publish the post without relying on local container disk.
+**Release artifacts**:
+- [Reader-facing summary](../releases/release-v0.76.0.md)
+- [Implementation archive](../releases-archive/release-v0.76.0-implementation.md)
+- [Review archive](../releases-archive/release-v0.76.0-review.md)
 
-This module should solve that infrastructure concern once, centrally, instead of repeating custom storage setup in every generated project or feature module. It should be a reusable dependency layer for media storage concerns, while business modules such as `blog`, `listings`, or future attachment-heavy modules continue to own their domain logic. In practice:
-
-- `quickscale_modules.blog` should continue owning publishing workflows and content models.
-- `quickscale_modules.storage` should own where uploaded files live, how their public URLs are built, and how production-safe delivery is configured.
-- local filesystem storage must remain the default for development and simple projects.
-- cloud-backed storage must be a documented, opt-in path for production projects that need durable media.
-
-**Primary Objectives**:
-- [x] Standardize media storage across QuickScale modules
-- [x] Make uploaded files durable across Railway redeployments and container restarts
-- [x] Provide stable, CDN-ready public URLs for uploaded assets
-- [x] Reduce repeated per-project storage and CDN configuration work
-- [x] Create a reusable foundation for blog images, avatars, galleries, and future attachments
-
-**Non-Goals for v0.76.0**:
-- [ ] No infrastructure provisioning / Terraform automation
-- [ ] No video transcoding or advanced media pipeline
-- [ ] No full DAM/media-library product scope
-- [ ] No forced migration of existing local-media projects
-- [ ] No provider-specific premium features unless they fit the shared abstraction cleanly
-
-**Prerequisites**:
-- ✅ React Default Theme (v0.74.0)
-- ✅ Blog API image upload support available in the blog module
-
-**Implementation Approach**:
-- Build this as an infrastructure module, not a vertical feature module
-- Keep local filesystem as the default development mode
-- Add explicit opt-in configuration for cloud storage providers
-- Prefer S3-compatible interfaces first so AWS S3 and Cloudflare R2 share most of the implementation
-- Expose simple project-level helpers that other modules can use without importing provider-specific logic
-
-#### Implementation Checklist
-
-**Architecture & Boundaries**:
-- [x] Define module boundary: what belongs in `storage` vs what remains in `blog` and other modules
-- [x] Define supported provider matrix for v0.76.0 (minimum: local + S3-compatible + Cloudflare R2)
-- [x] Define stable public URL contract for uploaded files and CDN fronting
-- [x] Define upload path strategy by module / asset type / date / collision-safe suffix
-- [x] Define fallback strategy so projects can remain on local storage if desired
-- [x] Define the future extension point for private media even if v0.76.0 only ships public media delivery
-- [x] Make `public_base_url` the only supported public URL source for storage-backed media and blog-facing asset URLs
-- [x] Remove `custom_domain` from the storage module contract entirely instead of keeping any backward-compatibility path
-- [x] Fold mixed blog URL behavior into the storage integration plan so uploads, Markdown rewrites, featured images, and future blog-owned assets resolve through one canonical public URL helper
-
-**Core Storage Features**:
-- [x] Storage backend abstraction: local filesystem, S3-compatible, Cloudflare R2
-- [x] Provider configuration contract with explicit required and optional fields
-- [x] Project-level settings wiring for Django `STORAGES["default"]`
-- [x] Canonical media URL generation helpers
-- [x] CDN base URL support for uploaded media
-- [x] Upload path conventions for images, documents, and generic assets
-- [x] Validation helpers for file size, content type, and image dimensions
-- [x] Shared helper for converting stored file references into final public URLs
-- [x] Shared helper for generating immutable, cache-friendly asset names
-
-**Image & Media Processing**:
-- [x] Keep richer image variants and WebP/optimized generation out of v0.76.0 scope; preserve the current thumbnail-first MVP and defer broader media processing to a later release
-- [x] Cache-friendly filename/versioning strategy for immutable media URLs
-- [x] Shared utilities for modules that attach uploaded files to models
-- [x] Decide whether image processing is synchronous for v0.76.0 or deferred to future async integration
-- [x] Define a clean extension point for future background processing without blocking the initial release
-- [x] Ship a minimum viable remote thumbnail generation path for storage-backed images, acceptable as a synchronous first pass
-- [x] Ensure generated thumbnail URLs use the same `public_base_url` contract as original media URLs
-- [x] Defer richer variants, async/background processing, and broader media-pipeline expansion to a later release
-
-**Module Integrations**:
-- [x] Blog integration: use storage module for uploaded featured and inline images
-- [x] Author/avatar compatibility for existing blog author profiles
-- [x] Defer React showcase guidance and broader cross-module media integration hooks until the related vertical/theme releases land
-- [x] Ensure blog upload/publish APIs continue working when the storage backend changes from local to cloud
-- [x] Define how feature modules should depend on `storage` without importing provider-specific code
-- [x] Make blog templates and model helpers stop relying on direct `.url` for public rendering, using storage-backed public URL helpers instead
-- [x] Extend the same canonical public URL strategy to blog author/avatar and similar blog-owned image fields
-- [x] Verify blog publish flows no longer mix raw storage URLs, deprecated `custom_domain` behavior, and `public_base_url`-based URLs in the same project
-
-**CLI & Plan/Apply Integration**:
-- [x] Add `module.yml` manifest with mutable and immutable config boundaries
-- [x] Define `quickscale plan --add storage` prompts / defaults
-- [x] Add CLI wiring so generated projects receive provider-specific settings only when enabled
-- [x] Ensure `quickscale apply` can regenerate settings safely without clobbering unrelated project code
-- [x] Defer any automatic `blog` ↔ `storage` apply-time coupling until broader cross-module planner work in v0.84.0
-- [x] Add interactive `quickscale plan` module configuration for `storage` so backend/provider settings and `public_base_url` can be captured during planning
-- [x] Add a planner flag for interactive module configuration instead of forcing manual `quickscale.yml` edits for storage-specific setup
-- [x] Fix `quickscale plan --reconfigure` to preserve existing per-module option dictionaries instead of rebuilding them with empty values
-- [x] Acceptance: `plan --reconfigure` round-trips unchanged module options safely while updating only the fields the user reconfigures
-
-**Configuration & Deployment**:
-- [x] Environment variable contract (`AWS_*`, bucket, endpoint, CDN URL)
-- [x] Document minimum environment variables for AWS S3 and Cloudflare R2
-- [x] Railway deployment guide for external media storage
-- [x] Local development fallback preserving current filesystem behavior
-- [x] Staging vs production guidance for media storage
-- [x] Explicit note that Railway local disk should not be treated as durable production media storage
-- [x] CDN cache guidance for immutable uploaded assets
-- [x] Migration guide for moving existing local-media projects to cloud-backed storage
-- [x] Document `public_base_url` as the canonical environment-specific override for swapping S3/CDN host or base path without changing stored media keys
-- [x] Remove `custom_domain` from storage docs/config guidance so new setups use `public_base_url` only
-
-**Documentation & Acceptance Criteria**:
-- [x] Add a module README with local/dev, staging, and production setup paths
-- [x] Add troubleshooting guidance for missing credentials, invalid buckets, and broken CDN URLs
-- [x] Document how other modules should integrate with storage helpers
-- [x] Acceptance: a generated project can run locally with filesystem storage and no cloud credentials
-- [x] Acceptance: a generated project can switch to S3-compatible storage via documented environment variables
-- [x] Acceptance: blog image upload + publish workflow works end-to-end with cloud-backed URLs
-- [x] Acceptance: resulting media URLs are stable and cache-friendly for CDN delivery
-- [x] Acceptance: Railway deployment guidance is documented and production-safe
-- [x] Acceptance: `public_base_url` is the documented public URL source of truth for storage/blog media in v0.76.0
-- [x] Acceptance: storage no longer exposes `custom_domain`; `public_base_url` is the sole public media URL setting
-- [x] Acceptance: cloud-backed originals and generated thumbnails both resolve to stable, cache-friendly public URLs
-
-**Testing**:
-- [x] Unit tests for storage backend selection and URL helpers
-- [x] Keep targeted helper/blog/CLI regressions in v0.76.0 and reschedule deeper storage upload/write/read integration coverage to v0.85.0 workflow validation
-- [x] Blog integration tests for uploaded images using storage-backed URLs
-- [x] Reschedule Plan → Apply → Blog publish with uploaded CDN-backed images end-to-end coverage to v0.85.0 workflow validation
-- [x] Regression tests proving local-development behavior still works without cloud configuration
-- [x] Regression tests proving public blog rendering never depends on direct storage `.url` when storage helpers are available
-- [x] Planner tests covering interactive storage configuration, option persistence, and safe `plan --reconfigure` round-trips
-- [x] Thumbnail tests covering local and storage-backed generation with identical `public_base_url` URL resolution
+**Deferred follow-up**:
+- deeper storage upload/write/read integration coverage moved to [v0.85.0](#v0850-module-workflow-validation--real-world-testing)
+- Plan → Apply → Blog publish E2E workflow validation with CDN-backed media moved to [v0.85.0](#v0850-module-workflow-validation--real-world-testing)
 
 ---
 

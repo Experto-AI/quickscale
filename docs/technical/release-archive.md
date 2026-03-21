@@ -1,6 +1,6 @@
 # QuickScale Release Archive
 
-**Purpose**: Historical record centered on QuickScale releases from v0.52.0 to v0.72.0, with notes for later legacy release artifacts that still sit outside the current summary/archive split. This archive preserves implementation/review artifacts while keeping active documentation focused on current and future releases.
+**Purpose**: Historical record for archived QuickScale releases, combining older implementation/review artifacts with newer mixed-layout release records as they are published. This archive preserves implementation/review artifacts while keeping active documentation focused on current and future releases.
 
 **For Current Roadmap**: See [roadmap.md](./roadmap.md)
 
@@ -16,6 +16,10 @@ Dates and short summaries below mirror the linked release artifacts and [CHANGEL
 
 | Version | Artifact Date | Phase | Key Changes | Status | Docs |
 |---------|---------------|-------|-------------|--------|------|
+| **v0.76.0** | 2026-03-21 | MVP | Storage module, canonical public media URLs, `public_base_url` contract cleanup | ✅ Complete | [Summary](../releases/release-v0.76.0.md) \| [Impl](../releases-archive/release-v0.76.0-implementation.md) \| [Review](../releases-archive/release-v0.76.0-review.md) |
+| **v0.75.0** | 2026-02-23 | MVP | Forms module with admin-managed schemas, DRF API, spam protection, and notifications | ✅ Complete | [Summary](../releases/release-v0.75.0.md) |
+| **v0.74.0** | 2026-02-05 | MVP | React default theme (`showcase_react`) with Vite, TypeScript, TanStack Query, and Zustand | ✅ Complete | [Summary](../releases/release-v0.74.0.md) \| [Review](../releases/release-v0.74.0-review.md) |
+| **v0.73.0** | 2026-02-04 | MVP | CRM module with API-first Django app structure and CLI integration | ✅ Complete | [Impl](../releases-archive/release-v0.73.0-implementation.md) \| [Review](../releases/release-v0.73.0-review.md) |
 | **v0.72.0** | 2025-12-07 | MVP | Plan/Apply cleanup (removed legacy init/embed commands, full transition to plan/apply) | ✅ Complete | [Review](../releases-archive/release-v0.72.0-review.md) |
 | **v0.71.0** | 2025-06-25 | MVP | Module manifests & config mutability (Plan/Apply system complete) | ✅ Complete | [Impl](../releases-archive/release-v0.71.0-implementation.md) \| [Review](../releases-archive/release-v0.71.0-review.md) |
 | **v0.70.0** | 2025-12-19 | MVP | Existing project support (`status`, `plan --add`, `plan --reconfigure`) | ✅ Complete | [Impl](../releases-archive/release-v0.70.0-implementation.md) \| [Review](../releases-archive/release-v0.70.0-review.md) |
@@ -55,8 +59,8 @@ Dates and short summaries below mirror the linked release artifacts and [CHANGEL
 - Docker & PostgreSQL setup
 - Security best practices
 
-### MVP Phase (v0.56.0 - v0.72.0)
-**Dates**: This archive section covers the historical MVP subset through v0.72.0; see the table above for exact artifact dates.
+### MVP Phase (v0.56.0 - v0.77.0)
+**Dates**: This archive section covers archived MVP releases through the currently published records; see the table above for exact artifact dates.
 **Focus**: Production-ready personal toolkit for client projects
 
 **Key Milestones**:
@@ -67,8 +71,9 @@ Dates and short summaries below mirror the linked release artifacts and [CHANGEL
 - ✅ v0.66.0: Blog & listings modules + real estate site
 - ✅ v0.68.0: Plan/Apply system implementation
 - ✅ v0.72.0: Complete Plan/Apply cleanup
+- ✅ v0.76.0: Storage module with canonical public media URL contract
 
-**Status**: Historical MVP archive through v0.72.0. For current MVP/Post-MVP boundaries and active release status, see [decisions.md](./decisions.md) and [roadmap.md](./roadmap.md).
+**Status**: Historical/archive view for completed MVP releases with published artifacts. For current MVP/Post-MVP boundaries and active release status, see [decisions.md](./decisions.md) and [roadmap.md](./roadmap.md).
 
 ### Post-MVP Phase (v0.78.0+)
 **Planned**: 2026+

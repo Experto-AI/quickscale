@@ -60,8 +60,8 @@ QuickScale is a **Django project generator** that creates production-ready SaaS 
 
 **Quick Reference:**
 - **MVP** = Phase 1 (production-focused personal toolkit with first-party modules/themes)
-- **Post-MVP** = Phase 2+ (broader ecosystem, marketplace, and community growth)
-- **Generated Project** = Output of `quickscale plan` + `quickscale apply`
+- **Post-MVP** = Phase 2+ (broader post-MVP expansion; community-platform capabilities remain optional at v1.0.0+)
+- **Generated Project** = Output of `quickscale plan`, then entering the generated directory and running `quickscale apply`
 
 See [decisions.md - Document Responsibilities](./docs/technical/decisions.md#document-responsibilities) for complete terminology and Single Source of Truth reference
 

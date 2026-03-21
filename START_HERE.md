@@ -8,7 +8,7 @@
 
 QuickScale = **Django Generator** + **Reusable Modules** + **Production Foundations**
 
-**Input**: `quickscale plan myapp` (interactive config) → `quickscale apply`
+**Input**: `quickscale plan myapp` (interactive config), enter the generated directory, then run `quickscale apply`
 **Output**: Complete Django project with Docker, PostgreSQL, testing, CI/CD, and security best practices
 **Current Distribution**: Reusable modules are installed via git subtree during MVP; PyPI distribution remains Post-MVP
 
@@ -23,7 +23,7 @@ For complete definitions, see **[GLOSSARY.md](./GLOSSARY.md)**. Here are the ess
 
 | Term | Quick Definition | Learn More |
 |------|------------------|------------|
-| **Generated Project** | The standalone Django app created by `quickscale plan + apply` | [GLOSSARY.md](./GLOSSARY.md#generated-project) |
+| **Generated Project** | The standalone Django app created by `quickscale plan`, then entering the generated directory and running `quickscale apply` | [GLOSSARY.md](./GLOSSARY.md#generated-project) |
 | **MVP** | Phase 1 (v0.56-v0.77.0) - Personal toolkit for client projects | [GLOSSARY.md](./GLOSSARY.md#mvp-minimum-viable-product) |
 | **Post-MVP** | Phase 2+ (v0.78+) - Broader expansion beyond MVP; community-platform work is optional at v1.0.0+ | [GLOSSARY.md](./GLOSSARY.md#post-mvp) |
 | **Module** | Reusable Django app (auth, blog, listings, storage) | [GLOSSARY.md](./GLOSSARY.md#module) |
@@ -214,7 +214,7 @@ See: [README.md - Primary Use Cases](./README.md#primary-use-cases-mvp)
 
 ### "What's the difference between MVP and Post-MVP?"
 - **MVP (v0.56-v0.77)**: Personal toolkit, git subtree distribution, React + shadcn/ui default
-- **Post-MVP (v0.78+)**: Additional themes, PyPI distribution, marketplace
+- **Post-MVP (v0.78+)**: Broader post-MVP expansion including additional themes and packaging options, with community-platform capabilities optional at v1.0.0+
 
 See: [GLOSSARY.md - MVP](./GLOSSARY.md#mvp-minimum-viable-product) | [GLOSSARY.md - Post-MVP](./GLOSSARY.md#post-mvp)
 

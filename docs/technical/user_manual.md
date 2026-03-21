@@ -309,7 +309,7 @@ See [roadmap.md](./roadmap.md) for historical implementation context and follow-
 
 ### 4.2) Module Management Commands
 
-> **Status**: ✅ Available (shipped in v0.62.0)
+> **Status**: ✅ Available — `quickscale update` / `quickscale push --module <name>` shipped in v0.62.0, `quickscale status` in v0.70.0, and `quickscale remove <module>` in v0.71.0+
 >
 > These commands manage installed modules while keeping manual `git subtree` flows available for advanced recovery scenarios.
 
@@ -327,7 +327,7 @@ quickscale remove blog
 quickscale push --module blog
 ```
 
-**Note**: Initial module embedding is handled by the `quickscale plan` + `quickscale apply` workflow. Manual `git subtree` commands remain useful for advanced debugging and recovery.
+**Note**: Initial module embedding is handled by running `quickscale plan`, entering the generated directory, and then running `quickscale apply`. Manual `git subtree` commands remain useful for advanced debugging and recovery.
 
 See [decisions.md: CLI Command Matrix](./decisions.md#cli-command-matrix) for the authoritative command list.
 
@@ -582,7 +582,7 @@ poetry publish --build
 
 ## 8) Git Subtree Workflow (Advanced)
 
-> **Note**: CLI wrapper commands (`quickscale update`, `quickscale push --module <name>`) now ship with QuickScale. Module embedding is handled via `quickscale plan` + `quickscale apply`. See [section 4.2](#42-module-management-commands) for the simplified commands.
+> **Note**: CLI wrapper commands (`quickscale update`, `quickscale push --module <name>`) now ship with QuickScale. Module embedding is handled by running `quickscale plan`, entering the generated directory, and then running `quickscale apply`. See [section 4.2](#42-module-management-commands) for the simplified commands.
 >
 > The manual commands documented below will continue to work and are useful for understanding how git subtree works under the hood.
 
