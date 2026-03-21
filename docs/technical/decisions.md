@@ -42,7 +42,7 @@ TARGET AUDIENCE: Maintainers, core contributors, community package developers, C
 ## Quick Reference (AI Context)
 
 **MVP Essentials:**
-- ✅ CLI workflow: `quickscale plan myapp` + `quickscale apply`
+- ✅ CLI workflow: `quickscale plan myapp`, enter the generated directory, then run `quickscale apply`
 - ✅ Generates standalone Django project (Poetry + pyproject.toml)
 - ✅ Production-ready: Docker, PostgreSQL, pytest, CI/CD, security best practices
 - ✅ Git subtree for module distribution
@@ -421,7 +421,7 @@ last_apply_at: 2025-12-03T14:32:00Z
 
 #### **Related Files**
 
-- **Module tracking**: `.quickscale/config.yml` (v0.62.0+) — Records module branches and versions for `quickscale update` and `quickscale push` operations. Will consolidate into `state.yml` post-MVP.
+- **Module tracking**: `.quickscale/config.yml` (v0.62.0+) — Records module branches and versions for `quickscale update` and `quickscale push --module <name>` operations. Will consolidate into `state.yml` post-MVP.
 - **User manual**: See [user_manual.md §4.3](./user_manual.md#43-planapply-commands-shipped-in-v0680) for workflow examples and CLI usage.
 - **Project structure**: See [scaffolding.md §5](./scaffolding.md#generated-project-output) for complete project layout including state files.
 
@@ -1035,7 +1035,7 @@ frontend: {source: ./custom_frontend/, variant: default}
 
 **MVP - Git Subtree:**
 - ✅ Primary distribution mechanism
-- ✅ CLI workflow: `quickscale plan myapp` + `quickscale apply`
+- ✅ CLI workflow: `quickscale plan myapp`, enter the generated directory, then run `quickscale apply`
 - ✅ Manual git subtree commands (documented)
 - ✅ No package registries, offline development
 

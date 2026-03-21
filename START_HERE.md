@@ -25,7 +25,7 @@ For complete definitions, see **[GLOSSARY.md](./GLOSSARY.md)**. Here are the ess
 |------|------------------|------------|
 | **Generated Project** | The standalone Django app created by `quickscale plan + apply` | [GLOSSARY.md](./GLOSSARY.md#generated-project) |
 | **MVP** | Phase 1 (v0.56-v0.77.0) - Personal toolkit for client projects | [GLOSSARY.md](./GLOSSARY.md#mvp-minimum-viable-product) |
-| **Post-MVP** | Phase 2+ (v0.78+) - Community platform with marketplace | [GLOSSARY.md](./GLOSSARY.md#post-mvp) |
+| **Post-MVP** | Phase 2+ (v0.78+) - Broader expansion beyond MVP; community-platform work is optional at v1.0.0+ | [GLOSSARY.md](./GLOSSARY.md#post-mvp) |
 | **Module** | Reusable Django app (auth, blog, listings, storage) | [GLOSSARY.md](./GLOSSARY.md#module) |
 | **Theme** | Frontend scaffolding (React default, HTML alternative, HTMX planned post-MVP) | [GLOSSARY.md](./GLOSSARY.md#theme) |
 | **Git Subtree** | Distribution mechanism for sharing code | [GLOSSARY.md](./GLOSSARY.md#git-subtree) |

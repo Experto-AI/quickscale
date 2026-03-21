@@ -9,7 +9,7 @@
 ## Core Concepts
 
 ### Generated Project
-**Definition**: The standalone Django application created by running `quickscale plan <name>` + `quickscale apply`. This is the output that users own and customize for their client work.
+**Definition**: The standalone Django application created by running `quickscale plan <name>`, entering the generated directory, and then running `quickscale apply`. This is the output that users own and customize for their client work.
 
 **Key Characteristics**:
 - Complete Django project with manage.py, settings.py, urls.py
@@ -32,7 +32,7 @@
 **Workflow**:
 - `quickscale apply` → Embeds modules using git subtree
 - `quickscale update` → Pulls latest module changes
-- `quickscale push` → Contributes improvements back
+- `quickscale push --module <name>` → Contributes improvements back
 
 **See**: [decisions.md - Personal Toolkit Git Subtree](./docs/technical/decisions.md#integration-note-personal-toolkit-git-subtree), [plan-apply-system.md](./docs/technical/plan-apply-system.md)
 
@@ -154,7 +154,7 @@ quickscale/
 **Commands**:
 - `quickscale plan <name>` - Interactive wizard to create `quickscale.yml`
 - `quickscale plan --add` - Add modules to existing config
-- `quickscale plan --edit` - Reconfigure mutable options
+- `quickscale plan --reconfigure` - Reconfigure mutable options
 - `quickscale apply` - Execute configuration
 - `quickscale status` - Show current vs desired state
 
@@ -167,7 +167,7 @@ quickscale/
 ---
 
 ### Post-MVP
-**Definition**: Phase 2+ of QuickScale (v0.78.0+) - Broader community platform with expanded packaging, marketplace, and ecosystem capabilities.
+**Definition**: Phase 2+ of QuickScale (v0.78.0+) - Broader post-MVP expansion beyond the personal-toolkit scope, with community-platform capabilities remaining optional for v1.0.0+.
 
 **Planned Features**:
 - ✅ Broader theme expansion beyond the current first-party MVP set
@@ -178,7 +178,7 @@ quickscale/
 
 **Evolution Path**: Organic growth based on proven MVP usage, not speculative features
 
-**Synonym**: Phase 2+, Community Platform
+**Synonym**: Phase 2+, Post-MVP Expansion
 
 **Opposite**: MVP
 

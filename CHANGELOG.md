@@ -1,6 +1,6 @@
 # Changelog
 
-Use `docs/releases/` for reader-facing release summaries when published, `docs/releases-archive/` for detailed implementation/review artifacts, and `docs/technical/roadmap.md` for active release status.
+Use `docs/releases/` for reader-facing release summaries when published, `docs/releases-archive/` for detailed implementation/review artifacts, and `docs/technical/roadmap.md` for active release status. Entries are version-ordered; listed dates reflect the recorded artifact date when available.
 
 - v0.76.0 — tracked in roadmap pending any reader-facing summary — Storage Module (cloud file hosting, media storage adapters, CDN-ready media infrastructure)
 - v0.75.0 — 2026-02-23 — Forms Module (generic customizable form builder with admin, DRF API, spam protection, GDPR anonymization, and React mount point)

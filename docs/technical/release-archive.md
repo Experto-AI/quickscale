@@ -12,10 +12,10 @@
 
 ## Release Summary Table
 
-Dates and short summaries below mirror the linked release artifacts and [CHANGELOG.md](../../CHANGELOG.md). The table is ordered by version, not by date.
+Dates and short summaries below mirror the linked release artifacts and [CHANGELOG.md](../../CHANGELOG.md). The table is ordered by version, not by time; the date column records the linked artifact date.
 
-| Version | Date | Phase | Key Changes | Status | Docs |
-|---------|------|-------|-------------|--------|------|
+| Version | Artifact Date | Phase | Key Changes | Status | Docs |
+|---------|---------------|-------|-------------|--------|------|
 | **v0.72.0** | 2025-12-07 | MVP | Plan/Apply cleanup (removed legacy init/embed commands, full transition to plan/apply) | ✅ Complete | [Review](../releases-archive/release-v0.72.0-review.md) |
 | **v0.71.0** | 2025-06-25 | MVP | Module manifests & config mutability (Plan/Apply system complete) | ✅ Complete | [Impl](../releases-archive/release-v0.71.0-implementation.md) \| [Review](../releases-archive/release-v0.71.0-review.md) |
 | **v0.70.0** | 2025-12-19 | MVP | Existing project support (`status`, `plan --add`, `plan --reconfigure`) | ✅ Complete | [Impl](../releases-archive/release-v0.70.0-implementation.md) \| [Review](../releases-archive/release-v0.70.0-review.md) |
@@ -72,7 +72,7 @@ Dates and short summaries below mirror the linked release artifacts and [CHANGEL
 
 ### Post-MVP Phase (v0.78.0+)
 **Planned**: 2026+
-**Focus**: Community platform with PyPI distribution, multiple themes, marketplace
+**Focus**: Broader post-MVP expansion beyond the personal-toolkit scope, with community-platform capabilities remaining optional at v1.0.0+
 
 ---
 
@@ -150,7 +150,7 @@ QuickScale uses semantic versioning with QuickScale-specific phase alignment:
 **Phases**:
 - `v0.52-v0.55`: Foundation Phase (incremental foundations)
 - `v0.56-v0.77`: MVP Phase (personal toolkit)
-- `v0.78-v0.99`: Post-MVP Phase (community platform)
+- `v0.78-v0.99`: Post-MVP expansion phase (community-platform capabilities remain optional at v1.0.0+)
 - `v1.0+`: Production-stable (long-term support)
 
 **See**: [versioning.md](./versioning.md) for complete version scheme

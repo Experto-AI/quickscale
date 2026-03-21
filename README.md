@@ -97,7 +97,7 @@ If package README text differs from repo docs, [README.md](./README.md) and [dec
 
 ### What You Get
 
-Running `quickscale plan myapp && quickscale apply` generates a **production-ready Django project** with:
+Running `quickscale plan myapp`, entering the generated directory, and then running `quickscale apply` generates a **production-ready Django project** with:
 
 - ✅ **React + shadcn/ui** frontend (TypeScript, Vite, Tailwind CSS) — **NEW in v0.74.0**
 - ✅ **Docker** setup (development + production)

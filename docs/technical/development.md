@@ -539,7 +539,7 @@ You have a working development environment when:
 - ✅ `poetry run quickscale --version` shows version number
 - ✅ `./scripts/test_unit.sh` meets the repository coverage policy (90% overall mean and 80% per-file minimum)
 - ✅ `./scripts/lint.sh` passes all checks
-- ✅ `quickscale plan testproject && quickscale apply` generates working Django project
+- ✅ `quickscale plan testproject`, then `cd testproject`, then `quickscale apply` generates a working Django project
 - ✅ Can make changes, run tests, and see results in <2 minutes
 
 **Target: Clone → working dev environment in <15 minutes** 🎯

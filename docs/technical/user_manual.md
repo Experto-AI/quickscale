@@ -305,27 +305,31 @@ quickscale down                  # Stop services
 - After `quickscale down` → must run `quickscale up` manually
 - Incremental applies (adding modules) → services keep running, no restart
 
-See [Roadmap v0.59.0](./roadmap.md#v0590-cli-development-commands--railway-deployment-) for complete implementation details.
+See [roadmap.md](./roadmap.md) for historical implementation context and follow-on enhancements.
 
-### 4.2) Git Subtree Commands (Shipped in v0.62.0)
+### 4.2) Module Management Commands
 
 > **Status**: ✅ Available (shipped in v0.62.0)
 >
-> These commands simplify complex manual git subtree operations with simple CLI wrappers.
+> These commands manage installed modules while keeping manual `git subtree` flows available for advanced recovery scenarios.
 
 ```bash
-# Pull QuickScale updates
-quickscale update
-# Equivalent to: git subtree pull --prefix=quickscale_core <remote> main --squash
+# Check installed modules and project status
+quickscale status
 
-# Push improvements back to QuickScale
-quickscale push
-# Equivalent to: git subtree push --prefix=quickscale_core <remote> feature-branch
+# Update installed modules
+quickscale update
+
+# Remove an installed module
+quickscale remove blog
+
+# Push improvements for a specific module back upstream
+quickscale push --module blog
 ```
 
-**Note**: Module embedding is now handled by the `quickscale plan` + `quickscale apply` workflow.
+**Note**: Initial module embedding is handled by the `quickscale plan` + `quickscale apply` workflow. Manual `git subtree` commands remain useful for advanced debugging and recovery.
 
-See [Roadmap v0.60.0](./roadmap.md#v0600-cli-git-subtree-wrappers--update-workflow-validation) for complete implementation details.
+See [decisions.md: CLI Command Matrix](./decisions.md#cli-command-matrix) for the authoritative command list.
 
 ### 4.3) Plan/Apply Commands (Shipped in v0.68.0)
 
@@ -522,8 +526,8 @@ Run these scripts from the repository root.
 - Django commands: `quickscale manage <cmd>`
 
 **CLI Commands (Modules)**:
-- Update core: `quickscale update`
-- Push changes: `quickscale push`
+- Update installed modules: `quickscale update`
+- Push module changes: `quickscale push --module <name>`
 - Remove module: `quickscale remove <module>`
 - Project status: `quickscale status`
 
@@ -578,7 +582,7 @@ poetry publish --build
 
 ## 8) Git Subtree Workflow (Advanced)
 
-> **Note**: CLI wrapper commands (`quickscale update`, `quickscale push`) now ship with QuickScale. Module embedding is handled via `quickscale plan` + `quickscale apply`. See [section 4.2](#42-git-subtree-commands-shipped-in-v0620) for the simplified commands.
+> **Note**: CLI wrapper commands (`quickscale update`, `quickscale push --module <name>`) now ship with QuickScale. Module embedding is handled via `quickscale plan` + `quickscale apply`. See [section 4.2](#42-module-management-commands) for the simplified commands.
 >
 > The manual commands documented below will continue to work and are useful for understanding how git subtree works under the hood.
 

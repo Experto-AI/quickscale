@@ -5,53 +5,203 @@
 
 {% block content %}{%endraw%}
 <div class="welcome-container">
-    <h1>Welcome to {{ project_name }}</h1>
-    <p>Your Django project has been successfully generated with QuickScale!</p>
+    <section class="hero-panel">
+        <div class="hero-copy">
+            <span class="hero-eyebrow">Showcase HTML starter</span>
+            <h1>Welcome to {{ project_name }}</h1>
+            <p>Your Django project has been successfully generated with QuickScale. This landing page mirrors the React showcase structure while staying server-rendered and JavaScript-free.</p>
+        </div>
+        <div class="hero-actions">
+            <a class="btn btn-primary btn-inline" href="/admin/">Open Django Admin</a>
+            <a class="btn btn-secondary btn-inline" href="https://github.com/Experto-AI/quickscale" target="_blank" rel="noopener noreferrer">QuickScale Docs</a>
+        </div>
+    </section>
 
-    <div class="next-steps">
-        <h2>Next Steps:</h2>
-        <ul>
-            <li>Customize your settings in <code>{{ package_name }}/settings/</code></li>
-            <li>Create your Django apps with <code>python manage.py startapp</code></li>
-            <li>Add your models and run <code>python manage.py makemigrations</code></li>
-            <li>Set up your database with <code>python manage.py migrate</code></li>
-            <li>Create a superuser with <code>python manage.py createsuperuser</code></li>
-        </ul>
-    </div>
+    <section class="dashboard-section">
+        <div class="section-heading">
+            <div>
+                <h2>Installed Modules</h2>
+                <p>Enabled QuickScale modules are surfaced here with safe links to the entry points this starter theme knows about.</p>
+            </div>
+        </div>
 
-    <div class="installed-modules">
-        <h2>Installed Modules:</h2>
-        <ul>
+        <div class="module-grid">
             {%raw%}{% if 'quickscale_modules_auth' in settings.INSTALLED_APPS %}
-            <li>✅ <strong>Authentication</strong> - User registration, login, profiles, and password management</li>
+            <article class="module-card">
+                <div class="module-card-header">
+                    <h3>Authentication</h3>
+                    <span class="module-badge">Active</span>
+                </div>
+                <p>User registration, login, profiles, and password management.</p>
+                <div class="module-card-actions">
+                    {% if user.is_authenticated %}
+                    <a class="module-link" href="{% url 'quickscale_auth:profile' %}">Open profile</a>
+                    {% else %}
+                    <a class="module-link" href="{% url 'account_login' %}">Open login</a>
+                    {% endif %}
+                </div>
+            </article>
             {% endif %}
-            {% if 'quickscale_modules_blog' in settings.INSTALLED_APPS %}
-            <li>✅ <strong>Blog</strong> - Full-featured blog with Markdown support, categories, tags, and RSS feed (<a href="{% url 'quickscale_blog:post_list' %}">View Blog</a>)</li>
-            {% endif %}
-            {% if 'quickscale_modules_listings' in settings.INSTALLED_APPS %}
-            <li>✅ <strong>Listings</strong> - Generic listings with filtering for marketplace verticals (<a href="{% url 'quickscale_listings:listing_list' %}">View Listings</a>)</li>
-            {% endif %}
-            {% if 'quickscale_modules_billing' in settings.INSTALLED_APPS %}
-            <li>✅ <strong>Billing</strong> - Subscription management and payment processing</li>
-            {% endif %}
-            {% if 'quickscale_modules_teams' in settings.INSTALLED_APPS %}
-            <li>✅ <strong>Teams</strong> - Team collaboration and management features</li>
-            {% endif %}
-            {% if 'quickscale_modules_crm' in settings.INSTALLED_APPS %}
-            <li>✅ <strong>CRM</strong> - Contact management, companies, deals, and notes (<a href="{% url 'quickscale_crm:dashboard' %}">View CRM</a>)</li>
-            {% endif %}
-            {% if 'quickscale_modules_auth' not in settings.INSTALLED_APPS and 'quickscale_modules_blog' not in settings.INSTALLED_APPS and 'quickscale_modules_listings' not in settings.INSTALLED_APPS and 'quickscale_modules_billing' not in settings.INSTALLED_APPS and 'quickscale_modules_teams' not in settings.INSTALLED_APPS and 'quickscale_modules_crm' not in settings.INSTALLED_APPS %}
-            <li>No modules installed yet. Use <code>quickscale embed --module &lt;module_name&gt;</code> to add modules.</li>
-            {% endif %}{%endraw%}
-        </ul>
-    </div>
 
-    <div class="resources">
-        <h2>Resources:</h2>
-        <ul>
-            <li><a href="https://docs.djangoproject.com/" target="_blank">Django Documentation</a></li>
-            <li><a href="https://github.com/Experto-AI/quickscale" target="_blank">QuickScale Documentation</a></li>
-        </ul>
-    </div>
+            {% if 'quickscale_modules_blog' in settings.INSTALLED_APPS %}
+            <article class="module-card">
+                <div class="module-card-header">
+                    <h3>Blog</h3>
+                    <span class="module-badge">Active</span>
+                </div>
+                <p>Full-featured blog with Markdown support, categories, tags, and RSS feed.</p>
+                <div class="module-card-actions">
+                    <a class="module-link" href="{% url 'quickscale_blog:post_list' %}">Open blog</a>
+                </div>
+            </article>
+            {% endif %}
+
+            {% if 'quickscale_modules_listings' in settings.INSTALLED_APPS %}
+            <article class="module-card">
+                <div class="module-card-header">
+                    <h3>Listings</h3>
+                    <span class="module-badge">Active</span>
+                </div>
+                <p>Generic listings with filtering for marketplace and directory-style projects.</p>
+                <div class="module-card-actions">
+                    <a class="module-link" href="{% url 'quickscale_listings:listing_list' %}">Open listings</a>
+                </div>
+            </article>
+            {% endif %}
+
+            {% if 'quickscale_modules_crm' in settings.INSTALLED_APPS %}
+            <article class="module-card">
+                <div class="module-card-header">
+                    <h3>CRM</h3>
+                    <span class="module-badge">Active</span>
+                </div>
+                <p>Contact management, companies, deals, and notes for customer workflows.</p>
+                <div class="module-card-actions">
+                    <a class="module-link" href="{% url 'quickscale_crm:dashboard' %}">Open CRM</a>
+                </div>
+            </article>
+            {% endif %}
+
+            {% if 'quickscale_modules_forms' in settings.INSTALLED_APPS %}
+            <article class="module-card">
+                <div class="module-card-header">
+                    <h3>Forms</h3>
+                    <span class="module-badge">Active</span>
+                </div>
+                <p>Dynamic forms with public pages, spam protection, and submission management.</p>
+                <p class="module-note">Create forms in Django Admin, then open each public form at <code>/forms/&lt;slug&gt;/</code>.</p>
+                <div class="module-card-actions">
+                    <a class="module-link" href="/admin/">Open admin</a>
+                </div>
+            </article>
+            {% endif %}
+
+            {% if 'quickscale_modules_storage' in settings.INSTALLED_APPS %}
+            <article class="module-card">
+                <div class="module-card-header">
+                    <h3>Storage</h3>
+                    <span class="module-badge">Active</span>
+                </div>
+                <p>Shared media storage infrastructure for local and S3-compatible backends.</p>
+                <p class="module-note">No public page is generated for storage. Configure it in settings and use it from your apps and modules.</p>
+            </article>
+            {% endif %}
+
+            {% if 'quickscale_modules_billing' in settings.INSTALLED_APPS %}
+            <article class="module-card">
+                <div class="module-card-header">
+                    <h3>Billing</h3>
+                    <span class="module-badge">Active</span>
+                </div>
+                <p>Subscription management and payment processing infrastructure for monetized projects.</p>
+                <p class="module-note">Add your project-specific billing views to surface this module in the UI.</p>
+            </article>
+            {% endif %}
+
+            {% if 'quickscale_modules_teams' in settings.INSTALLED_APPS %}
+            <article class="module-card">
+                <div class="module-card-header">
+                    <h3>Teams</h3>
+                    <span class="module-badge">Active</span>
+                </div>
+                <p>Team collaboration and membership features for multi-user products.</p>
+                <p class="module-note">Add your project-specific team views when you are ready to expose collaboration flows.</p>
+            </article>
+            {% endif %}
+
+            {% if 'quickscale_modules_auth' not in settings.INSTALLED_APPS and 'quickscale_modules_blog' not in settings.INSTALLED_APPS and 'quickscale_modules_listings' not in settings.INSTALLED_APPS and 'quickscale_modules_crm' not in settings.INSTALLED_APPS and 'quickscale_modules_forms' not in settings.INSTALLED_APPS and 'quickscale_modules_storage' not in settings.INSTALLED_APPS and 'quickscale_modules_billing' not in settings.INSTALLED_APPS and 'quickscale_modules_teams' not in settings.INSTALLED_APPS %}
+            <article class="module-card empty-state">
+                <div class="module-card-header">
+                    <h3>No modules installed</h3>
+                </div>
+                <p>Use <code>quickscale plan --add &lt;module&gt;</code> to add modules before running <code>quickscale apply</code>.</p>
+            </article>
+            {% endif %}{%endraw%}
+        </div>
+    </section>
+
+    <section class="dashboard-section">
+        <div class="section-heading">
+            <div>
+                <h2>Getting Started</h2>
+                <p>These are the same core setup steps highlighted in the React showcase, adapted for a simple HTML starter.</p>
+            </div>
+        </div>
+
+        <div class="info-grid">
+            <article class="info-card">
+                <h3>Customize Settings</h3>
+                <p>Review the generated settings package and tailor environments for your project.</p>
+                <code>{{ package_name }}/settings/</code>
+            </article>
+
+            <article class="info-card">
+                <h3>Create Apps</h3>
+                <p>Build your product-specific Django apps on top of the generated foundation.</p>
+                <code>python manage.py startapp</code>
+            </article>
+
+            <article class="info-card">
+                <h3>Set Up Database</h3>
+                <p>Run migrations, create a superuser, and verify your local data flows.</p>
+                <code>python manage.py migrate</code>
+            </article>
+
+            <article class="info-card">
+                <h3>Production Readiness</h3>
+                <p>Configure secrets, allowed hosts, storage, and deployment settings before launch.</p>
+                <code>SECRET_KEY / ALLOWED_HOSTS</code>
+            </article>
+        </div>
+    </section>
+
+    <section class="dashboard-section">
+        <div class="section-heading">
+            <div>
+                <h2>Resources</h2>
+                <p>Helpful links for development, operations, and starter-project exploration.</p>
+            </div>
+        </div>
+
+        <div class="resource-grid">
+            <article class="resource-card">
+                <h3>Django Documentation</h3>
+                <p>Reference the framework docs for models, views, forms, auth, and deployment.</p>
+                <a class="resource-link" href="https://docs.djangoproject.com/" target="_blank" rel="noopener noreferrer">Open docs</a>
+            </article>
+
+            <article class="resource-card">
+                <h3>QuickScale Documentation</h3>
+                <p>Review generator workflows, module guides, and deployment conventions.</p>
+                <a class="resource-link" href="https://github.com/Experto-AI/quickscale" target="_blank" rel="noopener noreferrer">Open QuickScale</a>
+            </article>
+
+            <article class="resource-card">
+                <h3>Django Admin</h3>
+                <p>Use the built-in admin to inspect data and manage project content quickly.</p>
+                <a class="resource-link" href="/admin/">Open admin</a>
+            </article>
+        </div>
+    </section>
 </div>
 {%raw%}{% endblock %}{%endraw%}

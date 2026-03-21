@@ -434,7 +434,7 @@ This module should solve that infrastructure concern once, centrally, instead of
 
 **Rationale**: React theme is now the default (v0.74.0). HTMX provides an optional alternative for users preferring progressive enhancement.
 
-**See**: [user_manual.md Theme Selection](../technical/user_manual.md#theme-selection-v0610) for current theme architecture.
+**See**: [user_manual.md](../technical/user_manual.md) for current theme architecture and user-facing theme selection guidance.
 
 **When Implemented**: See [decisions.md: Module & Theme Architecture](./decisions.md#module-theme-architecture) for implementation specifications including HTMX + Alpine.js base templates and progressive enhancement patterns.
 
@@ -474,7 +474,7 @@ This module should solve that infrastructure concern once, centrally, instead of
 
 ### v0.84.0: Advanced Module Management Features
 
-**Note**: Basic module management commands (`quickscale update`, `quickscale push`) are implemented in **v0.62.0**. Plan/Apply system implemented in **v0.68.0-v0.71.0**. This release adds advanced features for managing multiple modules.
+**Note**: Basic module management commands (`quickscale update`, `quickscale push --module <name>`) are implemented in **v0.62.0**. Plan/Apply system implemented in **v0.68.0-v0.71.0**. This release adds advanced features for managing multiple modules.
 
 **Planner follow-up**: Cross-module planner work now lives directly in the checklist below; there is no separate temporary handoff doc.
 
@@ -485,7 +485,7 @@ This module should solve that infrastructure concern once, centrally, instead of
 - [ ] Implement rollback for failed batch updates
 
 **Status & Discovery**:
-- [ ] Create `quickscale status` command showing installed modules and versions
+- [ ] Expand `quickscale status` to show installed modules, versions, and richer diagnostics
 - [ ] Implement `quickscale list-modules` command for available modules
 - [ ] Add module version tracking and compatibility checking
 
