@@ -13,6 +13,7 @@ from quickscale_modules_storage.helpers import (
     build_public_media_url,
     build_upload_path,
     make_cache_friendly_name,
+    sanitize_relative_media_path,
     select_storage_backend,
     validate_file_upload,
 )
@@ -41,12 +42,20 @@ class TestSelectStorageBackend:
         assert resolved.use_s3_compatible is False
         assert resolved.django_backend == "django.core.files.storage.FileSystemStorage"
 
+    def test_invalid_backend_on_settings_object_normalizes_to_local(self) -> None:
+        class Settings:
+            QUICKSCALE_STORAGE_BACKEND = "invalid"
+
+        resolved = select_storage_backend(Settings())
+
+        assert resolved.backend == "local"
+        assert resolved.options == {}
+
     def test_s3_backend_uses_s3_storage(self) -> None:
         resolved = select_storage_backend(
             {
                 "QUICKSCALE_STORAGE_BACKEND": "s3",
                 "AWS_STORAGE_BUCKET_NAME": "my-bucket",
-                "AWS_S3_CUSTOM_DOMAIN": "cdn.example.com",
                 "AWS_S3_ENDPOINT_URL": "",
             }
         )
@@ -54,7 +63,7 @@ class TestSelectStorageBackend:
         assert resolved.use_s3_compatible is True
         assert resolved.django_backend == "storages.backends.s3.S3Storage"
         assert resolved.options["bucket_name"] == "my-bucket"
-        assert resolved.options["custom_domain"] == "cdn.example.com"
+        assert "custom_domain" not in resolved.options
 
     def test_r2_backend_accepts_endpoint_mode(self) -> None:
         resolved = select_storage_backend(
@@ -73,6 +82,10 @@ class TestUploadPathAndNaming:
         assert name.startswith("hero-image-")
         assert len(name.split("-")) >= 3
 
+    def test_make_cache_friendly_name_uses_version_when_provided(self) -> None:
+        name = make_cache_friendly_name("hero image.png", version="Release 1")
+        assert name.startswith("hero-image-release-1-")
+
     def test_build_upload_path_scopes_by_module_kind_and_date(self) -> None:
         path = build_upload_path(
             "blog",
@@ -86,10 +99,17 @@ class TestUploadPathAndNaming:
 
 
 class TestPublicUrlHelpers:
+    class _Request:
+        def build_absolute_uri(self, path: str) -> str:
+            return f"http://testserver{path}"
+
     def test_build_public_media_url_with_absolute_reference(self) -> None:
         absolute_url = "https://cdn.example.com/blog/uploads/image.png"
         resolved = build_public_media_url(absolute_url)
         assert resolved == absolute_url
+
+    def test_build_public_media_url_with_empty_reference(self) -> None:
+        assert build_public_media_url("") == ""
 
     def test_build_public_media_url_with_public_base_url(self) -> None:
         resolved = build_public_media_url(
@@ -105,12 +125,22 @@ class TestPublicUrlHelpers:
         )
         assert resolved == "/media/blog/uploads/image.png"
 
-    def test_build_public_media_url_supports_legacy_custom_domain_callers(self) -> None:
+    def test_build_public_media_url_with_relative_media_prefix_and_request(
+        self,
+    ) -> None:
         resolved = build_public_media_url(
             "blog/uploads/image.png",
-            custom_domain="cdn.example.com",
+            media_url="media",
+            request=self._Request(),
         )
-        assert resolved == "https://cdn.example.com/blog/uploads/image.png"
+        assert resolved == "http://testserver/media/blog/uploads/image.png"
+
+    def test_build_public_media_url_with_leading_slash_uses_request_uri(self) -> None:
+        resolved = build_public_media_url(
+            "/media/blog/uploads/image.png",
+            request=self._Request(),
+        )
+        assert resolved == "http://testserver/media/blog/uploads/image.png"
 
 
 class TestValidateFileUpload:
@@ -148,3 +178,48 @@ class TestValidateFileUpload:
                 max_size_bytes=2,
                 allowed_image_formats={"PNG"},
             )
+
+    def test_validate_file_upload_rejects_invalid_image_file(self) -> None:
+        payload = SimpleUploadedFile(
+            "invalid.txt",
+            b"not an image",
+            content_type="text/plain",
+        )
+
+        with pytest.raises(ValueError, match="Unsupported or invalid image file"):
+            validate_file_upload(
+                payload,
+                max_size_bytes=2_000_000,
+                allowed_image_formats={"PNG"},
+            )
+
+    def test_validate_file_upload_rejects_excessive_width(self) -> None:
+        uploaded = _uploaded_image(image_format="PNG", size=(641, 360))
+
+        with pytest.raises(ValueError, match="Image width exceeds maximum"):
+            validate_file_upload(
+                uploaded,
+                max_size_bytes=2_000_000,
+                allowed_image_formats={"PNG"},
+                max_width=640,
+            )
+
+    def test_validate_file_upload_rejects_excessive_height(self) -> None:
+        uploaded = _uploaded_image(image_format="PNG", size=(640, 361))
+
+        with pytest.raises(ValueError, match="Image height exceeds maximum"):
+            validate_file_upload(
+                uploaded,
+                max_size_bytes=2_000_000,
+                allowed_image_formats={"PNG"},
+                max_height=360,
+            )
+
+
+class TestPathSanitization:
+    def test_sanitize_relative_media_path_removes_leading_slashes_and_traversal(
+        self,
+    ) -> None:
+        assert sanitize_relative_media_path(" //../blog/uploads/image.png ") == (
+            "blog/uploads/image.png"
+        )

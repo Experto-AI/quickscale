@@ -191,9 +191,16 @@ def _configure_docker() -> tuple[bool, bool, bool]:
     return start, build, create_superuser
 
 
-def _copy_module_options(options: dict[str, Any] | None) -> dict[str, Any]:
-    """Return a shallow copy of module options."""
-    return dict(options or {})
+def _copy_module_options(
+    options: dict[str, Any] | None,
+    *,
+    module_name: str | None = None,
+) -> dict[str, Any]:
+    """Return a shallow copy of module options after pruning legacy keys."""
+    copied = dict(options or {})
+    if module_name == "storage":
+        copied.pop("custom_domain", None)
+    return copied
 
 
 def _merge_module_names(*module_groups: list[str]) -> list[str]:
@@ -215,12 +222,18 @@ def _get_existing_module_options(
 
     if existing_config is not None:
         for module_name, module_config in existing_config.modules.items():
-            options[module_name] = _copy_module_options(module_config.options)
+            options[module_name] = _copy_module_options(
+                module_config.options,
+                module_name=module_name,
+            )
 
     state = StateManager(project_path).load()
     if state is not None:
         for module_name, module_state in state.modules.items():
-            options.setdefault(module_name, _copy_module_options(module_state.options))
+            options.setdefault(
+                module_name,
+                _copy_module_options(module_state.options, module_name=module_name),
+            )
 
     return options
 
@@ -233,7 +246,10 @@ def _build_module_configs(
     return {
         module_name: ModuleConfig(
             name=module_name,
-            options=_copy_module_options(module_options.get(module_name)),
+            options=_copy_module_options(
+                module_options.get(module_name),
+                module_name=module_name,
+            ),
         )
         for module_name in module_names
     }
@@ -256,7 +272,10 @@ def _configure_selected_modules(
     click.echo("\n⚙️  Interactive module configuration enabled")
 
     for module_name in module_names:
-        current_options = _copy_module_options(existing_options.get(module_name))
+        current_options = _copy_module_options(
+            existing_options.get(module_name),
+            module_name=module_name,
+        )
         configured[module_name] = current_options
 
         configurator_entry = MODULE_CONFIGURATORS.get(module_name)

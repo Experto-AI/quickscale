@@ -256,6 +256,37 @@ docker:
             assert "public_base_url: https://cdn.example.com/media" in content
             assert "auth:" in content
 
+    def test_plan_add_prunes_legacy_storage_custom_domain(self):
+        """Adding modules should drop legacy storage-only custom_domain keys."""
+        runner = CliRunner()
+        with runner.isolated_filesystem():
+            with open("quickscale.yml", "w") as f:
+                f.write(
+                    """
+version: "1"
+project:
+  slug: testapp
+  package: testapp
+  theme: showcase_html
+modules:
+  storage:
+    backend: s3
+    public_base_url: https://cdn.example.com/media
+    custom_domain: cdn.example.com
+docker:
+  start: false
+"""
+                )
+
+            result = runner.invoke(plan, ["--add"], input="1\ny\n")
+
+            assert result.exit_code == 0
+            with open("quickscale.yml") as f:
+                content = f.read()
+            assert "custom_domain" not in content
+            assert "public_base_url: https://cdn.example.com/media" in content
+            assert "auth:" in content
+
     def test_plan_add_configure_modules_collects_storage_options(self):
         """Planner should collect storage options interactively when requested."""
         runner = CliRunner()

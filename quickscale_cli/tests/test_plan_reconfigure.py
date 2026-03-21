@@ -379,6 +379,63 @@ docker:
                 content = f.read()
             assert "public_base_url: https://cdn.example.com/media" in content
 
+    def test_plan_reconfigure_prunes_legacy_storage_custom_domain(self):
+        """Reconfigure should remove legacy storage custom_domain options on save."""
+        runner = CliRunner()
+        with runner.isolated_filesystem():
+            os.makedirs(".quickscale", exist_ok=True)
+            with open(".quickscale/state.yml", "w") as f:
+                yaml.dump(
+                    {
+                        "version": "1",
+                        "project": {
+                            "slug": "testapp",
+                            "package": "testapp",
+                            "theme": "showcase_html",
+                            "created_at": "2025-12-01T10:00:00",
+                            "last_applied": "2025-12-01T12:00:00",
+                        },
+                        "modules": {
+                            "storage": {
+                                "version": None,
+                                "embedded_at": "2025-12-01T11:00:00",
+                                "options": {
+                                    "backend": "s3",
+                                    "public_base_url": "https://cdn.example.com/media",
+                                    "custom_domain": "cdn.example.com",
+                                },
+                            }
+                        },
+                    },
+                    f,
+                )
+
+            with open("quickscale.yml", "w") as f:
+                f.write(
+                    """
+version: "1"
+project:
+  slug: testapp
+  package: testapp
+  theme: showcase_html
+modules:
+  storage:
+    backend: s3
+    public_base_url: https://cdn.example.com/media
+    custom_domain: cdn.example.com
+docker:
+  start: false
+"""
+                )
+
+            result = runner.invoke(plan, ["--reconfigure"], input="n\nn\ny\n")
+
+            assert result.exit_code == 0
+            with open("quickscale.yml") as f:
+                content = f.read()
+            assert "custom_domain" not in content
+            assert "public_base_url: https://cdn.example.com/media" in content
+
     def test_plan_reconfigure_configure_modules_updates_storage_options(self):
         """Reconfigure should allow interactive storage option updates when requested."""
         runner = CliRunner()
@@ -435,7 +492,6 @@ docker:
                     "s3\n"
                     "/media/\n"
                     "https://cdn.example.com/media\n"
-                    "cdn.example.com\n"
                     "assets\n"
                     "\n"
                     "eu-west-1\n"

@@ -48,7 +48,7 @@ QuickScale follows an evolution-aligned roadmap that starts as a personal toolki
    - ✅ CRM module (v0.73.0) - native Django CRM app (API-only)
    - ✅ **React Default Theme** (v0.74.0) - React + shadcn/ui as default
    - ✅ **Forms module** (v0.75.0) - generic form builder with CLI integration ✅ Complete
-  - 🚧 Storage module (v0.76.0) - cloud file hosting, media storage adapters, CDN integration
+  - ✅ Storage module (v0.76.0) - cloud file hosting, media storage adapters, CDN integration
   - 📋 Social & Link Tree module (v0.77.0) - social links page + media embeds
   - 📋 Listings Theme (v0.78.0) - React frontend for property listings (sell/rent)
   - 📋 CRM Theme (v0.79.0) - React frontend for CRM module
@@ -80,13 +80,15 @@ QuickScale follows an evolution-aligned roadmap that starts as a personal toolki
 - **v0.74.0:** React Default Theme (React + shadcn/ui) ✅
 - **v0.75.0:** Forms Module (generic form builder with DRF API, spam protection, GDPR anonymization) ✅
 - **v0.76.0:** Storage Module (cloud file hosting + CDN-ready media infrastructure) 🎯
+- **v0.77.0:** Social & Link Tree module foundation 📋
 - **v0.78.0:** Real Estate MVP (static + listings + social links) 🎯
 - **v0.81.0:** SaaS Feature Parity (auth, billing, teams) 🎯
 - **v1.0.0+:** Community platform (if demand exists)
 
 **Status:**
-- **Current Status:** v0.76.0 — Storage Module 🚧 In Progress
-- **In Progress:** v0.76.0 — Storage Module
+- **Current Status:** v0.76.0 — Storage Module ✅ Complete
+- **In Progress:** none — next scoped release work starts at v0.77.0
+- **Next Release:** v0.77.0 - Social & Link Tree module
 - **Next Milestone:** v0.78.0 - Real Estate MVP
 - **Plan/Apply System:** v0.68.0-v0.71.0 - Terraform-style configuration ✅ Complete
 - **SaaS Parity:** v0.81.0 - auth, billing, teams modules complete
@@ -114,7 +116,7 @@ Completed release note: v0.75.0 moved to [docs/releases/release-v0.75.0.md](../r
 
 ### v0.76.0: `quickscale_modules.storage` - Media Storage & CDN Integration Module
 
-**Status**: 🚧 In Progress — core module, CLI wiring, and blog compatibility implemented
+**Status**: ✅ Complete — storage contract cleanup, canonical blog media URLs, permanent deployment/docs alignment, and targeted regression coverage landed; deeper integration/E2E expansion moved to v0.85.0 workflow validation
 
 **Strategic Context**: Shared infrastructure module for user-uploaded files and media delivery. Provides a production-ready path beyond local filesystem storage by standardizing cloud object storage, CDN URL generation, image handling, and deployment wiring across QuickScale modules.
 
@@ -152,8 +154,6 @@ This module should solve that infrastructure concern once, centrally, instead of
 - Prefer S3-compatible interfaces first so AWS S3 and Cloudflare R2 share most of the implementation
 - Expose simple project-level helpers that other modules can use without importing provider-specific logic
 
-**Temporary implementation handoff**: See [docs/planning/temporary-storage-blog-planner-handoff.md](../planning/temporary-storage-blog-planner-handoff.md) for the implementation-oriented handoff covering `public_base_url`, `custom_domain` deprecation, blog URL cleanup, planner configuration, `plan --reconfigure` safety, and the remote thumbnail MVP. Delete that handoff doc only after the v0.76.0 work and the referenced v0.84.0 planner follow-up are implemented and folded into permanent docs.
-
 #### Implementation Checklist
 
 **Architecture & Boundaries**:
@@ -163,8 +163,8 @@ This module should solve that infrastructure concern once, centrally, instead of
 - [x] Define upload path strategy by module / asset type / date / collision-safe suffix
 - [x] Define fallback strategy so projects can remain on local storage if desired
 - [x] Define the future extension point for private media even if v0.76.0 only ships public media delivery
-- [x] Standardize `public_base_url` as the only public URL source of truth for storage-backed media and blog-facing asset URLs
-- [x] Deprecate `custom_domain` for public media URL generation so it no longer interferes with host + path CDN setups
+- [x] Make `public_base_url` the only supported public URL source for storage-backed media and blog-facing asset URLs
+- [x] Remove `custom_domain` from the storage module contract entirely instead of keeping any backward-compatibility path
 - [x] Fold mixed blog URL behavior into the storage integration plan so uploads, Markdown rewrites, featured images, and future blog-owned assets resolve through one canonical public URL helper
 
 **Core Storage Features**:
@@ -179,68 +179,66 @@ This module should solve that infrastructure concern once, centrally, instead of
 - [x] Shared helper for generating immutable, cache-friendly asset names
 
 **Image & Media Processing**:
-- [ ] Reusable image variant helpers (thumbnail, medium, original)
-- [ ] Optional WebP/optimized image generation hooks
+- [x] Keep richer image variants and WebP/optimized generation out of v0.76.0 scope; preserve the current thumbnail-first MVP and defer broader media processing to a later release
 - [x] Cache-friendly filename/versioning strategy for immutable media URLs
 - [x] Shared utilities for modules that attach uploaded files to models
-- [ ] Decide whether image processing is synchronous for v0.76.0 or deferred to future async integration
-- [ ] Define a clean extension point for future background processing without blocking the initial release
+- [x] Decide whether image processing is synchronous for v0.76.0 or deferred to future async integration
+- [x] Define a clean extension point for future background processing without blocking the initial release
 - [x] Ship a minimum viable remote thumbnail generation path for storage-backed images, acceptable as a synchronous first pass
 - [x] Ensure generated thumbnail URLs use the same `public_base_url` contract as original media URLs
-- [ ] Defer richer variants, async/background processing, and broader media-pipeline expansion to a later release
+- [x] Defer richer variants, async/background processing, and broader media-pipeline expansion to a later release
 
 **Module Integrations**:
 - [x] Blog integration: use storage module for uploaded featured and inline images
 - [x] Author/avatar compatibility for existing blog author profiles
-- [ ] React showcase guidance for consuming CDN-backed media URLs safely
-- [ ] Future-ready integration hooks for listings galleries, CRM attachments, and social embeds
+- [x] Defer React showcase guidance and broader cross-module media integration hooks until the related vertical/theme releases land
 - [x] Ensure blog upload/publish APIs continue working when the storage backend changes from local to cloud
 - [x] Define how feature modules should depend on `storage` without importing provider-specific code
 - [x] Make blog templates and model helpers stop relying on direct `.url` for public rendering, using storage-backed public URL helpers instead
 - [x] Extend the same canonical public URL strategy to blog author/avatar and similar blog-owned image fields
-- [ ] Verify blog publish flows no longer mix raw storage URLs, deprecated `custom_domain` behavior, and `public_base_url`-based URLs in the same project
+- [x] Verify blog publish flows no longer mix raw storage URLs, deprecated `custom_domain` behavior, and `public_base_url`-based URLs in the same project
 
 **CLI & Plan/Apply Integration**:
 - [x] Add `module.yml` manifest with mutable and immutable config boundaries
 - [x] Define `quickscale plan --add storage` prompts / defaults
 - [x] Add CLI wiring so generated projects receive provider-specific settings only when enabled
 - [x] Ensure `quickscale apply` can regenerate settings safely without clobbering unrelated project code
-- [ ] Decide whether `blog` should optionally detect and integrate with `storage` automatically during apply
+- [x] Defer any automatic `blog` ↔ `storage` apply-time coupling until broader cross-module planner work in v0.84.0
 - [x] Add interactive `quickscale plan` module configuration for `storage` so backend/provider settings and `public_base_url` can be captured during planning
 - [x] Add a planner flag for interactive module configuration instead of forcing manual `quickscale.yml` edits for storage-specific setup
 - [x] Fix `quickscale plan --reconfigure` to preserve existing per-module option dictionaries instead of rebuilding them with empty values
 - [x] Acceptance: `plan --reconfigure` round-trips unchanged module options safely while updating only the fields the user reconfigures
 
 **Configuration & Deployment**:
-- [ ] Environment variable contract (`AWS_*`, bucket, endpoint, CDN URL)
-- [ ] Document minimum environment variables for AWS S3 and Cloudflare R2
-- [ ] Railway deployment guide for external media storage
-- [ ] Local development fallback preserving current filesystem behavior
-- [ ] Staging vs production guidance for media storage
-- [ ] Explicit note that Railway local disk should not be treated as durable production media storage
-- [ ] CDN cache guidance for immutable uploaded assets
-- [ ] Migration guide for moving existing local-media projects to cloud-backed storage
+- [x] Environment variable contract (`AWS_*`, bucket, endpoint, CDN URL)
+- [x] Document minimum environment variables for AWS S3 and Cloudflare R2
+- [x] Railway deployment guide for external media storage
+- [x] Local development fallback preserving current filesystem behavior
+- [x] Staging vs production guidance for media storage
+- [x] Explicit note that Railway local disk should not be treated as durable production media storage
+- [x] CDN cache guidance for immutable uploaded assets
+- [x] Migration guide for moving existing local-media projects to cloud-backed storage
 - [x] Document `public_base_url` as the canonical environment-specific override for swapping S3/CDN host or base path without changing stored media keys
-- [x] Document `custom_domain` as deprecated/legacy for public media delivery so new setups rely on `public_base_url` only
+- [x] Remove `custom_domain` from storage docs/config guidance so new setups use `public_base_url` only
 
 **Documentation & Acceptance Criteria**:
 - [x] Add a module README with local/dev, staging, and production setup paths
-- [ ] Add troubleshooting guidance for missing credentials, invalid buckets, and broken CDN URLs
-- [ ] Document how other modules should integrate with storage helpers
+- [x] Add troubleshooting guidance for missing credentials, invalid buckets, and broken CDN URLs
+- [x] Document how other modules should integrate with storage helpers
 - [x] Acceptance: a generated project can run locally with filesystem storage and no cloud credentials
 - [x] Acceptance: a generated project can switch to S3-compatible storage via documented environment variables
 - [x] Acceptance: blog image upload + publish workflow works end-to-end with cloud-backed URLs
 - [x] Acceptance: resulting media URLs are stable and cache-friendly for CDN delivery
-- [ ] Acceptance: Railway deployment guidance is documented and production-safe
+- [x] Acceptance: Railway deployment guidance is documented and production-safe
 - [x] Acceptance: `public_base_url` is the documented public URL source of truth for storage/blog media in v0.76.0
-- [x] Acceptance: deprecated `custom_domain` behavior no longer changes generated public blog/storage asset URLs
+- [x] Acceptance: storage no longer exposes `custom_domain`; `public_base_url` is the sole public media URL setting
 - [x] Acceptance: cloud-backed originals and generated thumbnails both resolve to stable, cache-friendly public URLs
 
 **Testing**:
 - [x] Unit tests for storage backend selection and URL helpers
-- [ ] Integration tests for upload/write/read flows against local and mocked S3-compatible storage
+- [x] Keep targeted helper/blog/CLI regressions in v0.76.0 and reschedule deeper storage upload/write/read integration coverage to v0.85.0 workflow validation
 - [x] Blog integration tests for uploaded images using storage-backed URLs
-- [ ] E2E tests: Plan → Apply → Blog publish with uploaded CDN-backed images
+- [x] Reschedule Plan → Apply → Blog publish with uploaded CDN-backed images end-to-end coverage to v0.85.0 workflow validation
 - [x] Regression tests proving local-development behavior still works without cloud configuration
 - [x] Regression tests proving public blog rendering never depends on direct storage `.url` when storage helpers are available
 - [x] Planner tests covering interactive storage configuration, option persistence, and safe `plan --reconfigure` round-trips
@@ -477,7 +475,7 @@ This module should solve that infrastructure concern once, centrally, instead of
 
 **Note**: Basic module management commands (`quickscale update`, `quickscale push`) are implemented in **v0.62.0**. Plan/Apply system implemented in **v0.68.0-v0.71.0**. This release adds advanced features for managing multiple modules.
 
-**Temporary implementation handoff**: The cross-module planner follow-up is also tracked in [docs/planning/temporary-storage-blog-planner-handoff.md](../planning/temporary-storage-blog-planner-handoff.md#deferred-follow-up-for-v0840-cross-module-planner-work) until implementation is complete.
+**Planner follow-up**: Cross-module planner work now lives directly in the checklist below; there is no separate temporary handoff doc.
 
 **Batch Operations**:
 - [ ] Implement `quickscale update --all` command
@@ -534,6 +532,9 @@ This module should solve that infrastructure concern once, centrally, instead of
 - [ ] Real-world validation: Embed modules in 3+ client projects and document edge cases
 - [ ] Safety validation: Automated tests verify user's code never modified by module updates
 - [ ] Testing: E2E tests for multi-module workflows, conflict scenarios, and rollback functionality
+- [ ] Storage validation: add upload/write/read integration coverage for local storage and mocked S3-compatible backends
+- [ ] Storage/blog workflow validation: add Plan → Apply → Blog publish E2E coverage with CDN-backed media URLs
+- [ ] Storage URL regression validation: verify helper-built public media URLs remain canonical across blog rendering and upload flows in real project scaffolds
 - [ ] Documentation: Create "Safe Module Updates" guide with screenshots and case studies
 
 **Rationale**: Module embed/update commands implemented in v0.62.0, Plan/Apply system in v0.68.0-v0.71.0. This release validates those systems work safely in production after real usage across multiple client projects.

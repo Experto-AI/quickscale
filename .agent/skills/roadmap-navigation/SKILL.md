@@ -1,12 +1,12 @@
 ---
 name: roadmap-navigation
-version: "1.0"
 description: Task detection, checklist parsing, and roadmap operations
-provides:
-  - task_detection
-  - checklist_parsing
-  - task_status_tracking
-requires: []
+metadata:
+  version: "1.0"
+  provides:
+    - task_detection
+    - checklist_parsing
+    - task_status_tracking
 ---
 
 # Roadmap Navigation Skill
@@ -20,27 +20,29 @@ This skill provides navigation and parsing capabilities for the QuickScale roadm
 The roadmap is located at `docs/technical/roadmap.md` and follows this structure:
 
 ```markdown
-# Roadmap
+# QuickScale Development Roadmap
 
-## Current Release: v0.XX.0
+### v0.76.0: `quickscale_modules.storage` - Media Storage & CDN Integration Module
 
-### Task X.Y: Task Name
+**Status**: 🚧 In Progress
 
-**Deliverables:**
-- [ ] Deliverable 1
-- [ ] Deliverable 2
-- [x] Completed deliverable
+#### Implementation Checklist
 
-**Validation:**
-```bash
-./scripts/validate-feature.sh
+**Architecture & Boundaries**:
+- [x] Completed item
+- [ ] Remaining item
+
+**Testing**:
+- [ ] Remaining validation work
 ```
 
-## Next Release: v0.XX.1
+The real roadmap is organized by release-version sections such as
+`### v0.76.0: ...`, each with grouped checklist subsections. Do not assume
+`## Current Release` / `### Task X.Y` headings exist.
 
-### Task X.Z: Next Task Name
-...
-```
+If a roadmap section links to a temporary handoff document, treat that handoff as
+the implementation companion for the same release and extract only the still-open
+work from it.
 
 ## Task Detection
 
@@ -49,33 +51,43 @@ The roadmap is located at `docs/technical/roadmap.md` and follows this structure
 Algorithm to find the next unfinished task:
 
 1. Open `docs/technical/roadmap.md`
-2. Find first release section (e.g., "## Current Release")
-3. Within release, find first task header (`### Task`)
-4. Check if task has uncompleted checklist items (`- [ ]`)
-5. If all items completed, move to next task
-6. Return Task ID and checklist
+2. Find the first release section with unchecked checklist items
+3. Prefer the currently in-progress release version over future planned versions
+4. Within that release, preserve checklist grouping (`Architecture`, `Testing`, etc.)
+5. If the section links to a temporary handoff doc, read it and extract only still-pending work
+6. Return the release/task heading plus remaining checklist items
 
 ### Task Selection Rules
 
 **Priority Order:**
-1. Current release uncompleted tasks (top to bottom)
-2. If current release complete, move to next release
-3. Prefer explicitly marked "Priority" tasks
-4. If multiple candidates, select topmost
+1. Current in-progress release unchecked items (top to bottom)
+2. If current in-progress release is complete, move to the next planned release
+3. Prefer explicitly scoped handoff documents when present
+4. If multiple candidates remain, select the topmost unchecked item group
 
 **Detection Logic:**
 ```python
 def find_next_task(roadmap_content: str) -> tuple[str, list[str]]:
-    """Find next uncompleted task from roadmap.
+  """Find next unfinished roadmap work item group.
 
-    Returns:
-        Tuple of (task_id, checklist_items)
-    """
-    # Parse roadmap for release sections
-    # Find first uncompleted task
-    # Extract task ID and checklist
-    # Return both
+  Returns:
+    Tuple of (release_heading, remaining_checklist_items)
+  """
+  # Parse roadmap for version sections like "### v0.76.0: ..."
+  # Find first in-progress section with unchecked items
+  # Preserve checklist grouping context
+  # Return heading plus remaining items
 ```
+
+## Handoff-Oriented Navigation
+
+When preparing a handoff from the roadmap:
+
+1. Ignore checklist items already marked `- [x]`
+2. Summarize the committed baseline separately from the remaining work
+3. Prefer concrete pending implementation details over historical context
+4. If a temporary handoff doc exists, rewrite it around the remaining scope only
+5. Keep release-specific acceptance criteria and test expectations explicit
 
 ## Checklist Parsing
 

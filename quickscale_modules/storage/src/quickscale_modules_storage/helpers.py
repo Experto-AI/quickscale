@@ -88,9 +88,6 @@ def select_storage_backend(
         "bucket_name": str(
             _read_setting(settings_obj, "AWS_STORAGE_BUCKET_NAME", "")
         ).strip(),
-        "custom_domain": str(
-            _read_setting(settings_obj, "AWS_S3_CUSTOM_DOMAIN", "")
-        ).strip(),
         "endpoint_url": str(
             _read_setting(settings_obj, "AWS_S3_ENDPOINT_URL", "")
         ).strip(),
@@ -163,8 +160,6 @@ def build_public_media_url(
     request: Any | None = None,
     public_base_url: str | None = None,
     media_url: str = "/media/",
-    custom_domain: str | None = None,
-    url_protocol: str = "https:",
 ) -> str:
     """Build a public media URL from a storage path or relative/absolute reference."""
     reference = (stored_reference or "").strip()
@@ -178,16 +173,6 @@ def build_public_media_url(
     if public_base_url and public_base_url.strip():
         base = public_base_url.rstrip("/")
         return f"{base}/{reference.lstrip('/')}"
-
-    normalized_custom_domain = (custom_domain or "").strip().rstrip("/")
-    if normalized_custom_domain:
-        normalized_protocol = (url_protocol or "https:").strip() or "https:"
-        if not normalized_protocol.endswith(":"):
-            normalized_protocol += ":"
-        return (
-            f"{normalized_protocol}//{normalized_custom_domain.lstrip('/')}"
-            f"/{reference.lstrip('/')}"
-        )
 
     normalized_media_url = _normalize_media_prefix(media_url)
 
@@ -252,7 +237,7 @@ def validate_file_upload(
 def sanitize_relative_media_path(path: str) -> str:
     """Return a normalized relative media path without leading slash traversal."""
     normalized = re.sub(r"^/+", "", path.strip())
-    return posixpath.normpath(normalized).lstrip(".")
+    return posixpath.normpath(normalized).lstrip("./")
 
 
 __all__ = [

@@ -346,7 +346,6 @@ modules:
   storage:
     backend: s3
     public_base_url: https://cdn.example.com
-    custom_domain: cdn.example.com
 docker:
   build: true
   start: true
@@ -499,7 +498,6 @@ modules:
   storage:
     backend: s3
     public_base_url: https://cdn.example.com
-    custom_domain: cdn.example.com
 docker:
   start: true
   build: true
@@ -510,12 +508,11 @@ docker:
 #        quickscale apply → executes configuration
 ```
 
-**Storage URL rule (v0.76.0):** `modules.storage.public_base_url` is the canonical
-source of helper-built public media URLs. `custom_domain` remains available for
-provider/storage-level direct URL behavior, but it does not change helper-backed
-public blog/storage URLs in new configs. For backward compatibility, apply may
-derive `public_base_url` from a legacy cloud `custom_domain` when the canonical
-field is still blank.
+**Storage URL rule (v0.76.0):** `modules.storage.public_base_url` is the sole
+public media URL setting for storage-backed assets. Helper-built blog/storage
+URLs must use `public_base_url` when configured and fall back to `MEDIA_URL`
+behavior in local development when it is blank. `custom_domain` is not part of
+the supported storage contract.
 
 **Decision Rule**:
 - **v0.72.0+**: Plan/apply is the primary workflow

@@ -575,7 +575,6 @@ class TestModuleWiringSpecs:
                     "backend": "s3",
                     "media_url": "/media/",
                     "public_base_url": "",
-                    "custom_domain": "cdn.example.com",
                     "bucket_name": "assets",
                     "endpoint_url": "",
                     "region_name": "us-east-1",
@@ -596,17 +595,10 @@ class TestModuleWiringSpecs:
             == "storages.backends.s3.S3Storage"
         )
         assert (
-            settings["STORAGES"]["default"]["OPTIONS"]["custom_domain"]
-            == "cdn.example.com"
-        )
-        assert (
             settings["STORAGES"]["staticfiles"]["BACKEND"]
             == "whitenoise.storage.CompressedManifestStaticFilesStorage"
         )
-        assert (
-            settings["QUICKSCALE_STORAGE_PUBLIC_BASE_URL"] == "https://cdn.example.com"
-        )
-        assert settings["AWS_S3_CUSTOM_DOMAIN"] == "cdn.example.com"
+        assert settings["QUICKSCALE_STORAGE_PUBLIC_BASE_URL"] == ""
         assert settings["AWS_STORAGE_BUCKET_NAME"] == "assets"
         assert settings["AWS_QUERYSTRING_AUTH"] is False
 
@@ -637,7 +629,6 @@ class TestModuleWiringSpecs:
                     "backend": "r2",
                     "media_url": "https://cdn.example.com/",
                     "public_base_url": "https://cdn.example.com",
-                    "custom_domain": "https://cdn.example.com/",
                     "bucket_name": "assets",
                     "endpoint_url": "https://account.r2.cloudflarestorage.com",
                     "region_name": "auto",
@@ -657,7 +648,6 @@ class TestModuleWiringSpecs:
         assert (
             settings["QUICKSCALE_STORAGE_PUBLIC_BASE_URL"] == "https://cdn.example.com"
         )
-        assert settings["AWS_S3_CUSTOM_DOMAIN"] == "cdn.example.com"
         assert (
             settings["AWS_S3_ENDPOINT_URL"]
             == "https://account.r2.cloudflarestorage.com"
@@ -753,7 +743,7 @@ class TestStorageModuleConfig:
         config = get_default_storage_config()
         assert config["backend"] == "local"
         assert config["media_url"] == "/media/"
-        assert config["custom_domain"] == ""
+        assert "custom_domain" not in config
         assert config["querystring_auth"] is False
 
     def test_storage_in_module_configurators(self):
@@ -784,7 +774,6 @@ class TestStorageModuleConfig:
             "r2",
             "/media/",
             "https://cdn.example.com/media",
-            "cdn.example.com",
             "assets",
             "https://account.r2.cloudflarestorage.com",
             "auto",
@@ -796,7 +785,6 @@ class TestStorageModuleConfig:
         config = configure_storage_module(non_interactive=False)
 
         assert config["backend"] == "r2"
-        assert config["custom_domain"] == "cdn.example.com"
         assert config["bucket_name"] == "assets"
         assert config["endpoint_url"] == "https://account.r2.cloudflarestorage.com"
         assert config["region_name"] == "auto"
@@ -818,7 +806,6 @@ class TestStorageModuleConfig:
             "s3",
             "/media/",
             "https://cdn.example.com/media",
-            "cdn.example.com",
             "assets",
             "",
             "eu-west-1",
@@ -833,7 +820,6 @@ class TestStorageModuleConfig:
                 "backend": "s3",
                 "media_url": "/media/",
                 "public_base_url": "https://cdn.example.com/media",
-                "custom_domain": "cdn.example.com",
                 "bucket_name": "assets",
                 "region_name": "eu-west-1",
                 "access_key_id": "key-id",
@@ -862,7 +848,6 @@ class TestStorageModuleConfig:
                 "backend": "s3",
                 "media_url": "/media/",
                 "public_base_url": "https://cdn.example.com/media",
-                "custom_domain": "cdn.example.com",
                 "bucket_name": "assets",
                 "endpoint_url": "https://account.r2.cloudflarestorage.com",
                 "region_name": "auto",
@@ -874,7 +859,6 @@ class TestStorageModuleConfig:
         )
 
         assert config["backend"] == "local"
-        assert config["custom_domain"] == ""
         assert config["bucket_name"] == ""
         assert config["endpoint_url"] == ""
         assert config["region_name"] == ""

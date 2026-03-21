@@ -12,7 +12,12 @@ from django.urls import reverse
 from PIL import Image
 
 from quickscale_modules_blog.models import BlogMediaAsset, Category, Post, Tag
-from quickscale_modules_blog.views import _build_media_response_url
+from quickscale_modules_blog.views import (
+    _build_media_response_url,
+    _get_authorization_token,
+    _get_blog_api_tokens,
+    authenticate_blog_api_request,
+)
 
 
 def make_uploaded_test_image(
@@ -49,6 +54,66 @@ def staff_user(db):
 @pytest.mark.django_db
 class TestPublishPostApi:
     """Tests for publish post API"""
+
+    def test_get_blog_api_tokens_ignores_invalid_entries(self, settings):
+        """Token config helper should keep only valid token/username mappings."""
+        settings.BLOG_API_TOKENS = [
+            {"token": " valid-token ", "username": " author "},
+            {"token": "", "username": "missing-token"},
+            {"token": "missing-user", "username": ""},
+            "invalid-entry",
+        ]
+
+        assert _get_blog_api_tokens() == [("valid-token", "author")]
+
+    def test_get_authorization_token_rejects_malformed_headers(self, rf):
+        """Authorization parsing should reject malformed or unsupported headers."""
+        assert _get_authorization_token(rf.get("/blog/api")) is None
+        assert (
+            _get_authorization_token(rf.get("/blog/api", HTTP_AUTHORIZATION="Bearer"))
+            == ""
+        )
+        assert (
+            _get_authorization_token(
+                rf.get("/blog/api", HTTP_AUTHORIZATION="Basic abc123")
+            )
+            == ""
+        )
+
+    def test_authenticate_blog_api_request_rejects_missing_token_user(
+        self,
+        rf,
+        settings,
+    ):
+        """Token auth should fail when the configured username does not exist."""
+        settings.BLOG_API_TOKENS = [{"token": "publish-token", "username": "ghost"}]
+
+        _, response = authenticate_blog_api_request(
+            rf.post("/blog/api", HTTP_AUTHORIZATION="Bearer publish-token")
+        )
+
+        assert response is not None
+        assert response.status_code == 401
+        assert response.content == b'{"error": "Invalid API token"}'
+
+    def test_authenticate_blog_api_request_rejects_non_staff_token_user(
+        self,
+        rf,
+        settings,
+        user,
+    ):
+        """Token auth should still require staff access for machine users."""
+        settings.BLOG_API_TOKENS = [
+            {"token": "publish-token", "username": user.username}
+        ]
+
+        _, response = authenticate_blog_api_request(
+            rf.post("/blog/api", HTTP_AUTHORIZATION="Token publish-token")
+        )
+
+        assert response is not None
+        assert response.status_code == 403
+        assert response.content == b'{"error": "Staff access required"}'
 
     def test_publish_post_api_get_method_not_allowed_returns_405(self, client):
         """Test API rejects non-POST methods"""
@@ -535,6 +600,80 @@ class TestPublishPostApi:
 class TestUploadMediaApi:
     """Tests for blog media upload API."""
 
+    def test_build_media_response_url_without_helper_uses_public_base_url(
+        self,
+        rf,
+        settings,
+    ):
+        """Fallback URL builder should use the canonical public base when configured."""
+        settings.QUICKSCALE_STORAGE_PUBLIC_BASE_URL = "https://cdn.example.com/media"
+
+        request = rf.get(reverse("quickscale_blog:api_upload_media"))
+
+        with patch(
+            "quickscale_modules_blog.views.storage_build_public_media_url", None
+        ):
+            assert (
+                _build_media_response_url(
+                    request, "blog/uploads/2026/03/hero-image.png"
+                )
+                == "https://cdn.example.com/media/blog/uploads/2026/03/hero-image.png"
+            )
+
+    def test_build_media_response_url_without_helper_preserves_absolute_reference(
+        self,
+        rf,
+    ):
+        """Fallback URL builder should return already-absolute references unchanged."""
+        request = rf.get(reverse("quickscale_blog:api_upload_media"))
+        absolute_url = "https://cdn.example.com/blog/uploads/2026/03/hero-image.png"
+
+        with patch(
+            "quickscale_modules_blog.views.storage_build_public_media_url", None
+        ):
+            assert _build_media_response_url(request, absolute_url) == absolute_url
+
+    def test_build_media_response_url_without_helper_normalizes_relative_media_url(
+        self,
+        rf,
+        settings,
+    ):
+        """Fallback URL builder should normalize relative `MEDIA_URL` prefixes."""
+        settings.QUICKSCALE_STORAGE_PUBLIC_BASE_URL = ""
+        settings.MEDIA_URL = "media"
+
+        request = rf.get(reverse("quickscale_blog:api_upload_media"))
+
+        with patch(
+            "quickscale_modules_blog.views.storage_build_public_media_url", None
+        ):
+            assert (
+                _build_media_response_url(
+                    request, "blog/uploads/2026/03/hero-image.png"
+                )
+                == "http://testserver/media/blog/uploads/2026/03/hero-image.png"
+            )
+
+    def test_build_media_response_url_without_helper_uses_leading_slash_path(
+        self,
+        rf,
+        settings,
+    ):
+        """Fallback URL builder should preserve leading-slash media references."""
+        settings.QUICKSCALE_STORAGE_PUBLIC_BASE_URL = ""
+
+        request = rf.get(reverse("quickscale_blog:api_upload_media"))
+
+        with patch(
+            "quickscale_modules_blog.views.storage_build_public_media_url", None
+        ):
+            assert (
+                _build_media_response_url(
+                    request, "/media/blog/uploads/2026/03/hero-image.png"
+                )
+                == "http://testserver/media/blog/uploads/2026/03/hero-image.png"
+            )
+
     def test_upload_media_api_requires_authentication(self, client):
         """Test media uploads require authentication."""
         response = client.post(reverse("quickscale_blog:api_upload_media"))
@@ -661,14 +800,14 @@ class TestUploadMediaApi:
         )
 
     @patch("quickscale_modules_blog.views.create_blog_media_asset_from_request")
-    def test_upload_media_api_uses_provider_url_when_cloud_base_url_is_unset(
+    def test_upload_media_api_uses_local_media_url_when_public_base_url_is_unset(
         self,
         mock_create_asset,
         client,
         staff_user,
         settings,
     ):
-        """Upload API should preserve provider URLs without a public base URL."""
+        """Upload API should build local media URLs from the stored key."""
         settings.QUICKSCALE_STORAGE_PUBLIC_BASE_URL = ""
         client.force_login(staff_user)
 
@@ -696,8 +835,8 @@ class TestUploadMediaApi:
         assert response.status_code == 201
         payload = response.json()
         assert (
-            payload["url"] == "https://bucket.s3.amazonaws.com/blog/uploads/2026/03/"
-            "hero-image.png?signature=abc"
+            payload["url"]
+            == "http://testserver/media/blog/uploads/2026/03/hero-image.png"
         )
 
     def test_build_media_response_url_uses_local_media_fallback_when_no_public_base_url(
@@ -707,7 +846,6 @@ class TestUploadMediaApi:
     ):
         """Media response helper should fall back to local media paths without a canonical base URL."""
         settings.QUICKSCALE_STORAGE_PUBLIC_BASE_URL = ""
-        settings.AWS_S3_CUSTOM_DOMAIN = "cdn.example.com"
 
         request = rf.get(reverse("quickscale_blog:api_upload_media"))
 
@@ -717,47 +855,6 @@ class TestUploadMediaApi:
                 "blog/uploads/2026/03/hero-image.png",
             )
             == "http://testserver/media/blog/uploads/2026/03/hero-image.png"
-        )
-
-    @patch("quickscale_modules_blog.views.create_blog_media_asset_from_request")
-    def test_upload_media_api_returns_provider_url_when_public_base_url_is_unset(
-        self,
-        mock_create_asset,
-        client,
-        staff_user,
-        settings,
-    ):
-        """Upload API should preserve provider URLs when no canonical public base is set."""
-        settings.QUICKSCALE_STORAGE_PUBLIC_BASE_URL = ""
-        settings.AWS_S3_CUSTOM_DOMAIN = "cdn.example.com"
-        client.force_login(staff_user)
-
-        file_mock = MagicMock()
-        file_mock.name = "blog/uploads/2026/03/hero-image.png"
-        file_mock.url = (
-            "https://bucket.s3.amazonaws.com/blog/uploads/2026/03/"
-            "hero-image.png?signature=abc"
-        )
-
-        asset = MagicMock()
-        asset.pk = 789
-        asset.file = file_mock
-        asset.alt = "CDN image"
-        asset.kind = BlogMediaAsset.Kind.GENERAL
-        asset.width = 900
-        asset.height = 600
-        mock_create_asset.return_value = asset
-
-        response = client.post(
-            reverse("quickscale_blog:api_upload_media"),
-            data={"file": make_uploaded_test_image(size=(900, 600))},
-        )
-
-        assert response.status_code == 201
-        payload = response.json()
-        assert (
-            payload["url"] == "https://bucket.s3.amazonaws.com/blog/uploads/2026/03/"
-            "hero-image.png?signature=abc"
         )
 
     def test_upload_media_api_rejects_unsupported_file_type(

@@ -195,7 +195,7 @@ If your project needs persistent uploaded files such as blog images, configure t
 - **Static assets** (`static/`, React build output, CSS, JS, icons): keep using
   WhiteNoise / `staticfiles`
 - **Media uploads** (blog images, featured images, other Django-managed uploads):
-  use the `storage` module with S3-compatible storage and an optional CDN domain
+  use the `storage` module with S3-compatible storage and `public_base_url`
 
 ### Recommended `storage` module config
 
@@ -205,7 +205,6 @@ modules:
     backend: s3
     media_url: /media/
     public_base_url: https://cdn.example.com
-    custom_domain: cdn.example.com
     bucket_name: your-media-bucket
     endpoint_url: ""
     region_name: eu-west-1
@@ -232,16 +231,69 @@ For helper-backed CloudFront consistency, point the CloudFront distribution at y
 S3-compatible media origin and use:
 
 - `public_base_url: https://cdn.example.com`
-- optional `custom_domain: cdn.example.com`
 
 `public_base_url` is the canonical media host for helper-built URLs, including
 blog API responses, public featured-image rendering, and generated thumbnails.
-`custom_domain` is now a legacy/provider-level setting for direct Django storage
-URLs such as `file.url`.
+Leave it blank only for local development, where QuickScale falls back to
+`MEDIA_URL` behavior.
 
-If you are upgrading an older cloud config that only set `custom_domain`,
-re-run `quickscale apply` or move that host into `public_base_url` explicitly so
-helper-backed blog rendering and upload responses stay aligned.
+### Minimum environment variable contract
+
+Generated projects wire the storage module through standard Django storage
+settings. For production Railway deployments, set:
+
+- `QUICKSCALE_STORAGE_BACKEND=s3` for AWS S3, or `QUICKSCALE_STORAGE_BACKEND=r2`
+  for Cloudflare R2
+- `QUICKSCALE_STORAGE_PUBLIC_BASE_URL=https://cdn.example.com` for the final
+  public media host or host+path
+- `AWS_STORAGE_BUCKET_NAME`
+- `AWS_ACCESS_KEY_ID`
+- `AWS_SECRET_ACCESS_KEY`
+- `AWS_QUERYSTRING_AUTH=false` for public CDN-friendly assets
+
+Set `AWS_S3_REGION_NAME` for AWS S3. For Cloudflare R2, set:
+
+- `AWS_S3_ENDPOINT_URL=https://<account>.r2.cloudflarestorage.com`
+- `AWS_S3_REGION_NAME=auto`
+
+Keep `AWS_DEFAULT_ACL` blank unless your provider policy requires a specific
+override.
+
+### Local, staging, and production guidance
+
+- **Local development:** keep `backend: local`, keep `public_base_url` blank, and
+  use the default `/media/` path.
+- **Staging:** use the same backend family as production when validating uploads,
+  but point `public_base_url` at the staging CDN/media host so rendered URLs stay
+  environment-specific without changing stored keys.
+- **Production:** treat Railway disk as ephemeral and store all durable uploads in
+  external object storage.
+
+### CDN cache guidance
+
+QuickScale storage helpers generate immutable-style filenames for uploaded media.
+Keep `querystring_auth: false` for public assets so CDN caches can serve those
+stable URLs efficiently without signature churn.
+
+### Migrating an existing local-media project
+
+1. Add the `storage` module if it is not already enabled.
+2. Configure S3 or R2 credentials and set `public_base_url` to the final public
+   media host.
+3. Re-run `quickscale apply`.
+4. Copy existing local media objects into the target bucket using your preferred
+   storage sync process.
+5. Validate blog upload and rendered media URLs in staging before production cutover.
+
+### Troubleshooting
+
+- **Missing credentials:** verify bucket and credential variables are present in
+  Railway and match the selected backend.
+- **Broken public URLs:** confirm `public_base_url` matches the public CDN/media
+  host, including any required path prefix.
+- **Uploads work locally but not on Railway:** confirm the project is not relying
+  on Railway container disk for persistent media.
+- **Unexpected signed URLs:** ensure `querystring_auth` is disabled for public media.
 
 ### What this covers
 
