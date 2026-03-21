@@ -51,8 +51,6 @@ def _build_media_response_url(request: HttpRequest, stored_reference: str) -> st
     public_base_url = str(
         getattr(settings, "QUICKSCALE_STORAGE_PUBLIC_BASE_URL", "")
     ).strip()
-    custom_domain = str(getattr(settings, "AWS_S3_CUSTOM_DOMAIN", "")).strip()
-    url_protocol = str(getattr(settings, "AWS_S3_URL_PROTOCOL", "https:")).strip()
     media_url = str(getattr(settings, "MEDIA_URL", "/media/")).strip() or "/media/"
 
     if storage_build_public_media_url is not None:
@@ -61,8 +59,6 @@ def _build_media_response_url(request: HttpRequest, stored_reference: str) -> st
             request=request,
             public_base_url=public_base_url,
             media_url=media_url,
-            custom_domain=custom_domain,
-            url_protocol=url_protocol,
         )
 
     reference = (stored_reference or "").strip()
@@ -75,15 +71,6 @@ def _build_media_response_url(request: HttpRequest, stored_reference: str) -> st
 
     if public_base_url:
         return f"{public_base_url.rstrip('/')}/{reference.lstrip('/')}"
-
-    if custom_domain:
-        normalized_protocol = url_protocol or "https:"
-        if not normalized_protocol.endswith(":"):
-            normalized_protocol += ":"
-        return (
-            f"{normalized_protocol}//{custom_domain.rstrip('/')}"
-            f"/{reference.lstrip('/')}"
-        )
 
     if reference.startswith("/"):
         return request.build_absolute_uri(reference)
@@ -444,9 +431,8 @@ def upload_media_api(request: HttpRequest) -> JsonResponse:
     public_base_url = str(
         getattr(settings, "QUICKSCALE_STORAGE_PUBLIC_BASE_URL", "")
     ).strip()
-    custom_domain = str(getattr(settings, "AWS_S3_CUSTOM_DOMAIN", "")).strip()
     response_reference = asset.file.name
-    if not public_base_url and not custom_domain:
+    if not public_base_url:
         try:
             response_reference = str(asset.file.url)
         except AttributeError, ValueError:

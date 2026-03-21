@@ -2,6 +2,7 @@
 
 import os
 from io import BytesIO
+from unittest.mock import patch
 
 import pytest
 from django.contrib.auth import get_user_model
@@ -81,6 +82,30 @@ class TestAuthorProfile:
         assert profile.user == user
         assert profile.bio == "Test author bio"
         assert str(profile) == f"{user.username} - Author Profile"
+
+    def test_get_avatar_url_uses_public_base_url(self, user, tmp_path, settings):
+        """Author avatars should resolve through the storage public URL helper."""
+        settings.MEDIA_ROOT = str(tmp_path)
+        settings.QUICKSCALE_STORAGE_PUBLIC_BASE_URL = "https://cdn.example.com/media"
+
+        image = Image.new("RGB", (200, 200), color="teal")
+        image_path = tmp_path / "avatar.png"
+        image.save(str(image_path), format="PNG")
+
+        with open(image_path, "rb") as image_handle:
+            uploaded_file = SimpleUploadedFile(
+                "avatar.png",
+                image_handle.read(),
+                content_type="image/png",
+            )
+
+        profile = AuthorProfile.objects.create(
+            user=user,
+            bio="Test author bio",
+            avatar=uploaded_file,
+        )
+
+        assert profile.get_avatar_url().startswith("https://cdn.example.com/media/")
 
 
 @pytest.mark.django_db
@@ -219,6 +244,7 @@ class TestPost:
     def test_get_thumbnail_url_with_image(self, author_user, tmp_path, settings):
         """Test get_thumbnail_url returns correct URL when image exists"""
         settings.MEDIA_ROOT = str(tmp_path)
+        settings.QUICKSCALE_STORAGE_PUBLIC_BASE_URL = "https://cdn.example.com/media"
 
         img_dir = tmp_path / "blog" / "images"
         img_dir.mkdir(parents=True)
@@ -238,10 +264,12 @@ class TestPost:
         )
 
         medium_url = post.get_thumbnail_url("medium")
+        assert medium_url.startswith("https://cdn.example.com/media/")
         assert "thumbnails" in medium_url
         assert "medium" in medium_url
 
         small_url = post.get_thumbnail_url("small")
+        assert small_url.startswith("https://cdn.example.com/media/")
         assert "thumbnails" in small_url
         assert "small" in small_url
 
@@ -283,6 +311,38 @@ class TestPost:
 
         assert post.get_thumbnail_url("large") == post.featured_image.url
 
+    def test_get_featured_image_url_uses_public_base_url(
+        self,
+        author_user,
+        tmp_path,
+        settings,
+    ):
+        """Featured image public URL should be helper-backed when configured."""
+        settings.MEDIA_ROOT = str(tmp_path)
+        settings.QUICKSCALE_STORAGE_PUBLIC_BASE_URL = "https://cdn.example.com/media"
+
+        image = Image.new("RGB", (800, 450), color="purple")
+        image_path = tmp_path / "featured-helper.png"
+        image.save(str(image_path), format="PNG")
+
+        with open(image_path, "rb") as image_handle:
+            uploaded_file = SimpleUploadedFile(
+                "featured-helper.png",
+                image_handle.read(),
+                content_type="image/png",
+            )
+
+        post = Post.objects.create(
+            title="Helper Image Post",
+            author=author_user,
+            content="Content",
+            featured_image=uploaded_file,
+        )
+
+        assert post.get_featured_image_url().startswith(
+            "https://cdn.example.com/media/blog/images/"
+        )
+
     def test_generate_thumbnails_skips_non_filesystem_storage_path(
         self,
         author_user,
@@ -290,7 +350,7 @@ class TestPost:
         settings,
         monkeypatch,
     ):
-        """Test thumbnail generation exits cleanly when storage has no local path support."""
+        """Test thumbnail generation exits cleanly when storage cannot open the source image."""
         settings.MEDIA_ROOT = str(tmp_path)
 
         image_bytes = BytesIO()
@@ -308,11 +368,110 @@ class TestPost:
             featured_image=image_file,
         )
 
+        def _raise_not_implemented(*_args, **_kwargs):
+            raise NotImplementedError
+
+        monkeypatch.setattr(post.featured_image.storage, "open", _raise_not_implemented)
+        post._generate_thumbnails()
+
+    def test_generate_thumbnails_with_storage_open_without_filesystem_path(
+        self,
+        author_user,
+        tmp_path,
+        settings,
+        monkeypatch,
+    ):
+        """Thumbnail generation should work via storage I/O without relying on `.path`."""
+        settings.MEDIA_ROOT = str(tmp_path)
+        settings.QUICKSCALE_STORAGE_PUBLIC_BASE_URL = "https://cdn.example.com/media"
+
+        image_bytes = BytesIO()
+        Image.new("RGB", (1200, 800), color="orange").save(
+            image_bytes,
+            format="JPEG",
+        )
+        image_file = SimpleUploadedFile(
+            "remote-generated.jpg",
+            image_bytes.getvalue(),
+            content_type="image/jpeg",
+        )
+
+        post = Post.objects.create(
+            title="Remote Thumbnail Post",
+            author=author_user,
+            content="Content",
+            featured_image=image_file,
+        )
+
+        original_bytes = post.featured_image.read()
+        stored_files: dict[str, bytes] = {post.featured_image.name: original_bytes}
+
         def _raise_not_implemented(_: str) -> str:
             raise NotImplementedError
 
+        def _open(name: str, mode: str = "rb") -> BytesIO:
+            return BytesIO(stored_files[name])
+
+        def _save(name: str, content) -> str:
+            stored_files[name] = content.read()
+            return name
+
+        def _exists(name: str) -> bool:
+            return name in stored_files
+
+        def _delete(name: str) -> None:
+            stored_files.pop(name, None)
+
         monkeypatch.setattr(post.featured_image.storage, "path", _raise_not_implemented)
+        monkeypatch.setattr(post.featured_image.storage, "open", _open)
+        monkeypatch.setattr(post.featured_image.storage, "save", _save)
+        monkeypatch.setattr(post.featured_image.storage, "exists", _exists)
+        monkeypatch.setattr(post.featured_image.storage, "delete", _delete)
         post._generate_thumbnails()
+
+        thumbnail_name = post._get_thumbnail_name("medium")
+        assert post.featured_image.storage.exists(thumbnail_name)
+        assert post.get_thumbnail_url("medium").startswith(
+            "https://cdn.example.com/media/"
+        )
+
+    def test_helper_backed_urls_do_not_depend_on_storage_url(
+        self,
+        author_user,
+        tmp_path,
+        settings,
+    ):
+        """Public featured/thumbnail URLs should not call storage `.url` when helper-backed."""
+        settings.MEDIA_ROOT = str(tmp_path)
+        settings.QUICKSCALE_STORAGE_PUBLIC_BASE_URL = "https://cdn.example.com/media"
+
+        image = Image.new("RGB", (1200, 800), color="navy")
+        image_path = tmp_path / "helper-only.jpg"
+        image.save(str(image_path), format="JPEG")
+
+        with open(image_path, "rb") as image_handle:
+            uploaded_file = SimpleUploadedFile(
+                "helper-only.jpg",
+                image_handle.read(),
+                content_type="image/jpeg",
+            )
+
+        post = Post.objects.create(
+            title="Helper Only URLs",
+            author=author_user,
+            content="Content",
+            featured_image=uploaded_file,
+        )
+
+        with patch.object(
+            post.featured_image.storage, "url", side_effect=AssertionError
+        ):
+            assert post.get_featured_image_url().startswith(
+                "https://cdn.example.com/media/blog/images/"
+            )
+            assert post.get_thumbnail_url("medium").startswith(
+                "https://cdn.example.com/media/blog/images/thumbnails/"
+            )
 
 
 @pytest.mark.django_db

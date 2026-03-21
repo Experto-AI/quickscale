@@ -8,7 +8,7 @@
         <h1>{{ post.title }}</h1>
 
         {% if post.featured_image %}
-        <img src="{{ post.featured_image.url }}" alt="{{ post.featured_image_alt }}">
+        <img src="{{ post.get_featured_image_url }}" alt="{{ post.featured_image_alt }}">
         {% endif %}
 
         <p>

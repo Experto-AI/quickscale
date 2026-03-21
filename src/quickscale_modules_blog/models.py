@@ -3,11 +3,13 @@
 import posixpath
 from collections.abc import Callable
 from importlib import import_module
+from io import BytesIO
 from pathlib import Path
 from typing import Any
 from uuid import uuid4
 
 from django.conf import settings
+from django.core.files.base import ContentFile
 from django.db import models
 from django.urls import reverse
 from django.utils import timezone
@@ -16,6 +18,7 @@ from markdownx.models import MarkdownxField
 from PIL import Image
 
 storage_build_upload_path: Callable[..., str] | None = None
+storage_build_public_media_url: Callable[..., str] | None = None
 storage_helpers: Any | None
 try:
     storage_helpers = import_module("quickscale_modules_storage.helpers")
@@ -24,6 +27,76 @@ except ModuleNotFoundError:
 
 if storage_helpers is not None:
     storage_build_upload_path = getattr(storage_helpers, "build_upload_path", None)
+    storage_build_public_media_url = getattr(
+        storage_helpers, "build_public_media_url", None
+    )
+
+
+def _build_public_media_url(stored_reference: str) -> str:
+    """Return a public URL for a stored media reference."""
+    reference = (stored_reference or "").strip()
+    if not reference:
+        return ""
+
+    public_base_url = str(
+        getattr(settings, "QUICKSCALE_STORAGE_PUBLIC_BASE_URL", "")
+    ).strip()
+    media_url = str(getattr(settings, "MEDIA_URL", "/media/")).strip() or "/media/"
+
+    if storage_build_public_media_url is not None:
+        return storage_build_public_media_url(
+            reference,
+            public_base_url=public_base_url,
+            media_url=media_url,
+        )
+
+    if public_base_url:
+        return f"{public_base_url.rstrip('/')}/{reference.lstrip('/')}"
+
+    normalized_media_url = media_url
+    if not normalized_media_url.startswith("/") and not normalized_media_url.startswith(
+        "http"
+    ):
+        normalized_media_url = "/" + normalized_media_url
+    if not normalized_media_url.endswith("/"):
+        normalized_media_url += "/"
+    return f"{normalized_media_url}{reference.lstrip('/')}"
+
+
+def _save_format_from_name(file_name: str, detected_format: str | None) -> str:
+    """Infer a Pillow save format from the original file name or detected format."""
+    if detected_format:
+        normalized = detected_format.upper()
+        if normalized == "JPG":
+            return "JPEG"
+        return normalized
+
+    extension = Path(file_name).suffix.lower()
+    if extension in {".jpg", ".jpeg"}:
+        return "JPEG"
+    if extension == ".png":
+        return "PNG"
+    if extension == ".webp":
+        return "WEBP"
+    if extension == ".gif":
+        return "GIF"
+    return "JPEG"
+
+
+def _thumbnail_save_kwargs(image_format: str) -> dict[str, Any]:
+    """Return image-save keyword arguments appropriate for the target format."""
+    if image_format in {"JPEG", "WEBP"}:
+        return {"quality": 85, "optimize": True}
+    if image_format == "PNG":
+        return {"optimize": True}
+    return {}
+
+
+def _prepare_thumbnail_image(image: Image.Image, image_format: str) -> Image.Image:
+    """Normalize image mode for the requested thumbnail format."""
+    if image_format == "JPEG" and image.mode not in {"RGB", "L"}:
+        return image.convert("RGB")
+    return image
 
 
 def blog_media_upload_to(_: "BlogMediaAsset", filename: str) -> str:
@@ -105,6 +178,12 @@ class AuthorProfile(models.Model):
 
     def __str__(self) -> str:
         return f"{self.user.username} - Author Profile"
+
+    def get_avatar_url(self) -> str:
+        """Return the public avatar URL using storage helpers when available."""
+        if not self.avatar:
+            return ""
+        return _build_public_media_url(str(self.avatar.name))
 
 
 class BlogMediaAsset(models.Model):
@@ -231,14 +310,26 @@ class Post(models.Model):
         """Return the URL for this post"""
         return reverse("quickscale_blog:post_detail", kwargs={"slug": self.slug})
 
+    def get_featured_image_url(self) -> str:
+        """Return the public featured image URL using storage helpers when available."""
+        if not self.featured_image:
+            return ""
+        return _build_public_media_url(str(self.featured_image.name))
+
+    def _get_thumbnail_name(self, size: str) -> str:
+        """Return the storage-relative thumbnail name for a given size."""
+        file_name = str(self.featured_image.name)
+        directory, filename = posixpath.split(file_name)
+        stem, extension = posixpath.splitext(filename)
+        return posixpath.join(
+            directory,
+            "thumbnails",
+            f"{stem}_{size}{extension}",
+        )
+
     def _generate_thumbnails(self) -> None:
         """Generate thumbnail versions of featured image"""
         if not self.featured_image:
-            return
-
-        try:
-            image_path = self.featured_image.path
-        except NotImplementedError, ValueError, AttributeError:
             return
 
         sizes = {
@@ -246,38 +337,57 @@ class Post(models.Model):
             "medium": (800, 450),
         }
 
-        image_path_obj = Path(image_path)
-        thumb_dir = image_path_obj.parent / "thumbnails"
-        thumb_dir.mkdir(parents=True, exist_ok=True)
+        storage = self.featured_image.storage
+        source_name = str(self.featured_image.name)
 
-        with Image.open(image_path) as img:
-            for size_name, dimensions in sizes.items():
-                img_copy = img.copy()
-                img_copy.thumbnail(dimensions, Image.Resampling.LANCZOS)
-                thumb_path = (
-                    thumb_dir
-                    / f"{image_path_obj.stem}_{size_name}{image_path_obj.suffix}"
-                )
-                img_copy.save(thumb_path, quality=85, optimize=True)
+        try:
+            with storage.open(source_name, "rb") as source_file:
+                with Image.open(source_file) as image:
+                    source_format = _save_format_from_name(source_name, image.format)
+                    for size_name, dimensions in sizes.items():
+                        img_copy = image.copy()
+                        img_copy.thumbnail(dimensions, Image.Resampling.LANCZOS)
+                        prepared = _prepare_thumbnail_image(img_copy, source_format)
+                        thumbnail_name = self._get_thumbnail_name(size_name)
+                        output = BytesIO()
+                        prepared.save(
+                            output,
+                            format=source_format,
+                            **_thumbnail_save_kwargs(source_format),
+                        )
+                        output.seek(0)
+                        if storage.exists(thumbnail_name):
+                            storage.delete(thumbnail_name)
+                        storage.save(
+                            thumbnail_name,
+                            ContentFile(output.getvalue()),
+                        )
+        except (
+            AttributeError,
+            FileNotFoundError,
+            NotImplementedError,
+            OSError,
+            ValueError,
+        ):
+            return
 
     def get_thumbnail_url(self, size: str = "medium") -> str:
         """Get URL for thumbnail of specified size"""
         if not self.featured_image:
             return ""
 
-        file_name = str(self.featured_image.name)
-        directory, filename = posixpath.split(file_name)
-        stem, extension = posixpath.splitext(filename)
-        thumbnail_name = posixpath.join(
-            directory,
-            "thumbnails",
-            f"{stem}_{size}{extension}",
-        )
+        thumbnail_name = self._get_thumbnail_name(size)
 
         try:
             if self.featured_image.storage.exists(thumbnail_name):
-                return self.featured_image.storage.url(thumbnail_name)
-        except Exception:
-            return self.featured_image.url
+                return _build_public_media_url(thumbnail_name)
+        except (
+            AttributeError,
+            FileNotFoundError,
+            NotImplementedError,
+            OSError,
+            ValueError,
+        ):
+            return self.get_featured_image_url()
 
-        return self.featured_image.url
+        return self.get_featured_image_url()

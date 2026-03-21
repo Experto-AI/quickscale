@@ -144,7 +144,45 @@ class TestPostDetailView:
         assert response.status_code == 200
         html = response.content.decode()
         assert "Featured diagram" in html
-        assert post.featured_image.url in html
+        assert post.get_featured_image_url() in html
+
+    def test_post_detail_uses_helper_backed_featured_image_url(
+        self,
+        client,
+        author_user,
+        tmp_path,
+        settings,
+    ):
+        """Post detail should render helper-backed public URLs instead of direct `.url`."""
+        settings.MEDIA_ROOT = str(tmp_path)
+        settings.QUICKSCALE_STORAGE_PUBLIC_BASE_URL = "https://cdn.example.com/media"
+
+        image = Image.new("RGB", (800, 450), color="purple")
+        image_path = tmp_path / "featured-cdn.png"
+        image.save(str(image_path), format="PNG")
+
+        with open(image_path, "rb") as image_handle:
+            uploaded_file = SimpleUploadedFile(
+                "featured-cdn.png",
+                image_handle.read(),
+                content_type="image/png",
+            )
+
+        post = Post.objects.create(
+            title="Featured CDN Post",
+            author=author_user,
+            content="Body",
+            status="published",
+            featured_image=uploaded_file,
+            featured_image_alt="Featured CDN diagram",
+        )
+
+        response = client.get(reverse("quickscale_blog:post_detail", args=[post.slug]))
+
+        assert response.status_code == 200
+        html = response.content.decode()
+        assert f'src="{post.get_featured_image_url()}"' in html
+        assert f'src="{post.featured_image.url}"' not in html
 
 
 @pytest.mark.django_db
