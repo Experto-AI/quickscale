@@ -9,7 +9,7 @@ import re
 import subprocess
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Optional
+from typing import Any, Mapping, Optional
 
 import click
 
@@ -47,6 +47,17 @@ def _filter_new_apps(settings_content: str, apps: list[str]) -> list[str]:
         List of apps that are NOT already in settings.py
     """
     return [app for app in apps if not _is_app_in_installed_apps(settings_content, app)]
+
+
+def _merge_existing_config(
+    defaults: dict[str, Any],
+    existing_config: Mapping[str, Any] | None,
+) -> dict[str, Any]:
+    """Merge module defaults with any existing configured values."""
+    merged = dict(defaults)
+    if existing_config:
+        merged.update(dict(existing_config))
+    return merged
 
 
 @dataclass(frozen=True)
@@ -216,11 +227,16 @@ def get_default_auth_config() -> dict[str, Any]:
     }
 
 
-def configure_auth_module(non_interactive: bool = False) -> dict[str, Any]:
+def configure_auth_module(
+    non_interactive: bool = False,
+    existing_config: Mapping[str, Any] | None = None,
+) -> dict[str, Any]:
     """Interactive configuration for auth module"""
+    defaults = _merge_existing_config(get_default_auth_config(), existing_config)
+
     if non_interactive:
         click.echo("\n⚙️  Using default auth module configuration...")
-        config = get_default_auth_config()
+        config = defaults
         click.echo("  • Registration: Enabled")
         click.echo(f"  • Email verification: {config['email_verification']}")
         click.echo(f"  • Authentication: {config['authentication_method']}")
@@ -232,22 +248,22 @@ def configure_auth_module(non_interactive: bool = False) -> dict[str, Any]:
     config = {
         "registration_enabled": click.confirm(
             "Enable user registration?",
-            default=True,
+            default=bool(defaults["registration_enabled"]),
         ),
         "email_verification": click.prompt(
             "Email verification",
             type=click.Choice(["none", "optional", "mandatory"], case_sensitive=False),
-            default="none",
+            default=str(defaults["email_verification"]),
             show_choices=True,
         ),
         "authentication_method": click.prompt(
             "Authentication method",
             type=click.Choice(["email", "username", "both"], case_sensitive=False),
-            default="email",
+            default=str(defaults["authentication_method"]),
             show_choices=True,
         ),
-        "social_providers": [],
-        "session_cookie_age": 1209600,
+        "social_providers": list(defaults.get("social_providers", [])),
+        "session_cookie_age": int(defaults.get("session_cookie_age", 1209600)),
     }
 
     return config
@@ -480,11 +496,16 @@ def get_default_blog_config() -> dict[str, Any]:
     }
 
 
-def configure_blog_module(non_interactive: bool = False) -> dict[str, Any]:
+def configure_blog_module(
+    non_interactive: bool = False,
+    existing_config: Mapping[str, Any] | None = None,
+) -> dict[str, Any]:
     """Interactive configuration for blog module"""
+    defaults = _merge_existing_config(get_default_blog_config(), existing_config)
+
     if non_interactive:
         click.echo("\n⚙️  Using default blog module configuration...")
-        config = get_default_blog_config()
+        config = defaults
         click.echo(f"  • Posts per page: {config['posts_per_page']}")
         click.echo("  • RSS feed: Enabled")
         return config
@@ -496,9 +517,12 @@ def configure_blog_module(non_interactive: bool = False) -> dict[str, Any]:
         "posts_per_page": click.prompt(
             "Posts per page",
             type=int,
-            default=10,
+            default=int(defaults["posts_per_page"]),
         ),
-        "enable_rss": click.confirm("Enable RSS feed?", default=True),
+        "enable_rss": click.confirm(
+            "Enable RSS feed?",
+            default=bool(defaults["enable_rss"]),
+        ),
     }
 
     return config
@@ -526,11 +550,16 @@ def get_default_listings_config() -> dict[str, Any]:
     }
 
 
-def configure_listings_module(non_interactive: bool = False) -> dict[str, Any]:
+def configure_listings_module(
+    non_interactive: bool = False,
+    existing_config: Mapping[str, Any] | None = None,
+) -> dict[str, Any]:
     """Interactive configuration for listings module"""
+    defaults = _merge_existing_config(get_default_listings_config(), existing_config)
+
     if non_interactive:
         click.echo("\n⚙️  Using default listings module configuration...")
-        config = get_default_listings_config()
+        config = defaults
         click.echo(f"  • Listings per page: {config['listings_per_page']}")
         return config
 
@@ -543,7 +572,7 @@ def configure_listings_module(non_interactive: bool = False) -> dict[str, Any]:
         "listings_per_page": click.prompt(
             "Listings per page",
             type=int,
-            default=12,
+            default=int(defaults["listings_per_page"]),
         ),
     }
 
@@ -773,11 +802,16 @@ def get_default_crm_config() -> dict[str, Any]:
     }
 
 
-def configure_crm_module(non_interactive: bool = False) -> dict[str, Any]:
+def configure_crm_module(
+    non_interactive: bool = False,
+    existing_config: Mapping[str, Any] | None = None,
+) -> dict[str, Any]:
     """Interactive configuration for CRM module"""
+    defaults = _merge_existing_config(get_default_crm_config(), existing_config)
+
     if non_interactive:
         click.echo("\n⚙️  Using default CRM module configuration...")
-        config = get_default_crm_config()
+        config = defaults
         click.echo("  • API: Enabled")
         click.echo(f"  • Deals per page: {config['deals_per_page']}")
         click.echo(f"  • Contacts per page: {config['contacts_per_page']}")
@@ -789,23 +823,21 @@ def configure_crm_module(non_interactive: bool = False) -> dict[str, Any]:
     )
 
     config = {
-        "enable_api": click.confirm("Enable REST API endpoints?", default=True),
+        "enable_api": click.confirm(
+            "Enable REST API endpoints?",
+            default=bool(defaults["enable_api"]),
+        ),
         "deals_per_page": click.prompt(
             "Deals per page",
             type=int,
-            default=25,
+            default=int(defaults["deals_per_page"]),
         ),
         "contacts_per_page": click.prompt(
             "Contacts per page",
             type=int,
-            default=50,
+            default=int(defaults["contacts_per_page"]),
         ),
-        "default_pipeline_stages": [
-            "Prospecting",
-            "Negotiation",
-            "Closed-Won",
-            "Closed-Lost",
-        ],
+        "default_pipeline_stages": list(defaults["default_pipeline_stages"]),
     }
 
     return config
@@ -998,11 +1030,16 @@ def get_default_forms_config() -> dict[str, Any]:
     }
 
 
-def configure_forms_module(non_interactive: bool = False) -> dict[str, Any]:
+def configure_forms_module(
+    non_interactive: bool = False,
+    existing_config: Mapping[str, Any] | None = None,
+) -> dict[str, Any]:
     """Configure the forms module interactively or using defaults."""
+    defaults = _merge_existing_config(get_default_forms_config(), existing_config)
+
     if non_interactive:
         click.echo("\n⚙️  Using default forms module configuration...")
-        config = get_default_forms_config()
+        config = defaults
         click.echo(f"  \u2022 Forms per page: {config['forms_per_page']}")
         click.echo("  \u2022 Spam protection: Enabled")
         click.echo(f"  \u2022 Rate limit: {config['rate_limit']}")
@@ -1013,22 +1050,28 @@ def configure_forms_module(non_interactive: bool = False) -> dict[str, Any]:
     click.echo("\n⚙️  Configuring forms module...")
     config = {
         "forms_per_page": click.prompt(
-            "Submissions per page (admin)", type=int, default=25
+            "Submissions per page (admin)",
+            type=int,
+            default=int(defaults["forms_per_page"]),
         ),
         "spam_protection_enabled": click.confirm(
-            "Enable honeypot spam protection?", default=True
+            "Enable honeypot spam protection?",
+            default=bool(defaults["spam_protection_enabled"]),
         ),
         "rate_limit": click.prompt(
             "Rate limit for submissions (e.g. 5/hour, 10/minute)",
-            default="5/hour",
+            default=str(defaults["rate_limit"]),
         ),
         "data_retention_days": click.prompt(
-            "Data retention days (0 = keep forever)", type=int, default=365
+            "Data retention days (0 = keep forever)",
+            type=int,
+            default=int(defaults["data_retention_days"]),
         ),
         "submissions_api_enabled": click.confirm(
-            "Enable REST API for admin submissions?", default=True
+            "Enable REST API for admin submissions?",
+            default=bool(defaults["submissions_api_enabled"]),
         ),
-        "storage_backend": "django",
+        "storage_backend": str(defaults["storage_backend"]),
     }
     return config
 
@@ -1079,11 +1122,16 @@ def get_default_storage_config() -> dict[str, Any]:
     }
 
 
-def configure_storage_module(non_interactive: bool = False) -> dict[str, Any]:
+def configure_storage_module(
+    non_interactive: bool = False,
+    existing_config: Mapping[str, Any] | None = None,
+) -> dict[str, Any]:
     """Configure storage module settings interactively or with defaults."""
+    defaults = _merge_existing_config(get_default_storage_config(), existing_config)
+
     if non_interactive:
         click.echo("\n⚙️  Using default storage module configuration...")
-        config = get_default_storage_config()
+        config = defaults
         click.echo(f"  • Backend: {config['backend']}")
         click.echo(f"  • Media URL: {config['media_url']}")
         click.echo("  • Public base URL: not configured")
@@ -1095,7 +1143,7 @@ def configure_storage_module(non_interactive: bool = False) -> dict[str, Any]:
     backend = click.prompt(
         "Storage backend",
         type=click.Choice(["local", "s3", "r2"], case_sensitive=False),
-        default="local",
+        default=str(defaults["backend"]),
         show_choices=True,
     ).lower()
 
@@ -1103,47 +1151,72 @@ def configure_storage_module(non_interactive: bool = False) -> dict[str, Any]:
         "backend": backend,
         "media_url": click.prompt(
             "Media URL prefix",
-            default="/media/",
+            default=str(defaults["media_url"]),
         ).strip()
         or "/media/",
         "public_base_url": click.prompt(
             "Optional public base URL (CDN/domain)",
-            default="",
+            default=str(defaults["public_base_url"]),
             show_default=False,
         ).strip(),
-        "custom_domain": "",
-        "bucket_name": "",
-        "endpoint_url": "",
-        "region_name": "",
-        "access_key_id": "",
-        "secret_access_key": "",
-        "default_acl": "",
-        "querystring_auth": False,
-        "private_media_enabled": False,
+        "custom_domain": str(defaults["custom_domain"]),
+        "bucket_name": str(defaults["bucket_name"]),
+        "endpoint_url": str(defaults["endpoint_url"]),
+        "region_name": str(defaults["region_name"]),
+        "access_key_id": str(defaults["access_key_id"]),
+        "secret_access_key": str(defaults["secret_access_key"]),
+        "default_acl": str(defaults["default_acl"]),
+        "querystring_auth": bool(defaults["querystring_auth"]),
+        "private_media_enabled": bool(defaults["private_media_enabled"]),
     }
 
     if backend in {"s3", "r2"}:
         click.echo("\nCloud backend selected. Provide bucket/provider settings.")
         config["custom_domain"] = click.prompt(
             "Optional storage custom domain (host only, e.g. cdn.example.com)",
-            default="",
+            default=str(defaults["custom_domain"]),
             show_default=False,
         ).strip()
-        config["bucket_name"] = click.prompt("Bucket name", default="").strip()
-        config["endpoint_url"] = click.prompt(
-            "Endpoint URL (required for R2)", default=""
+        config["bucket_name"] = click.prompt(
+            "Bucket name",
+            default=str(defaults["bucket_name"]),
         ).strip()
-        config["region_name"] = click.prompt("Region name", default="").strip()
-        config["access_key_id"] = click.prompt("Access key id", default="").strip()
+        config["endpoint_url"] = click.prompt(
+            "Endpoint URL (required for R2)",
+            default=str(defaults["endpoint_url"]),
+        ).strip()
+        config["region_name"] = click.prompt(
+            "Region name",
+            default=str(defaults["region_name"]),
+        ).strip()
+        config["access_key_id"] = click.prompt(
+            "Access key id",
+            default=str(defaults["access_key_id"]),
+        ).strip()
         config["secret_access_key"] = click.prompt(
-            "Secret access key", default=""
+            "Secret access key",
+            default=str(defaults["secret_access_key"]),
         ).strip()
         config["default_acl"] = click.prompt(
-            "Default ACL (blank recommended)", default=""
+            "Default ACL (blank recommended)",
+            default=str(defaults["default_acl"]),
         ).strip()
         config["querystring_auth"] = click.confirm(
             "Enable querystring auth (signed URLs)?",
-            default=False,
+            default=bool(defaults["querystring_auth"]),
+        )
+    else:
+        config.update(
+            {
+                "custom_domain": "",
+                "bucket_name": "",
+                "endpoint_url": "",
+                "region_name": "",
+                "access_key_id": "",
+                "secret_access_key": "",
+                "default_acl": "",
+                "querystring_auth": False,
+            }
         )
 
     return config

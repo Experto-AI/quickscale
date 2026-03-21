@@ -27,6 +27,7 @@ class TestPlanAddBasic:
 
         assert result.exit_code == 0
         assert "--add" in result.output
+        assert "--configure-modules" in result.output
 
     def test_plan_add_with_config(self):
         """Test plan --add when config exists"""
@@ -225,6 +226,93 @@ docker:
                 with open("quickscale.yml") as f:
                     content = f.read()
                 assert "blog" in content
+
+    def test_plan_add_preserves_existing_module_options(self):
+        """Adding modules should keep previously configured module option dictionaries."""
+        runner = CliRunner()
+        with runner.isolated_filesystem():
+            with open("quickscale.yml", "w") as f:
+                f.write(
+                    """
+version: "1"
+project:
+  slug: testapp
+  package: testapp
+  theme: showcase_html
+modules:
+  storage:
+    backend: s3
+    public_base_url: https://cdn.example.com/media
+docker:
+  start: false
+"""
+                )
+
+            result = runner.invoke(plan, ["--add"], input="1\ny\n")
+
+            assert result.exit_code == 0
+            with open("quickscale.yml") as f:
+                content = f.read()
+            assert "public_base_url: https://cdn.example.com/media" in content
+            assert "auth:" in content
+
+    def test_plan_add_configure_modules_collects_storage_options(self):
+        """Planner should collect storage options interactively when requested."""
+        runner = CliRunner()
+        with runner.isolated_filesystem():
+            with open("quickscale.yml", "w") as f:
+                f.write(
+                    """
+version: "1"
+project:
+  slug: testapp
+  package: testapp
+  theme: showcase_html
+docker:
+  start: false
+"""
+                )
+
+            result = runner.invoke(
+                plan,
+                ["--add", "--configure-modules"],
+                input="storage\nlocal\n/media/\nhttps://cdn.example.com/media\ny\n",
+            )
+
+            assert result.exit_code == 0
+            with open("quickscale.yml") as f:
+                content = f.read()
+            assert "storage:" in content
+            assert "public_base_url: https://cdn.example.com/media" in content
+
+
+class TestPlanNewProjectConfigureModules:
+    """Tests for interactive module configuration during new project planning."""
+
+    def test_plan_new_project_configure_modules_collects_storage_options(self):
+        """New project planning should support interactive storage module config."""
+        runner = CliRunner()
+        with runner.isolated_filesystem():
+            result = runner.invoke(
+                plan,
+                ["myapp", "--configure-modules"],
+                input=(
+                    "\n"
+                    "2\n"
+                    "storage\n"
+                    "n\n"
+                    "local\n"
+                    "/media/\n"
+                    "https://cdn.example.com/media\n"
+                    "y\n"
+                ),
+            )
+
+            assert result.exit_code == 0
+            with open("myapp/quickscale.yml") as f:
+                content = f.read()
+            assert "storage:" in content
+            assert "public_base_url: https://cdn.example.com/media" in content
 
 
 class TestPlanAddNoModulesSelected:

@@ -225,15 +225,23 @@ If you added `storage` through `quickscale plan`, edit `quickscale.yml` after th
 planner step and put these values under `modules.storage` before running
 `quickscale apply`.
 
-For full CloudFront consistency, point the CloudFront distribution at your
+Prefer `quickscale plan --configure-modules` when you want the planner to capture
+the storage backend and CDN values interactively.
+
+For helper-backed CloudFront consistency, point the CloudFront distribution at your
 S3-compatible media origin and use:
 
 - `public_base_url: https://cdn.example.com`
-- `custom_domain: cdn.example.com`
+- optional `custom_domain: cdn.example.com`
 
-`public_base_url` keeps helper-built/media API URLs on CloudFront, while
-`custom_domain` makes direct Django storage URLs such as `file.url` use the same
-CloudFront host.
+`public_base_url` is the canonical media host for helper-built URLs, including
+blog API responses, public featured-image rendering, and generated thumbnails.
+`custom_domain` is now a legacy/provider-level setting for direct Django storage
+URLs such as `file.url`.
+
+If you are upgrading an older cloud config that only set `custom_domain`,
+re-run `quickscale apply` or move that host into `public_base_url` explicitly so
+helper-backed blog rendering and upload responses stay aligned.
 
 ### What this covers
 

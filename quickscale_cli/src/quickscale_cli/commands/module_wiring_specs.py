@@ -215,13 +215,12 @@ def _storage_wiring(options: Mapping[str, Any]) -> ModuleWiringSpec:
     media_url = _normalize_media_url(str(options.get("media_url", "/media/")))
     public_base_url = str(options.get("public_base_url", "")).strip()
     custom_domain = _normalize_custom_domain(str(options.get("custom_domain", "")))
-    derived_public_base_url = public_base_url or (
-        f"https://{custom_domain}" if custom_domain else ""
-    )
+    if not public_base_url and backend in {"s3", "r2"} and custom_domain:
+        public_base_url = f"https://{custom_domain}"
 
     settings: dict[str, Any] = {
         "QUICKSCALE_STORAGE_BACKEND": backend,
-        "QUICKSCALE_STORAGE_PUBLIC_BASE_URL": derived_public_base_url,
+        "QUICKSCALE_STORAGE_PUBLIC_BASE_URL": public_base_url,
         "MEDIA_URL": media_url,
         "QUICKSCALE_STORAGE_PRIVATE_MEDIA_ENABLED": bool(
             options.get("private_media_enabled", False)

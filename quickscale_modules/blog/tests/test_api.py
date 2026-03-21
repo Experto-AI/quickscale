@@ -700,12 +700,12 @@ class TestUploadMediaApi:
             "hero-image.png?signature=abc"
         )
 
-    def test_build_media_response_url_uses_custom_domain_when_public_base_url_is_unset(
+    def test_build_media_response_url_uses_local_media_fallback_when_no_public_base_url(
         self,
         rf,
         settings,
     ):
-        """Media response helper should fall back to the storage custom domain."""
+        """Media response helper should fall back to local media paths without a canonical base URL."""
         settings.QUICKSCALE_STORAGE_PUBLIC_BASE_URL = ""
         settings.AWS_S3_CUSTOM_DOMAIN = "cdn.example.com"
 
@@ -716,18 +716,18 @@ class TestUploadMediaApi:
                 request,
                 "blog/uploads/2026/03/hero-image.png",
             )
-            == "https://cdn.example.com/blog/uploads/2026/03/hero-image.png"
+            == "http://testserver/media/blog/uploads/2026/03/hero-image.png"
         )
 
     @patch("quickscale_modules_blog.views.create_blog_media_asset_from_request")
-    def test_upload_media_api_uses_custom_domain_when_public_base_url_is_unset(
+    def test_upload_media_api_returns_provider_url_when_public_base_url_is_unset(
         self,
         mock_create_asset,
         client,
         staff_user,
         settings,
     ):
-        """Upload API should prefer the storage custom domain over provider URLs."""
+        """Upload API should preserve provider URLs when no canonical public base is set."""
         settings.QUICKSCALE_STORAGE_PUBLIC_BASE_URL = ""
         settings.AWS_S3_CUSTOM_DOMAIN = "cdn.example.com"
         client.force_login(staff_user)
@@ -756,8 +756,8 @@ class TestUploadMediaApi:
         assert response.status_code == 201
         payload = response.json()
         assert (
-            payload["url"]
-            == "https://cdn.example.com/blog/uploads/2026/03/hero-image.png"
+            payload["url"] == "https://bucket.s3.amazonaws.com/blog/uploads/2026/03/"
+            "hero-image.png?signature=abc"
         )
 
     def test_upload_media_api_rejects_unsupported_file_type(

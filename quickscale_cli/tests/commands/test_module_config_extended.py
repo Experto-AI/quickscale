@@ -805,6 +805,84 @@ class TestStorageModuleConfig:
         assert config["default_acl"] == "public-read"
         assert config["querystring_auth"] is True
 
+    @patch("quickscale_cli.commands.module_config.click.prompt")
+    @patch("quickscale_cli.commands.module_config.click.confirm")
+    def test_configure_storage_interactive_reuses_existing_values(
+        self,
+        mock_confirm,
+        mock_prompt,
+    ):
+        """Interactive storage configuration should surface existing values as defaults."""
+        mock_confirm.return_value = False
+        mock_prompt.side_effect = [
+            "s3",
+            "/media/",
+            "https://cdn.example.com/media",
+            "cdn.example.com",
+            "assets",
+            "",
+            "eu-west-1",
+            "key-id",
+            "secret-key",
+            "",
+        ]
+
+        config = configure_storage_module(
+            non_interactive=False,
+            existing_config={
+                "backend": "s3",
+                "media_url": "/media/",
+                "public_base_url": "https://cdn.example.com/media",
+                "custom_domain": "cdn.example.com",
+                "bucket_name": "assets",
+                "region_name": "eu-west-1",
+                "access_key_id": "key-id",
+                "secret_access_key": "secret-key",
+            },
+        )
+
+        assert config["backend"] == "s3"
+        assert config["public_base_url"] == "https://cdn.example.com/media"
+        assert config["bucket_name"] == "assets"
+
+    @patch("quickscale_cli.commands.module_config.click.prompt")
+    @patch("quickscale_cli.commands.module_config.click.confirm")
+    def test_configure_storage_switching_to_local_clears_cloud_values(
+        self,
+        mock_confirm,
+        mock_prompt,
+    ):
+        """Switching storage to local should clear stale cloud-only settings."""
+        mock_confirm.return_value = False
+        mock_prompt.side_effect = ["local", "/media/", ""]
+
+        config = configure_storage_module(
+            non_interactive=False,
+            existing_config={
+                "backend": "s3",
+                "media_url": "/media/",
+                "public_base_url": "https://cdn.example.com/media",
+                "custom_domain": "cdn.example.com",
+                "bucket_name": "assets",
+                "endpoint_url": "https://account.r2.cloudflarestorage.com",
+                "region_name": "auto",
+                "access_key_id": "key-id",
+                "secret_access_key": "secret-key",
+                "default_acl": "public-read",
+                "querystring_auth": True,
+            },
+        )
+
+        assert config["backend"] == "local"
+        assert config["custom_domain"] == ""
+        assert config["bucket_name"] == ""
+        assert config["endpoint_url"] == ""
+        assert config["region_name"] == ""
+        assert config["access_key_id"] == ""
+        assert config["secret_access_key"] == ""
+        assert config["default_acl"] == ""
+        assert config["querystring_auth"] is False
+
     def test_add_storage_dependencies_aborts_when_module_pyproject_missing(
         self, tmp_path
     ):

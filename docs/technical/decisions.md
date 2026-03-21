@@ -448,8 +448,8 @@ $ quickscale plan myapp
 
 ✅ Configuration saved to quickscale.yml
 
-$ vim quickscale.yml
-# add module-specific values such as modules.storage.custom_domain
+$ quickscale plan myapp --configure-modules
+# optionally capture module-specific values such as modules.storage.public_base_url
 
 $ quickscale apply
 ✅ Modules embedded successfully!
@@ -477,6 +477,8 @@ Automatic changes made:
 
 **Current workflow**:
 - ✅ Use `quickscale plan` to select modules and generate `quickscale.yml`
+- ✅ Use `quickscale plan --configure-modules` when you want supported module
+  options captured interactively during planning
 - ✅ Edit module-specific values directly in `quickscale.yml` as needed
 - ✅ Use `quickscale apply` to materialize the configuration
 
@@ -502,10 +504,18 @@ docker:
   start: true
   build: true
 
-# Usage: quickscale plan myproject → creates quickscale.yml
+# Usage: quickscale plan myproject --configure-modules → optionally captures
+#        module values interactively for supported modules
 #        edit quickscale.yml module values as needed
 #        quickscale apply → executes configuration
 ```
+
+**Storage URL rule (v0.76.0):** `modules.storage.public_base_url` is the canonical
+source of helper-built public media URLs. `custom_domain` remains available for
+provider/storage-level direct URL behavior, but it does not change helper-backed
+public blog/storage URLs in new configs. For backward compatibility, apply may
+derive `public_base_url` from a legacy cloud `custom_domain` when the canonical
+field is still blank.
 
 **Decision Rule**:
 - **v0.72.0+**: Plan/apply is the primary workflow

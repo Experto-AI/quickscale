@@ -7,9 +7,11 @@ Also supports `--add` and `--reconfigure` flags for existing projects.
 import keyword
 import re
 from pathlib import Path
+from typing import Any
 
 import click
 
+from quickscale_cli.commands.module_config import MODULE_CONFIGURATORS
 from quickscale_cli.module_catalog import get_module_entries
 from quickscale_cli.schema.config_schema import (
     DockerConfig,
@@ -187,6 +189,94 @@ def _configure_docker() -> tuple[bool, bool, bool]:
         else False
     )
     return start, build, create_superuser
+
+
+def _copy_module_options(options: dict[str, Any] | None) -> dict[str, Any]:
+    """Return a shallow copy of module options."""
+    return dict(options or {})
+
+
+def _merge_module_names(*module_groups: list[str]) -> list[str]:
+    """Merge module names while preserving first-seen order."""
+    merged: list[str] = []
+    for group in module_groups:
+        for module_name in group:
+            if module_name not in merged:
+                merged.append(module_name)
+    return merged
+
+
+def _get_existing_module_options(
+    project_path: Path,
+    existing_config: QuickScaleConfig | None,
+) -> dict[str, dict[str, Any]]:
+    """Collect existing module option dictionaries from config and applied state."""
+    options: dict[str, dict[str, Any]] = {}
+
+    if existing_config is not None:
+        for module_name, module_config in existing_config.modules.items():
+            options[module_name] = _copy_module_options(module_config.options)
+
+    state = StateManager(project_path).load()
+    if state is not None:
+        for module_name, module_state in state.modules.items():
+            options.setdefault(module_name, _copy_module_options(module_state.options))
+
+    return options
+
+
+def _build_module_configs(
+    module_names: list[str],
+    module_options: dict[str, dict[str, Any]],
+) -> dict[str, ModuleConfig]:
+    """Build `ModuleConfig` objects while preserving known option dictionaries."""
+    return {
+        module_name: ModuleConfig(
+            name=module_name,
+            options=_copy_module_options(module_options.get(module_name)),
+        )
+        for module_name in module_names
+    }
+
+
+def _configure_selected_modules(
+    module_names: list[str],
+    existing_options: dict[str, dict[str, Any]],
+    *,
+    new_modules: set[str] | None = None,
+    allow_reconfigure_existing: bool = False,
+) -> dict[str, dict[str, Any]]:
+    """Interactively configure selected modules that expose configurators."""
+    configured: dict[str, dict[str, Any]] = {}
+    target_new_modules = new_modules or set(module_names)
+
+    if not module_names:
+        return configured
+
+    click.echo("\n⚙️  Interactive module configuration enabled")
+
+    for module_name in module_names:
+        current_options = _copy_module_options(existing_options.get(module_name))
+        configured[module_name] = current_options
+
+        configurator_entry = MODULE_CONFIGURATORS.get(module_name)
+        if configurator_entry is None:
+            continue
+
+        should_configure = module_name in target_new_modules
+        if not should_configure and allow_reconfigure_existing:
+            should_configure = click.confirm(
+                f"Reconfigure {module_name} module options?",
+                default=False,
+            )
+
+        if not should_configure:
+            continue
+
+        configurator, _ = configurator_entry
+        configured[module_name] = configurator(existing_config=current_options)
+
+    return configured
 
 
 def _detect_existing_project() -> tuple[Path | None, QuickScaleConfig | None]:
@@ -374,6 +464,7 @@ def _handle_add_modules(
     existing_config: QuickScaleConfig | None,
     *,
     include_experimental: bool = False,
+    configure_modules: bool = False,
 ) -> None:
     """Handle --add flag: add modules to existing project
 
@@ -402,39 +493,49 @@ def _handle_add_modules(
         click.echo("\n✅ No new modules selected")
         return
 
-    # Load or create config
-    if existing_config:
-        config = existing_config
-    else:
-        # Create minimal config from state
-        state_manager = StateManager(project_path)
-        state = state_manager.load()
+    state_manager = StateManager(project_path)
+    state = state_manager.load()
+    if existing_config is None and state is None:
+        click.secho(
+            "\n❌ Cannot add modules: No configuration or state found",
+            fg="red",
+            err=True,
+        )
+        raise click.Abort()
 
-        if state is None:
-            click.secho(
-                "\n❌ Cannot add modules: No configuration or state found",
-                fg="red",
-                err=True,
+    existing_options = _get_existing_module_options(project_path, existing_config)
+    all_modules = _merge_module_names(all_existing, new_modules)
+
+    if configure_modules:
+        existing_options.update(
+            _configure_selected_modules(
+                new_modules,
+                existing_options,
+                new_modules=set(new_modules),
             )
-            raise click.Abort()
+        )
+    else:
+        for module_name in new_modules:
+            existing_options.setdefault(module_name, {})
 
-        config = QuickScaleConfig(
-            version="1",
-            project=ProjectConfig(
-                slug=state.project.slug,
-                package=state.project.package,
-                theme=state.project.theme,
-            ),
-            modules={
-                name: ModuleConfig(name=name, options={})
-                for name in state.modules.keys()
-            },
-            docker=DockerConfig(start=False, build=False, create_superuser=False),
+    if existing_config is not None:
+        docker_config = existing_config.docker
+        project_config = existing_config.project
+    else:
+        assert state is not None
+        docker_config = DockerConfig(start=False, build=False, create_superuser=False)
+        project_config = ProjectConfig(
+            slug=state.project.slug,
+            package=state.project.package,
+            theme=state.project.theme,
         )
 
-    # Add new modules to config
-    for module_id in new_modules:
-        config.modules[module_id] = ModuleConfig(name=module_id, options={})
+    config = QuickScaleConfig(
+        version="1",
+        project=project_config,
+        modules=_build_module_configs(all_modules, existing_options),
+        docker=docker_config,
+    )
 
     # Generate YAML
     yaml_content = generate_yaml(config)
@@ -516,6 +617,7 @@ def _handle_reconfigure(
     existing_config: QuickScaleConfig | None,
     *,
     include_experimental: bool = False,
+    configure_modules: bool = False,
 ) -> None:
     """Handle --reconfigure flag: reconfigure existing project
 
@@ -559,17 +661,27 @@ def _handle_reconfigure(
             all_existing,
             include_experimental=include_experimental,
         )
-        all_modules = all_existing + new_modules
+        all_modules = _merge_module_names(all_existing, new_modules)
     else:
+        new_modules = []
         all_modules = all_existing
+
+    module_options = _get_existing_module_options(project_path, existing_config)
+    if configure_modules:
+        module_options.update(
+            _configure_selected_modules(
+                all_modules,
+                module_options,
+                new_modules=set(new_modules),
+                allow_reconfigure_existing=True,
+            )
+        )
 
     # Configure Docker
     docker_start, docker_build, docker_create_superuser = _configure_docker()
 
     # Build configuration
-    modules = {
-        module_id: ModuleConfig(name=module_id, options={}) for module_id in all_modules
-    }
+    modules = _build_module_configs(all_modules, module_options)
 
     config = QuickScaleConfig(
         version="1",
@@ -618,6 +730,7 @@ def _handle_existing_project_mode(
     reconfigure: bool,
     *,
     include_experimental: bool = False,
+    configure_modules: bool = False,
 ) -> bool:
     """Handle --add and --reconfigure flags for existing projects.
 
@@ -645,12 +758,14 @@ def _handle_existing_project_mode(
             project_path,
             existing_config,
             include_experimental=include_experimental,
+            configure_modules=configure_modules,
         )
     else:
         _handle_reconfigure(
             project_path,
             existing_config,
             include_experimental=include_experimental,
+            configure_modules=configure_modules,
         )
 
     return True
@@ -794,6 +909,11 @@ def _save_config_with_validation(yaml_content: str, output_path: Path) -> None:
     is_flag=True,
     help="Show and allow experimental modules (billing, teams)",
 )
+@click.option(
+    "--configure-modules",
+    is_flag=True,
+    help="Interactively configure supported module options during planning",
+)
 def plan(
     slug: str | None,
     output: str | None,
@@ -801,6 +921,7 @@ def plan(
     add_modules: bool,
     reconfigure: bool,
     include_experimental: bool,
+    configure_modules: bool,
 ) -> None:
     """
     Create or update a project configuration via interactive wizard.
@@ -832,6 +953,7 @@ def plan(
         add_modules,
         reconfigure,
         include_experimental=include_experimental,
+        configure_modules=configure_modules,
     ):
         return
 
@@ -851,11 +973,20 @@ def plan(
     selected_modules = _select_modules(include_experimental=include_experimental)
     docker_start, docker_build, docker_create_superuser = _configure_docker()
 
-    # Build configuration
-    modules = {
-        module_id: ModuleConfig(name=module_id, options={})
-        for module_id in selected_modules
+    module_options: dict[str, dict[str, Any]] = {
+        module_name: {} for module_name in selected_modules
     }
+    if configure_modules:
+        module_options.update(
+            _configure_selected_modules(
+                selected_modules,
+                module_options,
+                new_modules=set(selected_modules),
+            )
+        )
+
+    # Build configuration
+    modules = _build_module_configs(selected_modules, module_options)
 
     config = QuickScaleConfig(
         version="1",

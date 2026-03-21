@@ -28,19 +28,23 @@ quickscale apply
 
 Default configuration keeps local filesystem behavior unchanged.
 
-### Current `quickscale plan` workflow
+### `quickscale plan` workflow
 
-Today, `quickscale plan` lets you select the `storage` module, but it does not yet
-ask the storage-specific CDN/provider questions inside the planner wizard.
+`quickscale plan` now supports interactive storage-module configuration when you
+opt in with `--configure-modules`.
 
-Current workflow:
+Recommended workflow:
 
-1. Run `quickscale plan myapp` for a new project, or `quickscale plan --add` for an
-   existing project.
+1. Run `quickscale plan myapp --configure-modules` for a new project, or
+  `quickscale plan --add --configure-modules` / `quickscale plan --reconfigure --configure-modules`
+  for an existing project.
 2. Select `storage` in the module list.
-3. Open `quickscale.yml`.
-4. Fill in `modules.storage`.
+3. Answer the storage backend / CDN / provider questions during the planner flow.
+4. Review the generated `modules.storage` section in `quickscale.yml`.
 5. Run `quickscale apply`.
+
+Manual editing of `quickscale.yml` remains supported when you prefer a fully
+declarative review step or need to adjust values after planning.
 
 That means the authoritative config shape is:
 
@@ -106,17 +110,22 @@ quickscale apply
 ### Setting guidance
 
 - `backend: s3` enables S3-compatible media storage
-- `public_base_url` should point at your final public media base URL, usually your
-  CloudFront/custom CDN origin such as `https://cdn.example.com`
-- `custom_domain` should be the same CDN host without the scheme, for example
-  `cdn.example.com`; this makes direct Django `file.url` values use the CDN too
+- `public_base_url` is the canonical helper-backed public media base URL and should
+  point at your final CDN/media host, usually something like
+  `https://cdn.example.com`
+- `custom_domain` is now a legacy/provider-level setting for direct storage URLs,
+  for example `cdn.example.com`; new helper-backed blog/storage URLs should rely on
+  `public_base_url`
 - `querystring_auth: false` is recommended for public, cache-friendly media
 - `default_acl: ""` is recommended for modern bucket-policy-based setups
 - `media_url` should usually remain `/media/` as the local/app fallback
 
-If `custom_domain` is set and `public_base_url` is left blank, QuickScale derives
-helper-built media URLs from `https://<custom_domain>` so helper URLs and direct
-`.url` values stay aligned.
+If `public_base_url` is left blank, local/helper-backed URLs fall back to the
+configured media path. For legacy S3/R2 configs that still set only
+`custom_domain`, generated settings normalize `public_base_url` to
+`https://<custom_domain>` during apply so existing public blog rendering keeps
+working. Treat that as a migration bridge and move the value into
+`public_base_url` explicitly.
 
 ### AWS S3 vs Cloudflare R2
 
@@ -151,11 +160,19 @@ If your goal is:
 
 ### CloudFront consistency for all media URLs
 
-If you want **every** media URL to resolve through CloudFront automatically,
-configure both:
+If you want helper-backed blog/storage media URLs to resolve through CloudFront,
+configure:
 
-- `public_base_url` for helper-built URLs
-- `custom_domain` for backend-generated `file.url` values
+- `public_base_url` for canonical helper-built URLs
+
+Optionally also configure:
+
+- `custom_domain` for backend-generated `file.url` values in provider/storage-level
+  flows that still rely on direct Django storage URLs
+
+If you are upgrading an older cloud config that only set `custom_domain`,
+re-run `quickscale apply` or set `public_base_url` explicitly so helper-backed
+blog URLs and storage URLs stay aligned.
 
 Recommended pairing:
 
@@ -168,17 +185,19 @@ modules:
     querystring_auth: false
 ```
 
-This keeps the following consistent:
+This keeps the following helper-backed surfaces consistent:
 
 - helper-generated URLs such as API responses
-- direct Django storage URLs such as `post.featured_image.url`
+- public blog templates and model helpers such as featured images and thumbnails
 
 ### Current behavior notes
 
-- Blog upload API responses are CDN-aware when `public_base_url` or
-  `custom_domain` is configured.
-- Direct template/model `.url` lookups can now resolve through the CDN too when
-  `custom_domain` is configured for S3-compatible storage.
+- Blog upload API responses prefer `public_base_url` when configured.
+- Public blog rendering uses storage-backed helper URLs for featured images,
+  thumbnails, and avatar helpers instead of relying on direct model-field `.url`
+  lookups.
+- Legacy cloud configs with only `custom_domain` are normalized to a generated
+  `public_base_url` during apply as a backward-compatibility bridge.
 
 ## Public helper API
 

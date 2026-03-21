@@ -28,6 +28,7 @@ class TestPlanReconfigureBasic:
 
         assert result.exit_code == 0
         assert "--reconfigure" in result.output
+        assert "--configure-modules" in result.output
 
     def test_get_project_info_fallback_uses_react_default(self):
         """Fallback project info should use showcase_react when state/config missing."""
@@ -323,3 +324,133 @@ class TestPlanReconfigureSavesConfig:
             # quickscale.yml should not exist unless we saved
             if result.exit_code != 0:
                 assert not os.path.exists("quickscale.yml")
+
+    def test_plan_reconfigure_preserves_existing_module_options(self):
+        """Reconfigure should round-trip existing module options when not re-editing them."""
+        runner = CliRunner()
+        with runner.isolated_filesystem():
+            os.makedirs(".quickscale", exist_ok=True)
+            with open(".quickscale/state.yml", "w") as f:
+                yaml.dump(
+                    {
+                        "version": "1",
+                        "project": {
+                            "slug": "testapp",
+                            "package": "testapp",
+                            "theme": "showcase_html",
+                            "created_at": "2025-12-01T10:00:00",
+                            "last_applied": "2025-12-01T12:00:00",
+                        },
+                        "modules": {
+                            "storage": {
+                                "version": None,
+                                "embedded_at": "2025-12-01T11:00:00",
+                                "options": {
+                                    "backend": "s3",
+                                    "public_base_url": "https://cdn.example.com/media",
+                                },
+                            }
+                        },
+                    },
+                    f,
+                )
+
+            with open("quickscale.yml", "w") as f:
+                f.write(
+                    """
+version: "1"
+project:
+  slug: testapp
+  package: testapp
+  theme: showcase_html
+modules:
+  storage:
+    backend: s3
+    public_base_url: https://cdn.example.com/media
+docker:
+  start: false
+"""
+                )
+
+            result = runner.invoke(plan, ["--reconfigure"], input="n\nn\ny\n")
+
+            assert result.exit_code == 0
+            with open("quickscale.yml") as f:
+                content = f.read()
+            assert "public_base_url: https://cdn.example.com/media" in content
+
+    def test_plan_reconfigure_configure_modules_updates_storage_options(self):
+        """Reconfigure should allow interactive storage option updates when requested."""
+        runner = CliRunner()
+        with runner.isolated_filesystem():
+            os.makedirs(".quickscale", exist_ok=True)
+            with open(".quickscale/state.yml", "w") as f:
+                yaml.dump(
+                    {
+                        "version": "1",
+                        "project": {
+                            "slug": "testapp",
+                            "package": "testapp",
+                            "theme": "showcase_html",
+                            "created_at": "2025-12-01T10:00:00",
+                            "last_applied": "2025-12-01T12:00:00",
+                        },
+                        "modules": {
+                            "storage": {
+                                "version": None,
+                                "embedded_at": "2025-12-01T11:00:00",
+                                "options": {
+                                    "backend": "local",
+                                    "public_base_url": "",
+                                },
+                            }
+                        },
+                    },
+                    f,
+                )
+
+            with open("quickscale.yml", "w") as f:
+                f.write(
+                    """
+version: "1"
+project:
+  slug: testapp
+  package: testapp
+  theme: showcase_html
+modules:
+  storage:
+    backend: local
+    public_base_url: ""
+docker:
+  start: false
+"""
+                )
+
+            result = runner.invoke(
+                plan,
+                ["--reconfigure", "--configure-modules"],
+                input=(
+                    "n\n"
+                    "y\n"
+                    "s3\n"
+                    "/media/\n"
+                    "https://cdn.example.com/media\n"
+                    "cdn.example.com\n"
+                    "assets\n"
+                    "\n"
+                    "eu-west-1\n"
+                    "key-id\n"
+                    "secret-key\n"
+                    "\n"
+                    "n\n"
+                    "n\n"
+                    "y\n"
+                ),
+            )
+
+            assert result.exit_code == 0
+            with open("quickscale.yml") as f:
+                content = f.read()
+            assert "backend: s3" in content
+            assert "public_base_url: https://cdn.example.com/media" in content
+            assert "bucket_name: assets" in content
