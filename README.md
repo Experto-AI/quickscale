@@ -4,7 +4,7 @@ Production-ready blog module for Django projects with Markdown support, featured
 
 ## Features
 
-### ✅ Implemented (v0.66.0)
+### ✅ Implemented
 
 - **Markdown Editor Integration**: WYSIWYG Markdown editing with django-markdownx
 - **Rich Post Model**: Title, slug, content, excerpt, featured image, status (draft/published)
@@ -22,18 +22,21 @@ Production-ready blog module for Django projects with Markdown support, featured
 ### Via QuickScale CLI (Recommended)
 
 ```bash
-quickscale embed --module blog
+quickscale plan myapp --add blog
+cd myapp
+quickscale apply
 ```
 
 This will:
-- Embed the blog module into your project's `modules/blog/` directory
+- Add the blog module to your project's configuration
+- Embed the blog module into your project's `modules/blog/` directory during apply
 - Configure `settings.py` with required settings
 - Add blog URLs to your `urls.py`
-- Prompt for configuration options
+- Capture any module options in `quickscale.yml`
 
 ### Configuration Options
 
-During embed, you'll be prompted for:
+When configuring the module, review these options in `quickscale.yml`:
 
 1. **Posts per page** (default: 10)
 2. **Excerpt length** (default: 300 characters)
