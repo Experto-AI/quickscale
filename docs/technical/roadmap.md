@@ -668,6 +668,8 @@ This module should solve that infrastructure concern once, centrally, instead of
 - Prefer S3-compatible interfaces first so AWS S3 and Cloudflare R2 share most of the implementation
 - Expose simple project-level helpers that other modules can use without importing provider-specific logic
 
+**Temporary implementation handoff**: See [docs/planning/temporary-storage-blog-planner-handoff.md](../planning/temporary-storage-blog-planner-handoff.md) for the implementation-oriented handoff covering `public_base_url`, `custom_domain` deprecation, blog URL cleanup, planner configuration, `plan --reconfigure` safety, and the remote thumbnail MVP. Delete that handoff doc only after the v0.76.0 work and the referenced v0.84.0 planner follow-up are implemented and folded into permanent docs.
+
 #### Implementation Checklist
 
 **Architecture & Boundaries**:
@@ -677,6 +679,9 @@ This module should solve that infrastructure concern once, centrally, instead of
 - [x] Define upload path strategy by module / asset type / date / collision-safe suffix
 - [x] Define fallback strategy so projects can remain on local storage if desired
 - [x] Define the future extension point for private media even if v0.76.0 only ships public media delivery
+- [ ] Standardize `public_base_url` as the only public URL source of truth for storage-backed media and blog-facing asset URLs
+- [ ] Deprecate `custom_domain` for public media URL generation so it no longer interferes with host + path CDN setups
+- [ ] Fold mixed blog URL behavior into the storage integration plan so uploads, Markdown rewrites, featured images, and future blog-owned assets resolve through one canonical public URL helper
 
 **Core Storage Features**:
 - [x] Storage backend abstraction: local filesystem, S3-compatible, Cloudflare R2
@@ -696,6 +701,9 @@ This module should solve that infrastructure concern once, centrally, instead of
 - [x] Shared utilities for modules that attach uploaded files to models
 - [ ] Decide whether image processing is synchronous for v0.76.0 or deferred to future async integration
 - [ ] Define a clean extension point for future background processing without blocking the initial release
+- [ ] Ship a minimum viable remote thumbnail generation path for storage-backed images, acceptable as a synchronous first pass
+- [ ] Ensure generated thumbnail URLs use the same `public_base_url` contract as original media URLs
+- [ ] Defer richer variants, async/background processing, and broader media-pipeline expansion to a later release
 
 **Module Integrations**:
 - [x] Blog integration: use storage module for uploaded featured and inline images
@@ -704,6 +712,9 @@ This module should solve that infrastructure concern once, centrally, instead of
 - [ ] Future-ready integration hooks for listings galleries, CRM attachments, and social embeds
 - [x] Ensure blog upload/publish APIs continue working when the storage backend changes from local to cloud
 - [x] Define how feature modules should depend on `storage` without importing provider-specific code
+- [ ] Make blog templates and model helpers stop relying on direct `.url` for public rendering, using storage-backed public URL helpers instead
+- [ ] Extend the same canonical public URL strategy to blog author/avatar and similar blog-owned image fields
+- [ ] Verify blog publish flows no longer mix raw storage URLs, deprecated `custom_domain` behavior, and `public_base_url`-based URLs in the same project
 
 **CLI & Plan/Apply Integration**:
 - [x] Add `module.yml` manifest with mutable and immutable config boundaries
@@ -711,6 +722,10 @@ This module should solve that infrastructure concern once, centrally, instead of
 - [x] Add CLI wiring so generated projects receive provider-specific settings only when enabled
 - [x] Ensure `quickscale apply` can regenerate settings safely without clobbering unrelated project code
 - [ ] Decide whether `blog` should optionally detect and integrate with `storage` automatically during apply
+- [ ] Add interactive `quickscale plan` module configuration for `storage` so backend/provider settings and `public_base_url` can be captured during planning
+- [ ] Add a planner flag for interactive module configuration instead of forcing manual `quickscale.yml` edits for storage-specific setup
+- [ ] Fix `quickscale plan --reconfigure` to preserve existing per-module option dictionaries instead of rebuilding them with empty values
+- [ ] Acceptance: `plan --reconfigure` round-trips unchanged module options safely while updating only the fields the user reconfigures
 
 **Configuration & Deployment**:
 - [ ] Environment variable contract (`AWS_*`, bucket, endpoint, CDN URL)
@@ -721,6 +736,8 @@ This module should solve that infrastructure concern once, centrally, instead of
 - [ ] Explicit note that Railway local disk should not be treated as durable production media storage
 - [ ] CDN cache guidance for immutable uploaded assets
 - [ ] Migration guide for moving existing local-media projects to cloud-backed storage
+- [ ] Document `public_base_url` as the canonical environment-specific override for swapping S3/CDN host or base path without changing stored media keys
+- [ ] Document `custom_domain` as deprecated/legacy for public media delivery so new setups rely on `public_base_url` only
 
 **Documentation & Acceptance Criteria**:
 - [x] Add a module README with local/dev, staging, and production setup paths
@@ -731,6 +748,9 @@ This module should solve that infrastructure concern once, centrally, instead of
 - [x] Acceptance: blog image upload + publish workflow works end-to-end with cloud-backed URLs
 - [x] Acceptance: resulting media URLs are stable and cache-friendly for CDN delivery
 - [ ] Acceptance: Railway deployment guidance is documented and production-safe
+- [ ] Acceptance: `public_base_url` is the documented public URL source of truth for storage/blog media in v0.76.0
+- [ ] Acceptance: deprecated `custom_domain` behavior no longer changes generated public blog/storage asset URLs
+- [ ] Acceptance: cloud-backed originals and generated thumbnails both resolve to stable, cache-friendly public URLs
 
 **Testing**:
 - [x] Unit tests for storage backend selection and URL helpers
@@ -738,6 +758,9 @@ This module should solve that infrastructure concern once, centrally, instead of
 - [x] Blog integration tests for uploaded images using storage-backed URLs
 - [ ] E2E tests: Plan → Apply → Blog publish with uploaded CDN-backed images
 - [x] Regression tests proving local-development behavior still works without cloud configuration
+- [ ] Regression tests proving public blog rendering never depends on direct storage `.url` when storage helpers are available
+- [ ] Planner tests covering interactive storage configuration, option persistence, and safe `plan --reconfigure` round-trips
+- [ ] Thumbnail tests covering local and storage-backed generation with identical `public_base_url` URL resolution
 
 ---
 
@@ -970,6 +993,8 @@ This module should solve that infrastructure concern once, centrally, instead of
 
 **Note**: Basic module management commands (`quickscale update`, `quickscale push`) are implemented in **v0.62.0**. Plan/Apply system implemented in **v0.68.0-v0.71.0**. This release adds advanced features for managing multiple modules.
 
+**Temporary implementation handoff**: The cross-module planner follow-up is also tracked in [docs/planning/temporary-storage-blog-planner-handoff.md](../planning/temporary-storage-blog-planner-handoff.md#deferred-follow-up-for-v0840-cross-module-planner-work) until implementation is complete.
+
 **Batch Operations**:
 - [ ] Implement `quickscale update --all` command
 - [ ] Add batch conflict resolution
@@ -985,6 +1010,12 @@ This module should solve that infrastructure concern once, centrally, instead of
 - [ ] Improve diff previews and summaries
 - [ ] Add interactive conflict resolution
 - [ ] Implement better error messages and progress indicators
+
+**Planner UX & Cross-Module Configuration**:
+- [ ] Generalize interactive per-module configuration so `quickscale plan` can invoke manifest-backed configurators across all supported modules
+- [ ] Add dependency-aware planner sequencing for multi-module setups
+- [ ] Expand `quickscale plan --reconfigure` into a safe all-modules workflow with merge-preserving updates
+- [ ] Add planner regression coverage for mixed module stacks, dependency prompts, and option-retention behavior
 
 **Testing**:
 - [ ] Test batch operations with multiple modules
