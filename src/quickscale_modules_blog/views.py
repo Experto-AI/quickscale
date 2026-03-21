@@ -5,7 +5,7 @@ import logging
 import secrets
 from collections.abc import Callable, Mapping
 from importlib import import_module
-from typing import Any, cast
+from typing import Any, TypeVar, cast
 from urllib.parse import urlparse
 
 from django.conf import settings
@@ -44,6 +44,13 @@ logger = logging.getLogger(__name__)
 
 DEFAULT_BLOG_API_ALLOWED_IMAGE_FORMATS = ("PNG", "JPEG", "WEBP", "GIF")
 DEFAULT_BLOG_API_UPLOAD_MAX_BYTES = 10 * 1024 * 1024
+
+ViewFunc = TypeVar("ViewFunc", bound=Callable[..., Any])
+
+
+def _typed_csrf_exempt(view_func: ViewFunc) -> ViewFunc:
+    """Preserve view typing when applying Django's `csrf_exempt` decorator."""
+    return csrf_exempt(view_func)
 
 
 def _build_media_response_url(request: HttpRequest, stored_reference: str) -> str:
@@ -240,10 +247,10 @@ def _validate_blog_image_upload(uploaded_file: UploadedFile) -> tuple[int, int]:
         uploaded_file.seek(0)
         image = Image.open(uploaded_file)
         image.load()
-    except UnidentifiedImageError, OSError:
+    except (UnidentifiedImageError, OSError) as exc:
         raise BlogMediaUploadValidationError(
             {"file": "Unsupported or invalid image file"}
-        ) from None
+        ) from exc
     finally:
         uploaded_file.seek(0)
 
@@ -410,7 +417,7 @@ def create_published_post_from_payload(payload: Mapping[str, Any], author: Any) 
     return post
 
 
-@csrf_exempt
+@_typed_csrf_exempt
 def upload_media_api(request: HttpRequest) -> JsonResponse:
     """Upload a blog image for later use in Markdown or as a featured image."""
     if request.method != "POST":
@@ -428,20 +435,10 @@ def upload_media_api(request: HttpRequest) -> JsonResponse:
     except BlogMediaUploadValidationError as exc:
         return JsonResponse({"errors": exc.errors}, status=400)
 
-    public_base_url = str(
-        getattr(settings, "QUICKSCALE_STORAGE_PUBLIC_BASE_URL", "")
-    ).strip()
-    response_reference = asset.file.name
-    if not public_base_url:
-        try:
-            response_reference = str(asset.file.url)
-        except AttributeError, ValueError:
-            response_reference = asset.file.name
-
     return JsonResponse(
         {
             "id": asset.pk,
-            "url": _build_media_response_url(request, response_reference),
+            "url": _build_media_response_url(request, asset.file.name),
             "alt": asset.alt,
             "kind": asset.kind,
             "width": asset.width,
@@ -451,7 +448,7 @@ def upload_media_api(request: HttpRequest) -> JsonResponse:
     )
 
 
-@csrf_exempt
+@_typed_csrf_exempt
 def publish_post_api(request: HttpRequest) -> JsonResponse:
     """Create and publish a blog post from JSON payload for authenticated staff users"""
     if request.method != "POST":
