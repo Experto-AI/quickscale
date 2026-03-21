@@ -12,7 +12,7 @@ QuickScale = **Django Generator** + **Reusable Modules** + **Production Foundati
 **Output**: Complete Django project with Docker, PostgreSQL, testing, CI/CD, and security best practices
 **Future**: Reusable modules installable via git subtree (MVP) and PyPI (Post-MVP)
 
-**Current Status**: v0.75.0 - MVP Phase (production-ready personal toolkit)
+**Current Status**: v0.76.0 - MVP Phase (production-focused personal toolkit)
 **Target Audience**: Solo developers and development agencies building client projects
 
 ---
@@ -148,6 +148,18 @@ These 4 documents form the core knowledge base:
 
 ### **Tier 2: Task-Specific** (Read as Needed)
 
+#### **Package Reference Docs** (Informational Context Only)
+
+Use these when you need package-local packaging or responsibility summaries:
+
+| Document | Purpose |
+|----------|---------|
+| **[quickscale/README.md](./quickscale/README.md)** | Meta-package install and dependency bundle summary |
+| **[quickscale_cli/README.md](./quickscale_cli/README.md)** | CLI package scope, entrypoints, and command groups |
+| **[quickscale_core/README.md](./quickscale_core/README.md)** | Core scaffolding package contents and template ownership |
+
+**Rule**: These package README files are informational only. If wording differs, **[decisions.md](./docs/technical/decisions.md)** and **[README.md](./README.md)** remain authoritative.
+
 Reference these when performing specific tasks:
 
 | Document | Use When... | Length |
@@ -191,7 +203,7 @@ Detailed guides for specific stages:
 ## Quick Answers to Common Questions
 
 ### "Is QuickScale production-ready?"
-**Phase 1 (MVP)** will be production-ready by v0.77.0 (SaaS Feature Parity). Current: v0.75.0 (Forms Module complete).
+**Phase 1 (MVP)** is the current production-focused track. Current repository version: v0.76.0. Check the roadmap for the active release scope and remaining milestones.
 See: [roadmap.md](./docs/technical/roadmap.md)
 
 ### "Can I use it for my client projects?"
@@ -213,8 +225,8 @@ Historical releases (v0.52-v0.72): [release-archive.md](./docs/technical/release
 Current timeline: [roadmap.md](./docs/technical/roadmap.md)
 
 ### "What modules are available?"
-**Available**: auth, billing, teams, blog, listings
-See: [quickscale_modules/](./quickscale_modules/) for README in each module
+Current first-party module directories include **auth, billing, blog, crm, forms, listings, storage, and teams**.
+See: [quickscale_modules/](./quickscale_modules/) for the current package list and per-module README files.
 
 ### "Can I contribute?"
 **Yes!** Start with: [contrib/contributing.md](./docs/contrib/contributing.md)
@@ -310,6 +322,6 @@ decisions.md scaffolding.md roadmap.md   contrib/*
 
 ---
 
-**Last Updated**: 2026-02-08
-**QuickScale Version**: v0.74.0
+**Last Updated**: 2026-03-21
+**QuickScale Version**: v0.76.0
 **Feedback**: Open an issue if this guide needs improvement!

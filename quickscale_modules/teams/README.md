@@ -4,9 +4,9 @@
 
 This is a placeholder module for the QuickScale teams module. The module infrastructure and distribution mechanism are ready, but the actual implementation is not yet complete.
 
-## Coming in v0.66.0
+## Planned capabilities
 
-The full teams module will include:
+The full teams module is expected to include:
 
 - **Multi-tenancy patterns** - User → Team → Resources relationship models
 - **Role-based permissions** - Owner, Admin, Member roles with customizable permissions
@@ -21,7 +21,7 @@ This module uses **git subtree** distribution via split branches:
 
 - **Main branch**: `quickscale_modules/teams/` (development)
 - **Split branch**: `splits/teams-module` (distribution)
-- **User embedding**: `quickscale embed --module teams`
+- **Project configuration flow**: `quickscale plan myapp --add teams` followed by `quickscale apply`
 - **Updates**: `quickscale update`
 
 ## For Developers
@@ -35,8 +35,8 @@ If you're contributing to this module:
 
 ## Related Modules
 
-- **auth**: Authentication with django-allauth (placeholder in v0.62.0, full in v0.63.0)
-- **billing**: Stripe integration (placeholder in v0.62.0, full in v0.65.0)
+- **auth**: Authentication and account management support
+- **billing**: Billing and subscription support
 
 ## Documentation
 
@@ -47,4 +47,4 @@ For module management commands and workflows, see:
 
 ---
 
-**Note**: This README will be replaced with full module documentation when implementation begins in v0.66.0.
+**Note**: This README will be replaced with full module documentation once the teams implementation is ready.

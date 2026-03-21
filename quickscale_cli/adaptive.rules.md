@@ -1,19 +1,13 @@
 ---
-domain: root
+domain: quickscale_cli
 merge_strategy: append
 ---
 
 # Shared
 <!-- Add reusable principles to be included by reference here -->
-- **Authoritative SSOT (always read, this rules wins all)**:
-    - Decisions: docs/technical/decisions.md
-    - Scaffolding: docs/technical/scaffolding.md
-- **Documentation precedence**:
-    - Package README files are informational context only, SSOT wins any conflicts.
 - **Important context (always read)**:
-    - README.md
-    - START_HERE.md
-    - docs/contrib/contributing.md
+    - quickscale_cli/README.md
+    - quickscale_cli/pyproject.toml
 
 # Adaptive
 <!-- Add rules for the main orchestrator agent here -->

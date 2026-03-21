@@ -45,7 +45,7 @@ QuickScale is a **Django project generator** that creates production-ready SaaS 
 - **Full ownership**: Generated projects are 100% yours to customize—no vendor lock-in
 - **Standardized stack**: Build multiple client projects faster with consistent best practices
 
-🧭 **Future Vision**: QuickScale will evolve to support reusable modules and themes. Today it's a personal toolkit; tomorrow it becomes a community platform when demand emerges. [Read the full evolution strategy](./docs/overview/quickscale.md#evolution-strategy-personal-toolkit-first).
+🧭 **Evolution Path**: QuickScale already includes first-party modules and starter themes for current projects, while the broader community platform, marketplace, and ecosystem expansion remain future-facing. [Read the full evolution strategy](./docs/overview/quickscale.md#evolution-strategy-personal-toolkit-first).
 
 ## Documentation Guide
 
@@ -59,11 +59,18 @@ QuickScale is a **Django project generator** that creates production-ready SaaS 
 - 🎯 **Why QuickScale?** See [quickscale.md](./docs/overview/quickscale.md) for competitive positioning
 
 **Quick Reference:**
-- **MVP** = Phase 1 (Personal Toolkit)
-- **Post-MVP** = Phase 2+ (Modules & Themes)
+- **MVP** = Phase 1 (production-focused personal toolkit with first-party modules/themes)
+- **Post-MVP** = Phase 2+ (broader ecosystem, marketplace, and community growth)
 - **Generated Project** = Output of `quickscale plan` + `quickscale apply`
 
-See [decisions.md - Glossary section](./docs/technical/decisions.md#document-responsibilities-short) for complete terminology and Single Source of Truth reference
+See [decisions.md - Document Responsibilities](./docs/technical/decisions.md#document-responsibilities) for complete terminology and Single Source of Truth reference
+
+**Package reference docs (informational context only):**
+- [quickscale/README.md](./quickscale/README.md) - meta-package packaging notes
+- [quickscale_cli/README.md](./quickscale_cli/README.md) - CLI package scope and command groups
+- [quickscale_core/README.md](./quickscale_core/README.md) - core scaffolding package boundaries
+
+If package README text differs from repo docs, [README.md](./README.md) and [decisions.md](./docs/technical/decisions.md) win.
 
 
 ### Primary Use Cases (MVP):

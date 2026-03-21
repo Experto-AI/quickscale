@@ -56,7 +56,7 @@ TARGET AUDIENCE: Maintainers, core contributors, community package developers, C
 **Key Constraints:**
 - 90% overall mean + 80% per file minimum test coverage (CI enforced)
 - decisions.md is authoritative (update FIRST, never contradict)
-- Sub-packages MUST NOT have README.md (use root README only)
+- Package README.md files are informational context only; they MUST defer to root docs
 - Settings: Standalone by default (NO automatic inheritance)
 
 ## Critical Rules
@@ -69,24 +69,26 @@ TARGET AUDIENCE: Maintainers, core contributors, community package developers, C
 - ❌ Never contradict decisions.md elsewhere
 
 **Package README Policy:**
-- ❌ Sub-packages (quickscale_core, quickscale_cli) MUST NOT have README.md
+- ✅ First-party packages (`quickscale`, `quickscale_core`, `quickscale_cli`) MAY include a local `README.md`
+- ✅ Package READMEs are informational context for package-specific installation and boundaries
+- ✅ Root `README.md` and `docs/technical/decisions.md` remain authoritative when any wording differs
 - ✅ `quickscale_modules/*` MUST have README.md (distributed as standalone)
-- ✅ Use root README.md only for core/cli (avoids duplication)
+- ❌ Never treat package README.md files as authoritative architecture, scope, or policy documents
 
 ## MVP vs Post-MVP Scope
 
 **Terminology:**
 - Foundation Phase: v0.52-v0.55 (incremental foundation)
-- MVP: v0.56-v0.57.0 (production-ready personal toolkit)
-- Post-MVP: v0.58+ (modules, packaging, marketplace)
+- MVP: v0.56-v0.77.0 (production-focused personal toolkit with first-party modules/themes)
+- Post-MVP: v0.78+ (broader ecosystem, packaging, marketplace)
 
-**MVP (v0.56-v0.57.0):**
+**MVP (v0.56-v0.77.0):**
 - ✅ `quickscale_core`: Scaffolding + git subtree integration (monolithic package)
 - ✅ `quickscale_cli`: Plan/apply workflow (`quickscale plan` + `quickscale apply`)
 - ✅ Generated project: Standalone Django (user owns completely)
 - ✅ Settings: Standalone settings.py (NO inheritance from core by default)
-- ✅ Templates: Single starter template only
-- ❌ Multiple themes - Post-MVP
+- ✅ First-party modules and themes within the repository
+- ❌ Marketplace/community-platform capabilities - Post-MVP
 
 **MVP Output:** See [scaffolding.md §3](./scaffolding.md#mvp-structure)
 
@@ -876,7 +878,8 @@ Other documents (README.md, roadmap.md, scaffolding.md, commercial.md) MUST refe
 - **decisions.md**: Technical decisions, MVP matrix, tie-breakers (authoritative)
 - **roadmap.md**: Timeline, phases, tasks
 - **scaffolding.md**: Layout examples
-- **README.md**: User guide, glossary
+- **README.md**: Project overview, user guide, repo-level navigation
+- **package README.md files**: Package-local installation and responsibility summaries (informational only)
 - **commercial.md**: Commercial models (Post-MVP)
 
 **Rule:** Update decisions.md FIRST when changing scope.
@@ -1108,7 +1111,7 @@ INSTALLED_APPS = [
 **Package Structure:**
 - ❌ Nested package names (NO `quickscale/quickscale_core`)
 - ❌ Tests inside `src/` (place in parallel `tests/` directory)
-- ❌ README.md in sub-packages (use root README only)
+- ❌ Treating package `README.md` files as authoritative over root docs or `decisions.md`
 - ❌ NEVER run `quickscale plan`/`quickscale apply` in the QuickScale codebase (would generate unwanted project files)
 
 **Dependencies & Versions:**

@@ -1,13 +1,12 @@
 # QuickScale Auth Module
 
-**Version**: 0.71.0
 **Status**: ✅ Production Ready
 
-Production-ready authentication module for QuickScale projects using django-allauth with custom User model patterns.
+Production-ready standalone authentication module for QuickScale projects using django-allauth with custom User model patterns.
 
 ## Features
 
-### ✅ Implemented (v0.71.0)
+### ✅ Implemented
 
 - **django-allauth Integration**: Email/password authentication
 - **Custom User Model**: Extends Django's AbstractUser with custom fields support
@@ -20,7 +19,7 @@ Production-ready authentication module for QuickScale projects using django-alla
 - **Signals**: Post-registration hooks for custom logic
 - **Module Manifest**: Declarative config with mutable/immutable options
 
-## Module Manifest (v0.71.0+)
+## Module Manifest
 
 The auth module includes a `module.yml` manifest that defines configuration options:
 
@@ -32,7 +31,7 @@ The auth module includes a `module.yml` manifest that defines configuration opti
 | `email_verification` | `ACCOUNT_EMAIL_VERIFICATION` | `none` | Email verification mode |
 | `session_cookie_age` | `SESSION_COOKIE_AGE` | `1209600` | Session timeout in seconds |
 
-### Immutable Options (set at embed time, cannot be changed)
+### Immutable Options (set when the module is first added, cannot be changed)
 
 | Option | Default | Description |
 |--------|---------|-------------|
@@ -55,7 +54,7 @@ modules:
 quickscale apply
 ```
 
-**Immutable options** require removing and re-embedding the module:
+**Immutable options** require removing the module configuration and adding it again with the new values:
 
 ```bash
 quickscale remove auth
@@ -77,26 +76,27 @@ Available modules in navigation:
 - 💳 **Billing** - Links to billing dashboard when installed
 - 👥 **Teams** - Links to teams dashboard when installed
 
-### 🚧 Coming Soon
+### 🚧 Still Evolving
 
-- **Email Verification** (v0.64.0): Production email workflows
-- **Social Providers** (Post-MVP): Google, GitHub, Facebook authentication
-- **HTMX Theme** (v0.70.0): HTMX + Alpine.js theme variant
-- **React Theme** (v0.71.0): React + TypeScript SPA theme variant
+- **Email verification workflows**: Stronger production email flows may continue to evolve
+- **Social providers**: Google, GitHub, and similar integrations remain future-facing
+- **Additional theme variants**: HTMX and React-specific auth experiences may expand over time
 
 ## Installation
 
-### 1. Embed the Module
+### 1. Add the Module
 
 ```bash
-quickscale embed --module auth
+quickscale plan myapp --add auth
+cd myapp
+quickscale apply
 ```
 
-The embed command will:
-- Ask interactive configuration questions
-- Copy module files to `modules/auth/`
+This workflow will:
+- Add the auth module to your project configuration
+- Embed module files into `modules/auth/` during `quickscale apply`
 - Automatically configure settings and URLs
-- Run initial migrations
+- Run initial migrations as part of apply
 
 ### 2. Manual Configuration (if needed)
 
@@ -142,10 +142,10 @@ AUTH_USER_MODEL = "quickscale_modules_auth.User"
 # Site ID (required by django.contrib.sites)
 SITE_ID = 1
 
-# Allauth settings (django-allauth 0.62+ format)
+# Allauth settings (django-allauth 65.x format)
 ACCOUNT_LOGIN_METHODS = {"email", "username"}
 ACCOUNT_SIGNUP_FIELDS = ["email*", "username*", "password1*", "password2*"]
-ACCOUNT_EMAIL_VERIFICATION = "none"  # "mandatory" or "optional" in v0.64.0
+ACCOUNT_EMAIL_VERIFICATION = "none"  # Set to "mandatory" or "optional" as needed
 ACCOUNT_ALLOW_REGISTRATION = True  # Set to False to disable signups
 ACCOUNT_ADAPTER = "quickscale_modules_auth.adapters.QuickscaleAccountAdapter"
 ACCOUNT_SIGNUP_FORM_CLASS = "quickscale_modules_auth.forms.SignupForm"
@@ -266,7 +266,7 @@ ACCOUNT_ALLOW_REGISTRATION = False  # Disable signups
 ### Change Authentication Method
 
 ```python
-# Use email only (no username) - django-allauth 0.62+ format
+# Use email only (no username) - django-allauth 65.x format
 ACCOUNT_LOGIN_METHODS = {"email"}
 ACCOUNT_SIGNUP_FIELDS = ["email*", "password1*", "password2*"]
 
@@ -334,7 +334,7 @@ This module uses **git subtree** distribution:
 
 - **Development**: `quickscale_modules/auth/` on main branch
 - **Distribution**: `splits/auth-module` branch
-- **User embedding**: `quickscale embed --module auth`
+- **Project configuration**: `quickscale plan myapp --add auth` followed by `quickscale apply`
 - **Updates**: `quickscale update`
 
 ## Contributing
@@ -354,14 +354,14 @@ quickscale push --module auth
 
 ## Dependencies
 
-- Django >= 4.2, < 6.0
-- django-allauth ^0.63.0
+- Django 6.0+
+- django-allauth 65.14+
 
 ## Documentation
 
 - [django-allauth Documentation](https://django-allauth.readthedocs.io/)
-- [QuickScale User Manual](../../docs/technical/user_manual.md)
-- [QuickScale Roadmap](../../docs/technical/roadmap.md)
+- [QuickScale User Manual](https://github.com/Experto-AI/quickscale/blob/main/docs/technical/user_manual.md)
+- [QuickScale Roadmap](https://github.com/Experto-AI/quickscale/blob/main/docs/technical/roadmap.md)
 
 ## License
 
@@ -370,9 +370,9 @@ Apache 2.0 License - Same as QuickScale project
 ## Support
 
 - **Issues**: [GitHub Issues](https://github.com/Experto-AI/quickscale/issues)
-- **Docs**: [QuickScale Documentation](../../docs/)
+- **Docs**: [QuickScale Documentation](https://github.com/Experto-AI/quickscale/tree/main/docs)
 - **Community**: Coming in Post-MVP phases
 
 ---
 
-**Note**: This module is production-ready for basic authentication. Email verification and social providers coming in v0.64.0 and later releases.
+**Note**: This module is production-ready for basic authentication. Advanced capabilities such as email verification and social provider integrations may continue to evolve in later releases.

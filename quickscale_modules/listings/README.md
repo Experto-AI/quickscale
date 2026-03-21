@@ -4,7 +4,7 @@ Generic listings module for Django projects with filtering, search, and an abstr
 
 ## Features
 
-### ✅ Implemented (v0.67.0)
+### ✅ Implemented
 
 - **AbstractListing Model**: Extensible base model for marketplace listings
 - **Rich Listing Fields**: Title, slug, description, price, location, status, featured image
@@ -19,14 +19,17 @@ Generic listings module for Django projects with filtering, search, and an abstr
 ### Via QuickScale CLI (Recommended)
 
 ```bash
-quickscale embed --module listings
+quickscale plan myapp --add listings
+cd myapp
+quickscale apply
 ```
 
 This will:
-- Embed the listings module into your project's `modules/listings/` directory
+- Add the listings module to your project's configuration
+- Embed the listings module into your project's `modules/listings/` directory during apply
 - Configure `settings.py` with required settings
 - Add listings URLs to your `urls.py`
-- Prompt for configuration options
+- Capture any module options in `quickscale.yml`
 
 ### Manual Installation
 

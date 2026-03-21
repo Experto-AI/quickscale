@@ -110,7 +110,7 @@ quickscale/
 ---
 
 ### MVP (Minimum Viable Product)
-**Definition**: Phase 1 of QuickScale (v0.56-v0.75.0) - Production-ready "Personal Toolkit" for solo developers and development agencies to build client projects faster.
+**Definition**: Phase 1 of QuickScale (v0.56-v0.77.0) - Production-focused "Personal Toolkit" for solo developers and development agencies to build client projects faster with first-party modules and themes.
 
 **Scope**:
 - ✅ Django project generator (`quickscale plan` + `quickscale apply`)
@@ -165,7 +165,7 @@ quickscale/
 ---
 
 ### Post-MVP
-**Definition**: Phase 2+ of QuickScale (v0.76.0+) - Community platform with PyPI module distribution, multiple themes, and marketplace ecosystem.
+**Definition**: Phase 2+ of QuickScale (v0.78.0+) - Broader community platform with expanded packaging, marketplace, and ecosystem capabilities.
 
 **Planned Features**:
 - ✅ Multiple themes (HTMX, React, vertical-specific)
