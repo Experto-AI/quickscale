@@ -5,7 +5,8 @@
 # Secondary: Windows (via WSL or Git Bash)
 #
 # Usage:
-#   make setup                - Bootstrap Poetry environment and dependencies
+#   make bootstrap            - Full bootstrap (Python check + poetry install)
+#   make setup                - Install Poetry dependencies only
 #   make check                - Run all checks (lint, typecheck, test)
 #   make test                 - Run all tests
 #   make test-unit            - Run unit tests only
@@ -83,7 +84,7 @@ help:
 	@echo "QuickScale Development Commands"
 	@echo ""
 	@echo "Setup:"
-	@echo "  make setup                - Initialize Poetry environment (bootstrap + install)"
+	@echo "  make setup                - Install Poetry dependencies only"
 	@echo "  make bootstrap            - Full bootstrap (Python check + poetry install)"
 	@echo "  make install              - Install QuickScale CLI globally"
 	@echo ""
@@ -139,7 +140,7 @@ help:
 	@echo ""
 	@echo "Version Management:"
 	@echo "  make version-check        - Verify VERSION matches all pyproject.toml files"
-	@echo "  make version-update       - Sync all pyproject.toml files from VERSION file"
+	@echo "  make version-update       - Update all versioned files from VERSION"
 	@echo "  make bump-version X.Y.Z   - Set new version and update all files"
 
 # --- Setup ---
@@ -499,7 +500,7 @@ legacy-status:
 #
 # Usage:
 #   make version-check              - Verify VERSION matches all pyproject.toml files
-#   make version-update             - Sync all pyproject.toml files from VERSION file
+#   make version-update             - Update all versioned files from VERSION (pyproject.toml, dependencies, _version.py, docs)
 #   make bump-version 0.76.0        - Set new version and update all files
 
 SUPPORTED_COMMANDS := bump-version
@@ -516,13 +517,13 @@ version-check:
 	@scripts/version_tool.sh check
 
 version-update:
-	@scripts/version_tool.sh sync --apply
+	@scripts/version_tool.sh update
 
 bump-version:
 	@if [ -z "$(VERSION_ARG)" ]; then echo "Error: version argument required (e.g. make bump-version 0.76.0)"; exit 1; fi
 	@echo "$(VERSION_ARG)" > VERSION
 	@echo "  UPDATED: VERSION"
-	@scripts/version_tool.sh sync --apply
+	@scripts/version_tool.sh update
 	@echo "✅ Version bumped to $(VERSION_ARG)"
 
 

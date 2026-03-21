@@ -1,12 +1,10 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# Unified version tool: check, sync, embed, apply
+# Unified version tool: check, update
 # Usage:
 #   scripts/version_tool.sh check
-#   scripts/version_tool.sh sync [--apply]
-#   scripts/version_tool.sh embed
-#   scripts/version_tool.sh apply
+#   scripts/version_tool.sh update
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 VERSION_FILE="$ROOT/VERSION"
