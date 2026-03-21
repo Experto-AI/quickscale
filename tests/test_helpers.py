@@ -105,7 +105,7 @@ class TestPublicUrlHelpers:
         )
         assert resolved == "/media/blog/uploads/image.png"
 
-    def test_build_public_media_url_with_custom_domain_fallback(self) -> None:
+    def test_build_public_media_url_supports_legacy_custom_domain_callers(self) -> None:
         resolved = build_public_media_url(
             "blog/uploads/image.png",
             custom_domain="cdn.example.com",
