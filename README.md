@@ -4,9 +4,9 @@
 
 This is a placeholder module for the QuickScale billing module. The module infrastructure and distribution mechanism are ready, but the actual implementation is not yet complete.
 
-## Coming in v0.65.0
+## Planned capabilities
 
-The full billing module will include:
+The full billing module is expected to include:
 
 - **dj-stripe integration** - Complete Stripe subscription management
 - **Subscription plans** - Flexible pricing tiers and trial periods
@@ -21,7 +21,7 @@ This module uses **git subtree** distribution via split branches:
 
 - **Main branch**: `quickscale_modules/billing/` (development)
 - **Split branch**: `splits/billing-module` (distribution)
-- **User embedding**: `quickscale embed --module billing`
+- **Project configuration flow**: `quickscale plan myapp --add billing` followed by `quickscale apply`
 - **Updates**: `quickscale update`
 
 ## For Developers
@@ -35,8 +35,8 @@ If you're contributing to this module:
 
 ## Related Modules
 
-- **auth**: Authentication with django-allauth (placeholder in v0.62.0, full in v0.63.0)
-- **teams**: Multi-tenancy and team management (placeholder in v0.62.0, full in v0.66.0)
+- **auth**: Authentication and account management support
+- **teams**: Multi-tenancy and team management support
 
 ## Documentation
 
@@ -47,4 +47,4 @@ For module management commands and workflows, see:
 
 ---
 
-**Note**: This README will be replaced with full module documentation when implementation begins in v0.65.0.
+**Note**: This README will be replaced with full module documentation once the billing implementation is ready.
