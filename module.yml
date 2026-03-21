@@ -24,12 +24,6 @@ config:
       django_setting: QUICKSCALE_STORAGE_PUBLIC_BASE_URL
       description: "Optional absolute CDN/base URL used as the canonical source for helper-built public media URLs"
 
-    custom_domain:
-      type: string
-      default: ""
-      django_setting: AWS_S3_CUSTOM_DOMAIN
-      description: "Optional storage backend custom domain (host only, e.g. cdn.example.com) for provider/storage-level URL behavior; helper-built public URLs use public_base_url instead"
-
     bucket_name:
       type: string
       default: ""

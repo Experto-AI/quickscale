@@ -1,60 +1,44 @@
 # QuickScale Storage Module
 
-Shared storage infrastructure for QuickScale modules.
+Shared media-storage infrastructure for QuickScale modules.
 
 ## What this module provides
 
-- Storage backend selection helpers for local filesystem and S3-compatible providers
-- Public media URL helpers with optional CDN base URL support
-- Upload path helpers with cache-friendly, immutable naming
-- File validation helpers for size, type, and image dimensions
+- Storage backend selection for local filesystem and S3-compatible providers
+- Canonical public media URL helpers driven by `public_base_url`
+- Cache-friendly upload path and filename helpers
+- Shared file validation helpers for uploads and image dimensions
 
-## Provider model (v0.76.0)
+## Canonical contract for v0.76.0
 
-- Local filesystem is the default behavior
-- Cloud mode is opt-in through settings/configuration
-- S3-compatible backends include AWS S3 and Cloudflare R2 (endpoint mode)
+- Local filesystem remains the default
+- Cloud storage is opt-in through module configuration
+- `public_base_url` is the only supported public media URL setting
+- If `public_base_url` is blank, helper-built URLs fall back to `MEDIA_URL`
+- S3-compatible backends cover AWS S3 and Cloudflare R2
 
-## CLI integration
-
-Use QuickScale plan/apply:
-
-```bash
-quickscale plan myapp
-# or, for an existing project:
-quickscale plan --add
-quickscale apply
-```
-
-Default configuration keeps local filesystem behavior unchanged.
-
-### `quickscale plan` workflow
-
-`quickscale plan` now supports interactive storage-module configuration when you
-opt in with `--configure-modules`.
+## Planner and apply workflow
 
 Recommended workflow:
 
 1. Run `quickscale plan myapp --configure-modules` for a new project, or
-  `quickscale plan --add --configure-modules` / `quickscale plan --reconfigure --configure-modules`
-  for an existing project.
+   `quickscale plan --add --configure-modules` /
+   `quickscale plan --reconfigure --configure-modules` for an existing project.
 2. Select `storage` in the module list.
-3. Answer the storage backend / CDN / provider questions during the planner flow.
-4. Review the generated `modules.storage` section in `quickscale.yml`.
+3. Answer the storage backend and provider prompts.
+4. Review the generated `modules.storage` block in `quickscale.yml`.
 5. Run `quickscale apply`.
 
-Manual editing of `quickscale.yml` remains supported when you prefer a fully
-declarative review step or need to adjust values after planning.
+Manual editing of `quickscale.yml` remains supported.
 
-That means the authoritative config shape is:
+The supported configuration shape is:
 
 ```yaml
 modules:
   storage:
     backend: s3
     media_url: /media/
-    public_base_url: https://cdn.example.com
-    custom_domain: cdn.example.com
+    public_base_url: https://cdn.example.com/media
     bucket_name: your-media-bucket
     endpoint_url: ""
     region_name: eu-west-1
@@ -64,152 +48,103 @@ modules:
     querystring_auth: false
 ```
 
-## S3 + CDN setup for media
+## Provider setup
 
-Use the storage module when you want uploaded media to live in S3-compatible object
-storage and be served from a CDN-backed public URL.
-
-Typical use cases:
-
-- Blog post featured images and upload API images
-- General CMS-style images stored as Django media
-- Other uploaded files managed through Django's default media storage
-
-Typical non-use cases for v0.76.0:
-
-- React theme assets
-- Files under `static/`
-- CSS, JS, icons, or frontend build output
-
-Those still use Django `staticfiles` / WhiteNoise and are not moved by this module.
-
-### Recommended QuickScale configuration
-
-```yaml
-modules:
-  storage:
-    backend: s3
-    media_url: /media/
-    public_base_url: https://cdn.example.com
-    custom_domain: cdn.example.com
-    bucket_name: your-media-bucket
-    endpoint_url: ""
-    region_name: eu-west-1
-    access_key_id: YOUR_ACCESS_KEY_ID
-    secret_access_key: YOUR_SECRET_ACCESS_KEY
-    default_acl: ""
-    querystring_auth: false
-```
-
-Then run:
-
-```bash
-quickscale apply
-```
-
-### Setting guidance
-
-- `backend: s3` enables S3-compatible media storage
-- `public_base_url` is the canonical helper-backed public media base URL and should
-  point at your final CDN/media host, usually something like
-  `https://cdn.example.com`
-- `custom_domain` is now a legacy/provider-level setting for direct storage URLs,
-  for example `cdn.example.com`; new helper-backed blog/storage URLs should rely on
-  `public_base_url`
-- `querystring_auth: false` is recommended for public, cache-friendly media
-- `default_acl: ""` is recommended for modern bucket-policy-based setups
-- `media_url` should usually remain `/media/` as the local/app fallback
-
-If `public_base_url` is left blank, local/helper-backed URLs fall back to the
-configured media path. For legacy S3/R2 configs that still set only
-`custom_domain`, generated settings normalize `public_base_url` to
-`https://<custom_domain>` during apply so existing public blog rendering keeps
-working. Treat that as a migration bridge and move the value into
-`public_base_url` explicitly.
-
-### AWS S3 vs Cloudflare R2
-
-For AWS S3:
+### AWS S3
 
 - `backend: s3`
 - leave `endpoint_url` blank
 - set `region_name` to your AWS region
+- set `public_base_url` to the final public media host or host+path
 
-For Cloudflare R2:
+### Cloudflare R2
 
 - `backend: r2`
-- set `endpoint_url` to your R2 S3 endpoint
+- set `endpoint_url` to the R2 S3 endpoint
 - set `region_name` to `auto`
+- set `public_base_url` to the final public media host or host+path
 
-### Media vs static assets
+### Minimum environment variable contract
 
-The storage module currently targets **media**, not **static assets**.
+Generated projects rely on these settings in cloud mode:
 
-- **Handled by storage**: blog uploads, featured images, and other Django-managed
-	media files
-- **Not handled by storage**: theme/frontend assets, files in `static/`, React
-	build output, WhiteNoise staticfiles delivery
+- `QUICKSCALE_STORAGE_BACKEND`
+- `QUICKSCALE_STORAGE_PUBLIC_BASE_URL`
+- `AWS_STORAGE_BUCKET_NAME`
+- `AWS_ACCESS_KEY_ID`
+- `AWS_SECRET_ACCESS_KEY`
+- `AWS_QUERYSTRING_AUTH`
 
-If your goal is:
+AWS S3 additionally requires `AWS_S3_REGION_NAME`.
+Cloudflare R2 additionally requires `AWS_S3_ENDPOINT_URL` and usually
+`AWS_S3_REGION_NAME=auto`.
 
-- blog post uploaded images → configure `storage` with S3/R2 + `public_base_url`
-- general CMS-like uploaded website images → configure `storage` if they are saved
-	as Django media
-- React/theme/static assets → treat separately; keep `staticfiles` as-is unless
-	you intentionally add a separate static-CDN setup
+Leave `AWS_DEFAULT_ACL` blank unless you have a provider-specific reason to set it.
 
-### CloudFront consistency for all media URLs
+## Local, staging, and production guidance
 
-If you want helper-backed blog/storage media URLs to resolve through CloudFront,
-configure:
+- **Local development:** keep `backend: local`, keep `public_base_url` blank, and
+  use `/media/`.
+- **Staging:** validate uploads with the same backend family as production, but use
+  a staging-only `public_base_url`.
+- **Production:** store uploaded media in external object storage. Do not treat
+  Railway or container-local disk as durable media storage.
 
-- `public_base_url` for canonical helper-built URLs
+## Media vs static assets
 
-Optionally also configure:
+The storage module targets **media**, not **static assets**.
 
-- `custom_domain` for backend-generated `file.url` values in provider/storage-level
-  flows that still rely on direct Django storage URLs
+- **Handled by storage:** blog uploads, featured images, avatars, and other
+  Django-managed media files
+- **Not handled by storage:** React build output, CSS, JS, icons, `static/`, or
+  WhiteNoise staticfiles delivery
 
-If you are upgrading an older cloud config that only set `custom_domain`,
-re-run `quickscale apply` or set `public_base_url` explicitly so helper-backed
-blog URLs and storage URLs stay aligned.
+## CDN and cache guidance
 
-Recommended pairing:
+Use `public_base_url` for the final public media host, including host+path shapes
+such as `https://cdn.example.com/media`.
 
-```yaml
-modules:
-  storage:
-    backend: s3
-    public_base_url: https://cdn.example.com
-    custom_domain: cdn.example.com
-    querystring_auth: false
-```
+QuickScale storage helpers generate immutable-style filenames for uploaded assets.
+For public media, keep `querystring_auth: false` so CDN caches can reuse those
+stable URLs without signed-query churn.
 
-This keeps the following helper-backed surfaces consistent:
+## Migration guide: local media to cloud-backed media
 
-- helper-generated URLs such as API responses
-- public blog templates and model helpers such as featured images and thumbnails
+1. Enable the `storage` module if it is not already configured.
+2. Choose `backend: s3` or `backend: r2`.
+3. Set `public_base_url` to the final public media host.
+4. Run `quickscale apply`.
+5. Copy existing local media into the target bucket with your preferred sync tool.
+6. Verify blog upload and rendered media URLs in staging before production cutover.
 
-### Current behavior notes
+## Troubleshooting
 
-- Blog upload API responses prefer `public_base_url` when configured.
-- Public blog rendering uses storage-backed helper URLs for featured images,
-  thumbnails, and avatar helpers instead of relying on direct model-field `.url`
-  lookups.
-- Legacy cloud configs with only `custom_domain` are normalized to a generated
-  `public_base_url` during apply as a backward-compatibility bridge.
+- **Missing credentials:** confirm the bucket and credential settings match the
+  selected backend.
+- **Broken CDN URLs:** verify `public_base_url` matches the actual public host and
+  any required path prefix.
+- **Uploads work locally but fail in cloud:** confirm `endpoint_url` / `region_name`
+  values match the selected provider.
+- **Unexpected signed media URLs:** set `querystring_auth: false` for public media.
 
-## Public helper API
+## Guidance for other modules
 
-From `quickscale_modules_storage.helpers`:
+Modules that expose public uploaded media should depend on storage helpers rather
+than provider-specific URL behavior.
 
-- `select_storage_backend()`
-- `build_public_media_url()`
-- `build_upload_path()`
-- `validate_file_upload()`
-- `make_cache_friendly_name()`
+Use helpers from `quickscale_modules_storage.helpers`:
+
+- `build_public_media_url()` for canonical public URLs
+- `build_upload_path()` for cache-friendly object keys
+- `validate_file_upload()` for shared validation rules
+- `make_cache_friendly_name()` for immutable-style asset naming
+- `select_storage_backend()` when backend-aware branching is required
+
+Feature modules should store relative media keys and let helper-backed URL
+resolution turn those keys into final public URLs.
 
 ## Notes
 
 This module focuses on public media delivery and shared helper contracts.
-Private media authorization flows and async pipelines are intentionally out of scope for v0.76.0.
+Private media authorization, richer image variants, and async media pipelines are
+deferred beyond v0.76.0.
