@@ -7,6 +7,16 @@
 
 This release introduces the **`quickscale-module-forms`** package — a generic, fully customizable form-builder module for Django SaaS projects. Developers can define, render, and manage any kind of form (contact, feedback, support, newsletter) through a data-driven admin interface with zero code changes. The primary production use case is contact/inquiry pages with email notifications.
 
+**Related docs:** [Roadmap](../technical/roadmap.md) | [Technical Decisions](../technical/decisions.md)
+
+## Completed Tasks
+
+- [x] Added the `quickscale_modules.forms` backend package with data models, serializers, views, admin, and URLs.
+- [x] Added React-facing form rendering support and a Django mount-point template for the default React stack.
+- [x] Wired the forms module into QuickScale CLI planning and apply flows.
+- [x] Added spam protection, rate limiting, notifications, anonymization, and preset-seeding workflows.
+- [x] Validated the release with automated tests, linting, and migration checks.
+
 ## What's New
 
 ### Features
@@ -70,3 +80,9 @@ poetry install
 poetry run pytest          # 82 passed, 97.78% coverage
 poetry run ruff check src/ tests/  # 0 errors
 ```
+
+## Next Steps
+
+- Keep future module-planning work aligned with the active roadmap in [docs/technical/roadmap.md](../technical/roadmap.md).
+- Reuse the forms module as a dependency pattern for future feature modules that need public submissions or admin-managed schemas.
+- Maintain release-specific follow-up in release documents instead of re-expanding completed scope in the roadmap.
