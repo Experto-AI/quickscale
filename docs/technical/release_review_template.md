@@ -376,11 +376,13 @@ These are NOT issues with current implementation, but potential future enhanceme
 - Comprehensive assessment before commit/merge
 - Documentation of review findings and recommendations
 
-**Companion document**: This review document should reference a corresponding implementation document (`release-v[VERSION]-implementation.md`) created using the [release implementation template](./release_implementation_template.md).
+**Companion document**: This review document should reference a corresponding implementation document (`release-v[VERSION]-implementation.md`) created in `docs/releases-archive/` using the [release implementation template](./release_implementation_template.md).
 
-**Filename format**: Save as `release-v[VERSION]-review.md` in `docs/releases/`
+**Filename format**: Save as `release-v[VERSION]-review.md` in `docs/releases-archive/`
 - Example: `release-v0.53.3-review.md`
 - Companion: `release-v0.53.3-implementation.md`
+
+**Optional public-facing companion**: If maintainers publish a concise release summary, store it separately as `docs/releases/release-v[VERSION].md`.
 
 **How to use this template:**
 1. Replace all `[PLACEHOLDERS]` with actual values

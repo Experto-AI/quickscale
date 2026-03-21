@@ -1,6 +1,6 @@
 # 🚀 Start Here - QuickScale Documentation Guide
 
-**Quick Mental Model**: QuickScale is a Django project generator that creates production-ready SaaS applications in minutes. It generates standalone projects you own completely, with optional reusable modules for common features (auth, billing, teams, etc.). Think "create-react-app" but for Django SaaS applications.
+**Quick Mental Model**: QuickScale is a Django project generator that creates production-ready SaaS applications in minutes. It generates standalone projects you own completely, with optional reusable modules for common features (for example auth, blog, listings, and storage). Think "create-react-app" but for Django SaaS applications.
 
 ---
 
@@ -10,7 +10,7 @@ QuickScale = **Django Generator** + **Reusable Modules** + **Production Foundati
 
 **Input**: `quickscale plan myapp` (interactive config) → `quickscale apply`
 **Output**: Complete Django project with Docker, PostgreSQL, testing, CI/CD, and security best practices
-**Future**: Reusable modules installable via git subtree (MVP) and PyPI (Post-MVP)
+**Current Distribution**: Reusable modules are installed via git subtree during MVP; PyPI distribution remains Post-MVP
 
 **Current Status**: v0.76.0 - MVP Phase (production-focused personal toolkit)
 **Target Audience**: Solo developers and development agencies building client projects
@@ -26,8 +26,8 @@ For complete definitions, see **[GLOSSARY.md](./GLOSSARY.md)**. Here are the ess
 | **Generated Project** | The standalone Django app created by `quickscale plan + apply` | [GLOSSARY.md](./GLOSSARY.md#generated-project) |
 | **MVP** | Phase 1 (v0.56-v0.77.0) - Personal toolkit for client projects | [GLOSSARY.md](./GLOSSARY.md#mvp-minimum-viable-product) |
 | **Post-MVP** | Phase 2+ (v0.78+) - Community platform with marketplace | [GLOSSARY.md](./GLOSSARY.md#post-mvp) |
-| **Module** | Reusable Django app (auth, billing, blog) | [GLOSSARY.md](./GLOSSARY.md#module) |
-| **Theme** | Frontend scaffolding (React default, HTML/HTMX alternatives) | [GLOSSARY.md](./GLOSSARY.md#theme) |
+| **Module** | Reusable Django app (auth, blog, listings, storage) | [GLOSSARY.md](./GLOSSARY.md#module) |
+| **Theme** | Frontend scaffolding (React default, HTML alternative, HTMX planned post-MVP) | [GLOSSARY.md](./GLOSSARY.md#theme) |
 | **Git Subtree** | Distribution mechanism for sharing code | [GLOSSARY.md](./GLOSSARY.md#git-subtree) |
 | **Plan/Apply** | Terraform-style declarative workflow | [GLOSSARY.md](./GLOSSARY.md#planapply-workflow) |
 
@@ -196,7 +196,9 @@ Detailed guides for specific stages:
 - [overview/commercial.md](./docs/overview/commercial.md) - Business model
 - [overview/packages.md](./docs/overview/packages.md) - PyPI naming
 
-**Release History**: [release-archive.md](./docs/technical/release-archive.md) (v0.52-v0.72)
+**Release History**:
+- [docs/releases/](./docs/releases/) - reader-facing release summaries for recent releases when published
+- [release-archive.md](./docs/technical/release-archive.md) - archived implementation/review index for historical releases
 
 ---
 
@@ -221,11 +223,13 @@ See: [GLOSSARY.md - MVP](./GLOSSARY.md#mvp-minimum-viable-product) | [GLOSSARY.m
 See: [deployment/railway.md](./docs/deployment/railway.md)
 
 ### "Where are the release notes?"
-Historical releases (v0.52-v0.72): [release-archive.md](./docs/technical/release-archive.md)
-Current timeline: [roadmap.md](./docs/technical/roadmap.md)
+Recent reader-facing summaries live in [docs/releases/](./docs/releases/) when published.
+Historical implementation/review records are indexed in [release-archive.md](./docs/technical/release-archive.md) and stored in [docs/releases-archive/](./docs/releases-archive/).
+Some older review files also remain in [docs/releases/](./docs/releases/) as legacy placements.
+Current release status and unfinished scope remain in [roadmap.md](./docs/technical/roadmap.md).
 
 ### "What modules are available?"
-Current first-party module directories include **auth, billing, blog, crm, forms, listings, storage, and teams**.
+Current implemented first-party modules include **auth, blog, crm, forms, listings, and storage**. The monorepo also contains **billing** and **teams** directories as planned placeholders for follow-on modules.
 See: [quickscale_modules/](./quickscale_modules/) for the current package list and per-module README files.
 
 ### "Can I contribute?"

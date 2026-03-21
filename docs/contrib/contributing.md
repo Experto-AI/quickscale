@@ -118,31 +118,36 @@ Before contributing, familiarize yourself with these key project documents:
 - **[Technical Roadmap](../technical/roadmap.md)** - Current development roadmap and task tracking
 - **[Technical Decisions](../technical/decisions.md)** - What's IN vs OUT of scope
 - **[Scaffolding Guide](../technical/scaffolding.md)** - Directory layout and project structure
-- **[Release Template](../technical/release_template.md)** - Standard format for release documentation
+- **[Release Implementation Template](../technical/release_implementation_template.md)** - Standard format for archived implementation notes
+- **[Release Review Template](../technical/release_review_template.md)** - Standard format for archived review notes
 
 ---
 
 ## Release Documentation Policy
 
-When a roadmap release or major roadmap item is implemented, maintainers MUST create a release document under `docs/releases/` and remove the corresponding detailed release section from the roadmap. This keeps the roadmap focused on upcoming work and preserves completed release artifacts as standalone documents.
+When a roadmap release or major roadmap item is implemented, maintainers should preserve release documentation in the repository's mixed layout: concise reader-facing summaries in `docs/releases/` when a public-facing note is warranted, and detailed implementation/review artifacts in `docs/releases-archive/`. This keeps the roadmap focused on upcoming work without overloading `docs/releases/` with maintainer-only detail.
 
 ### Required Release Documentation Conventions
 
-- **Implementation filename**: `docs/releases/release-<version>-implementation.md` (e.g. `release-v0.52.0-implementation.md`)
-- **Review filename**: `docs/releases/release-<version>-review.md` (e.g. `release-v0.52.0-review.md`)
+- **Summary filename**: `docs/releases/release-<version>.md` (e.g. `release-v0.75.0.md`) when a reader-facing summary is published
+- **Implementation filename**: `docs/releases-archive/release-<version>-implementation.md` (e.g. `release-v0.52.0-implementation.md`)
+- **Review filename**: `docs/releases-archive/release-<version>-review.md` (e.g. `release-v0.52.0-review.md`)
 - **Minimum content (implementation)**: release title, release date, summary of verifiable improvements, completed tasks checklist, validation commands, and a short "Next steps" list
 - **Minimum content (review)**: comprehensive quality assessment, scope compliance check, code quality validation, testing review, approval status
 - Link back to the roadmap and to `decisions.md` where appropriate
+- Not every release requires every artifact; avoid promising a summary file that does not exist yet
+- Older releases may still have review files under `docs/releases/`; treat those as legacy placements rather than the current maintainer workflow
 
 ### Release Documentation Process
 
 Follow these steps after completing a release:
 
-1. Create `docs/releases/release-<version>-implementation.md` with implementation details, test results, and validation
-2. (Optional) Create `docs/releases/release-<version>-review.md` with quality assessment and approval status
-3. Commit the release documentation
-4. Remove the completed release section from `docs/technical/roadmap.md` (or replace it with a one-line pointer to the release docs)
-5. Update indexes/README links if necessary
+1. Create `docs/releases-archive/release-<version>-implementation.md` with implementation details, test results, and validation when detailed archival notes are needed
+2. Create `docs/releases-archive/release-<version>-review.md` when a formal quality review is produced
+3. Add `docs/releases/release-<version>.md` only when a concise reader-facing release summary is warranted
+4. Commit the release documentation
+5. Replace the completed release section with a concise pointer only when a summary or archive artifact exists
+6. Update indexes/README links if necessary
 
 This policy ensures completed work is archived in a discoverable place and the roadmap remains current and actionable.
 

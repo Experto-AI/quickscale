@@ -1,7 +1,8 @@
 # Changelog
 
-See docs/releases/ for detailed release notes.
+Use `docs/releases/` for reader-facing release summaries when published, `docs/releases-archive/` for detailed implementation/review artifacts, and `docs/technical/roadmap.md` for active release status.
 
+- v0.76.0 — tracked in roadmap pending any reader-facing summary — Storage Module (cloud file hosting, media storage adapters, CDN-ready media infrastructure)
 - v0.75.0 — 2026-02-23 — Forms Module (generic customizable form builder with admin, DRF API, spam protection, GDPR anonymization, and React mount point)
 - v0.74.0 — 2026-02-05 — React Default Theme (showcase_react theme with Vite, TypeScript, TanStack Query, and Zustand)
 - v0.73.0 — 2026-02-04 — CRM Module (API-first Django CRM with 7 core models and CLI integration)

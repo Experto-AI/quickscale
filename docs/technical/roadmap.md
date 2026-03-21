@@ -98,6 +98,7 @@ QuickScale follows an evolution-aligned roadmap that starts as a personal toolki
 **Target Audience:** Development team, project managers, stakeholders tracking progress
 
 - **Completed Releases:** See [CHANGELOG.md](../../CHANGELOG.md)
+- **Release doc layout:** Reader-facing summaries live in [docs/releases/](../releases/) when published; detailed implementation/review artifacts and older records live in [docs/releases-archive/](../releases-archive/)
 - **Technical SSOT**: [decisions.md](./decisions.md)
 - **Scaffolding SSOT**: [scaffolding.md](./scaffolding.md)
 - **Strategic Vision**: [quickscale.md](../overview/quickscale.md)
@@ -110,7 +111,7 @@ List of upcoming releases with detailed implementation tasks:
 
 ---
 
-Completed release note: v0.75.0 moved to [docs/releases/release-v0.75.0.md](../releases/release-v0.75.0.md).
+Release summaries currently exist in [docs/releases/](../releases/) for selected completed releases. Detailed implementation/review artifacts remain in [docs/releases-archive/](../releases-archive/). Keep v0.76.0 tracked here and in the changelog until a reader-facing summary is actually published.
 
 ---
 

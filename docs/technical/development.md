@@ -5,7 +5,7 @@
 
 **Target**: New contributor can clone repository and run tests successfully in <15 minutes.
 
-**Last Updated**: November 1, 2025
+**Last Updated**: March 21, 2026
 **Tested On**: Ubuntu 22.04, Python 3.14
 
 ---
@@ -31,7 +31,7 @@ Before starting, ensure you have these tools installed:
 3. **Poetry 2.0+** (Python package manager)
    ```bash
    poetry --version
-   # Should show 1.5.0 or higher
+   # Should show 2.0.0 or higher
    ```
 
 ### Installing Prerequisites
@@ -92,7 +92,7 @@ poetry install
 #### 2. Verify Installation (1 minute)
 ```bash
 poetry run quickscale --version
-# Should show version number (e.g., 0.73.0)
+# Should show version number (e.g., 0.76.0)
 
 poetry show
 # Should show quickscale_core, quickscale_cli, and dependencies
@@ -108,7 +108,7 @@ poetry run pytest
 # Expected output:
 # =================== test session starts ====================
 # quickscale_core: 96% coverage (target: >80%)
-# quickscale_cli: 82% coverage (target: >75%)
+# quickscale_cli: 82% coverage (target: >80%)
 # =================== XX passed in X.XXs ====================
 ```
 
@@ -267,7 +267,8 @@ quickscale/
 ├── docs/                     # Documentation
 │   ├── technical/            # Technical specs
 │   ├── contrib/              # Contributing guides
-│   └── releases/             # Release notes
+│   ├── releases/             # Reader-facing release summaries (when published)
+│   └── releases-archive/     # Detailed implementation/review artifacts
 ├── scripts/                  # Helper scripts
 │   ├── bootstrap.sh          # Development setup
 │   ├── test_unit.sh          # Run unit and integration tests
@@ -448,10 +449,10 @@ poetry run quickscale plan integration_test
 # Accept defaults
 
 # Apply configuration
+cd integration_test
 poetry run quickscale apply
 
 # Setup and test
-cd integration_test
 poetry install
 poetry run pytest
 poetry run python manage.py check
@@ -536,7 +537,7 @@ quickscale --version
 You have a working development environment when:
 
 - ✅ `poetry run quickscale --version` shows version number
-- ✅ `./scripts/test_unit.sh` passes with >80% coverage
+- ✅ `./scripts/test_unit.sh` meets the repository coverage policy (90% overall mean and 80% per-file minimum)
 - ✅ `./scripts/lint.sh` passes all checks
 - ✅ `quickscale plan testproject && quickscale apply` generates working Django project
 - ✅ Can make changes, run tests, and see results in <2 minutes

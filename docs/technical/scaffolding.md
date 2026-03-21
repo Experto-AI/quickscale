@@ -98,9 +98,9 @@ Default/unclear context? → Standalone settings.py
 
 **Should I generate YAML config files?**
 ```
-MVP project? → ❌ NO (quickscale.yml is Post-MVP only)
-User explicitly requests YAML config? → Explain it's Post-MVP, offer alternatives
-Post-MVP context? → ✅ YES (but confirm scope with decisions.md)
+MVP project using plan/apply? → ✅ YES (`quickscale.yml` is the supported desired-state file)
+Need extra config loaders, schemas, or `config/` package? → ❌ NO (those remain Post-MVP/reference material)
+User explicitly requests raw YAML outside plan/apply? → Explain `quickscale.yml` is the supported MVP surface
 ```
 
 ---
@@ -358,7 +358,7 @@ quickscale_core/
 │   │           │   └── static/
 │   │           │       ├── css/style.css.j2
 │   │           │       └── images/favicon.svg.j2
-│   │           ├── showcase_htmx/   # HTMX + Alpine.js theme (v0.78.0+)
+│   │           ├── showcase_htmx/   # HTMX + Alpine.js placeholder (planned post-MVP, target v0.82.0+)
 │   │           │   ├── templates/
 │   │           │   │   ├── base.html.j2
 │   │           │   │   └── index.html.j2
@@ -395,13 +395,14 @@ quickscale_core/
 **v0.74.0 React Default Theme:**
 - ✅ Theme system: `quickscale plan myproject` + `quickscale apply` (defaults to React)
 - ✅ Use `--theme showcase_html` for pure HTML/CSS alternative
+- ✅ `showcase_htmx/` remains a placeholder until the planned post-MVP HTMX theme lands
 - ✅ Themes are one-time copy, user owns generated code
 - ✅ **Default theme: `showcase_react`** (React + shadcn/ui)
 - ✅ Backend templates in `common/` (theme-agnostic)
-- ✅ Frontend templates in `themes/{showcase_react,showcase_html,showcase_htmx}/` (theme-specific)
+- ✅ Frontend templates in `themes/{showcase_react,showcase_html}/` today, with `showcase_htmx/` reserved as a future placeholder
 
 **MVP Simplifications:**
-- ❌ NO config/ directory (no YAML/JSON configuration loading in MVP)
+- ❌ NO extra `config/` directory or schema registry beyond the supported plan/apply files (`quickscale.yml`, `.quickscale/state.yml`, `.quickscale/config.yml`)
 - ❌ NO apps.py (not a Django app in MVP)
 - ❌ NO complex utils (just basics)
 - ❌ NO `backend_extensions.py` generation in MVP — see [backend_extensions.py policy](./decisions.md#backend-extensions-policy)
@@ -456,9 +457,8 @@ quickscale_cli/
 **When generating MVP code, AI assistants MUST NOT include:**
 
 **Configuration & Setup:**
-- ❌ `quickscale.yml` or any YAML/JSON config files
-- ❌ `config/` directory for configuration loading
-- ❌ Multiple theme variants or `--theme` flag support (v0.61.0+ only)
+- ❌ No extra `config/` directory or arbitrary YAML/JSON config loaders beyond the supported plan/apply files
+- ❌ No unsupported theme systems beyond first-party `quickscale plan --theme` selection
 - ❌ `backend_extensions.py` generation (users add manually if needed)
 - ❌ Automatic settings inheritance from `quickscale_core` (standalone settings.py only)
 
@@ -469,12 +469,12 @@ quickscale_cli/
 - ❌ `examples/` directory in generated projects
 - ❌ Nested package names like `quickscale/quickscale_core`
 - ❌ Tests inside `src/` (use parallel `tests/` directory)
-- ❌ README.md in sub-packages (root README.md only)
+- ❌ Treating package `README.md` files as the source of truth (root docs and `decisions.md` remain authoritative)
 
 **CLI Commands & Automation:**
 - ❌ CLI git subtree wrapper commands (`embed-core`, `update-core`, `sync-push`)
 - ❌ `quickscale validate` or `generate` commands
-- ❌ Multiple starter templates (single template only in MVP)
+- ❌ Unsupported theme/template systems beyond the documented first-party starter and vertical themes
 
 **Dependencies & Tooling:**
 - ❌ `requirements.txt` files (use Poetry + pyproject.toml)
@@ -490,6 +490,8 @@ quickscale_cli/
 
 **What MVP DOES Include:**
 - ✅ Declarative workflow: `quickscale plan <project>` + `quickscale apply`
+- ✅ `quickscale.yml` as the user-owned desired-state file
+- ✅ `.quickscale/state.yml` and `.quickscale/config.yml` as system-managed apply metadata
 - ✅ Standalone Django project (manage.py, settings.py, urls.py, wsgi.py, asgi.py)
 - ✅ Poetry packaging (pyproject.toml + poetry.lock)
 - ✅ Production foundations: Docker, PostgreSQL config, pytest, CI/CD, security best practices
@@ -498,8 +500,8 @@ quickscale_cli/
 
 **Decision Tree for AI Assistants:**
 ```
-User requests YAML config? → Explain it's Post-MVP, suggest alternative
-User wants multiple templates? → Explain single template MVP, note Post-MVP roadmap
+User requests YAML config? → Explain `quickscale.yml` is supported; extra config loaders/schema packages are not
+User wants alternative starter themes? → Use the documented first-party theme choices; do not invent new theme systems
 User asks about quickscale_modules/? → Explain maintainer-only, NOT generated
 Unsure if feature is MVP? → Check decisions.md MVP Feature Matrix (authoritative)
 ```
@@ -699,7 +701,7 @@ myapp/
 version: 0.76.0
 project:
   name: myapp
-  theme: showcase_html
+  theme: showcase_react
 applied_modules:
   - name: auth
     version: 0.76.0
@@ -749,13 +751,14 @@ Purpose: Tracks module branches and versions for `quickscale update` and `quicks
 **`quickscale.yml`** — Desired configuration (v0.68.0+):
 
 ```yaml
-version: 0.76.0
+version: "1"
 project:
-  name: myapp
-  theme: showcase_html
+  slug: myapp
+  package: myapp
+  theme: showcase_react
 modules:
-  - name: auth
-  - name: listings
+  auth: {}
+  listings: {}
 docker:
   build: true
   start: true
@@ -849,7 +852,7 @@ git subtree push --prefix=quickscale https://github.com/Experto-AI/quickscale.gi
 This extraction pattern keeps the MVP minimal while enabling shared improvements across your projects.
 
 - **Deferred to Post-MVP (illustrative / NOT in MVP):**
-- ❌ `quickscale.yml` and a `config/` directory (no YAML/JSON config system in MVP)
+- ❌ Expanded `config/` directory or schema-driven config system beyond the supported plan/apply files
 - ❌ backend_extensions.py (not generated by MVP; customize directly if needed)
 - ❌ custom_frontend/ structure (just use templates/)
 - ❌ variants system
@@ -860,7 +863,7 @@ This extraction pattern keeps the MVP minimal while enabling shared improvements
 ℹ️ **Post-MVP reference** – consult the MVP matrix for current scope.
 ```
 myapp/
-├── quickscale.yml           # Post-MVP illustrative for future config system
+├── quickscale.yml           # Desired state plus future expanded config integrations
 ├── pyproject.toml
 ├── manage.py
 ├── backend_extensions.py
@@ -914,7 +917,7 @@ Rules: Dotted namespaces for imports, underscore-qualified app labels to avoid c
 | Decision (decisions.md) | Scaffold Enforcement | Notes |
 |-------------------------|----------------------|-------|
 | Library-Style Modules | Independent `quickscale_modules/<name>/` packages | Post-MVP only; NOT in generated projects |
-| Configuration-Driven | Central `schemas/` + `config/` loader & validator | Post-MVP only; MVP uses standard Django settings |
+| Configuration-Driven | MVP uses `quickscale.yml` + `.quickscale/*.yml`; Post-MVP may add `schemas/` + `config/` tooling | `decisions.md` wins if scope wording changes |
 | Backend Extension Pattern | Post‑MVP / illustrative: `backend_extensions.py` + theme `base_models.py` | MVP does NOT auto-generate this file |
 | Directory-Based Frontend | `custom_frontend/` with `templates/`, `static/`, `variants/` | Post-MVP; MVP uses simple templates/ directory |
 | Git Subtree Distribution | Manual `git subtree` commands documented in decisions.md | CLI wrappers are Post-MVP backlog items |
@@ -935,7 +938,7 @@ Rules: Dotted namespaces for imports, underscore-qualified app labels to avoid c
 ## 8. Evolution Phases & Incremental Adoption
 | Phase | Adds | Deliverables |
 |-------|------|-------------|
-| 1 (MVP) | Core + CLI | Config load, scaffolding, create command, git subtree setup |
+| 1 (MVP) | Core + CLI | Plan/apply configuration, scaffolding, create command, git subtree setup |
 | 2 | Starter Theme | Theme packaging, inheritance base classes |
 | 3 | First Module (auth) | Module packaging, settings integration |
 | 4 | Update/Sync Commands | Full CLI for managing multiple client projects |
@@ -947,7 +950,7 @@ Backward compatibility stance: Config migrations tracked under `schemas/migratio
 ## 9. Crosswalk: Requirement → Artifact
 | Requirement | Artifact |
 |-------------|----------|
-| Declarative config | `schemas/quickscale-config-v1.json`, `config/loader.py` |
+| Declarative config | `quickscale.yml`, `.quickscale/state.yml`, `.quickscale/config.yml` |
 | Simple project generation | `scaffold/generator.py` + templates tree |
 | Backend inheritance | Post‑MVP / illustrative: `backend_extensions.py` + theme `base_models.py` (MVP does NOT auto-generate this file) |
 | Frontend variants | `custom_frontend/variants/<variant>/` |

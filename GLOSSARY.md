@@ -116,8 +116,10 @@ quickscale/
 - ✅ Django project generator (`quickscale plan` + `quickscale apply`)
 - ✅ Git subtree module distribution
 - ✅ Production-ready foundations (Docker, PostgreSQL, testing, CI/CD)
-- ✅ Single showcase theme
-- ❌ Multiple themes (Post-MVP)
+- ✅ `showcase_react` starter theme as the default frontend
+- ✅ `showcase_html` as the secondary starter theme option
+- ✅ Early first-party vertical themes inside the monorepo (for example `crm`)
+- ❌ Broader theme expansion beyond the current first-party MVP set (Post-MVP)
 - ❌ PyPI distribution (Post-MVP)
 - ❌ Marketplace (Post-MVP)
 
@@ -168,7 +170,7 @@ quickscale/
 **Definition**: Phase 2+ of QuickScale (v0.78.0+) - Broader community platform with expanded packaging, marketplace, and ecosystem capabilities.
 
 **Planned Features**:
-- ✅ Multiple themes (HTMX, React, vertical-specific)
+- ✅ Broader theme expansion beyond the current first-party MVP set
 - ✅ PyPI package distribution
 - ✅ Community marketplace
 - ✅ Commercial subscription model
@@ -188,9 +190,9 @@ quickscale/
 **Definition**: Minimal starter theme demonstrating QuickScale's frontend capabilities with minimal code, designed as a foundation for custom development.
 
 **Available Themes**:
-- `showcase_html` - Pure HTML + CSS (default, MVP)
-- `showcase_htmx` - HTMX + Alpine.js (planned v0.74.0)
-- `showcase_react` - React + TypeScript + Vite (planned v0.75.0)
+- `showcase_react` - React + TypeScript + Vite + shadcn/ui (default, v0.74.0+)
+- `showcase_html` - Pure HTML + CSS (secondary starter option)
+- `showcase_htmx` - HTMX + Alpine.js (planned post-MVP, currently targeted for v0.82.0+)
 
 **Characteristics**:
 - Minimal code (ready for customization)
@@ -249,7 +251,7 @@ quickscale/
 - Themes: Frontend-focused, one-time generation, not updated
 - Modules: Backend-focused, ongoing updates via git subtree/PyPI
 
-**Examples**: `showcase_html`, `showcase_htmx`, `real_estate`, `saas_starter`
+**Examples**: `showcase_react`, `showcase_html`, `crm`, `saas_starter`
 
 **See**: [decisions.md - Theme Architecture](./docs/technical/decisions.md#module-theme-architecture)
 
@@ -265,7 +267,7 @@ quickscale/
 - Ready for customization, not production deployment
 
 **Examples**:
-- `real_estate` - Property listings with React UI (v0.72.0+)
+- `crm` - CRM application with React frontend patterns (v0.75.0+)
 - `saas_starter` - SaaS with billing and teams (planned)
 - `job_board` - Job listings and applications (planned)
 
@@ -309,6 +311,6 @@ quickscale/
 
 ---
 
-**Last Updated**: 2025-12-07
+**Last Updated**: 2026-03-21
 **Maintained By**: QuickScale maintainers
 **Feedback**: Open issue if terms need clarification or addition

@@ -1,8 +1,10 @@
 # QuickScale Release Archive
 
-**Purpose**: Historical record of QuickScale releases from v0.52.0 to v0.72.0. This archive preserves release documentation while keeping the active documentation focused on current and future releases.
+**Purpose**: Historical record centered on QuickScale releases from v0.52.0 to v0.72.0, with notes for later legacy release artifacts that still sit outside the current summary/archive split. This archive preserves implementation/review artifacts while keeping active documentation focused on current and future releases.
 
 **For Current Roadmap**: See [roadmap.md](./roadmap.md)
+
+**For Recent Reader-Facing Summaries**: See [../releases/](../releases/)
 
 **For Detailed Release Documents**: See [../releases-archive/](../releases-archive/) directory
 
@@ -10,38 +12,40 @@
 
 ## Release Summary Table
 
+Dates and short summaries below mirror the linked release artifacts and [CHANGELOG.md](../../CHANGELOG.md). The table is ordered by version, not by date.
+
 | Version | Date | Phase | Key Changes | Status | Docs |
 |---------|------|-------|-------------|--------|------|
-| **v0.72.0** | 2025-12-07 | MVP | Complete Plan/Apply cleanup - removed legacy init/embed commands | ✅ Complete | [Review](../releases-archive/release-v0.72.0-review.md) |
-| **v0.71.0** | 2025-12-05 | MVP | Module manifests & config mutability (mutable vs immutable) | ✅ Complete | [Impl](../releases-archive/release-v0.71.0-implementation.md) \| [Review](../releases-archive/release-v0.71.0-review.md) |
-| **v0.70.0** | 2025-12-02 | MVP | CLI restructure (plan/apply/update/push workflow) | ✅ Complete | [Impl](../releases-archive/release-v0.70.0-implementation.md) \| [Review](../releases-archive/release-v0.70.0-review.md) |
-| **v0.69.0** | 2025-11-30 | MVP | Theme deployment & module dev iteration | ✅ Complete | [Impl](../releases-archive/release-v0.69.0-implementation.md) \| [Review](../releases-archive/release-v0.69.0-review.md) |
-| **v0.68.0** | 2025-11-28 | MVP | Plan/Apply system implementation | ✅ Complete | [Impl](../releases-archive/release-v0.68.0-implementation.md) \| [Review](../releases-archive/release-v0.68.0-review.md) |
-| **v0.67.0** | 2025-11-24 | MVP | Theme categories (starter vs vertical) | ✅ Complete | [Impl](../releases-archive/release-v0.67.0-implementation.md) \| [Review](../releases-archive/release-v0.67.0-review.md) |
-| **v0.66.0** | 2025-11-20 | MVP | Blog & listings modules with real estate site | ✅ Complete | [Impl](../releases-archive/release-v0.66.0-implementation.md) \| [Review](../releases-archive/release-v0.66.0-review.md) |
-| **v0.65.0** | 2025-11-15 | MVP | Module development strategy | ✅ Complete | [Plan](../releases-archive/release-v0.65.0-plan.md) |
-| **v0.64.0** | 2025-11-10 | MVP | Module architecture refinement | ✅ Complete | [Plan](../releases-archive/release-v0.64.0-plan.md) \| [Impl](../releases-archive/release-v0.64.0-implementation.md) \| [Review](../releases-archive/release-v0.64.0-review.md) |
-| **v0.63.0** | 2025-11-05 | MVP | Auth module with django-allauth | ✅ Complete | [Impl](../releases-archive/release-v0.63.0-implementation.md) \| [Review](../releases-archive/release-v0.63.0-review.md) |
-| **v0.62.0** | 2025-11-01 | MVP | Git subtree module distribution | ✅ Complete | [Impl](../releases-archive/release-v0.62.0-implementation.md) \| [Review](../releases-archive/release-v0.62.0-review.md) |
-| **v0.61.0** | 2025-10-28 | MVP | Module & theme architecture decision | ✅ Complete | [Impl](../releases-archive/release-v0.61.0-implementation.md) \| [Review](../releases-archive/release-v0.61.0-review.md) |
-| **v0.60.0** | 2025-10-24 | MVP | CLI foundations (plan/apply concepts) | ✅ Complete | [Impl](../releases-archive/release-v0.60.0-implementation.md) \| [Review](../releases-archive/release-v0.60.0-review.md) |
-| **v0.59.0** | 2025-10-20 | MVP | Settings management & configuration | ✅ Complete | [Impl](../releases-archive/release-v0.59.0-implementation.md) \| [Review](../releases-archive/release-v0.59.0-review.md) |
-| **v0.58.0** | 2025-10-15 | MVP | Testing infrastructure improvements | ✅ Complete | [Impl](../releases-archive/release-v0.58.0-implementation.md) \| [Review](../releases-archive/release-v0.58.0-review.md) |
-| **v0.57.0** | 2025-10-10 | MVP | Production-ready foundations | ✅ Complete | [Impl](../releases-archive/release-v0.57.0-implementation.md) \| [Review](../releases-archive/release-v0.57.0-review.md) |
-| **v0.56.0** | 2025-10-05 | MVP | MVP kickoff - personal toolkit | ✅ Complete | [Impl](../releases-archive/release-v0.56.0-implementation.md) \| [Review](../releases-archive/release-v0.56.0-review.md) |
-| **v0.55.0** | 2025-10-01 | Foundation | Final foundation phase release | ✅ Complete | [Impl](../releases-archive/release-v0.55.0-implementation.md) \| [Review](../releases-archive/release-v0.55.0-review.md) |
-| **v0.54.0** | 2025-09-25 | Foundation | Core utilities & scaffolding | ✅ Complete | [Impl](../releases-archive/release-v0.54.0-implementation.md) \| [Review](../releases-archive/release-v0.54.0-review.md) |
-| **v0.53.3** | 2025-09-20 | Foundation | Bug fixes & stability | ✅ Complete | [Impl](../releases-archive/release-v0.53.3-implementation.md) \| [Review](../releases-archive/release-v0.53.3-review.md) |
-| **v0.53.2** | 2025-09-18 | Foundation | Minor improvements | ✅ Complete | [Impl](../releases-archive/release-v0.53.2-implementation.md) |
-| **v0.53.1** | 2025-09-15 | Foundation | Patch release | ✅ Complete | [Impl](../releases-archive/release-v0.53.1-implementation.md) |
-| **v0.52.0** | 2025-09-10 | Foundation | Initial foundation phase | ✅ Complete | [Impl](../releases-archive/release-v0.52.0-implementation.md) |
+| **v0.72.0** | 2025-12-07 | MVP | Plan/Apply cleanup (removed legacy init/embed commands, full transition to plan/apply) | ✅ Complete | [Review](../releases-archive/release-v0.72.0-review.md) |
+| **v0.71.0** | 2025-06-25 | MVP | Module manifests & config mutability (Plan/Apply system complete) | ✅ Complete | [Impl](../releases-archive/release-v0.71.0-implementation.md) \| [Review](../releases-archive/release-v0.71.0-review.md) |
+| **v0.70.0** | 2025-12-19 | MVP | Existing project support (`status`, `plan --add`, `plan --reconfigure`) | ✅ Complete | [Impl](../releases-archive/release-v0.70.0-implementation.md) \| [Review](../releases-archive/release-v0.70.0-review.md) |
+| **v0.69.0** | 2025-12-03 | MVP | State management and incremental applies | ✅ Complete | [Impl](../releases-archive/release-v0.69.0-implementation.md) \| [Review](../releases-archive/release-v0.69.0-review.md) |
+| **v0.68.0** | 2025-12-01 | MVP | Plan/Apply system core commands (Terraform-style declarative workflow) | ✅ Complete | [Impl](../releases-archive/release-v0.68.0-implementation.md) \| [Review](../releases-archive/release-v0.68.0-review.md) |
+| **v0.67.0** | 2025-11-29 | MVP | Listings module with `AbstractListing` base model for verticals | ✅ Complete | [Impl](../releases-archive/release-v0.67.0-implementation.md) \| [Review](../releases-archive/release-v0.67.0-review.md) |
+| **v0.66.0** | 2025-11-24 | MVP | Blog module with Markdown, featured images, and RSS feeds | ✅ Complete | [Impl](../releases-archive/release-v0.66.0-implementation.md) \| [Review](../releases-archive/release-v0.66.0-review.md) |
+| **v0.65.0** | 2025-11-03 | MVP | Enhanced auth module and development tooling | ✅ Complete | [Plan](../releases-archive/release-v0.65.0-plan.md) |
+| **v0.64.0** | 2025-11-01 | MVP | Theme rename to `showcase_*` (breaking change) | ✅ Complete | [Plan](../releases-archive/release-v0.64.0-plan.md) \| [Impl](../releases-archive/release-v0.64.0-implementation.md) \| [Review](../releases-archive/release-v0.64.0-review.md) |
+| **v0.63.0** | 2025-10-29 | MVP | Authentication module with `django-allauth` and interactive embed | ✅ Complete | [Impl](../releases-archive/release-v0.63.0-implementation.md) \| [Review](../releases-archive/release-v0.63.0-review.md) |
+| **v0.62.0** | 2025-10-25 | MVP | Split branch infrastructure (module management CLI commands, GitHub Actions automation) | ✅ Complete | [Impl](../releases-archive/release-v0.62.0-implementation.md) \| [Review](../releases-archive/release-v0.62.0-review.md) |
+| **v0.61.0** | 2025-10-24 | MVP | Theme system foundation (`--theme` flag, theme abstraction layer, HTML theme) | ✅ Complete | [Impl](../releases-archive/release-v0.61.0-implementation.md) \| [Review](../releases-archive/release-v0.61.0-review.md) |
+| **v0.60.0** | 2025-10-19 | MVP | Railway deployment support (`quickscale deploy railway`) | ✅ Complete | [Impl](../releases-archive/release-v0.60.0-implementation.md) \| [Review](../releases-archive/release-v0.60.0-review.md) |
+| **v0.59.0** | 2025-10-18 | MVP | CLI development commands (Docker/Django operation wrappers) | ✅ Complete | [Impl](../releases-archive/release-v0.59.0-implementation.md) \| [Review](../releases-archive/release-v0.59.0-review.md) |
+| **v0.58.0** | 2025-10-18 | MVP | Comprehensive E2E testing infrastructure with Playwright and PostgreSQL | ✅ Complete | [Impl](../releases-archive/release-v0.58.0-implementation.md) \| [Review](../releases-archive/release-v0.58.0-review.md) |
+| **v0.57.0** | 2025-10-15 | MVP | MVP launch: production-ready personal toolkit | ✅ Complete | [Impl](../releases-archive/release-v0.57.0-implementation.md) \| [Review](../releases-archive/release-v0.57.0-review.md) |
+| **v0.56.0** | 2025-10-13 | MVP | Quality, testing, and CI/CD | ✅ Complete | [Impl](../releases-archive/release-v0.56.0-implementation.md) \| [Review](../releases-archive/release-v0.56.0-review.md) |
+| **v0.55.0** | 2025-10-13 | Foundation | CLI implementation | ✅ Complete | [Impl](../releases-archive/release-v0.55.0-implementation.md) \| [Review](../releases-archive/release-v0.55.0-review.md) |
+| **v0.54.0** | 2025-10-13 | Foundation | Project generator | ✅ Complete | [Impl](../releases-archive/release-v0.54.0-implementation.md) \| [Review](../releases-archive/release-v0.54.0-review.md) |
+| **v0.53.3** | 2025-10-12 | Foundation | Project metadata and DevOps templates | ✅ Complete | [Impl](../releases-archive/release-v0.53.3-implementation.md) \| [Review](../releases-archive/release-v0.53.3-review.md) |
+| **v0.53.2** | 2025-01-11 | Foundation | Templates and static files | ✅ Complete | [Impl](../releases-archive/release-v0.53.2-implementation.md) |
+| **v0.53.1** | 2025-10-11 | Foundation | Core Django project templates | ✅ Complete | [Impl](../releases-archive/release-v0.53.1-implementation.md) |
+| **v0.52.0** | 2025-10-08 | Foundation | Project foundation | ✅ Complete | [Impl](../releases-archive/release-v0.52.0-implementation.md) |
 
 ---
 
 ## Phase Summary
 
 ### Foundation Phase (v0.52.0 - v0.55.0)
-**Duration**: Sept 2025 - Oct 2025
+**Dates**: See the release table above for the exact artifact dates recorded for each archived release.
 **Focus**: Building incremental foundations before MVP
 
 **Key Achievements**:
@@ -52,7 +56,7 @@
 - Security best practices
 
 ### MVP Phase (v0.56.0 - v0.72.0)
-**Duration**: Oct 2025 - Dec 2025
+**Dates**: This archive section covers the historical MVP subset through v0.72.0; see the table above for exact artifact dates.
 **Focus**: Production-ready personal toolkit for client projects
 
 **Key Milestones**:
@@ -64,9 +68,9 @@
 - ✅ v0.68.0: Plan/Apply system implementation
 - ✅ v0.72.0: Complete Plan/Apply cleanup
 
-**Status**: MVP nearing completion (targeting v0.75.0 for production-ready)
+**Status**: Historical MVP archive through v0.72.0. For current MVP/Post-MVP boundaries and active release status, see [decisions.md](./decisions.md) and [roadmap.md](./roadmap.md).
 
-### Post-MVP Phase (v0.76.0+)
+### Post-MVP Phase (v0.78.0+)
 **Planned**: 2026+
 **Focus**: Community platform with PyPI distribution, multiple themes, marketplace
 
@@ -145,8 +149,8 @@ QuickScale uses semantic versioning with QuickScale-specific phase alignment:
 
 **Phases**:
 - `v0.52-v0.55`: Foundation Phase (incremental foundations)
-- `v0.56-v0.75`: MVP Phase (personal toolkit)
-- `v0.76-v0.99`: Post-MVP Phase (community platform)
+- `v0.56-v0.77`: MVP Phase (personal toolkit)
+- `v0.78-v0.99`: Post-MVP Phase (community platform)
 - `v1.0+`: Production-stable (long-term support)
 
 **See**: [versioning.md](./versioning.md) for complete version scheme
@@ -155,21 +159,20 @@ QuickScale uses semantic versioning with QuickScale-specific phase alignment:
 
 ## Future Release Management
 
-Starting with **v0.73.0**, releases will follow a streamlined process:
+Starting with **v0.73.0**, releases may use a mixed documentation layout:
 
-1. **Planning**: Release tasks added to [roadmap.md](./roadmap.md)
-2. **Implementation**: Work tracked via roadmap task checklist
-3. **Validation**: QA review integrated into workflow
-4. **Completion**: Tasks marked complete in roadmap
-5. **Archive**: Release summary added to this archive (no separate implementation/review files)
+1. **Planning**: Release tasks stay in [roadmap.md](./roadmap.md)
+2. **Implementation**: Detailed maintainer-facing implementation/review notes go in [../releases-archive/](../releases-archive/) when created
+3. **Summaries**: Concise reader-facing summaries may be published in [../releases/](../releases/)
+4. **Completion**: Roadmap keeps the active checklist until a summary or archive artifact exists
 
-**Benefit**: Living roadmap remains current, historical archive stays lean
+**Benefit**: The roadmap stays actionable, recent summaries stay readable, and archival detail remains discoverable without promising files that do not yet exist
 
 ---
 
-**Last Updated**: 2025-12-07
-**Current Release**: v0.72.0
-**Next Release**: v0.73.0 (CRM Module - in progress)
+**Last Updated**: 2026-03-21
+**Current Active Release Tracking**: [roadmap.md](./roadmap.md)
+**Recent Summary Location**: [../releases/](../releases/)
 
 ---
 
@@ -207,7 +210,7 @@ See [release-v0.70.0-implementation.md](../releases-archive/release-v0.70.0-impl
 
 ### v0.71.0: Plan/Apply System - Module Manifests & Config Mutability
 
-**Status**: ✅ Complete — 2025-12-04
+**Status**: ✅ Complete — 2025-06-25
 
 See [release-v0.71.0-implementation.md](../releases-archive/release-v0.71.0-implementation.md) and [decisions.md: Module Manifest Architecture](./decisions.md#module-manifest-architecture).
 

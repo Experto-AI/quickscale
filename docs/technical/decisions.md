@@ -65,7 +65,9 @@ TARGET AUDIENCE: Maintainers, core contributors, community package developers, C
 - ✅ decisions.md is authoritative - always wins conflicts
 - ✅ Update decisions.md FIRST, then other docs
 - ✅ Contributing guides: `docs/contrib/*.md`
-- ✅ Release docs: `docs/releases-archive/release-vX.XX.X-{implementation,review}.md` (archived)
+- ✅ Release summaries: `docs/releases/release-vX.XX.X.md` when a reader-facing note is published
+- ✅ Detailed implementation/review docs: `docs/releases-archive/release-vX.XX.X-{implementation,review}.md` (archived)
+- ✅ Legacy review files may still exist under `docs/releases/`; keep new maintainer-focused artifacts in `docs/releases-archive/`
 - ❌ Never contradict decisions.md elsewhere
 
 **Package README Policy:**
@@ -165,7 +167,7 @@ myproject/
 1. **Starter Themes** — Empty foundations for building custom applications
    - `showcase_react` — **React + TypeScript + shadcn/ui (default)** ✅
    - `showcase_html` — Pure HTML + CSS (secondary option)
-   - `showcase_htmx` — HTMX + Alpine.js (planned v0.78.0+)
+  - `showcase_htmx` — HTMX + Alpine.js (planned post-MVP, currently targeted for v0.82.0+)
    - Minimal code, ready for module embedding
    - Foundation for custom development
 
@@ -259,7 +261,7 @@ quickscale_core/generator/templates/
     ├── showcase_html/         # Pure HTML + CSS (secondary)
     │   ├── templates/
     │   └── static/
-    ├── showcase_htmx/         # HTMX + Alpine.js (planned v0.78.0+)
+    ├── showcase_htmx/         # HTMX + Alpine.js placeholder (planned post-MVP, target v0.82.0+)
     │   ├── templates/
     │   ├── static/
     │   └── package.json
@@ -754,7 +756,7 @@ Other documents (README.md, roadmap.md, scaffolding.md, commercial.md) MUST refe
 | Comprehensive README with setup instructions | IN | README.md.j2 with Docker setup, local dev, testing, deployment instructions. |
 | **MODULES & DISTRIBUTION** |
 | `quickscale_modules/` (split branch distribution) | IN (v0.62.0+) | Modules distributed via git subtree split branches. Embed via `quickscale plan --add <name>` + `quickscale apply`. |
-| Themes (HTML, HTMX, React) | IN (v0.61.0+) | Generator templates, one-time copy during apply. User owns generated code, no updates. |
+| Themes (HTML, React; HTMX planned) | IN (v0.61.0+) | `showcase_html` and `showcase_react` ship as generator templates with one-time copy during apply. `showcase_htmx` remains a post-MVP placeholder currently targeted for v0.82.0+. |
 | `quickscale_themes/` packaged themes | OUT (Post-MVP) | Themes as PyPI packages is Post-MVP. Current: generator templates only. |
 | YAML declarative configuration (`quickscale.yml`) | IN (v0.68.0+) | **v0.68.0**: Shipped as part of Plan/Apply system. `quickscale plan` creates `quickscale.yml`, `quickscale apply` executes it. Terraform-style workflow. See [§Plan/Apply Architecture](#planapply-architecture). |
 | State tracking (`.quickscale/state.yml`) | IN (v0.69.0+) | **v0.69.0**: Applied state tracking for incremental applies. Distinguishes desired state (`quickscale.yml`) from applied state (`.quickscale/state.yml`). |
@@ -876,7 +878,7 @@ Other documents (README.md, roadmap.md, scaffolding.md, commercial.md) MUST refe
 
 **Distribution**: Split branch pattern (`splits/simple-blog`), added via `quickscale plan` and `quickscale apply`
 
-**Theme Support**: showcase_html (v0.66.0), showcase_htmx (v0.70.0), showcase_react (v0.71.0)
+**Theme Support**: showcase_html (v0.66.0), showcase_react (v0.71.0), showcase_htmx planned post-MVP (target v0.82.0+)
 
 ---
 
@@ -1006,10 +1008,10 @@ class OrderProcessor:
 ### Configuration (Post-MVP)
 
 **MVP:**
-- ✅ Standard Django `settings.py` (no YAML)
-- ✅ No configuration files
-- ✅ Standalone projects
-- ❌ NO declarative configuration
+- ✅ Standard Django `settings.py` generated from `quickscale.yml`
+- ✅ Declarative desired state in `quickscale.yml`
+- ✅ Applied state tracking in `.quickscale/state.yml`
+- ✅ Standalone generated projects after `quickscale apply`
 
 **Post-MVP (Illustrative - NOT Implemented):**
 ```yaml
@@ -1111,7 +1113,7 @@ INSTALLED_APPS = [
 **Post-MVP Only:**
 - ❌ PEP 420 namespace packages (Post-MVP: independent module distribution)
 - ❌ Hook/event system (deferred to Post-MVP)
-- ❌ YAML configuration (deferred to Post-MVP)
+- ❌ Advanced configuration layers beyond the shipped `quickscale.yml` + `.quickscale/state.yml` workflow (deferred to Post-MVP)
 
 ## Prohibitions (Critical - DO NOT)
 

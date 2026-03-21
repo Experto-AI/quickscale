@@ -3,11 +3,11 @@
 <!--
 release_implementation_template.md - Standard Release Implementation Documentation Template
 
-PURPOSE: Provides a consistent structure for documenting QuickScale release implementations in docs/releases/
+PURPOSE: Provides a consistent structure for documenting archived QuickScale release implementations in docs/releases-archive/
 
-USAGE: Copy this template when creating a new release implementation document. Fill in all sections
-       with release-specific details. Save as release-v[VERSION]-implementation.md in docs/releases/.
-       See examples in docs/releases/ for reference.
+USAGE: Copy this template when creating a detailed release implementation document. Fill in all sections
+       with release-specific details. Save as release-v[VERSION]-implementation.md in docs/releases-archive/.
+       Reader-facing summaries, when published, belong in docs/releases/ as release-v[VERSION].md.
 
 TARGET AUDIENCE: Maintainers, contributors, users reviewing release history
 -->
@@ -16,7 +16,7 @@ TARGET AUDIENCE: Maintainers, contributors, users reviewing release history
 
 This document provides the standard template for QuickScale release implementation documentation. All release implementation notes should follow this structure to ensure consistency, completeness, and traceability.
 
-**Companion document**: After implementation is complete, a release review document (`release-v[VERSION]-review.md`) should be created using the [release review template](./release_review_template.md) to document quality assessment and approval status.
+**Companion document**: After implementation is complete, a release review document (`release-v[VERSION]-review.md`) may be created in `docs/releases-archive/` using the [release review template](./release_review_template.md) to document quality assessment and approval status.
 
 ## Template Structure
 
@@ -137,7 +137,8 @@ command to validate feature 3
 - [ ] All tests passing
 - [ ] Code quality checks passing (ruff format, ruff check)
 - [ ] Documentation updated
-- [ ] Release notes committed to docs/releases/
+- [ ] Archived implementation notes committed to docs/releases-archive/
+- [ ] Reader-facing summary added to docs/releases/ when applicable
 - [ ] Roadmap updated with completion status
 - [ ] Version numbers consistent across packages
 - [ ] Validation commands tested
@@ -192,12 +193,11 @@ Create a release document for:
 
 ### Version Numbering Convention
 
-QuickScale follows semantic versioning with special meaning during MVP:
+QuickScale follows semantic versioning with phase-aligned milestones:
 
-- **0.5X.X**: Foundation phase (project structure, tooling)
-- **0.5X.Y**: Incremental tasks within a release (Y = task number)
-- **0.57.0**: MVP completion (production-ready personal toolkit)
-- **0.5X.0**: Post-MVP features (module extraction, marketplace)
+- **0.52.0-0.55.x**: Foundation phase (project structure, tooling)
+- **0.56.0-0.77.x**: MVP releases (production-focused personal toolkit)
+- **0.78.0+**: Post-MVP expansion (ecosystem and marketplace work)
 - **1.0.0+**: Community Platform (PyPI distribution, marketplace)
 - **X.0.0**: Major architectural changes
 
@@ -219,7 +219,10 @@ Release implementation documents should be named:
 Release review documents should be named:
 - `release-vX.XX.X-review.md` for quality reviews
 
-Store in: `docs/releases/`
+Store in: `docs/releases-archive/`
+
+Optional reader-facing summary:
+- `docs/releases/release-vX.XX.X.md`
 
 **Naming rationale**: The `-implementation` suffix distinguishes implementation documentation (what was built, how it works, test results) from review documentation (quality assessment, compliance checks, approval status).
 
@@ -227,7 +230,7 @@ Store in: `docs/releases/`
 
 - **Update roadmap** after completing release
 - **Link from README** for major releases
-- **Archive old releases** if they become obsolete (move to docs/releases/archive/)
+- **Keep archive artifacts in `docs/releases-archive/`** and publish concise summaries in `docs/releases/` only when needed
 - **Keep template current** - update this template when patterns evolve
 
 ---
@@ -236,5 +239,6 @@ Store in: `docs/releases/`
 - [Roadmap](./roadmap.md) - Track task implementation progress
 - [Technical Decisions](./decisions.md) - Architectural decisions and rules
 - [Scaffolding](./scaffolding.md) - Project structure patterns
-- [Release Directory](../releases/) - All release documentation
+- [Release Summaries](../releases/) - Reader-facing release notes when published
+- [Release Archive](../releases-archive/) - Detailed implementation and review artifacts
 - [Release Review Template](./release_review_template.md) - Template for quality review documentation

@@ -207,14 +207,16 @@ QuickScale supports multiple frontend themes. Choose your theme during the `plan
 ```bash
 # Create configuration interactively
 quickscale plan myapp
-# → Select theme during wizard (showcase_html, showcase_htmx, showcase_react)
+# → Select theme during wizard (showcase_html, showcase_react)
 # → Generates quickscale.yml
 ```
 
 **Available themes**:
 - `showcase_html` - Pure HTML + CSS
-- `showcase_htmx` - HTMX + Alpine.js
 - `showcase_react` - React + TypeScript SPA (default)
+
+**Planned theme**:
+- `showcase_htmx` - HTMX + Alpine.js (planned post-MVP, currently targeted for v0.82.0+)
 
 **Important**: Theme selection is one-time during project generation. Generated code is yours to own and customize - no updates or tracking after initialization.
 
@@ -345,19 +347,20 @@ quickscale plan myapp --overwrite
 ```
 
 The wizard guides you through:
-1. **Theme selection**: Choose from available themes (showcase_html, showcase_htmx, showcase_react)
-2. **Module selection**: Select optional modules to include (blog, listings, billing, teams)
+1. **Theme selection**: Choose from available themes (showcase_html, showcase_react)
+2. **Module selection**: Select optional modules to include (auth, blog, listings, storage)
 3. **Docker configuration**: Configure Docker build/start options and optional first-start superuser creation
 
 **Generated `quickscale.yml` example**:
 ```yaml
-version: 0.76.0
+version: "1"
 project:
-  name: myapp
+  slug: myapp
+  package: myapp
   theme: showcase_html
 modules:
-  - name: blog
-  - name: listings
+  blog: {}
+  listings: {}
 docker:
   build: true
   start: true

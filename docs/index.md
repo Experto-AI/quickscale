@@ -35,8 +35,9 @@
 - **Deployment**
   - [Railway Deployment](deployment/railway.md) - Deploy to Railway platform
 
-- **Release Archive**
-  - [Release Archive (v0.52-v0.72)](technical/release-archive.md) - Historical release notes
+- **Releases**
+  - [Release Summaries](releases/) - Reader-facing summaries for recent releases when published
+  - [Release Archive & Legacy Notes](technical/release-archive.md) - Historical implementation/review index plus notes about legacy release files outside the current summary/archive split
 
 ---
 
