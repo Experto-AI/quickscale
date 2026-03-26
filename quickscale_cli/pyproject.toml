@@ -49,10 +49,6 @@ python_functions = ["test_*"]
 addopts = [
     "--strict-markers",
     "--strict-config",
-    "--cov=quickscale_cli",
-    "--cov-report=term-missing",
-    "--cov-report=html",
-    "--cov-fail-under=90",
     "-m", "not e2e",  # Skip E2E tests by default (run with: pytest -m e2e)
 ]
 markers = [

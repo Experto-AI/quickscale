@@ -172,7 +172,7 @@ test:
 	fi; \
 	if [ -n "$(filter cli,$(ACTIVE_SECTIONS))" ]; then \
 		echo "📦 Testing quickscale_cli..."; \
-		$(PYTHON) -m pytest quickscale_cli/tests -v --tb=short -m "not e2e"; \
+		$(PYTHON) -m pytest quickscale_cli/tests -v --tb=short -m "not e2e" --cov=quickscale_cli --cov-report=term-missing --cov-report=html --cov-fail-under=90; \
 	fi; \
 	if [ -n "$(filter modules,$(ACTIVE_SECTIONS))" ]; then \
 		if [ -n "$(MODULE)" ] && [ ! -d "quickscale_modules/$(MODULE)" ]; then \
@@ -205,7 +205,7 @@ test-unit:
 	fi; \
 	if [ -n "$(filter cli,$(ACTIVE_SECTIONS))" ]; then \
 		echo "📦 Unit testing quickscale_cli..."; \
-		$(PYTHON) -m pytest quickscale_cli/tests -v --tb=short -m "not integration and not e2e"; \
+		$(PYTHON) -m pytest quickscale_cli/tests -v --tb=short -m "not integration and not e2e" --cov=quickscale_cli --cov-report=term-missing --cov-report=html --cov-fail-under=90; \
 	fi; \
 	if [ -n "$(filter modules,$(ACTIVE_SECTIONS))" ]; then \
 		if [ -n "$(MODULE)" ] && [ ! -d "quickscale_modules/$(MODULE)" ]; then \
