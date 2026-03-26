@@ -57,7 +57,7 @@ make check
 
 ## Deferred Follow-up
 
-The following items were intentionally deferred to [v0.85.0](../technical/roadmap.md#v0850-module-workflow-validation--real-world-testing):
+The following items were intentionally deferred to [v0.86.0](../technical/roadmap.md#v0860-module-workflow-validation--real-world-testing):
 - deeper storage upload/write/read integration coverage
 - Plan → Apply → Blog publish E2E validation with CDN-backed media URLs
 - broader workflow validation in real generated-project scaffolds
