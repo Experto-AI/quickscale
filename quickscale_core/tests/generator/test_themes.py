@@ -38,13 +38,10 @@ class TestThemeValidation:
         theme_dir = generator.template_dir / "themes" / "showcase_html"
         assert theme_dir.exists()
 
-    def test_htmx_theme_placeholder_exists(self):
-        """showcase_htmx should have placeholder directory"""
-        generator = ProjectGenerator(theme="showcase_html")
-        theme_dir = generator.template_dir / "themes" / "showcase_htmx"
-        assert theme_dir.exists()
-        readme = theme_dir / "README.md"
-        assert readme.exists()
+    def test_htmx_theme_is_not_supported(self):
+        """showcase_htmx should be rejected as an unsupported theme."""
+        with pytest.raises(ValueError, match="showcase_htmx"):
+            ProjectGenerator(theme="showcase_htmx")
 
     def test_react_theme_placeholder_exists(self):
         """showcase_react should have placeholder directory"""

@@ -333,11 +333,11 @@ docker:
             assert "auth" in result.output
 
 
-class TestApplyUnimplementedThemes:
-    """Tests for handling unimplemented themes"""
+class TestApplyThemeHandling:
+    """Tests for supported theme handling"""
 
-    def test_apply_showcase_htmx_not_implemented(self):
-        """Test that showcase_htmx theme shows not implemented error"""
+    def test_apply_removed_theme_fails_validation(self):
+        """Removed HTMX theme should fail during config validation."""
         runner = CliRunner()
         with runner.isolated_filesystem():
             with open("quickscale.yml", "w") as f:
@@ -356,11 +356,11 @@ docker:
             result = runner.invoke(
                 apply,
                 ["quickscale.yml", "--no-modules", "--no-docker"],
-                input="y\n",
             )
 
-            # Should fail with not implemented error
-            assert result.exit_code != 0 or "not yet implemented" in result.output
+            assert result.exit_code != 0
+            assert "Configuration error" in result.output
+            assert "Unknown theme 'showcase_htmx'" in result.output
 
     def test_apply_showcase_react_generates_frontend(self):
         """Test that showcase_react theme generates frontend directory"""

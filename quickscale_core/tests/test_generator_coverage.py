@@ -22,16 +22,14 @@ class TestProjectGeneratorThemeValidation:
         with pytest.raises(ValueError, match="Theme directory not found"):
             ProjectGenerator(template_dir=template_dir, theme="showcase_html")
 
-    def test_init_raises_value_error_for_htmx_theme_missing_dir(
-        self, tmp_path: Path
-    ) -> None:
-        """ValueError raised for showcase_htmx when theme directory absent."""
+    def test_init_rejects_removed_htmx_theme(self, tmp_path: Path) -> None:
+        """ValueError raised for removed showcase_htmx theme."""
         template_dir = tmp_path / "mytemplates"
         template_dir.mkdir()
-        # Create a different theme dir, but not htmx
+        # Create a supported theme dir so validation fails on the theme value itself.
         (template_dir / "themes" / "showcase_html").mkdir(parents=True)
 
-        with pytest.raises(ValueError, match="showcase_htmx"):
+        with pytest.raises(ValueError, match="Invalid theme 'showcase_htmx'"):
             ProjectGenerator(template_dir=template_dir, theme="showcase_htmx")
 
 

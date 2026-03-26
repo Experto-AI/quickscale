@@ -31,7 +31,6 @@ The v0.64.0 theme rename implementation successfully delivers the core functiona
 
 ✅ **Task Group 1: Filesystem Rename**:
 - Rename template directory: `starter_html/` → `showcase_html/` ✅
-- Rename template directory: `starter_htmx/` → `showcase_htmx/` ✅
 - Rename template directory: `starter_react/` → `showcase_react/` ✅
 - Verify all subdirectories and files moved correctly ✅
 
@@ -87,7 +86,7 @@ All code changes are explicitly listed in the roadmap task v0.64.0.
 
 All documented issues from the earlier review have been addressed:
 
-- README.md: updated to use `showcase_html`, `showcase_htmx`, `showcase_react`
+- README.md: updated to use `showcase_html` and `showcase_react`
 - docs/technical/decisions.md: updated forward-facing sections to `showcase_*` naming
 - docs/technical/scaffolding.md: directory examples and examples updated to `showcase_*`
 

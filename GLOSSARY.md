@@ -192,7 +192,6 @@ quickscale/
 **Available Themes**:
 - `showcase_react` - React + TypeScript + Vite + shadcn/ui (default, v0.74.0+)
 - `showcase_html` - Pure HTML + CSS (secondary starter option)
-- `showcase_htmx` - HTMX + Alpine.js (planned post-MVP, currently targeted for v0.82.0+)
 
 **Characteristics**:
 - Minimal code (ready for customization)
@@ -242,7 +241,7 @@ quickscale/
 **Definition**: Complete frontend scaffolding for generated projects, ranging from minimal starters to full vertical applications. Unlike modules, themes are one-time generation (not updated after creation).
 
 **Categories**:
-1. **Showcase Themes** - Minimal foundations (HTML, HTMX, React)
+1. **Showcase Themes** - Minimal foundations (React default, HTML secondary option)
 2. **Vertical Themes** - Complete industry apps (real estate, SaaS)
 
 **Distribution**: Generator templates (one-time copy)

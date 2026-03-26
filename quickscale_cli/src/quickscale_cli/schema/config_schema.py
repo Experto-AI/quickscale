@@ -78,7 +78,7 @@ class QuickScaleConfig:
 VALID_TOP_LEVEL_KEYS = {"version", "project", "modules", "docker"}
 VALID_PROJECT_KEYS = {"slug", "package", "theme"}
 VALID_DOCKER_KEYS = {"start", "build", "create_superuser"}
-VALID_THEMES = {"showcase_html", "showcase_htmx", "showcase_react"}
+VALID_THEMES = {"showcase_html", "showcase_react"}
 AVAILABLE_MODULES = set(get_module_names(include_experimental=True))
 
 

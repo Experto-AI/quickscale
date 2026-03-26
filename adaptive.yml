@@ -13,4 +13,5 @@ domains:
 precedence_order:
   - global
   - local
+readiness_state: configured
 max_depth: 4

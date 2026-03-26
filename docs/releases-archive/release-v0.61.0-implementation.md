@@ -8,7 +8,7 @@
 
 ## Summary
 
-Release v0.61.0 establishes the theme system foundation for QuickScale, implementing the `--theme` CLI flag and refactoring existing templates into a theme directory structure. This release ships with the production-ready `starter_html` theme and establishes the architectural foundation for future HTMX (v0.67.0) and React (v0.68.0) themes.
+Release v0.61.0 establishes the theme system foundation for QuickScale, implementing the `--theme` CLI flag and refactoring existing templates into a theme directory structure. This release ships with the production-ready `starter_html` theme and establishes the architectural foundation for future React and HTML-fallback variants.
 
 **Key Achievement**: 100% backward compatibility maintained - existing users experience zero breaking changes, while new users gain explicit theme selection capability.
 
@@ -27,9 +27,6 @@ quickscale init myapp
 # Explicit HTML theme
 quickscale init myapp --theme starter_html
 
-# Future HTMX theme (v0.67.0)
-quickscale init myapp --theme starter_htmx
-
 # Future React theme (v0.68.0)
 quickscale init myapp --theme starter_react
 ```
@@ -37,7 +34,7 @@ quickscale init myapp --theme starter_react
 **User Experience**:
 - ✅ Default behavior unchanged (`starter_html` implicit)
 - ✅ Helpful error messages for unimplemented themes
-- ✅ Clear roadmap visibility for future themes
+- ✅ Clear roadmap visibility for future variants
 - ✅ Click.Choice validation with case-insensitive matching
 
 **Validation**:
@@ -49,11 +46,10 @@ Usage: quickscale init [OPTIONS] PROJECT_NAME
 
   Choose from available themes:
   - starter_html: Pure HTML + CSS (default, production-ready)
-  - starter_htmx: HTMX + Alpine.js (coming in v0.67.0)
   - starter_react: React + TypeScript SPA (coming in v0.68.0)
 
 Options:
-  --theme [starter_html|starter_htmx|starter_react]
+  --theme [starter_html|starter_react]
                                   Theme to use for the project (default:
                                   starter_html)
   --help                          Show this message and exit.
@@ -61,11 +57,10 @@ Options:
 
 **Error Handling**:
 ```bash
-$ poetry run quickscale init myapp --theme starter_htmx
-❌ Error: Theme 'starter_htmx' is not yet implemented
+$ poetry run quickscale init myapp --theme starter_react
+❌ Error: Theme 'starter_react' is not yet implemented
 
-💡 The 'starter_htmx' theme is planned for a future release:
-   - starter_htmx: Coming in v0.67.0
+💡 The 'starter_react' theme is planned for a future release:
    - starter_react: Coming in v0.68.0
 
 📖 For now, use the default 'starter_html' theme
@@ -90,8 +85,6 @@ themes/
 │   └── static/
 │       └── css/
 │           └── styles.css.j2
-├── starter_htmx/          # Placeholder (v0.67.0)
-│   └── README.md
 └── starter_react/         # Placeholder (v0.68.0)
     └── README.md
 ```
@@ -135,8 +128,6 @@ templates/
 │   │   └── static/           # Moved from root
 │   │       └── css/
 │   │           └── styles.css.j2
-│   ├── starter_htmx/          # Placeholder for v0.67.0
-│   │   └── README.md
 │   └── starter_react/         # Placeholder for v0.68.0
 │       └── README.md
 ├── manage.py.j2               # Unchanged (backend)
@@ -163,7 +154,6 @@ templates/
 **CLI Theme Tests** (7 tests, 100% passing):
 - ✅ Default theme (implicit starter_html)
 - ✅ Explicit HTML theme selection
-- ✅ HTMX theme error handling
 - ✅ React theme error handling
 - ✅ Invalid theme validation
 - ✅ Theme parameter passing to generator
@@ -216,9 +206,9 @@ quickscale_cli coverage: 85%
 - [x] Tests for theme system (test_themes.py - 15 tests passing)
 
 ### Phase 3: Template Migration ✅
-- [x] Create new directory structure (themes/starter_html/, themes/starter_htmx/, themes/starter_react/)
+- [x] Create new directory structure (themes/starter_html/, themes/starter_react/, reserved placeholder theme directory)
 - [x] Move frontend templates to themes/starter_html/ (base.html.j2, index.html.j2, static/)
-- [x] Create placeholder directories for future themes (README.md in htmx/react)
+- [x] Create placeholder directories for future themes (README.md in reserved theme directories)
 - [x] Backend templates remain in root for backward compatibility (architectural decision)
 
 ### Phase 4: Integration Testing ✅
@@ -260,7 +250,7 @@ poetry run quickscale init test_html --theme starter_html
 poetry run quickscale init test_default  # Should use starter_html
 
 # Test error handling
-poetry run quickscale init test_htmx --theme starter_htmx  # Should show helpful error
+poetry run quickscale init test_react --theme starter_react  # Should show helpful error
 ```
 
 ### Full Test Suite
@@ -303,7 +293,6 @@ docker-compose exec web python manage.py createsuperuser
 
 ### Scope Discipline ✅
 - ✅ All code changes explicitly listed in roadmap v0.61.0
-- ✅ No HTMX theme implementation (deferred to v0.67.0)
 - ✅ No React theme implementation (deferred to v0.68.0)
 - ✅ No module embed/update commands (deferred to v0.62.0)
 - ✅ Documentation tasks completed (Phases 5-6)
@@ -342,7 +331,7 @@ With v0.61.0 complete, the theme infrastructure is ready for:
 3. **v0.64.0 - Email Verification**: Production email flows (HTML theme)
 4. **v0.65.0 - Billing Module**: dj-stripe subscriptions (HTML theme)
 5. **v0.66.0 - Teams Module**: Multi-tenancy patterns (HTML theme)
-6. **v0.67.0 - HTMX Theme**: Port auth/billing/teams to HTMX + Alpine.js
+6. **v0.67.0+ - HTML Fallback Refinements**: Continue improving the server-rendered experience
 7. **v0.68.0 - React Theme**: Port auth/billing/teams to React + TypeScript SPA
 
 See [roadmap.md](../technical/roadmap.md) for complete timeline and task details.

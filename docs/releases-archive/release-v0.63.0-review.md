@@ -115,7 +115,7 @@ All changes are explicitly listed in the roadmap task v0.63.0:
 - ❌ No email verification workflows (correctly deferred to v0.64.0)
 - ❌ No showcase landing page integration (correctly deferred to v0.64.0)
 - ❌ No social authentication providers (Post-MVP)
-- ❌ No HTMX/React themes (correctly deferred to v0.67.0/v0.68.0)
+- ❌ No additional theme variants beyond the current HTML experience (correctly deferred at the time)
 
 ---
 
@@ -738,7 +738,7 @@ These are NOT issues with current implementation, but planned future enhancement
 
 1. **Email Verification Workflows** - Add email verification templates and flows (v0.64.0)
 2. **Social Authentication** - Add Google/GitHub/Facebook providers (Post-MVP)
-3. **HTMX Theme Variant** - Port templates to HTMX + Alpine.js (v0.67.0)
+3. **HTML Fallback Polish** - Continue refining the lightweight server-rendered theme
 4. **React Theme Variant** - Port templates to React + TypeScript SPA (v0.68.0)
 5. **Adapter Coverage** - Add tests for save_user() method once custom logic is implemented (current placeholder is intentionally not tested)
 

@@ -80,7 +80,7 @@ Available modules in navigation:
 
 - **Email verification workflows**: Stronger production email flows may continue to evolve
 - **Social providers**: Google, GitHub, and similar integrations remain future-facing
-- **Additional theme variants**: HTMX and React-specific auth experiences may expand over time
+- **Additional theme variants**: HTML and React-specific auth experiences may expand over time
 
 ## Installation
 

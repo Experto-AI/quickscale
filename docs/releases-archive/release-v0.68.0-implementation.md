@@ -18,7 +18,7 @@ quickscale plan myapp
 ```
 
 Features:
-- Theme selection (showcase_html, showcase_htmx, showcase_react)
+- Theme selection (showcase_html, showcase_react)
 - Module selection (blog, listings, billing, teams)
 - Docker configuration (build and start options)
 - YAML preview before saving

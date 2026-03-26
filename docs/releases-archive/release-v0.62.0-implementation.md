@@ -288,7 +288,7 @@ jobs:
 - Custom User model patterns
 - Account management views
 - Email verification workflows
-- Theme support (HTML, HTMX, React)
+- Theme support (HTML, React)
 
 #### Billing Module
 **Location**: `quickscale_modules/billing/README.md`
@@ -301,7 +301,7 @@ jobs:
 - Webhook handling with logging
 - Invoice management
 - Payment method management
-- Theme support (HTML, HTMX, React)
+- Theme support (HTML, React)
 
 #### Teams Module
 **Location**: `quickscale_modules/teams/README.md`
@@ -314,7 +314,7 @@ jobs:
 - Invitation system with secure tokens
 - Row-level security query filters
 - Team management UI
-- Theme support (HTML, HTMX, React)
+- Theme support (HTML, React)
 
 ---
 

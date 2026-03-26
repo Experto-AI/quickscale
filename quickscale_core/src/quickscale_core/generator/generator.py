@@ -36,7 +36,7 @@ class ProjectGenerator:
         self.theme = theme
 
         # Validate theme
-        available_themes = ["showcase_html", "showcase_htmx", "showcase_react"]
+        available_themes = ["showcase_html", "showcase_react"]
         if theme not in available_themes:
             raise ValueError(
                 f"Invalid theme '{theme}'. Available themes: {', '.join(available_themes)}"
@@ -285,12 +285,12 @@ class ProjectGenerator:
             ("tests/test_example.py.j2", "tests/test_example.py", False),
         ]
 
-        # Theme-specific files: HTML/HTMX themes use Django templates, React uses frontend/
+        # Theme-specific files: HTML uses Django templates, React uses frontend/
         if self.theme == "showcase_react":
             # React theme: copy entire frontend directory
             self._generate_react_frontend(output_path, context)
         else:
-            # HTML/HTMX themes: use Django templates and static files
+            # HTML secondary theme: use Django templates and static files
             file_mappings.extend(
                 [
                     (

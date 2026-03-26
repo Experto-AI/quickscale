@@ -231,7 +231,7 @@ quickscale embed --module auth
 
 - ❌ Email verification deferred to v0.64.0
 - ❌ Social authentication providers (Google, GitHub, Facebook) - Post-MVP
-- ❌ HTMX/React themes deferred to v0.67.0/v0.68.0
+- ❌ Additional theme variants deferred beyond the initial HTML support
 - ⚠️  8 view tests require middleware configuration fixes (code coverage is 94%, failing due to test setup)
 
 ## Next Steps
@@ -243,7 +243,7 @@ quickscale embed --module auth
 
 ### Future Enhancements
 - Social authentication providers (v0.65.0+)
-- HTMX theme variant (v0.67.0)
+- HTML fallback polish (future)
 - React theme variant (v0.68.0)
 - Advanced permissions (teams module, v0.66.0)
 

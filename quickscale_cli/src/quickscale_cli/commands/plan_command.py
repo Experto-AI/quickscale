@@ -28,7 +28,6 @@ from quickscale_core.utils.file_utils import validate_project_name
 AVAILABLE_THEMES = [
     ("showcase_react", "React + TypeScript + shadcn/ui (default, production-ready)"),
     ("showcase_html", "Pure HTML + CSS (simpler alternative)"),
-    ("showcase_htmx", "HTMX + Alpine.js (coming in v0.78.0)"),
 ]
 
 
@@ -55,25 +54,11 @@ def _get_theme_by_name(name: str) -> str | None:
     return None
 
 
-def _confirm_unimplemented_theme(theme_id: str) -> bool:
-    """Confirm use of unimplemented theme"""
-    if theme_id in ("showcase_html", "showcase_react"):
-        return True
-
-    click.secho(
-        f"\n⚠️  Theme '{theme_id}' is not yet implemented. "
-        "It will be available in a future release (v0.78.0).",
-        fg="yellow",
-    )
-    return click.confirm("Use this theme anyway?", default=False)
-
-
 def _select_theme() -> str:
     """Interactive theme selection"""
     click.echo("\n🎨 Select a theme for your project:")
     for i, (tid, description) in enumerate(AVAILABLE_THEMES, start=1):
-        status = " ⚠️  not yet implemented" if tid == "showcase_htmx" else ""
-        click.echo(f"  {i}. {tid} - {description}{status}")
+        click.echo(f"  {i}. {tid} - {description}")
 
     while True:
         choice = click.prompt(
@@ -89,7 +74,7 @@ def _select_theme() -> str:
         else:
             theme_id = _get_theme_by_name(choice)
 
-        if theme_id is not None and _confirm_unimplemented_theme(theme_id):
+        if theme_id is not None:
             return theme_id
 
         if theme_id is None:
@@ -958,7 +943,7 @@ def plan(
 
     \b
     New project wizard:
-      - Theme selection (showcase_html, showcase_htmx, showcase_react)
+    - Theme selection (showcase_html, showcase_react)
       - Module selection (auth, blog, listings, etc.)
             - Docker configuration (start, build, create superuser)
 

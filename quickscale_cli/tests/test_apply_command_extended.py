@@ -99,15 +99,18 @@ class TestGenerateProject:
         """Test successful project generation"""
         mock_config = Mock()
         mock_config.project.slug = "myapp"
+        mock_config.project.package = "myapp"
         mock_config.project.theme = "showcase_html"
         result = _generate_project(mock_config, Path("/tmp/myapp"))
         assert result is True
 
     @patch("quickscale_cli.commands.apply_command.ProjectGenerator")
-    def test_showcase_htmx_not_implemented(self, mock_gen_cls):
-        """Test showcase_htmx theme is rejected"""
+    def test_removed_theme_value_error_is_handled(self, mock_gen_cls):
+        """Unsupported themes should be surfaced as invalid configuration."""
+        mock_gen_cls.side_effect = ValueError("Invalid theme 'showcase_htmx'")
         mock_config = Mock()
         mock_config.project.slug = "myapp"
+        mock_config.project.package = "myapp"
         mock_config.project.theme = "showcase_htmx"
         result = _generate_project(mock_config, Path("/tmp/myapp"))
         assert result is False
@@ -118,6 +121,7 @@ class TestGenerateProject:
         mock_gen_cls.return_value.generate.side_effect = FileExistsError()
         mock_config = Mock()
         mock_config.project.slug = "myapp"
+        mock_config.project.package = "myapp"
         mock_config.project.theme = "showcase_html"
         result = _generate_project(mock_config, Path("/tmp/myapp"))
         assert result is False
@@ -128,6 +132,7 @@ class TestGenerateProject:
         mock_gen_cls.return_value.generate.side_effect = ValueError("bad config")
         mock_config = Mock()
         mock_config.project.slug = "myapp"
+        mock_config.project.package = "myapp"
         mock_config.project.theme = "showcase_html"
         result = _generate_project(mock_config, Path("/tmp/myapp"))
         assert result is False
@@ -138,6 +143,7 @@ class TestGenerateProject:
         mock_gen_cls.return_value.generate.side_effect = RuntimeError("oops")
         mock_config = Mock()
         mock_config.project.slug = "myapp"
+        mock_config.project.package = "myapp"
         mock_config.project.theme = "showcase_html"
         result = _generate_project(mock_config, Path("/tmp/myapp"))
         assert result is False

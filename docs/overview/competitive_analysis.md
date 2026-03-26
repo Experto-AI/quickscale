@@ -48,7 +48,7 @@ QuickScale is positioned as the **only composable Django SaaS framework** design
 | **Team Management** | Post-MVP | ✅ Built-in | ❌ Manual | ✅ Included | ✅ Included |
 | | | | | | |
 | **FRONTEND & UI** |
-| **Frontend Options** | Directory-based, any framework | HTMX, React, Vue | Any (manual setup) | React + TypeScript | React |
+| **Frontend Options** | Directory-based, any framework | Server-rendered, React, Vue | Any (manual setup) | React + TypeScript | React |
 | **Admin Interface** | Django admin (enhanced Post-MVP via admin module) | Wagtail CMS + Django admin | Django admin | Django admin | Django admin |
 | **UI Components** | Post-MVP | ✅ Tailwind, Bootstrap | ⚠️ Basic setup | ✅ Modern UI | ✅ Included |
 | **CMS Integration** | Not planned | ✅ Wagtail CMS | ❌ Manual | ❌ No | ❌ No |
@@ -107,7 +107,7 @@ QuickScale is positioned as the **only composable Django SaaS framework** design
 **Unique Advantages**:
 - ✅ Most comprehensive feature set out-of-the-box
 - ✅ Production-ready immediately after setup
-- ✅ Multiple frontend framework choices (HTMX, React, Vue)
+- ✅ Multiple frontend framework choices (server-rendered, React, Vue)
 - ✅ Wagtail CMS integration included
 - ✅ Active development and regular updates
 - ✅ Premium support and documentation
@@ -436,16 +436,16 @@ These features are essential for competing with Pegasus and Ready SaaS in the Sa
 These features enhance competitiveness but aren't blocking for initial adoption.
 
 #### 7. Multiple Frontend Framework Options
-**Learn from**: SaaS Pegasus (HTMX, React, Vue options)
+**Learn from**: SaaS Pegasus (server-rendered, React, Vue options)
 **Priority**: P2 - Valuable flexibility
 
 **Should incorporate:**
-- ✅ **HTMX variant** - Low-JS, server-rendered (Django developers love this, trending)
-- ✅ **React variant** - For SPA requirements and modern dev teams
+- ✅ **React variant** - Default frontend for SPA requirements and modern dev teams
+- ✅ **HTML secondary option** - Low-JS, server-rendered option for teams that do not want a React-heavy stack
 - ⚠️ **NOT Vue** initially - Don't spread too thin (focus > breadth)
 - ✅ **Frontend variant switching** - Easy to change frontend tech without backend changes
 
-**Rationale**: Pegasus's multiple frontend options are popular. HTMX is particularly attractive to Django developers who prefer server-side rendering.
+**Rationale**: Pegasus's multiple frontend options are popular. A lightweight server-rendered secondary option remains attractive to Django developers who prefer simpler rendering patterns.
 
 **QuickScale advantage**: Directory-based frontends already provide this flexibility. Just need to scaffold quality starter templates.
 
@@ -630,8 +630,8 @@ quickscale_modules/
 1. ✅ **Advanced CI/CD** - Deployment pipelines, automated rollbacks, staging environments
 2. ✅ **Celery + Redis** - Background task infrastructure with monitoring
 3. ✅ **Email infrastructure** - django-anymail + professional template library
-4. ✅ **HTMX frontend variant** - Modern, low-JS option for Django developers
-5. ✅ **React frontend variant** - SPA option with TypeScript
+4. ✅ **React frontend variant** - Default SPA option with TypeScript
+5. ✅ **HTML secondary frontend variant** - Modern, low-JS option for Django developers
 6. ✅ **Monitoring scaffolding** - Sentry, DataDog, or similar integration points
 7. ✅ **Documentation site** - Comprehensive docs with search and examples
 
@@ -854,8 +854,8 @@ This section identifies additional Django SaaS boilerplates not previously analy
 | | | | | | | | | |
 | **ARCHITECTURE & TECH STACK** |
 | **Backend** | Django | Django | Django | Django | Django | Django 5.0 | Django 4.2.4 + DRF | Django 3.2-5.2 |
-| **Frontend Options** | Directory-based, any framework | Hotwire (Turbo/Stimulus) OR React | Bootstrap | React + Astro (marketing) | React (InertiaJS) | **HTMX** + Alpine.js | React 18 + TypeScript | Django/Jinja2 templates |
-| **Frontend Philosophy** | Framework-agnostic | HTML-over-JSON (minimal JS) | Traditional | Separate marketing/app | Modern SPA | **No-framework (HTMX)** | SPA (React) | Template-based |
+| **Frontend Options** | Directory-based, any framework | Hotwire (Turbo/Stimulus) OR React | Bootstrap | React + Astro (marketing) | React (InertiaJS) | Server-rendered + Alpine.js | React 18 + TypeScript | Django/Jinja2 templates |
+| **Frontend Philosophy** | Framework-agnostic | HTML-over-JSON (minimal JS) | Traditional | Separate marketing/app | Modern SPA | No-framework server-rendered | SPA (React) | Template-based |
 | **UI Framework** | Post-MVP | Tailwind CSS + TypeScript | Bootstrap | Tailwind + DaisyUI (32+ themes) | React + InertiaJS | Tailwind CSS | React 18 | N/A (billing logic only) |
 | **CMS Integration** | Not planned | ✅ **Wagtail CMS** | ❌ No | ❌ No | ❌ No | ❌ No | ❌ No | ❌ No |
 | **Build Tools** | Standard Django | **Vite, SWC** | Standard | Docker | CLI tools | Standard | Standard | N/A |
@@ -885,8 +885,8 @@ This section identifies additional Django SaaS boilerplates not previously analy
 | **Production Ready** | Post-MVP | ✅ Yes | ✅ Yes | ✅ Yes | ✅ Yes | ✅ Yes | ✅ Yes | ✅ Yes |
 | | | | | | | | | |
 | **UNIQUE SELLING POINTS** |
-| **Key Differentiator** | Shared updates + composable modules | HTML-over-JSON + Wagtail | Hybrid open/commercial model | **Performance-focused** (99/100) | **AI-ready** out-of-box | **Modern HTMX** stack | Data monetization focus | **Library approach** (not boilerplate) |
-| **Target Audience** | Agencies building multiple clients | Full-stack developers | SaaS builders | Performance-conscious devs | AI product builders | Django + HTMX developers | Data-driven SaaS | **Developers adding billing to existing apps** |
+| **Key Differentiator** | Shared updates + composable modules | HTML-over-JSON + Wagtail | Hybrid open/commercial model | **Performance-focused** (99/100) | **AI-ready** out-of-box | **Modern server-rendered** stack | Data monetization focus | **Library approach** (not boilerplate) |
+| **Target Audience** | Agencies building multiple clients | Full-stack developers | SaaS builders | Performance-conscious devs | AI product builders | Django + Alpine.js developers | Data-driven SaaS | **Developers adding billing to existing apps** |
 
 **Note on Inactive Projects**: *Quickstartup Template* (46⭐) was identified but excluded from this matrix as it was archived in April 2024 and is no longer maintained.
 
@@ -925,7 +925,7 @@ This section identifies additional Django SaaS boilerplates not previously analy
 4. ✅ **Vite/SWC build tools** - Faster builds than Webpack
 5. ⚠️ **Wagtail integration** - Consider as optional Post-MVP module (not core)
 
-**Strategic Insight**: Hotwire/HTMX trend is real. QuickScale should offer HTMX variant in Post-MVP Phase 3.
+**Strategic Insight**: Lightweight server-rendered demand is real. QuickScale should keep HTML as a strong secondary option alongside the React default.
 
 ---
 
@@ -982,7 +982,7 @@ This section identifies additional Django SaaS boilerplates not previously analy
 - ❌ Single-project license
 - ❌ Proprietary license
 - ❌ No multi-tenancy/teams
-- ❌ React-only SPA (no HTMX option)
+- ❌ React-only SPA (no lightweight server-rendered secondary option)
 
 **Best For**: Performance-conscious developers wanting fast marketing sites + SPA dashboards
 
@@ -1017,7 +1017,7 @@ This section identifies additional Django SaaS boilerplates not previously analy
 **Limitations**:
 - ❌ Highest pricing ($750-$1,450) - more expensive than Pegasus
 - ❌ Static generation (no shared updates)
-- ❌ React-only (no HTMX option)
+- ❌ React-only (no lightweight server-rendered secondary option)
 - ❌ Proprietary license
 - ❌ Limited project licenses (1 or 5)
 
@@ -1045,7 +1045,7 @@ This section identifies additional Django SaaS boilerplates not previously analy
 
 **Unique Advantages**:
 - ✅ **Django 5.0** - Latest Django version (most up-to-date found)
-- ✅ **HTMX + Alpine.js** - Modern no-framework approach (trending)
+- ✅ **Server-rendered + Alpine.js** - Modern no-framework approach (trending)
 - ✅ **MIT License** - Most permissive license
 - ✅ **Free** - No cost barrier
 - ✅ **Mobile-First Design** - Responsive by default
@@ -1059,18 +1059,18 @@ This section identifies additional Django SaaS boilerplates not previously analy
 - ❌ No multi-tenancy
 - ❌ Basic feature set
 
-**Best For**: Django developers wanting modern HTMX stack without React complexity
+**Best For**: Django developers wanting a modern server-rendered stack without React complexity
 
-**Competitive Threat**: **MEDIUM** - HTMX trend + free + MIT license attracts Django purists
+**Competitive Threat**: **MEDIUM** - lightweight server-rendered trend + free + MIT license attracts Django purists
 
 **What QuickScale Should Copy**:
-1. ✅ **HTMX + Alpine.js stack** - Trending "no-framework" approach (Post-MVP HTMX variant)
+1. ✅ **Server-rendered + Alpine.js stack** - Trending "no-framework" approach for an HTML secondary option
 2. ✅ **Django 5.0 adoption** - Stay current with latest Django versions
 3. ✅ **Mobile-first responsive** - Design for mobile, scale to desktop
 4. ✅ **SEO optimization patterns** - Meta tags, sitemaps, structured data
 5. ✅ **RBAC patterns** - Role-based permissions from start
 
-**Strategic Insight**: HTMX is gaining traction. Multiple competitors (SaaS Hammer, this project) validate HTMX as Post-MVP frontend variant.
+**Strategic Insight**: Lightweight server-rendered approaches are gaining traction. Multiple competitors validate keeping a non-React secondary option available.
 
 ---
 
@@ -1166,7 +1166,7 @@ Based on battle-tested features from these competitors, QuickScale should incorp
 1. ✅ **Celery + Redis** (Launchr, Pegasus, Cookiecutter) - Battle-tested async tasks
 2. ✅ **Docker single-command deploy** (SlimSaaS, Launchr) - `docker compose up` simplicity
 3. ✅ **Sentry integration** (Launchr) - Error tracking scaffolding
-4. ✅ **HTMX frontend variant** (SaaS Hammer, django-saas-boilerplate) - Trending approach
+4. ✅ **HTML secondary / server-rendered frontend** (SaaS Hammer, django-saas-boilerplate) - Trending low-JS approach
 5. ✅ **Stripe-only payment** (ALL competitors use Stripe exclusively) - Validates QuickScale decision
 
 **From djaodjin-saas (Library Pattern Validation)**:
@@ -1221,9 +1221,9 @@ Based on battle-tested features from these competitors, QuickScale should incorp
 
 ### Key Insights & Trends
 
-#### 1. **HTMX Trend is Real**
-- **SaaS Hammer** (Hotwire/Turbo), **django-saas-boilerplate** (HTMX + Alpine.js)
-- **Recommendation**: QuickScale should offer HTMX variant in Post-MVP Phase 3
+#### 1. **Lightweight Server-Rendered Trend is Real**
+- **SaaS Hammer** (Hotwire/Turbo), **django-saas-boilerplate** (server-rendered + Alpine.js)
+- **Recommendation**: QuickScale should keep the React default while maintaining a polished HTML secondary option
 - **Rationale**: Django developers prefer server-side rendering over React complexity
 
 #### 2. **Library Distribution Validated**
@@ -1276,7 +1276,7 @@ Based on battle-tested features from these competitors, QuickScale should incorp
 - **djaodjin-saas** proves library distribution works (599 stars)
 - **Launchr** proves hybrid open/commercial works ($0 dev, $499 prod)
 - **SlimSaaS** proves performance metrics are marketable
-- **SaaS Hammer + django-saas-boilerplate** prove HTMX trend is real
+- **SaaS Hammer + django-saas-boilerplate** prove demand for lightweight server-rendered options is real
 - **ALL competitors** validate Stripe-only decision
 
 **Strategic Positioning**:

@@ -83,7 +83,7 @@ Implementation of the React Default Theme (v0.74.0) successfully creates the `sh
 - ✅ Pre-built templates (no `npx create-vite` at runtime)
 - ✅ Jinja2 only for config files, not React components
 - ✅ Proper `{% raw %}...{% endraw %}` escaping for React curly braces
-- ✅ Generator properly distinguishes React vs HTML/HTMX themes
+- ✅ Generator properly distinguishes React vs HTML themes
 - ✅ Frontend directory structure matches roadmap specification
 
 ---
@@ -127,7 +127,7 @@ Implementation of the React Default Theme (v0.74.0) successfully creates the `sh
 ### Test Coverage
 
 - ✅ `test_apply_showcase_react_generates_frontend()` - Verifies React theme generates `frontend/` directory
-- ✅ `test_apply_showcase_htmx_not_implemented()` - Verifies HTMX still blocked
+- ✅ Unsupported placeholder-theme coverage preserved while React shipped as default
 - ✅ All 23 apply_command tests pass
 
 ### Test Isolation

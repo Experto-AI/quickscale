@@ -358,14 +358,6 @@ quickscale_core/
 │   │           │   └── static/
 │   │           │       ├── css/style.css.j2
 │   │           │       └── images/favicon.svg.j2
-│   │           ├── showcase_htmx/   # HTMX + Alpine.js placeholder (planned post-MVP, target v0.82.0+)
-│   │           │   ├── templates/
-│   │           │   │   ├── base.html.j2
-│   │           │   │   └── index.html.j2
-│   │           │   ├── static/
-│   │           │   │   ├── css/
-│   │           │   │   └── js/
-│   │           │   └── package.json.j2  # Tailwind, Alpine.js
     #
     # Vertical Themes (complete applications)
     └── crm/                   # CRM application, React-based (v0.75.0)
@@ -394,12 +386,11 @@ quickscale_core/
 
 **v0.74.0 React Default Theme:**
 - ✅ Theme system: `quickscale plan myproject`, enter the generated directory, then run `quickscale apply` (defaults to React)
-- ✅ Use `--theme showcase_html` for pure HTML/CSS alternative
-- ✅ `showcase_htmx/` remains a placeholder until the planned post-MVP HTMX theme lands
+- ✅ Choose `showcase_html` during the interactive theme prompt for the pure HTML/CSS secondary option
 - ✅ Themes are one-time copy, user owns generated code
 - ✅ **Default theme: `showcase_react`** (React + shadcn/ui)
 - ✅ Backend templates in `common/` (theme-agnostic)
-- ✅ Frontend templates in `themes/{showcase_react,showcase_html}/` today, with `showcase_htmx/` reserved as a future placeholder
+- ✅ Frontend templates in `themes/{showcase_react,showcase_html}/` today
 
 **MVP Simplifications:**
 - ❌ NO extra `config/` directory or schema registry beyond the supported plan/apply files (`quickscale.yml`, `.quickscale/state.yml`, `.quickscale/config.yml`)
@@ -416,7 +407,7 @@ quickscale_cli/
 │   ├── main.py                     # CLI entry point
 │   └── commands/
 │       ├── __init__.py
-│       ├── plan_command.py         # 'quickscale plan <name> --theme <theme>'
+│       ├── plan_command.py         # 'quickscale plan <name>' with interactive theme selection
 │       ├── apply_command.py        # 'quickscale apply' (generates project, embeds modules)
 │       ├── module_commands.py      # Module management (v0.61.0+)
 │       │   ├── update()           # 'quickscale update'
@@ -441,7 +432,7 @@ quickscale_cli/
     └── test_deploy_commands.py
 
 **v0.61.0 Enhancements:**
-- ✅ Theme selection: `quickscale plan myproject --theme <name>`, enter the generated directory, then run `quickscale apply`
+- ✅ Theme selection: `quickscale plan myproject`, choose a supported theme interactively, enter the generated directory, then run `quickscale apply`
 - ✅ Module management: `quickscale update`, `quickscale push --module <name>`
 - ✅ Git subtree automation for modules (split branch distribution)
 - ✅ `.quickscale/config.yml` tracking for installed modules
@@ -458,7 +449,7 @@ quickscale_cli/
 
 **Configuration & Setup:**
 - ❌ No extra `config/` directory or arbitrary YAML/JSON config loaders beyond the supported plan/apply files
-- ❌ No unsupported theme systems beyond first-party `quickscale plan --theme` selection
+- ❌ No unsupported theme systems beyond first-party interactive theme selection in `quickscale plan`
 - ❌ `backend_extensions.py` generation (users add manually if needed)
 - ❌ Automatic settings inheritance from `quickscale_core` (standalone settings.py only)
 
@@ -640,7 +631,7 @@ myapp/
 └── README.md                   # Next steps guidance
 ```
 
-**Alternative: HTML Theme (`quickscale plan myapp --theme showcase_html`)**
+**Alternative: HTML Theme (`quickscale plan myapp`, then choose `showcase_html`)**
 ```
 myapp/
 ├── manage.py                    # Standard Django
@@ -657,7 +648,7 @@ myapp/
 **What Users Get:**
 - Working Django project in 30 seconds
 - **Default**: React + shadcn/ui frontend with TypeScript and Vite
-- **Alternative**: Use `--theme showcase_html` for pure HTML/CSS (simpler projects)
+- **Secondary option**: Choose `showcase_html` during planning for pure HTML/CSS (simpler projects)
 - Runnable with `docker-compose up` (full stack) or `python manage.py runserver`
 - 100% theirs to customize
 - Production-ready Docker setup

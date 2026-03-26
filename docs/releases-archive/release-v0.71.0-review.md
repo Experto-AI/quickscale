@@ -97,7 +97,7 @@ All changes are explicitly listed in the roadmap task v0.71.0:
 
 **No out-of-scope features added**:
 - ❌ No React theme (correctly deferred to v0.72.0)
-- ❌ No HTMX theme (correctly deferred to v0.75.0)
+- ❌ No additional lightweight fallback theme work beyond the current HTML support (correctly deferred at the time)
 - ❌ No billing module (correctly deferred to v0.73.0)
 
 ---

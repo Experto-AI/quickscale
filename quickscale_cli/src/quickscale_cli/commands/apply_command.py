@@ -105,24 +105,6 @@ def _generate_project(config: QuickScaleConfig, output_path: Path) -> bool:
             f"(package: {config.project.package})..."
         )
 
-        # Validate theme availability
-        if config.project.theme == "showcase_htmx":
-            click.secho(
-                f"❌ Error: Theme '{config.project.theme}' is not yet implemented",
-                fg="red",
-                err=True,
-            )
-            click.echo(
-                "\n💡 The 'showcase_htmx' theme is planned for a future release:",
-                err=True,
-            )
-            click.echo("   - showcase_htmx: Coming in v0.78.0", err=True)
-            click.echo(
-                "   - Use 'showcase_react' (default) or 'showcase_html' instead",
-                err=True,
-            )
-            return False
-
         generator = ProjectGenerator(theme=config.project.theme)
         # mypy can resolve an older installed quickscale-core signature here.
         generate_project = cast(Any, generator.generate)

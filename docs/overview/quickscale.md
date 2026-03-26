@@ -115,7 +115,7 @@ QuickScale provides the building blocks for professional Django development:
   - Content: blog (custom Django), listings (multi-vertical)
   - Built on proven Django foundations (django-allauth, dj-stripe, etc.)
   - Distributed via split branches (git subtree), PyPI for commercial later
-- **Theme Packages** = Frontend scaffolding (HTML, HTMX, React)
+- **Theme Packages** = Frontend scaffolding (React default, HTML secondary option)
   - One-time generation, user owns code
   - No updates after generation (disposable scaffolding)
 - **Marketplace** = Community ecosystem for agencies and developers

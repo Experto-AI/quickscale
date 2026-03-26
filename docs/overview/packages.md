@@ -40,7 +40,6 @@ P1 — High priority modules (competitive parity)
 P2 — Differentiation & themes (polish and verticals)
  - `quickscale-module-ai` — AI service framework, BaseService, credits integration
  - `quickscale-theme-showcase-html` — Pure HTML/CSS (renamed from starter_html)
- - `quickscale-theme-showcase-htmx` — HTMX + Alpine.js (renamed from starter_htmx)
  - `quickscale-theme-showcase-react` — React SPA (renamed from starter_react)
  - `quickscale-theme-tailwind` — Tailwind CSS theme (UI primitives)
  - `quickscale-theme-bulma` — Bulma CSS theme (existing styling option)
@@ -61,7 +60,6 @@ Suggested short-term reservation list
  - quickscale-stripe
  - quickscale-module-billing
  - quickscale-module-teams
- - quickscale-theme-htmx
  - quickscale-theme-react
 
 How to publish a placeholder quickly (Poetry)
@@ -95,7 +93,7 @@ The table below maps common modules/features offered by major Django SaaS boiler
 
 | Competitor | Key modules / features | Rough package/name equivalents (for comparison) |
 |---|---|---|
-| SaaS Pegasus | Auth (django-allauth), Billing (Stripe), Teams, Admin+CMS (Wagtail), Frontend variants (HTMX/React), Subscriptions | pegasus-auth, pegasus-billing, pegasus-teams, pegasus-wagtail, pegasus-htmx |
+| SaaS Pegasus | Auth (django-allauth), Billing (Stripe), Teams, Admin+CMS (Wagtail), Frontend variants (server-rendered/React), Subscriptions | pegasus-auth, pegasus-billing, pegasus-teams, pegasus-wagtail, pegasus-react |
 | Django Cookiecutter | Production-ready Django setup, Docker, CI, Testing, Custom User, Anymail | cookiecutter-core, cookiecutter-ci, cookiecutter-testing |
 | Apptension SaaS Boilerplate | React+TS frontend, AWS deployment, Multi-tenant patterns, GraphQL API | apptension-frontend, apptension-aws, apptension-graphql |
 | Ready SaaS | Django+React starter, Stripe, Templates, Docs | readysaas-core, readysaas-billing, readysaas-theme |

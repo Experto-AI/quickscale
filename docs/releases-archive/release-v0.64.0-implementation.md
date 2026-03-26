@@ -12,10 +12,9 @@ This release delivers a clean breaking change that renames all three themes to e
 
 1. **Complete Theme Rename (All Three Themes)**:
    - Filesystem: `themes/starter_html/` → `themes/showcase_html/`
-   - Filesystem: `themes/starter_htmx/` → `themes/showcase_htmx/`
    - Filesystem: `themes/starter_react/` → `themes/showcase_react/`
-   - Generator available_themes: `["showcase_html", "showcase_htmx", "showcase_react"]`
-   - CLI choices: `["showcase_html", "showcase_htmx", "showcase_react"]`
+   - Generator available_themes: `["showcase_html", "showcase_react"]`
+   - CLI choices: `["showcase_html", "showcase_react"]`
    - Generator default: `theme="showcase_html"`
    - CLI default: `--theme showcase_html`
    - **Breaking change**: `starter_*` themes no longer accepted (clean break, no aliases)
@@ -29,7 +28,7 @@ This release delivers a clean breaking change that renames all three themes to e
 3. **Test Coverage**:
    - ✅ **196/196 tests passing** in quickscale_core (100%)
    - ✅ **215/215 tests passing** in quickscale_cli (100%)
-   - ✅ All theme-related tests updated (showcase_html, showcase_htmx, showcase_react)
+   - ✅ All theme-related tests updated (showcase_html, showcase_react)
    - ✅ Backward compatibility tests removed (intentional breaking change)
 
 4. **Quality Metrics**:
@@ -46,9 +45,6 @@ This release delivers a clean breaking change that renames all three themes to e
 # All three theme directories renamed
 mv quickscale_core/src/quickscale_core/generator/templates/themes/starter_html/ \
    quickscale_core/src/quickscale_core/generator/templates/themes/showcase_html/
-
-mv quickscale_core/src/quickscale_core/generator/templates/themes/starter_htmx/ \
-   quickscale_core/src/quickscale_core/generator/templates/themes/showcase_htmx/
 
 mv quickscale_core/src/quickscale_core/generator/templates/themes/starter_react/ \
    quickscale_core/src/quickscale_core/generator/templates/themes/showcase_react/
@@ -68,12 +64,8 @@ themes/
 │       │   └── favicon.svg.j2
 │       └── js/
 │           └── .gitkeep
-├── showcase_htmx/          # Renamed from starter_htmx (placeholder for v0.67.0)
-│   └── README.md
 └── showcase_react/         # Renamed from starter_react (placeholder for v0.68.0)
     └── README.md
-├── starter_htmx/           # Unchanged (placeholder)
-└── starter_react/          # Unchanged (placeholder)
 ```
 
 ### Code Changes
@@ -83,13 +75,13 @@ themes/
 # Before
 def __init__(self, template_dir: Path | None = None, theme: str = "starter_html"):
     # ...
-    available_themes = ["starter_html", "starter_htmx", "starter_react"]
+   available_themes = ["starter_html", "starter_react"]
 
 # After (v0.64.0)
 def __init__(self, template_dir: Path | None = None, theme: str = "showcase_html"):
     # ...
     # NO backward compatibility - clean break
-    available_themes = ["showcase_html", "showcase_htmx", "showcase_react"]
+   available_themes = ["showcase_html", "showcase_react"]
 ```
 
 #### CLI (quickscale_cli/src/quickscale_cli/main.py)
@@ -97,25 +89,23 @@ def __init__(self, template_dir: Path | None = None, theme: str = "showcase_html
 # Before
 @click.option(
     "--theme",
-    type=click.Choice(["starter_html", "starter_htmx", "starter_react"], ...),
+   type=click.Choice(["starter_html", "starter_react"], ...),
     default="starter_html",
     ...
 )
 # Help text:
 # - starter_html: Pure HTML + CSS (default, production-ready)
-# - starter_htmx: HTMX + Alpine.js (coming in v0.67.0)
 # - starter_react: React + TypeScript SPA (coming in v0.68.0)
 
 # After (v0.64.0)
 @click.option(
     "--theme",
-    type=click.Choice(["showcase_html", "showcase_htmx", "showcase_react"], ...),
+   type=click.Choice(["showcase_html", "showcase_react"], ...),
     default="showcase_html",
     ...
 )
 # Help text:
 # - showcase_html: Pure HTML + CSS (default, production-ready)
-# - showcase_htmx: HTMX + Alpine.js (coming in v0.67.0)
 # - showcase_react: React + TypeScript SPA (coming in v0.68.0)
 ```
 
@@ -136,10 +126,10 @@ def __init__(self, template_dir: Path | None = None, theme: str = "showcase_html
 #### decisions.md
 ```markdown
 # Before
-| `quickscale init --theme <name>` flag | IN (v0.61.0) | Theme selection during init (starter_html/starter_htmx/starter_react). Themes are one-time copy, not embedded. |
+| `quickscale init --theme <name>` flag | IN (v0.61.0) | Theme selection during init (starter_html/starter_react). Themes are one-time copy, not embedded. |
 
 # After (v0.64.0)
-| `quickscale init --theme <name>` flag | IN (v0.61.0) | Theme selection during init (showcase_html/showcase_htmx/showcase_react). Themes are one-time copy, not embedded. **BREAKING in v0.64.0**: All themes renamed from `starter_*` to `showcase_*` (no aliases). |
+| `quickscale init --theme <name>` flag | IN (v0.61.0) | Theme selection during init (showcase_html/showcase_react). Themes are one-time copy, not embedded. **BREAKING in v0.64.0**: All themes renamed from `starter_*` to `showcase_*` (no aliases). |
 ```
 
 #### user_manual.md
@@ -147,7 +137,6 @@ Added breaking change notice:
 ```markdown
 **Breaking Change (v0.64.0)**: All themes have been renamed:
 - `starter_html` → `showcase_html`
-- `starter_htmx` → `showcase_htmx`
 - `starter_react` → `showcase_react`
 
 Projects using `--theme starter_*` must update to `--theme showcase_*`.
@@ -175,7 +164,7 @@ $ cd /tmp && quickscale init test_v64_fail --theme starter_html
 Usage: quickscale init [OPTIONS] PROJECT_NAME
 Try 'quickscale init --help' for help.
 
-Error: Invalid value for '--theme': 'starter_html' is not one of 'showcase_html', 'starter_htmx', 'starter_react'.
+Error: Invalid value for '--theme': 'starter_html' is not one of 'showcase_html', 'showcase_react'.
 ```
 
 ### Automated Testing

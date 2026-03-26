@@ -606,7 +606,7 @@ Since Atomic CRM is MIT licensed (15k LOC, minimal approach), could QuickScale:
 | Aspect | Atomic CRM | QuickScale CRM |
 |--------|-----------|----------------|
 | **Backend** | Supabase (PostgreSQL + serverless functions) | Django + DRF |
-| **Frontend** | React SPA (client-side only) | Theme-agnostic (HTML, HTMX, React) |
+| **Frontend** | React SPA (client-side only) | Theme-agnostic (HTML, React) |
 | **State Management** | React Query + Recoil | Django ORM |
 | **Auth** | Supabase Auth | django-allauth (or custom) |
 | **Database Access** | Direct PostgreSQL via Supabase client | Django ORM + migrations |
@@ -698,7 +698,7 @@ Atomic CRM: Direct database access via Supabase API
 QuickScale: DRF REST API endpoints
 
 Both enable:
-- Frontend flexibility (swap HTML → HTMX → React)
+- Frontend flexibility (swap HTML → React)
 - Third-party integrations
 - Mobile app development (future)
 - Headless CRM capabilities
@@ -1029,7 +1029,7 @@ Based on market analysis, here's how to position QuickScale CRM to WIN in the so
 
 **Include**:
 - ✅ Unlimited contacts, companies, deals (vs. HubSpot's limits)
-- ✅ Visual pipeline (Kanban board in HTML, HTMX drag-drop)
+- ✅ Visual pipeline (Kanban board in HTML, with enhanced React interactions later)
 - ✅ Mobile-responsive templates
 - ✅ Email integration (send emails, log in CRM)
 - ✅ Full REST API (DRF browsable API)
@@ -2383,7 +2383,7 @@ Based on 2025 market research, QuickScale CRM MUST nail these elements to compet
 
 #### **1. Visual Pipeline (Non-Negotiable)**
 - **Why**: 95% of solo users cite Kanban board as #1 requirement
-- **Implementation**: HTML/HTMX drag-drop for v0.73.0, enhanced React for v0.74.0
+- **Implementation**: HTML-first interactions for v0.73.0, enhanced React for v0.74.0
 - **Benchmark**: Must match Pipedrive/monday CRM's visual simplicity
 - **Risk if missing**: Instant rejection by target users
 

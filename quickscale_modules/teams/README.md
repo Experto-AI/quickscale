@@ -13,7 +13,7 @@ The full teams module is expected to include:
 - **Invitation system** - Email-based team invitations with secure tokens
 - **Row-level security** - Query filters for data isolation between teams
 - **Team management UI** - Dashboard, member management, settings
-- **Theme support** - HTML, HTMX, and React theme variants
+- **Theme support** - HTML and React theme variants
 
 ## Module Distribution
 

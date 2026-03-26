@@ -55,8 +55,8 @@ QuickScale follows an evolution-aligned roadmap that starts as a personal toolki
   - 📋 Billing module (v0.80.0) - Stripe integration
   - 📋 Teams module (v0.81.0) - multi-tenancy
 
-2. **Phase 2: Additional Themes (Secondary Options)** 📋 _Planned_
-  - 📋 HTMX theme with Alpine.js (v0.82.0+) - alternative for progressive enhancement
+2. **Phase 2: Additional Theme Work (Secondary Options)** 📋 _Planned_
+  - 📋 HTML theme polish and parity improvements (v0.82.0+) - maintain the server-rendered secondary option alongside the React default
    - HTML theme remains as secondary option (simpler projects)
 
 3. **Phase 3: Expand Features (All Themes)** 📋 _Planned_
@@ -313,15 +313,15 @@ This release completed QuickScale's shared media-storage milestone: the storage 
 
 ---
 
-### v0.82.0+: HTMX Frontend Theme (Optional)
+### v0.82.0+: HTML Secondary Theme Polish (Optional)
 
 **Status**: 📋 Planned (low priority, after SaaS Feature Parity)
 
-**Rationale**: React theme is now the default (v0.74.0). HTMX provides an optional alternative for users preferring progressive enhancement.
+**Rationale**: React theme is now the default (v0.74.0). The HTML theme remains the lightweight secondary option for users preferring a simpler server-rendered stack.
 
 **See**: [user_manual.md](../technical/user_manual.md) for current theme architecture and user-facing theme selection guidance.
 
-**When Implemented**: See [decisions.md: Module & Theme Architecture](./decisions.md#module-theme-architecture) for implementation specifications including HTMX + Alpine.js base templates and progressive enhancement patterns.
+**When Implemented**: See [decisions.md: Module & Theme Architecture](./decisions.md#module-theme-architecture) for implementation guidance covering the supported React default and HTML secondary theme set.
 
 ---
 
@@ -343,7 +343,6 @@ This release completed QuickScale's shared media-storage milestone: the storage 
 
 **Multi-Theme Support**:
 - [ ] Port notifications to HTML theme
-- [ ] Port notifications to HTMX theme (when available)
 - [ ] Port notifications to React theme (when available)
 - [ ] Ensure theme-agnostic backend code
 

@@ -1,6 +1,6 @@
 # Review Report: v0.61.0 - Theme System Foundation
 
-**Task**: Implement theme selection system with `--theme` flag. Refactor existing templates into theme directory structure. Ships with HTML theme only, establishing foundation for future HTMX and React themes.
+**Task**: Implement theme selection system with `--theme` flag. Refactor existing templates into theme directory structure. Ships with HTML theme only, establishing foundation for future React and HTML-fallback variants.
 **Release**: v0.61.0
 **Review Date**: 2025-10-24
 **Reviewer**: AI Code Assistant
@@ -16,7 +16,7 @@ The v0.61.0 implementation demonstrates **excellent code quality** with comprehe
 **Key Achievements**:
 - ✅ Theme selection CLI infrastructure with `--theme` flag (7 tests, 100% passing)
 - ✅ Generator theme abstraction layer with path resolution (15 tests, 100% passing)
-- ✅ Template migration to theme directory structure (starter_html, placeholder for htmx/react)
+- ✅ Template migration to theme directory structure (starter_html, placeholders for future variants)
 - ✅ 100% backward compatibility maintained (371 total tests passing, 89% core coverage, 85% CLI coverage)
 - ✅ Excellent error handling with actionable user guidance
 - ⚠️ Documentation incomplete (user manual, README, release docs pending)
@@ -47,15 +47,15 @@ The v0.61.0 implementation demonstrates **excellent code quality** with comprehe
 - ✅ Tests for theme system (test_themes.py - 15 tests passing)
 
 ✅ **Phase 3: Template Migration**:
-- ✅ Create new directory structure (themes/starter_html/, themes/starter_htmx/, themes/starter_react/)
+- ✅ Create new directory structure (themes/starter_html/, themes/starter_react/, reserved placeholder theme directory)
 - ✅ Move frontend templates to themes/starter_html/ (base.html.j2, index.html.j2, static/)
-- ✅ Create placeholder directories for future themes (README.md in htmx/react)
+- ✅ Create placeholder directories for future themes (README.md in reserved theme directories)
 - ℹ️ Note: No separate common/ directory created - backend templates remain in root for backward compatibility (architectural decision)
 
 ✅ **Phase 4: Integration Testing**:
 - ✅ E2E test: Generate project with explicit theme (test_themes.py::test_generate_with_explicit_theme)
 - ✅ E2E test: Generate project with default theme (test_themes.py::test_generate_with_default_theme)
-- ✅ E2E test: Theme validation errors (test_init_themes.py::test_init_with_htmx_theme_shows_error, test_init_with_react_theme_shows_error)
+- ✅ E2E test: Theme validation errors for unimplemented variants
 - ✅ Regression test: v0.61.0 vs v0.60.0 output (test_themes.py::test_generated_output_matches_v060)
 - ✅ Backward compatibility test (test_themes.py::TestBackwardCompatibility - 2 tests)
 - ✅ All existing tests passing (160 core + 211 CLI = 371 total)
@@ -96,7 +96,7 @@ All **code changes** are explicitly listed in the roadmap task v0.61.0:
 - ❌ `docs/technical/roadmap.md` - v0.61.0 not marked complete
 
 **No out-of-scope features added**:
-- ❌ No HTMX theme implementation (correctly deferred to v0.67.0)
+- ❌ No additional HTML-fallback variant implementation beyond the default theme
 - ❌ No React theme implementation (correctly deferred to v0.68.0)
 - ❌ No module embed/update commands (correctly deferred to v0.62.0)
 
@@ -166,7 +166,6 @@ All **code changes** are explicitly listed in the roadmap task v0.61.0:
   │   └── static/
   │       ├── css/style.css.j2
   │       └── images/favicon.svg.j2
-  ├── starter_htmx/ (placeholder with README.md)
   └── starter_react/ (placeholder with README.md)
   ```
 - Backward compatibility maintained (backend templates in root)
@@ -203,7 +202,7 @@ def _get_theme_template_path(self, template_name: str) -> str:
 
 **Example - Theme extensibility** (generator.py lines 29-41):
 ```python
-available_themes = ["starter_html", "starter_htmx", "starter_react"]
+available_themes = ["starter_html", "starter_react"]
 if theme not in available_themes:
     raise ValueError(...)
 ```
@@ -260,10 +259,9 @@ self.env = Environment(
 
 **Example - CLI theme validation** (main.py lines 60-67):
 ```python
-if theme in ["starter_htmx", "starter_react"]:
+if theme in ["starter_react"]:
     click.secho(f"❌ Error: Theme '{theme}' is not yet implemented", fg="red", err=True)
     click.echo(f"\n💡 The '{theme}' theme is planned for a future release:", err=True)
-    click.echo("   - starter_htmx: Coming in v0.67.0", err=True)
     click.echo("   - starter_react: Coming in v0.68.0", err=True)
     raise click.Abort()
 ```
@@ -387,7 +385,6 @@ def init(project_name: str, theme: str) -> None:
 
     Choose from available themes:
     - starter_html: Pure HTML + CSS (default, production-ready)
-    - starter_htmx: HTMX + Alpine.js (coming in v0.67.0)
     - starter_react: React + TypeScript SPA (coming in v0.68.0)
     """
 ```
@@ -482,7 +479,6 @@ Total: 371 tests passing ✅
 1. `TestCLIThemeSelection` - Theme selection behavior (5 tests):
    - `test_init_without_theme_flag` - Default theme
    - `test_init_with_explicit_html_theme` - Explicit starter_html
-   - `test_init_with_htmx_theme_shows_error` - Unimplemented htmx error
    - `test_init_with_react_theme_shows_error` - Unimplemented react error
    - `test_init_with_invalid_theme` - Invalid theme rejection
 2. `TestCLIThemeHelp` - Help documentation (2 tests):
@@ -536,14 +532,14 @@ def test_generated_output_matches_v060(self, tmp_path):
 
 **Good Example - Testing User-Facing Behavior** (test_init_themes.py lines 30-36):
 ```python
-def test_init_with_htmx_theme_shows_error(self, tmp_path):
-    """Init command should show helpful error for unimplemented htmx theme"""
+def test_init_with_react_theme_shows_error(self, tmp_path):
+  """Init command should show helpful error for unimplemented react theme"""
     runner = CliRunner()
     with runner.isolated_filesystem(temp_dir=tmp_path):
-        result = runner.invoke(cli, ["init", "testproject", "--theme", "starter_htmx"])
+    result = runner.invoke(cli, ["init", "testproject", "--theme", "starter_react"])
         assert result.exit_code == 1
-        assert "Theme 'starter_htmx' is not yet implemented" in result.output
-        assert "Coming in v0.67.0" in result.output
+    assert "Theme 'starter_react' is not yet implemented" in result.output
+    assert "Coming in v0.68.0" in result.output
 ```
 **Why this is excellent**:
 - Tests user-facing behavior (CLI output)
@@ -575,7 +571,7 @@ Total Tests: 371 passing (160 core + 211 CLI)
 **CLI Theme Selection** (7 tests):
 - Default theme selection (no flag)
 - Explicit theme selection (--theme starter_html)
-- Unimplemented theme errors (htmx, react)
+- Unimplemented theme errors (react)
 - Invalid theme rejection
 - Help documentation
 
@@ -588,7 +584,7 @@ Total Tests: 371 passing (160 core + 211 CLI)
 
 **Edge Cases Covered**:
 - Invalid theme names (test_invalid_theme_name)
-- Unimplemented themes (test_htmx/react_theme_shows_error)
+- Unimplemented themes (test_react_theme_shows_error)
 - Missing theme directories (test_starter_html_theme_exists)
 - Fallback path resolution (test_common_template_fallback)
 - Backward compatibility (TestBackwardCompatibility class)
@@ -657,9 +653,8 @@ themes/starter_html/
 - Static file loading ({% load static %})
 - Extensible blocks (extra_css, content, extra_js)
 
-**starter_htmx & starter_react Themes** (Placeholders):
+**starter_react Theme** (Placeholder):
 ```
-themes/starter_htmx/README.md    ✅ Clear "Coming in v0.67.0" message
 themes/starter_react/README.md   ✅ Clear "Coming in v0.68.0" message
 ```
 
@@ -667,7 +662,7 @@ themes/starter_react/README.md   ✅ Clear "Coming in v0.68.0" message
 Per competitive_analysis.md requirements:
 - ✅ Matches SaaS Pegasus theme selection capability
 - ✅ Better flexibility (one-time copy vs. vendor lock-in)
-- ✅ Foundation for future theme expansion (htmx, react)
+- ✅ Foundation for future theme expansion (HTML fallback refinements, react)
 - ✅ User owns generated code completely (no subscription required)
 
 ---
@@ -719,7 +714,6 @@ def init(project_name: str, theme: str) -> None:
 
     Choose from available themes:
     - starter_html: Pure HTML + CSS (default, production-ready)
-    - starter_htmx: HTMX + Alpine.js (coming in v0.67.0)
     - starter_react: React + TypeScript SPA (coming in v0.68.0)
     """
 ```
@@ -1000,7 +994,7 @@ def _resolve_template_directory(self) -> Path:
 
 **Excellent Error Handling**:
 - Clear, actionable error messages throughout
-- Example: "Theme 'starter_htmx' is not yet implemented... Coming in v0.67.0"
+- Example: "Theme 'starter_react' is not yet implemented... Coming in v0.68.0"
 - Users know exactly what to do next
 - Continue this user-centric error messaging in future releases
 
@@ -1040,7 +1034,6 @@ def _resolve_template_directory(self) -> Path:
    quickscale init myproject --theme starter_html
 
    # Future themes (coming soon)
-   quickscale init myproject --theme starter_htmx  # v0.67.0
    quickscale init myproject --theme starter_react # v0.68.0
    ```
    ```
@@ -1053,7 +1046,7 @@ def _resolve_template_directory(self) -> Path:
    # Create your first project
    quickscale init myapp
 
-   # Or choose a theme (coming soon: starter_htmx, starter_react)
+  # Or choose a theme (coming soon: starter_react)
    quickscale init myapp --theme starter_html
    ```
    ```
@@ -1099,7 +1092,7 @@ def _resolve_template_directory(self) -> Path:
 
 **Overall Status**: ⚠️ APPROVED WITH MINOR ISSUES - CODE EXCELLENT, DOCUMENTATION INCOMPLETE
 
-**Summary**: The v0.61.0 Theme System Foundation implementation demonstrates **exemplary code quality** with comprehensive testing, strong architectural compliance, and excellent user experience design. The theme selection infrastructure is production-ready, establishes a solid foundation for future theme expansion (HTMX, React), and achieves competitive parity with SaaS Pegasus while offering superior flexibility (one-time copy vs. vendor lock-in).
+**Summary**: The v0.61.0 Theme System Foundation implementation demonstrates **exemplary code quality** with comprehensive testing, strong architectural compliance, and excellent user experience design. The theme selection infrastructure is production-ready, establishes a solid foundation for future theme expansion (HTML fallback refinements, React), and achieves competitive parity with SaaS Pegasus while offering superior flexibility (one-time copy vs. vendor lock-in).
 
 **Code Quality Assessment**: ✅ EXCELLENT
 - 371 tests passing (22 new, 349 existing) with zero failures
@@ -1130,7 +1123,7 @@ def _resolve_template_directory(self) -> Path:
 4. Tag release: `git tag 0.61.0`
 5. Proceed to v0.62.0 (Split Branch Infrastructure)
 
-**Competitive Position**: v0.61.0 establishes theme architecture foundation, achieving parity with SaaS Pegasus theme selection while offering superior flexibility and zero cost. The infrastructure is ready for rapid theme expansion in v0.67.0 (HTMX) and v0.68.0 (React).
+**Competitive Position**: v0.61.0 establishes theme architecture foundation, achieving parity with SaaS Pegasus theme selection while offering superior flexibility and zero cost. The infrastructure is ready for continued theme expansion in future releases, with React planned next.
 
 ---
 

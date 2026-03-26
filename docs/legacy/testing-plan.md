@@ -23,7 +23,7 @@ A task is complete only when all of the following are true:
 
 ## 3. Non-Goals
 1. No removal of `showcase_html` support.
-2. No changes to theme list/validation (`showcase_html`, `showcase_htmx`, `showcase_react` remain valid).
+2. No changes to theme list/validation (`showcase_html` and `showcase_react` remain valid).
 3. No redesign of CLI UX text beyond what is necessary to keep default references accurate.
 4. No changes to generator template content except where test behavior requires explicit theme selection.
 

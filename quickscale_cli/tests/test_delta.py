@@ -134,7 +134,11 @@ class TestComputeDelta:
         # Desired config with different theme
         config = QuickScaleConfig(
             version="1",
-            project=ProjectConfig(slug="myapp", package="myapp", theme="showcase_htmx"),
+            project=ProjectConfig(
+                slug="myapp",
+                package="myapp",
+                theme="showcase_react",
+            ),
             modules={
                 "auth": ModuleConfig(name="auth", options={}),
             },
@@ -158,7 +162,7 @@ class TestComputeDelta:
         assert set(delta.modules_unchanged) == {"auth"}
         assert delta.theme_changed is True
         assert delta.old_theme == "showcase_html"
-        assert delta.new_theme == "showcase_htmx"
+        assert delta.new_theme == "showcase_react"
 
     def test_delta_multiple_changes(self):
         """Test delta computation with multiple changes"""
@@ -278,7 +282,11 @@ class TestFormatDelta:
         """Test formatting delta with theme change"""
         config = QuickScaleConfig(
             version="1",
-            project=ProjectConfig(slug="myapp", package="myapp", theme="showcase_htmx"),
+            project=ProjectConfig(
+                slug="myapp",
+                package="myapp",
+                theme="showcase_react",
+            ),
             modules={},
             docker=DockerConfig(start=True, build=True),
         )
@@ -294,5 +302,5 @@ class TestFormatDelta:
         assert "Changes to apply:" in formatted
         assert "Theme:" in formatted
         assert "showcase_html" in formatted
-        assert "showcase_htmx" in formatted
+        assert "showcase_react" in formatted
         assert "WARNING" in formatted

@@ -162,7 +162,7 @@ modules:
 
     def test_all_valid_themes(self):
         """Test that all valid themes are accepted"""
-        for theme in ["showcase_html", "showcase_htmx", "showcase_react"]:
+        for theme in ["showcase_html", "showcase_react"]:
             yaml_content = f"""
 version: "1"
 project:
@@ -278,6 +278,22 @@ project:
 
         assert "Unknown theme 'unknown_theme'" in str(exc.value)
         assert "Available themes" in str(exc.value)
+
+    def test_removed_htmx_theme(self):
+        """Test error for removed HTMX placeholder theme."""
+        yaml_content = """
+version: "1"
+project:
+  slug: myapp
+  package: myapp
+  theme: showcase_htmx
+"""
+        with pytest.raises(ConfigValidationError) as exc:
+            validate_config(yaml_content)
+
+        assert "Unknown theme 'showcase_htmx'" in str(exc.value)
+        assert "showcase_html" in str(exc.value)
+        assert "showcase_react" in str(exc.value)
 
     def test_unknown_module(self):
         """Test error for unknown module"""
@@ -512,7 +528,7 @@ class TestGenerateYaml:
             project=ProjectConfig(
                 slug="testproject",
                 package="testproject",
-                theme="showcase_htmx",
+                theme="showcase_react",
             ),
             modules={
                 "auth": ModuleConfig(name="auth", options={"key": "value"}),

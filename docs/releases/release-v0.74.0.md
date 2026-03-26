@@ -26,11 +26,12 @@ This release marks a major milestone in QuickScale's evolution by establishing *
 - Corrected Jinja2 template rendering for `package.json` to ensure valid versioning strings.
 
 ## Breaking Changes
-- **Default Theme Change**: The default theme for new projects is now `showcase_react`. Users who prefer the classic HTML/HTMX approach can still specify it via `quickscale plan --theme showcase_html`, but React is now the primary path.
+- **Default Theme Change**: The default theme for new projects is now `showcase_react`. Users who prefer the classic HTML approach can still choose `showcase_html` during `quickscale plan`, but React is now the primary path.
 
 ## Migration Guide
 1. **Existing Projects**: No automatic migration is provided. Existing projects built with `showcase_html` will continue to work.
 2. **Adopting React**: To move an existing project to the new React foundation, we recommend creating a new project with v0.74.0 and migrating your custom business logic.
+3. **Removed HTMX Placeholder**: Any saved `quickscale.yml` using `theme: showcase_htmx` must be updated to `showcase_react` or `showcase_html` before running `quickscale apply`.
 
 ## Known Issues
 - `pnpm` is required on the user's system to install dependencies in the generated project automatically. If missing, users must install it or manually use `npm`/`yarn`.

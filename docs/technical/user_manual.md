@@ -215,9 +215,6 @@ quickscale plan myapp
 - `showcase_html` - Pure HTML + CSS
 - `showcase_react` - React + TypeScript SPA (default)
 
-**Planned theme**:
-- `showcase_htmx` - HTMX + Alpine.js (planned post-MVP, currently targeted for v0.82.0+)
-
 **Important**: Theme selection is one-time during project generation. Generated code is yours to own and customize - no updates or tracking after initialization.
 
 **Typical flow** to create and run a generated project:
