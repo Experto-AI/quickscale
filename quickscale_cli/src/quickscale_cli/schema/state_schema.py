@@ -11,6 +11,8 @@ from typing import Any
 
 import yaml
 
+from quickscale_cli.backups_contract import sanitize_module_options
+
 
 class StateError(Exception):
     """State file operation error"""
@@ -140,7 +142,10 @@ class StateManager:
                     embedded_at=module_info.get(
                         "embedded_at", datetime.now().isoformat()
                     ),
-                    options=module_info.get("options", {}),
+                    options=sanitize_module_options(
+                        module_name,
+                        module_info.get("options") or {},
+                    ),
                 )
 
             return QuickScaleState(
@@ -185,7 +190,11 @@ class StateManager:
                         "version": module.version,
                         "commit_sha": module.commit_sha,
                         "embedded_at": module.embedded_at,
-                        "options": module.options if module.options else None,
+                        "options": (
+                            sanitize_module_options(name, module.options)
+                            if module.options
+                            else None
+                        ),
                     }
                     for name, module in state.modules.items()
                 }

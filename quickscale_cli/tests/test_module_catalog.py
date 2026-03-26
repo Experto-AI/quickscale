@@ -27,6 +27,7 @@ def test_get_module_entries_filters_experimental_by_default() -> None:
     names = [entry.name for entry in entries]
 
     assert "storage" in names
+    assert "backups" in names
     assert "billing" not in names
     assert "teams" not in names
 
@@ -38,3 +39,4 @@ def test_get_module_names_includes_experimental_when_requested() -> None:
     assert "billing" in names
     assert "teams" in names
     assert "storage" in names
+    assert "backups" in names

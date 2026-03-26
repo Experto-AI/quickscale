@@ -4,18 +4,32 @@ Implements `quickscale apply [config]` - executes quickscale.yml configuration
 """
 
 import subprocess
+from collections.abc import Mapping
 from dataclasses import dataclass
 from datetime import datetime
-from pathlib import Path
+from pathlib import Path, PurePosixPath, PureWindowsPath
 from typing import Any, cast
 
 import click
 
+from quickscale_cli.backups_contract import (
+    BACKUPS_REMOTE_ACCESS_KEY_ID_ENV_VAR_OPTION,
+    BACKUPS_REMOTE_SECRET_ACCESS_KEY_ENV_VAR_OPTION,
+    DEFAULT_BACKUPS_REMOTE_ACCESS_KEY_ID_ENV_VAR,
+    DEFAULT_BACKUPS_REMOTE_SECRET_ACCESS_KEY_ENV_VAR,
+    normalize_backups_module_options,
+    sanitize_module_options,
+)
 from quickscale_cli.commands.module_commands import embed_module
+from quickscale_cli.commands.module_config import (
+    get_default_backups_config,
+    validate_backups_module_options,
+)
 from quickscale_cli.utils.module_wiring_manager import regenerate_managed_wiring
 from quickscale_cli.schema.config_schema import (
     ConfigValidationError,
     QuickScaleConfig,
+    generate_yaml,
     validate_config,
 )
 from quickscale_cli.schema.delta import ConfigDelta, compute_delta, format_delta
@@ -52,6 +66,10 @@ class EmbedModulesResult:
     success: bool
     embedded_modules: list[str]
     failed_module: str | None = None
+
+
+_UNSAFE_GITIGNORE_LEADING_CHARACTERS = frozenset({"!", "#"})
+_UNSAFE_GITIGNORE_GLOB_CHARACTERS = frozenset({"*", "?", "["})
 
 
 def _run_command(
@@ -361,7 +379,24 @@ def _update_module_config_in_state(
             current_options = state.modules[module_name].options or {}
             for change in module_delta.mutable_changes:
                 current_options[change.option_name] = change.new_value
-            state.modules[module_name].options = current_options
+            state.modules[module_name].options = sanitize_module_options(
+                module_name,
+                current_options,
+            )
+
+
+def _sanitize_loaded_backups_config(qs_config: QuickScaleConfig) -> bool:
+    """Normalize backups options so raw secrets never persist after apply."""
+    backups_config = qs_config.modules.get("backups")
+    if backups_config is None:
+        return False
+
+    normalized = normalize_backups_module_options(backups_config.options or {})
+    if normalized == (backups_config.options or {}):
+        return False
+
+    backups_config.options = normalized
+    return True
 
 
 def _load_and_validate_config(config_path: Path) -> QuickScaleConfig:
@@ -379,13 +414,122 @@ def _load_and_validate_config(config_path: Path) -> QuickScaleConfig:
     click.echo(f"\n📋 Reading configuration: {config_path}")
     try:
         yaml_content = config_path.read_text()
-        return validate_config(yaml_content)
+        qs_config = validate_config(yaml_content)
+        if _sanitize_loaded_backups_config(qs_config):
+            config_path.write_text(generate_yaml(qs_config))
+            click.secho(
+                "✅ Sanitized backups config to env-var references in quickscale.yml",
+                fg="green",
+            )
+        _validate_module_prerequisites(qs_config)
+        return qs_config
     except ConfigValidationError as e:
         click.secho(f"\n❌ Configuration error:\n{e}", fg="red", err=True)
         raise click.Abort()
     except Exception as e:
         click.secho(f"\n❌ Failed to read configuration: {e}", fg="red", err=True)
         raise click.Abort()
+
+
+def _validate_module_prerequisites(qs_config: QuickScaleConfig) -> None:
+    """Validate actionable module-specific prerequisites before apply proceeds."""
+    backups_config = qs_config.modules.get("backups")
+    if backups_config is None:
+        return
+
+    issues = validate_backups_module_options(backups_config.options or {})
+    if not issues:
+        return
+
+    click.secho(
+        "\n❌ Backups module configuration is incomplete for apply:",
+        fg="red",
+        err=True,
+    )
+    for issue in issues:
+        click.echo(f"  • {issue}", err=True)
+    click.echo(
+        "\n💡 Re-run 'quickscale plan --reconfigure --configure-modules' or edit "
+        "quickscale.yml to supply the missing private-remote env-var references.",
+        err=True,
+    )
+    raise click.Abort()
+
+
+def _normalize_backups_gitignore_entry(local_directory: str) -> str | None:
+    """Return a safe repo-relative ignore entry for backup artifacts."""
+    if any(
+        ord(character) < 32 or ord(character) == 127 for character in local_directory
+    ):
+        return None
+
+    raw_candidate = local_directory.strip()
+    windows_path = PureWindowsPath(raw_candidate)
+    if windows_path.drive or windows_path.is_absolute():
+        return None
+
+    candidate = raw_candidate.replace("\\", "/")
+    if not candidate or candidate in {".", "./", "/"}:
+        return None
+    if candidate.startswith("/") or candidate.startswith("~"):
+        return None
+
+    normalized = candidate
+    while normalized.startswith("./"):
+        normalized = normalized[2:]
+    if not normalized or normalized.startswith("/"):
+        return None
+
+    path = PurePosixPath(normalized)
+    if not path.parts or any(part == ".." for part in path.parts):
+        return None
+
+    resolved = path.as_posix()
+    if resolved.startswith(tuple(_UNSAFE_GITIGNORE_LEADING_CHARACTERS)):
+        return None
+    if any(character in _UNSAFE_GITIGNORE_GLOB_CHARACTERS for character in resolved):
+        return None
+    if resolved in {".", ".quickscale"}:
+        return None
+    return resolved if resolved.endswith("/") else f"{resolved}/"
+
+
+def _ensure_backups_gitignore_rules(
+    project_path: Path,
+    qs_config: QuickScaleConfig,
+) -> bool:
+    """Ensure custom backups directories are ignored safely in git."""
+    backups_config = qs_config.modules.get("backups")
+    if backups_config is None:
+        return True
+
+    options = normalize_backups_module_options(backups_config.options or {})
+    default_local_directory = str(get_default_backups_config()["local_directory"])
+    local_directory = options.get("local_directory", default_local_directory)
+    entry = _normalize_backups_gitignore_entry(str(local_directory))
+    if entry is None:
+        click.secho(
+            "⚠️  Skipping automatic backups .gitignore update because "
+            "`modules.backups.local_directory` is not a safe repo-relative path.",
+            fg="yellow",
+        )
+        return True
+
+    gitignore_path = project_path / ".gitignore"
+    existing = gitignore_path.read_text() if gitignore_path.exists() else ""
+    existing_entries = {line.strip() for line in existing.splitlines() if line.strip()}
+    if entry in existing_entries:
+        return True
+
+    new_content = existing
+    if new_content and not new_content.endswith("\n"):
+        new_content += "\n"
+    if "# QuickScale private backup artifacts" not in new_content:
+        new_content += "\n# QuickScale private backup artifacts\n"
+    new_content += f"{entry}\n"
+    gitignore_path.write_text(new_content)
+    click.secho(f"✅ Added backups ignore rule to .gitignore: {entry}", fg="green")
+    return True
 
 
 def _determine_output_path(config_path: Path, project_slug: str) -> Path:
@@ -680,7 +824,10 @@ def _save_project_state(
                 version=None,
                 commit_sha=None,
                 embedded_at=datetime.now().isoformat(),
-                options=qs_config.modules[module_name].options,
+                options=sanitize_module_options(
+                    module_name,
+                    qs_config.modules[module_name].options,
+                ),
             )
 
         if existing_state:
@@ -724,6 +871,37 @@ def _display_next_steps(
         click.echo("  quickscale up        # Start Docker services")
         click.echo("  # Or run without Docker:")
         click.echo("  poetry run python manage.py runserver")
+
+    modules = qs_config.modules if isinstance(qs_config.modules, Mapping) else {}
+    if "backups" in modules:
+        backups_options = normalize_backups_module_options(
+            modules["backups"].options or {}
+        )
+        click.echo("\n  # Backups operations")
+        click.echo("  poetry run python manage.py backups_create")
+        click.echo(
+            "  poetry run python manage.py backups_restore <id> --confirm <filename> --dry-run"
+        )
+        if backups_options.get("target_mode") == "private_remote":
+            access_key_env_var = str(
+                backups_options.get(
+                    BACKUPS_REMOTE_ACCESS_KEY_ID_ENV_VAR_OPTION,
+                    DEFAULT_BACKUPS_REMOTE_ACCESS_KEY_ID_ENV_VAR,
+                )
+                or DEFAULT_BACKUPS_REMOTE_ACCESS_KEY_ID_ENV_VAR
+            )
+            secret_key_env_var = str(
+                backups_options.get(
+                    BACKUPS_REMOTE_SECRET_ACCESS_KEY_ENV_VAR_OPTION,
+                    DEFAULT_BACKUPS_REMOTE_SECRET_ACCESS_KEY_ENV_VAR,
+                )
+                or DEFAULT_BACKUPS_REMOTE_SECRET_ACCESS_KEY_ENV_VAR
+            )
+            click.echo(
+                "  Configure runtime credentials via env vars "
+                f"`{access_key_env_var}` and `{secret_key_env_var}` before relying "
+                "on scheduled or production restore workflows."
+            )
 
     click.echo("\n  Visit: http://localhost:8000")
 
@@ -885,6 +1063,20 @@ def _execute_apply_steps(
         _print_apply_failure_summary(
             failed_step="managed module wiring generation",
             reason="unable to render settings/modules.py and urls_modules.py",
+        )
+        raise click.Abort()
+
+    if not _ensure_backups_gitignore_rules(ctx.output_path, ctx.qs_config):
+        _save_project_state(
+            ctx.output_path,
+            ctx.qs_config,
+            ctx.existing_state,
+            embedded_modules,
+            ctx.delta,
+        )
+        _print_apply_failure_summary(
+            failed_step="backups gitignore hardening",
+            reason="Unable to update .gitignore with the configured private backups directory.",
         )
         raise click.Abort()
 

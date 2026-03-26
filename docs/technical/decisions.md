@@ -511,6 +511,17 @@ URLs must use `public_base_url` when configured and fall back to `MEDIA_URL`
 behavior in local development when it is blank. `custom_domain` is not part of
 the supported storage contract.
 
+**Backups privacy rule (v0.77.0):** `modules.backups` artifacts are private
+operational files. They MUST NOT use `public_base_url`, public media URLs, or
+template-visible asset helpers. Scheduled execution remains command-driven only
+(`manage.py backups_create --scheduled` or equivalent platform cron job), and
+destructive restore execution is CLI-only with explicit filename confirmation
+plus environment guards. Private-remote credentials MUST be referenced by
+environment-variable name only; raw credential values MUST NOT be persisted in
+`quickscale.yml`, `.quickscale/state.yml`, or `BackupArtifact` rows. When
+`modules.backups.local_directory` is repo-relative, `quickscale apply` MUST add
+that directory to `.gitignore` without hiding `.quickscale/state.yml`.
+
 **Decision Rule**:
 - **v0.72.0+**: Plan/apply is the primary workflow
 - `quickscale plan` selects modules and creates `quickscale.yml`

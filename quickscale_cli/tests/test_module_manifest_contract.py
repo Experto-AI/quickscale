@@ -9,6 +9,7 @@ from quickscale_cli.commands.module_config import (
     get_default_auth_config,
     get_default_blog_config,
     get_default_crm_config,
+    get_default_backups_config,
     get_default_forms_config,
     get_default_listings_config,
     get_default_storage_config,
@@ -26,6 +27,7 @@ DEFAULT_CONFIG_FACTORIES = {
     "crm": get_default_crm_config,
     "forms": get_default_forms_config,
     "storage": get_default_storage_config,
+    "backups": get_default_backups_config,
 }
 
 SETTING_NAME_PATTERN = re.compile(r"^[A-Z][A-Z0-9_]*$")

@@ -13,6 +13,14 @@ from typing import Any, Mapping, Optional
 
 import click
 
+from quickscale_cli.backups_contract import (
+    BACKUPS_REMOTE_ACCESS_KEY_ID_ENV_VAR_OPTION,
+    BACKUPS_REMOTE_SECRET_ACCESS_KEY_ENV_VAR_OPTION,
+    DEFAULT_BACKUPS_REMOTE_ACCESS_KEY_ID_ENV_VAR,
+    DEFAULT_BACKUPS_REMOTE_SECRET_ACCESS_KEY_ENV_VAR,
+    normalize_backups_module_options,
+    validate_backups_env_var_reference,
+)
 from quickscale_cli.utils.module_wiring_manager import regenerate_managed_wiring
 from quickscale_cli.utils.project_identity import (
     derive_package_from_slug,
@@ -1321,6 +1329,278 @@ def apply_storage_configuration(project_path: Path, config: dict[str, Any]) -> N
 
 
 # ============================================================================
+# BACKUPS MODULE CONFIGURATION
+# ============================================================================
+
+
+def get_default_backups_config() -> dict[str, Any]:
+    """Return default configuration for the backups module."""
+    return {
+        "retention_days": 14,
+        "naming_prefix": "db",
+        "target_mode": "local",
+        "local_directory": ".quickscale/backups",
+        "remote_bucket_name": "",
+        "remote_prefix": "backups/private",
+        "remote_endpoint_url": "",
+        "remote_region_name": "",
+        BACKUPS_REMOTE_ACCESS_KEY_ID_ENV_VAR_OPTION: "",
+        BACKUPS_REMOTE_SECRET_ACCESS_KEY_ENV_VAR_OPTION: "",
+        "automation_enabled": False,
+        "schedule": "0 2 * * *",
+    }
+
+
+def _resolve_backups_config(config: Mapping[str, Any]) -> dict[str, Any]:
+    """Merge backups options with defaults while preserving explicit overrides."""
+    return get_default_backups_config() | normalize_backups_module_options(config)
+
+
+def validate_backups_module_options(config: Mapping[str, Any]) -> list[str]:
+    """Return validation issues for backups module options."""
+    issues: list[str] = []
+    resolved = _resolve_backups_config(config)
+
+    try:
+        retention_days = int(resolved["retention_days"])
+        if retention_days < 1:
+            issues.append("modules.backups.retention_days must be at least 1")
+    except TypeError, ValueError:
+        issues.append("modules.backups.retention_days must be an integer")
+
+    naming_prefix = str(resolved["naming_prefix"]).strip()
+    if not naming_prefix:
+        issues.append("modules.backups.naming_prefix cannot be blank")
+
+    target_mode = str(resolved["target_mode"]).strip().lower()
+    if target_mode not in {"local", "private_remote"}:
+        issues.append("modules.backups.target_mode must be 'local' or 'private_remote'")
+
+    local_directory = str(resolved["local_directory"]).strip()
+    if not local_directory:
+        issues.append("modules.backups.local_directory cannot be blank")
+
+    automation_enabled = bool(resolved["automation_enabled"])
+    schedule = str(resolved["schedule"]).strip()
+    if automation_enabled and not schedule:
+        issues.append(
+            "modules.backups.schedule is required when automation_enabled is true"
+        )
+
+    if target_mode == "private_remote":
+        bucket_name = str(resolved["remote_bucket_name"]).strip()
+        access_key_id_env_var = str(
+            resolved[BACKUPS_REMOTE_ACCESS_KEY_ID_ENV_VAR_OPTION]
+        ).strip()
+        secret_access_key_env_var = str(
+            resolved[BACKUPS_REMOTE_SECRET_ACCESS_KEY_ENV_VAR_OPTION]
+        ).strip()
+        endpoint_url = str(resolved["remote_endpoint_url"]).strip()
+        region_name = str(resolved["remote_region_name"]).strip()
+
+        if not bucket_name:
+            issues.append(
+                "modules.backups.remote_bucket_name is required when "
+                "target_mode is private_remote"
+            )
+        if not access_key_id_env_var:
+            issues.append(
+                "modules.backups.remote_access_key_id_env_var is required when "
+                "target_mode is private_remote"
+            )
+        else:
+            access_key_issue = validate_backups_env_var_reference(
+                BACKUPS_REMOTE_ACCESS_KEY_ID_ENV_VAR_OPTION,
+                access_key_id_env_var,
+            )
+            if access_key_issue:
+                issues.append(access_key_issue)
+        if not secret_access_key_env_var:
+            issues.append(
+                "modules.backups.remote_secret_access_key_env_var is required when "
+                "target_mode is private_remote"
+            )
+        else:
+            secret_access_key_issue = validate_backups_env_var_reference(
+                BACKUPS_REMOTE_SECRET_ACCESS_KEY_ENV_VAR_OPTION,
+                secret_access_key_env_var,
+            )
+            if secret_access_key_issue:
+                issues.append(secret_access_key_issue)
+        if not (endpoint_url or region_name):
+            issues.append(
+                "modules.backups.private_remote mode requires remote_region_name "
+                "or remote_endpoint_url"
+            )
+
+    return issues
+
+
+def _raise_for_invalid_backups_config(config: Mapping[str, Any]) -> None:
+    """Abort with actionable messaging when backups config is invalid."""
+    issues = validate_backups_module_options(config)
+    if not issues:
+        return
+
+    click.secho("\n❌ Invalid backups module configuration:", fg="red", err=True)
+    for issue in issues:
+        click.echo(f"  • {issue}", err=True)
+    raise click.Abort()
+
+
+def configure_backups_module(
+    non_interactive: bool = False,
+    existing_config: Mapping[str, Any] | None = None,
+) -> dict[str, Any]:
+    """Configure backups module settings interactively or with defaults."""
+    defaults = _resolve_backups_config(existing_config or {})
+
+    if non_interactive:
+        click.echo("\n⚙️  Using default backups module configuration...")
+        config = defaults
+        click.echo(f"  • Retention days: {config['retention_days']}")
+        click.echo(f"  • Naming prefix: {config['naming_prefix']}")
+        click.echo(f"  • Target mode: {config['target_mode']}")
+        click.echo(
+            f"  • Automation: {'Enabled' if config['automation_enabled'] else 'Disabled'}"
+        )
+        _raise_for_invalid_backups_config(config)
+        return config
+
+    click.echo("\n⚙️  Configuring backups module...")
+    click.echo(
+        "Backups are private operational artifacts. Restore execution remains "
+        "CLI-only and scheduled runs stay command-driven.\n"
+    )
+
+    target_mode = click.prompt(
+        "Backup target mode",
+        type=click.Choice(["local", "private_remote"], case_sensitive=False),
+        default=str(defaults["target_mode"]),
+        show_choices=True,
+    ).lower()
+
+    automation_enabled = click.confirm(
+        "Record that external cron/scheduler automation is enabled?",
+        default=bool(defaults["automation_enabled"]),
+    )
+
+    config = {
+        "retention_days": click.prompt(
+            "Retention days",
+            type=int,
+            default=int(defaults["retention_days"]),
+        ),
+        "naming_prefix": click.prompt(
+            "Naming prefix",
+            default=str(defaults["naming_prefix"]),
+        ).strip()
+        or "db",
+        "target_mode": target_mode,
+        "local_directory": click.prompt(
+            "Private local backup directory",
+            default=str(defaults["local_directory"]),
+        ).strip()
+        or ".quickscale/backups",
+        "remote_bucket_name": str(defaults["remote_bucket_name"]),
+        "remote_prefix": str(defaults["remote_prefix"]),
+        "remote_endpoint_url": str(defaults["remote_endpoint_url"]),
+        "remote_region_name": str(defaults["remote_region_name"]),
+        BACKUPS_REMOTE_ACCESS_KEY_ID_ENV_VAR_OPTION: str(
+            defaults[BACKUPS_REMOTE_ACCESS_KEY_ID_ENV_VAR_OPTION]
+        ),
+        BACKUPS_REMOTE_SECRET_ACCESS_KEY_ENV_VAR_OPTION: str(
+            defaults[BACKUPS_REMOTE_SECRET_ACCESS_KEY_ENV_VAR_OPTION]
+        ),
+        "automation_enabled": automation_enabled,
+        "schedule": str(defaults["schedule"]),
+    }
+
+    if automation_enabled:
+        config["schedule"] = click.prompt(
+            "Documented schedule (cron-like)",
+            default=str(defaults["schedule"]),
+        ).strip()
+    else:
+        config["schedule"] = str(defaults["schedule"])
+
+    if target_mode == "private_remote":
+        click.echo("\nPrivate remote mode selected. Provide S3-compatible settings.")
+        config["remote_bucket_name"] = click.prompt(
+            "Remote bucket name",
+            default=str(defaults["remote_bucket_name"]),
+        ).strip()
+        config["remote_prefix"] = (
+            click.prompt(
+                "Remote object prefix",
+                default=str(defaults["remote_prefix"]),
+            ).strip()
+            or "backups/private"
+        )
+        config["remote_endpoint_url"] = click.prompt(
+            "Remote endpoint URL (leave blank for provider defaults)",
+            default=str(defaults["remote_endpoint_url"]),
+            show_default=False,
+        ).strip()
+        config["remote_region_name"] = click.prompt(
+            "Remote region name (or auto for endpoint providers)",
+            default=str(defaults["remote_region_name"]),
+            show_default=bool(defaults["remote_region_name"]),
+        ).strip()
+        config[BACKUPS_REMOTE_ACCESS_KEY_ID_ENV_VAR_OPTION] = click.prompt(
+            "Remote access key id environment variable",
+            default=(
+                str(defaults[BACKUPS_REMOTE_ACCESS_KEY_ID_ENV_VAR_OPTION]).strip()
+                or DEFAULT_BACKUPS_REMOTE_ACCESS_KEY_ID_ENV_VAR
+            ),
+            show_default=True,
+        ).strip()
+        config[BACKUPS_REMOTE_SECRET_ACCESS_KEY_ENV_VAR_OPTION] = click.prompt(
+            "Remote secret access key environment variable",
+            default=(
+                str(defaults[BACKUPS_REMOTE_SECRET_ACCESS_KEY_ENV_VAR_OPTION]).strip()
+                or DEFAULT_BACKUPS_REMOTE_SECRET_ACCESS_KEY_ENV_VAR
+            ),
+            show_default=True,
+        ).strip()
+    else:
+        config.update(
+            {
+                "remote_bucket_name": "",
+                "remote_prefix": "backups/private",
+                "remote_endpoint_url": "",
+                "remote_region_name": "",
+                BACKUPS_REMOTE_ACCESS_KEY_ID_ENV_VAR_OPTION: "",
+                BACKUPS_REMOTE_SECRET_ACCESS_KEY_ENV_VAR_OPTION: "",
+            }
+        )
+
+    _raise_for_invalid_backups_config(config)
+    return config
+
+
+def apply_backups_configuration(project_path: Path, config: dict[str, Any]) -> None:
+    """Apply backups module configuration via managed wiring files."""
+    normalized = _resolve_backups_config(config)
+    _raise_for_invalid_backups_config(normalized)
+    _regenerate_wiring_for_module(project_path, "backups", normalized)
+
+    click.echo("\n📋 Configuration applied:")
+    click.echo(f"  • Retention days: {normalized['retention_days']}")
+    click.echo(f"  • Naming prefix: {normalized['naming_prefix']}")
+    click.echo(f"  • Target mode: {normalized['target_mode']}")
+    click.echo(
+        "  • Automation: "
+        + ("Enabled" if normalized["automation_enabled"] else "Disabled")
+    )
+    if normalized["target_mode"] == "private_remote":
+        click.echo(
+            "  • Remote bucket: "
+            + (normalized["remote_bucket_name"] or "not configured")
+        )
+
+
+# ============================================================================
 # MODULE CONFIGURATORS REGISTRY
 # ============================================================================
 
@@ -1331,4 +1611,5 @@ MODULE_CONFIGURATORS = {
     "crm": (configure_crm_module, apply_crm_configuration),
     "forms": (configure_forms_module, apply_forms_configuration),
     "storage": (configure_storage_module, apply_storage_configuration),
+    "backups": (configure_backups_module, apply_backups_configuration),
 }

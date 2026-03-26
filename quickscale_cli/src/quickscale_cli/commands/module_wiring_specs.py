@@ -4,6 +4,13 @@ from __future__ import annotations
 
 from typing import Any, Mapping
 
+from quickscale_cli.backups_contract import (
+    BACKUPS_REMOTE_ACCESS_KEY_ID_ENV_VAR_OPTION,
+    BACKUPS_REMOTE_SECRET_ACCESS_KEY_ENV_VAR_OPTION,
+    DEFAULT_BACKUPS_REMOTE_ACCESS_KEY_ID_ENV_VAR,
+    DEFAULT_BACKUPS_REMOTE_SECRET_ACCESS_KEY_ENV_VAR,
+    normalize_backups_module_options,
+)
 from quickscale_core.module_wiring import ModuleWiringSpec
 
 
@@ -268,6 +275,62 @@ def _storage_wiring(options: Mapping[str, Any]) -> ModuleWiringSpec:
     )
 
 
+def _backups_wiring(options: Mapping[str, Any]) -> ModuleWiringSpec:
+    resolved = normalize_backups_module_options(options)
+    retention_days = int(resolved.get("retention_days", 14))
+    naming_prefix = str(resolved.get("naming_prefix", "db")).strip() or "db"
+    target_mode = str(resolved.get("target_mode", "local")).strip().lower()
+    if target_mode not in {"local", "private_remote"}:
+        target_mode = "local"
+
+    access_key_id_env_var = str(
+        resolved.get(BACKUPS_REMOTE_ACCESS_KEY_ID_ENV_VAR_OPTION, "")
+    ).strip()
+    secret_access_key_env_var = str(
+        resolved.get(BACKUPS_REMOTE_SECRET_ACCESS_KEY_ENV_VAR_OPTION, "")
+    ).strip()
+    if target_mode == "private_remote" and not access_key_id_env_var:
+        access_key_id_env_var = DEFAULT_BACKUPS_REMOTE_ACCESS_KEY_ID_ENV_VAR
+    if target_mode == "private_remote" and not secret_access_key_env_var:
+        secret_access_key_env_var = DEFAULT_BACKUPS_REMOTE_SECRET_ACCESS_KEY_ENV_VAR
+
+    settings: dict[str, Any] = {
+        "QUICKSCALE_BACKUPS_RETENTION_DAYS": retention_days,
+        "QUICKSCALE_BACKUPS_NAMING_PREFIX": naming_prefix,
+        "QUICKSCALE_BACKUPS_TARGET_MODE": target_mode,
+        "QUICKSCALE_BACKUPS_LOCAL_DIRECTORY": str(
+            resolved.get("local_directory", ".quickscale/backups")
+        ).strip()
+        or ".quickscale/backups",
+        "QUICKSCALE_BACKUPS_AUTOMATION_ENABLED": bool(
+            resolved.get("automation_enabled", False)
+        ),
+        "QUICKSCALE_BACKUPS_SCHEDULE": str(resolved.get("schedule", "0 2 * * *")),
+        "QUICKSCALE_BACKUPS_REMOTE_BUCKET_NAME": str(
+            resolved.get("remote_bucket_name", "")
+        ).strip(),
+        "QUICKSCALE_BACKUPS_REMOTE_PREFIX": str(
+            resolved.get("remote_prefix", "backups/private")
+        ).strip()
+        or "backups/private",
+        "QUICKSCALE_BACKUPS_REMOTE_ENDPOINT_URL": str(
+            resolved.get("remote_endpoint_url", "")
+        ).strip(),
+        "QUICKSCALE_BACKUPS_REMOTE_REGION_NAME": str(
+            resolved.get("remote_region_name", "")
+        ).strip(),
+        "QUICKSCALE_BACKUPS_REMOTE_ACCESS_KEY_ID_ENV_VAR": access_key_id_env_var,
+        "QUICKSCALE_BACKUPS_REMOTE_SECRET_ACCESS_KEY_ENV_VAR": (
+            secret_access_key_env_var
+        ),
+    }
+
+    return ModuleWiringSpec(
+        apps=("quickscale_modules_backups",),
+        settings=settings,
+    )
+
+
 MODULE_WIRING_BUILDERS = {
     "auth": _auth_wiring,
     "blog": _blog_wiring,
@@ -275,6 +338,7 @@ MODULE_WIRING_BUILDERS = {
     "crm": _crm_wiring,
     "forms": _forms_wiring,
     "storage": _storage_wiring,
+    "backups": _backups_wiring,
 }
 
 

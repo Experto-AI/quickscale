@@ -45,6 +45,11 @@ MODULE_CATALOG: tuple[ModuleCatalogEntry, ...] = (
         ready=True,
     ),
     ModuleCatalogEntry(
+        name="backups",
+        description="Private operational database backups with guarded restore workflows",
+        ready=True,
+    ),
+    ModuleCatalogEntry(
         name="billing",
         description="Stripe integration",
         ready=False,

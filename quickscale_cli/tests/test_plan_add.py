@@ -5,13 +5,13 @@ import os
 import yaml
 from click.testing import CliRunner
 
-from quickscale_cli.commands.plan_command import plan
+from quickscale_cli.commands.plan_command import plan  # type: ignore[import-untyped]
 
 
 class TestPlanAddBasic:
     """Basic tests for plan --add command"""
 
-    def test_plan_add_not_in_project(self):
+    def test_plan_add_not_in_project(self) -> None:
         """Test plan --add when not in a QuickScale project"""
         runner = CliRunner()
         with runner.isolated_filesystem():
@@ -20,7 +20,7 @@ class TestPlanAddBasic:
             assert result.exit_code != 0
             assert "Not in a QuickScale project" in result.output
 
-    def test_plan_add_help(self):
+    def test_plan_add_help(self) -> None:
         """Test that --add flag is documented in help"""
         runner = CliRunner()
         result = runner.invoke(plan, ["--help"])
@@ -29,7 +29,7 @@ class TestPlanAddBasic:
         assert "--add" in result.output
         assert "--configure-modules" in result.output
 
-    def test_plan_add_with_config(self):
+    def test_plan_add_with_config(self) -> None:
         """Test plan --add when config exists"""
         runner = CliRunner()
         with runner.isolated_filesystem():
@@ -54,7 +54,7 @@ docker:
             if result.exit_code == 0:
                 assert "auth" in result.output
 
-    def test_plan_add_with_state_only(self):
+    def test_plan_add_with_state_only(self) -> None:
         """Test plan --add when only state exists (no config)"""
         runner = CliRunner()
         with runner.isolated_filesystem():
@@ -85,7 +85,7 @@ docker:
 class TestPlanAddShowsCurrentModules:
     """Tests for displaying current modules"""
 
-    def test_plan_add_shows_installed_modules(self):
+    def test_plan_add_shows_installed_modules(self) -> None:
         """Test that --add shows which modules are already installed"""
         runner = CliRunner()
         with runner.isolated_filesystem():
@@ -139,7 +139,7 @@ docker:
 class TestPlanAddSelectsNewModules:
     """Tests for selecting new modules"""
 
-    def test_plan_add_skips_installed_modules(self):
+    def test_plan_add_skips_installed_modules(self) -> None:
         """Test that installed modules are not shown as available"""
         runner = CliRunner()
         with runner.isolated_filesystem():
@@ -201,7 +201,7 @@ docker:
                             "auth should not appear as available for selection"
                         )
 
-    def test_plan_add_updates_config(self):
+    def test_plan_add_updates_config(self) -> None:
         """Test that adding module updates quickscale.yml"""
         runner = CliRunner()
         with runner.isolated_filesystem():
@@ -227,7 +227,7 @@ docker:
                     content = f.read()
                 assert "blog" in content
 
-    def test_plan_add_preserves_existing_module_options(self):
+    def test_plan_add_preserves_existing_module_options(self) -> None:
         """Adding modules should keep previously configured module option dictionaries."""
         runner = CliRunner()
         with runner.isolated_filesystem():
@@ -256,7 +256,7 @@ docker:
             assert "public_base_url: https://cdn.example.com/media" in content
             assert "auth:" in content
 
-    def test_plan_add_prunes_legacy_storage_custom_domain(self):
+    def test_plan_add_prunes_legacy_storage_custom_domain(self) -> None:
         """Adding modules should drop legacy storage-only custom_domain keys."""
         runner = CliRunner()
         with runner.isolated_filesystem():
@@ -287,7 +287,7 @@ docker:
             assert "public_base_url: https://cdn.example.com/media" in content
             assert "auth:" in content
 
-    def test_plan_add_configure_modules_collects_storage_options(self):
+    def test_plan_add_configure_modules_collects_storage_options(self) -> None:
         """Planner should collect storage options interactively when requested."""
         runner = CliRunner()
         with runner.isolated_filesystem():
@@ -320,7 +320,7 @@ docker:
 class TestPlanNewProjectConfigureModules:
     """Tests for interactive module configuration during new project planning."""
 
-    def test_plan_new_project_configure_modules_collects_storage_options(self):
+    def test_plan_new_project_configure_modules_collects_storage_options(self) -> None:
         """New project planning should support interactive storage module config."""
         runner = CliRunner()
         with runner.isolated_filesystem():
@@ -349,7 +349,7 @@ class TestPlanNewProjectConfigureModules:
 class TestPlanAddNoModulesSelected:
     """Tests for when no modules are selected"""
 
-    def test_plan_add_no_selection(self):
+    def test_plan_add_no_selection(self) -> None:
         """Test --add with no module selected"""
         runner = CliRunner()
         with runner.isolated_filesystem():
@@ -376,7 +376,7 @@ docker:
 class TestPlanAddAllModulesInstalled:
     """Tests for when all modules are already installed"""
 
-    def test_plan_add_all_installed(self):
+    def test_plan_add_all_installed(self) -> None:
         """Test --add when all modules are already installed"""
         runner = CliRunner()
         with runner.isolated_filesystem():
@@ -419,6 +419,10 @@ class TestPlanAddAllModulesInstalled:
                                 "version": None,
                                 "embedded_at": "2025-12-01T11:00:00",
                             },
+                            "backups": {
+                                "version": None,
+                                "embedded_at": "2025-12-01T11:00:00",
+                            },
                             "billing": {
                                 "version": None,
                                 "embedded_at": "2025-12-01T11:00:00",
@@ -437,20 +441,21 @@ class TestPlanAddAllModulesInstalled:
                     """
 version: "1"
 project:
-  slug: testapp
-  package: testapp
-  theme: showcase_html
+    slug: testapp
+    package: testapp
+    theme: showcase_html
 modules:
-  auth:
-  blog:
-  listings:
-  crm:
-  forms:
+    auth:
+    blog:
+    listings:
+    crm:
+    forms:
     storage:
-  billing:
-  teams:
+    backups:
+    billing:
+    teams:
 docker:
-  start: false
+    start: false
 """
                 )
 

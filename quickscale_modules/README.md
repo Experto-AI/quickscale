@@ -18,6 +18,7 @@ These directories currently include packaging and implementation scaffolding. Us
 | [forms](./forms/README.md) | Forms module with local packaging, tests, and manifest |
 | [listings](./listings/README.md) | Listings module with local packaging, tests, and manifest |
 | [storage](./storage/README.md) | Storage module with local packaging, tests, and manifest |
+| [backups](./backups/README.md) | Admin/ops-first backups module with private local/remote artifact workflows |
 
 ### Placeholder directories
 

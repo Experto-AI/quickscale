@@ -1089,6 +1089,16 @@ class TestGitignoreContent:
         assert ".pytest_cache" in output
         assert ".coverage" in output
 
+    def test_private_quickscale_backup_artifacts(
+        self, jinja_env: Environment, test_context: dict[str, str]
+    ) -> None:
+        """Test .gitignore excludes private backup artifacts without hiding state files."""
+        template = jinja_env.get_template(".gitignore.j2")
+        output = template.render(test_context)
+        assert ".quickscale/backups/" in output
+        assert "\n.quickscale/\n" not in output
+        assert ".quickscale/state.yml" not in output
+
 
 class TestEditorconfigContent:
     """Verify .editorconfig defines consistent editor settings."""

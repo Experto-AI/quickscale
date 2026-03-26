@@ -11,6 +11,7 @@ from typing import Any
 
 import click
 
+from quickscale_cli.backups_contract import sanitize_module_options
 from quickscale_cli.commands.module_config import MODULE_CONFIGURATORS
 from quickscale_cli.module_catalog import get_module_entries
 from quickscale_cli.schema.config_schema import (
@@ -185,6 +186,8 @@ def _copy_module_options(
     copied = dict(options or {})
     if module_name == "storage":
         copied.pop("custom_domain", None)
+    if module_name is not None:
+        copied = sanitize_module_options(module_name, copied)
     return copied
 
 

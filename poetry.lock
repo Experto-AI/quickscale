@@ -1647,6 +1647,25 @@ type = "directory"
 url = "quickscale_modules/auth"
 
 [[package]]
+name = "quickscale-module-backups"
+version = "0.77.0"
+description = "QuickScale operational backups module with private local and remote artifact workflows"
+optional = false
+python-versions = "^3.14"
+groups = ["main"]
+files = []
+develop = true
+
+[package.dependencies]
+boto3 = "^1.40.46"
+Django = ">=6.0.3,<7.0.0"
+django-storages = "^1.14.6"
+
+[package.source]
+type = "directory"
+url = "quickscale_modules/backups"
+
+[[package]]
 name = "quickscale-module-blog"
 version = "0.66.0"
 description = "QuickScale blog module with Markdown support and RSS feeds"
@@ -1952,4 +1971,4 @@ files = [
 [metadata]
 lock-version = "2.1"
 python-versions = "^3.14"
-content-hash = "1b9f3fb6816e572d341b3dce0f860b9bbe71da5aff98b1ca03465d0d82ce3030"
+content-hash = "47faba38dd5248321e1a013b6df00d97df1451aebbcfcc2e19e6e293c70e1329"

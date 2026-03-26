@@ -6,34 +6,40 @@ from unittest.mock import Mock, patch
 import click
 import pytest
 
+from quickscale_cli.backups_contract import (
+    DEFAULT_BACKUPS_REMOTE_ACCESS_KEY_ID_ENV_VAR,
+    DEFAULT_BACKUPS_REMOTE_SECRET_ACCESS_KEY_ENV_VAR,
+)
 from quickscale_cli.commands.apply_command import (
     EmbedModulesResult,
-    _run_command,
-    _generate_project,
-    _init_git,
-    _git_commit,
-    _embed_module,
-    _run_poetry_install,
-    _run_migrations,
-    _run_migrations_in_docker,
-    _start_docker,
-    _load_module_manifests,
     _apply_mutable_config,
     _check_immutable_config_changes,
-    _update_module_config_in_state,
-    _load_and_validate_config,
+    _check_output_directory,
+    _commit_pending_config_changes,
     _determine_output_path,
     _display_config_summary,
-    _handle_delta_and_existing_state,
-    _check_output_directory,
-    _generate_with_existing_config,
-    _init_git_with_config,
-    _commit_pending_config_changes,
+    _display_next_steps,
+    _embed_module,
     _embed_modules_step,
+    _ensure_backups_gitignore_rules,
+    _execute_apply_steps,
+    _generate_project,
+    _generate_with_existing_config,
+    _git_commit,
+    _handle_delta_and_existing_state,
+    _init_git,
+    _init_git_with_config,
+    _load_and_validate_config,
+    _load_module_manifests,
+    _normalize_backups_gitignore_entry,
+    _run_command,
+    _run_migrations,
+    _run_migrations_in_docker,
+    _run_poetry_install,
     _run_post_generation_steps,
     _save_project_state,
-    _display_next_steps,
-    _execute_apply_steps,
+    _start_docker,
+    _update_module_config_in_state,
 )
 
 
@@ -461,6 +467,67 @@ class TestLoadAndValidateConfig:
         )
         result = _load_and_validate_config(config)
         assert result.project.slug == "myapp"
+
+    def test_valid_config_with_empty_backups_module_uses_defaults(self, tmp_path):
+        """Empty backups block should pass apply validation with default values."""
+        config = tmp_path / "quickscale.yml"
+        config.write_text(
+            'version: "1"\n'
+            "project:\n"
+            "  slug: myapp\n"
+            "  package: myapp\n"
+            "  theme: showcase_html\n"
+            "modules:\n"
+            "  backups:\n"
+            "docker:\n"
+            "  start: false\n"
+        )
+
+        result = _load_and_validate_config(config)
+
+        assert result.modules["backups"].options == {}
+
+    def test_legacy_backups_secrets_are_sanitized_on_load(self, tmp_path):
+        """Legacy raw backup secrets should be rewritten to env-var references."""
+        config = tmp_path / "quickscale.yml"
+        config.write_text(
+            'version: "1"\n'
+            "project:\n"
+            "  slug: myapp\n"
+            "  package: myapp\n"
+            "  theme: showcase_html\n"
+            "modules:\n"
+            "  backups:\n"
+            "    target_mode: private_remote\n"
+            "    remote_bucket_name: private-bucket\n"
+            "    remote_region_name: auto\n"
+            "    remote_access_key_id: legacy-key\n"
+            "    remote_secret_access_key: legacy-secret\n"
+            "docker:\n"
+            "  start: false\n"
+        )
+
+        result = _load_and_validate_config(config)
+        rewritten = config.read_text()
+
+        assert (
+            result.modules["backups"].options["remote_access_key_id_env_var"]
+            == DEFAULT_BACKUPS_REMOTE_ACCESS_KEY_ID_ENV_VAR
+        )
+        assert (
+            result.modules["backups"].options["remote_secret_access_key_env_var"]
+            == DEFAULT_BACKUPS_REMOTE_SECRET_ACCESS_KEY_ENV_VAR
+        )
+        assert "legacy-key" not in rewritten
+        assert "legacy-secret" not in rewritten
+        assert (
+            "remote_access_key_id_env_var: QUICKSCALE_BACKUPS_REMOTE_ACCESS_KEY_ID"
+            in rewritten
+        )
+        assert (
+            "remote_secret_access_key_env_var: QUICKSCALE_BACKUPS_REMOTE_SECRET_ACCESS_KEY"
+            in rewritten
+        )
 
     def test_read_error(self, tmp_path):
         """Test generic read error"""
@@ -958,6 +1025,34 @@ class TestSaveProjectState:
             _save_project_state(tmp_path, config, None, [], delta)
             # Should not raise
 
+    def test_backups_state_save_sanitizes_legacy_secret_values(self, tmp_path):
+        """Backups state should persist env-var references, not raw secrets."""
+        config = Mock()
+        config.project.slug = "myapp"
+        config.project.package = "myapp"
+        config.project.theme = "showcase_html"
+        config.modules = {
+            "backups": Mock(
+                options={
+                    "target_mode": "private_remote",
+                    "remote_bucket_name": "private-bucket",
+                    "remote_region_name": "auto",
+                    "remote_access_key_id": "legacy-key",
+                    "remote_secret_access_key": "legacy-secret",
+                }
+            )
+        }
+        delta = Mock()
+        delta.config_deltas = {}
+
+        _save_project_state(tmp_path, config, None, ["backups"], delta)
+
+        state_text = (tmp_path / ".quickscale" / "state.yml").read_text()
+        assert "legacy-key" not in state_text
+        assert "legacy-secret" not in state_text
+        assert "remote_access_key_id_env_var" in state_text
+        assert "remote_secret_access_key_env_var" in state_text
+
 
 # ============================================================================
 # _display_next_steps
@@ -994,6 +1089,125 @@ class TestDisplayNextSteps:
 
         assert "Docker auto-start failed during apply" in output
         assert "quickscale up --build" in output
+
+    def test_backups_private_remote_mentions_runtime_env_vars(
+        self,
+        tmp_path,
+        capsys,
+    ):
+        """Backups next steps should direct operators to env-var credentials."""
+        config = Mock()
+        config.project.slug = "myapp"
+        config.docker.start = False
+        config.modules = {
+            "backups": Mock(
+                options={
+                    "target_mode": "private_remote",
+                    "remote_access_key_id_env_var": "OPS_BACKUPS_ACCESS_KEY_ID",
+                    "remote_secret_access_key_env_var": "OPS_BACKUPS_SECRET_ACCESS_KEY",
+                }
+            )
+        }
+
+        _display_next_steps(tmp_path, config, False)
+        output = capsys.readouterr().out
+
+        assert "OPS_BACKUPS_ACCESS_KEY_ID" in output
+        assert "OPS_BACKUPS_SECRET_ACCESS_KEY" in output
+        assert "Configure runtime credentials via env vars" in output
+
+
+# ============================================================================
+# Backups-specific helpers
+# ============================================================================
+
+
+class TestBackupsApplyHelpers:
+    """Tests for backups config sanitization and gitignore helpers."""
+
+    @pytest.mark.parametrize(
+        ("local_directory", "expected"),
+        [
+            (".private/backups", ".private/backups/"),
+            ("./ops/backups", "ops/backups/"),
+            ("./!foo", None),
+            ("./#foo", None),
+            (r".\\!foo", None),
+            ("!ops/backups", None),
+            (" #ops/backups", None),
+            ("ops/*/backups", None),
+            ("ops/backups?", None),
+            ("ops/[draft]/backups", None),
+            ("ops/backups\nmodules/auth", None),
+            ("ops/backups\rmodules/auth", None),
+            ("ops/backup\x00s", None),
+            (r"C:\\backups", None),
+            ("C:backups", None),
+            ("C:/backups", None),
+            (r"D:ops\\backups", None),
+            ("/var/backups", None),
+            ("../outside", None),
+            (".quickscale", None),
+        ],
+    )
+    def test_normalize_backups_gitignore_entry(self, local_directory, expected):
+        assert _normalize_backups_gitignore_entry(local_directory) == expected
+
+    def test_ensure_backups_gitignore_rules_adds_repo_relative_entry(self, tmp_path):
+        qs_config = Mock()
+        qs_config.modules = {
+            "backups": Mock(options={"local_directory": ".private/backups"})
+        }
+
+        result = _ensure_backups_gitignore_rules(tmp_path, qs_config)
+
+        assert result is True
+        gitignore_text = (tmp_path / ".gitignore").read_text()
+        assert "# QuickScale private backup artifacts" in gitignore_text
+        assert ".private/backups/" in gitignore_text
+
+    def test_ensure_backups_gitignore_rules_uses_default_directory_for_empty_config(
+        self,
+        tmp_path,
+    ):
+        qs_config = Mock()
+        qs_config.modules = {"backups": Mock(options={})}
+
+        result = _ensure_backups_gitignore_rules(tmp_path, qs_config)
+
+        assert result is True
+        gitignore_text = (tmp_path / ".gitignore").read_text()
+        assert ".quickscale/backups/" in gitignore_text
+
+    @pytest.mark.parametrize(
+        "local_directory",
+        [
+            "./!foo",
+            "./#foo",
+            r".\!foo",
+            "!ops/backups",
+            "#ops/backups",
+            "ops/*/backups",
+            "ops/backups?",
+            "ops/[draft]/backups",
+            "ops/backups\n!modules/auth",
+            "ops/backups\x00private",
+        ],
+    )
+    def test_ensure_backups_gitignore_rules_skips_unsafe_gitignore_patterns(
+        self,
+        tmp_path,
+        local_directory,
+    ):
+        qs_config = Mock()
+        qs_config.modules = {
+            "backups": Mock(options={"local_directory": local_directory})
+        }
+
+        result = _ensure_backups_gitignore_rules(tmp_path, qs_config)
+
+        assert result is True
+        assert not (tmp_path / ".gitignore").exists()
 
 
 # ============================================================================

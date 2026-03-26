@@ -147,10 +147,13 @@ modules:
   blog:
   listings:
   crm:
+  forms:
+  storage:
+  backups:
 """
         config = validate_config(yaml_content)
 
-        assert len(config.modules) == 6
+        assert len(config.modules) == 9
         assert set(config.modules.keys()) == {
             "auth",
             "billing",
@@ -158,6 +161,9 @@ modules:
             "blog",
             "listings",
             "crm",
+            "forms",
+            "storage",
+            "backups",
         }
 
     def test_all_valid_themes(self):

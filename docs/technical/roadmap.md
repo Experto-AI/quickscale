@@ -135,9 +135,11 @@ This release completed QuickScale's shared media-storage milestone: the storage 
 
 ### v0.77.0: `quickscale_modules.backups` - Database Backup & Restore Module
 
-**Status**: 📋 Planned
+**Status**: 🚧 Admin/ops-first MVI in progress
 
 **Strategic Context**: First-party operational safety module for generated projects. Inspired by prior `gestion-mv` backup tooling, but QuickScale should define a cleaner module contract centered on database-focused backups, optional private object-storage offload, planner/apply integration, and scheduler-ready execution without coupling backups to public media delivery.
+
+**Current MVI shape**: local private backups by default, optional private remote offload via storage-compatible settings, Django admin create/validate/download/delete flows, retention policy metadata, and CLI-only guarded restore execution. Scheduler orchestration remains external and command-driven.
 
 **Prerequisites**:
 - ✅ Storage module (v0.76.0) for optional remote private backup storage
@@ -148,51 +150,52 @@ This release completed QuickScale's shared media-storage milestone: the storage 
 - **Defer if needed**: reusable background-job/scheduler infrastructure shared by multiple modules. For MVP, automatic execution should work via platform cron or scheduled tasks invoking a management command; extract a dedicated scheduler module later only if multiple modules need persistent periodic orchestration.
 
 **Module Goals**:
-- [ ] Safe PostgreSQL backup creation with operator-friendly restore workflow
-- [ ] Downloadable backups from the admin/ops surface
-- [ ] Optional private S3-compatible storage using the Storage module contract, without exposing backup artifacts as media
-- [ ] Retention-ready metadata and audit trail for operational visibility
+- [x] Safe PostgreSQL backup creation with operator-friendly restore workflow
+- [x] Downloadable backups from the admin/ops surface
+- [x] Optional private S3-compatible storage using the Storage module contract, without exposing backup artifacts as media
+- [x] Retention-ready metadata and audit trail for operational visibility
 
 **Backup & Restore Capabilities**:
-- [ ] Database-only backup format for the MVP path (`pg_dump` custom/compressed format preferred; SQL export only if needed for compatibility)
-- [ ] Deterministic backup naming including project/environment/timestamp
-- [ ] Backup metadata manifest (database engine/version, app version, module versions, checksum, size, created_at, storage target)
-- [ ] Pre-restore validation flow (file type, checksum, engine compatibility, destructive-action confirmation)
-- [ ] Restore workflow limited to privileged operators, with explicit warnings and environment guards
-- [ ] Optional dry-run validation command before applying a restore
+- [x] Database-only backup format for the MVP path (`pg_dump` custom/compressed format preferred; SQL export fallback used for compatibility/non-PostgreSQL test environments)
+- [x] Deterministic backup naming including project/environment/timestamp
+- [x] Backup metadata manifest (database engine/version, app version, module versions, checksum, size, created_at, storage target)
+- [x] Pre-restore validation flow (file type, checksum, engine compatibility, destructive-action confirmation)
+- [x] Restore workflow limited to privileged operators, with explicit warnings and environment guards
+- [x] Optional dry-run validation command before applying a restore
 
 **Private Storage Integration**:
-- [ ] Local private backup directory separate from public `MEDIA_URL` paths
-- [ ] Optional remote backup target that reuses Storage-module credentials/adapters for S3-compatible providers
-- [ ] Dedicated private backup prefix/bucket semantics; never use `public_base_url` or public CDN URLs
-- [ ] Operator download flow via admin stream or time-limited private retrieval, not public asset links
-- [ ] Retention and delete synchronization between local metadata and remote private objects
+- [x] Local private backup directory separate from public `MEDIA_URL` paths
+- [x] Optional remote backup target that uses private storage-compatible settings for S3-compatible providers
+- [x] Dedicated private backup prefix/bucket semantics; never use `public_base_url` or public CDN URLs
+- [x] Operator download flow via admin stream or local-path retrieval, not public asset links
+- [x] Retention and delete synchronization between local metadata and remote private objects
 
 **Minimal Admin Panel**:
-- [ ] `BackupSettings`/policy model in Django admin for storage target, retention, naming prefix, and automation toggle
-- [ ] `BackupArtifact`/history model in Django admin with status, checksum, size, initiated_by, and restore markers
-- [ ] Admin actions/buttons for create, validate, download, upload/offload, and delete
-- [ ] Restore action gated behind additional confirmation and superuser-only permissions
-- [ ] Minimal help text/documentation inside admin for storage prerequisites and operational warnings
+- [x] `BackupSettings`/policy model in Django admin for storage target, retention, naming prefix, and automation toggle
+- [x] `BackupArtifact`/history model in Django admin with status, checksum, size, initiated_by, and restore markers
+- [x] Admin actions/buttons for create, validate, download, upload/offload, and delete
+- [x] Restore action remains CLI-only with additional confirmation and environment guards
+- [x] Minimal help text/documentation inside admin for storage prerequisites and operational warnings
 
 **Automation / Scheduling**:
-- [ ] Management command(s) for on-demand backup creation and scheduled execution hooks
-- [ ] Schedule policy fields (enabled, cadence/cron expression or preset, retention class, target destination)
-- [ ] MVP automation path documented for platform cron / Railway scheduled jobs / container cron invoking the backup command
+- [x] Management command(s) for on-demand backup creation and scheduled execution hooks
+- [x] Schedule policy fields (enabled, cadence/cron expression or preset, retention class, target destination)
+- [x] MVP automation path documented for platform cron / Railway scheduled jobs / container cron invoking the backup command
 - [ ] Evaluate `django-celery-beat` or a dedicated scheduler module only after another QuickScale feature needs shared recurring jobs
-- [ ] Prevent overlapping runs and record failure/success outcomes for observability
+- [x] Prevent overlapping runs and record failure/success outcomes for observability
 
 **CLI / Planner Integration**:
-- [ ] Add module manifest and planner prompts for retention, local vs private-storage target, and optional schedule policy
-- [ ] Apply-time wiring for settings, admin registration, URLs or management-command guidance, and storage dependency checks
-- [ ] Next-steps output explaining secret configuration and restore safety
+- [x] Add module manifest and planner prompts for retention, local vs private-storage target, and optional schedule policy
+- [x] Apply-time wiring for settings, admin registration, management-command guidance, and private-remote prerequisite checks
+- [x] Next-steps output explaining env-based secret configuration and restore safety
 
 **Security & Operational Guardrails**:
-- [ ] Backups accessible only to privileged staff/superusers
-- [ ] Secret-safe logging and no accidental exposure through media routes or template context
+- [x] Backups accessible only to privileged staff/superusers
+- [x] Secret-safe logging and no accidental exposure through media routes or template context
+- [x] Private-remote credentials persist only as env-var references; artifact rows keep location metadata only
 - [ ] Checksums plus optional encryption/compression support evaluation
-- [ ] Concurrency lock to avoid duplicate scheduled/manual backup collisions
-- [ ] Clear rollback/restore documentation with production warnings
+- [x] Concurrency lock to avoid duplicate scheduled/manual backup collisions
+- [x] Clear rollback/restore documentation with production warnings
 
 **Testing**:
 - [ ] Unit tests for backup naming, metadata, checksum, retention, and permission checks

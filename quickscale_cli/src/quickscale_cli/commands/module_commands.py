@@ -195,7 +195,15 @@ def _perform_module_embed(
         applier(project_path, config)
 
     # Install dependencies for modules that need it
-    if module in ["auth", "blog", "listings", "crm", "forms", "storage"]:
+    if module in [
+        "auth",
+        "blog",
+        "listings",
+        "crm",
+        "forms",
+        "storage",
+        "backups",
+    ]:
         if not _install_module_dependencies(project_path, module):
             return False
 
