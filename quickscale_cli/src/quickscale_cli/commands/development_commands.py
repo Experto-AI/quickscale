@@ -548,7 +548,7 @@ def _dependencies_changed_since_last_build() -> bool:
         )
         return changed
 
-    except (json.JSONDecodeError, KeyError, OSError):
+    except json.JSONDecodeError, KeyError, OSError:
         # If we can't read state, don't warn (fail safe)
         return False
 

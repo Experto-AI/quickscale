@@ -22,7 +22,7 @@ def is_git_repo(path: Path | None = None) -> bool:
             text=True,
         )
         return True
-    except (subprocess.CalledProcessError, FileNotFoundError):
+    except subprocess.CalledProcessError, FileNotFoundError:
         return False
 
 
@@ -61,7 +61,11 @@ def check_remote_branch_exists(
 
 
 def run_git_subtree_add(
-    prefix: str, remote: str, branch: str, squash: bool = True, path: Path | None = None
+    prefix: str,
+    remote: str,
+    branch: str,
+    squash: bool = True,
+    path: Path | None = None,
 ) -> None:
     """Execute git subtree add with error handling"""
     cwd = path or Path.cwd()

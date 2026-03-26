@@ -207,7 +207,7 @@ def get_setting_value(settings_path: Path, setting_name: str) -> tuple[bool, Any
 
         value = ast.literal_eval(value_str)
         return True, value
-    except (ValueError, SyntaxError):
+    except ValueError, SyntaxError:
         # Return as string if can't parse
         return True, value_str
 

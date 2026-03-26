@@ -17,7 +17,7 @@ def is_docker_running() -> bool:
     try:
         subprocess.run(["docker", "info"], capture_output=True, check=True, timeout=5)
         return True
-    except (subprocess.SubprocessError, FileNotFoundError, subprocess.TimeoutExpired):
+    except subprocess.SubprocessError, FileNotFoundError, subprocess.TimeoutExpired:
         return False
 
 
@@ -39,7 +39,7 @@ def get_docker_compose_command() -> list[str]:
             ["docker", "compose", "version"], capture_output=True, check=True, timeout=2
         )
         return ["docker", "compose"]
-    except (subprocess.SubprocessError, FileNotFoundError, subprocess.TimeoutExpired):
+    except subprocess.SubprocessError, FileNotFoundError, subprocess.TimeoutExpired:
         # Fall back to docker-compose (v1 standalone)
         return ["docker-compose"]
 
@@ -63,7 +63,7 @@ def get_container_status(container_name: str) -> str | None:
             timeout=5,
         )
         return result.stdout.strip() or None
-    except (subprocess.SubprocessError, subprocess.TimeoutExpired):
+    except subprocess.SubprocessError, subprocess.TimeoutExpired:
         return None
 
 
@@ -96,7 +96,7 @@ def get_running_containers() -> list[str]:
         )
         containers = [c for c in result.stdout.strip().split("\n") if c]
         return containers
-    except (subprocess.SubprocessError, subprocess.TimeoutExpired):
+    except subprocess.SubprocessError, subprocess.TimeoutExpired:
         return []
 
 
