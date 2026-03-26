@@ -1,23 +1,31 @@
-[tool.poetry]
+[project]
 name = "quickscale-cli"
 version = "0.76.0"
 description = "Command-line interface for QuickScale Django project generator"
-authors = ["Experto AI <victor@experto.ai>"]
-license = "Apache-2.0"
-keywords = ["django", "cli", "project-generator", "saas"]
-homepage = "https://github.com/Experto-AI/quickscale"
-repository = "https://github.com/Experto-AI/quickscale"
-documentation = "https://github.com/Experto-AI/quickscale/tree/main/docs"
+requires-python = ">=3.14,<4.0"
 readme = "README.md"
+license = "Apache-2.0"
+authors = [{name = "Experto AI", email = "victor@experto.ai"}]
+keywords = ["django", "cli", "project-generator", "saas"]
 classifiers = [
     "Development Status :: 3 - Alpha",
     "Intended Audience :: Developers",
-    "License :: OSI Approved :: Apache Software License",
     "Programming Language :: Python :: 3",
     "Programming Language :: Python :: 3.14",
     "Framework :: Django",
     "Framework :: Django :: 6.0",
 ]
+dynamic = ["dependencies"]
+
+[project.urls]
+Homepage = "https://github.com/Experto-AI/quickscale"
+Repository = "https://github.com/Experto-AI/quickscale"
+Documentation = "https://github.com/Experto-AI/quickscale/tree/main/docs"
+
+[project.scripts]
+quickscale = "quickscale_cli.main:cli"
+
+[tool.poetry]
 packages = [{include = "quickscale_cli", from = "src"}]
 
 [tool.poetry.dependencies]
@@ -28,9 +36,6 @@ quickscale-core = {path = "../quickscale_core"}
 [tool.poetry.group.dev.dependencies]
 # Dev dependencies centralized in root pyproject.toml
 # Use: poetry install from repository root
-
-[tool.poetry.scripts]
-quickscale = "quickscale_cli.main:cli"
 
 [build-system]
 requires = ["poetry-core"]

@@ -1,8 +1,12 @@
-[tool.poetry]
+[project]
 name = "quickscale-monorepo"
 version = "0.0.0"
 description = "Repository-level helper project for local development with centralized dependencies"
-authors = ["Experto AI <victor@experto.ai>"]
+authors = [{name = "Experto AI", email = "victor@experto.ai"}]
+requires-python = ">=3.14,<4.0"
+dynamic = ["dependencies"]
+
+[tool.poetry]
 package-mode = false
 
 [tool.poetry.dependencies]

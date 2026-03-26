@@ -216,12 +216,7 @@ quickscale_cli/*_test_*/
 quickscale_core/testproject*/
 quickscale_core/*_test_*/
 
-# Temporary README.md copies for PyPI packaging
-# The build script copies README.md to each package directory temporarily
-# to satisfy Poetry's requirement that readme files be within the package
-quickscale_core/README.md
-quickscale_cli/README.md
-quickscale/README.md
+# Package README files are required by Poetry editable builds and must be tracked
 
 # Build state tracking files (used by build scripts)
 .quickscale/

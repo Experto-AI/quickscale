@@ -1,15 +1,19 @@
-[tool.poetry]
+[project]
 name = "quickscale-module-crm"
 version = "0.73.0"
 description = "QuickScale CRM module with contacts, companies, deals, and pipeline management"
-authors = ["Experto-AI <contact@experto.ai>"]
-license = "Apache-2.0"
+requires-python = ">=3.14,<4.0"
 readme = "README.md"
+license = "Apache-2.0"
+authors = [{name = "Experto AI", email = "victor@experto.ai"}]
+dynamic = ["dependencies"]
+
+[tool.poetry]
 packages = [{include = "quickscale_modules_crm", from = "src"}]
 
 [tool.poetry.dependencies]
 python = "^3.14"
-Django = "^6.0"
+Django = ">=6.0.3,<7.0.0"
 djangorestframework = "^3.16.1"
 django-filter = "^25.2"
 

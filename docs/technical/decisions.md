@@ -586,18 +586,22 @@ config:
 
 **1.1. Module pyproject.toml Template:**
 ```toml
-[tool.poetry]
+[project]
 name = "quickscale-module-<name>"
 version = "0.XX.0"
 description = "QuickScale <name> module - brief description"
-authors = ["Experto-AI <contact@experto.ai>"]
+requires-python = ">=3.14,<4.0"
+authors = [{name = "Experto AI", email = "victor@experto.ai"}]
 license = "Apache-2.0"
 readme = "README.md"
+dynamic = ["dependencies"]
+
+[tool.poetry]
 packages = [{include = "quickscale_modules_<name>", from = "src"}]
 
 [tool.poetry.dependencies]
 python = "^3.14"
-Django = "^6.0"
+Django = ">=6.0.3,<7.0.0"
 # Add module-specific runtime dependencies here (e.g., django-allauth, Pillow)
 
 [tool.poetry.group.dev.dependencies]

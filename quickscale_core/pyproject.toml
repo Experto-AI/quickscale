@@ -1,23 +1,28 @@
-[tool.poetry]
+[project]
 name = "quickscale-core"
 version = "0.76.0"
 description = "Core scaffolding and utilities for QuickScale Django project generator"
-authors = ["Experto AI <victor@experto.ai>"]
-license = "Apache-2.0"
-keywords = ["django", "scaffolding", "project-generator", "saas"]
-homepage = "https://github.com/Experto-AI/quickscale"
-repository = "https://github.com/Experto-AI/quickscale"
-documentation = "https://github.com/Experto-AI/quickscale/tree/main/docs"
+requires-python = ">=3.14,<4.0"
 readme = "README.md"
+license = "Apache-2.0"
+authors = [{name = "Experto AI", email = "victor@experto.ai"}]
+keywords = ["django", "scaffolding", "project-generator", "saas"]
 classifiers = [
     "Development Status :: 3 - Alpha",
     "Intended Audience :: Developers",
-    "License :: OSI Approved :: Apache Software License",
     "Programming Language :: Python :: 3",
     "Programming Language :: Python :: 3.14",
     "Framework :: Django",
     "Framework :: Django :: 6.0",
 ]
+dynamic = ["dependencies"]
+
+[project.urls]
+Homepage = "https://github.com/Experto-AI/quickscale"
+Repository = "https://github.com/Experto-AI/quickscale"
+Documentation = "https://github.com/Experto-AI/quickscale/tree/main/docs"
+
+[tool.poetry]
 packages = [{include = "quickscale_core", from = "src"}]
 include = [
     "src/quickscale_core/generator/templates/**/*",

@@ -1,14 +1,20 @@
-[tool.poetry]
+[project]
 name = "quickscale"
 version = "0.76.0"
 description = "Meta-package that installs quickscale-core and quickscale-cli together"
-authors = ["Experto AI <victor@experto.ai>"]
-license = "Apache-2.0"
-homepage = "https://github.com/Experto-AI/quickscale"
-repository = "https://github.com/Experto-AI/quickscale"
-documentation = "https://github.com/Experto-AI/quickscale/tree/main/docs"
-keywords = ["django", "cli", "scaffolding", "project-generator"]
+requires-python = ">=3.14,<4.0"
 readme = "README.md"
+license = "Apache-2.0"
+authors = [{name = "Experto AI", email = "victor@experto.ai"}]
+keywords = ["django", "cli", "scaffolding", "project-generator"]
+dynamic = ["dependencies"]
+
+[project.urls]
+Homepage = "https://github.com/Experto-AI/quickscale"
+Repository = "https://github.com/Experto-AI/quickscale"
+Documentation = "https://github.com/Experto-AI/quickscale/tree/main/docs"
+
+[tool.poetry]
 
 [tool.poetry.dependencies]
 python = "^3.14"
