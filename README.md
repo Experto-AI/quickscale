@@ -13,7 +13,7 @@ The full billing module is expected to include:
 - **Webhook handling** - Secure Stripe webhook processing with logging
 - **Invoice management** - Customer billing history and invoice generation
 - **Payment methods** - Credit card and payment method management
-- **Theme support** - HTML, HTMX, and React theme variants
+- **Theme support** - HTML and React theme variants
 
 ## Module Distribution
 
