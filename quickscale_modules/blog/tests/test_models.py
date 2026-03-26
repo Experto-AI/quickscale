@@ -10,6 +10,10 @@ from django.core.files.uploadedfile import SimpleUploadedFile
 from PIL import Image
 
 from quickscale_modules_blog.models import (
+    _build_public_media_url,
+    _prepare_thumbnail_image,
+    _save_format_from_name,
+    _thumbnail_save_kwargs,
     AuthorProfile,
     BlogMediaAsset,
     Category,
@@ -18,6 +22,81 @@ from quickscale_modules_blog.models import (
 )
 
 User = get_user_model()
+
+
+class TestModelHelpers:
+    """Tests for blog model helper functions."""
+
+    def test_build_public_media_url_returns_empty_for_blank_reference(self, settings):
+        """Blank media references should resolve to an empty URL."""
+        settings.QUICKSCALE_STORAGE_PUBLIC_BASE_URL = ""
+        settings.MEDIA_URL = "/media/"
+
+        assert _build_public_media_url("") == ""
+
+    def test_build_public_media_url_uses_configured_public_base_url(self, settings):
+        """Configured CDN/public base URL should take precedence."""
+        settings.QUICKSCALE_STORAGE_PUBLIC_BASE_URL = "https://cdn.example.com/media"
+        settings.MEDIA_URL = "/media/"
+
+        assert (
+            _build_public_media_url("blog/images/example.png")
+            == "https://cdn.example.com/media/blog/images/example.png"
+        )
+
+    def test_build_public_media_url_normalizes_relative_media_url(self, settings):
+        """Relative MEDIA_URL values should be normalized into a public path."""
+        settings.QUICKSCALE_STORAGE_PUBLIC_BASE_URL = ""
+        settings.MEDIA_URL = "uploads"
+
+        assert _build_public_media_url("blog/images/example.png") == (
+            "/uploads/blog/images/example.png"
+        )
+
+    @pytest.mark.parametrize(
+        ("file_name", "detected_format", "expected_format"),
+        [
+            ("example.jpg", None, "JPEG"),
+            ("example.jpeg", None, "JPEG"),
+            ("example.png", None, "PNG"),
+            ("example.webp", None, "WEBP"),
+            ("example.gif", None, "GIF"),
+            ("example.unknown", None, "JPEG"),
+            ("example.bin", "JPG", "JPEG"),
+            ("example.bin", "png", "PNG"),
+        ],
+    )
+    def test_save_format_from_name_resolves_supported_formats(
+        self,
+        file_name,
+        detected_format,
+        expected_format,
+    ):
+        """Thumbnail save format inference should cover extensions and detected types."""
+        assert _save_format_from_name(file_name, detected_format) == expected_format
+
+    def test_thumbnail_save_kwargs_match_format_expectations(self):
+        """Thumbnail save options should match the target image format."""
+        assert _thumbnail_save_kwargs("JPEG") == {"quality": 85, "optimize": True}
+        assert _thumbnail_save_kwargs("WEBP") == {"quality": 85, "optimize": True}
+        assert _thumbnail_save_kwargs("PNG") == {"optimize": True}
+        assert _thumbnail_save_kwargs("GIF") == {}
+
+    def test_prepare_thumbnail_image_converts_non_rgb_jpeg(self):
+        """JPEG thumbnails should be converted to an RGB-compatible mode."""
+        image = Image.new("RGBA", (20, 20), color="navy")
+
+        prepared = _prepare_thumbnail_image(image, "JPEG")
+
+        assert prepared.mode == "RGB"
+
+    def test_prepare_thumbnail_image_leaves_non_jpeg_modes_unchanged(self):
+        """Non-JPEG thumbnail formats should preserve the source image mode."""
+        image = Image.new("RGBA", (20, 20), color="teal")
+
+        prepared = _prepare_thumbnail_image(image, "PNG")
+
+        assert prepared.mode == "RGBA"
 
 
 @pytest.mark.django_db
