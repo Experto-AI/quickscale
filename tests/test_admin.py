@@ -9,10 +9,12 @@ from unittest.mock import patch
 
 import pytest
 from django.contrib import admin
+from django.contrib.auth import get_user_model
+from django.contrib.messages import get_messages
 from django.contrib.messages.storage.fallback import FallbackStorage
 from django.contrib.sessions.middleware import SessionMiddleware
 from django.http import FileResponse, HttpRequest
-from django.test import RequestFactory
+from django.test import Client, RequestFactory
 from django.urls import reverse
 
 from quickscale_modules_backups.admin import BackupArtifactAdmin, BackupPolicyAdmin
@@ -20,7 +22,6 @@ from quickscale_modules_backups.models import BackupArtifact, BackupPolicy
 
 if TYPE_CHECKING:
     from django.contrib.auth.base_user import AbstractBaseUser
-    from django.test import Client
 
 
 def _policy_admin() -> BackupPolicyAdmin:
@@ -138,10 +139,55 @@ class TestBackupPolicyAdmin:
         ):
             policy_admin.create_backup_now(request, BackupPolicy.objects.all())
 
+    def test_prune_expired_backups_action_runs_from_admin_changelist(
+        self,
+        admin_client: Client,
+        backup_policy: BackupPolicy,
+    ) -> None:
+        changelist_url = reverse(
+            "admin:quickscale_modules_backups_backuppolicy_changelist"
+        )
+
+        with patch(
+            "quickscale_modules_backups.admin.prune_expired_backups",
+            return_value=2,
+        ) as mocked_prune:
+            response = admin_client.post(
+                changelist_url,
+                {
+                    "action": "prune_expired_backups_now",
+                    admin.helpers.ACTION_CHECKBOX_NAME: [str(backup_policy.pk)],
+                    "index": 0,
+                },
+                follow=True,
+            )
+
+        assert response.status_code == 200
+        mocked_prune.assert_called_once_with()
+        assert [message.message for message in get_messages(response.wsgi_request)] == [
+            "Pruned 2 expired backup artifact(s)."
+        ]
+
 
 @pytest.mark.django_db
 class TestBackupArtifactAdmin:
     """Tests for artifact admin actions and download handling."""
+
+    def test_nonstaff_user_is_denied_artifact_changelist(self) -> None:
+        user = get_user_model().objects.create_user(
+            username="backups-operator",
+            email="backups-operator@example.com",
+            password="operatorpass123",
+        )
+        client = Client()
+        client.force_login(user)
+
+        response = client.get(
+            reverse("admin:quickscale_modules_backups_backupartifact_changelist")
+        )
+
+        assert response.status_code == 302
+        assert response.url.startswith(reverse("admin:login"))
 
     def test_change_view_renders_download_link(
         self,
@@ -211,6 +257,28 @@ class TestBackupArtifactAdmin:
 
         assert isinstance(response, FileResponse)
         assert response.status_code == 200
+
+    def test_nonstaff_user_is_denied_download_view(
+        self,
+        backup_artifact: BackupArtifact,
+    ) -> None:
+        user = get_user_model().objects.create_user(
+            username="backups-reader",
+            email="backups-reader@example.com",
+            password="readerpass123",
+        )
+        client = Client()
+        client.force_login(user)
+
+        response = client.get(
+            reverse(
+                "admin:quickscale_modules_backups_backupartifact_download",
+                args=[backup_artifact.pk],
+            )
+        )
+
+        assert response.status_code == 302
+        assert response.url.startswith(reverse("admin:login"))
 
     def test_download_link_is_unavailable_for_deleted_artifact(
         self,
