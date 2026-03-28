@@ -349,7 +349,7 @@ quickscale plan myapp --overwrite
 
 The wizard guides you through:
 1. **Theme selection**: Choose from available themes (showcase_html, showcase_react)
-2. **Module selection**: Select optional modules to include (auth, blog, listings, storage)
+2. **Module selection**: Select optional modules to include. On the main branch, current implemented first-party modules include auth, backups, blog, crm, forms, listings, and storage; released metadata remains v0.76.0 until the v0.77.0 release cut.
 3. **Docker configuration**: Configure Docker build/start options and optional first-start superuser creation
 
 **Generated `quickscale.yml` example**:
@@ -367,6 +367,8 @@ docker:
   start: true
   create_superuser: false
 ```
+
+On the main branch, `backups` is the admin/ops-first safety option in that set: private local artifacts by default, optional private remote offload, staff-only admin create/validate/download/delete flows, CLI-only guarded restore, JSON export fallback outside PostgreSQL/test environments, no standalone admin upload/offload action, and additional at-rest encryption deferred beyond v0.77.
 
 **The `apply` command** executes a configuration file to generate the project:
 

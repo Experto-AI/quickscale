@@ -44,8 +44,13 @@ QuickScale is a **Django project generator** that creates production-ready SaaS 
 - **One-command deployment**: Deploy to Railway with `quickscale deploy railway`
 - **Full ownership**: Generated projects are 100% yours to customize—no vendor lock-in
 - **Standardized stack**: Build multiple client projects faster with consistent best practices
+- **Implemented first-party modules on the main branch today**: auth, backups, blog, crm, forms, listings, and storage
 
 🧭 **Evolution Path**: QuickScale already includes first-party modules and starter themes for current projects, while the broader community platform, marketplace, and ecosystem expansion remain future-facing. [Read the full evolution strategy](./docs/overview/quickscale.md#evolution-strategy-personal-toolkit-first).
+
+The main branch already contains the v0.77.0 backups closeout work, but the published package and release metadata remain v0.76.0 until the v0.77.0 release is cut.
+
+On the main branch, backups is the admin/ops-first safety module: private local backups are the default, optional private remote offload is supported, staff-only admin flows cover create/validate/download/delete, destructive restore stays CLI-only and guarded, non-PostgreSQL/test environments use JSON export fallback, additional at-rest encryption is deferred beyond v0.77, and there is no standalone admin upload/offload action.
 
 ## Documentation Guide
 

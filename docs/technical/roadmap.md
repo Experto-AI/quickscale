@@ -49,7 +49,7 @@ QuickScale follows an evolution-aligned roadmap that starts as a personal toolki
    - ✅ **React Default Theme** (v0.74.0) - React + shadcn/ui as default
    - ✅ **Forms module** (v0.75.0) - generic form builder with CLI integration ✅ Complete
   - ✅ Storage module (v0.76.0) - cloud file hosting, media storage adapters, CDN integration
-  - 📋 Database Backup module (v0.77.0) - private DB backups, download, restore, and scheduler-ready operations
+  - ✅ Backups module (v0.77.0) - private database backups, optional private remote offload, guarded CLI restore, and scheduler-ready command hooks
 
 2. **Phase 2: Vertical Modules & Theme Expansion (Post-MVP)** 📋 _Planned_
   - 📋 Social & Link Tree module (v0.78.0) - social links page + media embeds
@@ -81,15 +81,15 @@ QuickScale follows an evolution-aligned roadmap that starts as a personal toolki
 - **v0.74.0:** React Default Theme (React + shadcn/ui) ✅
 - **v0.75.0:** Forms Module (generic form builder with DRF API, spam protection, GDPR anonymization) ✅
 - **v0.76.0:** Storage Module (cloud file hosting + CDN-ready media infrastructure) 🎯
-- **v0.77.0:** Database Backup & Restore module foundation 📋
+- **v0.77.0:** Backups module (private local + optional private remote workflows, guarded CLI restore) ✅
 - **v0.79.0:** Real Estate MVP (static + listings + social links) 🎯
 - **v0.82.0:** SaaS Feature Parity (auth, billing, teams) 🎯
 - **v1.0.0+:** Community platform (if demand exists)
 
 **Status:**
-- **Current Status:** v0.76.0 — Storage Module ✅ Complete
-- **In Progress:** none — next scoped release work starts at v0.77.0
-- **Next Release:** v0.77.0 - Database Backup & Restore module
+- **Current Status:** main branch includes the v0.77.0 Backups Module closeout; published release metadata remains v0.76.0 until the v0.77.0 release cut
+- **In Progress:** v0.77.0 closeout and archival follow-up only
+- **Next Planned Scope After v0.77.0:** v0.78.0 - Social & Link Tree module
 - **Next Milestone:** v0.79.0 - Real Estate MVP
 - **Plan/Apply System:** v0.68.0-v0.71.0 - Terraform-style configuration ✅ Complete
 - **SaaS Parity:** v0.82.0 - auth, billing, teams modules complete
@@ -135,19 +135,19 @@ This release completed QuickScale's shared media-storage milestone: the storage 
 
 ### v0.77.0: `quickscale_modules.backups` - Database Backup & Restore Module
 
-**Status**: 🚧 Admin/ops-first MVI in progress
+**Status**: ✅ Implemented on main; release cut plus archival follow-up remain
 
-**Strategic Context**: First-party operational safety module for generated projects. Inspired by prior `gestion-mv` backup tooling, but QuickScale should define a cleaner module contract centered on database-focused backups, optional private object-storage offload, planner/apply integration, and scheduler-ready execution without coupling backups to public media delivery.
+**Strategic Context**: First-party operational safety module for generated projects. Inspired by prior `gestion-mv` backup tooling, QuickScale now defines a cleaner contract centered on database-focused backups, optional private object-storage offload, planner/apply integration, and scheduler-ready execution without coupling backups to public media delivery.
 
-**Current MVI shape**: local private backups by default, optional private remote offload via storage-compatible settings, Django admin create/validate/download/delete flows, retention policy metadata, and CLI-only guarded restore execution. Scheduler orchestration remains external and command-driven.
+**Implemented MVI shape**: local private backups by default, optional private remote offload via storage-compatible settings, Django admin create/validate/download/delete flows, retention policy metadata, and CLI-only guarded restore execution. JSON export is the fallback for CI-safe local/non-PostgreSQL environments, scheduler orchestration remains external and command-driven, additional at-rest encryption remains deferred, and there is no standalone admin upload/offload action.
 
 **Prerequisites**:
 - ✅ Storage module (v0.76.0) for optional remote private backup storage
 - No frontend theme dependency; the first delivery is admin/ops focused
 
-**Scope Decision (evaluated)**:
-- **Include in v0.77.0**: on-demand backup/restore, download, private storage integration, minimal Django admin configuration, scheduler-ready policy fields, and management-command entry points.
-- **Defer if needed**: reusable background-job/scheduler infrastructure shared by multiple modules. For MVP, automatic execution should work via platform cron or scheduled tasks invoking a management command; extract a dedicated scheduler module later only if multiple modules need persistent periodic orchestration.
+**Scope Decision (implemented)**:
+- **Included in v0.77.0**: on-demand backup/restore, download, private storage integration, minimal Django admin configuration, scheduler-ready policy fields, and management-command entry points.
+- **Deferred beyond v0.77.0 if needed**: reusable background-job/scheduler infrastructure shared by multiple modules. For MVP, automatic execution should work via platform cron or scheduled tasks invoking a management command; extract a dedicated scheduler module later only if multiple modules need persistent periodic orchestration.
 
 **Module Goals**:
 - [x] Safe PostgreSQL backup creation with operator-friendly restore workflow
@@ -156,10 +156,10 @@ This release completed QuickScale's shared media-storage milestone: the storage 
 - [x] Retention-ready metadata and audit trail for operational visibility
 
 **Backup & Restore Capabilities**:
-- [x] Database-only backup format for the MVP path (`pg_dump` custom/compressed format preferred; SQL export fallback used for compatibility/non-PostgreSQL test environments)
+- [x] Database-only backup format for the MVP path (`pg_dump` custom/compressed format for PostgreSQL; JSON export fallback for CI-safe local/non-PostgreSQL environments)
 - [x] Deterministic backup naming including project/environment/timestamp
-- [x] Backup metadata manifest (database engine/version, app version, module versions, checksum, size, created_at, storage target)
-- [x] Pre-restore validation flow (file type, checksum, engine compatibility, destructive-action confirmation)
+- [x] Backup metadata manifest (database engine plus best-effort server version, app version, module versions, checksum, size, created_at, storage target)
+- [x] Pre-restore validation flow (checksum verification, metadata-backed backup-format and engine-compatibility checks, JSON payload validation for JSON artifacts, and destructive-action confirmation; no deep custom-dump byte probing)
 - [x] Restore workflow limited to privileged operators, with explicit warnings and environment guards
 - [x] Optional dry-run validation command before applying a restore
 
@@ -173,7 +173,8 @@ This release completed QuickScale's shared media-storage milestone: the storage 
 **Minimal Admin Panel**:
 - [x] `BackupSettings`/policy model in Django admin for storage target, retention, naming prefix, and automation toggle
 - [x] `BackupArtifact`/history model in Django admin with status, checksum, size, initiated_by, and restore markers
-- [x] Admin actions/buttons for create, validate, download, upload/offload, and delete
+- [x] Admin actions/buttons for create, prune, validate, download, and delete
+- [x] No standalone admin upload/offload action; private remote offload only happens during backup creation when `target_mode` is `private_remote`
 - [x] Restore action remains CLI-only with additional confirmation and environment guards
 - [x] Minimal help text/documentation inside admin for storage prerequisites and operational warnings
 
@@ -193,17 +194,17 @@ This release completed QuickScale's shared media-storage milestone: the storage 
 - [x] Backups accessible only to privileged staff/superusers
 - [x] Secret-safe logging and no accidental exposure through media routes or template context
 - [x] Private-remote credentials persist only as env-var references; artifact rows keep location metadata only
-- [ ] Checksums plus optional encryption/compression support evaluation
+- [x] Encryption/compression evaluation resolved: PostgreSQL custom dumps already satisfy the compressed-format direction; additional at-rest encryption is deferred beyond v0.77 because it expands key-management and restore UX scope
 - [x] Concurrency lock to avoid duplicate scheduled/manual backup collisions
 - [x] Clear rollback/restore documentation with production warnings
 
 **Testing**:
-- [ ] Unit tests for backup naming, metadata, checksum, retention, and permission checks
-- [ ] Integration tests for backup create/download/delete flows
-- [ ] Integration tests for private S3-compatible storage upload/download using mocked providers
-- [ ] Restore validation tests for incompatible/corrupt artifacts and confirmation guards
-- [ ] Planner/apply E2E test: module configured with local-only backups
-- [ ] Planner/apply E2E test: module configured with storage-backed private backups
+- [x] Direct service tests cover backup naming, metadata payload, checksum mismatch detection, retention pruning, and restore environment/compatibility guardrails
+- [x] Direct admin tests cover create, validate, download, delete, and non-staff denial flows for the shipped admin surface
+- [x] Service tests cover private-remote upload, rollback, and deletion/credential-resolution behavior with mocked hooks
+- [x] Planner/apply lifecycle coverage: module configured with local-only backups
+- [x] Planner/apply lifecycle coverage: module configured with storage-backed private backups using env-var-only credentials
+- [x] Direct admin prune-action coverage for the shipped admin surface
 
 **Deferred Follow-up**:
 - [ ] Comprehensive project snapshots (database + media + env bundle) only if a real ops use case justifies broader scope

@@ -146,6 +146,7 @@ class TestBackupLifecycle:
         assert artifact.checksum_sha256
         assert artifact.size_bytes > 0
         assert artifact.metadata_json["database_engine"] == "django.db.backends.sqlite3"
+        assert artifact.metadata_json["database_server_version"]
         payload = json.loads(Path(artifact.local_path).read_text(encoding="utf-8"))
         assert isinstance(payload, list)
 
@@ -447,6 +448,46 @@ class TestBackupLifecycle:
         backup_artifact.refresh_from_db()
         assert backup_artifact.status == BackupArtifact.STATUS_FAILED
 
+    def test_validate_backup_artifact_detects_invalid_json_payload(
+        self,
+        backup_artifact: BackupArtifact,
+        artifact_file: Path,
+    ) -> None:
+        artifact_file.write_text("{not-json", encoding="utf-8")
+        backup_artifact.checksum_sha256 = hashlib.sha256(
+            artifact_file.read_bytes()
+        ).hexdigest()
+        backup_artifact.size_bytes = artifact_file.stat().st_size
+        backup_artifact.save(
+            update_fields=["checksum_sha256", "size_bytes", "updated_at"]
+        )
+
+        issues = validate_backup_artifact(backup_artifact)
+
+        assert issues == ["json backup payload is not valid JSON"]
+        backup_artifact.refresh_from_db()
+        assert backup_artifact.status == BackupArtifact.STATUS_FAILED
+
+    def test_validate_backup_artifact_detects_corrupt_json_bytes(
+        self,
+        backup_artifact: BackupArtifact,
+        artifact_file: Path,
+    ) -> None:
+        artifact_file.write_bytes(b"\xff\xfe\x00\x81")
+        backup_artifact.checksum_sha256 = hashlib.sha256(
+            artifact_file.read_bytes()
+        ).hexdigest()
+        backup_artifact.size_bytes = artifact_file.stat().st_size
+        backup_artifact.save(
+            update_fields=["checksum_sha256", "size_bytes", "updated_at"]
+        )
+
+        issues = validate_backup_artifact(backup_artifact)
+
+        assert issues == ["json backup payload is not valid JSON"]
+        backup_artifact.refresh_from_db()
+        assert backup_artifact.status == BackupArtifact.STATUS_FAILED
+
     def test_prune_expired_backups_deletes_old_local_files(
         self,
         db: Any,
@@ -584,6 +625,20 @@ class TestBackupLifecycle:
                 dry_run=False,
             )
 
+    def test_restore_rejects_confirmation_mismatch(
+        self,
+        backup_artifact: BackupArtifact,
+    ) -> None:
+        with pytest.raises(
+            BackupRestoreBlocked,
+            match="Confirmation must exactly match the backup filename",
+        ):
+            restore_backup_artifact(
+                backup_artifact,
+                confirmation=f"{backup_artifact.filename}-wrong",
+                dry_run=True,
+            )
+
     @override_settings(DEBUG=False)
     def test_restore_allow_production_still_requires_environment_guard(
         self,
@@ -639,6 +694,33 @@ class TestBackupLifecycle:
 
         assert result.executed is False
         assert result.dry_run is True
+
+    def test_restore_execution_rejects_json_backup_even_when_restore_gate_is_open(
+        self,
+        backup_artifact: BackupArtifact,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        runner_calls: list[tuple[list[str], dict[str, str] | None]] = []
+
+        def fake_runner(
+            command: list[str], *, env: dict[str, str] | None = None
+        ) -> None:
+            runner_calls.append((command, env))
+
+        monkeypatch.setenv("QUICKSCALE_BACKUPS_ALLOW_RESTORE", "true")
+
+        with pytest.raises(
+            BackupRestoreBlocked,
+            match="Executable restore is only supported for PostgreSQL custom-format",
+        ):
+            restore_backup_artifact(
+                backup_artifact,
+                confirmation=backup_artifact.filename,
+                dry_run=False,
+                shell_runner=cast(ShellCommandRunner, fake_runner),
+            )
+
+        assert runner_calls == []
 
     def test_restore_dry_run_rejects_incompatible_engine_and_format(
         self,

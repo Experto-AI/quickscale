@@ -62,6 +62,56 @@ def _write_initial_state(project_path: Path) -> None:
     (state_dir / "state.yml").write_text(yaml.safe_dump(state_data, sort_keys=False))
 
 
+def _write_backups_quickscale_config(
+    base_path: Path,
+    backups_options: dict[str, Any],
+) -> None:
+    """Write a quickscale.yml containing the backups module configuration."""
+    config_data = {
+        "version": "1",
+        "project": {
+            "slug": "myproject",
+            "package": "myproject",
+            "theme": "showcase_html",
+        },
+        "modules": {"backups": backups_options},
+        "docker": {"start": False},
+    }
+    (base_path / "quickscale.yml").write_text(
+        yaml.safe_dump(config_data, sort_keys=False)
+    )
+
+
+def _generate_minimal_project(
+    qs_config: Any,
+    output_path: Path,
+    force: bool,
+) -> None:
+    """Create the smallest generated-project layout needed for apply tests."""
+    del force
+    output_path.mkdir(parents=True, exist_ok=True)
+    package_dir = output_path / qs_config.project.package
+    (package_dir / "settings").mkdir(parents=True, exist_ok=True)
+    (package_dir / "__init__.py").write_text("")
+    (package_dir / "urls.py").write_text("urlpatterns = []\n")
+    (output_path / "manage.py").write_text("# manage\n")
+
+
+def _embed_modules_into_project(
+    output_path: Path,
+    modules_to_embed: list[str],
+    no_modules: bool,
+    existing_state: Any,
+) -> EmbedModulesResult:
+    """Create embedded module directories without touching git subtrees."""
+    del no_modules, existing_state
+    for module_name in modules_to_embed:
+        module_dir = output_path / "modules" / module_name
+        module_dir.mkdir(parents=True, exist_ok=True)
+        (module_dir / "__init__.py").write_text("")
+    return EmbedModulesResult(success=True, embedded_modules=modules_to_embed)
+
+
 def test_lifecycle_create_apply_remove_readd_apply_e2e_expected_state(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -138,6 +188,159 @@ def test_lifecycle_create_apply_remove_readd_apply_e2e_expected_state(
         (project_path / ".quickscale" / "state.yml").read_text()
     )
     assert "auth" in state_after_readd["modules"]
+
+
+def test_apply_backups_local_adds_private_gitignore_and_state() -> None:
+    """Backups local mode should persist state and harden the generated project."""
+    cli_runner = CliRunner()
+
+    with cli_runner.isolated_filesystem():
+        workspace = Path.cwd()
+        _write_backups_quickscale_config(
+            workspace,
+            {
+                "retention_days": 30,
+                "naming_prefix": "ops",
+                "target_mode": "local",
+                "local_directory": ".private/backups",
+                "automation_enabled": True,
+                "schedule": "0 4 * * *",
+            },
+        )
+
+        with (
+            patch(
+                "quickscale_cli.commands.apply_command._generate_new_project",
+                side_effect=_generate_minimal_project,
+            ),
+            patch(
+                "quickscale_cli.commands.apply_command._init_git_with_config",
+                return_value=None,
+            ),
+            patch(
+                "quickscale_cli.commands.apply_command._embed_modules_step",
+                side_effect=_embed_modules_into_project,
+            ) as mock_embed_modules_step,
+            patch(
+                "quickscale_cli.commands.apply_command._regenerate_managed_wiring_for_apply",
+                return_value=True,
+            ),
+            patch(
+                "quickscale_cli.commands.apply_command._run_post_generation_steps",
+                return_value=None,
+            ),
+        ):
+            result = cli_runner.invoke(
+                apply,
+                ["quickscale.yml", "--no-docker"],
+                input="y\n",
+                catch_exceptions=False,
+            )
+
+        project_path = workspace / "myproject"
+
+        assert result.exit_code == 0
+        assert mock_embed_modules_step.call_args.args[1] == ["backups"]
+        assert (project_path / "modules" / "backups").exists()
+        assert (
+            "Added backups ignore rule to .gitignore: .private/backups/"
+            in result.output
+        )
+        assert "poetry run python manage.py backups_create" in result.output
+
+        gitignore_text = (project_path / ".gitignore").read_text()
+        assert "# QuickScale private backup artifacts" in gitignore_text
+        assert ".private/backups/" in gitignore_text
+
+        state = yaml.safe_load((project_path / ".quickscale" / "state.yml").read_text())
+        backups_options = state["modules"]["backups"]["options"]
+        assert backups_options["target_mode"] == "local"
+        assert backups_options["local_directory"] == ".private/backups"
+        assert backups_options["schedule"] == "0 4 * * *"
+
+
+def test_apply_backups_private_remote_stays_offline_with_env_var_refs() -> None:
+    """Private remote mode should stay offline and persist env-var references."""
+    cli_runner = CliRunner()
+
+    with cli_runner.isolated_filesystem():
+        workspace = Path.cwd()
+        _write_backups_quickscale_config(
+            workspace,
+            {
+                "retention_days": 14,
+                "naming_prefix": "db",
+                "target_mode": "private_remote",
+                "local_directory": ".quickscale/backups",
+                "remote_bucket_name": "private-bucket",
+                "remote_prefix": "ops/backups",
+                "remote_endpoint_url": "https://account.r2.example.com",
+                "remote_region_name": "auto",
+                "remote_access_key_id_env_var": "OPS_BACKUPS_ACCESS_KEY_ID",
+                "remote_secret_access_key_env_var": "OPS_BACKUPS_SECRET_ACCESS_KEY",
+                "automation_enabled": True,
+                "schedule": "0 2 * * *",
+            },
+        )
+
+        with (
+            patch(
+                "quickscale_cli.commands.apply_command._generate_new_project",
+                side_effect=_generate_minimal_project,
+            ),
+            patch(
+                "quickscale_cli.commands.apply_command._init_git_with_config",
+                return_value=None,
+            ),
+            patch(
+                "quickscale_cli.commands.apply_command._embed_modules_step",
+                side_effect=_embed_modules_into_project,
+            ) as mock_embed_modules_step,
+            patch(
+                "quickscale_cli.commands.apply_command._regenerate_managed_wiring_for_apply",
+                return_value=True,
+            ),
+            patch(
+                "quickscale_cli.commands.apply_command._run_post_generation_steps",
+                return_value=None,
+            ),
+        ):
+            result = cli_runner.invoke(
+                apply,
+                ["quickscale.yml", "--no-docker"],
+                input="y\n",
+                catch_exceptions=False,
+            )
+
+        project_path = workspace / "myproject"
+        state_text = (project_path / ".quickscale" / "state.yml").read_text()
+
+        assert result.exit_code == 0
+        assert mock_embed_modules_step.call_args.args[1] == ["backups"]
+        assert (project_path / "modules" / "backups").exists()
+        assert "OPS_BACKUPS_ACCESS_KEY_ID" in result.output
+        assert "OPS_BACKUPS_SECRET_ACCESS_KEY" in result.output
+        assert "Configure runtime credentials via env vars" in result.output
+
+        gitignore_text = (project_path / ".gitignore").read_text()
+        assert ".quickscale/backups/" in gitignore_text
+        assert "\n.quickscale/\n" not in f"\n{gitignore_text}"
+
+        assert "remote_access_key_id_env_var: OPS_BACKUPS_ACCESS_KEY_ID" in state_text
+        assert (
+            "remote_secret_access_key_env_var: OPS_BACKUPS_SECRET_ACCESS_KEY"
+            in state_text
+        )
+        assert "remote_access_key_id:" not in state_text
+        assert "remote_secret_access_key:" not in state_text
+
+        state = yaml.safe_load(state_text)
+        backups_options = state["modules"]["backups"]["options"]
+        assert backups_options["remote_bucket_name"] == "private-bucket"
+        assert (
+            backups_options["remote_endpoint_url"] == "https://account.r2.example.com"
+        )
+        assert backups_options["remote_region_name"] == "auto"
 
 
 def test_update_after_removal_only_targets_remaining_modules() -> None:

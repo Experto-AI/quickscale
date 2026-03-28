@@ -666,7 +666,7 @@ def validate_backup_artifact(artifact: BackupArtifact) -> list[str]:
         if artifact.backup_format == "json":
             try:
                 json.loads(local_path.read_text(encoding="utf-8"))
-            except json.JSONDecodeError:
+            except UnicodeDecodeError, json.JSONDecodeError:
                 issues.append("json backup payload is not valid JSON")
 
     artifact.validated_at = django_timezone.now()
@@ -821,7 +821,7 @@ def _build_backup_metadata(
     database_name: str,
     target_mode: str,
 ) -> dict[str, Any]:
-    return {
+    metadata = {
         "created_at": created_at.astimezone(timezone.utc).isoformat(),
         "backup_format": backup_format,
         "database_engine": database_engine,
@@ -832,6 +832,41 @@ def _build_backup_metadata(
         "module_versions": _collect_module_versions(),
         "app_version": str(getattr(settings, "QUICKSCALE_APP_VERSION", "unknown")),
     }
+    database_server_version = _get_database_server_version(database_engine)
+    if database_server_version is not None:
+        metadata["database_server_version"] = database_server_version
+    return metadata
+
+
+def _get_database_server_version(engine: str) -> str | None:
+    """Return best-effort database server version metadata for the active backend."""
+    version_query = _database_server_version_query(engine)
+    if version_query is None:
+        return None
+
+    connection = django.db.connections["default"]
+    try:
+        with connection.cursor() as cursor:
+            cursor.execute(version_query)
+            row = cursor.fetchone()
+    except Exception:
+        return None
+
+    if not row:
+        return None
+
+    database_server_version = str(row[0]).strip()
+    return database_server_version or None
+
+
+def _database_server_version_query(engine: str) -> str | None:
+    """Return a read-only version query for supported backup backends."""
+    engine_family = _database_engine_family(engine)
+    if engine_family == "postgresql":
+        return "SHOW server_version"
+    if engine_family == "sqlite":
+        return "SELECT sqlite_version()"
+    return None
 
 
 def _get_restore_compatibility_issues(artifact: BackupArtifact) -> list[str]:

@@ -5,7 +5,7 @@ Private operational database backups for QuickScale projects.
 ## What this module provides
 
 - On-demand backup creation through Django admin or management commands
-- Artifact metadata with checksums, size, engine details, and operator tracking
+- Artifact metadata with checksums, size, engine details, best-effort server-version capture, and operator tracking
 - Private local backup storage by default
 - Optional private S3-compatible offload without using public media URLs or `public_base_url`
 - Retention pruning and guarded restore validation/execution workflows
@@ -21,7 +21,7 @@ Recommended workflow:
 3. Choose local-only backups or provide private remote-offload settings.
 4. Review the generated `modules.backups` block in `quickscale.yml`.
 5. Populate the named environment variables in your shell, container, or platform secret manager.
-5. Run `quickscale apply`.
+6. Run `quickscale apply`.
 
 The supported configuration shape is:
 
@@ -66,6 +66,7 @@ Admin capabilities include:
 - download local artifacts through a staff-only admin view
 - prune expired artifacts
 - delete artifacts while removing private files first
+- no separate upload/offload admin action; private remote offload only happens during backup creation when `target_mode` is `private_remote`
 
 ## Management commands
 
@@ -118,8 +119,13 @@ The referenced environment variables must be set in the runtime environment. For
 - `QUICKSCALE_BACKUPS_REMOTE_ACCESS_KEY_ID`
 - `QUICKSCALE_BACKUPS_REMOTE_SECRET_ACCESS_KEY`
 
+## Format and encryption notes
+
+- PostgreSQL backups use the `pg_dump` custom/compressed format path.
+- Non-PostgreSQL backups fall back to JSON export for CI-safe validation and local development.
+- Additional at-rest encryption is deferred beyond v0.77 because it adds key-management and restore-UX scope.
+
 ## Limitations of the MVI
 
 - PostgreSQL custom-format restore execution is supported only through the CLI workflow
-- Non-PostgreSQL backups fall back to JSON export for CI-safe validation and local development
 - Scheduler orchestration remains external to the module
