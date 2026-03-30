@@ -1118,7 +1118,8 @@ INSTALLED_APPS = [
 - ✅ Separate CLI package (independent release cadence from core)
 - ✅ src/ layout (prevents import errors during testing/building)
 - ✅ Direct imports (NO DI frameworks or service registries)
-- ✅ Single providers (Stripe payments, SendGrid email - embrace specifics)
+- ✅ Single providers at the product policy layer (Stripe payments, Resend email)
+- ✅ Django email delivery for notifications uses `django-anymail` as the approved delivery layer with Resend as the current first-class provider for v0.78.0
 - ✅ Version pinning (predictable compatibility for Django foundations)
 
 **Post-MVP Only:**
@@ -1142,7 +1143,7 @@ INSTALLED_APPS = [
 **Architecture & Patterns:**
 - ❌ Runtime dynamic `INSTALLED_APPS` modifications
 - ❌ DI frameworks or service registries (direct imports in production)
-- ❌ Abstract provider interfaces (embrace Stripe, SendGrid specifics)
+- ❌ Custom abstract provider interfaces or app-defined multi-provider contracts (use Django's email path plus `django-anymail` for the approved provider rather than building a generic provider layer)
 - ❌ Custom database table naming (use Django's `app_label` default)
 - ❌ HTTP APIs from modules (expose Python service layer only)
 - ❌ Tight coupling themes to modules

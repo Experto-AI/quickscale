@@ -51,17 +51,17 @@ QuickScale follows an evolution-aligned roadmap that starts as a personal toolki
   - ✅ Storage module (v0.76.0) - cloud file hosting, media storage adapters, CDN integration
   - ✅ Backups module (v0.77.0) - private database backups, optional private remote offload, guarded CLI restore, and scheduler-ready command hooks
 
-2. **Phase 2: Vertical Modules & Theme Expansion (Post-MVP)** 📋 _Planned_
-  - 📋 Social & Link Tree module (v0.78.0) - social links page + media embeds
-  - 📋 Listings Theme (v0.79.0) - React frontend for property listings (sell/rent)
-  - 📋 CRM Theme (v0.80.0) - React frontend for CRM module
-  - 📋 Billing module (v0.81.0) - Stripe integration
-  - 📋 Teams module (v0.82.0) - multi-tenancy
+2. **Phase 2: Notifications, Vertical Modules & Theme Expansion (Post-MVP)** 📋 _Planned_
+  - 📋 Notifications module (v0.78.0) - transactional email infrastructure, using Anymail-backed Resend as the approved delivery direction
+  - 📋 Social & Link Tree module (v0.79.0) - social links page + media embeds
+  - 📋 Listings Theme (v0.80.0) - React frontend for property listings (sell/rent)
+  - 📋 CRM Theme (v0.81.0) - React frontend for CRM module
+  - 📋 Billing module (v0.82.0) - Stripe integration
+  - 📋 Teams module (v0.83.0) - multi-tenancy
 
-3. **Phase 3: Additional Theme Work & Cross-Cutting Features** 📋 _Planned_
-  - 📋 HTML theme polish and parity improvements (v0.83.0+) - maintain the server-rendered secondary option alongside the React default
+3. **Phase 3: Secondary Theme & Cross-Cutting Validation** 📋 _Planned_
+  - 📋 HTML theme polish and parity improvements (v0.84.0+) - maintain the server-rendered secondary option alongside the React default
    - HTML theme remains as secondary option (simpler projects)
-  - 📋 Notifications module with email infrastructure (v0.84.0)
   - 📋 Advanced module management features (v0.85.0)
   - 📋 Workflow validation and real-world testing (v0.86.0)
 
@@ -82,17 +82,18 @@ QuickScale follows an evolution-aligned roadmap that starts as a personal toolki
 - **v0.75.0:** Forms Module (generic form builder with DRF API, spam protection, GDPR anonymization) ✅
 - **v0.76.0:** Storage Module (cloud file hosting + CDN-ready media infrastructure) 🎯
 - **v0.77.0:** Backups module (private local + optional private remote workflows, guarded CLI restore) ✅
-- **v0.79.0:** Real Estate MVP (static + listings + social links) 🎯
-- **v0.82.0:** SaaS Feature Parity (auth, billing, teams) 🎯
+- **v0.78.0:** Notifications Module (transactional email foundation; Anymail-backed Resend delivery) 🎯
+- **v0.80.0:** Real Estate MVP (static + listings + social links) 🎯
+- **v0.83.0:** SaaS Feature Parity (auth, billing, teams, notifications foundation) 🎯
 - **v1.0.0+:** Community platform (if demand exists)
 
 **Status:**
 - **Current Status:** main branch includes the v0.77.0 Backups Module closeout; published release metadata remains v0.76.0 until the v0.77.0 release cut
 - **In Progress:** v0.77.0 closeout and archival follow-up only
-- **Next Planned Scope After v0.77.0:** v0.78.0 - Social & Link Tree module
-- **Next Milestone:** v0.79.0 - Real Estate MVP
+- **Next Planned Scope After v0.77.0:** v0.78.0 - Notifications module implementation planning, centered on Anymail-backed Resend delivery
+- **Next Milestone:** v0.78.0 - Notifications module foundation
 - **Plan/Apply System:** v0.68.0-v0.71.0 - Terraform-style configuration ✅ Complete
-- **SaaS Parity:** v0.82.0 - auth, billing, teams modules complete
+- **SaaS Parity:** v0.83.0 - auth, billing, teams modules complete on top of the notifications foundation
 
 ## Notes and References
 
@@ -213,7 +214,72 @@ This release completed QuickScale's shared media-storage milestone: the storage 
 
 ---
 
-### v0.78.0: `quickscale_modules.social` - Social & Link Tree Module
+### v0.78.0: `quickscale_modules.notifications` - Notifications Module
+
+**Status**: 📋 Planned as the next task after v0.77.0
+
+**Detailed planning reference**: [email-sender-comparison.md](../planning/email-sender-comparison.md)
+
+**Strategic Context**: QuickScale needs a first-class transactional email path before expanding billing, richer auth flows, forms follow-up, and broader operational notifications. This release should ship one opinionated delivery path instead of pretending every provider is equal. The approved direction is Resend as the first-class provider with Django Anymail as the delivery layer for the notifications module.
+
+**Approved v0.78.0 Scope**:
+- **Included in v0.78.0**: outbound transactional email delivery, template rendering/layouts, Django Anymail wiring, Resend backend integration, signed webhook ingestion for supported delivery events, planner/apply wiring, admin/ops visibility, and generated-project next steps for DNS/domain verification.
+- **Deferred beyond v0.78.0 if needed**: inbound/reply workflows, provider-native Resend features not cleanly exposed through the current Anymail backend, multi-provider failover, newsletter or broadcast tooling, mandatory Celery infrastructure, and end-user notification preferences beyond basic operator controls.
+
+**Approved Delivery Direction**:
+- **Primary sender**: Resend, via Anymail-backed Django email integration, env-var-based API credentials, and domain verification
+- **Rendering source of truth**: app-owned Django-rendered templates/layouts so message content stays testable and portable
+- **Architecture shape for kickoff**: Django email sending through Anymail configured for Resend as the only first-class provider in the initial v0.78.0 release
+
+**Module Goals**:
+- [ ] Reliable transactional email foundation for auth, forms, admin/ops, and future billing flows
+- [ ] Resend-first developer experience with Django-native send flow through Anymail
+- [ ] Observable delivery lifecycle with provider message IDs, event history, and failure reasons
+- [ ] Clear Anymail + Resend implementation path for v0.78.0 without implying generic ESP parity in the initial release
+
+**Delivery & Template Architecture**:
+- [ ] Define a notifications-module send entry point for callers, backed by Django email sending through Anymail + Resend in the initial release
+- [ ] Add canonical email template keys, shared layouts, and structured context validation for transactional messages
+- [ ] Render the canonical message body inside QuickScale rather than making provider-hosted templates the initial-release requirement
+- [ ] Support tags/metadata within the current Anymail + Resend supported surface so downstream modules can track email purpose, tenant/project, and workflow origin
+- [ ] Keep local development and CI on console/file backends when Resend credentials are absent and Anymail is not configured for live delivery
+
+**Anymail + Resend Integration Tasks**:
+- [ ] Add `quickscale_modules.notifications` manifest and planner prompts for sender name/address, domain, API-key env var, default tags, and webhook secret
+- [ ] Wire Django email backend and Anymail Resend configuration at apply time with env-var-only secret handling and explicit next-step guidance for SPF/DKIM/domain verification
+- [ ] Implement Anymail-backed Resend delivery as the canonical initial-release send path, including stable message/provider ID capture where supported
+- [ ] Keep the initial v0.78.0 release within the current Anymail-supported Resend surface instead of assuming full provider-native parity in the same release
+- [ ] Add webhook verification plus event ingestion for delivery and failure states where the chosen Anymail + Resend path cleanly supports them
+- [ ] Normalize Resend events into module-owned delivery status records instead of leaking provider payload shapes to callers
+
+**Admin / Ops Surface**:
+- [ ] Add `NotificationSettings` admin surface for sender defaults, Anymail + Resend configuration, and webhook status guidance
+- [ ] Add `NotificationMessage` history/audit model with template key, recipients, provider ID, last event, and retry metadata
+- [ ] Provide preview/test-send flows for operators without exposing secrets in admin
+- [ ] Document clear failure states for unverified domains, revoked API keys, Anymail misconfiguration, and webhook misconfiguration
+
+**Planner / Apply Integration**:
+- [ ] Add planner support for enabling notifications, choosing the primary sender address, and deciding whether webhooks are configured now or later
+- [ ] Apply-time wiring for settings, URLs, installed apps, webhook endpoints, and admin registration
+- [ ] Next-steps output for DNS/domain verification, dashboard setup, and safe local-development behavior
+- [ ] Validation that production-targeted configurations do not silently fall back to console email backends
+
+**Testing**:
+- [ ] Unit tests for template rendering, Anymail payload mapping, webhook signature verification, and delivery-status normalization
+- [ ] Integration tests with mocked Anymail + Resend responses and webhook payloads
+- [ ] Planner/apply lifecycle coverage for enabled, disabled, and partially configured notification setups
+- [ ] Regression tests ensuring missing credentials stay safe in local/CI while production-mode configs fail loudly
+- [ ] Cross-module smoke coverage for at least one auth/forms/admin-triggered notification path after integration points exist
+
+**Deferred Follow-up**:
+- [ ] Provider-hosted template support only if a real ops workflow needs it beyond app-owned rendering
+- [ ] Direct provider-specific Resend integration only if the required feature set exceeds what the chosen Anymail path can support cleanly
+- [ ] Secondary-provider evaluation only after v0.78.0 stabilizes and the SSOT explicitly permits that broader scope
+- [ ] Shared async worker integration only when notifications and another module both justify the operational overhead
+
+---
+
+### v0.79.0: `quickscale_modules.social` - Social & Link Tree Module
 
 **Status**: 📋 Planned
 
@@ -252,7 +318,7 @@ This release completed QuickScale's shared media-storage milestone: the storage 
 
 ---
 
-### v0.79.0: Listings Theme (React Frontend for Listings)
+### v0.80.0: Listings Theme (React Frontend for Listings)
 
 **Status**: 📋 Planned
 
@@ -284,7 +350,7 @@ This release completed QuickScale's shared media-storage milestone: the storage 
 
 ---
 
-### v0.80.0: CRM Theme (React Frontend for CRM)
+### v0.81.0: CRM Theme (React Frontend for CRM)
 
 **Status**: 📋 Planned
 
@@ -311,7 +377,7 @@ This release completed QuickScale's shared media-storage milestone: the storage 
 
 ---
 
-### v0.81.0: `quickscale_modules.billing` - Billing Module
+### v0.82.0: `quickscale_modules.billing` - Billing Module
 
 **Status**: 📋 Planned
 
@@ -340,7 +406,7 @@ This release completed QuickScale's shared media-storage milestone: the storage 
 
 ---
 
-### v0.82.0: `quickscale_modules.teams` - Teams/Multi-tenancy Module
+### v0.83.0: `quickscale_modules.teams` - Teams/Multi-tenancy Module
 
 **Status**: 📋 Planned
 
@@ -369,9 +435,9 @@ This release completed QuickScale's shared media-storage milestone: the storage 
 
 ---
 
-### Module Showcase Architecture (Deferred to Post-v0.82.0)
+### Module Showcase Architecture (Deferred to Post-v0.83.0)
 
-**Status**: 🚧 **NOT YET IMPLEMENTED** - Deferred to post-v0.82.0
+**Status**: 🚧 **NOT YET IMPLEMENTED** - Deferred to post-v0.83.0
 
 **Current Reality** (v0.66.0):
 - ✅ Basic context processor exists (`quickscale_core/context_processors.py`)
@@ -381,11 +447,11 @@ This release completed QuickScale's shared media-storage milestone: the storage 
 - ❌ Current `index.html.j2`: Simple welcome page only
 
 **Why Deferred**:
-- Focus on Plan/Apply system and core modules first (v0.68-v0.82)
+- Focus on notifications, Plan/Apply system, and core modules first (v0.68-v0.83)
 - Showcase architecture provides maximum value when multiple modules exist
 - Current simple welcome page is adequate for MVP
 
-**Implementation Plan**: After v0.82.0 (SaaS Feature Parity milestone), evaluate whether to implement showcase architecture or keep simple welcome page. Decision criteria:
+**Implementation Plan**: After v0.83.0 (SaaS Feature Parity milestone), evaluate whether to implement showcase architecture or keep simple welcome page. Decision criteria:
 - Are 3+ modules complete and production-ready?
 - Is module discovery a user pain point?
 - Would showcase provide meaningful marketing value?
@@ -394,7 +460,7 @@ This release completed QuickScale's shared media-storage milestone: the storage 
 
 ---
 
-### v0.83.0+: HTML Secondary Theme Polish (Optional)
+### v0.84.0+: HTML Secondary Theme Polish (Optional)
 
 **Status**: 📋 Planned (low priority, after SaaS Feature Parity)
 
@@ -403,37 +469,6 @@ This release completed QuickScale's shared media-storage milestone: the storage 
 **See**: [user_manual.md](../technical/user_manual.md) for current theme architecture and user-facing theme selection guidance.
 
 **When Implemented**: See [decisions.md: Module & Theme Architecture](./decisions.md#module-theme-architecture) for implementation guidance covering the supported React default and HTML secondary theme set.
-
----
-
-### v0.84.0: `quickscale_modules.notifications` - Notifications Module
-
-**Status**: 📋 Planned (after SaaS Feature Parity)
-
-**Email Backend Integration**:
-- [ ] Set up django-anymail for multiple email providers
-- [ ] Configure transactional email templates
-- [ ] Implement async email sending with Celery
-- [ ] Add email backend failover handling
-
-**Notification System**:
-- [ ] Create notification models and admin
-- [ ] Implement email template management
-- [ ] Add notification scheduling and queuing
-- [ ] Create notification dashboard for users
-
-**Multi-Theme Support**:
-- [ ] Port notifications to HTML theme
-- [ ] Port notifications to React theme (when available)
-- [ ] Ensure theme-agnostic backend code
-
-**Testing**:
-- [ ] Unit tests for email sending (80%+ per file coverage)
-- [ ] Integration tests with email providers
-- [ ] Test async processing with Celery
-- [ ] Cross-theme compatibility testing
-
-**See**: [competitive_analysis.md Module Roadmap](../overview/competitive_analysis.md#phase-2-post-mvp-v1---saas-essentials) for competitive context.
 
 ---
 
@@ -471,7 +506,7 @@ This release completed QuickScale's shared media-storage milestone: the storage 
 - [ ] Test conflict resolution workflows
 - [ ] E2E testing of enhanced UX features
 
-**Future Enhancements** (v0.86.0+, evaluate after v0.82.0):
+**Future Enhancements** (v0.86.0+, evaluate after v0.83.0):
 - [ ] Module versioning: `quickscale plan --add auth@v0.63.0` - Pin specific module version
 - [ ] Semantic versioning compatibility checks
 - [ ] Automatic migration scripts for breaking changes
