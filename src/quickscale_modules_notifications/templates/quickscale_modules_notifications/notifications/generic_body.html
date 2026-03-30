@@ -1,0 +1,16 @@
+{% extends "quickscale_modules_notifications/notifications/base_email.html" %}
+
+{% block title %}{{ headline }}{% endblock %}
+{% block heading %}{{ headline }}{% endblock %}
+
+{% block content %}
+<p style="margin-top:0;">{{ body|linebreaksbr }}</p>
+{% if secondary_text %}
+<p>{{ secondary_text|linebreaksbr }}</p>
+{% endif %}
+{% if action_url and action_label %}
+<p style="margin:24px 0 0;">
+  <a href="{{ action_url }}" style="display:inline-block;padding:12px 18px;background:#8a6c4a;color:#ffffff;text-decoration:none;">{{ action_label }}</a>
+</p>
+{% endif %}
+{% endblock %}

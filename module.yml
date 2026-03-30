@@ -1,0 +1,71 @@
+name: notifications
+version: "0.78.0"
+description: "Transactional email foundation with read-only operational settings, recipient-granular delivery tracking, and signed webhook ingestion"
+
+config:
+  mutable:
+    enabled:
+      type: boolean
+      default: true
+      django_setting: QUICKSCALE_NOTIFICATIONS_ENABLED
+      description: "Enable the notifications module runtime. Safe local backends remain valid when live delivery is not configured."
+
+    sender_name:
+      type: string
+      default: "QuickScale"
+      django_setting: QUICKSCALE_NOTIFICATIONS_SENDER_NAME
+      description: "Display name used for outbound transactional email."
+
+    sender_email:
+      type: string
+      default: "noreply@example.com"
+      django_setting: QUICKSCALE_NOTIFICATIONS_SENDER_EMAIL
+      description: "Authoritative sender email address used for outbound transactional email."
+
+    reply_to_email:
+      type: string
+      default: ""
+      django_setting: QUICKSCALE_NOTIFICATIONS_REPLY_TO_EMAIL
+      description: "Optional reply-to email address for transactional messages."
+
+    resend_domain:
+      type: string
+      default: ""
+      django_setting: QUICKSCALE_NOTIFICATIONS_RESEND_DOMAIN
+      description: "Verified Resend sending domain for operational visibility."
+
+    resend_api_key_env_var:
+      type: string
+      default: "RESEND_API_KEY"
+      django_setting: QUICKSCALE_NOTIFICATIONS_RESEND_API_KEY_ENV_VAR
+      description: "Environment-variable name containing the Resend API key."
+
+    webhook_secret_env_var:
+      type: string
+      default: "QUICKSCALE_NOTIFICATIONS_WEBHOOK_SECRET"
+      django_setting: QUICKSCALE_NOTIFICATIONS_WEBHOOK_SECRET_ENV_VAR
+      description: "Environment-variable name containing the shared webhook signing secret."
+
+    default_tags:
+      type: list
+      default: ["quickscale", "transactional"]
+      django_setting: QUICKSCALE_NOTIFICATIONS_DEFAULT_TAGS
+      description: "Provider-visible default tags from the approved non-sensitive allowlist."
+
+    allowed_tags:
+      type: list
+      default: ["quickscale", "transactional", "notifications", "auth", "forms", "ops", "billing", "testing"]
+      django_setting: QUICKSCALE_NOTIFICATIONS_ALLOWED_TAGS
+      description: "Tiny non-sensitive allowlist for provider-visible tags."
+
+    webhook_ttl_seconds:
+      type: integer
+      default: 300
+      django_setting: QUICKSCALE_NOTIFICATIONS_WEBHOOK_TTL_SECONDS
+      description: "Maximum accepted webhook timestamp skew in seconds."
+
+dependencies:
+  - django-anymail>=13.0
+
+django_apps:
+  - quickscale_modules_notifications

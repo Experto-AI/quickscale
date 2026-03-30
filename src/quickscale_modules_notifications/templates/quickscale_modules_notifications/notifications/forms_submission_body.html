@@ -1,0 +1,26 @@
+{% extends "quickscale_modules_notifications/notifications/base_email.html" %}
+
+{% block title %}[{{ form_title }}] New submission{% if submitter_name %} from {{ submitter_name }}{% endif %}{% endblock %}
+{% block heading %}New submission: {{ form_title }}{% endblock %}
+
+{% block content %}
+<p style="margin-top:0;">Received: {{ submitted_at }}</p>
+<table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="border-collapse:collapse;border:1px solid #e6e1d8;">
+  <thead>
+    <tr>
+      <th align="left" style="padding:12px;border-bottom:1px solid #e6e1d8;background:#f7f4ee;">Field</th>
+      <th align="left" style="padding:12px;border-bottom:1px solid #e6e1d8;background:#f7f4ee;">Value</th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for label, value in fields %}
+    <tr>
+      <th align="left" style="padding:12px;border-bottom:1px solid #e6e1d8;">{{ label }}</th>
+      <td style="padding:12px;border-bottom:1px solid #e6e1d8;">{{ value|linebreaksbr }}</td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+<p style="margin-bottom:0;">IP address: {{ ip_address }}</p>
+<p style="margin-bottom:0;">Status: {{ status }}</p>
+{% endblock %}
