@@ -40,3 +40,12 @@ def test_get_module_names_includes_experimental_when_requested() -> None:
     assert "teams" in names
     assert "storage" in names
     assert "backups" in names
+
+
+def test_get_module_entry_returns_notifications_metadata() -> None:
+    """Catalog lookup should return notifications metadata for ready modules."""
+    entry = get_module_entry("notifications")
+
+    assert entry is not None
+    assert entry.name == "notifications"
+    assert entry.ready is True

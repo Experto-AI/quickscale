@@ -2,6 +2,7 @@
 
 import pytest
 from django.core.cache import cache
+from django.core import mail
 from django.test import override_settings
 from django.urls import reverse
 
@@ -92,6 +93,79 @@ class TestFormSubmitAPIView:
         sub = FormSubmission.objects.filter(form=form).first()
         assert sub is not None
         assert sub.values.filter(field_name="full_name").exists()
+
+    def test_submission_persists_when_notification_delivery_fails(
+        self, api_client, form, form_field, email_field, monkeypatch
+    ):
+        """Delivery failure stays non-blocking and does not roll back persistence"""
+
+        def failing_send(*args, **kwargs):
+            raise Exception("SMTP connection refused")
+
+        monkeypatch.setattr(
+            "quickscale_modules_forms.notifications.EmailMultiAlternatives.send",
+            failing_send,
+        )
+
+        url = reverse("quickscale_forms:form-submit", kwargs={"slug": "test-contact"})
+        data = {"full_name": "Alice", "email": "alice@example.com"}
+
+        cache.clear()
+
+        response = api_client.post(url, data=data, format="json")
+
+        cache.clear()
+
+        assert response.status_code == 201
+        assert FormSubmission.objects.filter(form=form).count() == 1
+        assert (
+            FormSubmission.objects.get(form=form)
+            .values.filter(
+                field_name="full_name",
+                value="Alice",
+            )
+            .exists()
+        )
+
+    @override_settings(QUICKSCALE_NOTIFICATIONS_ENABLED=False)
+    def test_submission_uses_untracked_email_when_notifications_installed_but_disabled(
+        self,
+        api_client,
+        form,
+        form_field,
+        email_field,
+        monkeypatch,
+    ):
+        """Disabled tracked notifications fall back to untracked email after submit"""
+
+        def notifications_are_installed(app_label: str) -> bool:
+            return app_label == "quickscale_modules_notifications"
+
+        def fail_import(module_path: str):
+            raise AssertionError(
+                "tracked notifications service should not load when disabled"
+            )
+
+        monkeypatch.setattr(
+            "quickscale_modules_forms.notifications.apps.is_installed",
+            notifications_are_installed,
+        )
+        monkeypatch.setattr(
+            "quickscale_modules_forms.notifications.import_module",
+            fail_import,
+        )
+
+        url = reverse("quickscale_forms:form-submit", kwargs={"slug": "test-contact"})
+        data = {"full_name": "Alice", "email": "alice@example.com"}
+
+        cache.clear()
+        response = api_client.post(url, data=data, format="json")
+        cache.clear()
+
+        assert response.status_code == 201
+        assert FormSubmission.objects.filter(form=form).count() == 1
+        assert len(mail.outbox) == 1
+        assert "admin@example.com" in mail.outbox[0].recipients()
 
     @override_settings(FORMS_RATE_LIMIT="2/minute")
     def test_returns_429_when_rate_limit_exceeded(

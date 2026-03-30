@@ -1122,6 +1122,12 @@ INSTALLED_APPS = [
 - ✅ Django email delivery for notifications uses `django-anymail` as the approved delivery layer with Resend as the current first-class provider for v0.78.0
 - ✅ Version pinning (predictable compatibility for Django foundations)
 
+### Notifications Contract (v0.78.0 Planning Baseline)
+
+- Authoritative notifications configuration lives in `quickscale.yml`, generated Django settings, and environment variables. Any `NotificationSettings` admin surface is a read-only operational snapshot only, with no secrets and no alternate mutable config path.
+- Delivery tracking is recipient-granular. A multi-recipient send fans out into one tracked provider send/message ID per recipient delivery record.
+- Provider-visible tags/metadata are optional and limited to a tiny non-sensitive allowlist. Internal correlation identifiers stay local to QuickScale-owned records.
+
 **Post-MVP Only:**
 - ❌ PEP 420 namespace packages (Post-MVP: independent module distribution)
 - ❌ Hook/event system (deferred to Post-MVP)

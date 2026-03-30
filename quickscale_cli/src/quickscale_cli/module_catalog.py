@@ -50,6 +50,11 @@ MODULE_CATALOG: tuple[ModuleCatalogEntry, ...] = (
         ready=True,
     ),
     ModuleCatalogEntry(
+        name="notifications",
+        description="Transactional email delivery with Resend and Anymail",
+        ready=True,
+    ),
+    ModuleCatalogEntry(
         name="billing",
         description="Stripe integration",
         ready=False,

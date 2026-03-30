@@ -27,12 +27,15 @@ from quickscale_cli.commands.module_config import (
     apply_blog_configuration,
     apply_crm_configuration,
     apply_listings_configuration,
+    apply_notifications_configuration,
     apply_storage_configuration,
     configure_backups_module,
     configure_storage_module,
     configure_crm_module,
+    configure_notifications_module,
     get_default_backups_config,
     get_default_crm_config,
+    get_default_notifications_config,
     get_default_storage_config,
     validate_backups_module_options,
 )
@@ -1179,6 +1182,141 @@ class TestBackupsModuleConfig:
         )
         assert "QUICKSCALE_STORAGE_PUBLIC_BASE_URL" not in settings
         assert "MEDIA_URL" not in settings
+
+
+class TestNotificationsModuleConfig:
+    """Tests for notifications module configurator registration and wiring."""
+
+    def test_notifications_default_config_keys_match_manifest_contract_intent(self):
+        config = get_default_notifications_config()
+
+        assert config["enabled"] is True
+        assert config["sender_name"] == "QuickScale"
+        assert config["sender_email"] == "noreply@example.com"
+        assert config["resend_domain"] == ""
+        assert config["resend_api_key_env_var"] == "RESEND_API_KEY"
+
+    def test_notifications_in_module_configurators(self):
+        assert "notifications" in MODULE_CONFIGURATORS
+
+        config = configure_notifications_module(non_interactive=True)
+
+        assert config["enabled"] is True
+        assert config["default_tags"] == ["quickscale", "transactional"]
+
+    @patch("quickscale_cli.commands.module_config._regenerate_wiring_for_module")
+    def test_apply_notifications_configuration_regenerates_managed_wiring(
+        self,
+        mock_regenerate,
+        tmp_path,
+    ):
+        project = _make_project(tmp_path)
+
+        apply_notifications_configuration(
+            project,
+            {
+                "enabled": True,
+                "sender_name": "Ops",
+                "sender_email": "ops@example.com",
+                "reply_to_email": "support@example.com",
+                "resend_domain": "mg.example.com",
+                "resend_api_key_env_var": "OPS_RESEND_API_KEY",
+                "webhook_secret_env_var": "OPS_NOTIFICATIONS_WEBHOOK_SECRET",
+                "default_tags": ["quickscale", "ops"],
+                "allowed_tags": ["quickscale", "ops", "transactional"],
+                "webhook_ttl_seconds": 600,
+            },
+        )
+
+        mock_regenerate.assert_called_once_with(
+            project,
+            "notifications",
+            get_default_notifications_config()
+            | {
+                "enabled": True,
+                "sender_name": "Ops",
+                "sender_email": "ops@example.com",
+                "reply_to_email": "support@example.com",
+                "resend_domain": "mg.example.com",
+                "resend_api_key_env_var": "OPS_RESEND_API_KEY",
+                "webhook_secret_env_var": "OPS_NOTIFICATIONS_WEBHOOK_SECRET",
+                "default_tags": ["quickscale", "ops"],
+                "allowed_tags": ["quickscale", "ops", "transactional"],
+                "webhook_ttl_seconds": 600,
+            },
+        )
+
+    def test_notifications_wiring_stays_console_safe_by_default(self):
+        specs = build_module_wiring_specs(
+            {
+                "notifications": {
+                    "enabled": True,
+                    "sender_name": "QuickScale",
+                    "sender_email": "noreply@example.com",
+                    "reply_to_email": "",
+                    "resend_domain": "",
+                    "resend_api_key_env_var": "RESEND_API_KEY",
+                    "webhook_secret_env_var": "",
+                    "default_tags": ["quickscale", "transactional"],
+                    "allowed_tags": ["quickscale", "transactional", "ops"],
+                    "webhook_ttl_seconds": 300,
+                }
+            }
+        )
+
+        _, _, settings, urls = collect_wiring(specs)
+
+        assert (
+            settings["EMAIL_BACKEND"]
+            == "django.core.mail.backends.console.EmailBackend"
+        )
+        assert settings["DEFAULT_FROM_EMAIL"] == "noreply@example.com"
+        assert "QUICKSCALE_NOTIFICATIONS_ENABLED" in settings
+        assert ("", "quickscale_modules_notifications.urls") in urls
+
+    def test_notifications_wiring_live_delivery_owns_email_backend(self):
+        specs = build_module_wiring_specs(
+            {
+                "notifications": {
+                    "enabled": True,
+                    "sender_name": "Ops",
+                    "sender_email": "ops@example.com",
+                    "reply_to_email": "support@example.com",
+                    "resend_domain": "mg.example.com",
+                    "resend_api_key_env_var": "OPS_RESEND_API_KEY",
+                    "webhook_secret_env_var": "OPS_NOTIFICATIONS_WEBHOOK_SECRET",
+                    "default_tags": ["quickscale", "ops"],
+                    "allowed_tags": ["quickscale", "ops", "transactional"],
+                    "webhook_ttl_seconds": 600,
+                }
+            }
+        )
+
+        apps, _, settings, _ = collect_wiring(specs)
+
+        assert "anymail" in apps
+        assert settings["EMAIL_BACKEND"] == "anymail.backends.resend.EmailBackend"
+        assert settings["QUICKSCALE_NOTIFICATIONS_RESEND_DOMAIN"] == "mg.example.com"
+        assert (
+            settings["QUICKSCALE_NOTIFICATIONS_RESEND_API_KEY_ENV_VAR"]
+            == "OPS_RESEND_API_KEY"
+        )
+
+    def test_notifications_wiring_disabled_leaves_email_backend_unmanaged(self):
+        specs = build_module_wiring_specs(
+            {
+                "notifications": {
+                    "enabled": False,
+                    "sender_name": "Ops",
+                    "sender_email": "ops@example.com",
+                }
+            }
+        )
+
+        apps, _, settings, _ = collect_wiring(specs)
+
+        assert "quickscale_modules_notifications" in apps
+        assert "EMAIL_BACKEND" not in settings
 
 
 # ============================================================================

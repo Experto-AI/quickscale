@@ -20,6 +20,16 @@ from quickscale_cli.backups_contract import (
     normalize_backups_module_options,
     sanitize_module_options,
 )
+from quickscale_cli.notifications_contract import (
+    DEFAULT_NOTIFICATIONS_RESEND_API_KEY_ENV_VAR,
+    DEFAULT_NOTIFICATIONS_WEBHOOK_SECRET_ENV_VAR,
+    NOTIFICATIONS_RESEND_API_KEY_ENV_VAR_OPTION,
+    NOTIFICATIONS_WEBHOOK_SECRET_ENV_VAR_OPTION,
+    notifications_live_delivery_configured,
+    notifications_production_targeted,
+    resolve_notifications_module_options,
+    validate_notifications_module_options,
+)
 from quickscale_cli.commands.module_commands import embed_module
 from quickscale_cli.commands.module_config import (
     get_default_backups_config,
@@ -385,18 +395,16 @@ def _update_module_config_in_state(
             )
 
 
-def _sanitize_loaded_backups_config(qs_config: QuickScaleConfig) -> bool:
-    """Normalize backups options so raw secrets never persist after apply."""
-    backups_config = qs_config.modules.get("backups")
-    if backups_config is None:
-        return False
-
-    normalized = normalize_backups_module_options(backups_config.options or {})
-    if normalized == (backups_config.options or {}):
-        return False
-
-    backups_config.options = normalized
-    return True
+def _sanitize_loaded_module_configs(qs_config: QuickScaleConfig) -> list[str]:
+    """Normalize module configs so raw secrets never persist after apply."""
+    sanitized_modules: list[str] = []
+    for module_name, module_config in qs_config.modules.items():
+        normalized = sanitize_module_options(module_name, module_config.options or {})
+        if normalized == (module_config.options or {}):
+            continue
+        module_config.options = normalized
+        sanitized_modules.append(module_name)
+    return sanitized_modules
 
 
 def _load_and_validate_config(config_path: Path) -> QuickScaleConfig:
@@ -415,10 +423,11 @@ def _load_and_validate_config(config_path: Path) -> QuickScaleConfig:
     try:
         yaml_content = config_path.read_text()
         qs_config = validate_config(yaml_content)
-        if _sanitize_loaded_backups_config(qs_config):
+        sanitized_modules = _sanitize_loaded_module_configs(qs_config)
+        if sanitized_modules:
             config_path.write_text(generate_yaml(qs_config))
             click.secho(
-                "✅ Sanitized backups config to env-var references in quickscale.yml",
+                "✅ Sanitized module config to env-var references in quickscale.yml",
                 fg="green",
             )
         _validate_module_prerequisites(qs_config)
@@ -434,26 +443,139 @@ def _load_and_validate_config(config_path: Path) -> QuickScaleConfig:
 def _validate_module_prerequisites(qs_config: QuickScaleConfig) -> None:
     """Validate actionable module-specific prerequisites before apply proceeds."""
     backups_config = qs_config.modules.get("backups")
-    if backups_config is None:
+    if backups_config is not None:
+        issues = validate_backups_module_options(backups_config.options or {})
+        if issues:
+            click.secho(
+                "\n❌ Backups module configuration is incomplete for apply:",
+                fg="red",
+                err=True,
+            )
+            for issue in issues:
+                click.echo(f"  • {issue}", err=True)
+            click.echo(
+                "\n💡 Re-run 'quickscale plan --reconfigure --configure-modules' or edit "
+                "quickscale.yml to supply the missing private-remote env-var references.",
+                err=True,
+            )
+            raise click.Abort()
+
+    notifications_config = qs_config.modules.get("notifications")
+    if notifications_config is None:
         return
 
-    issues = validate_backups_module_options(backups_config.options or {})
-    if not issues:
+    notifications_options = notifications_config.options or {}
+    notification_issues = validate_notifications_module_options(notifications_options)
+    if not notification_issues:
         return
 
     click.secho(
-        "\n❌ Backups module configuration is incomplete for apply:",
+        "\n❌ Notifications module configuration is incomplete for apply:",
         fg="red",
         err=True,
     )
-    for issue in issues:
+    for issue in notification_issues:
         click.echo(f"  • {issue}", err=True)
-    click.echo(
-        "\n💡 Re-run 'quickscale plan --reconfigure --configure-modules' or edit "
-        "quickscale.yml to supply the missing private-remote env-var references.",
-        err=True,
-    )
+    if notifications_production_targeted(notifications_options):
+        click.echo(
+            "\n💡 This configuration targets live Resend delivery, so apply refuses "
+            "to leave production on the console email backend. Complete the missing "
+            "notifications settings first.",
+            err=True,
+        )
+    else:
+        click.echo(
+            "\n💡 Re-run 'quickscale plan --reconfigure --configure-modules' or edit "
+            "quickscale.yml to correct the notifications values.",
+            err=True,
+        )
     raise click.Abort()
+
+
+def _render_notifications_env_example_block(
+    options: Mapping[str, Any] | None,
+) -> str:
+    """Render the managed notifications section for `.env.example`."""
+    resolved = resolve_notifications_module_options(options)
+    resend_api_key_env_var = str(
+        resolved.get(
+            NOTIFICATIONS_RESEND_API_KEY_ENV_VAR_OPTION,
+            DEFAULT_NOTIFICATIONS_RESEND_API_KEY_ENV_VAR,
+        )
+        or DEFAULT_NOTIFICATIONS_RESEND_API_KEY_ENV_VAR
+    ).strip()
+    webhook_secret_env_var = str(
+        resolved.get(
+            NOTIFICATIONS_WEBHOOK_SECRET_ENV_VAR_OPTION,
+            DEFAULT_NOTIFICATIONS_WEBHOOK_SECRET_ENV_VAR,
+        )
+        or DEFAULT_NOTIFICATIONS_WEBHOOK_SECRET_ENV_VAR
+    ).strip()
+    resend_domain = str(resolved.get("resend_domain", "")).strip()
+    sender_email = str(resolved.get("sender_email", "noreply@example.com")).strip()
+
+    lines = [
+        "# QuickScale Notifications (managed)",
+        "# Leave these blank until your verified Resend domain is ready for live delivery.",
+        f"# Sender address from quickscale.yml: {sender_email}",
+    ]
+    if resend_domain:
+        lines.append(f"# Verified Resend domain from quickscale.yml: {resend_domain}")
+    lines.extend(
+        [
+            f"{resend_api_key_env_var}=",
+            f"{webhook_secret_env_var}=",
+            "# End QuickScale Notifications",
+        ]
+    )
+    return "\n".join(lines)
+
+
+def _sync_notifications_env_example(
+    output_path: Path,
+    qs_config: QuickScaleConfig,
+) -> bool:
+    """Keep `.env.example` aligned with the notifications env-var names."""
+    notifications_config = qs_config.modules.get("notifications")
+    env_example_path = output_path / ".env.example"
+    if notifications_config is None or not env_example_path.exists():
+        return True
+
+    start_marker = "# QuickScale Notifications (managed)"
+    end_marker = "# End QuickScale Notifications"
+    rendered_block = _render_notifications_env_example_block(
+        notifications_config.options or {}
+    )
+
+    try:
+        content = env_example_path.read_text()
+    except OSError as e:
+        click.secho(
+            f"⚠️  Failed to read .env.example for notifications wiring: {e}",
+            fg="yellow",
+        )
+        return False
+
+    if start_marker in content and end_marker in content:
+        before, remainder = content.split(start_marker, maxsplit=1)
+        _, after = remainder.split(end_marker, maxsplit=1)
+        replacement = rendered_block + after
+        updated_content = before + replacement
+    else:
+        suffix = "" if content.endswith("\n") else "\n"
+        updated_content = content + suffix + "\n" + rendered_block + "\n"
+
+    try:
+        env_example_path.write_text(updated_content)
+    except OSError as e:
+        click.secho(
+            f"⚠️  Failed to update .env.example for notifications wiring: {e}",
+            fg="yellow",
+        )
+        return False
+
+    click.secho("✅ Updated .env.example with notifications env vars", fg="green")
+    return True
 
 
 def _normalize_backups_gitignore_entry(local_directory: str) -> str | None:
@@ -903,6 +1025,55 @@ def _display_next_steps(
                 "on scheduled or production restore workflows."
             )
 
+    if "notifications" in modules:
+        notifications_options = resolve_notifications_module_options(
+            modules["notifications"].options or {}
+        )
+        resend_api_key_env_var = str(
+            notifications_options.get(
+                NOTIFICATIONS_RESEND_API_KEY_ENV_VAR_OPTION,
+                DEFAULT_NOTIFICATIONS_RESEND_API_KEY_ENV_VAR,
+            )
+            or DEFAULT_NOTIFICATIONS_RESEND_API_KEY_ENV_VAR
+        )
+        webhook_secret_env_var = str(
+            notifications_options.get(
+                NOTIFICATIONS_WEBHOOK_SECRET_ENV_VAR_OPTION,
+                DEFAULT_NOTIFICATIONS_WEBHOOK_SECRET_ENV_VAR,
+            )
+            or DEFAULT_NOTIFICATIONS_WEBHOOK_SECRET_ENV_VAR
+        )
+        click.echo("\n  # Notifications setup")
+        if bool(notifications_options.get("enabled", True)):
+            if notifications_live_delivery_configured(notifications_options):
+                resend_domain = str(
+                    notifications_options.get("resend_domain", "")
+                ).strip()
+                click.echo(
+                    "  Verify SPF/DKIM in Resend for "
+                    + (resend_domain or "your sending domain")
+                    + "."
+                )
+                click.echo(
+                    f"  Set `{resend_api_key_env_var}` before relying on live email delivery."
+                )
+            else:
+                click.echo(
+                    "  Local development remains on the console email backend until "
+                    "you configure a verified Resend domain."
+                )
+                click.echo(
+                    f"  When ready, set `{resend_api_key_env_var}` and re-run `quickscale apply`."
+                )
+            click.echo(
+                f"  Set `{webhook_secret_env_var}` before enabling signed delivery webhooks."
+            )
+        else:
+            click.echo(
+                "  Notifications is embedded but disabled. Re-enable it in quickscale.yml "
+                "when you are ready to own email delivery through the module."
+            )
+
     click.echo("\n  Visit: http://localhost:8000")
 
 
@@ -1077,6 +1248,20 @@ def _execute_apply_steps(
         _print_apply_failure_summary(
             failed_step="backups gitignore hardening",
             reason="Unable to update .gitignore with the configured private backups directory.",
+        )
+        raise click.Abort()
+
+    if not _sync_notifications_env_example(ctx.output_path, ctx.qs_config):
+        _save_project_state(
+            ctx.output_path,
+            ctx.qs_config,
+            ctx.existing_state,
+            embedded_modules,
+            ctx.delta,
+        )
+        _print_apply_failure_summary(
+            failed_step="notifications env example sync",
+            reason="Unable to update .env.example with the configured notifications env-var names.",
         )
         raise click.Abort()
 

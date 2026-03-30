@@ -2,6 +2,7 @@
 
 import pytest
 from django.core import mail
+from django.test import override_settings
 
 from quickscale_modules_forms.models import FormSubmission
 from quickscale_modules_forms.notifications import notify_submission
@@ -57,6 +58,37 @@ class TestNotifySubmission:
         submission.save()
         notify_submission(submission)
         assert len(mail.outbox) == 0
+
+    @override_settings(QUICKSCALE_NOTIFICATIONS_ENABLED=False)
+    def test_falls_back_to_untracked_email_when_notifications_installed_but_disabled(
+        self,
+        submission,
+        field_value,
+        monkeypatch,
+    ):
+        """Disabled tracked notifications fall back to the existing untracked email path"""
+
+        def notifications_are_installed(app_label: str) -> bool:
+            return app_label == "quickscale_modules_notifications"
+
+        def fail_import(module_path: str):
+            raise AssertionError(
+                "tracked notifications service should not load when disabled"
+            )
+
+        monkeypatch.setattr(
+            "quickscale_modules_forms.notifications.apps.is_installed",
+            notifications_are_installed,
+        )
+        monkeypatch.setattr(
+            "quickscale_modules_forms.notifications.import_module",
+            fail_import,
+        )
+
+        notify_submission(submission)
+
+        assert len(mail.outbox) == 1
+        assert "admin@example.com" in mail.outbox[0].recipients()
 
     def test_smtp_exception_does_not_propagate(
         self, submission, field_value, monkeypatch

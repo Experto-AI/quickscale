@@ -22,6 +22,7 @@ quickscale-module-crm = {path = "./quickscale_modules/crm", develop = true}
 quickscale-module-forms = {path = "./quickscale_modules/forms", develop = true}
 quickscale-module-storage = {path = "./quickscale_modules/storage", develop = true}
 quickscale-module-backups = {path = "./quickscale_modules/backups", develop = true}
+quickscale-module-notifications = {path = "./quickscale_modules/notifications", develop = true}
 
 [tool.poetry.group.dev.dependencies]
 # Testing frameworks

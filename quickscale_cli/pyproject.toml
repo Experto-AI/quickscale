@@ -1,6 +1,6 @@
 [project]
 name = "quickscale-cli"
-version = "0.76.0"
+version = "0.78.0"
 description = "Command-line interface for QuickScale Django project generator"
 requires-python = ">=3.14,<4.0"
 readme = "README.md"

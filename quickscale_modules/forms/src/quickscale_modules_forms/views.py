@@ -109,7 +109,7 @@ class FormSubmitAPIView(CreateAPIView):
             )
             self._create_field_values(submission, form, data)
 
-        # Notifications run outside the transaction — SMTP failure must not roll back submission
+        # Notifications run outside the transaction — delivery failure must not roll back submission
         notify_submission(submission)
 
         return Response(

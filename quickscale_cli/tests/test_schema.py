@@ -150,10 +150,11 @@ modules:
   forms:
   storage:
   backups:
+  notifications:
 """
         config = validate_config(yaml_content)
 
-        assert len(config.modules) == 9
+        assert len(config.modules) == 10
         assert set(config.modules.keys()) == {
             "auth",
             "billing",
@@ -164,6 +165,7 @@ modules:
             "forms",
             "storage",
             "backups",
+            "notifications",
         }
 
     def test_all_valid_themes(self):

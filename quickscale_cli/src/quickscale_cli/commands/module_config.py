@@ -21,6 +21,16 @@ from quickscale_cli.backups_contract import (
     normalize_backups_module_options,
     validate_backups_env_var_reference,
 )
+from quickscale_cli.notifications_contract import (
+    DEFAULT_NOTIFICATIONS_ALLOWED_TAGS,
+    DEFAULT_NOTIFICATIONS_RESEND_API_KEY_ENV_VAR,
+    DEFAULT_NOTIFICATIONS_WEBHOOK_SECRET_ENV_VAR,
+    NOTIFICATIONS_RESEND_API_KEY_ENV_VAR_OPTION,
+    NOTIFICATIONS_WEBHOOK_SECRET_ENV_VAR_OPTION,
+    default_notifications_module_options,
+    resolve_notifications_module_options,
+    validate_notifications_module_options,
+)
 from quickscale_cli.utils.module_wiring_manager import regenerate_managed_wiring
 from quickscale_cli.utils.project_identity import (
     derive_package_from_slug,
@@ -66,6 +76,17 @@ def _merge_existing_config(
     if existing_config:
         merged.update(dict(existing_config))
     return merged
+
+
+def _format_tag_list(tags: list[str] | tuple[str, ...]) -> str:
+    """Return a comma-separated prompt string for provider-visible tags."""
+    return ", ".join(tags)
+
+
+def _parse_notification_tag_input(raw_value: str, field_name: str) -> list[str]:
+    """Normalize comma-separated notification tags using the shared contract."""
+    normalized = resolve_notifications_module_options({field_name: raw_value})
+    return list(normalized[field_name])
 
 
 @dataclass(frozen=True)
@@ -1601,6 +1622,172 @@ def apply_backups_configuration(project_path: Path, config: dict[str, Any]) -> N
 
 
 # ============================================================================
+# NOTIFICATIONS MODULE CONFIGURATION
+# ============================================================================
+
+
+def get_default_notifications_config() -> dict[str, Any]:
+    """Return default configuration for the notifications module."""
+    return default_notifications_module_options()
+
+
+def _raise_for_invalid_notifications_config(config: Mapping[str, Any]) -> None:
+    """Abort with actionable messaging when notifications config is invalid."""
+    issues = validate_notifications_module_options(config)
+    if not issues:
+        return
+
+    click.secho("\n❌ Invalid notifications module configuration:", fg="red", err=True)
+    for issue in issues:
+        click.echo(f"  • {issue}", err=True)
+    raise click.Abort()
+
+
+def configure_notifications_module(
+    non_interactive: bool = False,
+    existing_config: Mapping[str, Any] | None = None,
+) -> dict[str, Any]:
+    """Configure notifications module settings interactively or with defaults."""
+    defaults = resolve_notifications_module_options(existing_config)
+
+    if non_interactive:
+        click.echo("\n⚙️  Using default notifications module configuration...")
+        click.echo(
+            f"  • Sender: {defaults['sender_name']} <{defaults['sender_email']}>"
+        )
+        click.echo("  • Live delivery: configure later (console-safe by default)")
+        click.echo("  • Webhook signing: configure later")
+        _raise_for_invalid_notifications_config(defaults)
+        return defaults
+
+    click.echo("\n⚙️  Configuring notifications module...")
+    click.echo(
+        "Notifications remain console-safe by default. Configure a verified Resend "
+        "domain only when you want live delivery to take ownership of email settings.\n"
+    )
+
+    enabled = click.confirm(
+        "Enable the notifications runtime?",
+        default=bool(defaults["enabled"]),
+    )
+    sender_name = click.prompt(
+        "Sender display name",
+        default=str(defaults["sender_name"]),
+    ).strip()
+    sender_email = click.prompt(
+        "Sender email address",
+        default=str(defaults["sender_email"]),
+    ).strip()
+    reply_to_email = click.prompt(
+        "Reply-to email address (leave blank to reuse sender)",
+        default=str(defaults["reply_to_email"]),
+        show_default=bool(defaults["reply_to_email"]),
+    ).strip()
+
+    configure_live_delivery_now = enabled and click.confirm(
+        "Configure live Resend delivery now?",
+        default=bool(defaults["resend_domain"]),
+    )
+    if configure_live_delivery_now:
+        resend_domain = click.prompt(
+            "Verified Resend sending domain",
+            default=str(defaults["resend_domain"]),
+            show_default=bool(defaults["resend_domain"]),
+        ).strip()
+        resend_api_key_env_var = click.prompt(
+            "Resend API key environment variable",
+            default=(
+                str(defaults[NOTIFICATIONS_RESEND_API_KEY_ENV_VAR_OPTION]).strip()
+                or DEFAULT_NOTIFICATIONS_RESEND_API_KEY_ENV_VAR
+            ),
+            show_default=True,
+        ).strip()
+    else:
+        resend_domain = ""
+        resend_api_key_env_var = (
+            str(defaults[NOTIFICATIONS_RESEND_API_KEY_ENV_VAR_OPTION]).strip()
+            or DEFAULT_NOTIFICATIONS_RESEND_API_KEY_ENV_VAR
+        )
+
+    configure_webhooks_now = enabled and click.confirm(
+        "Configure webhook signing now?",
+        default=bool(defaults[NOTIFICATIONS_WEBHOOK_SECRET_ENV_VAR_OPTION]),
+    )
+    if configure_webhooks_now:
+        webhook_secret_env_var = click.prompt(
+            "Webhook secret environment variable",
+            default=(
+                str(defaults[NOTIFICATIONS_WEBHOOK_SECRET_ENV_VAR_OPTION]).strip()
+                or DEFAULT_NOTIFICATIONS_WEBHOOK_SECRET_ENV_VAR
+            ),
+            show_default=True,
+        ).strip()
+    else:
+        webhook_secret_env_var = ""
+
+    allowed_tags = _parse_notification_tag_input(
+        click.prompt(
+            "Allowed provider-visible tags (comma-separated)",
+            default=_format_tag_list(
+                list(defaults.get("allowed_tags", DEFAULT_NOTIFICATIONS_ALLOWED_TAGS))
+            ),
+            show_default=True,
+        ),
+        "allowed_tags",
+    )
+    default_tags = _parse_notification_tag_input(
+        click.prompt(
+            "Default provider-visible tags (comma-separated)",
+            default=_format_tag_list(list(defaults.get("default_tags", []))),
+            show_default=True,
+        ),
+        "default_tags",
+    )
+    webhook_ttl_seconds = click.prompt(
+        "Webhook timestamp tolerance in seconds",
+        type=int,
+        default=int(defaults["webhook_ttl_seconds"]),
+    )
+
+    config = resolve_notifications_module_options(
+        {
+            "enabled": enabled,
+            "sender_name": sender_name,
+            "sender_email": sender_email,
+            "reply_to_email": reply_to_email,
+            "resend_domain": resend_domain,
+            NOTIFICATIONS_RESEND_API_KEY_ENV_VAR_OPTION: resend_api_key_env_var,
+            NOTIFICATIONS_WEBHOOK_SECRET_ENV_VAR_OPTION: webhook_secret_env_var,
+            "default_tags": default_tags,
+            "allowed_tags": allowed_tags,
+            "webhook_ttl_seconds": webhook_ttl_seconds,
+        }
+    )
+    _raise_for_invalid_notifications_config(config)
+    return config
+
+
+def apply_notifications_configuration(
+    project_path: Path, config: dict[str, Any]
+) -> None:
+    """Apply notifications module configuration via managed wiring files."""
+    resolved = resolve_notifications_module_options(config)
+    _raise_for_invalid_notifications_config(resolved)
+    _regenerate_wiring_for_module(project_path, "notifications", resolved)
+
+    click.echo("\n📋 Configuration applied:")
+    click.echo(f"  • Sender: {resolved['sender_name']} <{resolved['sender_email']}>")
+    click.echo(
+        "  • Live delivery: "
+        + (resolved["resend_domain"] or "configure later (console-safe by default)")
+    )
+    click.echo(
+        "  • Webhook secret env var: "
+        + (resolved[NOTIFICATIONS_WEBHOOK_SECRET_ENV_VAR_OPTION] or "configure later")
+    )
+
+
+# ============================================================================
 # MODULE CONFIGURATORS REGISTRY
 # ============================================================================
 
@@ -1612,4 +1799,8 @@ MODULE_CONFIGURATORS = {
     "forms": (configure_forms_module, apply_forms_configuration),
     "storage": (configure_storage_module, apply_storage_configuration),
     "backups": (configure_backups_module, apply_backups_configuration),
+    "notifications": (
+        configure_notifications_module,
+        apply_notifications_configuration,
+    ),
 }

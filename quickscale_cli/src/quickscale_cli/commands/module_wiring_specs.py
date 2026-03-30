@@ -11,6 +11,11 @@ from quickscale_cli.backups_contract import (
     DEFAULT_BACKUPS_REMOTE_SECRET_ACCESS_KEY_ENV_VAR,
     normalize_backups_module_options,
 )
+from quickscale_cli.notifications_contract import (
+    NOTIFICATIONS_LIVE_EMAIL_BACKEND,
+    notifications_runtime_email_backend,
+    resolve_notifications_module_options,
+)
 from quickscale_core.module_wiring import ModuleWiringSpec
 
 
@@ -331,6 +336,56 @@ def _backups_wiring(options: Mapping[str, Any]) -> ModuleWiringSpec:
     )
 
 
+def _notifications_wiring(options: Mapping[str, Any]) -> ModuleWiringSpec:
+    resolved = resolve_notifications_module_options(options)
+    runtime_email_backend = notifications_runtime_email_backend(resolved)
+
+    settings: dict[str, Any] = {
+        "QUICKSCALE_NOTIFICATIONS_ENABLED": bool(resolved.get("enabled", True)),
+        "QUICKSCALE_NOTIFICATIONS_PROVIDER": "resend",
+        "QUICKSCALE_NOTIFICATIONS_SENDER_NAME": str(
+            resolved.get("sender_name", "QuickScale")
+        ).strip(),
+        "QUICKSCALE_NOTIFICATIONS_SENDER_EMAIL": str(
+            resolved.get("sender_email", "noreply@example.com")
+        ).strip(),
+        "QUICKSCALE_NOTIFICATIONS_REPLY_TO_EMAIL": str(
+            resolved.get("reply_to_email", "")
+        ).strip(),
+        "QUICKSCALE_NOTIFICATIONS_RESEND_DOMAIN": str(
+            resolved.get("resend_domain", "")
+        ).strip(),
+        "QUICKSCALE_NOTIFICATIONS_RESEND_API_KEY_ENV_VAR": str(
+            resolved.get("resend_api_key_env_var", "")
+        ).strip(),
+        "QUICKSCALE_NOTIFICATIONS_WEBHOOK_SECRET_ENV_VAR": str(
+            resolved.get("webhook_secret_env_var", "")
+        ).strip(),
+        "QUICKSCALE_NOTIFICATIONS_DEFAULT_TAGS": list(resolved.get("default_tags", [])),
+        "QUICKSCALE_NOTIFICATIONS_ALLOWED_TAGS": list(resolved.get("allowed_tags", [])),
+        "QUICKSCALE_NOTIFICATIONS_WEBHOOK_TTL_SECONDS": int(
+            resolved.get("webhook_ttl_seconds", 300)
+        ),
+    }
+
+    apps = ["quickscale_modules_notifications"]
+    if runtime_email_backend == NOTIFICATIONS_LIVE_EMAIL_BACKEND:
+        apps.insert(0, "anymail")
+
+    if runtime_email_backend is not None:
+        settings["EMAIL_BACKEND"] = runtime_email_backend
+        settings["DEFAULT_FROM_EMAIL"] = settings[
+            "QUICKSCALE_NOTIFICATIONS_SENDER_EMAIL"
+        ]
+        settings["SERVER_EMAIL"] = settings["QUICKSCALE_NOTIFICATIONS_SENDER_EMAIL"]
+
+    return ModuleWiringSpec(
+        apps=tuple(apps),
+        settings=settings,
+        url_includes=(("", "quickscale_modules_notifications.urls"),),
+    )
+
+
 MODULE_WIRING_BUILDERS = {
     "auth": _auth_wiring,
     "blog": _blog_wiring,
@@ -339,6 +394,7 @@ MODULE_WIRING_BUILDERS = {
     "forms": _forms_wiring,
     "storage": _storage_wiring,
     "backups": _backups_wiring,
+    "notifications": _notifications_wiring,
 }
 
 

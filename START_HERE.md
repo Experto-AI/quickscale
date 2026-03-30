@@ -1,6 +1,6 @@
 # 🚀 Start Here - QuickScale Documentation Guide
 
-**Quick Mental Model**: QuickScale is a Django project generator that creates production-ready SaaS applications in minutes. It generates standalone projects you own completely, with optional reusable modules for common features (for example auth, backups, blog, listings, and storage). Think "create-react-app" but for Django SaaS applications.
+**Quick Mental Model**: QuickScale is a Django project generator that creates production-ready SaaS applications in minutes. It generates standalone projects you own completely, with optional reusable modules for common features (for example auth, backups, blog, listings, notifications, and storage). Think "create-react-app" but for Django SaaS applications.
 
 ---
 
@@ -12,7 +12,7 @@ QuickScale = **Django Generator** + **Reusable Modules** + **Production Foundati
 **Output**: Complete Django project with Docker, PostgreSQL, testing, CI/CD, and security best practices
 **Current Distribution**: Reusable modules are installed via git subtree during MVP; PyPI distribution remains Post-MVP
 
-**Current Status**: Main branch includes the v0.77.0 backups closeout work; released metadata remains v0.76.0 until the v0.77.0 release cut
+**Current Status**: Released metadata and the main branch are aligned at v0.78.0; notifications shipped and the post-MVP expansion line is now active
 **Target Audience**: Solo developers and development agencies building client projects
 
 ---
@@ -26,7 +26,7 @@ For complete definitions, see **[GLOSSARY.md](./GLOSSARY.md)**. Here are the ess
 | **Generated Project** | The standalone Django app created by `quickscale plan`, then entering the generated directory and running `quickscale apply` | [GLOSSARY.md](./GLOSSARY.md#generated-project) |
 | **MVP** | Phase 1 (v0.56-v0.77.0) - Personal toolkit for client projects | [GLOSSARY.md](./GLOSSARY.md#mvp-minimum-viable-product) |
 | **Post-MVP** | Phase 2+ (v0.78+) - Broader expansion beyond MVP; community-platform work is optional at v1.0.0+ | [GLOSSARY.md](./GLOSSARY.md#post-mvp) |
-| **Module** | Reusable Django app (auth, backups, blog, listings, storage) | [GLOSSARY.md](./GLOSSARY.md#module) |
+| **Module** | Reusable Django app (auth, backups, blog, listings, notifications, storage) | [GLOSSARY.md](./GLOSSARY.md#module) |
 | **Theme** | Frontend scaffolding (React default, HTML secondary option) | [GLOSSARY.md](./GLOSSARY.md#theme) |
 | **Git Subtree** | Distribution mechanism for sharing code | [GLOSSARY.md](./GLOSSARY.md#git-subtree) |
 | **Plan/Apply** | Terraform-style declarative workflow | [GLOSSARY.md](./GLOSSARY.md#planapply-workflow) |
@@ -205,7 +205,7 @@ Detailed guides for specific stages:
 ## Quick Answers to Common Questions
 
 ### "Is QuickScale production-ready?"
-**Phase 1 (MVP)** is the current production-focused track. Main branch is at v0.77.0 closeout, while the latest released metadata remains v0.76.0 until the v0.77.0 release cut. Check the roadmap for the active release scope and remaining milestones.
+**Phase 1 (MVP)** is complete through v0.77.0, and **Post-MVP** began with the v0.78.0 notifications release. The current published metadata is v0.78.0; check the roadmap for the active post-MVP scope and next milestones.
 See: [roadmap.md](./docs/technical/roadmap.md)
 
 ### "Can I use it for my client projects?"
@@ -229,7 +229,7 @@ Some older review files also remain in [docs/releases/](./docs/releases/) as leg
 Current release status and unfinished scope remain in [roadmap.md](./docs/technical/roadmap.md).
 
 ### "What modules are available?"
-Current main-branch first-party modules include **auth, backups, blog, crm, forms, listings, and storage**. The latest released metadata still reflects v0.76.0 until the v0.77.0 release cut. The monorepo also contains **billing** and **teams** directories as planned placeholders for follow-on modules.
+Current first-party modules include **auth, backups, blog, crm, forms, listings, notifications, and storage**. The current published metadata is v0.78.0, which starts the post-MVP expansion line. The monorepo also contains **billing** and **teams** directories as planned placeholders for follow-on modules.
 See: [quickscale_modules/](./quickscale_modules/) for the current package list and per-module README files.
 
 ### "Can I contribute?"
@@ -326,6 +326,6 @@ decisions.md scaffolding.md roadmap.md   contrib/*
 
 ---
 
-**Last Updated**: 2026-03-21
-**QuickScale Version**: v0.76.0
+**Last Updated**: 2026-03-30
+**QuickScale Version**: v0.78.0
 **Feedback**: Open an issue if this guide needs improvement!

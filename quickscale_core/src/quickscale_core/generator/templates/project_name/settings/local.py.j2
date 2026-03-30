@@ -44,8 +44,10 @@ DATABASES: dict[str, Any] = {  # type: ignore[no-redef]  # noqa: F405
 # MIDDLEWARE += ["debug_toolbar.middleware.DebugToolbarMiddleware"]  # noqa: F405
 # INTERNAL_IPS = ["127.0.0.1"]
 
-# Email backend - console output for development
-EMAIL_BACKEND = "django.core.mail.backends.console.EmailBackend"
+# Email backend - console output for development unless managed module wiring
+# already took ownership (for example, live notifications delivery).
+if "EMAIL_BACKEND" not in globals():
+    EMAIL_BACKEND = "django.core.mail.backends.console.EmailBackend"
 
 # Disable password validation in development (optional, for convenience)
 # AUTH_PASSWORD_VALIDATORS = []  # noqa: F405

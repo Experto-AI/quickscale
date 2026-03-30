@@ -150,6 +150,31 @@ MEDIA_ROOT = BASE_DIR / "media"
 # (e.g. storage backend, MEDIA_URL) are not clobbered by the template defaults.
 globals().update(MODULE_SETTINGS)
 
+if EMAIL_BACKEND == "anymail.backends.resend.EmailBackend":
+    _notifications_resend_api_key_env_var = str(
+        globals().get("QUICKSCALE_NOTIFICATIONS_RESEND_API_KEY_ENV_VAR", "")
+    ).strip()
+    _notifications_webhook_secret_env_var = str(
+        globals().get("QUICKSCALE_NOTIFICATIONS_WEBHOOK_SECRET_ENV_VAR", "")
+    ).strip()
+    _notifications_resend_domain = str(
+        globals().get("QUICKSCALE_NOTIFICATIONS_RESEND_DOMAIN", "")
+    ).strip()
+
+    ANYMAIL = dict(globals().get("ANYMAIL", {}))
+    if _notifications_resend_api_key_env_var:
+        ANYMAIL["RESEND_API_KEY"] = config(
+            _notifications_resend_api_key_env_var,
+            default="",
+        )
+    if _notifications_webhook_secret_env_var:
+        ANYMAIL["WEBHOOK_SECRET"] = config(
+            _notifications_webhook_secret_env_var,
+            default="",
+        )
+    if _notifications_resend_domain:
+        ANYMAIL["RESEND_SENDER_DOMAIN"] = _notifications_resend_domain
+
 
 # Default primary key field type
 # https://docs.djangoproject.com/en/stable/ref/settings/#default-auto-field

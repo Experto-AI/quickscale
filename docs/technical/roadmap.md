@@ -38,7 +38,7 @@ QuickScale follows an evolution-aligned roadmap that starts as a personal toolki
 
 **Roadmap Phases:**
 
-1. **Phase 1: Foundation + Core Modules (React Theme Default)** 🚧 _In Progress_
+1. **Phase 1: Foundation + Core Modules (React Theme Default)** ✅ _Complete_
    - ✅ Theme system infrastructure and split branch management (v0.61.0-v0.62.0)
    - ✅ Auth module (v0.63.0) - production-ready with django-allauth
    - ✅ Listings module (v0.67.0) - generic base for vertical themes
@@ -51,8 +51,8 @@ QuickScale follows an evolution-aligned roadmap that starts as a personal toolki
   - ✅ Storage module (v0.76.0) - cloud file hosting, media storage adapters, CDN integration
   - ✅ Backups module (v0.77.0) - private database backups, optional private remote offload, guarded CLI restore, and scheduler-ready command hooks
 
-2. **Phase 2: Notifications, Vertical Modules & Theme Expansion (Post-MVP)** 📋 _Planned_
-  - 📋 Notifications module (v0.78.0) - transactional email infrastructure, using Anymail-backed Resend as the approved delivery direction
+2. **Phase 2: Notifications, Vertical Modules & Theme Expansion (Post-MVP)** 🚧 _In Progress_
+  - ✅ Notifications module (v0.78.0) - transactional email foundation with app-owned rendering, recipient-granular tracking, and Anymail-backed Resend delivery
   - 📋 Social & Link Tree module (v0.79.0) - social links page + media embeds
   - 📋 Listings Theme (v0.80.0) - React frontend for property listings (sell/rent)
   - 📋 CRM Theme (v0.81.0) - React frontend for CRM module
@@ -82,16 +82,16 @@ QuickScale follows an evolution-aligned roadmap that starts as a personal toolki
 - **v0.75.0:** Forms Module (generic form builder with DRF API, spam protection, GDPR anonymization) ✅
 - **v0.76.0:** Storage Module (cloud file hosting + CDN-ready media infrastructure) 🎯
 - **v0.77.0:** Backups module (private local + optional private remote workflows, guarded CLI restore) ✅
-- **v0.78.0:** Notifications Module (transactional email foundation; Anymail-backed Resend delivery) 🎯
+- **v0.78.0:** Notifications Module (transactional email foundation; app-owned rendering, recipient-granular tracking, and Anymail-backed Resend delivery) ✅
 - **v0.80.0:** Real Estate MVP (static + listings + social links) 🎯
 - **v0.83.0:** SaaS Feature Parity (auth, billing, teams, notifications foundation) 🎯
 - **v1.0.0+:** Community platform (if demand exists)
 
 **Status:**
-- **Current Status:** main branch includes the v0.77.0 Backups Module closeout; published release metadata remains v0.76.0 until the v0.77.0 release cut
-- **In Progress:** v0.77.0 closeout and archival follow-up only
-- **Next Planned Scope After v0.77.0:** v0.78.0 - Notifications module implementation planning, centered on Anymail-backed Resend delivery
-- **Next Milestone:** v0.78.0 - Notifications module foundation
+- **Current Status:** main branch and published release metadata are aligned at v0.78.0; notifications shipped and opened the post-MVP expansion release line
+- **In Progress:** v0.79.0 planning and post-v0.78.0 follow-up only
+- **Next Planned Scope After v0.78.0:** v0.79.0 - Social & Link Tree module
+- **Next Milestone:** v0.79.0 - Social & Link Tree module
 - **Plan/Apply System:** v0.68.0-v0.71.0 - Terraform-style configuration ✅ Complete
 - **SaaS Parity:** v0.83.0 - auth, billing, teams modules complete on top of the notifications foundation
 
@@ -136,7 +136,7 @@ This release completed QuickScale's shared media-storage milestone: the storage 
 
 ### v0.77.0: `quickscale_modules.backups` - Database Backup & Restore Module
 
-**Status**: ✅ Implemented on main; release cut plus archival follow-up remain
+**Status**: ✅ Implemented on main as the MVP closeout baseline
 
 **Strategic Context**: First-party operational safety module for generated projects. Inspired by prior `gestion-mv` backup tooling, QuickScale now defines a cleaner contract centered on database-focused backups, optional private object-storage offload, planner/apply integration, and scheduler-ready execution without coupling backups to public media delivery.
 
@@ -216,66 +216,16 @@ This release completed QuickScale's shared media-storage milestone: the storage 
 
 ### v0.78.0: `quickscale_modules.notifications` - Notifications Module
 
-**Status**: 📋 Planned as the next task after v0.77.0
+**Status**: ✅ Released on 2026-03-30
 
-**Detailed planning reference**: [email-sender-comparison.md](../planning/email-sender-comparison.md)
+This release starts QuickScale's post-MVP expansion line and ships the notifications module as the new transactional-email foundation. Generated projects now have an opinionated delivery path centered on a read-only operational settings snapshot backed by Django settings and environment variables, app-owned email rendering, recipient-granular delivery tracking, Django email compatibility with the Anymail Resend backend, and signed webhook ingestion for delivery events.
 
-**Strategic Context**: QuickScale needs a first-class transactional email path before expanding billing, richer auth flows, forms follow-up, and broader operational notifications. This release should ship one opinionated delivery path instead of pretending every provider is equal. The approved direction is Resend as the first-class provider with Django Anymail as the delivery layer for the notifications module.
+**Release artifacts**:
+- [Reader-facing summary](../releases/release-v0.78.0.md)
 
-**Approved v0.78.0 Scope**:
-- **Included in v0.78.0**: outbound transactional email delivery, template rendering/layouts, Django Anymail wiring, Resend backend integration, signed webhook ingestion for supported delivery events, planner/apply wiring, admin/ops visibility, and generated-project next steps for DNS/domain verification.
-- **Deferred beyond v0.78.0 if needed**: inbound/reply workflows, provider-native Resend features not cleanly exposed through the current Anymail backend, multi-provider failover, newsletter or broadcast tooling, mandatory Celery infrastructure, and end-user notification preferences beyond basic operator controls.
-
-**Approved Delivery Direction**:
-- **Primary sender**: Resend, via Anymail-backed Django email integration, env-var-based API credentials, and domain verification
-- **Rendering source of truth**: app-owned Django-rendered templates/layouts so message content stays testable and portable
-- **Architecture shape for kickoff**: Django email sending through Anymail configured for Resend as the only first-class provider in the initial v0.78.0 release
-
-**Module Goals**:
-- [ ] Reliable transactional email foundation for auth, forms, admin/ops, and future billing flows
-- [ ] Resend-first developer experience with Django-native send flow through Anymail
-- [ ] Observable delivery lifecycle with provider message IDs, event history, and failure reasons
-- [ ] Clear Anymail + Resend implementation path for v0.78.0 without implying generic ESP parity in the initial release
-
-**Delivery & Template Architecture**:
-- [ ] Define a notifications-module send entry point for callers, backed by Django email sending through Anymail + Resend in the initial release
-- [ ] Add canonical email template keys, shared layouts, and structured context validation for transactional messages
-- [ ] Render the canonical message body inside QuickScale rather than making provider-hosted templates the initial-release requirement
-- [ ] Support tags/metadata within the current Anymail + Resend supported surface so downstream modules can track email purpose, tenant/project, and workflow origin
-- [ ] Keep local development and CI on console/file backends when Resend credentials are absent and Anymail is not configured for live delivery
-
-**Anymail + Resend Integration Tasks**:
-- [ ] Add `quickscale_modules.notifications` manifest and planner prompts for sender name/address, domain, API-key env var, default tags, and webhook secret
-- [ ] Wire Django email backend and Anymail Resend configuration at apply time with env-var-only secret handling and explicit next-step guidance for SPF/DKIM/domain verification
-- [ ] Implement Anymail-backed Resend delivery as the canonical initial-release send path, including stable message/provider ID capture where supported
-- [ ] Keep the initial v0.78.0 release within the current Anymail-supported Resend surface instead of assuming full provider-native parity in the same release
-- [ ] Add webhook verification plus event ingestion for delivery and failure states where the chosen Anymail + Resend path cleanly supports them
-- [ ] Normalize Resend events into module-owned delivery status records instead of leaking provider payload shapes to callers
-
-**Admin / Ops Surface**:
-- [ ] Add `NotificationSettings` admin surface for sender defaults, Anymail + Resend configuration, and webhook status guidance
-- [ ] Add `NotificationMessage` history/audit model with template key, recipients, provider ID, last event, and retry metadata
-- [ ] Provide preview/test-send flows for operators without exposing secrets in admin
-- [ ] Document clear failure states for unverified domains, revoked API keys, Anymail misconfiguration, and webhook misconfiguration
-
-**Planner / Apply Integration**:
-- [ ] Add planner support for enabling notifications, choosing the primary sender address, and deciding whether webhooks are configured now or later
-- [ ] Apply-time wiring for settings, URLs, installed apps, webhook endpoints, and admin registration
-- [ ] Next-steps output for DNS/domain verification, dashboard setup, and safe local-development behavior
-- [ ] Validation that production-targeted configurations do not silently fall back to console email backends
-
-**Testing**:
-- [ ] Unit tests for template rendering, Anymail payload mapping, webhook signature verification, and delivery-status normalization
-- [ ] Integration tests with mocked Anymail + Resend responses and webhook payloads
-- [ ] Planner/apply lifecycle coverage for enabled, disabled, and partially configured notification setups
-- [ ] Regression tests ensuring missing credentials stay safe in local/CI while production-mode configs fail loudly
-- [ ] Cross-module smoke coverage for at least one auth/forms/admin-triggered notification path after integration points exist
-
-**Deferred Follow-up**:
-- [ ] Provider-hosted template support only if a real ops workflow needs it beyond app-owned rendering
-- [ ] Direct provider-specific Resend integration only if the required feature set exceeds what the chosen Anymail path can support cleanly
-- [ ] Secondary-provider evaluation only after v0.78.0 stabilizes and the SSOT explicitly permits that broader scope
-- [ ] Shared async worker integration only when notifications and another module both justify the operational overhead
+**Deferred follow-up**:
+- inbound or reply workflows, provider-hosted templates, and richer broadcast/newsletter tooling remain deferred to later post-MVP releases
+- multi-provider failover and shared async worker extraction remain deferred beyond v0.78.0
 
 ---
 

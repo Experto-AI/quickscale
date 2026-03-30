@@ -399,6 +399,40 @@ class TestProductionReadyFeatures:
         assert '"django.core.files.storage.FileSystemStorage"' not in output
         assert "STORAGES = {" not in output
 
+    def test_base_settings_build_anymail_from_notifications_env_var_names(
+        self, jinja_env: Environment, test_context: dict[str, str]
+    ) -> None:
+        """Base settings should derive Resend Anymail config from env-var names."""
+        template = jinja_env.get_template("project_name/settings/base.py.j2")
+        output = template.render(test_context)
+
+        assert 'if EMAIL_BACKEND == "anymail.backends.resend.EmailBackend":' in output
+        assert "QUICKSCALE_NOTIFICATIONS_RESEND_API_KEY_ENV_VAR" in output
+        assert 'ANYMAIL["RESEND_API_KEY"]' in output
+
+    def test_local_settings_email_backend_is_fallback_only(
+        self, jinja_env: Environment, test_context: dict[str, str]
+    ) -> None:
+        """Local settings should only set console email when base settings did not."""
+        template = jinja_env.get_template("project_name/settings/local.py.j2")
+        output = template.render(test_context)
+
+        assert 'if "EMAIL_BACKEND" not in globals():' in output
+        assert (
+            'EMAIL_BACKEND = "django.core.mail.backends.console.EmailBackend"' in output
+        )
+
+    def test_production_settings_email_defaults_are_fallback_only(
+        self, jinja_env: Environment, test_context: dict[str, str]
+    ) -> None:
+        """Production settings should not overwrite module-managed email settings."""
+        template = jinja_env.get_template("project_name/settings/production.py.j2")
+        output = template.render(test_context)
+
+        assert 'if "EMAIL_BACKEND" not in globals():' in output
+        assert 'if "DEFAULT_FROM_EMAIL" not in globals():' in output
+        assert 'if "SERVER_EMAIL" not in globals():' in output
+
 
 class TestHTMLTemplateStructure:
     """Verify HTML templates contain required structural elements."""
@@ -1030,6 +1064,17 @@ class TestEnvExampleContent:
         output = template.render(test_context)
         assert "#" in output
         assert "SECURITY WARNING" in output
+
+    def test_env_example_contains_managed_notifications_block(
+        self, jinja_env: Environment, test_context: dict[str, str]
+    ) -> None:
+        """Template should include the managed notifications env-var placeholders."""
+        template = jinja_env.get_template(".env.example.j2")
+        output = template.render(test_context)
+
+        assert "# QuickScale Notifications (managed)" in output
+        assert "RESEND_API_KEY=" in output
+        assert "QUICKSCALE_NOTIFICATIONS_WEBHOOK_SECRET=" in output
 
 
 class TestGitignoreContent:

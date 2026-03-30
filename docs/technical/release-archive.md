@@ -16,6 +16,8 @@ Dates and short summaries below mirror the linked release artifacts and [CHANGEL
 
 | Version | Artifact Date | Phase | Key Changes | Status | Docs |
 |---------|---------------|-------|-------------|--------|------|
+| **v0.78.0** | 2026-03-30 | Post-MVP | Notifications module, app-owned rendering, recipient-granular delivery tracking, and post-MVP expansion kickoff | ✅ Complete | [Summary](../releases/release-v0.78.0.md) |
+| **v0.77.0** | — | MVP | Backups module MVP closeout baseline on main; no separate published summary before v0.78.0 | ℹ️ Internal baseline | [Roadmap entry](./roadmap.md#v0770-quickscale_modulesbackups---database-backup--restore-module) |
 | **v0.76.0** | 2026-03-21 | MVP | Storage module, canonical public media URLs, `public_base_url` contract cleanup | ✅ Complete | [Summary](../releases/release-v0.76.0.md) \| [Impl](../releases-archive/release-v0.76.0-implementation.md) \| [Review](../releases-archive/release-v0.76.0-review.md) |
 | **v0.75.0** | 2026-02-23 | MVP | Forms module with admin-managed schemas, DRF API, spam protection, and notifications | ✅ Complete | [Summary](../releases/release-v0.75.0.md) |
 | **v0.74.0** | 2026-02-05 | MVP | React default theme (`showcase_react`) with Vite, TypeScript, TanStack Query, and Zustand | ✅ Complete | [Summary](../releases/release-v0.74.0.md) \| [Review](../releases/release-v0.74.0-review.md) |
@@ -76,8 +78,11 @@ Dates and short summaries below mirror the linked release artifacts and [CHANGEL
 **Status**: Historical/archive view for completed MVP releases with published artifacts. For current MVP/Post-MVP boundaries and active release status, see [decisions.md](./decisions.md) and [roadmap.md](./roadmap.md).
 
 ### Post-MVP Phase (v0.78.0+)
-**Planned**: 2026+
+**Dates**: Began with v0.78.0 on 2026-03-30; v0.79+ remains planned
 **Focus**: Broader post-MVP expansion beyond the personal-toolkit scope, with community-platform capabilities remaining optional at v1.0.0+
+
+**Key Milestones**:
+- ✅ v0.78.0: Notifications module and post-MVP expansion-line kickoff
 
 ---
 
@@ -175,7 +180,7 @@ Starting with **v0.73.0**, releases may use a mixed documentation layout:
 
 ---
 
-**Last Updated**: 2026-03-21
+**Last Updated**: 2026-03-30
 **Current Active Release Tracking**: [roadmap.md](./roadmap.md)
 **Recent Summary Location**: [../releases/](../releases/)
 

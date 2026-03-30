@@ -39,6 +39,7 @@ from quickscale_cli.commands.apply_command import (
     _run_post_generation_steps,
     _save_project_state,
     _start_docker,
+    _sync_notifications_env_example,
     _update_module_config_in_state,
 )
 
@@ -528,6 +529,68 @@ class TestLoadAndValidateConfig:
             "remote_secret_access_key_env_var: QUICKSCALE_BACKUPS_REMOTE_SECRET_ACCESS_KEY"
             in rewritten
         )
+
+    def test_legacy_notifications_secrets_are_sanitized_on_load(self, tmp_path):
+        """Legacy notification secrets should be rewritten to env-var references."""
+        config = tmp_path / "quickscale.yml"
+        config.write_text(
+            'version: "1"\n'
+            "project:\n"
+            "  slug: myapp\n"
+            "  package: myapp\n"
+            "  theme: showcase_html\n"
+            "modules:\n"
+            "  notifications:\n"
+            "    resend_domain: mg.example.com\n"
+            "    resend_api_key: raw-secret\n"
+            "    webhook_secret: webhook-secret\n"
+            "docker:\n"
+            "  start: false\n"
+        )
+
+        result = _load_and_validate_config(config)
+        rewritten = config.read_text()
+
+        assert (
+            result.modules["notifications"].options["resend_api_key_env_var"]
+            == "RESEND_API_KEY"
+        )
+        assert (
+            result.modules["notifications"].options["webhook_secret_env_var"]
+            == "QUICKSCALE_NOTIFICATIONS_WEBHOOK_SECRET"
+        )
+        assert "raw-secret" not in rewritten
+        assert "webhook-secret" not in rewritten
+        assert "resend_api_key_env_var: RESEND_API_KEY" in rewritten
+        assert (
+            "webhook_secret_env_var: QUICKSCALE_NOTIFICATIONS_WEBHOOK_SECRET"
+            in rewritten
+        )
+
+    def test_production_targeted_notifications_require_complete_live_config(
+        self,
+        tmp_path,
+    ):
+        """Production-targeted notifications configs must fail before apply."""
+        config = tmp_path / "quickscale.yml"
+        config.write_text(
+            'version: "1"\n'
+            "project:\n"
+            "  slug: myapp\n"
+            "  package: myapp\n"
+            "  theme: showcase_html\n"
+            "modules:\n"
+            "  notifications:\n"
+            "    sender_name: Ops\n"
+            "    sender_email: ops@example.com\n"
+            "    resend_domain: mg.example.com\n"
+            '    resend_api_key_env_var: ""\n'
+            "docker:\n"
+            "  start: false\n"
+        )
+
+        with pytest.raises(click.Abort):
+            _load_and_validate_config(config)
 
     def test_read_error(self, tmp_path):
         """Test generic read error"""
@@ -1115,6 +1178,75 @@ class TestDisplayNextSteps:
         assert "OPS_BACKUPS_ACCESS_KEY_ID" in output
         assert "OPS_BACKUPS_SECRET_ACCESS_KEY" in output
         assert "Configure runtime credentials via env vars" in output
+
+    def test_notifications_live_delivery_mentions_dns_and_env_vars(
+        self,
+        tmp_path,
+        capsys,
+    ):
+        """Notifications next steps should call out DNS verification and env vars."""
+        config = Mock()
+        config.project.slug = "myapp"
+        config.docker.start = False
+        config.modules = {
+            "notifications": Mock(
+                options={
+                    "enabled": True,
+                    "sender_name": "Ops",
+                    "sender_email": "ops@example.com",
+                    "resend_domain": "mg.example.com",
+                    "resend_api_key_env_var": "OPS_RESEND_API_KEY",
+                    "webhook_secret_env_var": "OPS_NOTIFICATIONS_WEBHOOK_SECRET",
+                    "default_tags": ["quickscale", "ops"],
+                    "allowed_tags": ["quickscale", "ops", "transactional"],
+                }
+            )
+        }
+
+        _display_next_steps(tmp_path, config, False)
+        output = capsys.readouterr().out
+
+        assert "Verify SPF/DKIM in Resend for mg.example.com" in output
+        assert "OPS_RESEND_API_KEY" in output
+        assert "OPS_NOTIFICATIONS_WEBHOOK_SECRET" in output
+
+
+class TestNotificationsEnvExampleSync:
+    """Tests for notifications `.env.example` synchronization."""
+
+    def test_sync_notifications_env_example_replaces_managed_block(self, tmp_path):
+        env_example = tmp_path / ".env.example"
+        env_example.write_text(
+            "SECRET_KEY=test\n"
+            "# QuickScale Notifications (managed)\n"
+            "OLD_RESEND=\n"
+            "OLD_WEBHOOK=\n"
+            "# End QuickScale Notifications\n"
+        )
+        qs_config = Mock()
+        qs_config.modules = {
+            "notifications": Mock(
+                options={
+                    "enabled": True,
+                    "sender_name": "Ops",
+                    "sender_email": "ops@example.com",
+                    "resend_domain": "mg.example.com",
+                    "resend_api_key_env_var": "OPS_RESEND_API_KEY",
+                    "webhook_secret_env_var": "OPS_NOTIFICATIONS_WEBHOOK_SECRET",
+                    "default_tags": ["quickscale", "ops"],
+                    "allowed_tags": ["quickscale", "ops", "transactional"],
+                }
+            )
+        }
+
+        result = _sync_notifications_env_example(tmp_path, qs_config)
+
+        assert result is True
+        updated = env_example.read_text()
+        assert "OLD_RESEND" not in updated
+        assert "OLD_WEBHOOK" not in updated
+        assert "OPS_RESEND_API_KEY=" in updated
+        assert "OPS_NOTIFICATIONS_WEBHOOK_SECRET=" in updated
 
 
 # ============================================================================

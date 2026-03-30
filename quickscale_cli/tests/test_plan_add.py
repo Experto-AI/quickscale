@@ -5,6 +5,7 @@ import os
 import yaml
 from click.testing import CliRunner
 
+from quickscale_cli.module_catalog import get_module_names  # type: ignore[import-untyped]
 from quickscale_cli.commands.plan_command import plan  # type: ignore[import-untyped]
 
 
@@ -381,6 +382,7 @@ class TestPlanAddAllModulesInstalled:
         runner = CliRunner()
         with runner.isolated_filesystem():
             os.makedirs(".quickscale", exist_ok=True)
+            installed_modules = get_module_names(include_experimental=False)
 
             # Create state with all modules
             with open(".quickscale/state.yml", "w") as f:
@@ -395,68 +397,35 @@ class TestPlanAddAllModulesInstalled:
                             "last_applied": "2025-12-01T12:00:00",
                         },
                         "modules": {
-                            "auth": {
+                            module_name: {
                                 "version": None,
                                 "embedded_at": "2025-12-01T11:00:00",
-                            },
-                            "blog": {
-                                "version": None,
-                                "embedded_at": "2025-12-01T11:00:00",
-                            },
-                            "listings": {
-                                "version": None,
-                                "embedded_at": "2025-12-01T11:00:00",
-                            },
-                            "crm": {
-                                "version": None,
-                                "embedded_at": "2025-12-01T11:00:00",
-                            },
-                            "forms": {
-                                "version": None,
-                                "embedded_at": "2025-12-01T11:00:00",
-                            },
-                            "storage": {
-                                "version": None,
-                                "embedded_at": "2025-12-01T11:00:00",
-                            },
-                            "backups": {
-                                "version": None,
-                                "embedded_at": "2025-12-01T11:00:00",
-                            },
-                            "billing": {
-                                "version": None,
-                                "embedded_at": "2025-12-01T11:00:00",
-                            },
-                            "teams": {
-                                "version": None,
-                                "embedded_at": "2025-12-01T11:00:00",
-                            },
+                            }
+                            for module_name in installed_modules
                         },
                     },
                     f,
                 )
 
             with open("quickscale.yml", "w") as f:
+                modules_block = "\n".join(
+                    f"    {module_name}:" for module_name in installed_modules
+                )
                 f.write(
-                    """
-version: "1"
-project:
-    slug: testapp
-    package: testapp
-    theme: showcase_html
-modules:
-    auth:
-    blog:
-    listings:
-    crm:
-    forms:
-    storage:
-    backups:
-    billing:
-    teams:
-docker:
-    start: false
-"""
+                    "\n".join(
+                        [
+                            'version: "1"',
+                            "project:",
+                            "    slug: testapp",
+                            "    package: testapp",
+                            "    theme: showcase_html",
+                            "modules:",
+                            modules_block,
+                            "docker:",
+                            "    start: false",
+                            "",
+                        ]
+                    )
                 )
 
             result = runner.invoke(plan, ["--add"], input="")

@@ -2,6 +2,8 @@
 
 Use `docs/releases/` for reader-facing release summaries when published, `docs/releases-archive/` for detailed implementation/review artifacts, and `docs/technical/roadmap.md` for active release status. Entries are version-ordered; listed dates reflect the recorded artifact date when available.
 
+- v0.78.0 — 2026-03-30 — Notifications Module (first post-MVP expansion release; transactional email foundation, Anymail-backed Resend delivery, recipient-granular tracking, and signed delivery webhooks)
+- v0.77.0 — internal main-branch baseline — Backups Module (private database backups, optional private remote offload, guarded CLI restore, and scheduler-ready command hooks; no separate published release artifact before v0.78.0)
 - v0.76.0 — 2026-03-21 — Storage Module (cloud file hosting, media storage adapters, CDN-ready media infrastructure)
 - v0.75.0 — 2026-02-23 — Forms Module (generic customizable form builder with admin, DRF API, spam protection, GDPR anonymization, and React mount point)
 - v0.74.0 — 2026-02-05 — React Default Theme (showcase_react theme with Vite, TypeScript, TanStack Query, and Zustand)

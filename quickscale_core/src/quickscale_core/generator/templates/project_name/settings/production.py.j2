@@ -100,14 +100,23 @@ DATABASES = {
 }
 
 # Email configuration
-EMAIL_BACKEND = "django.core.mail.backends.smtp.EmailBackend"
+if "EMAIL_BACKEND" not in globals():
+    EMAIL_BACKEND = "django.core.mail.backends.smtp.EmailBackend"
 EMAIL_HOST = config("EMAIL_HOST", default="localhost")
 EMAIL_PORT = config("EMAIL_PORT", default=587, cast=int)
 EMAIL_USE_TLS = config("EMAIL_USE_TLS", default=True, cast=bool)
 EMAIL_HOST_USER = config("EMAIL_HOST_USER", default="")
 EMAIL_HOST_PASSWORD = config("EMAIL_HOST_PASSWORD", default="")
-DEFAULT_FROM_EMAIL = config("DEFAULT_FROM_EMAIL", default="noreply@{{ project_name }}.com")
-SERVER_EMAIL = config("SERVER_EMAIL", default="server@{{ project_name }}.com")
+if "DEFAULT_FROM_EMAIL" not in globals():
+    DEFAULT_FROM_EMAIL = config(
+        "DEFAULT_FROM_EMAIL",
+        default="noreply@{{ project_name }}.com",
+    )
+if "SERVER_EMAIL" not in globals():
+    SERVER_EMAIL = config(
+        "SERVER_EMAIL",
+        default="server@{{ project_name }}.com",
+    )
 
 # Static files - WhiteNoise for efficient serving
 # STATIC_ROOT and STORAGES are inherited from base.py

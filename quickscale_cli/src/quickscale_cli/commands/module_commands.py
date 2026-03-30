@@ -203,6 +203,7 @@ def _perform_module_embed(
         "forms",
         "storage",
         "backups",
+        "notifications",
     ]:
         if not _install_module_dependencies(project_path, module):
             return False
