@@ -6,13 +6,21 @@ interface QuickScaleModules {
   crm: boolean
   forms: boolean
   storage: boolean
+  backups: boolean
+  notifications: boolean
+  social: boolean
   billing: boolean
   teams: boolean
+}
+
+interface QuickScaleModulePaths {
+  social: string
 }
 
 interface QuickScaleConfig {
   projectName: string
   modules: QuickScaleModules
+  modulePaths: QuickScaleModulePaths
 }
 
 declare global {
@@ -30,8 +38,14 @@ const defaultConfig: QuickScaleConfig = {
     crm: false,
     forms: false,
     storage: false,
+    backups: false,
+    notifications: false,
+    social: false,
     billing: false,
     teams: false,
+  },
+  modulePaths: {
+    social: '/social',
   },
 }
 

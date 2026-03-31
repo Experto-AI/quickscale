@@ -5,23 +5,36 @@ import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Link } from 'react-router-dom'
 import {
+  Archive,
+  Bell,
   BookOpen,
-  Store,
   Briefcase,
-  CreditCard,
-  Users,
-  UserCircle,
   ClipboardList,
-  ExternalLink,
-  Rocket,
   Code,
+  CreditCard,
   Database,
+  ExternalLink,
   HardDrive,
+  Rocket,
+  Share2,
   Shield,
+  Store,
+  UserCircle,
+  Users,
 } from 'lucide-react'
-import { useModules } from '@/hooks/useModules'
+import { useModules, useProjectConfig } from '@/hooks/useModules'
 
-const moduleInfo = [
+type ModuleCard = {
+  key: keyof ReturnType<typeof useModules>
+  name: string
+  icon: React.ComponentType<{ className?: string }>
+  description: string
+  href: string
+  reloadDocument?: boolean
+  actionLabel?: string
+}
+
+const buildModuleInfo = (socialPath: string): ModuleCard[] => [
   {
     key: 'auth',
     name: 'Authentication',
@@ -51,6 +64,47 @@ const moduleInfo = [
     href: '/crm',
   },
   {
+    key: 'forms',
+    name: 'Forms',
+    icon: ClipboardList,
+    description: 'Dynamic form builder with spam protection and submission management',
+    href: '/forms/contact',
+  },
+  {
+    key: 'social',
+    name: 'Social',
+    icon: Share2,
+    description: 'Managed social link-tree and embed feeds exposed through fixed public routes.',
+    href: socialPath,
+    reloadDocument: true,
+    actionLabel: 'Open social',
+  },
+  {
+    key: 'storage',
+    name: 'Storage',
+    icon: HardDrive,
+    description: 'Shared media storage infrastructure for local and S3-compatible backends',
+    href: '/settings',
+  },
+  {
+    key: 'backups',
+    name: 'Backups',
+    icon: Archive,
+    description: 'Operational backup snapshots with retention, validation, and artifact downloads.',
+    href: '/admin/quickscale_modules_backups/backuppolicy/',
+    reloadDocument: true,
+    actionLabel: 'Open admin',
+  },
+  {
+    key: 'notifications',
+    name: 'Notifications',
+    icon: Bell,
+    description: 'Transactional email settings, message history, and delivery event visibility.',
+    href: '/admin/quickscale_modules_notifications/',
+    reloadDocument: true,
+    actionLabel: 'Open admin',
+  },
+  {
     key: 'billing',
     name: 'Billing',
     icon: CreditCard,
@@ -64,21 +118,7 @@ const moduleInfo = [
     description: 'Team collaboration and management features',
     href: '/teams',
   },
-  {
-    key: 'forms',
-    name: 'Forms',
-    icon: ClipboardList,
-    description: 'Dynamic form builder with spam protection and submission management',
-    href: '/forms/contact',
-  },
-  {
-    key: 'storage',
-    name: 'Storage',
-    icon: HardDrive,
-    description: 'Shared media storage infrastructure for local and S3-compatible backends',
-    href: '/settings',
-  },
-] as const
+]
 
 const gettingStarted = [
   { title: 'Customize Settings', description: 'Edit your project settings', icon: Code },
@@ -89,7 +129,8 @@ const gettingStarted = [
 
 export function Dashboard() {
   const modules = useModules()
-  const installedModules = moduleInfo.filter((m) => modules[m.key as keyof typeof modules])
+  const { modulePaths } = useProjectConfig()
+  const installedModules = buildModuleInfo(modulePaths.social).filter((m) => modules[m.key])
   const hasModules = installedModules.length > 0
 
   return (
@@ -106,7 +147,7 @@ export function Dashboard() {
         <h2 className="mb-4 text-xl font-semibold">
           {hasModules ? 'Installed Modules' : 'No Modules Installed'}
         </h2>
-        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
           {hasModules ? (
             installedModules.map((mod, index) => (
               <motion.div
@@ -128,8 +169,8 @@ export function Dashboard() {
                   <CardContent>
                     <p className="mb-3 text-sm text-muted-foreground">{mod.description}</p>
                     <Button variant="outline" size="sm" asChild>
-                      <Link to={mod.href}>
-                        Open <ExternalLink className="ml-1 h-3 w-3" />
+                      <Link to={mod.href} reloadDocument={mod.reloadDocument}>
+                        {mod.actionLabel ?? 'Open'} <ExternalLink className="ml-1 h-3 w-3" />
                       </Link>
                     </Button>
                   </CardContent>

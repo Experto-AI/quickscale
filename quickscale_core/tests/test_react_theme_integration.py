@@ -538,13 +538,15 @@ class TestReactThemeAuthUrls:
 class TestReactThemeModuleActivationMatrix:
     """Validate React module activation behavior for none/some/all selections."""
 
-    MODULES = [
+    APP_BACKED_MODULES = [
         "auth",
         "blog",
         "listings",
         "crm",
         "forms",
         "storage",
+        "backups",
+        "notifications",
         "billing",
         "teams",
     ]
@@ -553,7 +555,7 @@ class TestReactThemeModuleActivationMatrix:
     def _extract_template_module_app_map(index_html: str) -> dict[str, str]:
         """Extract module->Django app mapping from generated index.html template."""
         mapping: dict[str, str] = {}
-        for module in TestReactThemeModuleActivationMatrix.MODULES:
+        for module in TestReactThemeModuleActivationMatrix.APP_BACKED_MODULES:
             pattern = (
                 rf"{module}:\s*\{{%\s*if\s*'([^']+)'\s*in\s*settings\.INSTALLED_APPS\s*%\}}"
                 rf"true\{{%\s*else\s*%\}}false\{{%\s*endif\s*%\}}"
@@ -574,7 +576,9 @@ class TestReactThemeModuleActivationMatrix:
         index_html = (output_path / "templates" / "index.html").read_text()
         app_map = self._extract_template_module_app_map(index_html)
 
-        expected = {module: f"quickscale_modules_{module}" for module in self.MODULES}
+        expected = {
+            module: f"quickscale_modules_{module}" for module in self.APP_BACKED_MODULES
+        }
         assert app_map == expected
 
     @pytest.mark.parametrize(
@@ -587,8 +591,9 @@ class TestReactThemeModuleActivationMatrix:
                     "quickscale_modules_blog",
                     "quickscale_modules_crm",
                     "quickscale_modules_storage",
+                    "quickscale_modules_backups",
                 ],
-                {"auth", "blog", "crm", "storage"},
+                {"auth", "blog", "crm", "storage", "backups"},
             ),
             (  # all
                 [
@@ -598,6 +603,8 @@ class TestReactThemeModuleActivationMatrix:
                     "quickscale_modules_crm",
                     "quickscale_modules_forms",
                     "quickscale_modules_storage",
+                    "quickscale_modules_backups",
+                    "quickscale_modules_notifications",
                     "quickscale_modules_billing",
                     "quickscale_modules_teams",
                 ],
@@ -608,6 +615,8 @@ class TestReactThemeModuleActivationMatrix:
                     "crm",
                     "forms",
                     "storage",
+                    "backups",
+                    "notifications",
                     "billing",
                     "teams",
                 },
@@ -628,9 +637,35 @@ class TestReactThemeModuleActivationMatrix:
         resolved_flags = {
             module: app_name in installed_apps for module, app_name in app_map.items()
         }
-        expected_flags = {module: module in expected_true for module in self.MODULES}
+        expected_flags = {
+            module: module in expected_true for module in self.APP_BACKED_MODULES
+        }
 
         assert resolved_flags == expected_flags
+
+    def test_index_template_declares_social_activation_condition_and_path(
+        self, tmp_path
+    ):
+        """Generated React index template should expose social via settings-backed wiring."""
+        generator = ProjectGenerator(theme="showcase_react")
+        output_path = tmp_path / "react_social_activation"
+        generator.generate("react_social_activation", output_path)
+
+        index_html = (output_path / "templates" / "index.html").read_text()
+
+        activation_pattern = re.compile(
+            r"social:\s*\{% if settings\.QUICKSCALE_SOCIAL_LINK_TREE_ENABLED "
+            r"or settings\.QUICKSCALE_SOCIAL_EMBEDS_ENABLED %\}true"
+            r"\{% else %\}false\{% endif %\}"
+        )
+        path_pattern = re.compile(
+            r'social:\s*"\{% if settings\.QUICKSCALE_SOCIAL_LINK_TREE_ENABLED %\}'
+            r"/social\{% elif settings\.QUICKSCALE_SOCIAL_EMBEDS_ENABLED %\}"
+            r'/social/embeds\{% else %\}/social\{% endif %\}"'
+        )
+
+        assert activation_pattern.search(index_html) is not None
+        assert path_pattern.search(index_html) is not None
 
     def test_react_theme_storage_module_appears_in_frontend_config_and_dashboard(
         self, tmp_path
@@ -651,6 +686,62 @@ class TestReactThemeModuleActivationMatrix:
         assert "key: 'storage'" in dashboard
         assert "name: 'Storage'" in dashboard
         assert "href: '/settings'" in dashboard
+
+    def test_react_theme_operational_modules_appear_in_config_and_navigation(
+        self, tmp_path
+    ):
+        """Generated React theme should expose admin-backed and social modules in the UI."""
+        generator = ProjectGenerator(theme="showcase_react")
+        output_path = tmp_path / "react_operational_modules"
+        generator.generate("react_operational_modules", output_path)
+
+        use_modules = (
+            output_path / "frontend" / "src" / "hooks" / "useModules.ts"
+        ).read_text()
+        dashboard = (
+            output_path / "frontend" / "src" / "pages" / "Dashboard.tsx"
+        ).read_text()
+        sidebar = (
+            output_path / "frontend" / "src" / "components" / "layout" / "Sidebar.tsx"
+        ).read_text()
+
+        assert "backups: false" in use_modules
+        assert "notifications: false" in use_modules
+        assert "social: false" in use_modules
+        assert "modulePaths" in use_modules
+        assert "social: '/social'" in use_modules
+
+        assert "key: 'backups'" in dashboard
+        assert "name: 'Backups'" in dashboard
+        assert "href: '/admin/quickscale_modules_backups/backuppolicy/'" in dashboard
+        assert "key: 'notifications'" in dashboard
+        assert "name: 'Notifications'" in dashboard
+        assert "href: '/admin/quickscale_modules_notifications/'" in dashboard
+        assert "key: 'social'" in dashboard
+        assert "name: 'Social'" in dashboard
+        assert "modulePaths.social" in dashboard
+        assert "reloadDocument={mod.reloadDocument}" in dashboard
+        assert "lg:grid-cols-4" in dashboard
+
+        assert "name: 'Social'" in sidebar
+        assert "modulePaths.social" in sidebar
+        assert "name: 'Notifications'" in sidebar
+        assert "name: 'Backups'" in sidebar
+        assert "reloadDocument={item.reloadDocument}" in sidebar
+
+    def test_react_theme_generates_backups_app_index_override(self, tmp_path):
+        """Generated projects should expose a backup action on the admin app index."""
+        generator = ProjectGenerator(theme="showcase_react")
+        output_path = tmp_path / "react_backups_app_index"
+        generator.generate("react_backups_app_index", output_path)
+
+        app_index_template = (
+            output_path / "templates" / "admin" / "app_index.html"
+        ).read_text()
+
+        assert "quickscale_modules_backups_backuppolicy_create" in app_index_template
+        assert "Create backup now" in app_index_template
+        assert 'app_label == "quickscale_modules_backups"' in app_index_template
 
     def test_react_routes_cover_all_module_navigation_targets(self, tmp_path):
         """React router should include routes for every module link exposed by the UI."""

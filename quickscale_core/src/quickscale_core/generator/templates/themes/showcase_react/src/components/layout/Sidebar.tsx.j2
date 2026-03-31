@@ -1,6 +1,8 @@
 {% raw -%}
 import { NavLink } from 'react-router-dom'
 import {
+  Archive,
+  Bell,
   Home,
   Settings,
   BookOpen,
@@ -10,10 +12,11 @@ import {
   Users,
   UserCircle,
   ClipboardList,
+  Share2,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { Separator } from '@/components/ui/separator'
-import { useModules } from '@/hooks/useModules'
+import { useProjectConfig } from '@/hooks/useModules'
 
 interface NavItem {
   name: string
@@ -21,10 +24,11 @@ interface NavItem {
   icon: React.ComponentType<{ className?: string }>
   show: boolean
   end?: boolean
+  reloadDocument?: boolean
 }
 
 export function Sidebar() {
-  const modules = useModules()
+  const { modules, modulePaths } = useProjectConfig()
 
   const navigation: NavItem[] = [
     { name: 'Dashboard', href: '/', icon: Home, show: true, end: true },
@@ -32,12 +36,33 @@ export function Sidebar() {
     { name: 'Listings', href: '/listings', icon: Store, show: modules.listings },
     { name: 'CRM', href: '/crm', icon: Briefcase, show: modules.crm },
     { name: 'Forms', href: '/forms', icon: ClipboardList, show: modules.forms },
+    {
+      name: 'Social',
+      href: modulePaths.social,
+      icon: Share2,
+      show: modules.social,
+      reloadDocument: true,
+    },
     { name: 'Billing', href: '/billing', icon: CreditCard, show: modules.billing },
     { name: 'Teams', href: '/teams', icon: Users, show: modules.teams },
   ]
 
   const bottomNavigation: NavItem[] = [
     { name: 'Auth', href: '/profile', icon: UserCircle, show: modules.auth },
+    {
+      name: 'Notifications',
+      href: '/admin/quickscale_modules_notifications/',
+      icon: Bell,
+      show: modules.notifications,
+      reloadDocument: true,
+    },
+    {
+      name: 'Backups',
+      href: '/admin/quickscale_modules_backups/backuppolicy/',
+      icon: Archive,
+      show: modules.backups,
+      reloadDocument: true,
+    },
     { name: 'Settings', href: '/settings', icon: Settings, show: true },
   ]
 
@@ -55,6 +80,7 @@ export function Sidebar() {
               key={item.name}
               to={item.href}
               end={item.end}
+              reloadDocument={item.reloadDocument}
               className={({ isActive }) =>
                 cn(
                   'flex items-center gap-3 rounded-lg px-3 py-2 text-sm transition-colors',
@@ -77,6 +103,7 @@ export function Sidebar() {
             <NavLink
               key={item.name}
               to={item.href}
+              reloadDocument={item.reloadDocument}
               className={({ isActive }) =>
                 cn(
                   'flex items-center gap-3 rounded-lg px-3 py-2 text-sm transition-colors',

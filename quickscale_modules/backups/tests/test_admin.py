@@ -115,6 +115,54 @@ class TestBackupPolicyAdmin:
         assert 'name="_save"' not in content
         assert 'class="deletelink"' not in content
 
+    def test_policy_changelist_exposes_operator_buttons(
+        self,
+        admin_client: Client,
+        backup_policy: BackupPolicy,
+    ) -> None:
+        response = admin_client.get(
+            reverse("admin:quickscale_modules_backups_backuppolicy_changelist")
+        )
+
+        content = response.content.decode("utf-8")
+
+        assert response.status_code == 200
+        assert "Create backup now" in content
+        assert "Prune expired backups" in content
+        assert (
+            reverse("admin:quickscale_modules_backups_backuppolicy_create") in content
+        )
+        assert reverse("admin:quickscale_modules_backups_backuppolicy_prune") in content
+
+    @pytest.mark.parametrize(
+        ("url_name", "patched_symbol"),
+        [
+            (
+                "admin:quickscale_modules_backups_backuppolicy_create",
+                "quickscale_modules_backups.admin.create_backup",
+            ),
+            (
+                "admin:quickscale_modules_backups_backuppolicy_prune",
+                "quickscale_modules_backups.admin.prune_expired_backups",
+            ),
+        ],
+    )
+    def test_operator_endpoints_ignore_get_requests(
+        self,
+        admin_client: Client,
+        backup_policy: BackupPolicy,
+        url_name: str,
+        patched_symbol: str,
+    ) -> None:
+        with patch(patched_symbol) as mocked_operation:
+            response = admin_client.get(reverse(url_name))
+
+        assert response.status_code == 302
+        assert response.url == reverse(
+            "admin:quickscale_modules_backups_backuppolicy_changelist"
+        )
+        mocked_operation.assert_not_called()
+
     def test_create_backup_now_reports_success(
         self,
         backup_policy: BackupPolicy,
@@ -139,6 +187,34 @@ class TestBackupPolicyAdmin:
         ):
             policy_admin.create_backup_now(request, BackupPolicy.objects.all())
 
+    def test_create_backup_now_button_runs_from_custom_operator_endpoint(
+        self,
+        admin_client: Client,
+        backup_policy: BackupPolicy,
+    ) -> None:
+        fake_artifact = BackupArtifact(
+            filename="db-project-local-20260326T120000Z.json",
+            checksum_sha256="abc",
+            size_bytes=1,
+            backup_format="json",
+            database_engine="django.db.backends.sqlite3",
+            database_name="test.sqlite3",
+        )
+
+        with patch(
+            "quickscale_modules_backups.admin.create_backup", return_value=fake_artifact
+        ) as mocked_create:
+            response = admin_client.post(
+                reverse("admin:quickscale_modules_backups_backuppolicy_create"),
+                follow=True,
+            )
+
+        assert response.status_code == 200
+        mocked_create.assert_called_once()
+        assert [message.message for message in get_messages(response.wsgi_request)] == [
+            "Created backup artifact db-project-local-20260326T120000Z.json"
+        ]
+
     def test_prune_expired_backups_action_runs_from_admin_changelist(
         self,
         admin_client: Client,
@@ -159,6 +235,26 @@ class TestBackupPolicyAdmin:
                     admin.helpers.ACTION_CHECKBOX_NAME: [str(backup_policy.pk)],
                     "index": 0,
                 },
+                follow=True,
+            )
+
+        assert response.status_code == 200
+        mocked_prune.assert_called_once_with()
+        assert [message.message for message in get_messages(response.wsgi_request)] == [
+            "Pruned 2 expired backup artifact(s)."
+        ]
+
+    def test_prune_expired_backups_button_runs_from_custom_operator_endpoint(
+        self,
+        admin_client: Client,
+        backup_policy: BackupPolicy,
+    ) -> None:
+        with patch(
+            "quickscale_modules_backups.admin.prune_expired_backups",
+            return_value=2,
+        ) as mocked_prune:
+            response = admin_client.post(
+                reverse("admin:quickscale_modules_backups_backuppolicy_prune"),
                 follow=True,
             )
 

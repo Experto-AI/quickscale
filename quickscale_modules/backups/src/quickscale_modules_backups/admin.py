@@ -99,6 +99,26 @@ class BackupPolicyAdmin(admin.ModelAdmin):
         ),
     ]
     actions = ["create_backup_now", "prune_expired_backups_now"]
+    change_list_template = (
+        "admin/quickscale_modules_backups/backuppolicy/change_list.html"
+    )
+
+    def get_urls(self) -> list[Any]:
+        """Add explicit operator endpoints for backup creation and pruning."""
+        urls = super().get_urls()
+        custom_urls = [
+            path(
+                "ops/create/",
+                self.admin_site.admin_view(self.create_backup_view),
+                name="quickscale_modules_backups_backuppolicy_create",
+            ),
+            path(
+                "ops/prune/",
+                self.admin_site.admin_view(self.prune_expired_backups_view),
+                name="quickscale_modules_backups_backuppolicy_prune",
+            ),
+        ]
+        return custom_urls + urls
 
     def has_add_permission(self, request: HttpRequest) -> bool:
         """Policy rows are materialized from settings, never added in admin."""
@@ -129,6 +149,28 @@ class BackupPolicyAdmin(admin.ModelAdmin):
         """Ensure the default policy exists before rendering the changelist."""
         ensure_default_policy()
         return super().changelist_view(request, extra_context)
+
+    def create_backup_view(self, request: HttpRequest) -> HttpResponseRedirect:
+        """Run backup creation from a dedicated admin endpoint."""
+        if request.method != "POST":
+            return HttpResponseRedirect(
+                reverse("admin:quickscale_modules_backups_backuppolicy_changelist")
+            )
+        self.create_backup_now(request, BackupPolicy.objects.none())
+        return HttpResponseRedirect(
+            reverse("admin:quickscale_modules_backups_backuppolicy_changelist")
+        )
+
+    def prune_expired_backups_view(self, request: HttpRequest) -> HttpResponseRedirect:
+        """Run backup pruning from a dedicated admin endpoint."""
+        if request.method != "POST":
+            return HttpResponseRedirect(
+                reverse("admin:quickscale_modules_backups_backuppolicy_changelist")
+            )
+        self.prune_expired_backups_now(request, BackupPolicy.objects.none())
+        return HttpResponseRedirect(
+            reverse("admin:quickscale_modules_backups_backuppolicy_changelist")
+        )
 
     def change_view(
         self,
