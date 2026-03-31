@@ -1,0 +1,47 @@
+name: social
+version: "0.79.0"
+description: "Curated social links and embeds with fixed public routes and normalized provider contracts"
+
+config:
+  mutable:
+    link_tree_enabled:
+      type: boolean
+      default: true
+      django_setting: QUICKSCALE_SOCIAL_LINK_TREE_ENABLED
+      description: "Enable the public link-tree surface at the fixed /social route."
+
+    layout_variant:
+      type: string
+      default: "list"
+      django_setting: QUICKSCALE_SOCIAL_LAYOUT_VARIANT
+      description: "Default link-tree presentation variant. Supported values in v0.79.0 are list, cards, and grid."
+
+    embeds_enabled:
+      type: boolean
+      default: true
+      django_setting: QUICKSCALE_SOCIAL_EMBEDS_ENABLED
+      description: "Enable the public embed gallery surface at the fixed /social/embeds route."
+
+    provider_allowlist:
+      type: list
+      default: ["facebook", "instagram", "linkedin", "tiktok", "x", "youtube"]
+      django_setting: QUICKSCALE_SOCIAL_PROVIDER_ALLOWLIST
+      description: "Allowlisted social providers for curated links and embeds. Embed-capable providers in v0.79.0 are TikTok and YouTube."
+
+    cache_ttl_seconds:
+      type: integer
+      default: 300
+      django_setting: QUICKSCALE_SOCIAL_CACHE_TTL_SECONDS
+      description: "Cache TTL in seconds for normalized social payloads and provider lookups."
+
+    links_per_page:
+      type: integer
+      default: 24
+      django_setting: QUICKSCALE_SOCIAL_LINKS_PER_PAGE
+      description: "Optional maximum number of curated links exposed through the fixed /social surface."
+
+    embeds_per_page:
+      type: integer
+      default: 12
+      django_setting: QUICKSCALE_SOCIAL_EMBEDS_PER_PAGE
+      description: "Optional maximum number of curated embeds exposed through the fixed /social/embeds surface."
