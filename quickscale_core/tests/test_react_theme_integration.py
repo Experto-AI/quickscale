@@ -745,9 +745,27 @@ class TestReactThemeModuleActivationMatrix:
             output_path / "templates" / "admin" / "app_index.html"
         ).read_text()
 
-        assert "quickscale_modules_backups_backuppolicy_create" in app_index_template
+        assert (
+            'action="/admin/quickscale_modules_backups/backuppolicy/ops/create/"'
+            in app_index_template
+        )
         assert "Create backup now" in app_index_template
+        assert "/admin/quickscale_modules_backups/backuppolicy/" in app_index_template
         assert 'app_label == "quickscale_modules_backups"' in app_index_template
+
+    def test_react_theme_generates_backups_admin_index_override(self, tmp_path):
+        """Generated projects should expose backup actions on the admin root index."""
+        generator = ProjectGenerator(theme="showcase_react")
+        output_path = tmp_path / "react_backups_admin_index"
+        generator.generate("react_backups_admin_index", output_path)
+
+        admin_index_template = (
+            output_path / "templates" / "admin" / "index.html"
+        ).read_text()
+
+        assert "Create backup now" not in admin_index_template
+        assert "Open backup ops" in admin_index_template
+        assert 'app.app_label == "quickscale_modules_backups"' in admin_index_template
 
     def test_react_theme_reserves_public_social_pages(self, tmp_path):
         """Generated React projects should reserve /social routes ahead of the SPA catch-all."""
@@ -757,6 +775,7 @@ class TestReactThemeModuleActivationMatrix:
         generator.generate(project_name, output_path)
 
         urls_py = (output_path / project_name / "urls.py").read_text()
+        base_template = (output_path / "templates" / "base.html").read_text()
         link_tree_template = (
             output_path / "templates" / "social" / "link_tree.html"
         ).read_text()
@@ -778,6 +797,8 @@ class TestReactThemeModuleActivationMatrix:
         assert urls_py.index('r"^social/?$"') < urls_py.index(
             're_path(r".*", TemplateView.as_view(template_name="index.html"))'
         )
+        assert 'href="/social"' in base_template
+        assert 'href="/social/embeds"' in base_template
         assert "QuickScale reserves <code>/social</code>" in link_tree_template
         assert "QuickScale reserves <code>/social/embeds</code>" in embeds_template
 

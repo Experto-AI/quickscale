@@ -304,6 +304,18 @@ class ProjectGenerator:
                         False,
                     ),
                     (
+                        self._get_theme_template_path("templates/admin/index.html.j2"),
+                        "templates/admin/index.html",
+                        False,
+                    ),
+                    (
+                        self._get_theme_template_path(
+                            "templates/admin/app_index.html.j2"
+                        ),
+                        "templates/admin/app_index.html",
+                        False,
+                    ),
+                    (
                         self._get_theme_template_path(
                             "templates/components/navigation.html.j2"
                         ),

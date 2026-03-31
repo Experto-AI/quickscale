@@ -49,3 +49,22 @@ class TestHtmlThemeIntegration:
             "reserved and ready even before curated embeds have been published"
             in embeds_template
         )
+
+    def test_html_theme_generates_backups_admin_overrides(self, tmp_path):
+        """showcase_html should expose backup actions on admin index pages."""
+        generator = ProjectGenerator(theme="showcase_html")
+        output_path = tmp_path / "html_backups_admin_overrides"
+        generator.generate("html_backups_admin_overrides", output_path)
+
+        admin_index = (output_path / "templates" / "admin" / "index.html").read_text()
+        app_index = (output_path / "templates" / "admin" / "app_index.html").read_text()
+
+        assert "Create backup now" not in admin_index
+        assert "Open backup ops" in admin_index
+        assert 'app.app_label == "quickscale_modules_backups"' in admin_index
+        assert (
+            'action="/admin/quickscale_modules_backups/backuppolicy/ops/create/"'
+            in app_index
+        )
+        assert "Open backup ops" in app_index
+        assert 'app_label == "quickscale_modules_backups"' in app_index

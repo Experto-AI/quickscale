@@ -24,18 +24,31 @@
             display: flex;
             align-items: center;
             justify-content: space-between;
+            gap: 1rem;
+            flex-wrap: wrap;
         }
         .qs-topbar-brand {
             font-weight: 600;
             font-size: 1.125rem;
             color: #0f172a;
         }
-        .qs-topbar-nav a {
-            margin-left: 1rem;
+        .qs-topbar-nav {
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+            flex-wrap: wrap;
+        }
+        .qs-topbar-link {
             font-size: 0.875rem;
             color: #64748b;
+            padding: 0.35rem 0.7rem;
+            border-radius: 999px;
         }
-        .qs-topbar-nav a:hover { color: #0f172a; }
+        .qs-topbar-link:hover {
+            color: #0f172a;
+            background: #f8fafc;
+            text-decoration: none;
+        }
         .qs-main { max-width: 1024px; margin: 0 auto; padding: 2rem 1.5rem; }
         .qs-messages { margin-bottom: 1.5rem; }
         .qs-alert {
@@ -63,7 +76,13 @@
     <nav class="qs-topbar">
         <a href="/" class="qs-topbar-brand">{%endraw%}{{ project_name }}{%raw%}</a>
         <div class="qs-topbar-nav">
-            <a href="/">← Back to App</a>
+            <a href="/" class="qs-topbar-link">App</a>
+            {% if settings.QUICKSCALE_SOCIAL_LINK_TREE_ENABLED %}
+            <a href="/social" class="qs-topbar-link">Social</a>
+            {% endif %}
+            {% if settings.QUICKSCALE_SOCIAL_EMBEDS_ENABLED %}
+            <a href="/social/embeds" class="qs-topbar-link">Embeds</a>
+            {% endif %}
         </div>
     </nav>
 
