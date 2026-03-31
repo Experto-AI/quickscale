@@ -55,6 +55,11 @@ MODULE_CATALOG: tuple[ModuleCatalogEntry, ...] = (
         ready=True,
     ),
     ModuleCatalogEntry(
+        name="social",
+        description="Curated social links and embeds with managed backend integration",
+        ready=True,
+    ),
+    ModuleCatalogEntry(
         name="billing",
         description="Stripe integration",
         ready=False,

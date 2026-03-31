@@ -28,18 +28,27 @@ from quickscale_cli.commands.module_config import (
     apply_crm_configuration,
     apply_listings_configuration,
     apply_notifications_configuration,
+    apply_social_configuration,
     apply_storage_configuration,
     configure_backups_module,
     configure_storage_module,
     configure_crm_module,
     configure_notifications_module,
+    configure_social_module,
     get_default_backups_config,
     get_default_crm_config,
     get_default_notifications_config,
+    get_default_social_config,
     get_default_storage_config,
     validate_backups_module_options,
 )
 from quickscale_cli.commands.module_wiring_specs import build_module_wiring_specs
+from quickscale_cli.social_contract import (
+    SOCIAL_EMBEDS_PATH,
+    SOCIAL_INTEGRATION_BASE_PATH,
+    SOCIAL_INTEGRATION_EMBEDS_PATH,
+    SOCIAL_LINK_TREE_PATH,
+)
 from quickscale_core.module_wiring import collect_wiring
 
 
@@ -746,6 +755,48 @@ class TestModuleWiringSpecs:
         assert "unknown" not in specs
         assert "storage" in specs
 
+    def test_social_wiring_creates_managed_backend_transport(self):
+        """Social wiring should emit fixed-route settings and managed transport files."""
+        specs = build_module_wiring_specs(
+            {
+                "social": {
+                    "layout_variant": "GRID",
+                    "provider_allowlist": ["Twitter", "YouTube"],
+                    "cache_ttl_seconds": 600,
+                    "links_per_page": 18,
+                    "embeds_per_page": 9,
+                }
+            },
+            project_package="myproject",
+        )
+
+        _, _, settings, urls = collect_wiring(specs)
+        social_spec = specs["social"]
+
+        assert settings["QUICKSCALE_SOCIAL_LINK_TREE_PATH"] == SOCIAL_LINK_TREE_PATH
+        assert settings["QUICKSCALE_SOCIAL_EMBEDS_PATH"] == SOCIAL_EMBEDS_PATH
+        assert (
+            settings["QUICKSCALE_SOCIAL_INTEGRATION_BASE_PATH"]
+            == SOCIAL_INTEGRATION_BASE_PATH
+        )
+        assert (
+            settings["QUICKSCALE_SOCIAL_INTEGRATION_EMBEDS_PATH"]
+            == SOCIAL_INTEGRATION_EMBEDS_PATH
+        )
+        assert settings["QUICKSCALE_SOCIAL_PROVIDER_ALLOWLIST"] == ["x", "youtube"]
+        assert settings["QUICKSCALE_SOCIAL_EMBED_PROVIDER_ALLOWLIST"] == ["youtube"]
+        assert urls == [
+            ("_quickscale/social/", "myproject.quickscale_managed.social_urls")
+        ]
+        assert "quickscale_managed/__init__.py" in social_spec.managed_files
+        assert "quickscale_managed/social_urls.py" in social_spec.managed_files
+        assert "quickscale_managed/social_views.py" in social_spec.managed_files
+
+    def test_social_wiring_requires_project_package(self):
+        """Social managed transport wiring should require the generated package name."""
+        with pytest.raises(ValueError, match="project_package is required"):
+            build_module_wiring_specs({"social": {}})
+
 
 class TestStorageModuleConfig:
     """Tests for storage module configurator registration and defaults."""
@@ -1317,6 +1368,89 @@ class TestNotificationsModuleConfig:
 
         assert "quickscale_modules_notifications" in apps
         assert "EMAIL_BACKEND" not in settings
+
+
+class TestSocialModuleConfig:
+    """Tests for social module configurator registration and wiring."""
+
+    def test_social_default_config_keys_match_manifest_contract_intent(self):
+        config = get_default_social_config()
+
+        assert config["link_tree_enabled"] is True
+        assert config["layout_variant"] == "list"
+        assert config["embeds_enabled"] is True
+        assert config["provider_allowlist"] == [
+            "facebook",
+            "instagram",
+            "linkedin",
+            "tiktok",
+            "x",
+            "youtube",
+        ]
+
+    def test_social_in_module_configurators(self):
+        assert "social" in MODULE_CONFIGURATORS
+
+        config = configure_social_module(non_interactive=True)
+
+        assert config["link_tree_enabled"] is True
+        assert config["embeds_enabled"] is True
+
+    @patch("quickscale_cli.commands.module_config.click.prompt")
+    @patch("quickscale_cli.commands.module_config.click.confirm")
+    def test_configure_social_interactive_normalizes_provider_aliases(
+        self,
+        mock_confirm,
+        mock_prompt,
+    ):
+        mock_confirm.side_effect = [True, True]
+        mock_prompt.side_effect = ["cards", "Twitter, YouTube", 600, 18, 9]
+
+        config = configure_social_module(non_interactive=False)
+
+        assert config["layout_variant"] == "cards"
+        assert config["provider_allowlist"] == ["x", "youtube"]
+        assert config["cache_ttl_seconds"] == 600
+
+    def test_apply_social_configuration_creates_managed_transport_files(
+        self,
+        tmp_path,
+    ):
+        project = _make_project(tmp_path)
+
+        apply_social_configuration(
+            project,
+            {
+                "layout_variant": "grid",
+                "provider_allowlist": ["Twitter", "YouTube"],
+                "cache_ttl_seconds": 600,
+                "links_per_page": 18,
+                "embeds_per_page": 9,
+            },
+        )
+
+        managed_settings = (
+            project / "myproject" / "settings" / "modules.py"
+        ).read_text()
+        managed_urls = (project / "myproject" / "urls_modules.py").read_text()
+        managed_init = (
+            project / "myproject" / "quickscale_managed" / "__init__.py"
+        ).read_text()
+        managed_social_urls = (
+            project / "myproject" / "quickscale_managed" / "social_urls.py"
+        ).read_text()
+        managed_social_views = (
+            project / "myproject" / "quickscale_managed" / "social_views.py"
+        ).read_text()
+
+        assert "quickscale_modules_social" not in managed_settings
+        assert "QUICKSCALE_SOCIAL_LINK_TREE_PATH" in managed_settings
+        assert "QUICKSCALE_SOCIAL_INTEGRATION_BASE_PATH" in managed_settings
+        assert "myproject.quickscale_managed.social_urls" in managed_urls
+        assert "QuickScale managed integration package" in managed_init
+        assert 'path("embeds/", social_embeds_payload' in managed_social_urls
+        assert "integration_base_path" in managed_social_views
+        assert "JsonResponse" in managed_social_views
 
 
 # ============================================================================

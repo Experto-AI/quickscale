@@ -9,6 +9,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from pathlib import Path
 from pprint import pformat
+import shutil
 from typing import Any, Iterable, Mapping
 
 
@@ -20,6 +21,7 @@ class ModuleWiringSpec:
     middleware: tuple[str, ...] = ()
     settings: Mapping[str, Any] = field(default_factory=dict)
     url_includes: tuple[tuple[str, str], ...] = ()
+    managed_files: Mapping[str, str] = field(default_factory=dict)
 
 
 def _merge_unique(items: list[str], additions: Iterable[str]) -> None:
@@ -112,6 +114,43 @@ def render_urls_modules_py(module_specs: Mapping[str, ModuleWiringSpec]) -> str:
         )
 
 
+def collect_managed_files(
+    module_specs: Mapping[str, ModuleWiringSpec],
+) -> dict[str, str]:
+    """Collect managed file payloads from module specs."""
+    managed_files: dict[str, str] = {}
+    for _, spec in _sort_module_items(module_specs):
+        for relative_path, content in spec.managed_files.items():
+            managed_files[relative_path] = content
+    return managed_files
+
+
+def _write_extra_managed_files(
+    package_dir: Path, managed_files: Mapping[str, str]
+) -> None:
+    """Write or clear the dedicated QuickScale-managed integration package."""
+    managed_root = package_dir / "quickscale_managed"
+    if managed_root.exists():
+        if managed_root.is_dir():
+            shutil.rmtree(managed_root)
+        else:
+            managed_root.unlink()
+
+    if not managed_files:
+        return
+
+    for relative_path, content in managed_files.items():
+        relative = Path(relative_path)
+        if not relative.parts or relative.parts[0] != "quickscale_managed":
+            raise ValueError(
+                "Managed wiring file paths must be rooted in quickscale_managed/"
+            )
+
+        target_path = package_dir / relative
+        target_path.parent.mkdir(parents=True, exist_ok=True)
+        target_path.write_text(content)
+
+
 def write_managed_wiring(
     package_dir: Path,
     module_specs: Mapping[str, ModuleWiringSpec],
@@ -122,6 +161,8 @@ def write_managed_wiring(
 
     settings_modules_path = settings_dir / "modules.py"
     urls_modules_path = package_dir / "urls_modules.py"
+    managed_files = collect_managed_files(module_specs)
 
     settings_modules_path.write_text(render_settings_modules_py(module_specs))
     urls_modules_path.write_text(render_urls_modules_py(module_specs))
+    _write_extra_managed_files(package_dir, managed_files)

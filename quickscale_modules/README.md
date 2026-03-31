@@ -27,6 +27,7 @@ These directories currently act as placeholders or documentation stubs. They do 
 | Module | Notes |
 |--------|-------|
 | [billing](./billing/README.md) | Reserved module directory with README-only local context |
+| [social](./social/README.md) | Phase A contract-only skeleton with module manifest, fixed-route policy, and provider normalization foundations |
 | [teams](./teams/README.md) | Reserved module directory with README-only local context |
 
 ## Notes for maintainers

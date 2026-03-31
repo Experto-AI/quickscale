@@ -28,6 +28,7 @@ def test_get_module_entries_filters_experimental_by_default() -> None:
 
     assert "storage" in names
     assert "backups" in names
+    assert "social" in names
     assert "billing" not in names
     assert "teams" not in names
 
@@ -40,6 +41,7 @@ def test_get_module_names_includes_experimental_when_requested() -> None:
     assert "teams" in names
     assert "storage" in names
     assert "backups" in names
+    assert "social" in names
 
 
 def test_get_module_entry_returns_notifications_metadata() -> None:
@@ -48,4 +50,13 @@ def test_get_module_entry_returns_notifications_metadata() -> None:
 
     assert entry is not None
     assert entry.name == "notifications"
+    assert entry.ready is True
+
+
+def test_get_module_entry_returns_social_metadata() -> None:
+    """Catalog lookup should return social metadata for ready modules."""
+    entry = get_module_entry("social")
+
+    assert entry is not None
+    assert entry.name == "social"
     assert entry.ready is True

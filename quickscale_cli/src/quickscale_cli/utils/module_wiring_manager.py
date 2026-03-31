@@ -102,7 +102,13 @@ def regenerate_managed_wiring(
         for module_name in selected_modules
     }
 
-    specs = build_module_wiring_specs(selected_options)
+    try:
+        specs = build_module_wiring_specs(
+            selected_options,
+            project_package=package_name,
+        )
+    except ValueError as e:
+        return False, f"Unable to build managed wiring specs: {e}"
 
     package_dir = project_path / package_name
     if not package_dir.exists():

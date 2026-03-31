@@ -303,6 +303,46 @@ class TestWriteManagedWiring:
         assert "MODULE_INSTALLED_APPS" in settings_content
         assert "MODULE_URLPATTERNS" in urls_content
 
+    def test_write_managed_wiring_creates_extra_managed_files(
+        self, tmp_path: Path
+    ) -> None:
+        """Extra managed integration files are written into quickscale_managed/."""
+        package_dir = tmp_path / "myapp"
+        package_dir.mkdir()
+
+        specs = {
+            "social": ModuleWiringSpec(
+                url_includes=(
+                    ("_quickscale/social/", "myapp.quickscale_managed.social_urls"),
+                ),
+                managed_files={
+                    "quickscale_managed/__init__.py": '"""managed"""\n',
+                    "quickscale_managed/social_urls.py": "urlpatterns = []\n",
+                },
+            )
+        }
+
+        write_managed_wiring(package_dir, specs)
+
+        assert (package_dir / "quickscale_managed" / "__init__.py").exists()
+        assert (package_dir / "quickscale_managed" / "social_urls.py").exists()
+
+    def test_write_managed_wiring_removes_stale_extra_managed_files(
+        self, tmp_path: Path
+    ) -> None:
+        """Stale quickscale_managed files are removed when no specs require them."""
+        package_dir = tmp_path / "myapp"
+        package_dir.mkdir()
+        managed_dir = package_dir / "quickscale_managed"
+        managed_dir.mkdir()
+        stale_file = managed_dir / "stale.py"
+        stale_file.write_text("stale = True\n")
+
+        write_managed_wiring(package_dir, {})
+
+        assert not stale_file.exists()
+        assert not managed_dir.exists()
+
 
 class TestModuleWiringSpec:
     """Tests for ModuleWiringSpec dataclass."""
@@ -314,6 +354,7 @@ class TestModuleWiringSpec:
         assert spec.middleware == ()
         assert spec.settings == {}
         assert spec.url_includes == ()
+        assert spec.managed_files == {}
 
     def test_spec_with_all_fields(self) -> None:
         """Spec stores all provided fields correctly."""

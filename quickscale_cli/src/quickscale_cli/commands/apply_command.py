@@ -30,6 +30,13 @@ from quickscale_cli.notifications_contract import (
     resolve_notifications_module_options,
     validate_notifications_module_options,
 )
+from quickscale_cli.social_contract import (
+    SOCIAL_EMBEDS_PATH,
+    SOCIAL_INTEGRATION_BASE_PATH,
+    SOCIAL_INTEGRATION_EMBEDS_PATH,
+    SOCIAL_LINK_TREE_PATH,
+    validate_social_module_options,
+)
 from quickscale_cli.commands.module_commands import embed_module
 from quickscale_cli.commands.module_config import (
     get_default_backups_config,
@@ -456,6 +463,26 @@ def _validate_module_prerequisites(qs_config: QuickScaleConfig) -> None:
             click.echo(
                 "\n💡 Re-run 'quickscale plan --reconfigure --configure-modules' or edit "
                 "quickscale.yml to supply the missing private-remote env-var references.",
+                err=True,
+            )
+            raise click.Abort()
+
+    social_config = qs_config.modules.get("social")
+    if social_config is not None:
+        social_issues = validate_social_module_options(social_config.options or {})
+        if social_issues:
+            click.secho(
+                "\n❌ Social module configuration is incomplete for apply:",
+                fg="red",
+                err=True,
+            )
+            for issue in social_issues:
+                click.echo(f"  • {issue}", err=True)
+            click.echo(
+                "\n💡 Re-run 'quickscale plan --reconfigure --configure-modules' or edit "
+                "quickscale.yml to correct the social settings. This phase only wires "
+                f"the fixed public routes {SOCIAL_LINK_TREE_PATH} / {SOCIAL_EMBEDS_PATH} "
+                "plus the managed backend transport.",
                 err=True,
             )
             raise click.Abort()
@@ -1074,6 +1101,22 @@ def _display_next_steps(
                 "when you are ready to own email delivery through the module."
             )
 
+    if "social" in modules:
+        click.echo("\n  # Social integration")
+        click.echo(
+            "  Managed backend transport: "
+            + f"{SOCIAL_INTEGRATION_BASE_PATH} and {SOCIAL_INTEGRATION_EMBEDS_PATH}"
+        )
+        click.echo(
+            "  Fixed public routes for fresh generation or manual theme adoption: "
+            + f"{SOCIAL_LINK_TREE_PATH} and {SOCIAL_EMBEDS_PATH}"
+        )
+        click.echo(
+            "  Existing generated projects only receive the managed backend transport "
+            "automatically; use manual theme adoption for routes/pages if you want "
+            "the public UX."
+        )
+
     click.echo("\n  Visit: http://localhost:8000")
 
 
@@ -1233,7 +1276,7 @@ def _execute_apply_steps(
         )
         _print_apply_failure_summary(
             failed_step="managed module wiring generation",
-            reason="unable to render settings/modules.py and urls_modules.py",
+            reason="unable to render managed settings, URL, and integration files",
         )
         raise click.Abort()
 

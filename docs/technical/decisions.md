@@ -294,6 +294,7 @@ quickscale_core/generator/templates/
 - ✅ One-time scaffolding, user owns completely
 - ✅ Starter themes: empty foundations for custom development
 - ✅ Vertical themes: complete applications ready for production
+- ✅ Module releases may extend managed backend/runtime surfaces in existing projects, but newly scaffolded theme-owned routes, navigation, registries, and page source are only guaranteed on fresh generation or explicit manual adoption
 
 ---
 
@@ -574,6 +575,7 @@ config:
 - ✅ Immutable options MUST NOT have `django_setting`
 - ✅ Module code MUST read configurable values from settings (not hardcoded)
 - ✅ Backward compatible: modules without manifest treated as all-immutable
+- ✅ Options that would require rewriting generated theme-owned frontend routes, navigation, or page registries are not valid mutable plan/apply config; use fixed built-in routes or treat the frontend change as fresh-generation/manual-adoption work
 
 **Tie-Breaker:** For config option disputes, default to **immutable** (safer) unless explicit `django_setting` mapping exists.
 

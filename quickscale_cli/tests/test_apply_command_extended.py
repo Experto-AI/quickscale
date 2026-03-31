@@ -10,6 +10,12 @@ from quickscale_cli.backups_contract import (
     DEFAULT_BACKUPS_REMOTE_ACCESS_KEY_ID_ENV_VAR,
     DEFAULT_BACKUPS_REMOTE_SECRET_ACCESS_KEY_ENV_VAR,
 )
+from quickscale_cli.social_contract import (
+    SOCIAL_EMBEDS_PATH,
+    SOCIAL_INTEGRATION_BASE_PATH,
+    SOCIAL_INTEGRATION_EMBEDS_PATH,
+    SOCIAL_LINK_TREE_PATH,
+)
 from quickscale_cli.commands.apply_command import (
     EmbedModulesResult,
     _apply_mutable_config,
@@ -585,6 +591,57 @@ class TestLoadAndValidateConfig:
             "    sender_email: ops@example.com\n"
             "    resend_domain: mg.example.com\n"
             '    resend_api_key_env_var: ""\n'
+            "docker:\n"
+            "  start: false\n"
+        )
+
+        with pytest.raises(click.Abort):
+            _load_and_validate_config(config)
+
+    def test_social_module_options_are_normalized_on_load(self, tmp_path):
+        """Social aliases and casing should be canonicalized during apply load."""
+        config = tmp_path / "quickscale.yml"
+        config.write_text(
+            'version: "1"\n'
+            "project:\n"
+            "  slug: myapp\n"
+            "  package: myapp\n"
+            "  theme: showcase_html\n"
+            "modules:\n"
+            "  social:\n"
+            "    layout_variant: GRID\n"
+            "    provider_allowlist:\n"
+            "      - Twitter\n"
+            "      - YouTube\n"
+            "      - twitter\n"
+            "docker:\n"
+            "  start: false\n"
+        )
+
+        result = _load_and_validate_config(config)
+        rewritten = config.read_text()
+
+        assert result.modules["social"].options["layout_variant"] == "grid"
+        assert result.modules["social"].options["provider_allowlist"] == [
+            "x",
+            "youtube",
+        ]
+        assert "layout_variant: grid" in rewritten
+        assert "Twitter" not in rewritten
+
+    def test_social_module_requires_at_least_one_enabled_surface(self, tmp_path):
+        """Apply should reject social configs that disable every public surface."""
+        config = tmp_path / "quickscale.yml"
+        config.write_text(
+            'version: "1"\n'
+            "project:\n"
+            "  slug: myapp\n"
+            "  package: myapp\n"
+            "  theme: showcase_html\n"
+            "modules:\n"
+            "  social:\n"
+            "    link_tree_enabled: false\n"
+            "    embeds_enabled: false\n"
             "docker:\n"
             "  start: false\n"
         )
@@ -1209,6 +1266,26 @@ class TestDisplayNextSteps:
         assert "Verify SPF/DKIM in Resend for mg.example.com" in output
         assert "OPS_RESEND_API_KEY" in output
         assert "OPS_NOTIFICATIONS_WEBHOOK_SECRET" in output
+
+    def test_social_mentions_managed_transport_and_manual_theme_adoption(
+        self,
+        tmp_path,
+        capsys,
+    ):
+        """Social next steps should call out the managed transport and support matrix."""
+        config = Mock()
+        config.project.slug = "myapp"
+        config.docker.start = False
+        config.modules = {"social": Mock(options={})}
+
+        _display_next_steps(tmp_path, config, False)
+        output = capsys.readouterr().out
+
+        assert SOCIAL_INTEGRATION_BASE_PATH in output
+        assert SOCIAL_INTEGRATION_EMBEDS_PATH in output
+        assert SOCIAL_LINK_TREE_PATH in output
+        assert SOCIAL_EMBEDS_PATH in output
+        assert "manual theme adoption" in output
 
 
 class TestNotificationsEnvExampleSync:

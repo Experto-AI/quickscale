@@ -31,6 +31,16 @@ from quickscale_cli.notifications_contract import (
     resolve_notifications_module_options,
     validate_notifications_module_options,
 )
+from quickscale_cli.social_contract import (
+    SOCIAL_EMBEDS_PATH,
+    SOCIAL_INTEGRATION_BASE_PATH,
+    SOCIAL_INTEGRATION_EMBEDS_PATH,
+    SOCIAL_LAYOUT_VARIANTS,
+    SOCIAL_LINK_TREE_PATH,
+    default_social_module_options,
+    resolve_social_module_options,
+    validate_social_module_options,
+)
 from quickscale_cli.utils.module_wiring_manager import regenerate_managed_wiring
 from quickscale_cli.utils.project_identity import (
     derive_package_from_slug,
@@ -1788,6 +1798,126 @@ def apply_notifications_configuration(
 
 
 # ============================================================================
+# SOCIAL MODULE CONFIGURATION
+# ============================================================================
+
+
+def get_default_social_config() -> dict[str, Any]:
+    """Return default configuration for the social module."""
+    return default_social_module_options()
+
+
+def _raise_for_invalid_social_config(config: Mapping[str, Any]) -> None:
+    """Abort with actionable messaging when social config is invalid."""
+    issues = validate_social_module_options(dict(config))
+    if not issues:
+        return
+
+    click.secho("\n❌ Invalid social module configuration:", fg="red", err=True)
+    for issue in issues:
+        click.echo(f"  • {issue}", err=True)
+    raise click.Abort()
+
+
+def configure_social_module(
+    non_interactive: bool = False,
+    existing_config: Mapping[str, Any] | None = None,
+) -> dict[str, Any]:
+    """Configure social module settings interactively or with defaults."""
+    defaults = resolve_social_module_options(dict(existing_config or {}))
+
+    if non_interactive:
+        click.echo("\n⚙️  Using default social module configuration...")
+        click.echo(
+            "  • Link tree: "
+            + ("Enabled" if defaults["link_tree_enabled"] else "Disabled")
+            + f" ({SOCIAL_LINK_TREE_PATH})"
+        )
+        click.echo(
+            "  • Embeds: "
+            + ("Enabled" if defaults["embeds_enabled"] else "Disabled")
+            + f" ({SOCIAL_EMBEDS_PATH})"
+        )
+        click.echo("  • Providers: " + ", ".join(defaults["provider_allowlist"]))
+        _raise_for_invalid_social_config(defaults)
+        return defaults
+
+    click.echo("\n⚙️  Configuring social module...")
+    click.echo(
+        "Social uses fixed public routes and a managed generated-project backend "
+        "transport. Existing projects do not receive automatic theme route/page "
+        "changes.\n"
+    )
+
+    config = resolve_social_module_options(
+        {
+            "link_tree_enabled": click.confirm(
+                f"Enable the fixed {SOCIAL_LINK_TREE_PATH} public surface?",
+                default=bool(defaults["link_tree_enabled"]),
+            ),
+            "layout_variant": click.prompt(
+                "Default link-tree layout variant",
+                type=click.Choice(list(SOCIAL_LAYOUT_VARIANTS), case_sensitive=False),
+                default=str(defaults["layout_variant"]),
+                show_choices=True,
+            ).lower(),
+            "embeds_enabled": click.confirm(
+                f"Enable the fixed {SOCIAL_EMBEDS_PATH} public surface?",
+                default=bool(defaults["embeds_enabled"]),
+            ),
+            "provider_allowlist": click.prompt(
+                "Allowlisted providers (comma-separated)",
+                default=", ".join(defaults["provider_allowlist"]),
+                show_default=True,
+            ),
+            "cache_ttl_seconds": click.prompt(
+                "Cache TTL in seconds",
+                type=int,
+                default=int(defaults["cache_ttl_seconds"]),
+            ),
+            "links_per_page": click.prompt(
+                "Links per page",
+                type=int,
+                default=int(defaults["links_per_page"]),
+            ),
+            "embeds_per_page": click.prompt(
+                "Embeds per page",
+                type=int,
+                default=int(defaults["embeds_per_page"]),
+            ),
+        }
+    )
+
+    _raise_for_invalid_social_config(config)
+    return config
+
+
+def apply_social_configuration(project_path: Path, config: dict[str, Any]) -> None:
+    """Apply social module configuration via managed wiring files."""
+    resolved = resolve_social_module_options(config)
+    _raise_for_invalid_social_config(resolved)
+    _regenerate_wiring_for_module(project_path, "social", resolved)
+
+    click.echo("\n📋 Configuration applied:")
+    click.echo(
+        "  • Link tree: "
+        + ("Enabled" if resolved["link_tree_enabled"] else "Disabled")
+        + f" ({SOCIAL_LINK_TREE_PATH})"
+    )
+    click.echo(
+        "  • Embeds: "
+        + ("Enabled" if resolved["embeds_enabled"] else "Disabled")
+        + f" ({SOCIAL_EMBEDS_PATH})"
+    )
+    click.echo(
+        "  • Managed backend transport: "
+        + f"{SOCIAL_INTEGRATION_BASE_PATH} and {SOCIAL_INTEGRATION_EMBEDS_PATH}"
+    )
+    click.echo("  • Layout variant: " + str(resolved["layout_variant"]))
+    click.echo("  • Providers: " + ", ".join(list(resolved["provider_allowlist"])))
+
+
+# ============================================================================
 # MODULE CONFIGURATORS REGISTRY
 # ============================================================================
 
@@ -1803,4 +1933,5 @@ MODULE_CONFIGURATORS = {
         configure_notifications_module,
         apply_notifications_configuration,
     ),
+    "social": (configure_social_module, apply_social_configuration),
 }

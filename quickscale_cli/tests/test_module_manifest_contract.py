@@ -7,11 +7,12 @@ from pathlib import Path
 
 from quickscale_cli.commands.module_config import (
     get_default_auth_config,
+    get_default_backups_config,
     get_default_blog_config,
     get_default_crm_config,
-    get_default_backups_config,
     get_default_forms_config,
     get_default_listings_config,
+    get_default_social_config,
     get_default_storage_config,
 )
 from quickscale_cli.module_catalog import get_module_entries
@@ -28,6 +29,7 @@ DEFAULT_CONFIG_FACTORIES = {
     "forms": get_default_forms_config,
     "storage": get_default_storage_config,
     "backups": get_default_backups_config,
+    "social": get_default_social_config,
 }
 
 SETTING_NAME_PATTERN = re.compile(r"^[A-Z][A-Z0-9_]*$")

@@ -11,6 +11,7 @@ import re
 from typing import Any
 
 from quickscale_cli.notifications_contract import normalize_notifications_module_options
+from quickscale_cli.social_contract import normalize_social_module_options
 
 DEFAULT_BACKUPS_REMOTE_ACCESS_KEY_ID_ENV_VAR = "QUICKSCALE_BACKUPS_REMOTE_ACCESS_KEY_ID"
 DEFAULT_BACKUPS_REMOTE_SECRET_ACCESS_KEY_ENV_VAR = (
@@ -110,6 +111,8 @@ def sanitize_module_options(
         return normalize_backups_module_options(options)
     if module_name == "notifications":
         return normalize_notifications_module_options(options)
+    if module_name == "social":
+        return normalize_social_module_options(dict(options or {}))
     return dict(options or {})
 
 
