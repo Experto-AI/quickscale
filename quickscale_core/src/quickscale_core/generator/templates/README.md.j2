@@ -196,6 +196,49 @@ DATABASE_URL=postgresql://postgres:postgres@localhost:5432/{{ package_name }}
 # SENTRY_DSN=your-sentry-dsn-here
 ```
 
+### S3 and CDN for Media Uploads
+
+Use S3-compatible storage for user-uploaded media. Keep Django static assets on
+WhiteNoise and `collectstatic`; use the storage module plus a CDN host for
+uploaded files.
+
+Set these fields in `quickscale.yml` and then run `quickscale apply`:
+
+```yaml
+modules:
+	storage:
+		backend: s3
+		media_url: /media/
+		public_base_url: https://cdn.example.com
+		bucket_name: your-media-bucket
+		endpoint_url: ""
+		region_name: eu-west-1
+		access_key_id: YOUR_ACCESS_KEY_ID
+		secret_access_key: YOUR_SECRET_ACCESS_KEY
+		default_acl: ""
+		querystring_auth: false
+```
+
+Set these deployment environment variables:
+
+```bash
+QUICKSCALE_STORAGE_BACKEND=s3
+QUICKSCALE_STORAGE_PUBLIC_BASE_URL=https://cdn.example.com
+AWS_STORAGE_BUCKET_NAME=your-media-bucket
+AWS_ACCESS_KEY_ID=your-access-key-id
+AWS_SECRET_ACCESS_KEY=your-secret-access-key
+AWS_S3_REGION_NAME=eu-west-1
+AWS_QUERYSTRING_AUTH=false
+
+# Cloudflare R2 only
+# QUICKSCALE_STORAGE_BACKEND=r2
+# AWS_S3_ENDPOINT_URL=https://<account>.r2.cloudflarestorage.com
+# AWS_S3_REGION_NAME=auto
+```
+
+Keep `public_base_url` blank in local development. Set it to the final public
+CDN/media host in staging and production.
+
 ### Production Checklist
 
 Before deploying to production:

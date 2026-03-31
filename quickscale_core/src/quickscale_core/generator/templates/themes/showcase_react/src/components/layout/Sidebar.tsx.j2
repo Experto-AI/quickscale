@@ -1,8 +1,6 @@
 {% raw -%}
 import { NavLink } from 'react-router-dom'
 import {
-  Archive,
-  Bell,
   Home,
   Settings,
   BookOpen,
@@ -49,20 +47,6 @@ export function Sidebar() {
 
   const bottomNavigation: NavItem[] = [
     { name: 'Auth', href: '/profile', icon: UserCircle, show: modules.auth },
-    {
-      name: 'Notifications',
-      href: '/admin/quickscale_modules_notifications/',
-      icon: Bell,
-      show: modules.notifications,
-      reloadDocument: true,
-    },
-    {
-      name: 'Backups',
-      href: '/admin/quickscale_modules_backups/backuppolicy/',
-      icon: Archive,
-      show: modules.backups,
-      reloadDocument: true,
-    },
     { name: 'Settings', href: '/settings', icon: Settings, show: true },
   ]
 

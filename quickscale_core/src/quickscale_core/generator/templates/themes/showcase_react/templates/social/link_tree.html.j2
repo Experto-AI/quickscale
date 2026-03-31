@@ -1,0 +1,151 @@
+{%raw%}{% extends "base.html" %}
+
+{% block title %}Social | {% endraw %}{{ project_name }}{% raw %}{% endblock %}
+
+{% block extra_css %}
+<style>
+    .qs-social-stack {
+        display: grid;
+        gap: 1.5rem;
+    }
+    .qs-social-hero,
+    .qs-social-card {
+        background: #ffffff;
+        border: 1px solid #e2e8f0;
+        border-radius: 1rem;
+        padding: 1.5rem;
+        box-shadow: 0 16px 40px rgba(15, 23, 42, 0.06);
+    }
+    .qs-social-pill {
+        display: inline-flex;
+        align-items: center;
+        padding: 0.25rem 0.65rem;
+        border-radius: 999px;
+        background: #dbeafe;
+        color: #1d4ed8;
+        font-size: 0.78rem;
+        font-weight: 700;
+        letter-spacing: 0.03em;
+        text-transform: uppercase;
+    }
+    .qs-social-hero h1 {
+        margin-top: 1rem;
+        font-size: 2rem;
+        line-height: 1.1;
+    }
+    .qs-social-copy {
+        margin-top: 0.75rem;
+        color: #475569;
+        max-width: 62ch;
+    }
+    .qs-social-actions {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 0.75rem;
+        margin-top: 1rem;
+    }
+    .qs-social-button {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        padding: 0.7rem 1rem;
+        border-radius: 0.75rem;
+        border: 1px solid #2563eb;
+        background: #2563eb;
+        color: #ffffff;
+        font-weight: 600;
+        text-decoration: none;
+    }
+    .qs-social-button:hover {
+        text-decoration: none;
+        background: #1d4ed8;
+    }
+    .qs-social-button-muted {
+        background: #ffffff;
+        color: #0f172a;
+        border-color: #cbd5e1;
+    }
+    .qs-social-button-muted:hover {
+        background: #f8fafc;
+    }
+    .qs-social-grid {
+        display: grid;
+        gap: 1rem;
+        grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+    }
+    .qs-social-card h2 {
+        font-size: 1.05rem;
+        margin-bottom: 0.5rem;
+    }
+    .qs-social-card p,
+    .qs-social-card li {
+        color: #475569;
+    }
+    .qs-social-list {
+        margin: 0;
+        padding-left: 1.1rem;
+    }
+    .qs-social-empty {
+        border-style: dashed;
+        background: linear-gradient(135deg, #f8fafc 0%, #eff6ff 100%);
+    }
+    .qs-social-empty p + p {
+        margin-top: 0.65rem;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="qs-social-stack">
+    <section class="qs-social-hero">
+        <span class="qs-social-pill">
+            {% if settings.QUICKSCALE_SOCIAL_LINK_TREE_ENABLED %}Link tree enabled{% else %}Link tree disabled{% endif %}
+        </span>
+        <h1>Social</h1>
+        <p class="qs-social-copy">
+            QuickScale reserves <code>/social</code> as the public social surface for curated links.
+            This page gives the route a stable home even before any social links have been published.
+        </p>
+        <div class="qs-social-actions">
+            {% if settings.QUICKSCALE_SOCIAL_EMBEDS_ENABLED %}
+            <a class="qs-social-button" href="/social/embeds">Browse embeds</a>
+            {% endif %}
+            <a class="qs-social-button qs-social-button-muted" href="/">Return home</a>
+        </div>
+    </section>
+
+    <section class="qs-social-grid">
+        <article class="qs-social-card">
+            <h2>Status</h2>
+            <p>
+                {% if settings.QUICKSCALE_SOCIAL_LINK_TREE_ENABLED %}
+                The public link tree route is enabled at <code>/social</code>.
+                {% else %}
+                The public link tree route is currently disabled in project settings.
+                {% endif %}
+            </p>
+        </article>
+
+        <article class="qs-social-card">
+            <h2>Layout</h2>
+            <p>Configured layout variant: <code>{{ settings.QUICKSCALE_SOCIAL_LAYOUT_VARIANT }}</code></p>
+            <p>Links per page: <code>{{ settings.QUICKSCALE_SOCIAL_LINKS_PER_PAGE }}</code></p>
+        </article>
+
+        <article class="qs-social-card">
+            <h2>Providers</h2>
+            <ul class="qs-social-list">
+                {% for provider in settings.QUICKSCALE_SOCIAL_PROVIDER_ALLOWLIST %}
+                <li>{{ provider }}</li>
+                {% endfor %}
+            </ul>
+        </article>
+
+        <article class="qs-social-card qs-social-empty">
+            <h2>Published Links</h2>
+            <p>No curated social links are available yet.</p>
+            <p>When the social module starts publishing link data, this route will render it here instead of falling through to a 404.</p>
+        </article>
+    </section>
+</div>
+{% endblock %}{% endraw %}

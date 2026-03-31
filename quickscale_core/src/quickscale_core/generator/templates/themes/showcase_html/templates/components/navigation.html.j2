@@ -64,6 +64,20 @@
             </li>
             {% endif %}
 
+            {% if settings.QUICKSCALE_SOCIAL_LINK_TREE_ENABLED or settings.QUICKSCALE_SOCIAL_EMBEDS_ENABLED %}
+            <li class="nav-section">
+                <span class="nav-section-title">Social</span>
+                <ul class="nav-submenu">
+                    {% if settings.QUICKSCALE_SOCIAL_LINK_TREE_ENABLED %}
+                    <li><a href="/social">Link Tree</a></li>
+                    {% endif %}
+                    {% if settings.QUICKSCALE_SOCIAL_EMBEDS_ENABLED %}
+                    <li><a href="/social/embeds">Embeds</a></li>
+                    {% endif %}
+                </ul>
+            </li>
+            {% endif %}
+
             {% if 'quickscale_modules_billing' in settings.INSTALLED_APPS %}
             <li class="nav-section">
                 <span class="nav-section-title">Billing</span>
@@ -86,7 +100,7 @@
             <li class="nav-section">
                 <span class="nav-section-title">Storage</span>
                 <ul class="nav-submenu">
-                    <li><span class="nav-disabled-link">Shared media storage infrastructure with no public page.</span></li>
+                    <li><span class="nav-disabled-link">Configure S3/CDN in quickscale.yml and deployment environment variables; there is no admin config page.</span></li>
                 </ul>
             </li>
             {% endif %}

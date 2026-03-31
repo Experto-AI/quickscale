@@ -1,0 +1,57 @@
+{%raw%}{% extends "base.html" %}
+
+{% block title %}Social Embeds | {% endraw %}{{ project_name }}{% raw %}{% endblock %}
+
+{% block content %}{% endraw %}
+<div class="welcome-container">
+    <section class="hero-panel">
+        <div class="hero-copy">
+            <span class="hero-eyebrow">QuickScale Social</span>
+            <h1>Social Embeds</h1>
+            <p>This fixed public route now resolves cleanly for showcase_html projects instead of falling through to the default 404 path.</p>
+        </div>
+        <div class="hero-actions">
+            <a class="btn btn-primary btn-inline" href="/social">Open link tree</a>
+            <a class="btn btn-secondary btn-inline" href="/">Return home</a>
+        </div>
+    </section>
+
+    <section class="dashboard-section">
+        <div class="section-heading">
+            <div>
+                <h2>Embed Gallery</h2>
+                <p>The gallery route is reserved and ready even before curated embeds have been published.</p>
+            </div>
+        </div>
+
+        <div class="info-grid">
+            <article class="info-card">
+                <h3>Status</h3>
+                {%raw%}{% if settings.QUICKSCALE_SOCIAL_EMBEDS_ENABLED %}{%endraw%}
+                <p>The embed gallery surface is enabled at <code>/social/embeds</code>.</p>
+                {%raw%}{% else %}{%endraw%}
+                <p>The embed gallery surface is currently disabled in project settings.</p>
+                {%raw%}{% endif %}{%endraw%}
+            </article>
+
+            <article class="info-card">
+                <h3>Providers</h3>
+                <p>Embed-capable providers for this route:</p>
+                <code>{%raw%}{{ settings.QUICKSCALE_SOCIAL_EMBED_PROVIDER_ALLOWLIST|join:", " }}{%endraw%}</code>
+            </article>
+
+            <article class="info-card">
+                <h3>Cache</h3>
+                <p>Cache TTL:</p>
+                <code>{%raw%}{{ settings.QUICKSCALE_SOCIAL_CACHE_TTL_SECONDS }}{%endraw%} seconds</code>
+            </article>
+
+            <article class="info-card">
+                <h3>Published Embeds</h3>
+                <p>No curated embeds are available yet.</p>
+                <p>This generated page keeps the public route stable while the social module wiring matures.</p>
+            </article>
+        </div>
+    </section>
+</div>
+{%raw%}{% endblock %}{%endraw%}

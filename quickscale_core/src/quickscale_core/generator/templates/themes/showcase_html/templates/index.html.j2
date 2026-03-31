@@ -96,6 +96,23 @@
             </article>
             {% endif %}
 
+            {% if settings.QUICKSCALE_SOCIAL_LINK_TREE_ENABLED or settings.QUICKSCALE_SOCIAL_EMBEDS_ENABLED %}
+            <article class="module-card">
+                <div class="module-card-header">
+                    <h3>Social</h3>
+                    <span class="module-badge">Active</span>
+                </div>
+                <p>Managed social link-tree and curated embeds surfaced through fixed public routes.</p>
+                <div class="module-card-actions">
+                    {% if settings.QUICKSCALE_SOCIAL_LINK_TREE_ENABLED %}
+                    <a class="module-link" href="/social">Open social</a>
+                    {% elif settings.QUICKSCALE_SOCIAL_EMBEDS_ENABLED %}
+                    <a class="module-link" href="/social/embeds">Open embeds</a>
+                    {% endif %}
+                </div>
+            </article>
+            {% endif %}
+
             {% if 'quickscale_modules_storage' in settings.INSTALLED_APPS %}
             <article class="module-card">
                 <div class="module-card-header">
@@ -103,7 +120,35 @@
                     <span class="module-badge">Active</span>
                 </div>
                 <p>Shared media storage infrastructure for local and S3-compatible backends.</p>
-                <p class="module-note">No public page is generated for storage. Configure it in settings and use it from your apps and modules.</p>
+                <p class="module-note">Configure S3/CDN in <code>quickscale.yml</code> and deployment environment variables. There is no Django Admin configuration surface for storage secrets.</p>
+            </article>
+            {% endif %}
+
+            {% if 'quickscale_modules_notifications' in settings.INSTALLED_APPS %}
+            <article class="module-card">
+                <div class="module-card-header">
+                    <h3>Notifications</h3>
+                    <span class="module-badge">Active</span>
+                </div>
+                <p>Transactional email delivery settings, event visibility, and operational history.</p>
+                <p class="module-note">Notifications are admin-managed operational tooling, so this starter keeps them off the primary site navigation.</p>
+                <div class="module-card-actions">
+                    <a class="module-link" href="/admin/quickscale_modules_notifications/">Open notifications</a>
+                </div>
+            </article>
+            {% endif %}
+
+            {% if 'quickscale_modules_backups' in settings.INSTALLED_APPS %}
+            <article class="module-card">
+                <div class="module-card-header">
+                    <h3>Backups</h3>
+                    <span class="module-badge">Active</span>
+                </div>
+                <p>Operational backup snapshots with retention, validation, and artifact downloads.</p>
+                <p class="module-note">Backups are admin-managed project operations, so they stay out of the main site navigation.</p>
+                <div class="module-card-actions">
+                    <a class="module-link" href="/admin/quickscale_modules_backups/backuppolicy/">Open backup ops</a>
+                </div>
             </article>
             {% endif %}
 
@@ -129,7 +174,7 @@
             </article>
             {% endif %}
 
-            {% if 'quickscale_modules_auth' not in settings.INSTALLED_APPS and 'quickscale_modules_blog' not in settings.INSTALLED_APPS and 'quickscale_modules_listings' not in settings.INSTALLED_APPS and 'quickscale_modules_crm' not in settings.INSTALLED_APPS and 'quickscale_modules_forms' not in settings.INSTALLED_APPS and 'quickscale_modules_storage' not in settings.INSTALLED_APPS and 'quickscale_modules_billing' not in settings.INSTALLED_APPS and 'quickscale_modules_teams' not in settings.INSTALLED_APPS %}
+            {% if 'quickscale_modules_auth' not in settings.INSTALLED_APPS and 'quickscale_modules_blog' not in settings.INSTALLED_APPS and 'quickscale_modules_listings' not in settings.INSTALLED_APPS and 'quickscale_modules_crm' not in settings.INSTALLED_APPS and 'quickscale_modules_forms' not in settings.INSTALLED_APPS and 'quickscale_modules_storage' not in settings.INSTALLED_APPS and 'quickscale_modules_notifications' not in settings.INSTALLED_APPS and 'quickscale_modules_backups' not in settings.INSTALLED_APPS and 'quickscale_modules_billing' not in settings.INSTALLED_APPS and 'quickscale_modules_teams' not in settings.INSTALLED_APPS and not settings.QUICKSCALE_SOCIAL_LINK_TREE_ENABLED and not settings.QUICKSCALE_SOCIAL_EMBEDS_ENABLED %}
             <article class="module-card empty-state">
                 <div class="module-card-header">
                     <h3>No modules installed</h3>

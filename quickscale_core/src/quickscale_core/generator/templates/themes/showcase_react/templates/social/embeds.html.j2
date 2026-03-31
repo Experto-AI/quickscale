@@ -1,0 +1,138 @@
+{%raw%}{% extends "base.html" %}
+
+{% block title %}Social Embeds | {% endraw %}{{ project_name }}{% raw %}{% endblock %}
+
+{% block extra_css %}
+<style>
+    .qs-embeds-stack {
+        display: grid;
+        gap: 1.5rem;
+    }
+    .qs-embeds-panel,
+    .qs-embeds-card {
+        background: #ffffff;
+        border: 1px solid #e2e8f0;
+        border-radius: 1rem;
+        padding: 1.5rem;
+        box-shadow: 0 16px 40px rgba(15, 23, 42, 0.06);
+    }
+    .qs-embeds-kicker {
+        display: inline-flex;
+        align-items: center;
+        padding: 0.25rem 0.65rem;
+        border-radius: 999px;
+        background: #dcfce7;
+        color: #166534;
+        font-size: 0.78rem;
+        font-weight: 700;
+        letter-spacing: 0.03em;
+        text-transform: uppercase;
+    }
+    .qs-embeds-panel h1 {
+        margin-top: 1rem;
+        font-size: 2rem;
+        line-height: 1.1;
+    }
+    .qs-embeds-panel p,
+    .qs-embeds-card p,
+    .qs-embeds-card li {
+        color: #475569;
+    }
+    .qs-embeds-grid {
+        display: grid;
+        gap: 1rem;
+        grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+    }
+    .qs-embeds-actions {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 0.75rem;
+        margin-top: 1rem;
+    }
+    .qs-embeds-button {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        padding: 0.7rem 1rem;
+        border-radius: 0.75rem;
+        border: 1px solid #2563eb;
+        background: #2563eb;
+        color: #ffffff;
+        font-weight: 600;
+        text-decoration: none;
+    }
+    .qs-embeds-button:hover {
+        text-decoration: none;
+        background: #1d4ed8;
+    }
+    .qs-embeds-button-muted {
+        background: #ffffff;
+        color: #0f172a;
+        border-color: #cbd5e1;
+    }
+    .qs-embeds-button-muted:hover {
+        background: #f8fafc;
+    }
+    .qs-embeds-list {
+        margin: 0;
+        padding-left: 1.1rem;
+    }
+    .qs-embeds-empty {
+        border-style: dashed;
+        background: linear-gradient(135deg, #f8fafc 0%, #eef2ff 100%);
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="qs-embeds-stack">
+    <section class="qs-embeds-panel">
+        <span class="qs-embeds-kicker">
+            {% if settings.QUICKSCALE_SOCIAL_EMBEDS_ENABLED %}Embeds enabled{% else %}Embeds disabled{% endif %}
+        </span>
+        <h1>Social Embeds</h1>
+        <p>
+            QuickScale reserves <code>/social/embeds</code> for curated embed galleries.
+            This page now resolves ahead of the SPA catch-all instead of landing on the React 404 screen.
+        </p>
+        <div class="qs-embeds-actions">
+            <a class="qs-embeds-button" href="/social">Open link tree</a>
+            <a class="qs-embeds-button qs-embeds-button-muted" href="/">Return home</a>
+        </div>
+    </section>
+
+    <section class="qs-embeds-grid">
+        <article class="qs-embeds-card">
+            <h2>Status</h2>
+            <p>
+                {% if settings.QUICKSCALE_SOCIAL_EMBEDS_ENABLED %}
+                The embed gallery route is enabled at <code>/social/embeds</code>.
+                {% else %}
+                The embed gallery route is currently disabled in project settings.
+                {% endif %}
+            </p>
+        </article>
+
+        <article class="qs-embeds-card">
+            <h2>Providers</h2>
+            <ul class="qs-embeds-list">
+                {% for provider in settings.QUICKSCALE_SOCIAL_EMBED_PROVIDER_ALLOWLIST %}
+                <li>{{ provider }}</li>
+                {% endfor %}
+            </ul>
+        </article>
+
+        <article class="qs-embeds-card">
+            <h2>Cache</h2>
+            <p>Cache TTL: <code>{{ settings.QUICKSCALE_SOCIAL_CACHE_TTL_SECONDS }}</code> seconds</p>
+            <p>Embeds per page: <code>{{ settings.QUICKSCALE_SOCIAL_EMBEDS_PER_PAGE }}</code></p>
+        </article>
+
+        <article class="qs-embeds-card qs-embeds-empty">
+            <h2>Published Embeds</h2>
+            <p>No curated embeds are available yet.</p>
+            <p>This route now has a stable generated destination so social navigation no longer breaks on direct visits.</p>
+        </article>
+    </section>
+</div>
+{% endblock %}{% endraw %}

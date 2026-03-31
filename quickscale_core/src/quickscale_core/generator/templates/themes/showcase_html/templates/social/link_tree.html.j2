@@ -1,0 +1,59 @@
+{%raw%}{% extends "base.html" %}
+
+{% block title %}Social | {% endraw %}{{ project_name }}{% raw %}{% endblock %}
+
+{% block content %}{% endraw %}
+<div class="welcome-container">
+    <section class="hero-panel">
+        <div class="hero-copy">
+            <span class="hero-eyebrow">QuickScale Social</span>
+            <h1>Social</h1>
+            <p>This fixed public route now resolves cleanly for showcase_html projects. Curated links will appear here once the social module starts publishing them.</p>
+        </div>
+        <div class="hero-actions">
+            {%raw%}{% if settings.QUICKSCALE_SOCIAL_EMBEDS_ENABLED %}{%endraw%}
+            <a class="btn btn-primary btn-inline" href="/social/embeds">Browse embeds</a>
+            {%raw%}{% endif %}{%endraw%}
+            <a class="btn btn-secondary btn-inline" href="/">Return home</a>
+        </div>
+    </section>
+
+    <section class="dashboard-section">
+        <div class="section-heading">
+            <div>
+                <h2>Surface Details</h2>
+                <p>QuickScale keeps this route reserved so the public social page does not fall through to a generic 404.</p>
+            </div>
+        </div>
+
+        <div class="info-grid">
+            <article class="info-card">
+                <h3>Status</h3>
+                {%raw%}{% if settings.QUICKSCALE_SOCIAL_LINK_TREE_ENABLED %}{%endraw%}
+                <p>The public link tree surface is enabled at <code>/social</code>.</p>
+                {%raw%}{% else %}{%endraw%}
+                <p>The public link tree surface is currently disabled in project settings.</p>
+                {%raw%}{% endif %}{%endraw%}
+            </article>
+
+            <article class="info-card">
+                <h3>Layout</h3>
+                <p>Configured layout variant:</p>
+                <code>{%raw%}{{ settings.QUICKSCALE_SOCIAL_LAYOUT_VARIANT }}{%endraw%}</code>
+            </article>
+
+            <article class="info-card">
+                <h3>Providers</h3>
+                <p>Allowed social providers for this surface:</p>
+                <code>{%raw%}{{ settings.QUICKSCALE_SOCIAL_PROVIDER_ALLOWLIST|join:", " }}{%endraw%}</code>
+            </article>
+
+            <article class="info-card">
+                <h3>Published Links</h3>
+                <p>No curated social links are available yet.</p>
+                <p>This page now provides a stable destination until link data is published.</p>
+            </article>
+        </div>
+    </section>
+</div>
+{%raw%}{% endblock %}{%endraw%}

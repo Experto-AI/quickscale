@@ -704,6 +704,9 @@ class TestReactThemeModuleActivationMatrix:
         sidebar = (
             output_path / "frontend" / "src" / "components" / "layout" / "Sidebar.tsx"
         ).read_text()
+        settings_page = (
+            output_path / "frontend" / "src" / "pages" / "SettingsPage.tsx"
+        ).read_text()
 
         assert "backups: false" in use_modules
         assert "notifications: false" in use_modules
@@ -725,9 +728,12 @@ class TestReactThemeModuleActivationMatrix:
 
         assert "name: 'Social'" in sidebar
         assert "modulePaths.social" in sidebar
-        assert "name: 'Notifications'" in sidebar
-        assert "name: 'Backups'" in sidebar
+        assert "name: 'Notifications'" not in sidebar
+        assert "name: 'Backups'" not in sidebar
         assert "reloadDocument={item.reloadDocument}" in sidebar
+
+        assert "Storage & CDN" in settings_page
+        assert "No admin config surface" in settings_page
 
     def test_react_theme_generates_backups_app_index_override(self, tmp_path):
         """Generated projects should expose a backup action on the admin app index."""
@@ -742,6 +748,38 @@ class TestReactThemeModuleActivationMatrix:
         assert "quickscale_modules_backups_backuppolicy_create" in app_index_template
         assert "Create backup now" in app_index_template
         assert 'app_label == "quickscale_modules_backups"' in app_index_template
+
+    def test_react_theme_reserves_public_social_pages(self, tmp_path):
+        """Generated React projects should reserve /social routes ahead of the SPA catch-all."""
+        project_name = "react_social_public_routes"
+        generator = ProjectGenerator(theme="showcase_react")
+        output_path = tmp_path / project_name
+        generator.generate(project_name, output_path)
+
+        urls_py = (output_path / project_name / "urls.py").read_text()
+        link_tree_template = (
+            output_path / "templates" / "social" / "link_tree.html"
+        ).read_text()
+        embeds_template = (
+            output_path / "templates" / "social" / "embeds.html"
+        ).read_text()
+
+        social_route = (
+            're_path(\n        r"^social/?$",\n'
+            '        TemplateView.as_view(template_name="social/link_tree.html"),'
+        )
+        embeds_route = (
+            're_path(\n        r"^social/embeds/?$",\n'
+            '        TemplateView.as_view(template_name="social/embeds.html"),'
+        )
+
+        assert social_route in urls_py
+        assert embeds_route in urls_py
+        assert urls_py.index('r"^social/?$"') < urls_py.index(
+            're_path(r".*", TemplateView.as_view(template_name="index.html"))'
+        )
+        assert "QuickScale reserves <code>/social</code>" in link_tree_template
+        assert "QuickScale reserves <code>/social/embeds</code>" in embeds_template
 
     def test_react_routes_cover_all_module_navigation_targets(self, tmp_path):
         """React router should include routes for every module link exposed by the UI."""

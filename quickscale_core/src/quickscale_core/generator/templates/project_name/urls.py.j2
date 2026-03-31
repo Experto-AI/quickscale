@@ -43,6 +43,16 @@ urlpatterns = [
     path("healthcheck/", healthcheck, name="healthcheck"),
     path("admin/", admin.site.urls),
     path("", TemplateView.as_view(template_name="index.html"), name="home"),
+    re_path(
+        r"^social/?$",
+        TemplateView.as_view(template_name="social/link_tree.html"),
+        name="social-link-tree",
+    ),
+    re_path(
+        r"^social/embeds/?$",
+        TemplateView.as_view(template_name="social/embeds.html"),
+        name="social-embeds",
+    ),
 ]
 urlpatterns += MODULE_URLPATTERNS
 

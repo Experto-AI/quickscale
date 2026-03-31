@@ -2,7 +2,7 @@
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
-import { Settings, ExternalLink, Server, Database, Palette } from 'lucide-react'
+import { Settings, ExternalLink, Server, Database, Palette, HardDrive } from 'lucide-react'
 import { useModules } from '@/hooks/useModules'
 import { useHealthCheck } from '@/hooks/useApi'
 
@@ -79,6 +79,26 @@ export function SettingsPage() {
                 Open Admin <ExternalLink className="ml-1 h-3 w-3" />
               </a>
             </Button>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader>
+            <HardDrive className="mb-1 h-5 w-5 text-muted-foreground" />
+            <CardTitle className="text-base">Storage & CDN</CardTitle>
+            <CardDescription>Configure media infrastructure outside Django Admin</CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            <p className="text-sm text-muted-foreground">
+              Use <code>quickscale.yml</code> for <code>modules.storage.backend</code> and{' '}
+              <code>modules.storage.public_base_url</code>, then set the matching S3 or R2
+              environment variables in the deployment environment.
+            </p>
+            <div className="flex flex-wrap gap-2">
+              <Badge variant="outline">quickscale.yml</Badge>
+              <Badge variant="outline">AWS_* / R2 env vars</Badge>
+              <Badge variant="outline">No admin config surface</Badge>
+            </div>
           </CardContent>
         </Card>
 
