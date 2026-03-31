@@ -12,36 +12,36 @@
 
 ## Release Summary Table
 
-Dates and short summaries below mirror the linked release artifacts and [CHANGELOG.md](../../CHANGELOG.md). The table is ordered by version, not by time; the date column records the linked artifact date.
+Dates and short summaries below mirror the linked release artifacts and [CHANGELOG.md](../../CHANGELOG.md). The table is ordered by version, not by time; the date column records the linked artifact date when one exists and otherwise falls back to the changelog entry.
 
 | Version | Artifact Date | Phase | Key Changes | Status | Docs |
 |---------|---------------|-------|-------------|--------|------|
 | **v0.78.0** | 2026-03-30 | Post-MVP | Notifications module, app-owned rendering, recipient-granular delivery tracking, and post-MVP expansion kickoff | ✅ Complete | [Summary](../releases/release-v0.78.0.md) |
-| **v0.77.0** | — | MVP | Backups module MVP closeout baseline on main; no separate published summary before v0.78.0 | ℹ️ Internal baseline | [Roadmap entry](./roadmap.md#v0770-quickscale_modulesbackups---database-backup--restore-module) |
-| **v0.76.0** | 2026-03-21 | MVP | Storage module, canonical public media URLs, `public_base_url` contract cleanup | ✅ Complete | [Summary](../releases/release-v0.76.0.md) \| [Impl](../releases-archive/release-v0.76.0-implementation.md) \| [Review](../releases-archive/release-v0.76.0-review.md) |
+| **v0.77.0** | 2026-03-31 | MVP | Backups module MVP closeout baseline with private local/remote workflows and retrospective archival notes | ✅ Archived retrospective | [Impl](../releases-archive/release-v0.77.0-implementation.md) |
+| **v0.76.0** | 2026-03-21 | MVP | Storage module, canonical public media URLs, `public_base_url` contract cleanup | ✅ Complete | [Summary](../releases/release-v0.76.0.md) |
 | **v0.75.0** | 2026-02-23 | MVP | Forms module with admin-managed schemas, DRF API, spam protection, and notifications | ✅ Complete | [Summary](../releases/release-v0.75.0.md) |
-| **v0.74.0** | 2026-02-05 | MVP | React default theme (`showcase_react`) with Vite, TypeScript, TanStack Query, and Zustand | ✅ Complete | [Summary](../releases/release-v0.74.0.md) \| [Review](../releases/release-v0.74.0-review.md) |
-| **v0.73.0** | 2026-02-04 | MVP | CRM module with API-first Django app structure and CLI integration | ✅ Complete | [Impl](../releases-archive/release-v0.73.0-implementation.md) \| [Review](../releases/release-v0.73.0-review.md) |
+| **v0.74.0** | 2026-02-05 | MVP | React default theme (`showcase_react`) with Vite, TypeScript, TanStack Query, and Zustand | ✅ Complete | [Summary](../releases/release-v0.74.0.md) |
+| **v0.73.0** | 2026-02-04 | MVP | CRM module with API-first Django app structure and CLI integration | ✅ Complete | [Impl](../releases-archive/release-v0.73.0-implementation.md) |
 | **v0.72.0** | 2025-12-07 | MVP | Plan/Apply cleanup (removed legacy init/embed commands, full transition to plan/apply) | ✅ Complete | [Review](../releases-archive/release-v0.72.0-review.md) |
-| **v0.71.0** | 2025-06-25 | MVP | Module manifests & config mutability (Plan/Apply system complete) | ✅ Complete | [Impl](../releases-archive/release-v0.71.0-implementation.md) \| [Review](../releases-archive/release-v0.71.0-review.md) |
-| **v0.70.0** | 2025-12-19 | MVP | Existing project support (`status`, `plan --add`, `plan --reconfigure`) | ✅ Complete | [Impl](../releases-archive/release-v0.70.0-implementation.md) \| [Review](../releases-archive/release-v0.70.0-review.md) |
-| **v0.69.0** | 2025-12-03 | MVP | State management and incremental applies | ✅ Complete | [Impl](../releases-archive/release-v0.69.0-implementation.md) \| [Review](../releases-archive/release-v0.69.0-review.md) |
-| **v0.68.0** | 2025-12-01 | MVP | Plan/Apply system core commands (Terraform-style declarative workflow) | ✅ Complete | [Impl](../releases-archive/release-v0.68.0-implementation.md) \| [Review](../releases-archive/release-v0.68.0-review.md) |
-| **v0.67.0** | 2025-11-29 | MVP | Listings module with `AbstractListing` base model for verticals | ✅ Complete | [Impl](../releases-archive/release-v0.67.0-implementation.md) \| [Review](../releases-archive/release-v0.67.0-review.md) |
-| **v0.66.0** | 2025-11-24 | MVP | Blog module with Markdown, featured images, and RSS feeds | ✅ Complete | [Impl](../releases-archive/release-v0.66.0-implementation.md) \| [Review](../releases-archive/release-v0.66.0-review.md) |
-| **v0.65.0** | 2025-11-03 | MVP | Enhanced auth module and development tooling | ✅ Complete | [Plan](../releases-archive/release-v0.65.0-plan.md) |
-| **v0.64.0** | 2025-11-01 | MVP | Theme rename to `showcase_*` (breaking change) | ✅ Complete | [Plan](../releases-archive/release-v0.64.0-plan.md) \| [Impl](../releases-archive/release-v0.64.0-implementation.md) \| [Review](../releases-archive/release-v0.64.0-review.md) |
-| **v0.63.0** | 2025-10-29 | MVP | Authentication module with `django-allauth` and interactive embed | ✅ Complete | [Impl](../releases-archive/release-v0.63.0-implementation.md) \| [Review](../releases-archive/release-v0.63.0-review.md) |
-| **v0.62.0** | 2025-10-25 | MVP | Split branch infrastructure (module management CLI commands, GitHub Actions automation) | ✅ Complete | [Impl](../releases-archive/release-v0.62.0-implementation.md) \| [Review](../releases-archive/release-v0.62.0-review.md) |
-| **v0.61.0** | 2025-10-24 | MVP | Theme system foundation (`--theme` flag, theme abstraction layer, HTML theme) | ✅ Complete | [Impl](../releases-archive/release-v0.61.0-implementation.md) \| [Review](../releases-archive/release-v0.61.0-review.md) |
-| **v0.60.0** | 2025-10-19 | MVP | Railway deployment support (`quickscale deploy railway`) | ✅ Complete | [Impl](../releases-archive/release-v0.60.0-implementation.md) \| [Review](../releases-archive/release-v0.60.0-review.md) |
-| **v0.59.0** | 2025-10-18 | MVP | CLI development commands (Docker/Django operation wrappers) | ✅ Complete | [Impl](../releases-archive/release-v0.59.0-implementation.md) \| [Review](../releases-archive/release-v0.59.0-review.md) |
-| **v0.58.0** | 2025-10-18 | MVP | Comprehensive E2E testing infrastructure with Playwright and PostgreSQL | ✅ Complete | [Impl](../releases-archive/release-v0.58.0-implementation.md) \| [Review](../releases-archive/release-v0.58.0-review.md) |
-| **v0.57.0** | 2025-10-15 | MVP | MVP launch: production-ready personal toolkit | ✅ Complete | [Impl](../releases-archive/release-v0.57.0-implementation.md) \| [Review](../releases-archive/release-v0.57.0-review.md) |
-| **v0.56.0** | 2025-10-13 | MVP | Quality, testing, and CI/CD | ✅ Complete | [Impl](../releases-archive/release-v0.56.0-implementation.md) \| [Review](../releases-archive/release-v0.56.0-review.md) |
-| **v0.55.0** | 2025-10-13 | Foundation | CLI implementation | ✅ Complete | [Impl](../releases-archive/release-v0.55.0-implementation.md) \| [Review](../releases-archive/release-v0.55.0-review.md) |
-| **v0.54.0** | 2025-10-13 | Foundation | Project generator | ✅ Complete | [Impl](../releases-archive/release-v0.54.0-implementation.md) \| [Review](../releases-archive/release-v0.54.0-review.md) |
-| **v0.53.3** | 2025-10-12 | Foundation | Project metadata and DevOps templates | ✅ Complete | [Impl](../releases-archive/release-v0.53.3-implementation.md) \| [Review](../releases-archive/release-v0.53.3-review.md) |
+| **v0.71.0** | 2025-06-25 | MVP | Module manifests & config mutability (Plan/Apply system complete) | ✅ Complete | [Impl](../releases-archive/release-v0.71.0-implementation.md) |
+| **v0.70.0** | 2025-12-19 | MVP | Existing project support (`status`, `plan --add`, `plan --reconfigure`) | ✅ Complete | [Impl](../releases-archive/release-v0.70.0-implementation.md) |
+| **v0.69.0** | 2025-12-03 | MVP | State management and incremental applies | ✅ Complete | [Impl](../releases-archive/release-v0.69.0-implementation.md) |
+| **v0.68.0** | 2025-12-01 | MVP | Plan/Apply system core commands (Terraform-style declarative workflow) | ✅ Complete | [Impl](../releases-archive/release-v0.68.0-implementation.md) |
+| **v0.67.0** | 2025-11-29 | MVP | Listings module with `AbstractListing` base model for verticals | ✅ Complete | [Impl](../releases-archive/release-v0.67.0-implementation.md) |
+| **v0.66.0** | 2025-11-24 | MVP | Blog module with Markdown, featured images, and RSS feeds | ✅ Complete | [Impl](../releases-archive/release-v0.66.0-implementation.md) |
+| **v0.65.0** | 2025-11-03 | MVP | Enhanced auth module and development tooling | ✅ Complete | No archived release doc |
+| **v0.64.0** | 2025-11-01 | MVP | Theme rename to `showcase_*` (breaking change) | ✅ Complete | [Impl](../releases-archive/release-v0.64.0-implementation.md) |
+| **v0.63.0** | 2025-10-29 | MVP | Authentication module with `django-allauth` and interactive embed | ✅ Complete | [Impl](../releases-archive/release-v0.63.0-implementation.md) |
+| **v0.62.0** | 2025-10-25 | MVP | Split Branch infrastructure (module management CLI commands, GitHub Actions automation) | ✅ Complete | [Impl](../releases-archive/release-v0.62.0-implementation.md) |
+| **v0.61.0** | 2025-10-24 | MVP | Theme system foundation (`--theme` flag, theme abstraction layer, HTML theme) | ✅ Complete | [Impl](../releases-archive/release-v0.61.0-implementation.md) |
+| **v0.60.0** | 2025-10-19 | MVP | Railway deployment support (`quickscale deploy railway`) | ✅ Complete | [Impl](../releases-archive/release-v0.60.0-implementation.md) |
+| **v0.59.0** | 2025-10-18 | MVP | CLI development commands (Docker/Django operation wrappers) | ✅ Complete | [Impl](../releases-archive/release-v0.59.0-implementation.md) |
+| **v0.58.0** | 2025-10-18 | MVP | Comprehensive E2E testing infrastructure with Playwright and PostgreSQL | ✅ Complete | [Impl](../releases-archive/release-v0.58.0-implementation.md) |
+| **v0.57.0** | 2025-10-15 | MVP | MVP launch: production-ready personal toolkit | ✅ Complete | [Impl](../releases-archive/release-v0.57.0-implementation.md) |
+| **v0.56.0** | 2025-10-13 | MVP | Quality, testing, and CI/CD | ✅ Complete | [Impl](../releases-archive/release-v0.56.0-implementation.md) |
+| **v0.55.0** | 2025-10-13 | Foundation | CLI implementation | ✅ Complete | [Impl](../releases-archive/release-v0.55.0-implementation.md) |
+| **v0.54.0** | 2025-10-13 | Foundation | Project generator | ✅ Complete | [Impl](../releases-archive/release-v0.54.0-implementation.md) |
+| **v0.53.3** | 2025-10-12 | Foundation | Project metadata and DevOps templates | ✅ Complete | [Impl](../releases-archive/release-v0.53.3-implementation.md) |
 | **v0.53.2** | 2025-01-11 | Foundation | Templates and static files | ✅ Complete | [Impl](../releases-archive/release-v0.53.2-implementation.md) |
 | **v0.53.1** | 2025-10-11 | Foundation | Core Django project templates | ✅ Complete | [Impl](../releases-archive/release-v0.53.1-implementation.md) |
 | **v0.52.0** | 2025-10-08 | Foundation | Project foundation | ✅ Complete | [Impl](../releases-archive/release-v0.52.0-implementation.md) |
@@ -74,8 +74,9 @@ Dates and short summaries below mirror the linked release artifacts and [CHANGEL
 - ✅ v0.68.0: Plan/Apply system implementation
 - ✅ v0.72.0: Complete Plan/Apply cleanup
 - ✅ v0.76.0: Storage module with canonical public media URL contract
+- ✅ v0.77.0: Backups module with private local/remote operational workflows and guarded restore paths
 
-**Status**: Historical/archive view for completed MVP releases with published artifacts. For current MVP/Post-MVP boundaries and active release status, see [decisions.md](./decisions.md) and [roadmap.md](./roadmap.md).
+**Status**: Historical/archive view for completed MVP releases with published artifacts where available. For current MVP/Post-MVP boundaries and active release status, see [decisions.md](./decisions.md) and [roadmap.md](./roadmap.md).
 
 ### Post-MVP Phase (v0.78.0+)
 **Dates**: Began with v0.78.0 on 2026-03-30; v0.79+ remains planned
@@ -180,13 +181,21 @@ Starting with **v0.73.0**, releases may use a mixed documentation layout:
 
 ---
 
-**Last Updated**: 2026-03-30
+**Last Updated**: 2026-03-31
 **Current Active Release Tracking**: [roadmap.md](./roadmap.md)
 **Recent Summary Location**: [../releases/](../releases/)
 
 ---
 
 ## Detailed Release History
+
+### v0.77.0: Backups Module - Archived Retrospective Record
+
+**Status**: ✅ Archived retrospective implementation record
+
+See [release-v0.77.0-implementation.md](../releases-archive/release-v0.77.0-implementation.md).
+
+---
 
 ### v0.67.0: Listings Module — ✅ Complete
 
