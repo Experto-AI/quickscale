@@ -19,6 +19,7 @@ from django.urls import reverse
 
 from quickscale_modules_backups.admin import BackupArtifactAdmin, BackupPolicyAdmin
 from quickscale_modules_backups.models import BackupArtifact, BackupPolicy
+from quickscale_modules_backups.services import BackupError
 
 if TYPE_CHECKING:
     from django.contrib.auth.base_user import AbstractBaseUser
@@ -213,6 +214,28 @@ class TestBackupPolicyAdmin:
         mocked_create.assert_called_once()
         assert [message.message for message in get_messages(response.wsgi_request)] == [
             "Created backup artifact db-project-local-20260326T120000Z.json"
+        ]
+
+    def test_create_backup_now_button_reports_backup_errors(
+        self,
+        admin_client: Client,
+        backup_policy: BackupPolicy,
+    ) -> None:
+        with patch(
+            "quickscale_modules_backups.admin.create_backup",
+            side_effect=BackupError(
+                "Required executable 'pg_dump' is not installed in this runtime."
+            ),
+        ) as mocked_create:
+            response = admin_client.post(
+                reverse("admin:quickscale_modules_backups_backuppolicy_create"),
+                follow=True,
+            )
+
+        assert response.status_code == 200
+        mocked_create.assert_called_once()
+        assert [message.message for message in get_messages(response.wsgi_request)] == [
+            "Backup creation failed: Required executable 'pg_dump' is not installed in this runtime."
         ]
 
     def test_prune_expired_backups_action_runs_from_admin_changelist(
