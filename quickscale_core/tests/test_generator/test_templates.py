@@ -639,9 +639,12 @@ class TestDevOpsTemplateRendering:
         assert "pytest --cov=testproject" in output
         assert "runs-on: ubuntu-24.04" in output
         assert "apt.postgresql.org" in output
+        assert "apt.postgresql.org.asc" in output
         assert "postgresql-client-18" in output
         assert "pg_dump --version" in output
         assert "pg_restore --version" in output
+        assert "gpg --dearmor" not in output
+        assert "gnupg" not in output
 
     def test_dockerfile_renders(
         self, jinja_env: Environment, test_context: dict[str, str]
@@ -879,7 +882,10 @@ class TestDockerfileContent:
         assert "FROM python:3.14-slim-bookworm as builder" in output
         assert "FROM python:3.14-slim-bookworm" in output
         assert "bookworm-pgdg" in output
+        assert "apt.postgresql.org.asc" in output
         assert "postgresql-client-18" in output
+        assert "gpg --dearmor" not in output
+        assert "gnupg" not in output
 
     def test_non_root_user(
         self, jinja_env: Environment, test_context: dict[str, str]

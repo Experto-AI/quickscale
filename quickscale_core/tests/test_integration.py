@@ -121,9 +121,12 @@ class TestProjectGenerationIntegration:
         assert project_name in ci_content  # Project name should be in coverage command
         assert "runs-on: ubuntu-24.04" in ci_content
         assert "apt.postgresql.org" in ci_content
+        assert "apt.postgresql.org.asc" in ci_content
         assert "postgresql-client-18" in ci_content
         assert "pg_dump --version" in ci_content
         assert "pg_restore --version" in ci_content
+        assert "gpg --dearmor" not in ci_content
+        assert "gnupg" not in ci_content
 
         # Verify pre-commit config has ruff
         precommit_content = (output_path / ".pre-commit-config.yaml").read_text()

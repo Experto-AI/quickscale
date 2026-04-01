@@ -70,15 +70,14 @@ jobs:
         sudo apt-get install -y \
           ca-certificates \
           curl \
-          gnupg \
           docker-compose
         distro_codename="$(
           . /etc/os-release
           echo "$VERSION_CODENAME"
         )"
         sudo install -d /usr/share/postgresql-common/pgdg
-        curl -fsSL https://www.postgresql.org/media/keys/ACCC4CF8.asc \
-          | sudo gpg --dearmor -o /usr/share/postgresql-common/pgdg/apt.postgresql.org.asc
+        sudo curl -fsSL https://www.postgresql.org/media/keys/ACCC4CF8.asc \
+          -o /usr/share/postgresql-common/pgdg/apt.postgresql.org.asc
         echo "deb [signed-by=/usr/share/postgresql-common/pgdg/apt.postgresql.org.asc] http://apt.postgresql.org/pub/repos/apt ${distro_codename}-pgdg main" \
           | sudo tee /etc/apt/sources.list.d/pgdg.list > /dev/null
         sudo apt-get update
@@ -195,7 +194,9 @@ jobs:
       run: |
         grep -q "runs-on: ubuntu-24.04" /tmp/test_docker_project/.github/workflows/ci.yml
         grep -q "apt.postgresql.org" /tmp/test_docker_project/.github/workflows/ci.yml
+        grep -q "apt.postgresql.org.asc" /tmp/test_docker_project/.github/workflows/ci.yml
         grep -q "postgresql-client-18" /tmp/test_docker_project/.github/workflows/ci.yml
+        ! grep -q "gpg --dearmor" /tmp/test_docker_project/.github/workflows/ci.yml
 
     - name: Validate docker-compose configuration
       working-directory: /tmp/test_docker_project

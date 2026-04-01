@@ -401,9 +401,12 @@ class TestFullE2EWorkflow:
         ci_content = ci_file.read_text()
         assert "runs-on: ubuntu-24.04" in ci_content
         assert "apt.postgresql.org" in ci_content
+        assert "apt.postgresql.org.asc" in ci_content
         assert "postgresql-client-18" in ci_content
         assert "pg_dump --version" in ci_content
         assert "pg_restore --version" in ci_content
+        assert "gpg --dearmor" not in ci_content
+        assert "gnupg" not in ci_content
 
         # Verify it's valid YAML
         import yaml

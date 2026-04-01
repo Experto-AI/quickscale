@@ -25,14 +25,14 @@ jobs:
     - name: Install PostgreSQL 18 client tooling
       run: |
         sudo apt-get update
-        sudo apt-get install -y ca-certificates curl gnupg
+        sudo apt-get install -y ca-certificates curl
         distro_codename="$(
           . /etc/os-release
           echo "$VERSION_CODENAME"
         )"
         sudo install -d /usr/share/postgresql-common/pgdg
-        curl -fsSL https://www.postgresql.org/media/keys/ACCC4CF8.asc \
-          | sudo gpg --dearmor -o /usr/share/postgresql-common/pgdg/apt.postgresql.org.asc
+        sudo curl -fsSL https://www.postgresql.org/media/keys/ACCC4CF8.asc \
+          -o /usr/share/postgresql-common/pgdg/apt.postgresql.org.asc
         echo "deb [signed-by=/usr/share/postgresql-common/pgdg/apt.postgresql.org.asc] http://apt.postgresql.org/pub/repos/apt ${distro_codename}-pgdg main" \
           | sudo tee /etc/apt/sources.list.d/pgdg.list > /dev/null
         sudo apt-get update

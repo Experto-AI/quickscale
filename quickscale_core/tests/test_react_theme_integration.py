@@ -220,6 +220,9 @@ class TestReactThemeGeneration:
         assert "staticfiles" in dockerfile or "static" in dockerfile
         assert "postgresql-client-18" in dockerfile
         assert "apt.postgresql.org" in dockerfile
+        assert "apt.postgresql.org.asc" in dockerfile
+        assert "gpg --dearmor" not in dockerfile
+        assert "gnupg" not in dockerfile
 
     def test_react_theme_scripts_configured(self, tmp_path):
         """Package.json scripts should be properly configured"""
