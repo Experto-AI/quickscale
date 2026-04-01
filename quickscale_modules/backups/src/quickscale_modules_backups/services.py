@@ -7,12 +7,15 @@ from contextlib import contextmanager
 import hashlib
 import json
 import os
+import re
+import shutil
 import subprocess
 from dataclasses import asdict, dataclass
 from datetime import datetime, timedelta, timezone
 from importlib import import_module
 from io import StringIO
 from pathlib import Path
+from tempfile import TemporaryDirectory
 from typing import TYPE_CHECKING, Any, Protocol, Sequence
 
 import django
@@ -33,6 +36,21 @@ _DEFAULT_REMOTE_ACCESS_KEY_ID_ENV_VAR = "QUICKSCALE_BACKUPS_REMOTE_ACCESS_KEY_ID
 _DEFAULT_REMOTE_SECRET_ACCESS_KEY_ENV_VAR = (
     "QUICKSCALE_BACKUPS_REMOTE_SECRET_ACCESS_KEY"
 )
+_REQUIRED_POSTGRESQL_MAJOR = 18
+_LEADING_MAJOR_VERSION_PATTERN = re.compile(r"^\s*(\d+)")
+_ANY_MAJOR_VERSION_PATTERN = re.compile(r"(\d+)")
+_POSTGRESQL_CUSTOM_ARCHIVE_MAGIC = b"PGDMP"
+
+
+def _postgresql_18_client_tooling_guidance() -> str:
+    """Return operator guidance for the PostgreSQL 18 client-tooling contract."""
+    return (
+        " Install PostgreSQL 18 client tooling via the PGDG apt repository plus "
+        "'postgresql-client-18' in Docker/CI runtimes, or run the command in an "
+        "environment that already provides PostgreSQL 18 pg_dump/pg_restore. "
+        "Existing generated projects must adopt those Docker/CI/E2E file changes "
+        "manually because quickscale apply does not rewrite user-owned files."
+    )
 
 
 class BackupError(Exception):
@@ -72,6 +90,17 @@ class RemoteDeleter(Protocol):
     """Protocol used for private remote artifact deletion."""
 
     def __call__(self, remote_key: str, policy: "BackupPolicySnapshot") -> None: ...
+
+
+class RemoteMaterializer(Protocol):
+    """Protocol used for temporary private remote restore materialization."""
+
+    def __call__(
+        self,
+        remote_key: str,
+        policy: "BackupPolicySnapshot",
+        destination: Path,
+    ) -> None: ...
 
 
 @dataclass(frozen=True)
@@ -189,6 +218,22 @@ class RestoreResult:
     executed: bool
     dry_run: bool
     message: str
+
+
+@dataclass(frozen=True)
+class ResolvedRestoreSource:
+    """Resolved local restore input used by the guarded restore pipeline."""
+
+    confirmation_value: str
+    local_path: Path
+    backup_format: str
+    artifact: BackupArtifact | None = None
+
+    def is_export_only(self) -> bool:
+        """Return whether this resolved source is blocked as export-only."""
+        if self.artifact is None:
+            return self.backup_format == "json"
+        return self.artifact.is_export_only()
 
 
 def ensure_default_policy() -> BackupPolicy:
@@ -534,8 +579,22 @@ def create_backup(
         engine = str(connection_settings.get("ENGINE", ""))
         database_name = str(connection_settings.get("NAME", ""))
         backup_note = ""
+        database_server_version: str | None = None
+        database_server_major: int | None = None
+        dump_client_version: str | None = None
+        dump_client_major: int | None = None
 
         if "postgresql" in engine:
+            (
+                database_server_version,
+                database_server_major,
+                dump_client_version,
+                dump_client_major,
+            ) = _require_postgresql_18_contract(
+                database_engine=engine,
+                executable="pg_dump",
+                operation="backup creation",
+            )
             backup_format = "pg_dump_custom"
             filename = build_backup_filename(
                 resolved_policy,
@@ -553,32 +612,11 @@ def create_backup(
             local_path = local_directory / filename
         try:
             if backup_format == "pg_dump_custom":
-                try:
-                    _dump_postgresql_database(
-                        local_path,
-                        connection_settings,
-                        shell_runner=shell_runner,
-                    )
-                except BackupError as exc:
-                    if not _should_fallback_to_json_backup(exc):
-                        raise
-
-                    cleanup_error = _cleanup_local_backup_file(local_path)
-                    if cleanup_error is not None:
-                        raise BackupError(
-                            "PostgreSQL JSON fallback was blocked because the failed "
-                            f"dump file could not be removed: {cleanup_error}"
-                        ) from exc
-
-                    backup_format = "json"
-                    filename = build_backup_filename(
-                        resolved_policy,
-                        now=backup_started_at,
-                        suffix="json",
-                    )
-                    local_path = local_directory / filename
-                    backup_note = f"PostgreSQL dump fallback used: {exc}"
-                    _dump_database_as_json(local_path)
+                _dump_postgresql_database(
+                    local_path,
+                    connection_settings,
+                    shell_runner=shell_runner,
+                )
             else:
                 _dump_database_as_json(local_path)
 
@@ -598,6 +636,10 @@ def create_backup(
             database_engine=engine,
             database_name=database_name,
             target_mode=resolved_policy.target_mode,
+            database_server_version=database_server_version,
+            database_server_major=database_server_major,
+            dump_client_version=dump_client_version,
+            dump_client_major=dump_client_major,
         )
         if backup_note:
             metadata["degraded_backup_reason"] = backup_note
@@ -619,6 +661,8 @@ def create_backup(
             backup_format=backup_format,
             database_engine=engine,
             database_name=database_name,
+            database_server_major=database_server_major,
+            dump_client_major=dump_client_major,
             metadata_json=metadata,
             validation_notes=backup_note,
             initiated_by=initiated_by,
@@ -676,23 +720,13 @@ def create_backup(
 
 def validate_backup_artifact(artifact: BackupArtifact) -> list[str]:
     """Validate artifact integrity and update its validation status."""
-    issues: list[str] = []
     local_path = Path(artifact.local_path) if artifact.local_path else None
-
-    if local_path is None or not local_path.exists():
-        issues.append("local backup artifact is missing")
-    else:
-        calculated_checksum = _compute_sha256(local_path)
-        if calculated_checksum != artifact.checksum_sha256:
-            issues.append("checksum mismatch detected")
-        actual_size = local_path.stat().st_size
-        if actual_size != artifact.size_bytes:
-            issues.append("size mismatch detected")
-        if artifact.backup_format == "json":
-            try:
-                json.loads(local_path.read_text(encoding="utf-8"))
-            except UnicodeDecodeError, json.JSONDecodeError:
-                issues.append("json backup payload is not valid JSON")
+    issues = _collect_local_backup_validation_issues(
+        local_path,
+        backup_format=artifact.backup_format,
+        expected_checksum=artifact.checksum_sha256,
+        expected_size=artifact.size_bytes,
+    )
 
     artifact.validated_at = django_timezone.now()
     artifact.validation_notes = "; ".join(issues)
@@ -776,66 +810,132 @@ def restore_backup_artifact(
     dry_run: bool = False,
     allow_production: bool = False,
     shell_runner: ShellCommandRunner | None = None,
+    policy: BackupPolicySnapshot | None = None,
+    remote_materializer: RemoteMaterializer | None = None,
 ) -> RestoreResult:
     """Run guarded restore validation or execution for a backup artifact."""
-    if confirmation.strip() != artifact.filename:
-        raise BackupRestoreBlocked(
-            "Confirmation must exactly match the backup filename."
+    return restore_backup_source(
+        artifact=artifact,
+        confirmation=confirmation,
+        dry_run=dry_run,
+        allow_production=allow_production,
+        shell_runner=shell_runner,
+        policy=policy,
+        remote_materializer=remote_materializer,
+    )
+
+
+def restore_backup_source(
+    *,
+    artifact: BackupArtifact | None = None,
+    file_path: str | Path | None = None,
+    confirmation: str,
+    dry_run: bool = False,
+    allow_production: bool = False,
+    shell_runner: ShellCommandRunner | None = None,
+    policy: BackupPolicySnapshot | None = None,
+    remote_materializer: RemoteMaterializer | None = None,
+) -> RestoreResult:
+    """Run guarded restore validation or execution for one restore source."""
+    with _resolve_restore_source(
+        artifact=artifact,
+        file_path=file_path,
+        policy=policy,
+        remote_materializer=remote_materializer,
+    ) as restore_source:
+        if confirmation.strip() != restore_source.confirmation_value:
+            raise BackupRestoreBlocked(
+                "Confirmation must exactly match the backup filename."
+            )
+
+        if restore_source.is_export_only():
+            if restore_source.artifact is None:
+                raise BackupRestoreBlocked(
+                    "Restore blocked because JSON file inputs are not a supported "
+                    "restore input."
+                )
+            raise BackupRestoreBlocked(
+                "Restore blocked because export_only artifacts are not a supported "
+                "restore input."
+            )
+
+        source_issues = _get_restore_source_validation_issues(restore_source)
+        if source_issues:
+            raise BackupRestoreBlocked(
+                "Restore blocked because backup validation failed: "
+                + "; ".join(source_issues)
+            )
+
+        current_engine = str(
+            django.db.connections["default"].settings_dict.get("ENGINE") or ""
+        ).strip()
+        compatibility_issues = _get_restore_source_compatibility_issues(
+            restore_source,
+            current_engine,
+        )
+        if compatibility_issues:
+            compatibility_prefix = (
+                "Restore blocked because artifact compatibility validation failed: "
+                if restore_source.artifact is not None
+                else "Restore blocked because restore compatibility validation failed: "
+            )
+            raise BackupRestoreBlocked(
+                compatibility_prefix + "; ".join(compatibility_issues)
+            )
+
+        if dry_run:
+            _ensure_postgresql_18_restore_runtime(current_engine)
+            _ensure_operator_supplied_custom_archive_valid(
+                restore_source,
+                shell_runner=shell_runner,
+            )
+            return RestoreResult(
+                executed=False,
+                dry_run=True,
+                message="Restore validation completed successfully (dry run).",
+            )
+
+        if not _restore_execution_allowed():
+            message = (
+                "Restore execution is blocked outside local development until "
+                "QUICKSCALE_BACKUPS_ALLOW_RESTORE=true is set."
+            )
+            if allow_production:
+                message += " --allow-production does not bypass this environment gate."
+            raise BackupRestoreBlocked(message)
+
+        if restore_source.backup_format != "pg_dump_custom":
+            raise BackupRestoreBlocked(
+                "Executable restore is only supported for PostgreSQL custom-format "
+                "artifacts. Use --dry-run for JSON fallback backups."
+            )
+
+        _ensure_postgresql_18_restore_runtime(current_engine)
+        _ensure_operator_supplied_custom_archive_valid(
+            restore_source,
+            shell_runner=shell_runner,
         )
 
-    issues = validate_backup_artifact(artifact)
-    if issues:
-        raise BackupRestoreBlocked(
-            "Restore blocked because backup validation failed: " + "; ".join(issues)
+        connection_settings = django.db.connections["default"].settings_dict
+        command, env = _build_pg_restore_command(
+            restore_source.local_path,
+            connection_settings,
         )
+        runner = shell_runner or _run_shell_command
+        runner(command, env=env)
 
-    compatibility_issues = _get_restore_compatibility_issues(artifact)
-    if compatibility_issues:
-        raise BackupRestoreBlocked(
-            "Restore blocked because artifact compatibility validation failed: "
-            + "; ".join(compatibility_issues)
-        )
+        if restore_source.artifact is not None:
+            restore_source.artifact.status = BackupArtifact.STATUS_RESTORED
+            restore_source.artifact.restored_at = django_timezone.now()
+            restore_source.artifact.save(
+                update_fields=["status", "restored_at", "updated_at"]
+            )
 
-    if dry_run:
         return RestoreResult(
-            executed=False,
-            dry_run=True,
-            message="Restore validation completed successfully (dry run).",
+            executed=True,
+            dry_run=False,
+            message=(f"Restore executed for {restore_source.confirmation_value}."),
         )
-
-    if not _restore_execution_allowed():
-        message = (
-            "Restore execution is blocked outside local development until "
-            "QUICKSCALE_BACKUPS_ALLOW_RESTORE=true is set."
-        )
-        if allow_production:
-            message += " --allow-production does not bypass this environment gate."
-        raise BackupRestoreBlocked(message)
-
-    if artifact.backup_format != "pg_dump_custom":
-        raise BackupRestoreBlocked(
-            "Executable restore is only supported for PostgreSQL custom-format "
-            "artifacts. Use --dry-run for JSON fallback backups."
-        )
-
-    local_path = download_backup_path(artifact)
-    connection_settings = django.db.connections["default"].settings_dict
-    command, env = _build_pg_restore_command(
-        local_path,
-        connection_settings,
-    )
-    runner = shell_runner or _run_shell_command
-    runner(command, env=env)
-
-    artifact.status = BackupArtifact.STATUS_RESTORED
-    artifact.restored_at = django_timezone.now()
-    artifact.save(update_fields=["status", "restored_at", "updated_at"])
-
-    return RestoreResult(
-        executed=True,
-        dry_run=False,
-        message=f"Restore executed for {artifact.filename}.",
-    )
 
 
 def _build_backup_metadata(
@@ -845,8 +945,12 @@ def _build_backup_metadata(
     database_engine: str,
     database_name: str,
     target_mode: str,
+    database_server_version: str | None = None,
+    database_server_major: int | None = None,
+    dump_client_version: str | None = None,
+    dump_client_major: int | None = None,
 ) -> dict[str, Any]:
-    metadata = {
+    metadata: dict[str, Any] = {
         "created_at": created_at.astimezone(timezone.utc).isoformat(),
         "backup_format": backup_format,
         "database_engine": database_engine,
@@ -857,9 +961,17 @@ def _build_backup_metadata(
         "module_versions": _collect_module_versions(),
         "app_version": str(getattr(settings, "QUICKSCALE_APP_VERSION", "unknown")),
     }
-    database_server_version = _get_database_server_version(database_engine)
-    if database_server_version is not None:
-        metadata["database_server_version"] = database_server_version
+    resolved_database_server_version = database_server_version
+    if resolved_database_server_version is None:
+        resolved_database_server_version = _get_database_server_version(database_engine)
+    if resolved_database_server_version is not None:
+        metadata["database_server_version"] = resolved_database_server_version
+    if database_server_major is not None:
+        metadata["database_server_major"] = database_server_major
+    if dump_client_version is not None:
+        metadata["pg_dump_version"] = dump_client_version
+    if dump_client_major is not None:
+        metadata["dump_client_major"] = dump_client_major
     return metadata
 
 
@@ -882,6 +994,119 @@ def _get_database_server_version(engine: str) -> str | None:
 
     database_server_version = str(row[0]).strip()
     return database_server_version or None
+
+
+def _extract_leading_major_version(version_text: str | None) -> int | None:
+    """Return the leading major version number from a server version string."""
+    if not version_text:
+        return None
+
+    match = _LEADING_MAJOR_VERSION_PATTERN.match(version_text)
+    if match is None:
+        return None
+
+    major = int(match.group(1))
+    return major if major > 0 else None
+
+
+def _extract_any_major_version(version_text: str | None) -> int | None:
+    """Return the first major version number found in a tool version string."""
+    if not version_text:
+        return None
+
+    match = _ANY_MAJOR_VERSION_PATTERN.search(version_text)
+    if match is None:
+        return None
+
+    major = int(match.group(1))
+    return major if major > 0 else None
+
+
+def _require_postgresql_18_contract(
+    *,
+    database_engine: str,
+    executable: str,
+    operation: str,
+) -> tuple[str, int, str, int]:
+    """Require a PostgreSQL 18 server plus PostgreSQL 18 client tooling."""
+    if _database_engine_family(database_engine) != "postgresql":
+        raise BackupConfigurationError(
+            "PostgreSQL contract checks require DATABASES['default']['ENGINE'] to "
+            "use PostgreSQL."
+        )
+
+    database_server_version = _get_database_server_version(database_engine)
+    if database_server_version is None:
+        raise BackupError(
+            "PostgreSQL "
+            f"{operation} requires a PostgreSQL {_REQUIRED_POSTGRESQL_MAJOR} "
+            "server, but the current server version could not be determined."
+        )
+    database_server_major = _extract_leading_major_version(database_server_version)
+    if database_server_major is None:
+        raise BackupError(
+            "PostgreSQL "
+            f"{operation} requires a PostgreSQL {_REQUIRED_POSTGRESQL_MAJOR} "
+            "server, but the current server version could not be determined."
+        )
+    if database_server_major != _REQUIRED_POSTGRESQL_MAJOR:
+        raise BackupError(
+            "PostgreSQL "
+            f"{operation} requires a PostgreSQL {_REQUIRED_POSTGRESQL_MAJOR} "
+            f"server, found '{database_server_version}'."
+        )
+
+    tool_version = _get_postgresql_tool_version(executable)
+    tool_major = _extract_any_major_version(tool_version)
+    if tool_major is None:
+        raise BackupError(
+            "PostgreSQL "
+            f"{operation} requires PostgreSQL {_REQUIRED_POSTGRESQL_MAJOR} "
+            f"{executable} tooling, but the installed tool version could not be "
+            "determined." + _postgresql_18_client_tooling_guidance()
+        )
+    if tool_major != _REQUIRED_POSTGRESQL_MAJOR:
+        raise BackupError(
+            "PostgreSQL "
+            f"{operation} requires PostgreSQL {_REQUIRED_POSTGRESQL_MAJOR} "
+            f"{executable} tooling, found '{tool_version}'."
+            + _postgresql_18_client_tooling_guidance()
+        )
+
+    return database_server_version, database_server_major, tool_version, tool_major
+
+
+def _get_postgresql_tool_version(executable: str) -> str:
+    """Return the installed PostgreSQL client-tool version string."""
+    guidance = (
+        _postgresql_18_client_tooling_guidance()
+        if executable in {"pg_dump", "pg_restore"}
+        else ""
+    )
+    try:
+        result = subprocess.run(
+            [executable, "--version"],
+            capture_output=True,
+            check=False,
+            text=True,
+            env=os.environ.copy(),
+        )
+    except FileNotFoundError as exc:
+        raise _missing_executable_backup_error(executable) from exc
+
+    if result.returncode != 0:
+        stderr = result.stderr.strip() or result.stdout.strip() or "unknown error"
+        raise BackupError(
+            f"Unable to determine {executable} version: {stderr}{guidance}"
+        )
+
+    output = result.stdout.strip() or result.stderr.strip()
+    if not output:
+        raise BackupError(
+            f"Unable to determine {executable} version: command returned no output."
+            + guidance
+        )
+    return output
 
 
 def _database_server_version_query(engine: str) -> str | None:
@@ -917,7 +1142,238 @@ def _get_restore_compatibility_issues(artifact: BackupArtifact) -> list[str]:
             f"engine '{current_engine}' (expected '{expected_format}')"
         )
 
+    if (
+        artifact_engine_family == "postgresql"
+        and artifact.backup_format == "pg_dump_custom"
+    ):
+        if (
+            artifact.database_server_major is not None
+            and artifact.database_server_major != _REQUIRED_POSTGRESQL_MAJOR
+        ):
+            issues.append(
+                "artifact database server major "
+                f"'{artifact.database_server_major}' is incompatible with the "
+                f"PostgreSQL {_REQUIRED_POSTGRESQL_MAJOR} restore contract"
+            )
+        if (
+            artifact.dump_client_major is not None
+            and artifact.dump_client_major != _REQUIRED_POSTGRESQL_MAJOR
+        ):
+            issues.append(
+                "artifact dump client major "
+                f"'{artifact.dump_client_major}' is incompatible with the "
+                f"PostgreSQL {_REQUIRED_POSTGRESQL_MAJOR} restore contract"
+            )
+
     return issues
+
+
+def _collect_local_backup_validation_issues(
+    local_path: Path | None,
+    *,
+    backup_format: str,
+    expected_checksum: str | None = None,
+    expected_size: int | None = None,
+) -> list[str]:
+    """Validate one local backup file without mutating artifact state."""
+    issues: list[str] = []
+
+    if local_path is None or not local_path.exists():
+        issues.append("local backup artifact is missing")
+        return issues
+
+    if expected_checksum is not None:
+        calculated_checksum = _compute_sha256(local_path)
+        if calculated_checksum != expected_checksum:
+            issues.append("checksum mismatch detected")
+
+    if expected_size is not None:
+        actual_size = local_path.stat().st_size
+        if actual_size != expected_size:
+            issues.append("size mismatch detected")
+
+    if backup_format == "json":
+        try:
+            json.loads(local_path.read_text(encoding="utf-8"))
+        except UnicodeDecodeError, json.JSONDecodeError:
+            issues.append("json backup payload is not valid JSON")
+
+    return issues
+
+
+def _get_restore_source_validation_issues(
+    restore_source: ResolvedRestoreSource,
+) -> list[str]:
+    """Return validation issues for the resolved restore source."""
+    if restore_source.artifact is not None:
+        return _collect_local_backup_validation_issues(
+            restore_source.local_path,
+            backup_format=restore_source.artifact.backup_format,
+            expected_checksum=restore_source.artifact.checksum_sha256,
+            expected_size=restore_source.artifact.size_bytes,
+        )
+
+    if not restore_source.local_path.exists():
+        return [f"restore file not found: {restore_source.local_path}"]
+    if not restore_source.local_path.is_file():
+        return [f"restore file is not a regular file: {restore_source.local_path}"]
+    return []
+
+
+def _get_restore_source_compatibility_issues(
+    restore_source: ResolvedRestoreSource,
+    current_engine: str,
+) -> list[str]:
+    """Return compatibility issues for artifact and operator-supplied sources."""
+    if restore_source.artifact is not None:
+        return _get_restore_compatibility_issues(restore_source.artifact)
+
+    if _database_engine_family(current_engine) != "postgresql":
+        return ["operator-supplied restore files require a PostgreSQL target database"]
+    return []
+
+
+def _ensure_operator_supplied_custom_archive_valid(
+    restore_source: ResolvedRestoreSource,
+    *,
+    shell_runner: ShellCommandRunner | None = None,
+) -> None:
+    """Require file-mode restore inputs to be real PostgreSQL custom archives."""
+    if (
+        restore_source.artifact is not None
+        or restore_source.backup_format != "pg_dump_custom"
+    ):
+        return
+
+    try:
+        with restore_source.local_path.open("rb") as handle:
+            archive_magic = handle.read(len(_POSTGRESQL_CUSTOM_ARCHIVE_MAGIC))
+    except OSError as exc:
+        raise BackupRestoreBlocked(
+            "Restore blocked because the operator-supplied file could not be "
+            f"inspected: {exc}"
+        ) from exc
+
+    if archive_magic != _POSTGRESQL_CUSTOM_ARCHIVE_MAGIC:
+        raise BackupRestoreBlocked(
+            "Restore blocked because operator-supplied file is not a valid "
+            "PostgreSQL custom archive."
+        )
+
+    runner = shell_runner or _run_shell_command
+    try:
+        runner(["pg_restore", "--list", str(restore_source.local_path)], env=None)
+    except BackupError as exc:
+        raise BackupRestoreBlocked(
+            "Restore blocked because operator-supplied file is not a valid "
+            f"PostgreSQL custom archive: {exc}"
+        ) from exc
+
+
+def _normalize_restore_file_path(file_path: str | Path) -> Path:
+    """Resolve operator-supplied restore file paths relative to the current cwd."""
+    resolved_path = Path(file_path).expanduser()
+    if not resolved_path.is_absolute():
+        resolved_path = Path.cwd() / resolved_path
+    return resolved_path
+
+
+def _detect_restore_file_format(file_path: Path) -> str:
+    """Infer the operator-supplied restore input format from the file name."""
+    if file_path.suffix.lower() == ".json":
+        return "json"
+    return "pg_dump_custom"
+
+
+@contextmanager
+def _resolve_restore_source(
+    *,
+    artifact: BackupArtifact | None,
+    file_path: str | Path | None,
+    policy: BackupPolicySnapshot | None,
+    remote_materializer: RemoteMaterializer | None,
+) -> Iterator[ResolvedRestoreSource]:
+    """Resolve one restore source into a local file path for the guarded pipeline."""
+    has_artifact = artifact is not None
+    has_file = file_path is not None
+    if has_artifact == has_file:
+        raise BackupRestoreBlocked(
+            "Choose exactly one restore source: an artifact id or --file PATH."
+        )
+
+    if file_path is not None:
+        resolved_path = _normalize_restore_file_path(file_path)
+        yield ResolvedRestoreSource(
+            confirmation_value=resolved_path.name,
+            local_path=resolved_path,
+            backup_format=_detect_restore_file_format(resolved_path),
+        )
+        return
+
+    assert artifact is not None
+    local_path = Path(artifact.local_path) if artifact.local_path else None
+    if local_path is not None and local_path.exists():
+        yield ResolvedRestoreSource(
+            confirmation_value=artifact.filename,
+            local_path=local_path,
+            backup_format=artifact.backup_format,
+            artifact=artifact,
+        )
+        return
+
+    if not artifact.remote_key:
+        raise BackupRestoreBlocked(
+            "Restore blocked because the local backup artifact is missing and no "
+            "private remote artifact is available."
+        )
+
+    resolved_policy = _resolve_artifact_remote_policy(
+        artifact,
+        policy or load_policy_snapshot(),
+    )
+    materializer = remote_materializer or _materialize_private_remote_key
+    with TemporaryDirectory(prefix="quickscale-backups-restore-") as temp_dir:
+        materialized_path = Path(temp_dir) / artifact.filename
+        try:
+            materializer(artifact.remote_key, resolved_policy, materialized_path)
+        except BackupError as exc:
+            raise BackupRestoreBlocked(
+                "Restore blocked because private remote materialization failed for "
+                f"{artifact.filename}: {exc}"
+            ) from exc
+        except Exception as exc:
+            raise BackupRestoreBlocked(
+                "Restore blocked because private remote materialization failed for "
+                f"{artifact.filename}: {exc}"
+            ) from exc
+
+        if not materialized_path.exists():
+            raise BackupRestoreBlocked(
+                "Restore blocked because private remote materialization did not "
+                f"produce a local file for {artifact.filename}."
+            )
+
+        yield ResolvedRestoreSource(
+            confirmation_value=artifact.filename,
+            local_path=materialized_path,
+            backup_format=artifact.backup_format,
+            artifact=artifact,
+        )
+
+
+def _ensure_postgresql_18_restore_runtime(current_engine: str) -> None:
+    """Require the current restore runtime to satisfy the PostgreSQL 18 contract."""
+    if _database_engine_family(current_engine) != "postgresql":
+        return
+
+    try:
+        _require_postgresql_18_contract(
+            database_engine=current_engine,
+            executable="pg_restore",
+            operation="restore",
+        )
+    except BackupError as exc:
+        raise BackupRestoreBlocked(str(exc)) from exc
 
 
 def _database_engine_family(engine: str) -> str:
@@ -1055,45 +1511,20 @@ def _run_shell_command(
         )
     except FileNotFoundError as exc:
         executable = str(command[0]).strip() if command else "command"
-        hint = ""
-        if executable in {"pg_dump", "pg_restore"}:
-            hint = (
-                " Install the PostgreSQL client package "
-                "(for example 'postgresql-client') in the runtime image or run "
-                "the command in an environment that provides it."
-            )
-        raise BackupError(
-            f"Required executable '{executable}' is not installed in this runtime."
-            f"{hint}"
-        ) from exc
+        raise _missing_executable_backup_error(executable) from exc
     if result.returncode != 0:
         stderr = result.stderr.strip() or result.stdout.strip() or "unknown error"
         raise BackupError(f"Command failed: {' '.join(command)} :: {stderr}")
 
 
-def _should_fallback_to_json_backup(error: BackupError) -> bool:
-    message = str(error).lower()
-    if "server version mismatch" in message:
-        return True
-
-    if "required executable 'pg_dump'" not in message:
-        return False
-
-    return (
-        _local_json_backup_fallback_allowed() or _railway_json_backup_fallback_allowed()
+def _missing_executable_backup_error(executable: str) -> BackupError:
+    """Build a consistent missing-executable error for shell-backed operations."""
+    hint = ""
+    if executable in {"pg_dump", "pg_restore"}:
+        hint = _postgresql_18_client_tooling_guidance()
+    return BackupError(
+        f"Required executable '{executable}' is not installed in this runtime.{hint}"
     )
-
-
-def _local_json_backup_fallback_allowed() -> bool:
-    if settings.DEBUG:
-        return True
-
-    environment = str(os.getenv("QUICKSCALE_ENVIRONMENT", "")).strip().lower()
-    return environment in {"local", "development", "dev", "test", "ci"}
-
-
-def _railway_json_backup_fallback_allowed() -> bool:
-    return any(environment_key.startswith("RAILWAY_") for environment_key in os.environ)
 
 
 def _resolve_private_remote_credentials(
@@ -1148,6 +1579,41 @@ def _upload_to_private_remote(local_path: Path, policy: BackupPolicySnapshot) ->
     with local_path.open("rb") as handle:
         storage.save(remote_key, File(handle, name=local_path.name))
     return remote_key
+
+
+def _materialize_private_remote_key(
+    remote_key: str,
+    policy: BackupPolicySnapshot,
+    destination: Path,
+) -> None:
+    from storages.backends.s3 import S3Storage  # type: ignore[import-untyped]
+
+    access_key_id, secret_access_key = _resolve_private_remote_credentials(policy)
+
+    options: dict[str, Any] = {
+        "bucket_name": policy.remote_bucket_name,
+        "querystring_auth": True,
+        "default_acl": "",
+    }
+    if policy.remote_endpoint_url.strip():
+        options["endpoint_url"] = policy.remote_endpoint_url.strip()
+    if policy.remote_region_name.strip():
+        options["region_name"] = policy.remote_region_name.strip()
+    options["access_key"] = access_key_id
+    options["secret_key"] = secret_access_key
+
+    storage = S3Storage(**options)
+    destination.parent.mkdir(parents=True, exist_ok=True)
+    try:
+        with storage.open(remote_key, mode="rb") as source_handle:
+            with destination.open("wb") as destination_handle:
+                shutil.copyfileobj(source_handle, destination_handle)
+    except Exception as exc:
+        cleanup_error = _cleanup_local_backup_file(destination)
+        details = f"Private remote materialization failed for {remote_key}: {exc}"
+        if cleanup_error is not None:
+            details += f"; cleanup failed: {cleanup_error}"
+        raise BackupError(details) from exc
 
 
 def _delete_private_remote_key(remote_key: str, policy: BackupPolicySnapshot) -> None:

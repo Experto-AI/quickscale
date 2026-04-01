@@ -13,14 +13,25 @@ on:
   pull_request:
     branches: [ main ]
     paths:
-      - 'quickscale_core/**'
-      - 'quickscale_cli/**'
+      - 'quickscale_modules/backups/**'
+      - 'quickscale_cli/src/quickscale_cli/commands/plan_command.py'
+      - 'quickscale_cli/src/quickscale_cli/commands/apply_command.py'
+      - 'quickscale_cli/tests/test_apply_command_extended.py'
+      - 'quickscale_cli/tests/test_module_lifecycle_cycle.py'
+      - 'quickscale_core/src/quickscale_core/generator/templates/Dockerfile.j2'
+      - 'quickscale_core/src/quickscale_core/generator/templates/github/workflows/ci.yml.j2'
+      - 'quickscale_core/tests/test_generator/test_templates.py'
+      - 'quickscale_core/tests/test_html_theme_integration.py'
+      - 'quickscale_core/tests/test_react_theme_integration.py'
+      - 'quickscale_core/tests/test_integration.py'
+      - 'quickscale_core/tests/test_e2e_full_workflow.py'
+      - '.github/workflows/ci.yml'
       - '.github/workflows/e2e.yml'
 
 jobs:
   e2e-tests:
     name: Full E2E Tests (PostgreSQL + Playwright)
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
 
     services:
       postgres:
@@ -53,12 +64,30 @@ jobs:
         virtualenvs-create: true
         virtualenvs-in-project: true
 
-    - name: Install system dependencies
+    - name: Install system dependencies and PostgreSQL 18 client tooling
       run: |
         sudo apt-get update
         sudo apt-get install -y \
-          postgresql-client \
+          ca-certificates \
+          curl \
+          gnupg \
           docker-compose
+        distro_codename="$(
+          . /etc/os-release
+          echo "$VERSION_CODENAME"
+        )"
+        sudo install -d /usr/share/postgresql-common/pgdg
+        curl -fsSL https://www.postgresql.org/media/keys/ACCC4CF8.asc \
+          | sudo gpg --dearmor -o /usr/share/postgresql-common/pgdg/apt.postgresql.org.asc
+        echo "deb [signed-by=/usr/share/postgresql-common/pgdg/apt.postgresql.org.asc] http://apt.postgresql.org/pub/repos/apt ${distro_codename}-pgdg main" \
+          | sudo tee /etc/apt/sources.list.d/pgdg.list > /dev/null
+        sudo apt-get update
+        sudo apt-get install -y postgresql-client-18
+
+    - name: Verify PostgreSQL 18 client tooling
+      run: |
+        pg_dump --version | grep "PostgreSQL) 18"
+        pg_restore --version | grep "PostgreSQL) 18"
 
     - name: Cache Poetry dependencies
       uses: actions/cache@v4
@@ -131,7 +160,7 @@ jobs:
 
   docker-build-test:
     name: Test Generated Project Docker Build
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
 
     steps:
     - name: Checkout code
@@ -153,12 +182,20 @@ jobs:
     - name: Generate test project
       run: |
         cd /tmp
-        poetry -C $GITHUB_WORKSPACE/quickscale_cli run quickscale init test_docker_project
+        printf '\n2\n\ny\ny\nn\ny\n' | poetry -C $GITHUB_WORKSPACE/quickscale_cli run quickscale plan test_docker_project
+        cd /tmp/test_docker_project
+        printf 'y\n' | poetry -C $GITHUB_WORKSPACE/quickscale_cli run quickscale apply quickscale.yml --no-docker
 
     - name: Verify Dockerfile exists
       run: |
         test -f /tmp/test_docker_project/Dockerfile
         test -f /tmp/test_docker_project/docker-compose.yml
+
+    - name: Verify generated CI workflow contract
+      run: |
+        grep -q "runs-on: ubuntu-24.04" /tmp/test_docker_project/.github/workflows/ci.yml
+        grep -q "apt.postgresql.org" /tmp/test_docker_project/.github/workflows/ci.yml
+        grep -q "postgresql-client-18" /tmp/test_docker_project/.github/workflows/ci.yml
 
     - name: Validate docker-compose configuration
       working-directory: /tmp/test_docker_project
@@ -173,3 +210,8 @@ jobs:
     - name: Verify image was created
       run: |
         docker images | grep test_docker_project
+
+    - name: Verify generated image includes PostgreSQL 18 client tooling
+      run: |
+        docker run --rm test_docker_project:test pg_dump --version | grep "PostgreSQL) 18"
+        docker run --rm test_docker_project:test pg_restore --version | grep "PostgreSQL) 18"

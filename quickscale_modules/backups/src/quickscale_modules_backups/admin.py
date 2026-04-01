@@ -213,8 +213,9 @@ class BackupPolicyAdmin(admin.ModelAdmin):
     def restore_notice(self, obj: BackupPolicy) -> str:
         return (
             "Destructive restore execution is intentionally CLI-only. Admin users can "
-            "validate and download artifacts, but restore requires explicit CLI "
-            "confirmation and environment guards."
+            "validate and download local artifacts, but restore requires the guarded "
+            "CLI with either an artifact id or --file PATH, explicit confirmation, "
+            "and environment guards."
         )
 
     @admin.action(description="Create backup now")
@@ -255,6 +256,7 @@ class BackupArtifactAdmin(admin.ModelAdmin):
     list_display = [
         "filename",
         "status",
+        "restore_scope_badge",
         "storage_target",
         "size_bytes",
         "trigger",
@@ -267,6 +269,7 @@ class BackupArtifactAdmin(admin.ModelAdmin):
     readonly_fields = [
         "filename",
         "storage_target",
+        "restore_scope_badge",
         "local_path",
         "remote_key",
         "checksum_sha256",
@@ -274,6 +277,8 @@ class BackupArtifactAdmin(admin.ModelAdmin):
         "backup_format",
         "database_engine",
         "database_name",
+        "database_server_major",
+        "dump_client_major",
         "metadata_pretty",
         "status",
         "trigger",
@@ -286,6 +291,7 @@ class BackupArtifactAdmin(admin.ModelAdmin):
         "updated_at",
         "download_path_display",
         "download_link",
+        "admin_availability_notice",
         "restore_cli_notice",
     ]
     fieldsets = [
@@ -295,6 +301,7 @@ class BackupArtifactAdmin(admin.ModelAdmin):
                 "fields": [
                     "filename",
                     "status",
+                    "restore_scope_badge",
                     "storage_target",
                     "backup_format",
                     "trigger",
@@ -312,6 +319,7 @@ class BackupArtifactAdmin(admin.ModelAdmin):
                     "remote_key",
                     "download_path_display",
                     "download_link",
+                    "admin_availability_notice",
                 ]
             },
         ),
@@ -323,6 +331,8 @@ class BackupArtifactAdmin(admin.ModelAdmin):
                     "size_bytes",
                     "database_engine",
                     "database_name",
+                    "database_server_major",
+                    "dump_client_major",
                     "validation_notes",
                     "validated_at",
                     "restored_at",
@@ -359,6 +369,10 @@ class BackupArtifactAdmin(admin.ModelAdmin):
             return False
         return Path(obj.local_path).exists()
 
+    @admin.display(description="Classification")
+    def restore_scope_badge(self, obj: BackupArtifact) -> str:
+        return obj.effective_restore_scope() or "unclassified"
+
     @admin.display(description="Download")
     def download_link(self, obj: BackupArtifact) -> str:
         if not self._has_downloadable_local_file(obj):
@@ -374,6 +388,23 @@ class BackupArtifactAdmin(admin.ModelAdmin):
     def download_path_display(self, obj: BackupArtifact) -> str:
         return obj.download_path() or "Unavailable"
 
+    @admin.display(description="Admin availability")
+    def admin_availability_notice(self, obj: BackupArtifact) -> str:
+        if self._has_downloadable_local_file(obj):
+            return (
+                "Local file present. Admin download and validate can operate on "
+                "this artifact."
+            )
+        if obj.local_path:
+            return (
+                "Local file missing. Admin download and validate remain local-file-"
+                "only and cannot operate until the local artifact is present."
+            )
+        return (
+            "No local file recorded. Admin download and validate remain local-file-"
+            "only and do not materialize remote-only artifacts."
+        )
+
     @admin.display(description="Metadata")
     def metadata_pretty(self, obj: BackupArtifact) -> str:
         return format_html(
@@ -383,9 +414,35 @@ class BackupArtifactAdmin(admin.ModelAdmin):
 
     @admin.display(description="Restore note")
     def restore_cli_notice(self, obj: BackupArtifact) -> str:
+        if obj.is_export_only():
+            classification_note = (
+                "Classification: export_only. This artifact is export-only and is "
+                "not a supported restore input."
+            )
+        elif obj.is_local_only():
+            classification_note = (
+                "Classification: local_only. This artifact is treated "
+                "conservatively as local-only until portable compatibility is "
+                "recorded."
+            )
+        elif obj.is_portable():
+            classification_note = (
+                "Classification: portable. This artifact is marked as a portable "
+                "restore candidate, but restore still runs only through the guarded "
+                "CLI workflow."
+            )
+        else:
+            classification_note = (
+                "Classification: unclassified. No restore classification has been "
+                "recorded for this artifact yet."
+            )
         return (
-            "Use 'python manage.py backups_restore <id> --confirm <filename>' for "
-            "destructive restores. Admin intentionally does not execute restores."
+            f"{classification_note} "
+            "Admin download and validate only work when the local file is present. "
+            "Use 'python manage.py backups_restore <id> --confirm <filename>' or "
+            "'python manage.py backups_restore --file /path/to/backup.dump --confirm "
+            "backup.dump' for destructive restores. Admin intentionally does not "
+            "execute restores."
         )
 
     @admin.action(description="Validate selected backups")

@@ -180,6 +180,14 @@ The `quickscale deploy railway` command follows this config-first workflow:
 
 Railway automatically provisions PostgreSQL and provides the `DATABASE_URL` environment variable. QuickScale's generated settings are pre-configured to use this.
 
+## PostgreSQL 18 Backups Contract On Railway
+
+- QuickScale-generated Railway deployments provision PostgreSQL 18, and the backups follow-up defines PostgreSQL 18 custom dumps as the real backup/restore path for generated Railway projects.
+- JSON artifacts are export-only; do not treat them as a restore surface for Railway PostgreSQL deployments.
+- Admin download and validate stay local-file-only in v1. Restore stays CLI-only and guarded.
+- `quickscale apply` does not rewrite user-owned Docker, CI, or E2E files in already-generated projects. If your project predates the PostgreSQL 18 backups follow-up, manually adopt the PostgreSQL 18 tooling updates reflected in the current Docker, CI, and E2E templates.
+- This guide reflects the implemented contract on main: runtime enforcement and generated templates now match it.
+
 ## Static Files
 
 QuickScale uses WhiteNoise for static file serving, which works out-of-the-box on Railway without additional CDN configuration.

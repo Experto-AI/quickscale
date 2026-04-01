@@ -368,7 +368,21 @@ docker:
   create_superuser: false
 ```
 
-On the main branch, `backups` is the admin/ops-first safety option in that set: private local artifacts by default, optional private remote offload, staff-only admin create/validate/download/delete flows, CLI-only guarded restore, JSON export fallback outside PostgreSQL/test environments, no standalone admin upload/offload action, and additional at-rest encryption deferred beyond v0.77.
+On the main branch, `backups` is the admin/ops-first safety option in that set: private local artifacts are the default, optional private remote offload is supported, and generated local Docker and Railway PostgreSQL projects use PostgreSQL 18 custom dumps as the real backup/restore path. JSON artifacts are export-only rather than restore inputs, admin download and validate stay local-file-only in v1, restore stays CLI-only and guarded, and already-generated projects that predate this follow-up must manually adopt the current Docker/CI/E2E PostgreSQL 18 tooling updates.
+
+If you enable `backups` in a generated PostgreSQL project, the guarded restore surface supports both tracked artifact ids and operator-supplied dump files:
+
+```bash
+poetry run python manage.py backups_create
+poetry run python manage.py backups_restore 12 --confirm BACKUP_FILENAME.dump --dry-run
+poetry run python manage.py backups_restore --file /path/to/BACKUP_FILENAME.dump --confirm BACKUP_FILENAME.dump --dry-run
+
+export QUICKSCALE_BACKUPS_ALLOW_RESTORE=true
+poetry run python manage.py backups_restore 12 --confirm BACKUP_FILENAME.dump
+poetry run python manage.py backups_restore --file /path/to/BACKUP_FILENAME.dump --confirm BACKUP_FILENAME.dump
+```
+
+JSON artifacts remain export-only, not restore inputs. Existing generated projects must manually adopt later Docker/CI/E2E PostgreSQL 18 tooling updates because `quickscale apply` does not rewrite those user-owned files.
 
 **The `apply` command** executes a configuration file to generate the project:
 

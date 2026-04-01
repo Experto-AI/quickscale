@@ -7,8 +7,60 @@ on:
     branches: [ main ]
 
 jobs:
+  backups-validation:
+    name: Fail Fast Backups PG18 Contract
+    runs-on: ubuntu-24.04
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Set up Python 3.14
+      uses: actions/setup-python@v5
+      with:
+        python-version: "3.14"
+
+    - name: Install Poetry
+      uses: snok/install-poetry@v1
+      with:
+        version: latest
+        virtualenvs-create: true
+        virtualenvs-in-project: true
+
+    - name: Install PostgreSQL 18 client tooling
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y ca-certificates curl gnupg
+        distro_codename="$(
+          . /etc/os-release
+          echo "$VERSION_CODENAME"
+        )"
+        sudo install -d /usr/share/postgresql-common/pgdg
+        curl -fsSL https://www.postgresql.org/media/keys/ACCC4CF8.asc \
+          | sudo gpg --dearmor -o /usr/share/postgresql-common/pgdg/apt.postgresql.org.asc
+        echo "deb [signed-by=/usr/share/postgresql-common/pgdg/apt.postgresql.org.asc] http://apt.postgresql.org/pub/repos/apt ${distro_codename}-pgdg main" \
+          | sudo tee /etc/apt/sources.list.d/pgdg.list > /dev/null
+        sudo apt-get update
+        sudo apt-get install -y postgresql-client-18
+
+    - name: Verify PostgreSQL 18 client tooling
+      run: |
+        pg_dump --version | grep "PostgreSQL) 18"
+        pg_restore --version | grep "PostgreSQL) 18"
+
+    - name: Install dependencies
+      run: |
+        poetry install --with dev
+
+    - name: Run backups module validation tests
+      run: |
+        PYTHONPATH="quickscale_modules/backups:quickscale_modules/backups/src" \
+          poetry run pytest quickscale_modules/backups/tests -q --no-cov \
+            -p pytest_django --ds=tests.settings
+
   test:
     name: Run Tests (Unit + Integration)
+    needs: backups-validation
     runs-on: ubuntu-latest
     strategy:
       matrix:
@@ -130,6 +182,7 @@ jobs:
 
   lint-cli:
     name: Lint CLI Package
+    needs: backups-validation
     runs-on: ubuntu-latest
 
     steps:

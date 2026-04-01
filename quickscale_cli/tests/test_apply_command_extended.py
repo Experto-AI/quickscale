@@ -1235,6 +1235,29 @@ class TestDisplayNextSteps:
         assert "OPS_BACKUPS_ACCESS_KEY_ID" in output
         assert "OPS_BACKUPS_SECRET_ACCESS_KEY" in output
         assert "Configure runtime credentials via env vars" in output
+        assert "backups_restore --file /path/to/BACKUP_FILENAME.dump" in output
+        assert "JSON artifacts are export-only" in output
+        assert "Admin download and validate stay local-file-only in v1." in output
+        assert "Freshly generated Docker and GitHub CI files" in output
+
+    def test_backups_existing_project_mentions_manual_pg18_tooling_adoption(
+        self,
+        tmp_path,
+        capsys,
+    ):
+        """Existing-project apply output should call out manual Docker/CI/E2E adoption."""
+        config = Mock()
+        config.project.slug = "myapp"
+        config.docker.start = False
+        config.modules = {"backups": Mock(options={})}
+
+        _display_next_steps(tmp_path, config, False, existing_project=True)
+        output = capsys.readouterr().out
+
+        assert (
+            "quickscale apply does not rewrite user-owned Docker/CI/E2E files" in output
+        )
+        assert "predates the backups follow-up" in output
 
     def test_notifications_live_delivery_mentions_dns_and_env_vars(
         self,
@@ -1509,6 +1532,7 @@ class TestExecuteApplySteps:
             ctx.qs_config,
             False,
             True,
+            existing_project=False,
         )
 
     @patch("quickscale_cli.commands.apply_command._display_next_steps")

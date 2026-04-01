@@ -567,6 +567,11 @@ class TestDevOpsTemplateLoading:
         template = jinja_env.get_template("pyproject.toml.j2")
         assert template is not None
 
+    def test_github_ci_workflow_loads(self, jinja_env: Environment) -> None:
+        """Test generated GitHub CI workflow template loads without errors."""
+        template = jinja_env.get_template("github/workflows/ci.yml.j2")
+        assert template is not None
+
     def test_dockerfile_loads(self, jinja_env: Environment) -> None:
         """Test Dockerfile template loads without errors."""
         template = jinja_env.get_template("Dockerfile.j2")
@@ -622,6 +627,22 @@ class TestDevOpsTemplateRendering:
         assert "testproject" in output
         assert "[tool.poetry]" in output
 
+    def test_github_ci_workflow_renders(
+        self, jinja_env: Environment, test_context: dict[str, str]
+    ) -> None:
+        """Test generated GitHub CI workflow renders the PG18 tooling contract."""
+        template = jinja_env.get_template("github/workflows/ci.yml.j2")
+        output = template.render(test_context)
+        assert output is not None
+        assert len(output) > 0
+        assert "name: CI" in output
+        assert "pytest --cov=testproject" in output
+        assert "runs-on: ubuntu-24.04" in output
+        assert "apt.postgresql.org" in output
+        assert "postgresql-client-18" in output
+        assert "pg_dump --version" in output
+        assert "pg_restore --version" in output
+
     def test_dockerfile_renders(
         self, jinja_env: Environment, test_context: dict[str, str]
     ) -> None:
@@ -631,7 +652,7 @@ class TestDevOpsTemplateRendering:
         assert output is not None
         assert len(output) > 0
         assert "testproject" in output
-        assert "FROM python:" in output
+        assert "FROM python:3.14-slim-bookworm" in output
 
     def test_docker_compose_renders(
         self, jinja_env: Environment, test_context: dict[str, str]
@@ -855,8 +876,10 @@ class TestDockerfileContent:
         """Test Dockerfile uses multi-stage build pattern."""
         template = jinja_env.get_template("Dockerfile.j2")
         output = template.render(test_context)
-        assert "FROM python:3.14-slim as builder" in output
-        assert "FROM python:3.14-slim" in output
+        assert "FROM python:3.14-slim-bookworm as builder" in output
+        assert "FROM python:3.14-slim-bookworm" in output
+        assert "bookworm-pgdg" in output
+        assert "postgresql-client-18" in output
 
     def test_non_root_user(
         self, jinja_env: Environment, test_context: dict[str, str]

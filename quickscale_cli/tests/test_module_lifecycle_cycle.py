@@ -247,6 +247,8 @@ def test_apply_backups_local_adds_private_gitignore_and_state() -> None:
             in result.output
         )
         assert "poetry run python manage.py backups_create" in result.output
+        assert "backups_restore --file /path/to/BACKUP_FILENAME.dump" in result.output
+        assert "JSON artifacts are export-only" in result.output
 
         gitignore_text = (project_path / ".gitignore").read_text()
         assert "# QuickScale private backup artifacts" in gitignore_text
@@ -321,6 +323,8 @@ def test_apply_backups_private_remote_stays_offline_with_env_var_refs() -> None:
         assert "OPS_BACKUPS_ACCESS_KEY_ID" in result.output
         assert "OPS_BACKUPS_SECRET_ACCESS_KEY" in result.output
         assert "Configure runtime credentials via env vars" in result.output
+        assert "backups_restore --file /path/to/BACKUP_FILENAME.dump" in result.output
+        assert "Freshly generated Docker and GitHub CI files" in result.output
 
         gitignore_text = (project_path / ".gitignore").read_text()
         assert ".quickscale/backups/" in gitignore_text

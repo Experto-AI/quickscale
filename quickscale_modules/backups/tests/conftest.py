@@ -62,6 +62,14 @@ def artifact_file(tmp_path: Path) -> Path:
 
 
 @pytest.fixture
+def postgresql_artifact_file(tmp_path: Path) -> Path:
+    """Return a filesystem path with sample pg_dump-style artifact content."""
+    path = tmp_path / "sample-backup.dump"
+    path.write_bytes(b"pg_dump_custom_artifact")
+    return path
+
+
+@pytest.fixture
 def backup_artifact(db, artifact_file: Path, superuser) -> "BackupArtifact":
     """Return a backup artifact pointing at a real local file."""
     from quickscale_modules_backups.models import BackupArtifact
@@ -75,6 +83,39 @@ def backup_artifact(db, artifact_file: Path, superuser) -> "BackupArtifact":
         database_engine="django.db.backends.sqlite3",
         database_name="test.sqlite3",
         metadata_json={"environment": "test"},
+        initiated_by=superuser,
+    )
+
+
+@pytest.fixture
+def postgresql_backup_artifact(
+    db,
+    postgresql_artifact_file: Path,
+    superuser,
+) -> "BackupArtifact":
+    """Return a PostgreSQL custom-format artifact pointing at a real local file."""
+    from quickscale_modules_backups.models import BackupArtifact
+
+    return BackupArtifact.objects.create(
+        filename=postgresql_artifact_file.name,
+        local_path=str(postgresql_artifact_file),
+        checksum_sha256=hashlib.sha256(
+            postgresql_artifact_file.read_bytes()
+        ).hexdigest(),
+        size_bytes=postgresql_artifact_file.stat().st_size,
+        backup_format="pg_dump_custom",
+        restore_scope=BackupArtifact.RESTORE_SCOPE_LOCAL_ONLY,
+        database_engine="django.db.backends.postgresql",
+        database_name="quickscale_test",
+        database_server_major=18,
+        dump_client_major=18,
+        metadata_json={
+            "environment": "test",
+            "database_server_version": "18.3 (Debian 18.3-1)",
+            "database_server_major": 18,
+            "pg_dump_version": "pg_dump (PostgreSQL) 18.4",
+            "dump_client_major": 18,
+        },
         initiated_by=superuser,
     )
 

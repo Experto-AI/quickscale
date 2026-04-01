@@ -71,8 +71,9 @@ class TestHtmlThemeIntegration:
 
         dockerfile = (output_path / "Dockerfile").read_text()
 
-        assert "postgresql-client" in dockerfile
-        assert "python:3.14-slim" in dockerfile
+        assert "postgresql-client-18" in dockerfile
+        assert "apt.postgresql.org" in dockerfile
+        assert "python:3.14-slim-bookworm" in dockerfile
 
     def test_html_theme_generates_backups_admin_overrides(self, tmp_path: Path) -> None:
         """showcase_html should expose backup actions on admin index pages."""

@@ -512,16 +512,33 @@ URLs must use `public_base_url` when configured and fall back to `MEDIA_URL`
 behavior in local development when it is blank. `custom_domain` is not part of
 the supported storage contract.
 
-**Backups privacy rule (v0.77.0):** `modules.backups` artifacts are private
-operational files. They MUST NOT use `public_base_url`, public media URLs, or
-template-visible asset helpers. Scheduled execution remains command-driven only
+**Backups contract rule (v0.77.0 follow-up):** `modules.backups` artifacts are
+private operational files. They MUST NOT use `public_base_url`, public media
+URLs, or template-visible asset helpers. For generated QuickScale PostgreSQL
+projects, the supported local Docker and Railway backup/restore contract
+targets PostgreSQL 18 server/client tooling and native PostgreSQL custom dumps
+as the real disaster-recovery path. JSON artifacts are export-only: they
+remain acceptable for non-PostgreSQL development/test fixture export and
+operator inspection, but they are NOT a supported restore surface for
+generated PostgreSQL projects. Admin create/delete/history flows remain
+available, but admin download and validate stay local-file-only in v1; there
+is no standalone admin upload/offload action and no admin materialization path
+for remote-only artifacts. Scheduled execution remains command-driven only
 (`manage.py backups_create --scheduled` or equivalent platform cron job), and
-destructive restore execution is CLI-only with explicit filename confirmation
-plus environment guards. Private-remote credentials MUST be referenced by
+destructive restore execution remains CLI-only with explicit confirmation plus
+environment guards. Private-remote credentials MUST be referenced by
 environment-variable name only; raw credential values MUST NOT be persisted in
 `quickscale.yml`, `.quickscale/state.yml`, or `BackupArtifact` rows. When
 `modules.backups.local_directory` is repo-relative, `quickscale apply` MUST add
 that directory to `.gitignore` without hiding `.quickscale/state.yml`.
+`quickscale apply` MAY update managed backend/runtime wiring, but it does NOT
+rewrite user-owned Docker, Compose, CI, or E2E workflow files in already-
+generated projects; when the PostgreSQL 18 backups contract requires new image
+packages or runner tooling, existing generated projects MUST adopt those
+changes manually, while fresh generations pick them up from the updated
+templates. This section defines the authoritative contract for the implemented
+follow-up, and the current runtime enforcement, generated templates, and
+workflow coverage are aligned to it.
 
 **Decision Rule**:
 - **v0.72.0+**: Plan/apply is the primary workflow

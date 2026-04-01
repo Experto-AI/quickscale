@@ -997,6 +997,7 @@ def _display_next_steps(
     qs_config: QuickScaleConfig,
     no_docker: bool,
     docker_started: bool | None = None,
+    existing_project: bool = False,
 ) -> None:
     """Display success message and next steps."""
     click.echo("\n" + "=" * 50)
@@ -1029,8 +1030,26 @@ def _display_next_steps(
         click.echo("\n  # Backups operations")
         click.echo("  poetry run python manage.py backups_create")
         click.echo(
-            "  poetry run python manage.py backups_restore <id> --confirm <filename> --dry-run"
+            "  poetry run python manage.py backups_restore <id> --confirm BACKUP_FILENAME.dump --dry-run"
         )
+        click.echo(
+            "  poetry run python manage.py backups_restore --file /path/to/BACKUP_FILENAME.dump --confirm BACKUP_FILENAME.dump --dry-run"
+        )
+        click.echo(
+            "  export QUICKSCALE_BACKUPS_ALLOW_RESTORE=true  # Required for destructive restores outside local DEBUG"
+        )
+        click.echo(
+            "  JSON artifacts are export-only; generated PostgreSQL projects restore only PostgreSQL 18 custom dumps."
+        )
+        click.echo("  Admin download and validate stay local-file-only in v1.")
+        if existing_project:
+            click.echo(
+                "  quickscale apply does not rewrite user-owned Docker/CI/E2E files; manually adopt the PostgreSQL 18 tooling updates if this project predates the backups follow-up."
+            )
+        else:
+            click.echo(
+                "  Freshly generated Docker and GitHub CI files already install PostgreSQL 18 client tooling."
+            )
         if backups_options.get("target_mode") == "private_remote":
             access_key_env_var = str(
                 backups_options.get(
@@ -1372,7 +1391,13 @@ def _execute_apply_steps(
     )
 
     # Display next steps
-    _display_next_steps(ctx.output_path, ctx.qs_config, no_docker, docker_started)
+    _display_next_steps(
+        ctx.output_path,
+        ctx.qs_config,
+        no_docker,
+        docker_started,
+        existing_project=ctx.existing_state is not None,
+    )
 
 
 @click.command()
