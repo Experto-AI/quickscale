@@ -188,6 +188,17 @@ class TestBackupPolicyAdmin:
         ):
             policy_admin.create_backup_now(request, BackupPolicy.objects.all())
 
+    def test_restore_notice_mentions_file_mode_without_broadening_admin_surface(
+        self,
+        backup_policy: BackupPolicy,
+    ) -> None:
+        policy_admin = _policy_admin()
+
+        notice = policy_admin.restore_notice(backup_policy)
+
+        assert "--file PATH" in notice
+        assert "validate and download local artifacts" in notice
+
     def test_create_backup_now_button_runs_from_custom_operator_endpoint(
         self,
         admin_client: Client,
@@ -320,8 +331,73 @@ class TestBackupArtifactAdmin:
             )
         )
 
+        content = response.content.decode("utf-8")
+
         assert response.status_code == 200
-        assert "Download" in response.content.decode("utf-8")
+        assert "Download" in content
+        assert "export_only" in content
+        assert "not a supported restore input" in content
+
+    @pytest.mark.parametrize(
+        ("restore_scope", "expected_fragment"),
+        [
+            (
+                BackupArtifact.RESTORE_SCOPE_LOCAL_ONLY,
+                "Classification: local_only.",
+            ),
+            (
+                BackupArtifact.RESTORE_SCOPE_PORTABLE,
+                "Classification: portable.",
+            ),
+        ],
+    )
+    def test_restore_cli_notice_reports_scope_specific_guidance(
+        self,
+        artifact_file: Path,
+        restore_scope: str,
+        expected_fragment: str,
+    ) -> None:
+        artifact = BackupArtifact.objects.create(
+            filename=f"artifact-{restore_scope}.dump",
+            local_path=str(artifact_file),
+            checksum_sha256=hashlib.sha256(artifact_file.read_bytes()).hexdigest(),
+            size_bytes=artifact_file.stat().st_size,
+            backup_format="pg_dump_custom",
+            restore_scope=restore_scope,
+            database_engine="django.db.backends.postgresql",
+            database_name="quickscale_test",
+        )
+
+        artifact_admin = _artifact_admin()
+        notice = artifact_admin.restore_cli_notice(artifact)
+
+        assert expected_fragment in notice
+        assert (
+            "Admin download and validate only work when the local file is present."
+            in notice
+        )
+        assert "--file /path/to/backup.dump" in notice
+
+    def test_admin_availability_notice_explains_remote_only_artifacts(self) -> None:
+        artifact = BackupArtifact.objects.create(
+            filename="artifact-remote.dump",
+            storage_target=BackupArtifact.STORAGE_TARGET_PRIVATE_REMOTE,
+            local_path="",
+            remote_key="private/backups/artifact-remote.dump",
+            checksum_sha256="abc123",
+            size_bytes=100,
+            backup_format="pg_dump_custom",
+            restore_scope=BackupArtifact.RESTORE_SCOPE_LOCAL_ONLY,
+            database_engine="django.db.backends.postgresql",
+            database_name="quickscale_test",
+        )
+
+        artifact_admin = _artifact_admin()
+
+        assert artifact_admin.admin_availability_notice(artifact) == (
+            "No local file recorded. Admin download and validate remain local-file-"
+            "only and do not materialize remote-only artifacts."
+        )
 
     def test_metadata_pretty_escapes_embedded_html(
         self,

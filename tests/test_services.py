@@ -25,6 +25,7 @@ from quickscale_modules_backups.services import (
     BackupPolicySnapshot,
     BackupRestoreBlocked,
     RemoteDeleter,
+    RemoteMaterializer,
     RemoteUploader,
     ShellCommandRunner,
     build_backup_filename,
@@ -32,9 +33,56 @@ from quickscale_modules_backups.services import (
     load_policy_snapshot,
     prune_expired_backups,
     restore_backup_artifact,
+    restore_backup_source,
     validate_backup_artifact,
     validate_policy_snapshot,
 )
+
+
+def _set_postgresql_default_connection(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Make the default connection look like a PostgreSQL runtime for service tests."""
+    monkeypatch.setitem(
+        connections["default"].settings_dict,
+        "ENGINE",
+        "django.db.backends.postgresql",
+    )
+    monkeypatch.setitem(
+        connections["default"].settings_dict,
+        "NAME",
+        "quickscale_test",
+    )
+
+
+def _mock_postgresql_18_contract(
+    monkeypatch: pytest.MonkeyPatch,
+    *,
+    server_version: str = "18.3 (Debian 18.3-1)",
+    tool_versions: dict[str, str] | None = None,
+) -> None:
+    """Mock PostgreSQL server and tool discovery for PG18 contract checks."""
+    resolved_tool_versions = {
+        "pg_dump": "pg_dump (PostgreSQL) 18.4",
+        "pg_restore": "pg_restore (PostgreSQL) 18.4",
+    }
+    if tool_versions is not None:
+        resolved_tool_versions.update(tool_versions)
+
+    def fake_get_database_server_version(_engine: str) -> str:
+        return server_version
+
+    def fake_get_postgresql_tool_version(executable: str) -> str:
+        return resolved_tool_versions[executable]
+
+    monkeypatch.setattr(
+        backup_services,
+        "_get_database_server_version",
+        fake_get_database_server_version,
+    )
+    monkeypatch.setattr(
+        backup_services,
+        "_get_postgresql_tool_version",
+        fake_get_postgresql_tool_version,
+    )
 
 
 @pytest.mark.django_db
@@ -128,7 +176,7 @@ class TestPolicyValidation:
 class TestBackupLifecycle:
     """Tests for backup creation, validation, pruning, and restore guardrails."""
 
-    def test_create_backup_uses_json_fallback_for_sqlite(
+    def test_create_backup_uses_json_export_for_sqlite(
         self,
         superuser: AbstractBaseUser,
         backup_policy: BackupPolicy,
@@ -147,8 +195,58 @@ class TestBackupLifecycle:
         assert artifact.size_bytes > 0
         assert artifact.metadata_json["database_engine"] == "django.db.backends.sqlite3"
         assert artifact.metadata_json["database_server_version"]
+        assert artifact.database_server_major is None
+        assert artifact.dump_client_major is None
         payload = json.loads(Path(artifact.local_path).read_text(encoding="utf-8"))
         assert isinstance(payload, list)
+
+    def test_create_backup_persists_postgresql_18_contract_metadata(
+        self,
+        superuser: AbstractBaseUser,
+        local_backup_settings: Path,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        policy = BackupPolicySnapshot(
+            retention_days=14,
+            naming_prefix="db",
+            target_mode=BackupPolicy.TARGET_MODE_LOCAL,
+            local_directory=str(local_backup_settings),
+            remote_bucket_name="",
+            remote_prefix="backups/private",
+            remote_endpoint_url="",
+            remote_region_name="",
+            remote_access_key_id_env_var="",
+            remote_secret_access_key_env_var="",
+            automation_enabled=False,
+            schedule="0 2 * * *",
+        )
+        _set_postgresql_default_connection(monkeypatch)
+        _mock_postgresql_18_contract(monkeypatch)
+
+        def successful_runner(
+            command: list[str], *, env: dict[str, str] | None = None
+        ) -> None:
+            del env
+            local_path = Path(command[command.index("--file") + 1])
+            local_path.write_bytes(b"pg_dump_custom_data")
+
+        artifact = create_backup(
+            initiated_by=superuser,
+            trigger="manual",
+            policy=policy,
+            shell_runner=cast(ShellCommandRunner, successful_runner),
+        )
+
+        assert artifact.backup_format == "pg_dump_custom"
+        assert Path(artifact.local_path).exists()
+        assert artifact.database_server_major == 18
+        assert artifact.dump_client_major == 18
+        assert (
+            artifact.metadata_json["database_server_version"] == "18.3 (Debian 18.3-1)"
+        )
+        assert artifact.metadata_json["database_server_major"] == 18
+        assert artifact.metadata_json["pg_dump_version"] == "pg_dump (PostgreSQL) 18.4"
+        assert artifact.metadata_json["dump_client_major"] == 18
 
     def test_create_backup_private_remote_calls_uploader(
         self,
@@ -366,16 +464,8 @@ class TestBackupLifecycle:
             automation_enabled=False,
             schedule="0 2 * * *",
         )
-        monkeypatch.setitem(
-            connections["default"].settings_dict,
-            "ENGINE",
-            "django.db.backends.postgresql",
-        )
-        monkeypatch.setitem(
-            connections["default"].settings_dict,
-            "NAME",
-            "quickscale_test",
-        )
+        _set_postgresql_default_connection(monkeypatch)
+        _mock_postgresql_18_contract(monkeypatch)
 
         def failing_runner(
             command: list[str], *, env: dict[str, str] | None = None
@@ -397,7 +487,7 @@ class TestBackupLifecycle:
         assert not any(local_backup_settings.iterdir())
 
     @override_settings(DEBUG=True)
-    def test_create_backup_falls_back_to_json_when_pg_dump_is_missing_in_debug(
+    def test_create_backup_reports_missing_pg_dump_as_backup_error_in_debug(
         self,
         superuser: AbstractBaseUser,
         local_backup_settings: Path,
@@ -417,15 +507,15 @@ class TestBackupLifecycle:
             automation_enabled=False,
             schedule="0 2 * * *",
         )
-        monkeypatch.setitem(
-            connections["default"].settings_dict,
-            "ENGINE",
-            "django.db.backends.postgresql",
-        )
-        monkeypatch.setitem(
-            connections["default"].settings_dict,
-            "NAME",
-            "quickscale_test",
+        _set_postgresql_default_connection(monkeypatch)
+
+        def fake_get_database_server_version(_engine: str) -> str:
+            return "18.3 (Debian 18.3-1)"
+
+        monkeypatch.setattr(
+            backup_services,
+            "_get_database_server_version",
+            fake_get_database_server_version,
         )
 
         def missing_pg_dump(*args: Any, **kwargs: Any) -> None:
@@ -434,21 +524,23 @@ class TestBackupLifecycle:
 
         monkeypatch.setattr(backup_services.subprocess, "run", missing_pg_dump)
 
-        artifact = create_backup(
-            initiated_by=superuser,
-            trigger="manual",
-            policy=policy,
-        )
+        with pytest.raises(
+            BackupError,
+            match="Required executable 'pg_dump' is not installed in this runtime",
+        ) as exc_info:
+            create_backup(
+                initiated_by=superuser,
+                trigger="manual",
+                policy=policy,
+            )
 
-        assert artifact.backup_format == "json"
-        assert Path(artifact.local_path).exists()
-        assert "PostgreSQL dump fallback used" in artifact.validation_notes
-        assert "degraded_backup_reason" in artifact.metadata_json
-        payload = json.loads(Path(artifact.local_path).read_text(encoding="utf-8"))
-        assert isinstance(payload, list)
+        assert "PGDG apt repository" in str(exc_info.value)
+        assert "postgresql-client-18" in str(exc_info.value)
+        assert BackupArtifact.objects.count() == 0
+        assert not any(local_backup_settings.iterdir())
 
     @override_settings(DEBUG=True)
-    def test_create_backup_falls_back_to_json_on_pg_dump_version_mismatch(
+    def test_create_backup_rejects_non_18_postgresql_server_in_debug(
         self,
         superuser: AbstractBaseUser,
         local_backup_settings: Path,
@@ -468,38 +560,27 @@ class TestBackupLifecycle:
             automation_enabled=False,
             schedule="0 2 * * *",
         )
-        monkeypatch.setitem(
-            connections["default"].settings_dict,
-            "ENGINE",
-            "django.db.backends.postgresql",
-        )
-        monkeypatch.setitem(
-            connections["default"].settings_dict,
-            "NAME",
-            "quickscale_test",
+        _set_postgresql_default_connection(monkeypatch)
+        _mock_postgresql_18_contract(
+            monkeypatch,
+            server_version="17.9 (Debian 17.9-1)",
         )
 
-        def mismatched_runner(
-            command: list[str], *, env: dict[str, str] | None = None
-        ) -> None:
-            del command, env
-            raise BackupError(
-                "Command failed: pg_dump ... :: pg_dump: error: aborting because of server version mismatch"
+        with pytest.raises(
+            BackupError,
+            match="requires a PostgreSQL 18 server",
+        ):
+            create_backup(
+                initiated_by=superuser,
+                trigger="manual",
+                policy=policy,
             )
 
-        artifact = create_backup(
-            initiated_by=superuser,
-            trigger="manual",
-            policy=policy,
-            shell_runner=cast(ShellCommandRunner, mismatched_runner),
-        )
-
-        assert artifact.backup_format == "json"
-        assert Path(artifact.local_path).exists()
-        assert "server version mismatch" in artifact.validation_notes
+        assert BackupArtifact.objects.count() == 0
+        assert not any(local_backup_settings.iterdir())
 
     @override_settings(DEBUG=False)
-    def test_create_backup_falls_back_to_json_on_pg_dump_version_mismatch_outside_debug(
+    def test_create_backup_rejects_non_18_pg_dump_tooling_outside_debug(
         self,
         superuser: AbstractBaseUser,
         local_backup_settings: Path,
@@ -519,38 +600,31 @@ class TestBackupLifecycle:
             automation_enabled=False,
             schedule="0 2 * * *",
         )
-        monkeypatch.setitem(
-            connections["default"].settings_dict,
-            "ENGINE",
-            "django.db.backends.postgresql",
-        )
-        monkeypatch.setitem(
-            connections["default"].settings_dict,
-            "NAME",
-            "quickscale_test",
+        _set_postgresql_default_connection(monkeypatch)
+        _mock_postgresql_18_contract(
+            monkeypatch,
+            tool_versions={"pg_dump": "pg_dump (PostgreSQL) 17.9"},
         )
 
-        def mismatched_runner(
-            command: list[str], *, env: dict[str, str] | None = None
-        ) -> None:
-            del command, env
-            raise BackupError(
-                "Command failed: pg_dump ... :: pg_dump: error: aborting because of server version mismatch"
+        with pytest.raises(
+            BackupError,
+            match="requires PostgreSQL 18 pg_dump tooling",
+        ) as exc_info:
+            create_backup(
+                initiated_by=superuser,
+                trigger="manual",
+                policy=policy,
             )
 
-        artifact = create_backup(
-            initiated_by=superuser,
-            trigger="manual",
-            policy=policy,
-            shell_runner=cast(ShellCommandRunner, mismatched_runner),
+        assert "postgresql-client-18" in str(exc_info.value)
+        assert "quickscale apply does not rewrite user-owned files" in str(
+            exc_info.value
         )
-
-        assert artifact.backup_format == "json"
-        assert Path(artifact.local_path).exists()
-        assert "server version mismatch" in artifact.validation_notes
+        assert BackupArtifact.objects.count() == 0
+        assert not any(local_backup_settings.iterdir())
 
     @override_settings(DEBUG=False)
-    def test_create_backup_falls_back_to_json_when_pg_dump_is_missing_on_railway(
+    def test_create_backup_reports_missing_pg_dump_as_backup_error_on_railway(
         self,
         superuser: AbstractBaseUser,
         local_backup_settings: Path,
@@ -570,15 +644,15 @@ class TestBackupLifecycle:
             automation_enabled=False,
             schedule="0 2 * * *",
         )
-        monkeypatch.setitem(
-            connections["default"].settings_dict,
-            "ENGINE",
-            "django.db.backends.postgresql",
-        )
-        monkeypatch.setitem(
-            connections["default"].settings_dict,
-            "NAME",
-            "quickscale_test",
+        _set_postgresql_default_connection(monkeypatch)
+
+        def fake_get_database_server_version(_engine: str) -> str:
+            return "18.3 (Debian 18.3-1)"
+
+        monkeypatch.setattr(
+            backup_services,
+            "_get_database_server_version",
+            fake_get_database_server_version,
         )
         monkeypatch.setenv("RAILWAY_ENVIRONMENT_ID", "env-local-test")
 
@@ -588,15 +662,18 @@ class TestBackupLifecycle:
 
         monkeypatch.setattr(backup_services.subprocess, "run", missing_pg_dump)
 
-        artifact = create_backup(
-            initiated_by=superuser,
-            trigger="manual",
-            policy=policy,
-        )
+        with pytest.raises(
+            BackupError,
+            match="Required executable 'pg_dump' is not installed in this runtime",
+        ):
+            create_backup(
+                initiated_by=superuser,
+                trigger="manual",
+                policy=policy,
+            )
 
-        assert artifact.backup_format == "json"
-        assert Path(artifact.local_path).exists()
-        assert "PostgreSQL dump fallback used" in artifact.validation_notes
+        assert BackupArtifact.objects.count() == 0
+        assert not any(local_backup_settings.iterdir())
 
     @override_settings(DEBUG=False)
     def test_create_backup_reports_missing_pg_dump_as_backup_error_outside_debug(
@@ -619,15 +696,15 @@ class TestBackupLifecycle:
             automation_enabled=False,
             schedule="0 2 * * *",
         )
-        monkeypatch.setitem(
-            connections["default"].settings_dict,
-            "ENGINE",
-            "django.db.backends.postgresql",
-        )
-        monkeypatch.setitem(
-            connections["default"].settings_dict,
-            "NAME",
-            "quickscale_test",
+        _set_postgresql_default_connection(monkeypatch)
+
+        def fake_get_database_server_version(_engine: str) -> str:
+            return "18.3 (Debian 18.3-1)"
+
+        monkeypatch.setattr(
+            backup_services,
+            "_get_database_server_version",
+            fake_get_database_server_version,
         )
 
         def missing_pg_dump(*args: Any, **kwargs: Any) -> None:
@@ -869,12 +946,15 @@ class TestBackupLifecycle:
     @override_settings(DEBUG=False)
     def test_restore_requires_environment_guard(
         self,
-        backup_artifact: BackupArtifact,
+        postgresql_backup_artifact: BackupArtifact,
+        monkeypatch: pytest.MonkeyPatch,
     ) -> None:
+        _set_postgresql_default_connection(monkeypatch)
+
         with pytest.raises(BackupRestoreBlocked):
             restore_backup_artifact(
-                backup_artifact,
-                confirmation=backup_artifact.filename,
+                postgresql_backup_artifact,
+                confirmation=postgresql_backup_artifact.filename,
                 dry_run=False,
             )
 
@@ -895,9 +975,10 @@ class TestBackupLifecycle:
     @override_settings(DEBUG=False)
     def test_restore_allow_production_still_requires_environment_guard(
         self,
-        backup_artifact: BackupArtifact,
+        postgresql_backup_artifact: BackupArtifact,
         monkeypatch: pytest.MonkeyPatch,
     ) -> None:
+        _set_postgresql_default_connection(monkeypatch)
         monkeypatch.delenv("QUICKSCALE_BACKUPS_ALLOW_RESTORE", raising=False)
 
         with pytest.raises(
@@ -905,8 +986,8 @@ class TestBackupLifecycle:
             match="QUICKSCALE_BACKUPS_ALLOW_RESTORE=true",
         ) as exc_info:
             restore_backup_artifact(
-                backup_artifact,
-                confirmation=backup_artifact.filename,
+                postgresql_backup_artifact,
+                confirmation=postgresql_backup_artifact.filename,
                 dry_run=False,
                 allow_production=True,
             )
@@ -916,9 +997,10 @@ class TestBackupLifecycle:
     @override_settings(DEBUG=False)
     def test_restore_command_allow_production_still_requires_environment_guard(
         self,
-        backup_artifact: BackupArtifact,
+        postgresql_backup_artifact: BackupArtifact,
         monkeypatch: pytest.MonkeyPatch,
     ) -> None:
+        _set_postgresql_default_connection(monkeypatch)
         monkeypatch.delenv("QUICKSCALE_BACKUPS_ALLOW_RESTORE", raising=False)
 
         with pytest.raises(
@@ -927,26 +1009,27 @@ class TestBackupLifecycle:
         ):
             call_command(
                 "backups_restore",
-                str(backup_artifact.pk),
+                str(postgresql_backup_artifact.pk),
                 "--confirm",
-                backup_artifact.filename,
+                postgresql_backup_artifact.filename,
                 "--allow-production",
                 stdout=StringIO(),
                 stderr=StringIO(),
             )
 
-    def test_restore_dry_run_succeeds_for_json_backup(
+    def test_restore_dry_run_rejects_export_only_backup(
         self,
         backup_artifact: BackupArtifact,
     ) -> None:
-        result = restore_backup_artifact(
-            backup_artifact,
-            confirmation=backup_artifact.filename,
-            dry_run=True,
-        )
-
-        assert result.executed is False
-        assert result.dry_run is True
+        with pytest.raises(
+            BackupRestoreBlocked,
+            match="export_only artifacts are not a supported restore input",
+        ):
+            restore_backup_artifact(
+                backup_artifact,
+                confirmation=backup_artifact.filename,
+                dry_run=True,
+            )
 
     def test_restore_execution_rejects_json_backup_even_when_restore_gate_is_open(
         self,
@@ -964,7 +1047,7 @@ class TestBackupLifecycle:
 
         with pytest.raises(
             BackupRestoreBlocked,
-            match="Executable restore is only supported for PostgreSQL custom-format",
+            match="export_only artifacts are not a supported restore input",
         ):
             restore_backup_artifact(
                 backup_artifact,
@@ -977,24 +1060,498 @@ class TestBackupLifecycle:
 
     def test_restore_dry_run_rejects_incompatible_engine_and_format(
         self,
-        backup_artifact: BackupArtifact,
+        postgresql_backup_artifact: BackupArtifact,
+    ) -> None:
+        with pytest.raises(
+            BackupRestoreBlocked,
+            match="artifact compatibility validation failed",
+        ) as exc_info:
+            restore_backup_artifact(
+                postgresql_backup_artifact,
+                confirmation=postgresql_backup_artifact.filename,
+                dry_run=True,
+            )
+
+        assert "artifact database engine" in str(exc_info.value)
+        assert "artifact backup format 'pg_dump_custom'" in str(exc_info.value)
+
+    def test_restore_dry_run_requires_postgresql_18_server(
+        self,
+        postgresql_backup_artifact: BackupArtifact,
         monkeypatch: pytest.MonkeyPatch,
     ) -> None:
-        monkeypatch.setitem(
-            connections["default"].settings_dict,
-            "ENGINE",
-            "django.db.backends.postgresql",
+        _set_postgresql_default_connection(monkeypatch)
+        _mock_postgresql_18_contract(
+            monkeypatch,
+            server_version="17.9 (Debian 17.9-1)",
         )
+
+        with pytest.raises(
+            BackupRestoreBlocked,
+            match="requires a PostgreSQL 18 server",
+        ):
+            restore_backup_artifact(
+                postgresql_backup_artifact,
+                confirmation=postgresql_backup_artifact.filename,
+                dry_run=True,
+            )
+
+    def test_restore_dry_run_requires_pg_restore_18_tooling(
+        self,
+        postgresql_backup_artifact: BackupArtifact,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        _set_postgresql_default_connection(monkeypatch)
+        _mock_postgresql_18_contract(
+            monkeypatch,
+            tool_versions={"pg_restore": "pg_restore (PostgreSQL) 17.9"},
+        )
+
+        with pytest.raises(
+            BackupRestoreBlocked,
+            match="requires PostgreSQL 18 pg_restore tooling",
+        ) as exc_info:
+            restore_backup_artifact(
+                postgresql_backup_artifact,
+                confirmation=postgresql_backup_artifact.filename,
+                dry_run=True,
+            )
+
+        assert "PGDG apt repository" in str(exc_info.value)
+        assert "postgresql-client-18" in str(exc_info.value)
+
+    def test_restore_dry_run_allows_legacy_local_only_artifact_without_normalized_majors(
+        self,
+        postgresql_backup_artifact: BackupArtifact,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        _set_postgresql_default_connection(monkeypatch)
+        _mock_postgresql_18_contract(monkeypatch)
+        postgresql_backup_artifact.database_server_major = None
+        postgresql_backup_artifact.dump_client_major = None
+        postgresql_backup_artifact.save(
+            update_fields=["database_server_major", "dump_client_major", "updated_at"]
+        )
+
+        result = restore_backup_artifact(
+            postgresql_backup_artifact,
+            confirmation=postgresql_backup_artifact.filename,
+            dry_run=True,
+        )
+
+        assert result.executed is False
+        assert result.dry_run is True
+
+    @pytest.mark.parametrize(
+        ("field_name", "field_value", "expected_fragment"),
+        [
+            (
+                "database_server_major",
+                17,
+                "artifact database server major '17'",
+            ),
+            (
+                "dump_client_major",
+                17,
+                "artifact dump client major '17'",
+            ),
+        ],
+    )
+    def test_restore_dry_run_rejects_recorded_non_18_postgresql_metadata(
+        self,
+        postgresql_backup_artifact: BackupArtifact,
+        monkeypatch: pytest.MonkeyPatch,
+        field_name: str,
+        field_value: int,
+        expected_fragment: str,
+    ) -> None:
+        _set_postgresql_default_connection(monkeypatch)
+        _mock_postgresql_18_contract(monkeypatch)
+        setattr(postgresql_backup_artifact, field_name, field_value)
+        postgresql_backup_artifact.save(update_fields=[field_name, "updated_at"])
 
         with pytest.raises(
             BackupRestoreBlocked,
             match="artifact compatibility validation failed",
         ) as exc_info:
             restore_backup_artifact(
-                backup_artifact,
-                confirmation=backup_artifact.filename,
+                postgresql_backup_artifact,
+                confirmation=postgresql_backup_artifact.filename,
                 dry_run=True,
             )
 
-        assert "artifact database engine" in str(exc_info.value)
-        assert "artifact backup format 'json'" in str(exc_info.value)
+        assert expected_fragment in str(exc_info.value)
+
+    def test_restore_dry_run_materializes_private_remote_artifact_when_local_file_is_missing(
+        self,
+        postgresql_backup_artifact: BackupArtifact,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        _set_postgresql_default_connection(monkeypatch)
+        _mock_postgresql_18_contract(monkeypatch)
+        original_local_path = Path(postgresql_backup_artifact.local_path)
+        original_payload = original_local_path.read_bytes()
+        original_local_path.unlink()
+        postgresql_backup_artifact.storage_target = (
+            BackupArtifact.STORAGE_TARGET_PRIVATE_REMOTE
+        )
+        postgresql_backup_artifact.remote_key = "private/backups/remote-artifact.dump"
+        postgresql_backup_artifact.remote_bucket_name = "artifact-bucket"
+        postgresql_backup_artifact.remote_endpoint_url = (
+            "https://artifact.example.invalid"
+        )
+        postgresql_backup_artifact.remote_region_name = "artifact-region"
+        postgresql_backup_artifact.save(
+            update_fields=[
+                "storage_target",
+                "remote_key",
+                "remote_bucket_name",
+                "remote_endpoint_url",
+                "remote_region_name",
+                "updated_at",
+            ]
+        )
+
+        monkeypatch.setenv("CURRENT_RESTORE_ACCESS_KEY", "current-key")
+        monkeypatch.setenv("CURRENT_RESTORE_SECRET_KEY", "current-secret")
+        policy = BackupPolicySnapshot(
+            retention_days=14,
+            naming_prefix="db",
+            target_mode=BackupPolicy.TARGET_MODE_PRIVATE_REMOTE,
+            local_directory=".quickscale/backups",
+            remote_bucket_name="ignored-policy-bucket",
+            remote_prefix="ops/backups",
+            remote_endpoint_url="https://policy.example.invalid",
+            remote_region_name="policy-region",
+            remote_access_key_id_env_var="CURRENT_RESTORE_ACCESS_KEY",
+            remote_secret_access_key_env_var="CURRENT_RESTORE_SECRET_KEY",
+            automation_enabled=False,
+            schedule="0 2 * * *",
+        )
+        materialization_calls: list[tuple[str, str, str, str, str, str]] = []
+        temp_paths: list[Path] = []
+
+        def fake_materializer(
+            remote_key: str,
+            resolved_policy: BackupPolicySnapshot,
+            destination: Path,
+        ) -> None:
+            materialization_calls.append(
+                (
+                    remote_key,
+                    resolved_policy.remote_bucket_name,
+                    resolved_policy.remote_endpoint_url,
+                    resolved_policy.remote_region_name,
+                    resolved_policy.resolve_remote_access_key_id(),
+                    resolved_policy.resolve_remote_secret_access_key(),
+                )
+            )
+            temp_paths.append(destination)
+            destination.write_bytes(original_payload)
+
+        result = restore_backup_artifact(
+            postgresql_backup_artifact,
+            confirmation=postgresql_backup_artifact.filename,
+            dry_run=True,
+            policy=policy,
+            remote_materializer=cast(RemoteMaterializer, fake_materializer),
+        )
+
+        postgresql_backup_artifact.refresh_from_db()
+        assert result.executed is False
+        assert result.dry_run is True
+        assert materialization_calls == [
+            (
+                "private/backups/remote-artifact.dump",
+                "artifact-bucket",
+                "https://artifact.example.invalid",
+                "artifact-region",
+                "current-key",
+                "current-secret",
+            )
+        ]
+        assert postgresql_backup_artifact.local_path == str(original_local_path)
+        assert postgresql_backup_artifact.status == BackupArtifact.STATUS_READY
+        assert temp_paths and not temp_paths[0].exists()
+
+    def test_restore_execute_materialized_private_remote_artifact_cleans_temp_file(
+        self,
+        postgresql_backup_artifact: BackupArtifact,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        _set_postgresql_default_connection(monkeypatch)
+        _mock_postgresql_18_contract(monkeypatch)
+        original_local_path = Path(postgresql_backup_artifact.local_path)
+        original_payload = original_local_path.read_bytes()
+        original_local_path.unlink()
+        postgresql_backup_artifact.storage_target = (
+            BackupArtifact.STORAGE_TARGET_PRIVATE_REMOTE
+        )
+        postgresql_backup_artifact.remote_key = "private/backups/remote-artifact.dump"
+        postgresql_backup_artifact.remote_bucket_name = "artifact-bucket"
+        postgresql_backup_artifact.remote_endpoint_url = (
+            "https://artifact.example.invalid"
+        )
+        postgresql_backup_artifact.remote_region_name = "artifact-region"
+        postgresql_backup_artifact.save(
+            update_fields=[
+                "storage_target",
+                "remote_key",
+                "remote_bucket_name",
+                "remote_endpoint_url",
+                "remote_region_name",
+                "updated_at",
+            ]
+        )
+
+        monkeypatch.setenv("QUICKSCALE_BACKUPS_ALLOW_RESTORE", "true")
+        monkeypatch.setenv("CURRENT_RESTORE_ACCESS_KEY", "current-key")
+        monkeypatch.setenv("CURRENT_RESTORE_SECRET_KEY", "current-secret")
+        policy = BackupPolicySnapshot(
+            retention_days=14,
+            naming_prefix="db",
+            target_mode=BackupPolicy.TARGET_MODE_PRIVATE_REMOTE,
+            local_directory=".quickscale/backups",
+            remote_bucket_name="ignored-policy-bucket",
+            remote_prefix="ops/backups",
+            remote_endpoint_url="https://policy.example.invalid",
+            remote_region_name="policy-region",
+            remote_access_key_id_env_var="CURRENT_RESTORE_ACCESS_KEY",
+            remote_secret_access_key_env_var="CURRENT_RESTORE_SECRET_KEY",
+            automation_enabled=False,
+            schedule="0 2 * * *",
+        )
+        temp_paths: list[Path] = []
+        runner_calls: list[tuple[list[str], dict[str, str] | None]] = []
+
+        def fake_materializer(
+            remote_key: str,
+            resolved_policy: BackupPolicySnapshot,
+            destination: Path,
+        ) -> None:
+            del remote_key, resolved_policy
+            temp_paths.append(destination)
+            destination.write_bytes(original_payload)
+
+        def fake_runner(
+            command: list[str], *, env: dict[str, str] | None = None
+        ) -> None:
+            runner_calls.append((command, env))
+            restore_path = Path(command[-1])
+            assert restore_path.exists()
+            assert restore_path.read_bytes() == original_payload
+
+        result = restore_backup_artifact(
+            postgresql_backup_artifact,
+            confirmation=postgresql_backup_artifact.filename,
+            dry_run=False,
+            shell_runner=cast(ShellCommandRunner, fake_runner),
+            policy=policy,
+            remote_materializer=cast(RemoteMaterializer, fake_materializer),
+        )
+
+        postgresql_backup_artifact.refresh_from_db()
+        assert result.executed is True
+        assert (
+            result.message
+            == f"Restore executed for {postgresql_backup_artifact.filename}."
+        )
+        assert runner_calls
+        assert postgresql_backup_artifact.local_path == str(original_local_path)
+        assert postgresql_backup_artifact.status == BackupArtifact.STATUS_RESTORED
+        assert temp_paths and not temp_paths[0].exists()
+
+    def test_restore_runner_failure_cleans_materialized_private_remote_file(
+        self,
+        postgresql_backup_artifact: BackupArtifact,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        _set_postgresql_default_connection(monkeypatch)
+        _mock_postgresql_18_contract(monkeypatch)
+        original_local_path = Path(postgresql_backup_artifact.local_path)
+        original_payload = original_local_path.read_bytes()
+        original_local_path.unlink()
+        postgresql_backup_artifact.storage_target = (
+            BackupArtifact.STORAGE_TARGET_PRIVATE_REMOTE
+        )
+        postgresql_backup_artifact.remote_key = "private/backups/remote-artifact.dump"
+        postgresql_backup_artifact.remote_bucket_name = "artifact-bucket"
+        postgresql_backup_artifact.remote_endpoint_url = (
+            "https://artifact.example.invalid"
+        )
+        postgresql_backup_artifact.remote_region_name = "artifact-region"
+        postgresql_backup_artifact.save(
+            update_fields=[
+                "storage_target",
+                "remote_key",
+                "remote_bucket_name",
+                "remote_endpoint_url",
+                "remote_region_name",
+                "updated_at",
+            ]
+        )
+
+        monkeypatch.setenv("QUICKSCALE_BACKUPS_ALLOW_RESTORE", "true")
+        monkeypatch.setenv("CURRENT_RESTORE_ACCESS_KEY", "current-key")
+        monkeypatch.setenv("CURRENT_RESTORE_SECRET_KEY", "current-secret")
+        policy = BackupPolicySnapshot(
+            retention_days=14,
+            naming_prefix="db",
+            target_mode=BackupPolicy.TARGET_MODE_PRIVATE_REMOTE,
+            local_directory=".quickscale/backups",
+            remote_bucket_name="ignored-policy-bucket",
+            remote_prefix="ops/backups",
+            remote_endpoint_url="https://policy.example.invalid",
+            remote_region_name="policy-region",
+            remote_access_key_id_env_var="CURRENT_RESTORE_ACCESS_KEY",
+            remote_secret_access_key_env_var="CURRENT_RESTORE_SECRET_KEY",
+            automation_enabled=False,
+            schedule="0 2 * * *",
+        )
+        temp_paths: list[Path] = []
+
+        def fake_materializer(
+            remote_key: str,
+            resolved_policy: BackupPolicySnapshot,
+            destination: Path,
+        ) -> None:
+            del remote_key, resolved_policy
+            temp_paths.append(destination)
+            destination.write_bytes(original_payload)
+
+        def failing_runner(
+            command: list[str], *, env: dict[str, str] | None = None
+        ) -> None:
+            del command, env
+            raise BackupError("pg_restore exploded")
+
+        with pytest.raises(BackupError, match="pg_restore exploded"):
+            restore_backup_artifact(
+                postgresql_backup_artifact,
+                confirmation=postgresql_backup_artifact.filename,
+                dry_run=False,
+                shell_runner=cast(ShellCommandRunner, failing_runner),
+                policy=policy,
+                remote_materializer=cast(RemoteMaterializer, fake_materializer),
+            )
+
+        postgresql_backup_artifact.refresh_from_db()
+        assert postgresql_backup_artifact.local_path == str(original_local_path)
+        assert postgresql_backup_artifact.status == BackupArtifact.STATUS_READY
+        assert temp_paths and not temp_paths[0].exists()
+
+    @pytest.mark.parametrize("dry_run", [True, False])
+    def test_restore_file_mode_rejects_json_input(
+        self,
+        artifact_file: Path,
+        dry_run: bool,
+    ) -> None:
+        with pytest.raises(
+            BackupRestoreBlocked,
+            match="JSON file inputs are not a supported restore input",
+        ):
+            restore_backup_source(
+                file_path=artifact_file,
+                confirmation=artifact_file.name,
+                dry_run=dry_run,
+            )
+
+    def test_restore_file_mode_requires_basename_confirmation(
+        self,
+        postgresql_artifact_file: Path,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        _set_postgresql_default_connection(monkeypatch)
+        _mock_postgresql_18_contract(monkeypatch)
+
+        with pytest.raises(
+            BackupRestoreBlocked,
+            match="Confirmation must exactly match the backup filename",
+        ):
+            restore_backup_source(
+                file_path=postgresql_artifact_file,
+                confirmation=f"wrong-{postgresql_artifact_file.name}",
+                dry_run=True,
+            )
+
+    def test_restore_file_mode_dry_run_rejects_non_archive_input(
+        self,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        _set_postgresql_default_connection(monkeypatch)
+        _mock_postgresql_18_contract(monkeypatch)
+        invalid_file = tmp_path / "not-a-backup.dump"
+        invalid_file.write_text(
+            "plain text instead of a PostgreSQL archive", encoding="utf-8"
+        )
+
+        with pytest.raises(
+            BackupRestoreBlocked,
+            match="operator-supplied file is not a valid PostgreSQL custom archive",
+        ):
+            restore_backup_source(
+                file_path=invalid_file,
+                confirmation=invalid_file.name,
+                dry_run=True,
+            )
+
+    def test_restore_file_mode_executes_pg_restore_for_operator_dump(
+        self,
+        postgresql_artifact_file: Path,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        _set_postgresql_default_connection(monkeypatch)
+        _mock_postgresql_18_contract(monkeypatch)
+        monkeypatch.setenv("QUICKSCALE_BACKUPS_ALLOW_RESTORE", "true")
+        postgresql_artifact_file.write_bytes(b"PGDMP\x01\x0e\x00sample archive bytes")
+        runner_calls: list[tuple[list[str], dict[str, str] | None]] = []
+
+        def fake_runner(
+            command: list[str], *, env: dict[str, str] | None = None
+        ) -> None:
+            runner_calls.append((command, env))
+
+        result = restore_backup_source(
+            file_path=postgresql_artifact_file,
+            confirmation=postgresql_artifact_file.name,
+            dry_run=False,
+            shell_runner=cast(ShellCommandRunner, fake_runner),
+        )
+
+        assert result.executed is True
+        assert (
+            result.message == f"Restore executed for {postgresql_artifact_file.name}."
+        )
+        assert runner_calls == [
+            (
+                ["pg_restore", "--list", str(postgresql_artifact_file)],
+                None,
+            ),
+            (
+                [
+                    "pg_restore",
+                    "--clean",
+                    "--if-exists",
+                    "--no-owner",
+                    "--dbname",
+                    "quickscale_test",
+                    str(postgresql_artifact_file),
+                ],
+                None,
+            ),
+        ]
+
+    def test_restore_file_mode_rejects_non_postgresql_target_runtime(
+        self,
+        postgresql_artifact_file: Path,
+    ) -> None:
+        with pytest.raises(
+            BackupRestoreBlocked,
+            match="operator-supplied restore files require a PostgreSQL target database",
+        ):
+            restore_backup_source(
+                file_path=postgresql_artifact_file,
+                confirmation=postgresql_artifact_file.name,
+                dry_run=True,
+            )

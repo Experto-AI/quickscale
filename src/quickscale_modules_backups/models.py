@@ -93,6 +93,15 @@ class BackupArtifact(models.Model):
         (STORAGE_TARGET_PRIVATE_REMOTE, "Private remote offload"),
     ]
 
+    RESTORE_SCOPE_EXPORT_ONLY = "export_only"
+    RESTORE_SCOPE_LOCAL_ONLY = "local_only"
+    RESTORE_SCOPE_PORTABLE = "portable"
+    RESTORE_SCOPE_CHOICES = [
+        (RESTORE_SCOPE_EXPORT_ONLY, "Export only"),
+        (RESTORE_SCOPE_LOCAL_ONLY, "Local restore only"),
+        (RESTORE_SCOPE_PORTABLE, "Portable restore"),
+    ]
+
     filename = models.CharField(max_length=255, unique=True)
     storage_target = models.CharField(
         max_length=20,
@@ -107,8 +116,19 @@ class BackupArtifact(models.Model):
     checksum_sha256 = models.CharField(max_length=64)
     size_bytes = models.PositiveBigIntegerField(default=0)
     backup_format = models.CharField(max_length=32, default="json")
+    restore_scope = models.CharField(
+        max_length=20,
+        choices=RESTORE_SCOPE_CHOICES,
+        null=True,
+        blank=True,
+        help_text=(
+            "Conservative restore classification: export_only, local_only, or portable."
+        ),
+    )
     database_engine = models.CharField(max_length=255)
     database_name = models.CharField(max_length=255, blank=True)
+    database_server_major = models.PositiveIntegerField(null=True, blank=True)
+    dump_client_major = models.PositiveIntegerField(null=True, blank=True)
     metadata_json = models.JSONField(default=dict, blank=True)
     status = models.CharField(
         max_length=20, choices=STATUS_CHOICES, default=STATUS_READY
@@ -137,6 +157,35 @@ class BackupArtifact(models.Model):
 
     def __str__(self) -> str:
         return self.filename
+
+    def effective_restore_scope(self) -> str | None:
+        """Return the recorded restore scope or a conservative legacy fallback."""
+        if self.restore_scope:
+            return self.restore_scope
+        if self.backup_format == "json":
+            return self.RESTORE_SCOPE_EXPORT_ONLY
+        if self.backup_format == "pg_dump_custom":
+            return self.RESTORE_SCOPE_LOCAL_ONLY
+        return None
+
+    def restore_scope_label(self) -> str:
+        """Return a human-readable classification label."""
+        restore_scope = self.effective_restore_scope()
+        if restore_scope is None:
+            return "Unclassified"
+        return dict(self.RESTORE_SCOPE_CHOICES).get(restore_scope, "Unclassified")
+
+    def is_export_only(self) -> bool:
+        """Return whether the artifact is classified as export-only."""
+        return self.effective_restore_scope() == self.RESTORE_SCOPE_EXPORT_ONLY
+
+    def is_local_only(self) -> bool:
+        """Return whether the artifact is classified as local-only."""
+        return self.effective_restore_scope() == self.RESTORE_SCOPE_LOCAL_ONLY
+
+    def is_portable(self) -> bool:
+        """Return whether the artifact is classified as portable."""
+        return self.effective_restore_scope() == self.RESTORE_SCOPE_PORTABLE
 
     def download_path(self) -> str:
         """Return the best available operator-facing download path."""
