@@ -3,6 +3,13 @@
 
 set -e
 
+ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+# shellcheck source=./_python_requirement.sh
+source "$ROOT/scripts/_python_requirement.sh"
+
+REQUIRED_PYTHON_SPEC="$(quickscale_requires_python_spec "$ROOT")"
+REQUIRED_PYTHON_VERSION="$(quickscale_min_python_version "$ROOT")"
+
 if [[ "${EUID:-$(id -u)}" -eq 0 ]]; then
     echo "❌ Do not run bootstrap with sudo/root."
     echo "Running as root creates root-owned cache/.venv files that break local Poetry workflows."
@@ -14,25 +21,19 @@ echo ""
 
 # Check Python version
 echo "📋 Checking Python version..."
-required_version="3.14"
 
-PYTHON_CMD=""
-if command -v python3.14 &> /dev/null; then
-    PYTHON_CMD="python3.14"
-elif command -v python3 &> /dev/null; then
-    if python3 -c "import sys; exit(0 if sys.version_info >= (3, 14) else 1)"; then
-        PYTHON_CMD="python3"
-    fi
-fi
+PYTHON_CMD="$(quickscale_find_compatible_python "$ROOT" || true)"
 
 if [[ -z "$PYTHON_CMD" ]]; then
     detected_version="unknown"
     if command -v python3 &> /dev/null; then
         detected_version="$(python3 --version | cut -d' ' -f2 | cut -d'.' -f1,2)"
+    elif command -v python &> /dev/null; then
+        detected_version="$(python --version 2>&1 | cut -d' ' -f2 | cut -d'.' -f1,2)"
     fi
 
-    echo "❌ Python $required_version or higher is required (found $detected_version)"
-    echo "Install python3.14 and retry (or ensure python3 points to 3.14+)"
+    echo "❌ Python $REQUIRED_PYTHON_VERSION or higher is required (project constraint: $REQUIRED_PYTHON_SPEC; found $detected_version)"
+    echo "Install python$REQUIRED_PYTHON_VERSION and retry (or ensure python3 points to $REQUIRED_PYTHON_VERSION+)"
     exit 1
 fi
 

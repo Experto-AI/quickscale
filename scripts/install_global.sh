@@ -4,21 +4,30 @@
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
-VERSION_FILE="$ROOT/VERSION"
+# shellcheck source=./_python_requirement.sh
+source "$ROOT/scripts/_python_requirement.sh"
 
-ensure_python_314_available() {
-    if command -v python3.14 >/dev/null 2>&1; then
+VERSION_FILE="$ROOT/VERSION"
+PYTHON_BIN=""
+PYTHON_DISPLAY_VERSION=""
+REQUIRED_PYTHON_SPEC="$(quickscale_requires_python_spec "$ROOT")"
+REQUIRED_PYTHON_VERSION="$(quickscale_min_python_version "$ROOT")"
+POETRY_BUILD_VENVS_DIR=""
+
+ensure_compatible_python_available() {
+    if PYTHON_BIN="$(quickscale_find_compatible_python "$ROOT")"; then
+        PYTHON_DISPLAY_VERSION="$(quickscale_python_major_minor "$PYTHON_BIN")"
         return 0
     fi
 
     echo ""
-    echo "❌ Python 3.14 is required to build/install QuickScale (current project constraint: ^3.14)."
+    echo "❌ Python ${REQUIRED_PYTHON_VERSION} or newer is required to build/install QuickScale (project constraint: ${REQUIRED_PYTHON_SPEC})."
     echo ""
-    echo "Install Python 3.14 and retry:"
+    echo "Install a compatible interpreter and retry. For Ubuntu/Debian, for example:"
     echo "  sudo add-apt-repository ppa:deadsnakes/ppa -y"
     echo "  sudo apt update"
-    echo "  sudo apt install -y python3.14 python3.14-venv"
-    echo "  # Or install Python 3.14 via pyenv / your distro package manager"
+    echo "  sudo apt install -y python${REQUIRED_PYTHON_VERSION} python${REQUIRED_PYTHON_VERSION}-venv"
+    echo "  # Or install Python ${REQUIRED_PYTHON_VERSION}+ via pyenv / your distro package manager"
     echo ""
     echo "Then run:"
     echo "  make install"
@@ -26,12 +35,57 @@ ensure_python_314_available() {
     exit 1
 }
 
-ensure_poetry_uses_python_314() {
+ensure_compatible_python_pip_available() {
+    if "$PYTHON_BIN" -m pip --version >/dev/null 2>&1; then
+        return 0
+    fi
+
+    echo ""
+    echo "❌ Compatible Python ${PYTHON_DISPLAY_VERSION:-$REQUIRED_PYTHON_VERSION} was found at $PYTHON_BIN, but its pip module is unavailable."
+    echo ""
+    echo "Install the matching pip/venv support and retry. For Ubuntu/Debian, for example:"
+    echo "  sudo apt install -y python${PYTHON_DISPLAY_VERSION:-$REQUIRED_PYTHON_VERSION}-venv python3-pip"
+    echo "  # Or run: $PYTHON_BIN -m ensurepip --upgrade"
+    echo ""
+    echo "Then run:"
+    echo "  make install"
+    echo ""
+    exit 1
+}
+
+ensure_poetry_uses_compatible_python() {
     local pkg_dir="$1"
 
     (
         cd "$pkg_dir"
-        poetry env use python3.14 >/dev/null
+        POETRY_VIRTUALENVS_CREATE=true \
+        POETRY_VIRTUALENVS_IN_PROJECT=false \
+        POETRY_VIRTUALENVS_PATH="$POETRY_BUILD_VENVS_DIR" \
+        poetry env use "$PYTHON_BIN" >/dev/null 2>&1
+    )
+}
+
+build_with_poetry_compatible_python() {
+    local pkg_dir="$1"
+    local venv_path
+
+    venv_path="$(
+        cd "$pkg_dir"
+        POETRY_VIRTUALENVS_CREATE=true \
+        POETRY_VIRTUALENVS_IN_PROJECT=false \
+        POETRY_VIRTUALENVS_PATH="$POETRY_BUILD_VENVS_DIR" \
+        poetry env info -p
+    )"
+
+    (
+        cd "$pkg_dir"
+        VIRTUAL_ENV="$venv_path" \
+        PATH="$venv_path/bin:$PATH" \
+        POETRY_ACTIVE=1 \
+        POETRY_VIRTUALENVS_CREATE=true \
+        POETRY_VIRTUALENVS_IN_PROJECT=false \
+        POETRY_VIRTUALENVS_PATH="$POETRY_BUILD_VENVS_DIR" \
+        poetry build
     )
 }
 
@@ -97,6 +151,10 @@ cleanup_build_state() {
     restore_pyproject "$ROOT/quickscale_cli" || true
     remove_readme "$ROOT/quickscale_core" || true
     remove_readme "$ROOT/quickscale_cli" || true
+
+    if [[ -n "${POETRY_BUILD_VENVS_DIR:-}" ]] && [[ -d "$POETRY_BUILD_VENVS_DIR" ]]; then
+        rm -rf "$POETRY_BUILD_VENVS_DIR"
+    fi
 }
 
 replace_path_deps_cli() {
@@ -109,40 +167,51 @@ replace_path_deps_cli() {
     sed -Ei "s|quickscale-core = \{path = \"\.\./quickscale_core\"(, develop = true)?\}|quickscale-core = \"^${version}\"|" "$pyproject"
 }
 
+pip_install_user() {
+    PYTHONWARNINGS=ignore::SyntaxWarning \
+    "$PYTHON_BIN" -m pip install \
+        --user \
+        --disable-pip-version-check \
+        --force-reinstall \
+        "$@"
+}
+
 VERSION=$(read_version)
 
 trap cleanup_build_state EXIT
 
-ensure_python_314_available
+ensure_compatible_python_available
+ensure_compatible_python_pip_available
+POETRY_BUILD_VENVS_DIR="$(mktemp -d)"
 
 echo "🚀 Installing QuickScale globally (version $VERSION)..."
 
 # Build quickscale_core first
 echo "📦 Building quickscale_core..."
 cd "$ROOT/quickscale_core"
-ensure_poetry_uses_python_314 "$ROOT/quickscale_core"
+ensure_poetry_uses_compatible_python "$ROOT/quickscale_core"
 copy_readme "$ROOT/quickscale_core"
 backup_pyproject "$ROOT/quickscale_core"
 fix_readme_path "$ROOT/quickscale_core"
 rm -rf dist/
-poetry build
+build_with_poetry_compatible_python "$ROOT/quickscale_core"
 
 # Build quickscale_cli (with path dependency replaced)
 echo "📦 Building quickscale_cli..."
 cd "$ROOT/quickscale_cli"
-ensure_poetry_uses_python_314 "$ROOT/quickscale_cli"
+ensure_poetry_uses_compatible_python "$ROOT/quickscale_cli"
 copy_readme "$ROOT/quickscale_cli"
 backup_pyproject "$ROOT/quickscale_cli"
 fix_readme_path "$ROOT/quickscale_cli"
 replace_path_deps_cli "$ROOT/quickscale_cli" "$VERSION"
 rm -rf dist/
-poetry build
+build_with_poetry_compatible_python "$ROOT/quickscale_cli"
 
 # Install both packages globally
-echo "📦 Installing globally with pip..."
-python3.14 -m pip install --upgrade "click>=8.3.1,<9.0.0"
-python3.14 -m pip install --force-reinstall "$ROOT/quickscale_core/dist/quickscale_core-"*.whl
-python3.14 -m pip install --force-reinstall --no-deps "$ROOT/quickscale_cli/dist/quickscale_cli-"*.whl
+echo "📦 Installing globally with pip ($(basename "$PYTHON_BIN") --user)..."
+pip_install_user \
+    "$ROOT/quickscale_core/dist/quickscale_core-"*.whl \
+    "$ROOT/quickscale_cli/dist/quickscale_cli-"*.whl
 
 echo "✅ QuickScale installed globally. You can now run 'quickscale' from any directory."
 echo ""

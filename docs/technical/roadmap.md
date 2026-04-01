@@ -216,7 +216,7 @@ This release starts QuickScale's post-MVP expansion line and ships the notificat
 **Architectural Guardrails**:
 - [ ] Keep `quickscale_modules.social` theme-agnostic; React work belongs in `showcase_react` integration, not inside the module package.
 - [ ] Keep any public HTTP integration in generated-project or theme-owned files backed by module Python services; the module package itself must not ship public HTTP APIs.
-- [ ] Follow manifest-driven planner/apply patterns used by existing modules; no manual patching of generated settings or URLs.
+- [x] Follow manifest-driven planner/apply patterns used by existing modules; no manual patching of generated settings or URLs.
 - [ ] Keep runtime configuration authoritative in generated settings and `quickscale.yml`; do not create a second mutable configuration surface in the database.
 - [ ] Support read-only external-provider consumption only; no posting, OAuth account linking, inbox/reply workflows, or background provider sync jobs.
 - [ ] Use a provider allowlist and normalized QuickScale-owned payloads; do not make arbitrary third-party embed HTML the primary rendering contract.
@@ -239,9 +239,9 @@ This release starts QuickScale's post-MVP expansion line and ships the notificat
 **Planner / Module Contract**:
 - [x] Create `quickscale_modules/social/module.yml` with mutable options for link-tree enablement, default layout variant (`list`, `cards`, `grid`), embeds enablement, provider allowlist, cache TTL, and optional per-page item limits. Public routes stay fixed at `/social` and `/social/embeds` in v0.79.0.
 - [x] Keep route-bearing config out of the manifest for v0.79.0; do not add mutable public path, slug, or embed-gallery path fields.
-- [ ] Keep the config surface small and operator-understandable; do not introduce provider-specific secret fields in v0.79.0 unless a supported provider strictly requires them.
-- [ ] Add planner prompts, defaults, and normalizers in the CLI so `quickscale plan` and `quickscale plan --reconfigure` round-trip the `modules.social` block safely.
-- [ ] Ensure apply-time validation fails explicitly on unsupported providers, invalid numeric limits, or contradictory config combinations such as all public social surfaces being disabled.
+- [x] Keep the config surface small and operator-understandable; do not introduce provider-specific secret fields in v0.79.0 unless a supported provider strictly requires them.
+- [x] Add planner prompts, defaults, and normalizers in the CLI so `quickscale plan` and `quickscale plan --reconfigure` round-trip the `modules.social` block safely.
+- [x] Ensure apply-time validation fails explicitly on unsupported providers, invalid numeric limits, or contradictory config combinations such as all public social surfaces being disabled.
 
 **Backend Domain Model & Django Admin**:
 - [ ] Create the `quickscale_modules/social` Django app package with README, app config, migrations, admin registration, tests, and standard module packaging.
@@ -264,29 +264,29 @@ This release starts QuickScale's post-MVP expansion line and ships the notificat
 - [ ] Expose any read-only public JSON endpoints needed by the React frontend from generated-project or theme-owned integration files backed by module service calls, not from the module package itself.
 - [ ] Return normalized JSON contracts that the React frontend can render without provider-specific parsing logic leaking into every component.
 - [ ] Keep ordering deterministic and filter out inactive, invalid, or unresolved content as appropriate.
-- [ ] Keep the generated-project-owned backend integration surface safe for existing-project apply updates without requiring automatic edits to user-owned `showcase_react` source.
+- [x] Keep the generated-project-owned backend integration surface safe for existing-project apply updates without requiring automatic edits to user-owned `showcase_react` source.
 - [ ] Document the integration payload or endpoint examples in the module README or generated-project docs.
 
 **Apply-Time Wiring & Generated Project Integration**:
-- [ ] Wire the module through deterministic managed settings and generated-project backend integration generation rather than ad hoc file patching.
-- [ ] Add `social` to the generated-project module registry everywhere module presence is runtime-managed. Existing generated projects only receive backend/runtime wiring automatically; React bridge, route, and navigation source changes remain fresh-generation or manual-adoption work.
-- [ ] Generate project-owned social integration views/endpoints in managed backend files outside the module package; do not expose module-owned public HTTP URLs as the primary contract.
-- [ ] Generate Django settings defaults for the fixed public routes (`/social`, `/social/embeds`), embed settings, supported providers, and cache TTL.
+- [x] Wire the module through deterministic managed settings and generated-project backend integration generation rather than ad hoc file patching.
+- [x] Add `social` to the generated-project module registry everywhere module presence is runtime-managed. Existing generated projects only receive backend/runtime wiring automatically; React bridge, route, and navigation source changes remain fresh-generation or manual-adoption work.
+- [x] Generate project-owned social integration views/endpoints in managed backend files outside the module package; do not expose module-owned public HTTP URLs as the primary contract.
+- [x] Generate Django settings defaults for the fixed public routes (`/social`, `/social/embeds`), embed settings, supported providers, and cache TTL.
 - [ ] Register only the backend/runtime wiring needed for social through managed URL surfaces and ensure disabled features do not expose dead routes.
-- [ ] Keep `.env.example` changes minimal; the preferred v0.79.0 path ships without required provider secrets.
+- [x] Keep `.env.example` changes minimal; the preferred v0.79.0 path ships without required provider secrets.
 
 **React Default Theme Integration (`showcase_react`, fresh generation or manual adoption only)**:
-- [ ] Add a `social` flag to the frontend module-config bridge used by `useModules()`.
+- [x] Add a `social` flag to the frontend module-config bridge used by `useModules()`.
 - [ ] Create a public link tree page at `/social` that consumes the generated-project integration surface and renders platform-aware cards/buttons with branded icon treatment.
 - [ ] Create an embed gallery page at `/social/embeds` that renders normalized provider payloads using provider-specific React components where needed.
 - [ ] Add empty-state, disabled-module, and provider-error UX so generated projects fail cleanly when no links or embeds are configured.
 - [ ] Keep the initial UX mobile-first and marketing-facing; do not couple it to listings-specific layout assumptions in v0.79.0.
-- [ ] Update theme navigation, routing, and any shared page registry needed to surface the module when installed in freshly generated projects.
+- [x] Update theme navigation, routing, and any shared page registry needed to surface the module when installed in freshly generated projects.
 - [ ] Add frontend tests for link-tree and embed-rendering flows using mocked API payloads, not live provider traffic.
 
 **Implementation Phasing (handoff order)**:
 1. [x] Phase A: contract closeout, fixed-route config surface, and shared URL normalization/provider helper foundations.
-2. [ ] Phase B: planner/apply wiring plus existing-project-safe backend integration surfaces.
+2. [x] Phase B: planner/apply wiring plus existing-project-safe backend integration surfaces.
 3. [ ] Phase C: backend models, admin, provider resolution, caching, and operator-facing failure states for curated embeds.
 4. [ ] Phase D: `showcase_react` integration, routes, components, and module-bridge updates for fresh generation and documented manual adoption.
 5. [ ] Phase E: split support-matrix tests, documentation, and release artifacts.
@@ -307,7 +307,7 @@ This release starts QuickScale's post-MVP expansion line and ships the notificat
 - [ ] Replace this roadmap section with a concise pointer once release artifacts exist.
 
 **Success Criteria**:
-- [ ] `quickscale plan` can configure `modules.social` without manual YAML editing.
+- [x] `quickscale plan` can configure `modules.social` without manual YAML editing.
 - [ ] `quickscale apply` on an existing generated project adds working admin-managed social links, deterministic managed backend wiring, and generated-project integration surfaces that stay outside the module package without mutating theme-owned React files.
 - [ ] Freshly generated or manually updated `showcase_react` projects render a branded link tree page at `/social` and an embed gallery at `/social/embeds` when the module is installed and configured.
 - [ ] Curated embeds for the supported provider allowlist render through normalized backend data and degrade safely on provider failure.
