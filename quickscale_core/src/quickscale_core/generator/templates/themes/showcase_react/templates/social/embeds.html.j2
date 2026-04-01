@@ -4,10 +4,25 @@
 
 {% block extra_css %}
 <style>
+    .qs-main {
+        max-width: 1280px;
+    }
+    .qs-social-shell {
+        display: grid;
+        gap: 1.5rem;
+        align-items: start;
+    }
+    @media (min-width: 960px) {
+        .qs-social-shell {
+            grid-template-columns: minmax(240px, 280px) minmax(0, 1fr);
+        }
+    }
+    .qs-social-rail,
     .qs-embeds-stack {
         display: grid;
         gap: 1.5rem;
     }
+    .qs-social-rail,
     .qs-embeds-panel,
     .qs-embeds-card {
         background: #ffffff;
@@ -15,6 +30,90 @@
         border-radius: 1rem;
         padding: 1.5rem;
         box-shadow: 0 16px 40px rgba(15, 23, 42, 0.06);
+    }
+    .qs-social-rail {
+        position: sticky;
+        top: 1.5rem;
+        background: linear-gradient(180deg, #ffffff 0%, #f8fafc 100%);
+    }
+    .qs-social-rail-eyebrow {
+        display: inline-flex;
+        align-items: center;
+        width: fit-content;
+        padding: 0.28rem 0.7rem;
+        border-radius: 999px;
+        background: #e2e8f0;
+        color: #0f172a;
+        font-size: 0.74rem;
+        font-weight: 700;
+        letter-spacing: 0.04em;
+        text-transform: uppercase;
+    }
+    .qs-social-rail h1 {
+        font-size: 1.5rem;
+        line-height: 1.1;
+    }
+    .qs-social-rail-copy {
+        color: #475569;
+    }
+    .qs-social-rail-group {
+        display: grid;
+        gap: 0.75rem;
+        padding-top: 0.25rem;
+    }
+    .qs-social-rail-label {
+        font-size: 0.78rem;
+        font-weight: 700;
+        letter-spacing: 0.04em;
+        text-transform: uppercase;
+        color: #64748b;
+    }
+    .qs-social-nav {
+        display: grid;
+        gap: 0.65rem;
+    }
+    .qs-social-nav-link {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        padding: 0.8rem 0.95rem;
+        border-radius: 0.85rem;
+        border: 1px solid #cbd5e1;
+        background: #ffffff;
+        color: #0f172a;
+        font-weight: 600;
+        text-decoration: none;
+    }
+    .qs-social-nav-link:hover {
+        background: #eff6ff;
+        border-color: #93c5fd;
+        text-decoration: none;
+    }
+    .qs-social-nav-link-active {
+        background: #0f172a;
+        border-color: #0f172a;
+        color: #ffffff;
+    }
+    .qs-social-nav-link-active:hover {
+        background: #1e293b;
+        border-color: #1e293b;
+    }
+    .qs-social-meta {
+        display: grid;
+        gap: 0.85rem;
+    }
+    .qs-social-meta div {
+        display: grid;
+        gap: 0.2rem;
+    }
+    .qs-social-meta dt {
+        font-size: 0.84rem;
+        color: #64748b;
+    }
+    .qs-social-meta dd {
+        margin: 0;
+        color: #0f172a;
+        font-weight: 600;
     }
     .qs-embeds-kicker {
         display: inline-flex;
@@ -85,54 +184,91 @@
 {% endblock %}
 
 {% block content %}
-<div class="qs-embeds-stack">
-    <section class="qs-embeds-panel">
-        <span class="qs-embeds-kicker">
-            {% if settings.QUICKSCALE_SOCIAL_EMBEDS_ENABLED %}Embeds enabled{% else %}Embeds disabled{% endif %}
-        </span>
-        <h1>Social Embeds</h1>
-        <p>
-            QuickScale reserves <code>/social/embeds</code> for curated embed galleries.
-            This page now resolves ahead of the SPA catch-all instead of landing on the React 404 screen.
+<div class="qs-social-shell">
+    <aside class="qs-social-rail">
+        <span class="qs-social-rail-eyebrow">Public Social Surface</span>
+        <h1>Embeds</h1>
+        <p class="qs-social-rail-copy">
+            The embed gallery keeps its own public URL while staying visually aligned with the rest of the React showcase.
         </p>
-        <div class="qs-embeds-actions">
-            <a class="qs-embeds-button" href="/social">Open link tree</a>
-            <a class="qs-embeds-button qs-embeds-button-muted" href="/">Return home</a>
-        </div>
-    </section>
 
-    <section class="qs-embeds-grid">
-        <article class="qs-embeds-card">
-            <h2>Status</h2>
+        <section class="qs-social-rail-group">
+            <span class="qs-social-rail-label">Navigate</span>
+            <nav class="qs-social-nav" aria-label="Social embed navigation">
+                <a class="qs-social-nav-link" href="/social">Link tree</a>
+                <a class="qs-social-nav-link qs-social-nav-link-active" href="/social/embeds">Embeds</a>
+                <a class="qs-social-nav-link" href="/">App home</a>
+            </nav>
+        </section>
+
+        <section class="qs-social-rail-group">
+            <span class="qs-social-rail-label">Current setup</span>
+            <dl class="qs-social-meta">
+                <div>
+                    <dt>Status</dt>
+                    <dd>{% if settings.QUICKSCALE_SOCIAL_EMBEDS_ENABLED %}Enabled{% else %}Disabled{% endif %}</dd>
+                </div>
+                <div>
+                    <dt>Providers</dt>
+                    <dd><code>{{ settings.QUICKSCALE_SOCIAL_EMBED_PROVIDER_ALLOWLIST|length }}</code></dd>
+                </div>
+                <div>
+                    <dt>Embeds / page</dt>
+                    <dd><code>{{ settings.QUICKSCALE_SOCIAL_EMBEDS_PER_PAGE }}</code></dd>
+                </div>
+            </dl>
+        </section>
+    </aside>
+
+    <div class="qs-embeds-stack">
+        <section class="qs-embeds-panel">
+            <span class="qs-embeds-kicker">
+                {% if settings.QUICKSCALE_SOCIAL_EMBEDS_ENABLED %}Embeds enabled{% else %}Embeds disabled{% endif %}
+            </span>
+            <h1>Social Embeds</h1>
             <p>
-                {% if settings.QUICKSCALE_SOCIAL_EMBEDS_ENABLED %}
-                The embed gallery route is enabled at <code>/social/embeds</code>.
-                {% else %}
-                The embed gallery route is currently disabled in project settings.
-                {% endif %}
+                QuickScale reserves <code>/social/embeds</code> for curated embed galleries.
+                This page now resolves ahead of the SPA catch-all instead of landing on the React 404 screen.
             </p>
-        </article>
+            <div class="qs-embeds-actions">
+                <a class="qs-embeds-button" href="/social">Open link tree</a>
+                <a class="qs-embeds-button qs-embeds-button-muted" href="/">Return home</a>
+            </div>
+        </section>
 
-        <article class="qs-embeds-card">
-            <h2>Providers</h2>
-            <ul class="qs-embeds-list">
-                {% for provider in settings.QUICKSCALE_SOCIAL_EMBED_PROVIDER_ALLOWLIST %}
-                <li>{{ provider }}</li>
-                {% endfor %}
-            </ul>
-        </article>
+        <section class="qs-embeds-grid">
+            <article class="qs-embeds-card">
+                <h2>Status</h2>
+                <p>
+                    {% if settings.QUICKSCALE_SOCIAL_EMBEDS_ENABLED %}
+                    The embed gallery route is enabled at <code>/social/embeds</code>.
+                    {% else %}
+                    The embed gallery route is currently disabled in project settings.
+                    {% endif %}
+                </p>
+            </article>
 
-        <article class="qs-embeds-card">
-            <h2>Cache</h2>
-            <p>Cache TTL: <code>{{ settings.QUICKSCALE_SOCIAL_CACHE_TTL_SECONDS }}</code> seconds</p>
-            <p>Embeds per page: <code>{{ settings.QUICKSCALE_SOCIAL_EMBEDS_PER_PAGE }}</code></p>
-        </article>
+            <article class="qs-embeds-card">
+                <h2>Providers</h2>
+                <ul class="qs-embeds-list">
+                    {% for provider in settings.QUICKSCALE_SOCIAL_EMBED_PROVIDER_ALLOWLIST %}
+                    <li>{{ provider }}</li>
+                    {% endfor %}
+                </ul>
+            </article>
 
-        <article class="qs-embeds-card qs-embeds-empty">
-            <h2>Published Embeds</h2>
-            <p>No curated embeds are available yet.</p>
-            <p>This route now has a stable generated destination so social navigation no longer breaks on direct visits.</p>
-        </article>
-    </section>
+            <article class="qs-embeds-card">
+                <h2>Cache</h2>
+                <p>Cache TTL: <code>{{ settings.QUICKSCALE_SOCIAL_CACHE_TTL_SECONDS }}</code> seconds</p>
+                <p>Embeds per page: <code>{{ settings.QUICKSCALE_SOCIAL_EMBEDS_PER_PAGE }}</code></p>
+            </article>
+
+            <article class="qs-embeds-card qs-embeds-empty">
+                <h2>Published Embeds</h2>
+                <p>No curated embeds are available yet.</p>
+                <p>This route now has a stable generated destination so social navigation no longer breaks on direct visits.</p>
+            </article>
+        </section>
+    </div>
 </div>
 {% endblock %}{% endraw %}

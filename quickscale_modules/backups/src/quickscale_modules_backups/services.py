@@ -533,6 +533,7 @@ def create_backup(
         connection_settings = django.db.connections["default"].settings_dict
         engine = str(connection_settings.get("ENGINE", ""))
         database_name = str(connection_settings.get("NAME", ""))
+        backup_note = ""
 
         if "postgresql" in engine:
             backup_format = "pg_dump_custom"
@@ -552,11 +553,32 @@ def create_backup(
             local_path = local_directory / filename
         try:
             if backup_format == "pg_dump_custom":
-                _dump_postgresql_database(
-                    local_path,
-                    connection_settings,
-                    shell_runner=shell_runner,
-                )
+                try:
+                    _dump_postgresql_database(
+                        local_path,
+                        connection_settings,
+                        shell_runner=shell_runner,
+                    )
+                except BackupError as exc:
+                    if not _should_fallback_to_json_backup(exc):
+                        raise
+
+                    cleanup_error = _cleanup_local_backup_file(local_path)
+                    if cleanup_error is not None:
+                        raise BackupError(
+                            "PostgreSQL JSON fallback was blocked because the failed "
+                            f"dump file could not be removed: {cleanup_error}"
+                        ) from exc
+
+                    backup_format = "json"
+                    filename = build_backup_filename(
+                        resolved_policy,
+                        now=backup_started_at,
+                        suffix="json",
+                    )
+                    local_path = local_directory / filename
+                    backup_note = f"PostgreSQL dump fallback used: {exc}"
+                    _dump_database_as_json(local_path)
             else:
                 _dump_database_as_json(local_path)
 
@@ -577,6 +599,8 @@ def create_backup(
             database_name=database_name,
             target_mode=resolved_policy.target_mode,
         )
+        if backup_note:
+            metadata["degraded_backup_reason"] = backup_note
 
         artifact = BackupArtifact.objects.create(
             filename=filename,
@@ -596,6 +620,7 @@ def create_backup(
             database_engine=engine,
             database_name=database_name,
             metadata_json=metadata,
+            validation_notes=backup_note,
             initiated_by=initiated_by,
             trigger=trigger,
         )
@@ -1020,16 +1045,49 @@ def _run_shell_command(
     if env:
         command_env.update(env)
 
-    result = subprocess.run(
-        list(command),
-        capture_output=True,
-        check=False,
-        text=True,
-        env=command_env,
-    )
+    try:
+        result = subprocess.run(
+            list(command),
+            capture_output=True,
+            check=False,
+            text=True,
+            env=command_env,
+        )
+    except FileNotFoundError as exc:
+        executable = str(command[0]).strip() if command else "command"
+        hint = ""
+        if executable in {"pg_dump", "pg_restore"}:
+            hint = (
+                " Install the PostgreSQL client package "
+                "(for example 'postgresql-client') in the runtime image or run "
+                "the command in an environment that provides it."
+            )
+        raise BackupError(
+            f"Required executable '{executable}' is not installed in this runtime."
+            f"{hint}"
+        ) from exc
     if result.returncode != 0:
         stderr = result.stderr.strip() or result.stdout.strip() or "unknown error"
         raise BackupError(f"Command failed: {' '.join(command)} :: {stderr}")
+
+
+def _should_fallback_to_json_backup(error: BackupError) -> bool:
+    if not _local_json_backup_fallback_allowed():
+        return False
+
+    message = str(error).lower()
+    return (
+        "required executable 'pg_dump'" in message
+        or "server version mismatch" in message
+    )
+
+
+def _local_json_backup_fallback_allowed() -> bool:
+    if settings.DEBUG:
+        return True
+
+    environment = str(os.getenv("QUICKSCALE_ENVIRONMENT", "")).strip().lower()
+    return environment in {"local", "development", "dev", "test", "ci"}
 
 
 def _resolve_private_remote_credentials(

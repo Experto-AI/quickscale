@@ -218,6 +218,7 @@ class TestReactThemeGeneration:
 
         # Should copy built assets
         assert "staticfiles" in dockerfile or "static" in dockerfile
+        assert "postgresql-client" in dockerfile
 
     def test_react_theme_scripts_configured(self, tmp_path):
         """Package.json scripts should be properly configured"""
@@ -799,7 +800,11 @@ class TestReactThemeModuleActivationMatrix:
         )
         assert 'href="/social"' in base_template
         assert 'href="/social/embeds"' in base_template
+        assert "Public Social Surface" in link_tree_template
+        assert "qs-social-rail" in link_tree_template
         assert "QuickScale reserves <code>/social</code>" in link_tree_template
+        assert "Public Social Surface" in embeds_template
+        assert "qs-social-rail" in embeds_template
         assert "QuickScale reserves <code>/social/embeds</code>" in embeds_template
 
     def test_react_routes_cover_all_module_navigation_targets(self, tmp_path):

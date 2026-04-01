@@ -92,6 +92,7 @@ ENV PORT=${PORT}
 RUN echo "📦 Installing runtime dependencies..." && \
     apt-get update && apt-get install -y --no-install-recommends \
     libpq5 \
+    postgresql-client \
     && rm -rf /var/lib/apt/lists/* && \
     echo "✅ Runtime dependencies installed"
 
