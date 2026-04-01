@@ -3,30 +3,61 @@
 {% block title %}Social Embeds | {% endraw %}{{ project_name }}{% raw %}{% endblock %}
 
 {% block content %}{% endraw %}
-<div class="welcome-container">
-    <section class="hero-panel">
-        <div class="hero-copy">
-            <span class="hero-eyebrow">QuickScale Social</span>
+<div class="qs-social-shell">
+    <aside class="qs-social-rail">
+        <span class="qs-social-rail-eyebrow">Public Social Surface</span>
+        <h1>Embeds</h1>
+        <p class="qs-social-rail-copy">
+            The embed gallery keeps its own public URL while staying visually aligned with the rest of the HTML showcase.
+        </p>
+
+        <section class="qs-social-rail-group">
+            <span class="qs-social-rail-label">Navigate</span>
+            <nav class="qs-social-nav" aria-label="Social embed navigation">
+                <a class="qs-social-nav-link" href="/social">Link tree</a>
+                <a class="qs-social-nav-link qs-social-nav-link-active" href="/social/embeds">Embeds</a>
+                <a class="qs-social-nav-link" href="/">App home</a>
+            </nav>
+        </section>
+
+        <section class="qs-social-rail-group">
+            <span class="qs-social-rail-label">Current setup</span>
+            <dl class="qs-social-meta">
+                <div>
+                    <dt>Status</dt>
+                    <dd>{%raw%}{% if settings.QUICKSCALE_SOCIAL_EMBEDS_ENABLED %}Enabled{% else %}Disabled{% endif %}{%endraw%}</dd>
+                </div>
+                <div>
+                    <dt>Providers</dt>
+                    <dd><code>{%raw%}{{ settings.QUICKSCALE_SOCIAL_EMBED_PROVIDER_ALLOWLIST|length }}{%endraw%}</code></dd>
+                </div>
+                <div>
+                    <dt>Embeds / page</dt>
+                    <dd><code>{%raw%}{{ settings.QUICKSCALE_SOCIAL_EMBEDS_PER_PAGE }}{%endraw%}</code></dd>
+                </div>
+            </dl>
+        </section>
+    </aside>
+
+    <div class="qs-social-stack">
+        <section class="qs-social-hero">
+            <span class="qs-social-pill">
+                {%raw%}{% if settings.QUICKSCALE_SOCIAL_EMBEDS_ENABLED %}Embeds enabled{% else %}Embeds disabled{% endif %}{%endraw%}
+            </span>
             <h1>Social Embeds</h1>
-            <p>This fixed public route now resolves cleanly for showcase_html projects instead of falling through to the default 404 path.</p>
-        </div>
-        <div class="hero-actions">
-            <a class="btn btn-primary btn-inline" href="/social">Open link tree</a>
-            <a class="btn btn-secondary btn-inline" href="/">Return home</a>
-        </div>
-    </section>
-
-    <section class="dashboard-section">
-        <div class="section-heading">
-            <div>
-                <h2>Embed Gallery</h2>
-                <p>The gallery route is reserved and ready even before curated embeds have been published.</p>
+            <p class="qs-social-copy">
+                QuickScale reserves <code>/social/embeds</code> for curated embed galleries.
+                This page now resolves ahead of the fallback route instead of landing on a generic showcase screen.
+            </p>
+            <div class="hero-actions">
+                <a class="btn btn-primary btn-inline" href="/social">Open link tree</a>
+                <a class="btn btn-secondary btn-inline" href="/">Return home</a>
             </div>
-        </div>
+        </section>
 
-        <div class="info-grid">
-            <article class="info-card">
-                <h3>Status</h3>
+        <section class="qs-social-grid">
+            <article class="qs-social-card">
+                <h2>Status</h2>
                 {%raw%}{% if settings.QUICKSCALE_SOCIAL_EMBEDS_ENABLED %}{%endraw%}
                 <p>The embed gallery surface is enabled at <code>/social/embeds</code>.</p>
                 {%raw%}{% else %}{%endraw%}
@@ -34,24 +65,27 @@
                 {%raw%}{% endif %}{%endraw%}
             </article>
 
-            <article class="info-card">
-                <h3>Providers</h3>
-                <p>Embed-capable providers for this route:</p>
-                <code>{%raw%}{{ settings.QUICKSCALE_SOCIAL_EMBED_PROVIDER_ALLOWLIST|join:", " }}{%endraw%}</code>
+            <article class="qs-social-card">
+                <h2>Providers</h2>
+                <ul class="qs-social-list">
+                    {%raw%}{% for provider in settings.QUICKSCALE_SOCIAL_EMBED_PROVIDER_ALLOWLIST %}{%endraw%}
+                    <li>{%raw%}{{ provider }}{%endraw%}</li>
+                    {%raw%}{% endfor %}{%endraw%}
+                </ul>
             </article>
 
-            <article class="info-card">
-                <h3>Cache</h3>
-                <p>Cache TTL:</p>
-                <code>{%raw%}{{ settings.QUICKSCALE_SOCIAL_CACHE_TTL_SECONDS }}{%endraw%} seconds</code>
+            <article class="qs-social-card">
+                <h2>Cache</h2>
+                <p>Cache TTL: <code>{%raw%}{{ settings.QUICKSCALE_SOCIAL_CACHE_TTL_SECONDS }}{%endraw%}</code> seconds</p>
+                <p>Embeds per page: <code>{%raw%}{{ settings.QUICKSCALE_SOCIAL_EMBEDS_PER_PAGE }}{%endraw%}</code></p>
             </article>
 
-            <article class="info-card">
-                <h3>Published Embeds</h3>
+            <article class="qs-social-card qs-social-empty">
+                <h2>Published Embeds</h2>
                 <p>No curated embeds are available yet.</p>
                 <p>This generated page keeps the public route stable while the social module wiring matures.</p>
             </article>
-        </div>
-    </section>
+        </section>
+    </div>
 </div>
 {%raw%}{% endblock %}{%endraw%}

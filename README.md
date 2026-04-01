@@ -50,7 +50,7 @@ QuickScale is a **Django project generator** that creates production-ready SaaS 
 
 The current published release is v0.78.0, which ships the notifications module and opens QuickScale's post-MVP expansion release line. Main-branch docs and package metadata are aligned on this release.
 
-On the main branch, backups is the admin/ops-first safety module: private local backups are the default, optional private remote offload is supported, staff-only admin flows cover create/validate/download/delete, destructive restore stays CLI-only and guarded, non-PostgreSQL/test environments use JSON export fallback, additional at-rest encryption is deferred beyond v0.77, and there is no standalone admin upload/offload action.
+On the main branch, backups is the admin/ops-first safety module: private local backups are the default, optional private remote offload is supported, staff-only admin flows cover create/validate/download/delete, destructive restore stays CLI-only and guarded, non-PostgreSQL backups and pg_dump compatibility failures degrade to JSON export with operator notes, additional at-rest encryption is deferred beyond v0.77, and there is no standalone admin upload/offload action.
 
 ## Documentation Guide
 

@@ -1072,13 +1072,15 @@ def _run_shell_command(
 
 
 def _should_fallback_to_json_backup(error: BackupError) -> bool:
-    if not _local_json_backup_fallback_allowed():
+    message = str(error).lower()
+    if "server version mismatch" in message:
+        return True
+
+    if "required executable 'pg_dump'" not in message:
         return False
 
-    message = str(error).lower()
     return (
-        "required executable 'pg_dump'" in message
-        or "server version mismatch" in message
+        _local_json_backup_fallback_allowed() or _railway_json_backup_fallback_allowed()
     )
 
 
@@ -1088,6 +1090,10 @@ def _local_json_backup_fallback_allowed() -> bool:
 
     environment = str(os.getenv("QUICKSCALE_ENVIRONMENT", "")).strip().lower()
     return environment in {"local", "development", "dev", "test", "ci"}
+
+
+def _railway_json_backup_fallback_allowed() -> bool:
+    return any(environment_key.startswith("RAILWAY_") for environment_key in os.environ)
 
 
 def _resolve_private_remote_credentials(

@@ -121,8 +121,8 @@ The referenced environment variables must be set in the runtime environment. For
 
 ## Format and encryption notes
 
-- PostgreSQL backups use the `pg_dump` custom/compressed format path.
-- Non-PostgreSQL backups fall back to JSON export for CI-safe validation and local development.
+- PostgreSQL backups prefer the `pg_dump` custom/compressed format path and degrade to JSON export with operator notes when client availability or version compatibility blocks native dumping.
+- Non-PostgreSQL backups use JSON export directly for CI-safe validation and local development.
 - Additional at-rest encryption is deferred beyond v0.77 because it adds key-management and restore-UX scope.
 
 ## Limitations of the MVI

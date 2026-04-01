@@ -499,6 +499,106 @@ class TestBackupLifecycle:
         assert "server version mismatch" in artifact.validation_notes
 
     @override_settings(DEBUG=False)
+    def test_create_backup_falls_back_to_json_on_pg_dump_version_mismatch_outside_debug(
+        self,
+        superuser: AbstractBaseUser,
+        local_backup_settings: Path,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        policy = BackupPolicySnapshot(
+            retention_days=14,
+            naming_prefix="db",
+            target_mode=BackupPolicy.TARGET_MODE_LOCAL,
+            local_directory=str(local_backup_settings),
+            remote_bucket_name="",
+            remote_prefix="backups/private",
+            remote_endpoint_url="",
+            remote_region_name="",
+            remote_access_key_id_env_var="",
+            remote_secret_access_key_env_var="",
+            automation_enabled=False,
+            schedule="0 2 * * *",
+        )
+        monkeypatch.setitem(
+            connections["default"].settings_dict,
+            "ENGINE",
+            "django.db.backends.postgresql",
+        )
+        monkeypatch.setitem(
+            connections["default"].settings_dict,
+            "NAME",
+            "quickscale_test",
+        )
+
+        def mismatched_runner(
+            command: list[str], *, env: dict[str, str] | None = None
+        ) -> None:
+            del command, env
+            raise BackupError(
+                "Command failed: pg_dump ... :: pg_dump: error: aborting because of server version mismatch"
+            )
+
+        artifact = create_backup(
+            initiated_by=superuser,
+            trigger="manual",
+            policy=policy,
+            shell_runner=cast(ShellCommandRunner, mismatched_runner),
+        )
+
+        assert artifact.backup_format == "json"
+        assert Path(artifact.local_path).exists()
+        assert "server version mismatch" in artifact.validation_notes
+
+    @override_settings(DEBUG=False)
+    def test_create_backup_falls_back_to_json_when_pg_dump_is_missing_on_railway(
+        self,
+        superuser: AbstractBaseUser,
+        local_backup_settings: Path,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        policy = BackupPolicySnapshot(
+            retention_days=14,
+            naming_prefix="db",
+            target_mode=BackupPolicy.TARGET_MODE_LOCAL,
+            local_directory=str(local_backup_settings),
+            remote_bucket_name="",
+            remote_prefix="backups/private",
+            remote_endpoint_url="",
+            remote_region_name="",
+            remote_access_key_id_env_var="",
+            remote_secret_access_key_env_var="",
+            automation_enabled=False,
+            schedule="0 2 * * *",
+        )
+        monkeypatch.setitem(
+            connections["default"].settings_dict,
+            "ENGINE",
+            "django.db.backends.postgresql",
+        )
+        monkeypatch.setitem(
+            connections["default"].settings_dict,
+            "NAME",
+            "quickscale_test",
+        )
+        monkeypatch.setenv("RAILWAY_ENVIRONMENT_ID", "env-local-test")
+
+        def missing_pg_dump(*args: Any, **kwargs: Any) -> None:
+            del args, kwargs
+            raise FileNotFoundError("pg_dump")
+
+        monkeypatch.setattr(backup_services.subprocess, "run", missing_pg_dump)
+
+        artifact = create_backup(
+            initiated_by=superuser,
+            trigger="manual",
+            policy=policy,
+        )
+
+        assert artifact.backup_format == "json"
+        assert Path(artifact.local_path).exists()
+        assert "PostgreSQL dump fallback used" in artifact.validation_notes
+
+    @override_settings(DEBUG=False)
     def test_create_backup_reports_missing_pg_dump_as_backup_error_outside_debug(
         self,
         superuser: AbstractBaseUser,
