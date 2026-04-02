@@ -11,7 +11,7 @@ from django.core.management import call_command
 from django.core.management.base import CommandError
 
 from quickscale_modules_backups.models import BackupArtifact
-from quickscale_modules_backups.services import RestoreResult
+from quickscale_modules_backups.services import RestoreResult, RestoreWarning
 
 
 @pytest.mark.django_db
@@ -84,3 +84,50 @@ class TestBackupsRestoreCommand:
             allow_production=False,
         )
         assert "Restore validation completed successfully" in stdout.getvalue()
+
+    def test_command_renders_structured_restore_warnings_without_erroring(
+        self,
+        postgresql_backup_artifact: BackupArtifact,
+    ) -> None:
+        stdout = StringIO()
+        stderr = StringIO()
+
+        with patch(
+            "quickscale_modules_backups.management.commands.backups_restore.restore_backup_source",
+            return_value=RestoreResult(
+                executed=True,
+                dry_run=False,
+                message=f"Restore executed for {postgresql_backup_artifact.filename}.",
+                warnings=(
+                    RestoreWarning(
+                        code="artifact_row_missing_after_restore",
+                        message=(
+                            "Restore executed, but the original backup artifact row "
+                            "no longer exists in the restored database."
+                        ),
+                    ),
+                ),
+            ),
+        ) as mocked_restore:
+            result = call_command(
+                "backups_restore",
+                str(postgresql_backup_artifact.pk),
+                "--confirm",
+                postgresql_backup_artifact.filename,
+                stdout=stdout,
+                stderr=stderr,
+            )
+
+        assert result is None
+        mocked_restore.assert_called_once_with(
+            artifact=postgresql_backup_artifact,
+            file_path=None,
+            confirmation=postgresql_backup_artifact.filename,
+            dry_run=False,
+            allow_production=False,
+        )
+        assert stdout.getvalue() == (
+            f"Restore executed for {postgresql_backup_artifact.filename}.\n"
+            "Warning [artifact_row_missing_after_restore]: Restore executed, but the original backup artifact row no longer exists in the restored database.\n"
+        )
+        assert stderr.getvalue() == ""

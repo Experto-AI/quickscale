@@ -8,12 +8,13 @@ from datetime import datetime, timedelta, timezone
 from io import StringIO
 from pathlib import Path
 from typing import Any, cast
+from unittest.mock import patch
 
 import pytest
 from django.contrib.auth.base_user import AbstractBaseUser
 from django.core.management import call_command
 from django.core.management.base import CommandError
-from django.db import connections
+from django.db import DatabaseError, connections
 from django.test import override_settings
 
 import quickscale_modules_backups.services as backup_services
@@ -27,6 +28,7 @@ from quickscale_modules_backups.services import (
     RemoteDeleter,
     RemoteMaterializer,
     RemoteUploader,
+    RestoreSourceResolutionMode,
     ShellCommandRunner,
     build_backup_filename,
     create_backup,
@@ -1142,6 +1144,57 @@ class TestBackupLifecycle:
         assert result.executed is False
         assert result.dry_run is True
 
+    def test_restore_local_only_resolution_rejects_remote_materialization(
+        self,
+        postgresql_backup_artifact: BackupArtifact,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        _set_postgresql_default_connection(monkeypatch)
+        _mock_postgresql_18_contract(monkeypatch)
+        Path(postgresql_backup_artifact.local_path).unlink()
+        postgresql_backup_artifact.storage_target = (
+            BackupArtifact.STORAGE_TARGET_PRIVATE_REMOTE
+        )
+        postgresql_backup_artifact.remote_key = "private/backups/remote-artifact.dump"
+        postgresql_backup_artifact.remote_bucket_name = "artifact-bucket"
+        postgresql_backup_artifact.remote_endpoint_url = (
+            "https://artifact.example.invalid"
+        )
+        postgresql_backup_artifact.remote_region_name = "artifact-region"
+        postgresql_backup_artifact.save(
+            update_fields=[
+                "storage_target",
+                "remote_key",
+                "remote_bucket_name",
+                "remote_endpoint_url",
+                "remote_region_name",
+                "updated_at",
+            ]
+        )
+        materializer_calls: list[tuple[str, str]] = []
+
+        def fake_materializer(
+            remote_key: str,
+            resolved_policy: BackupPolicySnapshot,
+            destination: Path,
+        ) -> None:
+            del resolved_policy, destination
+            materializer_calls.append((remote_key, postgresql_backup_artifact.filename))
+
+        with pytest.raises(
+            BackupRestoreBlocked,
+            match="resolution mode does not allow private remote materialization",
+        ):
+            restore_backup_artifact(
+                postgresql_backup_artifact,
+                confirmation=postgresql_backup_artifact.filename,
+                dry_run=True,
+                resolution_mode=RestoreSourceResolutionMode.LOCAL_ONLY,
+                remote_materializer=cast(RemoteMaterializer, fake_materializer),
+            )
+
+        assert materializer_calls == []
+
     @pytest.mark.parametrize(
         ("field_name", "field_value", "expected_fragment"),
         [
@@ -1181,6 +1234,118 @@ class TestBackupLifecycle:
             )
 
         assert expected_fragment in str(exc_info.value)
+
+    def test_restore_execution_warns_when_metadata_persistence_raises_database_error(
+        self,
+        postgresql_backup_artifact: BackupArtifact,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        _set_postgresql_default_connection(monkeypatch)
+        _mock_postgresql_18_contract(monkeypatch)
+        monkeypatch.setenv("QUICKSCALE_BACKUPS_ALLOW_RESTORE", "true")
+        runner_calls: list[tuple[list[str], dict[str, str] | None]] = []
+
+        def fake_runner(
+            command: list[str], *, env: dict[str, str] | None = None
+        ) -> None:
+            runner_calls.append((command, env))
+
+        class ExplodingUpdateQuerySet:
+            def update(self, **kwargs: Any) -> int:
+                del kwargs
+                raise DatabaseError("restored database no longer matches row state")
+
+        with patch.object(
+            BackupArtifact._default_manager,
+            "filter",
+            return_value=ExplodingUpdateQuerySet(),
+        ):
+            result = restore_backup_artifact(
+                postgresql_backup_artifact,
+                confirmation=postgresql_backup_artifact.filename,
+                dry_run=False,
+                shell_runner=cast(ShellCommandRunner, fake_runner),
+            )
+
+        postgresql_backup_artifact.refresh_from_db()
+        assert result.executed is True
+        assert result.dry_run is False
+        assert (
+            result.message
+            == f"Restore executed for {postgresql_backup_artifact.filename}."
+        )
+        assert runner_calls
+        assert len(result.warnings) == 1
+        warning = result.warnings[0]
+        assert warning.code == "artifact_metadata_not_persisted_after_restore"
+        assert (
+            warning.message
+            == "Restore executed, but backup artifact metadata could not be persisted after the restored database changed."
+        )
+        assert warning.details == {
+            "artifact_id": str(postgresql_backup_artifact.pk),
+            "error_type": "DatabaseError",
+            "filename": postgresql_backup_artifact.filename,
+        }
+        assert postgresql_backup_artifact.status == BackupArtifact.STATUS_READY
+        assert postgresql_backup_artifact.restored_at is None
+
+    def test_restore_execution_warns_when_artifact_row_is_missing_after_restore(
+        self,
+        postgresql_backup_artifact: BackupArtifact,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        _set_postgresql_default_connection(monkeypatch)
+        _mock_postgresql_18_contract(monkeypatch)
+        monkeypatch.setenv("QUICKSCALE_BACKUPS_ALLOW_RESTORE", "true")
+        runner_calls: list[tuple[list[str], dict[str, str] | None]] = []
+        artifact_id = postgresql_backup_artifact.pk
+        assert artifact_id is not None
+
+        def fake_runner(
+            command: list[str], *, env: dict[str, str] | None = None
+        ) -> None:
+            runner_calls.append((command, env))
+
+        class MissingRowUpdateQuerySet:
+            def update(self, **kwargs: Any) -> int:
+                del kwargs
+                return 0
+
+        with patch.object(
+            BackupArtifact._default_manager,
+            "filter",
+            return_value=MissingRowUpdateQuerySet(),
+        ):
+            result = restore_backup_artifact(
+                postgresql_backup_artifact,
+                confirmation=postgresql_backup_artifact.filename,
+                dry_run=False,
+                shell_runner=cast(ShellCommandRunner, fake_runner),
+            )
+
+        postgresql_backup_artifact.refresh_from_db()
+
+        assert result.executed is True
+        assert result.dry_run is False
+        assert (
+            result.message
+            == f"Restore executed for {postgresql_backup_artifact.filename}."
+        )
+        assert runner_calls
+        assert len(result.warnings) == 1
+        warning = result.warnings[0]
+        assert warning.code == "artifact_row_missing_after_restore"
+        assert (
+            warning.message
+            == "Restore executed, but the original backup artifact row no longer exists in the restored database."
+        )
+        assert warning.details == {
+            "artifact_id": str(artifact_id),
+            "filename": postgresql_backup_artifact.filename,
+        }
+        assert postgresql_backup_artifact.status == BackupArtifact.STATUS_READY
+        assert postgresql_backup_artifact.restored_at is None
 
     def test_restore_dry_run_materializes_private_remote_artifact_when_local_file_is_missing(
         self,
