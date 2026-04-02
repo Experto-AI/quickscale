@@ -10,6 +10,7 @@ from unittest.mock import patch
 import pytest
 from django.contrib import admin, messages
 from django.contrib.auth import get_user_model
+from django.contrib.auth.models import Permission
 from django.contrib.messages import get_messages
 from django.contrib.messages.storage.fallback import FallbackStorage
 from django.contrib.sessions.middleware import SessionMiddleware
@@ -46,6 +47,26 @@ def _attach_messages(request: HttpRequest) -> None:
     session_middleware.process_request(request)
     request.session.save()
     setattr(request, "_messages", FallbackStorage(request))
+
+
+def _make_staff_user(username: str, *permission_codenames: str) -> AbstractBaseUser:
+    """Create a staff user with the requested backups-model permissions."""
+    user = get_user_model().objects.create_user(
+        username=username,
+        email=f"{username}@example.com",
+        password="staffpass123",
+        is_staff=True,
+    )
+    if permission_codenames:
+        permissions = [
+            Permission.objects.get(
+                content_type__app_label="quickscale_modules_backups",
+                codename=codename,
+            )
+            for codename in permission_codenames
+        ]
+        user.user_permissions.add(*permissions)
+    return user
 
 
 @pytest.mark.django_db
@@ -144,6 +165,32 @@ class TestBackupPolicyAdmin:
         )
         assert reverse("admin:quickscale_modules_backups_backuppolicy_prune") in content
 
+    def test_policy_changelist_hides_change_only_controls_for_view_only_user(
+        self,
+        backup_policy: BackupPolicy,
+    ) -> None:
+        del backup_policy
+        user = _make_staff_user(
+            "backups-staff-policy-view-only",
+            "view_backuppolicy",
+        )
+        client = Client()
+        client.force_login(user)
+
+        response = client.get(
+            reverse("admin:quickscale_modules_backups_backuppolicy_changelist")
+        )
+
+        content = response.content.decode("utf-8")
+
+        assert response.status_code == 200
+        assert "Create backup now" not in content
+        assert "Prune expired backups" not in content
+        assert "Restore backup" in content
+        assert (
+            reverse("admin:quickscale_modules_backups_backuppolicy_restore") in content
+        )
+
     def test_restore_page_renders_guarded_local_restore_workflow(
         self,
         admin_client: Client,
@@ -211,6 +258,94 @@ class TestBackupPolicyAdmin:
 
         assert response.status_code == 403
         mocked_restore.assert_not_called()
+
+    @pytest.mark.parametrize(
+        ("label", "url_name", "patched_symbol", "needs_artifact"),
+        [
+            (
+                "create",
+                "admin:quickscale_modules_backups_backuppolicy_create",
+                "quickscale_modules_backups.admin.create_backup",
+                False,
+            ),
+            (
+                "prune",
+                "admin:quickscale_modules_backups_backuppolicy_prune",
+                "quickscale_modules_backups.admin.prune_expired_backups",
+                False,
+            ),
+            (
+                "download",
+                "admin:quickscale_modules_backups_backupartifact_download",
+                "quickscale_modules_backups.admin.download_backup_path",
+                True,
+            ),
+        ],
+    )
+    def test_direct_operator_urls_deny_staff_user_without_required_permissions(
+        self,
+        backup_artifact: BackupArtifact,
+        label: str,
+        url_name: str,
+        patched_symbol: str,
+        needs_artifact: bool,
+    ) -> None:
+        user = _make_staff_user(
+            f"backups-staff-{label}-direct-url-view-only",
+            "view_backuppolicy",
+        )
+        client = Client()
+        client.force_login(user)
+
+        if needs_artifact:
+            url = reverse(url_name, args=[backup_artifact.pk])
+        else:
+            url = reverse(url_name)
+
+        with patch(patched_symbol) as mocked_operation:
+            response = client.get(url)
+
+        assert response.status_code == 403
+        mocked_operation.assert_not_called()
+
+    @pytest.mark.parametrize(
+        ("action_name", "patched_symbol"),
+        [
+            (
+                "create_backup_now",
+                "quickscale_modules_backups.admin.create_backup",
+            ),
+            (
+                "prune_expired_backups_now",
+                "quickscale_modules_backups.admin.prune_expired_backups",
+            ),
+        ],
+    )
+    def test_changelist_actions_deny_view_only_user_without_change_permission(
+        self,
+        backup_policy: BackupPolicy,
+        action_name: str,
+        patched_symbol: str,
+    ) -> None:
+        user = _make_staff_user(
+            f"backups-staff-{action_name}-action-view-only",
+            "view_backuppolicy",
+        )
+        client = Client()
+        client.force_login(user)
+
+        with patch(patched_symbol) as mocked_operation:
+            response = client.post(
+                reverse("admin:quickscale_modules_backups_backuppolicy_changelist"),
+                {
+                    "action": action_name,
+                    admin.helpers.ACTION_CHECKBOX_NAME: [str(backup_policy.pk)],
+                    "index": 0,
+                },
+            )
+
+        assert response.status_code == 403
+        mocked_operation.assert_not_called()
 
     @pytest.mark.parametrize(
         ("url_name", "patched_symbol"),
@@ -458,6 +593,72 @@ class TestBackupPolicyAdmin:
             "Backup creation failed: Required executable 'pg_dump' is not installed in this runtime."
         ]
 
+    def test_prune_operator_endpoint_allows_staff_user_with_change_permission(
+        self,
+        backup_policy: BackupPolicy,
+    ) -> None:
+        del backup_policy
+        user = _make_staff_user(
+            "backups-staff-prune-custom-url-change",
+            "change_backuppolicy",
+        )
+        client = Client()
+        client.force_login(user)
+
+        with patch(
+            "quickscale_modules_backups.admin.prune_expired_backups",
+            return_value=2,
+        ) as mocked_prune:
+            response = client.post(
+                reverse("admin:quickscale_modules_backups_backuppolicy_prune"),
+                follow=True,
+            )
+
+        assert response.status_code == 200
+        mocked_prune.assert_called_once_with()
+        assert [message.message for message in get_messages(response.wsgi_request)] == [
+            "Pruned 2 expired backup artifact(s)."
+        ]
+
+    def test_create_backup_action_allows_staff_user_with_change_permission(
+        self,
+        backup_policy: BackupPolicy,
+    ) -> None:
+        user = _make_staff_user(
+            "backups-staff-create-action-change",
+            "change_backuppolicy",
+        )
+        client = Client()
+        client.force_login(user)
+        fake_artifact = BackupArtifact(
+            filename="db-project-local-20260326T120000Z.json",
+            checksum_sha256="abc",
+            size_bytes=1,
+            backup_format="json",
+            database_engine="django.db.backends.sqlite3",
+            database_name="test.sqlite3",
+        )
+
+        with patch(
+            "quickscale_modules_backups.admin.create_backup",
+            return_value=fake_artifact,
+        ) as mocked_create:
+            response = client.post(
+                reverse("admin:quickscale_modules_backups_backuppolicy_changelist"),
+                {
+                    "action": "create_backup_now",
+                    admin.helpers.ACTION_CHECKBOX_NAME: [str(backup_policy.pk)],
+                    "index": 0,
+                },
+                follow=True,
+            )
+
+        assert response.status_code == 200
+        mocked_create.assert_called_once_with(initiated_by=user, trigger="admin")
+        assert [message.message for message in get_messages(response.wsgi_request)] == [
+            "Created backup artifact db-project-local-20260326T120000Z.json"
+        ]
+
     def test_prune_expired_backups_action_runs_from_admin_changelist(
         self,
         admin_client: Client,
@@ -686,6 +887,27 @@ class TestBackupArtifactAdmin:
 
         assert response.status_code == 302
         assert response.url.startswith(reverse("admin:login"))
+
+    def test_download_view_allows_staff_user_with_view_permission(
+        self,
+        backup_artifact: BackupArtifact,
+    ) -> None:
+        user = _make_staff_user(
+            "backups-staff-artifact-view-only",
+            "view_backupartifact",
+        )
+        client = Client()
+        client.force_login(user)
+
+        response = client.get(
+            reverse(
+                "admin:quickscale_modules_backups_backupartifact_download",
+                args=[backup_artifact.pk],
+            )
+        )
+
+        assert response.status_code == 200
+        assert backup_artifact.filename in response["Content-Disposition"]
 
     def test_download_link_is_unavailable_for_deleted_artifact(
         self,

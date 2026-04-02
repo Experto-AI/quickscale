@@ -74,6 +74,9 @@ class BackupPolicyAdmin(admin.ModelAdmin):
         "command_driven_notice",
         "restore_notice",
     ]
+    _change_required_actions = frozenset(
+        {"create_backup_now", "prune_expired_backups_now"}
+    )
 
     list_display = [
         "key",
@@ -186,17 +189,35 @@ class BackupPolicyAdmin(admin.ModelAdmin):
         model_fields = [field.name for field in self.model._meta.fields]
         return [*model_fields, *self._notice_fields]
 
+    def _require_change_permission(self, request: HttpRequest) -> None:
+        """Require BackupPolicy change permission for mutating admin operations."""
+        if not self.has_change_permission(request):
+            raise PermissionDenied
+
     def changelist_view(
         self,
         request: HttpRequest,
         extra_context: dict[str, Any] | None = None,
     ) -> HttpResponse:
         """Ensure the default policy exists before rendering the changelist."""
+        requested_action = request.POST.get("action")
+        if (
+            request.method == "POST"
+            and requested_action in self._change_required_actions
+        ):
+            self._require_change_permission(request)
+
         ensure_default_policy()
-        return super().changelist_view(request, extra_context)
+        merged_context = {
+            **(extra_context or {}),
+            "show_create_prune_controls": self.has_change_permission(request),
+            "show_restore_control": self.has_view_or_change_permission(request),
+        }
+        return super().changelist_view(request, merged_context)
 
     def create_backup_view(self, request: HttpRequest) -> HttpResponseRedirect:
         """Run backup creation from a dedicated admin endpoint."""
+        self._require_change_permission(request)
         if request.method != "POST":
             return HttpResponseRedirect(
                 reverse("admin:quickscale_modules_backups_backuppolicy_changelist")
@@ -208,6 +229,7 @@ class BackupPolicyAdmin(admin.ModelAdmin):
 
     def prune_expired_backups_view(self, request: HttpRequest) -> HttpResponseRedirect:
         """Run backup pruning from a dedicated admin endpoint."""
+        self._require_change_permission(request)
         if request.method != "POST":
             return HttpResponseRedirect(
                 reverse("admin:quickscale_modules_backups_backuppolicy_changelist")
@@ -458,9 +480,10 @@ class BackupPolicyAdmin(admin.ModelAdmin):
             "same guardrails."
         )
 
-    @admin.action(description="Create backup now")
+    @admin.action(description="Create backup now", permissions=["change"])
     def create_backup_now(self, request: HttpRequest, queryset: Any) -> None:
         """Create a new backup artifact from the admin surface."""
+        self._require_change_permission(request)
         initiated_by: AbstractBaseUser | None = None
         if request.user.is_authenticated:
             initiated_by = request.user
@@ -478,9 +501,10 @@ class BackupPolicyAdmin(admin.ModelAdmin):
             level=messages.SUCCESS,
         )
 
-    @admin.action(description="Prune expired backups now")
+    @admin.action(description="Prune expired backups now", permissions=["change"])
     def prune_expired_backups_now(self, request: HttpRequest, queryset: Any) -> None:
         """Prune expired backup files and mark their metadata as deleted."""
+        self._require_change_permission(request)
         deleted_count = prune_expired_backups()
         self.message_user(
             request,
@@ -600,6 +624,11 @@ class BackupArtifactAdmin(admin.ModelAdmin):
             )
         ]
         return custom_urls + urls
+
+    def _require_view_or_change_permission(self, request: HttpRequest) -> None:
+        """Require BackupArtifact view or change permission for admin downloads."""
+        if not self.has_view_or_change_permission(request):
+            raise PermissionDenied
 
     def _has_downloadable_local_file(self, obj: BackupArtifact) -> bool:
         """Return whether the admin can still offer a local download action."""
@@ -726,6 +755,7 @@ class BackupArtifactAdmin(admin.ModelAdmin):
         artifact_id: int,
     ) -> FileResponse | HttpResponseRedirect:
         """Stream a local backup file to authenticated staff users."""
+        self._require_view_or_change_permission(request)
         artifact = self.get_object(request, str(artifact_id))
         if artifact is None:
             self.message_user(
