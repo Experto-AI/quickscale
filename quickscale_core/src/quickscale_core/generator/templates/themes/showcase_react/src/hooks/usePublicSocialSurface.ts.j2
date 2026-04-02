@@ -120,18 +120,27 @@ function isSocialEmbedRecord(value: unknown): value is SocialEmbedRecord {
     return false
   }
 
-  const record = value as Record<string, unknown>
   return (
-    isSocialEmbedResolutionStatus(record.resolution_status) &&
-    isOptionalString(record.resolution_error) &&
-    isOptionalString(record.embed_url) &&
-    isOptionalString(record.thumbnail_url) &&
-    isOptionalNumber(record.embed_width) &&
-    isOptionalNumber(record.embed_height) &&
-    isOptionalNumber(record.thumbnail_width) &&
-    isOptionalNumber(record.thumbnail_height) &&
-    isOptionalString(record.last_resolution_attempt_at) &&
-    isOptionalString(record.last_resolved_at)
+    'resolution_status' in value &&
+    isSocialEmbedResolutionStatus(value.resolution_status) &&
+    'resolution_error' in value &&
+    isOptionalString(value.resolution_error) &&
+    'embed_url' in value &&
+    isOptionalString(value.embed_url) &&
+    'thumbnail_url' in value &&
+    isOptionalString(value.thumbnail_url) &&
+    'embed_width' in value &&
+    isOptionalNumber(value.embed_width) &&
+    'embed_height' in value &&
+    isOptionalNumber(value.embed_height) &&
+    'thumbnail_width' in value &&
+    isOptionalNumber(value.thumbnail_width) &&
+    'thumbnail_height' in value &&
+    isOptionalNumber(value.thumbnail_height) &&
+    'last_resolution_attempt_at' in value &&
+    isOptionalString(value.last_resolution_attempt_at) &&
+    'last_resolved_at' in value &&
+    isOptionalString(value.last_resolved_at)
   )
 }
 
@@ -163,13 +172,16 @@ function isLinkTreePayload(value: unknown): value is SocialLinkTreePayload {
     return false
   }
 
-  const payload = value as Record<string, unknown>
   return (
-    typeof payload.layout_variant === 'string' &&
-    typeof payload.links_per_page === 'number' &&
-    typeof payload.total_links === 'number' &&
-    Array.isArray(payload.links) &&
-    payload.links.every(isSocialLinkRecord)
+    'layout_variant' in value &&
+    typeof value.layout_variant === 'string' &&
+    'links_per_page' in value &&
+    typeof value.links_per_page === 'number' &&
+    'total_links' in value &&
+    typeof value.total_links === 'number' &&
+    'links' in value &&
+    Array.isArray(value.links) &&
+    value.links.every(isSocialLinkRecord)
   )
 }
 
@@ -178,13 +190,16 @@ function isEmbedsPayload(value: unknown): value is SocialEmbedsPayload {
     return false
   }
 
-  const payload = value as Record<string, unknown>
   return (
-    typeof payload.cache_ttl_seconds === 'number' &&
-    typeof payload.embeds_per_page === 'number' &&
-    typeof payload.total_embeds === 'number' &&
-    Array.isArray(payload.embeds) &&
-    payload.embeds.every(isSocialEmbedRecord)
+    'cache_ttl_seconds' in value &&
+    typeof value.cache_ttl_seconds === 'number' &&
+    'embeds_per_page' in value &&
+    typeof value.embeds_per_page === 'number' &&
+    'total_embeds' in value &&
+    typeof value.total_embeds === 'number' &&
+    'embeds' in value &&
+    Array.isArray(value.embeds) &&
+    value.embeds.every(isSocialEmbedRecord)
   )
 }
 

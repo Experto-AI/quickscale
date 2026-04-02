@@ -84,6 +84,35 @@ class TestReactThemeGeneration:
         assert "record.embed_url" in embeds_page
         assert "record.resolution_error" in embeds_page
 
+    def test_react_theme_social_hook_uses_strict_safe_payload_narrowing(self, tmp_path):
+        """Generated social hook should avoid unsafe recasts after narrowing payloads."""
+        generator = ProjectGenerator(theme="showcase_react")
+        project_name = "react_social_type_guard_contract"
+        output_path = tmp_path / project_name
+
+        generator.generate(project_name, output_path)
+
+        social_hook = (
+            output_path / "frontend" / "src" / "hooks" / "usePublicSocialSurface.ts"
+        ).read_text()
+
+        social_embed_guard = social_hook.split("function isSocialEmbedRecord", 1)[
+            1
+        ].split("\nfunction hasBasePayload", 1)[0]
+        link_tree_guard = social_hook.split("function isLinkTreePayload", 1)[1].split(
+            "\nfunction isEmbedsPayload", 1
+        )[0]
+        embeds_guard = social_hook.split("function isEmbedsPayload", 1)[1].split(
+            "\nasync function fetchPublicSocialPayload", 1
+        )[0]
+
+        assert "as Record<string, unknown>" not in social_embed_guard
+        assert "'resolution_status' in value" in social_embed_guard
+        assert "as Record<string, unknown>" not in link_tree_guard
+        assert "'links' in value" in link_tree_guard
+        assert "as Record<string, unknown>" not in embeds_guard
+        assert "'embeds' in value" in embeds_guard
+
     def test_react_theme_prettier_config_matches_templates(self, tmp_path):
         """Prettier config should match generated React source style."""
         generator = ProjectGenerator(theme="showcase_react")
