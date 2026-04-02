@@ -23,6 +23,7 @@ quickscale-module-forms = {path = "./quickscale_modules/forms", develop = true}
 quickscale-module-storage = {path = "./quickscale_modules/storage", develop = true}
 quickscale-module-backups = {path = "./quickscale_modules/backups", develop = true}
 quickscale-module-notifications = {path = "./quickscale_modules/notifications", develop = true}
+quickscale-module-social = {path = "./quickscale_modules/social", develop = true}
 
 [tool.poetry.group.dev.dependencies]
 # Testing frameworks
@@ -49,6 +50,9 @@ psycopg2-binary = "^2.9.11"
 [build-system]
 requires = ["poetry-core"]
 build-backend = "poetry.core.masonry.api"
+
+[tool.pytest.ini_options]
+pythonpath = ["quickscale/src", "quickscale_core/src", "quickscale_cli/src"]
 
 [tool.pylint.main]
 # Use multiple processes for faster analysis

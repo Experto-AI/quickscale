@@ -1,10 +1,4 @@
-"""Dependency-light social module contract helpers.
-
-This module defines the canonical Phase A social contract used by planner-side
-validation and future generated-project wiring. Runtime/admin consumers must not
-import quickscale_cli directly; later phases should copy these fixed values into
-module-owned or generated-project-owned code paths instead.
-"""
+"""Module-owned social contract helpers for runtime and admin consumers."""
 
 from __future__ import annotations
 
@@ -14,11 +8,15 @@ import re
 from typing import Any
 from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 
+from django.conf import settings
+
 SOCIAL_LINK_TREE_PATH = "/social"
 SOCIAL_EMBEDS_PATH = "/social/embeds"
 SOCIAL_INTEGRATION_BASE_PATH = "/_quickscale/social/"
 SOCIAL_INTEGRATION_EMBEDS_PATH = "/_quickscale/social/embeds/"
 SOCIAL_LAYOUT_VARIANTS = ("list", "cards", "grid")
+SOCIAL_LINKS_CACHE_KEY = "quickscale_modules_social:links"
+SOCIAL_EMBEDS_CACHE_KEY = "quickscale_modules_social:embeds"
 SOCIAL_STATUS_ENABLED = "enabled"
 SOCIAL_STATUS_EMPTY = "empty"
 SOCIAL_STATUS_DISABLED = "disabled"
@@ -53,6 +51,12 @@ _TRACKING_QUERY_NAMES = {
     "ref_url",
     "si",
 }
+_TRUE_VALUES = {"1", "true", "yes", "on"}
+_FALSE_VALUES = {"0", "false", "no", "off"}
+
+
+class SocialConfigurationError(Exception):
+    """Raised when the runtime social settings are invalid."""
 
 
 @dataclass(frozen=True)
@@ -72,6 +76,19 @@ class ResolvedSocialTarget:
 
     provider: str
     url: str
+
+
+@dataclass(frozen=True)
+class SocialRuntimeSettingsSnapshot:
+    """Read-only runtime view of the authoritative social settings."""
+
+    link_tree_enabled: bool
+    layout_variant: str
+    embeds_enabled: bool
+    provider_allowlist: tuple[str, ...]
+    cache_ttl_seconds: int
+    links_per_page: int
+    embeds_per_page: int
 
 
 SOCIAL_PROVIDER_CATALOG: tuple[SocialProviderMetadata, ...] = (
@@ -126,6 +143,10 @@ SOCIAL_PROVIDER_CATALOG: tuple[SocialProviderMetadata, ...] = (
     ),
 )
 
+SOCIAL_PROVIDER_CHOICES = tuple(
+    (provider.name, provider.display_name) for provider in SOCIAL_PROVIDER_CATALOG
+)
+
 _SOCIAL_PROVIDER_BY_NAME = {
     provider.name: provider for provider in SOCIAL_PROVIDER_CATALOG
 }
@@ -146,19 +167,6 @@ DEFAULT_SOCIAL_PROVIDER_ALLOWLIST = tuple(
 DEFAULT_SOCIAL_EMBED_PROVIDER_ALLOWLIST = tuple(
     provider.name for provider in SOCIAL_PROVIDER_CATALOG if provider.supports_embeds
 )
-
-
-def default_social_module_options() -> dict[str, Any]:
-    """Return the Phase A social module contract defaults."""
-    return {
-        "link_tree_enabled": True,
-        "layout_variant": "list",
-        "embeds_enabled": True,
-        "provider_allowlist": list(DEFAULT_SOCIAL_PROVIDER_ALLOWLIST),
-        "cache_ttl_seconds": 300,
-        "links_per_page": 24,
-        "embeds_per_page": 12,
-    }
 
 
 def _normalize_provider_token(value: Any) -> str:
@@ -223,92 +231,6 @@ def normalize_social_provider_allowlist(values: Sequence[Any] | Any) -> list[str
         normalized.append(candidate)
 
     return normalized
-
-
-def normalize_social_module_options(
-    options: dict[str, Any] | None,
-) -> dict[str, Any]:
-    """Return a normalized social module options mapping."""
-    normalized = dict(options or {})
-
-    if "provider_allowlist" in normalized:
-        normalized["provider_allowlist"] = normalize_social_provider_allowlist(
-            normalized["provider_allowlist"]
-        )
-
-    if "layout_variant" in normalized:
-        normalized["layout_variant"] = str(normalized["layout_variant"]).strip().lower()
-
-    return normalized
-
-
-def resolve_social_module_options(options: dict[str, Any] | None) -> dict[str, Any]:
-    """Merge default social options with normalized overrides."""
-    resolved = default_social_module_options()
-    resolved.update(normalize_social_module_options(options))
-    resolved["provider_allowlist"] = normalize_social_provider_allowlist(
-        resolved["provider_allowlist"]
-    )
-    resolved["layout_variant"] = str(resolved["layout_variant"]).strip().lower()
-    return resolved
-
-
-def validate_social_module_options(options: dict[str, Any] | None) -> list[str]:
-    """Return validation issues for the social module contract."""
-    resolved = resolve_social_module_options(options)
-    issues: list[str] = []
-
-    if not isinstance(resolved.get("link_tree_enabled"), bool):
-        issues.append("modules.social.link_tree_enabled must be a boolean")
-    if not isinstance(resolved.get("embeds_enabled"), bool):
-        issues.append("modules.social.embeds_enabled must be a boolean")
-
-    layout_variant = str(resolved.get("layout_variant", "")).strip().lower()
-    if layout_variant not in SOCIAL_LAYOUT_VARIANTS:
-        issues.append("modules.social.layout_variant must be one of: list, cards, grid")
-
-    provider_allowlist = normalize_social_provider_allowlist(
-        resolved.get("provider_allowlist", [])
-    )
-    if not provider_allowlist:
-        issues.append("modules.social.provider_allowlist cannot be empty")
-
-    unknown_providers = [
-        provider
-        for provider in provider_allowlist
-        if provider not in _SOCIAL_PROVIDER_BY_NAME
-    ]
-    if unknown_providers:
-        issues.append(
-            "modules.social.provider_allowlist contains unsupported providers: "
-            + ", ".join(sorted(unknown_providers))
-        )
-
-    if not resolved.get("link_tree_enabled") and not resolved.get("embeds_enabled"):
-        issues.append(
-            "modules.social must leave link_tree_enabled or embeds_enabled enabled"
-        )
-
-    if resolved.get("embeds_enabled"):
-        embed_providers = [
-            provider
-            for provider in provider_allowlist
-            if social_provider_supports_embeds(provider)
-        ]
-        if not embed_providers:
-            issues.append(
-                "modules.social.provider_allowlist must include tiktok or youtube when embeds_enabled is true"
-            )
-
-    for option_name in ("cache_ttl_seconds", "links_per_page", "embeds_per_page"):
-        try:
-            value = int(resolved.get(option_name, 0))
-            if value < 1:
-                issues.append(f"modules.social.{option_name} must be at least 1")
-        except TypeError, ValueError:
-            issues.append(f"modules.social.{option_name} must be an integer")
-
-    return issues
 
 
 def _coerce_social_url(raw_url: str) -> str:
@@ -379,23 +301,6 @@ def _canonical_youtube_parts(host: str, path: str, query: str) -> tuple[str, str
     return canonical_path, ""
 
 
-def detect_social_provider(url: str) -> str | None:
-    """Return the canonical provider detected from a social URL."""
-    try:
-        parsed = urlsplit(_coerce_social_url(url))
-    except ValueError:
-        return None
-
-    if parsed.scheme.lower() not in {"http", "https"}:
-        return None
-
-    host = (parsed.hostname or "").lower()
-    if not host:
-        return None
-
-    return _SOCIAL_PROVIDER_BY_HOST.get(host)
-
-
 def resolve_social_target(
     url: str,
     *,
@@ -451,33 +356,138 @@ def normalize_social_url(url: str, *, provider: Any | None = None) -> str:
     return resolve_social_target(url, provider=provider).url
 
 
+def _coerce_bool_setting(value: Any, setting_name: str) -> bool:
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, int) and value in {0, 1}:
+        return bool(value)
+    if isinstance(value, str):
+        lowered = value.strip().lower()
+        if lowered in _TRUE_VALUES:
+            return True
+        if lowered in _FALSE_VALUES:
+            return False
+    raise SocialConfigurationError(f"{setting_name} must be a boolean")
+
+
+def _coerce_positive_int_setting(value: Any, setting_name: str) -> int:
+    try:
+        normalized = int(value)
+    except (TypeError, ValueError) as exc:
+        raise SocialConfigurationError(f"{setting_name} must be an integer") from exc
+
+    if normalized < 1:
+        raise SocialConfigurationError(f"{setting_name} must be at least 1")
+    return normalized
+
+
+def get_social_runtime_settings() -> SocialRuntimeSettingsSnapshot:
+    """Return the authoritative social runtime settings from Django settings."""
+    link_tree_enabled = _coerce_bool_setting(
+        getattr(settings, "QUICKSCALE_SOCIAL_LINK_TREE_ENABLED", True),
+        "QUICKSCALE_SOCIAL_LINK_TREE_ENABLED",
+    )
+    embeds_enabled = _coerce_bool_setting(
+        getattr(settings, "QUICKSCALE_SOCIAL_EMBEDS_ENABLED", True),
+        "QUICKSCALE_SOCIAL_EMBEDS_ENABLED",
+    )
+    layout_variant = (
+        str(getattr(settings, "QUICKSCALE_SOCIAL_LAYOUT_VARIANT", "list"))
+        .strip()
+        .lower()
+    )
+    provider_allowlist = tuple(
+        normalize_social_provider_allowlist(
+            getattr(
+                settings,
+                "QUICKSCALE_SOCIAL_PROVIDER_ALLOWLIST",
+                DEFAULT_SOCIAL_PROVIDER_ALLOWLIST,
+            )
+        )
+    )
+    cache_ttl_seconds = _coerce_positive_int_setting(
+        getattr(settings, "QUICKSCALE_SOCIAL_CACHE_TTL_SECONDS", 300),
+        "QUICKSCALE_SOCIAL_CACHE_TTL_SECONDS",
+    )
+    links_per_page = _coerce_positive_int_setting(
+        getattr(settings, "QUICKSCALE_SOCIAL_LINKS_PER_PAGE", 24),
+        "QUICKSCALE_SOCIAL_LINKS_PER_PAGE",
+    )
+    embeds_per_page = _coerce_positive_int_setting(
+        getattr(settings, "QUICKSCALE_SOCIAL_EMBEDS_PER_PAGE", 12),
+        "QUICKSCALE_SOCIAL_EMBEDS_PER_PAGE",
+    )
+
+    if layout_variant not in SOCIAL_LAYOUT_VARIANTS:
+        raise SocialConfigurationError(
+            "QUICKSCALE_SOCIAL_LAYOUT_VARIANT must be one of: list, cards, grid"
+        )
+    if not provider_allowlist:
+        raise SocialConfigurationError(
+            "QUICKSCALE_SOCIAL_PROVIDER_ALLOWLIST cannot be empty"
+        )
+
+    unknown_providers = [
+        provider
+        for provider in provider_allowlist
+        if provider not in _SOCIAL_PROVIDER_BY_NAME
+    ]
+    if unknown_providers:
+        joined = ", ".join(sorted(unknown_providers))
+        raise SocialConfigurationError(
+            "QUICKSCALE_SOCIAL_PROVIDER_ALLOWLIST contains unsupported providers: "
+            f"{joined}"
+        )
+    if not link_tree_enabled and not embeds_enabled:
+        raise SocialConfigurationError(
+            "QuickScale social must leave link_tree_enabled or embeds_enabled enabled"
+        )
+    if embeds_enabled and not any(
+        social_provider_supports_embeds(provider) for provider in provider_allowlist
+    ):
+        raise SocialConfigurationError(
+            "QUICKSCALE_SOCIAL_PROVIDER_ALLOWLIST must include TikTok or YouTube when embeds are enabled"
+        )
+
+    return SocialRuntimeSettingsSnapshot(
+        link_tree_enabled=link_tree_enabled,
+        layout_variant=layout_variant,
+        embeds_enabled=embeds_enabled,
+        provider_allowlist=provider_allowlist,
+        cache_ttl_seconds=cache_ttl_seconds,
+        links_per_page=links_per_page,
+        embeds_per_page=embeds_per_page,
+    )
+
+
 __all__ = [
     "DEFAULT_SOCIAL_EMBED_PROVIDER_ALLOWLIST",
     "DEFAULT_SOCIAL_PROVIDER_ALLOWLIST",
+    "SOCIAL_EMBEDS_CACHE_KEY",
     "SOCIAL_EMBEDS_PATH",
     "SOCIAL_INTEGRATION_BASE_PATH",
     "SOCIAL_INTEGRATION_EMBEDS_PATH",
     "SOCIAL_LAYOUT_VARIANTS",
     "SOCIAL_PAYLOAD_HTTP_STATUS",
     "SOCIAL_PAYLOAD_STATUSES",
+    "SOCIAL_LINKS_CACHE_KEY",
     "SOCIAL_LINK_TREE_PATH",
     "SOCIAL_PROVIDER_CATALOG",
+    "SOCIAL_PROVIDER_CHOICES",
     "SOCIAL_STATUS_DISABLED",
     "SOCIAL_STATUS_EMPTY",
     "SOCIAL_STATUS_ENABLED",
     "SOCIAL_STATUS_ERROR",
     "ResolvedSocialTarget",
+    "SocialConfigurationError",
     "SocialProviderMetadata",
-    "default_social_module_options",
-    "detect_social_provider",
+    "SocialRuntimeSettingsSnapshot",
     "get_social_provider_metadata",
-    "normalize_social_module_options",
+    "get_social_runtime_settings",
     "normalize_social_provider",
     "normalize_social_provider_allowlist",
     "normalize_social_url",
-    "resolve_social_module_options",
     "resolve_social_target",
     "social_payload_status_code",
     "social_provider_supports_embeds",
-    "validate_social_module_options",
 ]

@@ -772,6 +772,9 @@ class TestModuleWiringSpecs:
 
         _, _, settings, urls = collect_wiring(specs)
         social_spec = specs["social"]
+        managed_social_views = social_spec.managed_files[
+            "quickscale_managed/social_views.py"
+        ]
 
         assert settings["QUICKSCALE_SOCIAL_LINK_TREE_PATH"] == SOCIAL_LINK_TREE_PATH
         assert settings["QUICKSCALE_SOCIAL_EMBEDS_PATH"] == SOCIAL_EMBEDS_PATH
@@ -791,6 +794,11 @@ class TestModuleWiringSpecs:
         assert "quickscale_managed/__init__.py" in social_spec.managed_files
         assert "quickscale_managed/social_urls.py" in social_spec.managed_files
         assert "quickscale_managed/social_views.py" in social_spec.managed_files
+        assert "quickscale_modules_social.services" in managed_social_views
+        assert "build_social_link_tree_payload" in managed_social_views
+        assert "build_social_embeds_payload" in managed_social_views
+        assert "PAYLOAD_STATUS_HTTP" in managed_social_views
+        assert "_error_payload" in managed_social_views
 
     def test_social_wiring_requires_project_package(self):
         """Social managed transport wiring should require the generated package name."""
@@ -1450,6 +1458,11 @@ class TestSocialModuleConfig:
         assert "QuickScale managed integration package" in managed_init
         assert 'path("embeds/", social_embeds_payload' in managed_social_urls
         assert "integration_base_path" in managed_social_views
+        assert "quickscale_modules_social.services" in managed_social_views
+        assert "build_social_link_tree_payload" in managed_social_views
+        assert "build_social_embeds_payload" in managed_social_views
+        assert "PAYLOAD_STATUS_HTTP" in managed_social_views
+        assert "_error_payload" in managed_social_views
         assert "JsonResponse" in managed_social_views
 
 

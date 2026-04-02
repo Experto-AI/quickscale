@@ -1599,7 +1599,7 @@ files = [
 
 [[package]]
 name = "quickscale"
-version = "0.76.0"
+version = "0.78.0"
 description = "Meta-package that installs quickscale-core and quickscale-cli together"
 optional = false
 python-versions = "^3.14"
@@ -1608,8 +1608,8 @@ files = []
 develop = true
 
 [package.dependencies]
-quickscale-cli = "^0.76.0"
-quickscale-core = "^0.76.0"
+quickscale-cli = "^0.78.0"
+quickscale-core = "^0.78.0"
 
 [package.source]
 type = "directory"
@@ -1617,7 +1617,7 @@ url = "quickscale"
 
 [[package]]
 name = "quickscale-cli"
-version = "0.76.0"
+version = "0.78.0"
 description = "Command-line interface for QuickScale Django project generator"
 optional = false
 python-versions = "^3.14"
@@ -1635,7 +1635,7 @@ url = "quickscale_cli"
 
 [[package]]
 name = "quickscale-core"
-version = "0.76.0"
+version = "0.78.0"
 description = "Core scaffolding and utilities for QuickScale Django project generator"
 optional = false
 python-versions = "^3.14"
@@ -1782,6 +1782,23 @@ django-anymail = ">=13.0,<14.0"
 [package.source]
 type = "directory"
 url = "quickscale_modules/notifications"
+
+[[package]]
+name = "quickscale-module-social"
+version = "0.79.0"
+description = "QuickScale curated social links and embeds module"
+optional = false
+python-versions = "^3.14"
+groups = ["main"]
+files = []
+develop = true
+
+[package.dependencies]
+Django = ">=6.0.3,<7.0.0"
+
+[package.source]
+type = "directory"
+url = "quickscale_modules/social"
 
 [[package]]
 name = "quickscale-module-storage"
@@ -2012,4 +2029,4 @@ files = [
 [metadata]
 lock-version = "2.1"
 python-versions = "^3.14"
-content-hash = "a5bfc2dbc5157d41ba66b8c68952fdfa120895f7886372ab7133fa686f695b1d"
+content-hash = "b74cbea262bb9e859fbbd945ed727b64d62fd5df155eaac2bc65f8ca88014218"

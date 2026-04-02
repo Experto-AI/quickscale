@@ -88,7 +88,11 @@ def check_poetry_installed() -> DependencyStatus:
             required=True,
             purpose="Dependency management for generated projects",
         )
-    except subprocess.SubprocessError, FileNotFoundError, subprocess.TimeoutExpired:
+    except (
+        subprocess.SubprocessError,
+        FileNotFoundError,
+        subprocess.TimeoutExpired,
+    ):
         return DependencyStatus(
             name="Poetry",
             installed=False,

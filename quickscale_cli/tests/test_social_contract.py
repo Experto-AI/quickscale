@@ -14,13 +14,19 @@ from quickscale_cli.social_contract import (
     SOCIAL_INTEGRATION_BASE_PATH,
     SOCIAL_INTEGRATION_EMBEDS_PATH,
     SOCIAL_LAYOUT_VARIANTS,
+    SOCIAL_PAYLOAD_STATUSES,
     SOCIAL_LINK_TREE_PATH,
+    SOCIAL_STATUS_DISABLED,
+    SOCIAL_STATUS_EMPTY,
+    SOCIAL_STATUS_ENABLED,
+    SOCIAL_STATUS_ERROR,
     default_social_module_options,
     detect_social_provider,
     normalize_social_provider,
     normalize_social_provider_allowlist,
     normalize_social_url,
     resolve_social_target,
+    social_payload_status_code,
     social_provider_supports_embeds,
     validate_social_module_options,
 )
@@ -45,6 +51,21 @@ def test_social_routes_are_fixed() -> None:
 def test_default_social_embed_provider_allowlist_is_stable() -> None:
     """The embed-capable provider set should remain explicitly constrained."""
     assert DEFAULT_SOCIAL_EMBED_PROVIDER_ALLOWLIST == ("tiktok", "youtube")
+
+
+def test_social_payload_state_contract_is_stable() -> None:
+    """Managed payload status names and HTTP mapping should remain explicit."""
+    assert SOCIAL_PAYLOAD_STATUSES == (
+        SOCIAL_STATUS_ENABLED,
+        SOCIAL_STATUS_EMPTY,
+        SOCIAL_STATUS_DISABLED,
+        SOCIAL_STATUS_ERROR,
+    )
+    assert social_payload_status_code(SOCIAL_STATUS_ENABLED) == 200
+    assert social_payload_status_code(SOCIAL_STATUS_EMPTY) == 200
+    assert social_payload_status_code(SOCIAL_STATUS_DISABLED) == 200
+    assert social_payload_status_code(SOCIAL_STATUS_ERROR) == 503
+    assert social_payload_status_code("unexpected") == 503
 
 
 @pytest.mark.parametrize(
