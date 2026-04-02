@@ -1,6 +1,6 @@
 [project]
 name = "quickscale"
-version = "0.78.0"
+version = "0.79.0"
 description = "Meta-package that installs quickscale-core and quickscale-cli together"
 requires-python = ">=3.14,<4.0"
 readme = "README.md"
@@ -18,8 +18,8 @@ Documentation = "https://github.com/Experto-AI/quickscale/tree/main/docs"
 
 [tool.poetry.dependencies]
 python = "^3.14"
-quickscale-core = "^0.78.0"
-quickscale-cli = "^0.78.0"
+quickscale-core = "^0.79.0"
+quickscale-cli = "^0.79.0"
 
 [build-system]
 requires = ["poetry-core"]

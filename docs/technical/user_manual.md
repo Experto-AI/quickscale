@@ -354,7 +354,7 @@ The wizard guides you through:
 
 **Generated `quickscale.yml` example**:
 ```yaml
-version: "1"
+version: 0.79.0
 project:
   slug: myapp
   package: myapp
