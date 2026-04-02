@@ -1,24 +1,64 @@
 {% extends "admin/change_list.html" %}
 
+{% block extrastyle %}
+{{ block.super }}
+<style>
+    .object-tools li form {
+        display: inline;
+        margin: 0;
+    }
+
+    .object-tools li form button,
+    .object-tools li form input[type="submit"] {
+        display: block;
+        float: left;
+        padding: 3px 12px;
+        background: var(--object-tools-bg);
+        color: var(--object-tools-fg);
+        font-weight: 400;
+        font-size: 0.6875rem;
+        line-height: 1.25rem;
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+        border: 0;
+        border-radius: 15px;
+        cursor: pointer;
+        font-family: var(--font-family-primary);
+    }
+
+    .object-tools li form button:hover,
+    .object-tools li form button:focus,
+    .object-tools li form input[type="submit"]:hover,
+    .object-tools li form input[type="submit"]:focus {
+        background-color: var(--object-tools-hover-bg);
+    }
+
+    .object-tools li form button:focus,
+    .object-tools li form input[type="submit"]:focus {
+        text-decoration: none;
+    }
+</style>
+{% endblock %}
+
 {% block object-tools-items %}
 {% if show_create_prune_controls %}
 <li>
     <form action="{% url 'admin:quickscale_modules_backups_backuppolicy_create' %}" method="post">
         {% csrf_token %}
-        <button type="submit" class="button">Create backup now</button>
+        <button type="submit">Create backup now</button>
     </form>
 </li>
 {% endif %}
 {% if show_restore_control %}
 <li>
-    <a href="{% url 'admin:quickscale_modules_backups_backuppolicy_restore' %}" class="button">Restore backup</a>
+    <a href="{% url 'admin:quickscale_modules_backups_backuppolicy_restore' %}">Restore backup</a>
 </li>
 {% endif %}
 {% if show_create_prune_controls %}
 <li>
     <form action="{% url 'admin:quickscale_modules_backups_backuppolicy_prune' %}" method="post">
         {% csrf_token %}
-        <button type="submit" class="button">Prune expired backups</button>
+        <button type="submit">Prune expired backups</button>
     </form>
 </li>
 {% endif %}
