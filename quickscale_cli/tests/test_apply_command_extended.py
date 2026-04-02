@@ -33,6 +33,7 @@ from quickscale_cli.commands.apply_command import (
     _generate_with_existing_config,
     _git_commit,
     _handle_delta_and_existing_state,
+    _regenerate_managed_wiring_for_apply,
     _init_git,
     _init_git_with_config,
     _load_and_validate_config,
@@ -48,6 +49,7 @@ from quickscale_cli.commands.apply_command import (
     _sync_notifications_env_example,
     _update_module_config_in_state,
 )
+from quickscale_core.generator import ProjectGenerator
 
 
 # ============================================================================
@@ -1776,3 +1778,65 @@ class TestGenerateWithExistingConfig:
         _generate_with_existing_config(mock_config, output, config_file, True)
         assert not (output / "old_file.txt").exists()
         assert (output / "manage.py").exists()
+
+
+class TestManagedSocialApplyRegression:
+    """Regression coverage for existing-project managed social apply behavior."""
+
+    def test_existing_project_social_regeneration_preserves_showcase_react_files(
+        self, tmp_path
+    ):
+        """Existing-project apply should refresh managed backend files without theme churn."""
+        project_name = "social_existing_project"
+        output_path = tmp_path / project_name
+        generator = ProjectGenerator(theme="showcase_react")
+        generator.generate(project_name, output_path)
+
+        frontend_page = (
+            output_path / "frontend" / "src" / "pages" / "SocialEmbedsPublicPage.tsx"
+        )
+        public_template = output_path / "templates" / "social" / "embeds.html"
+
+        frontend_page.write_text(
+            "// user-owned showcase_react customization\n" + frontend_page.read_text()
+        )
+        public_template.write_text(
+            "<!-- user-owned social embeds template -->\n" + public_template.read_text()
+        )
+
+        expected_frontend_page = frontend_page.read_text()
+        expected_public_template = public_template.read_text()
+
+        ctx = Mock()
+        ctx.output_path = output_path
+        ctx.existing_state = Mock()
+        ctx.delta = Mock()
+        ctx.delta.modules_unchanged = ["social"]
+        ctx.qs_config = Mock()
+        ctx.qs_config.project.package = project_name
+        ctx.qs_config.modules = {
+            "social": Mock(
+                options={
+                    "layout_variant": "grid",
+                    "provider_allowlist": ["youtube", "tiktok"],
+                    "cache_ttl_seconds": 600,
+                    "links_per_page": 18,
+                    "embeds_per_page": 9,
+                }
+            )
+        }
+
+        assert _regenerate_managed_wiring_for_apply(ctx, embedded_modules=[]) is True
+        assert frontend_page.read_text() == expected_frontend_page
+        assert public_template.read_text() == expected_public_template
+
+        managed_settings = (
+            output_path / project_name / "settings" / "modules.py"
+        ).read_text()
+        managed_social_views = (
+            output_path / project_name / "quickscale_managed" / "social_views.py"
+        ).read_text()
+
+        assert "QUICKSCALE_SOCIAL_EMBEDS_PER_PAGE" in managed_settings
+        assert "build_social_link_tree_payload" in managed_social_views
+        assert "build_social_embeds_payload" in managed_social_views

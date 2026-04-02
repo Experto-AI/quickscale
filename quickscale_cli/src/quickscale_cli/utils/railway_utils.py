@@ -17,7 +17,11 @@ def is_npm_installed() -> bool:
             timeout=5,
         )
         return True
-    except subprocess.SubprocessError, FileNotFoundError, subprocess.TimeoutExpired:
+    except (
+        subprocess.SubprocessError,
+        FileNotFoundError,
+        subprocess.TimeoutExpired,
+    ):
         return False
 
 
@@ -45,7 +49,11 @@ def get_railway_cli_version() -> str | None:
         if len(parts) >= 3:
             return parts[2]
         return None
-    except subprocess.SubprocessError, FileNotFoundError, subprocess.TimeoutExpired:
+    except (
+        subprocess.SubprocessError,
+        FileNotFoundError,
+        subprocess.TimeoutExpired,
+    ):
         return None
 
 
@@ -66,7 +74,11 @@ def install_railway_cli() -> bool:
             timeout=180,  # npm install can take a while
         )
         return result.returncode == 0
-    except subprocess.SubprocessError, FileNotFoundError, subprocess.TimeoutExpired:
+    except (
+        subprocess.SubprocessError,
+        FileNotFoundError,
+        subprocess.TimeoutExpired,
+    ):
         return False
 
 
@@ -87,7 +99,11 @@ def upgrade_railway_cli() -> bool:
             timeout=180,  # npm update can take a while
         )
         return result.returncode == 0
-    except subprocess.SubprocessError, FileNotFoundError, subprocess.TimeoutExpired:
+    except (
+        subprocess.SubprocessError,
+        FileNotFoundError,
+        subprocess.TimeoutExpired,
+    ):
         return False
 
 
@@ -109,7 +125,11 @@ def login_railway_cli_browserless() -> bool:
             timeout=300,  # Give user 5 minutes to complete auth
         )
         return result.returncode == 0
-    except subprocess.SubprocessError, FileNotFoundError, subprocess.TimeoutExpired:
+    except (
+        subprocess.SubprocessError,
+        FileNotFoundError,
+        subprocess.TimeoutExpired,
+    ):
         return False
 
 
@@ -123,7 +143,11 @@ def is_railway_cli_installed() -> bool:
             timeout=5,
         )
         return True
-    except subprocess.SubprocessError, FileNotFoundError, subprocess.TimeoutExpired:
+    except (
+        subprocess.SubprocessError,
+        FileNotFoundError,
+        subprocess.TimeoutExpired,
+    ):
         return False
 
 
@@ -145,7 +169,11 @@ def check_railway_cli_version(minimum: str = "3.0.0") -> bool:
             current_version = parts[2]
             return _compare_versions(current_version, minimum) >= 0
         return False
-    except subprocess.SubprocessError, FileNotFoundError, subprocess.TimeoutExpired:
+    except (
+        subprocess.SubprocessError,
+        FileNotFoundError,
+        subprocess.TimeoutExpired,
+    ):
         return False
 
 
@@ -172,7 +200,11 @@ def is_railway_authenticated() -> bool:
             timeout=5,
         )
         return result.returncode == 0
-    except subprocess.SubprocessError, FileNotFoundError, subprocess.TimeoutExpired:
+    except (
+        subprocess.SubprocessError,
+        FileNotFoundError,
+        subprocess.TimeoutExpired,
+    ):
         return False
 
 
@@ -459,7 +491,11 @@ def check_uncommitted_changes() -> tuple[bool, str]:
         status_output = result.stdout.strip()
         has_changes = bool(status_output)
         return has_changes, status_output
-    except subprocess.SubprocessError, FileNotFoundError, subprocess.TimeoutExpired:
+    except (
+        subprocess.SubprocessError,
+        FileNotFoundError,
+        subprocess.TimeoutExpired,
+    ):
         # If git is not available or not a git repo, return False
         return False, ""
 
@@ -582,7 +618,11 @@ def check_poetry_lock_consistency() -> tuple[bool, str]:
             return True, "poetry.lock is consistent with pyproject.toml"
         else:
             return False, "poetry.lock is inconsistent with pyproject.toml"
-    except subprocess.SubprocessError, FileNotFoundError, subprocess.TimeoutExpired:
+    except (
+        subprocess.SubprocessError,
+        FileNotFoundError,
+        subprocess.TimeoutExpired,
+    ):
         # If poetry is not available, we can't check
         return True, "Unable to verify poetry.lock consistency (poetry not found)"
 

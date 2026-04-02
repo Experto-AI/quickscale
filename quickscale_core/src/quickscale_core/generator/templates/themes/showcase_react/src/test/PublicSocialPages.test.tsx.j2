@@ -1,0 +1,287 @@
+{% raw -%}
+import { afterEach, describe, expect, it, vi } from 'vitest'
+import { render, screen } from '@testing-library/react'
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
+import { SocialEmbedsPublicPage } from '@/pages/SocialEmbedsPublicPage'
+import { SocialLinkTreePublicPage } from '@/pages/SocialLinkTreePublicPage'
+import type { QuickScaleConfig } from '@/hooks/useModules'
+import type {
+  SocialEmbedsPayload,
+  SocialLinkTreePayload,
+} from '@/hooks/usePublicSocialSurface'
+
+const fetchMock = vi.fn()
+
+vi.stubGlobal('fetch', fetchMock)
+
+function buildProjectConfig(surface: 'link_tree' | 'embeds'): QuickScaleConfig {
+  return {
+    projectName: 'Public Social Demo',
+    modules: {
+      auth: false,
+      blog: false,
+      listings: false,
+      crm: false,
+      forms: false,
+      storage: false,
+      backups: false,
+      notifications: false,
+      social: true,
+      billing: false,
+      teams: false,
+    },
+    modulePaths: {
+      social: surface === 'link_tree' ? '/social' : '/social/embeds',
+    },
+    publicPage: {
+      module: 'social',
+      surface,
+      endpoint: surface === 'link_tree' ? '/_quickscale/social/' : '/_quickscale/social/embeds/',
+      navigation: {
+        home: '/',
+        linkTree: '/social',
+        embeds: '/social/embeds',
+      },
+    },
+  }
+}
+
+function renderPublicPage(surface: 'link_tree' | 'embeds', element: React.ReactElement) {
+  window.__QUICKSCALE__ = buildProjectConfig(surface)
+  const queryClient = new QueryClient({
+    defaultOptions: {
+      queries: {
+        retry: false,
+      },
+    },
+  })
+
+  return render(
+    <QueryClientProvider client={queryClient}>{element}</QueryClientProvider>,
+  )
+}
+
+function mockFetch(payload: unknown, status = 200) {
+  fetchMock.mockResolvedValue({
+    ok: status >= 200 && status < 300,
+    status,
+    json: async () => payload,
+  })
+}
+
+afterEach(() => {
+  fetchMock.mockReset()
+  delete window.__QUICKSCALE__
+})
+
+describe('public social pages', () => {
+  it('renders link-tree entries from the managed payload', async () => {
+    const payload: SocialLinkTreePayload = {
+      module: 'social',
+      surface: 'link_tree',
+      status: 'enabled',
+      enabled: true,
+      public_path: '/social',
+      integration_base_path: '/_quickscale/social/',
+      integration_embeds_path: '/_quickscale/social/embeds/',
+      provider_allowlist: ['youtube', 'linkedin'],
+      embed_provider_allowlist: ['youtube'],
+      error: null,
+      layout_variant: 'cards',
+      links_per_page: 24,
+      total_links: 2,
+      links: [
+        {
+          id: 1,
+          title: 'QuickScale on YouTube',
+          description: 'Launch clips and demos.',
+          provider_name: 'youtube',
+          provider_display_name: 'YouTube',
+          url: 'https://www.youtube.com/watch?v=abc123',
+          source_url: 'https://youtu.be/abc123?si=share',
+          display_order: 10,
+        },
+        {
+          id: 2,
+          title: 'QuickScale on LinkedIn',
+          description: 'Company updates.',
+          provider_name: 'linkedin',
+          provider_display_name: 'LinkedIn',
+          url: 'https://www.linkedin.com/company/quickscale',
+          source_url: 'https://www.linkedin.com/company/quickscale/?utm_source=share',
+          display_order: 20,
+        },
+      ],
+    }
+
+    mockFetch(payload)
+
+    renderPublicPage('link_tree', <SocialLinkTreePublicPage />)
+
+    expect(await screen.findByText('QuickScale on YouTube')).toBeInTheDocument()
+    expect(screen.getByText('Launch clips and demos.')).toBeInTheDocument()
+    expect(screen.getByRole('link', { name: 'Visit QuickScale on YouTube' })).toHaveAttribute(
+      'href',
+      'https://www.youtube.com/watch?v=abc123',
+    )
+    expect(fetchMock).toHaveBeenCalledWith(
+      '/_quickscale/social/',
+      expect.objectContaining({
+        headers: {
+          Accept: 'application/json',
+        },
+      }),
+    )
+  })
+
+  it('renders the empty link-tree state from the managed payload', async () => {
+    const payload: SocialLinkTreePayload = {
+      module: 'social',
+      surface: 'link_tree',
+      status: 'empty',
+      enabled: true,
+      public_path: '/social',
+      integration_base_path: '/_quickscale/social/',
+      integration_embeds_path: '/_quickscale/social/embeds/',
+      provider_allowlist: ['youtube', 'linkedin'],
+      embed_provider_allowlist: ['youtube'],
+      error: null,
+      layout_variant: 'list',
+      links_per_page: 24,
+      total_links: 0,
+      links: [],
+    }
+
+    mockFetch(payload)
+
+    renderPublicPage('link_tree', <SocialLinkTreePublicPage />)
+
+    expect(await screen.findByText('Ready for the first link')).toBeInTheDocument()
+    expect(screen.getByText(/no curated destinations have been published yet/i)).toBeInTheDocument()
+  })
+
+  it('renders the disabled link-tree state without crashing', async () => {
+    const payload: SocialLinkTreePayload = {
+      module: 'social',
+      surface: 'link_tree',
+      status: 'disabled',
+      enabled: false,
+      public_path: '/social',
+      integration_base_path: '/_quickscale/social/',
+      integration_embeds_path: '/_quickscale/social/embeds/',
+      provider_allowlist: ['youtube', 'linkedin'],
+      embed_provider_allowlist: ['youtube'],
+      error: null,
+      layout_variant: 'list',
+      links_per_page: 24,
+      total_links: 0,
+      links: [],
+    }
+
+    mockFetch(payload)
+
+    renderPublicPage('link_tree', <SocialLinkTreePublicPage />)
+
+    expect(await screen.findByText('Link tree paused')).toBeInTheDocument()
+    expect(screen.getByText(/published links are disabled right now/i)).toBeInTheDocument()
+  })
+
+  it('renders managed embed previews and provider fallbacks from mocked payloads', async () => {
+    const payload: SocialEmbedsPayload = {
+      module: 'social',
+      surface: 'embeds',
+      status: 'enabled',
+      enabled: true,
+      public_path: '/social/embeds',
+      integration_base_path: '/_quickscale/social/',
+      integration_embeds_path: '/_quickscale/social/embeds/',
+      provider_allowlist: ['youtube', 'tiktok'],
+      embed_provider_allowlist: ['youtube', 'tiktok'],
+      error: null,
+      cache_ttl_seconds: 600,
+      embeds_per_page: 12,
+      total_embeds: 2,
+      embeds: [
+        {
+          id: 1,
+          title: 'QuickScale launch clip',
+          description: 'Launch announcement clip.',
+          provider_name: 'youtube',
+          provider_display_name: 'YouTube',
+          url: 'https://www.youtube.com/shorts/alpha123',
+          source_url: 'https://www.youtube.com/shorts/alpha123',
+          display_order: 10,
+          resolution_status: 'resolved',
+          resolution_error: null,
+          embed_url: 'https://www.youtube.com/embed/alpha123?rel=0',
+          thumbnail_url: 'https://i.ytimg.com/vi/alpha123/hqdefault.jpg',
+          embed_width: 560,
+          embed_height: 315,
+          thumbnail_width: 480,
+          thumbnail_height: 360,
+          last_resolution_attempt_at: '2026-04-02T10:00:00+00:00',
+          last_resolved_at: '2026-04-02T10:00:00+00:00',
+        },
+        {
+          id: 2,
+          title: 'QuickScale teaser',
+          description: 'Short product teaser.',
+          provider_name: 'tiktok',
+          provider_display_name: 'TikTok',
+          url: 'https://vm.tiktok.com/ZM1234567',
+          source_url: 'https://vm.tiktok.com/ZM1234567/',
+          display_order: 20,
+          resolution_status: 'error',
+          resolution_error:
+            'QuickScale needs a canonical TikTok video URL before it can resolve inline preview metadata.',
+          embed_url: null,
+          thumbnail_url: null,
+          embed_width: null,
+          embed_height: null,
+          thumbnail_width: null,
+          thumbnail_height: null,
+          last_resolution_attempt_at: '2026-04-02T10:05:00+00:00',
+          last_resolved_at: null,
+        },
+      ],
+    }
+
+    mockFetch(payload)
+
+    renderPublicPage('embeds', <SocialEmbedsPublicPage />)
+
+    expect(await screen.findByText('QuickScale launch clip')).toBeInTheDocument()
+    expect(screen.getByTitle('QuickScale launch clip embed')).toHaveAttribute(
+      'src',
+      'https://www.youtube.com/embed/alpha123?rel=0',
+    )
+    expect(screen.getByText(/canonical TikTok video URL/i)).toBeInTheDocument()
+  })
+
+  it('renders the contract error state for embeds from mocked payloads', async () => {
+    const payload: SocialEmbedsPayload = {
+      module: 'social',
+      surface: 'embeds',
+      status: 'error',
+      enabled: false,
+      public_path: '/social/embeds',
+      integration_base_path: '/_quickscale/social/',
+      integration_embeds_path: '/_quickscale/social/embeds/',
+      provider_allowlist: ['facebook', 'instagram'],
+      embed_provider_allowlist: ['youtube', 'tiktok'],
+      error: 'QUICKSCALE_SOCIAL_PROVIDER_ALLOWLIST must include TikTok or YouTube when embeds are enabled',
+      cache_ttl_seconds: 300,
+      embeds_per_page: 12,
+      total_embeds: 0,
+      embeds: [],
+    }
+
+    mockFetch(payload, 503)
+
+    renderPublicPage('embeds', <SocialEmbedsPublicPage />)
+
+    expect(await screen.findByText('Embed configuration needs attention')).toBeInTheDocument()
+    expect(screen.getByText(/must include TikTok or YouTube/i)).toBeInTheDocument()
+  })
+})
+{% endraw -%}

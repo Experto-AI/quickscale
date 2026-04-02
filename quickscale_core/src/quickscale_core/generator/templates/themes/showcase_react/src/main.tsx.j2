@@ -5,6 +5,9 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { BrowserRouter } from 'react-router-dom'
 import './index.css'
 import App from './App'
+import { SocialEmbedsPublicPage } from '@/pages/SocialEmbedsPublicPage'
+import { SocialLinkTreePublicPage } from '@/pages/SocialLinkTreePublicPage'
+import type { PublicSocialSurface } from '@/hooks/useModules'
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -15,12 +18,32 @@ const queryClient = new QueryClient({
   },
 })
 
-createRoot(document.getElementById('root')!).render(
+function QuickScaleRoot({ surface }: { surface?: PublicSocialSurface }) {
+  if (surface === 'link_tree') {
+    return <SocialLinkTreePublicPage />
+  }
+
+  if (surface === 'embeds') {
+    return <SocialEmbedsPublicPage />
+  }
+
+  return (
+    <BrowserRouter>
+      <App />
+    </BrowserRouter>
+  )
+}
+
+const rootElement = document.getElementById('root')
+
+if (rootElement == null) {
+  throw new Error('QuickScale could not find the React root element')
+}
+
+createRoot(rootElement).render(
   <StrictMode>
     <QueryClientProvider client={queryClient}>
-      <BrowserRouter>
-        <App />
-      </BrowserRouter>
+      <QuickScaleRoot surface={window.__QUICKSCALE__?.publicPage?.surface} />
     </QueryClientProvider>
   </StrictMode>,
 )

@@ -1,0 +1,254 @@
+{% raw -%}
+import { ExternalLink, Link2 } from 'lucide-react'
+import { Badge } from '@/components/ui/badge'
+import { Button } from '@/components/ui/button'
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
+import { PublicSocialShell } from '@/components/social/PublicSocialShell'
+import { usePublicSocialSurface } from '@/hooks/usePublicSocialSurface'
+import { cn } from '@/lib/utils'
+
+function layoutLabel(layoutVariant: string): string {
+  if (layoutVariant === 'cards') {
+    return 'Cards layout'
+  }
+
+  if (layoutVariant === 'grid') {
+    return 'Grid layout'
+  }
+
+  return 'List layout'
+}
+
+function linkGridClass(layoutVariant: string): string {
+  if (layoutVariant === 'cards') {
+    return 'md:grid-cols-2'
+  }
+
+  if (layoutVariant === 'grid') {
+    return 'sm:grid-cols-2 xl:grid-cols-3'
+  }
+
+  return 'grid-cols-1'
+}
+
+export function SocialLinkTreePublicPage() {
+  const { data, error, isError, isLoading, navigation, projectName } = usePublicSocialSurface(
+    'link_tree',
+  )
+
+  const status = isLoading ? 'loading' : isError || data == null ? 'error' : data.status
+  const description = isLoading
+    ? 'Loading the managed public social link tree so the Django-owned route can hydrate without leaving the showcase visual language.'
+    : isError || data == null
+      ? 'The page booted, but the public social payload could not be loaded cleanly from the managed endpoint.'
+      : data.status === 'enabled'
+        ? 'Curated destinations stay shareable on the Django-owned /social route while React turns the frozen managed contract into a polished public hub.'
+        : data.status === 'empty'
+          ? 'The public route is live and ready for the first curated link. Publishing starts here without moving the route into the SPA router.'
+          : data.status === 'disabled'
+            ? 'The route is still reserved by Django, but link-tree publishing is currently paused in the managed social settings.'
+            : data.error ??
+              'The managed social contract reported an error while preparing the public link tree.'
+
+  const stats = [
+    {
+      label: 'Public route',
+      value: data?.public_path ?? navigation.linkTree,
+    },
+    {
+      label: 'Visible links',
+      value: isLoading ? 'Syncing…' : String(data?.total_links ?? 0),
+    },
+    {
+      label: 'Layout',
+      value: isLoading ? 'Loading' : layoutLabel(data?.layout_variant ?? 'list'),
+    },
+  ]
+
+  let content: React.ReactNode
+
+  if (isLoading) {
+    content = (
+      <Card className="rounded-[1.75rem] border-slate-200/80 bg-white/95 shadow-sm">
+        <CardHeader>
+          <CardTitle>Loading curated links</CardTitle>
+          <CardDescription>
+            The public surface is waiting for the managed JSON transport.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="grid gap-3">
+          {Array.from({ length: 3 }, (_, index) => (
+            <div
+              key={index}
+              className="h-24 animate-pulse rounded-2xl border border-slate-200 bg-slate-100"
+            />
+          ))}
+        </CardContent>
+      </Card>
+    )
+  } else if (isError || data == null) {
+    content = (
+      <Card className="rounded-[1.75rem] border-rose-200 bg-rose-50/80 shadow-sm">
+        <CardHeader>
+          <CardTitle>Public link tree unavailable</CardTitle>
+          <CardDescription>
+            The shared bundle loaded, but the social endpoint could not provide a valid payload.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="text-sm text-rose-700">{error?.message}</CardContent>
+      </Card>
+    )
+  } else if (data.status === 'disabled') {
+    content = (
+      <Card className="rounded-[1.75rem] border-amber-200 bg-amber-50/80 shadow-sm">
+        <CardHeader>
+          <CardTitle>Link tree paused</CardTitle>
+          <CardDescription>
+            The route still resolves publicly, but published links are disabled right now.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-3 text-sm text-amber-900">
+          <p>
+            This keeps /social under Django ownership while making the managed disabled state
+            explicit instead of falling through to the SPA.
+          </p>
+          <p>
+            When link-tree publishing is re-enabled, the same route will start rendering curated
+            links immediately.
+          </p>
+        </CardContent>
+      </Card>
+    )
+  } else if (data.status === 'error') {
+    content = (
+      <Card className="rounded-[1.75rem] border-rose-200 bg-rose-50/80 shadow-sm">
+        <CardHeader>
+          <CardTitle>Social configuration needs attention</CardTitle>
+          <CardDescription>
+            The managed contract surfaced an error instead of link-tree content.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-3 text-sm text-rose-700">
+          <p>{data.error}</p>
+          <p>
+            Fix the social settings and reload this page to restore the public link tree without
+            changing route ownership.
+          </p>
+        </CardContent>
+      </Card>
+    )
+  } else if (data.links.length === 0) {
+    content = (
+      <Card className="rounded-[1.75rem] border-sky-200 bg-sky-50/80 shadow-sm">
+        <CardHeader>
+          <CardTitle>Ready for the first link</CardTitle>
+          <CardDescription>
+            The public route is live, but no curated destinations have been published yet.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-3 text-sm text-slate-700">
+          <p>
+            Once the social module publishes its first link, this route will turn into a shareable
+            public directory while keeping Django as the canonical owner of /social.
+          </p>
+          <p>
+            The active layout is <strong>{layoutLabel(data.layout_variant).toLowerCase()}</strong>,
+            and the current cap is <strong>{data.links_per_page}</strong> links per page.
+          </p>
+        </CardContent>
+      </Card>
+    )
+  } else {
+    content = (
+      <>
+        <Card className="rounded-[1.75rem] border-slate-200/80 bg-white/95 shadow-sm">
+          <CardHeader className="gap-4">
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <Badge className="rounded-full bg-slate-900 px-3 py-1 text-white hover:bg-slate-900">
+                {layoutLabel(data.layout_variant)}
+              </Badge>
+              <span className="text-sm font-medium text-slate-500">
+                {data.total_links} published destination{data.total_links === 1 ? '' : 's'}
+              </span>
+            </div>
+            <div>
+              <CardTitle className="text-2xl">Curated destinations</CardTitle>
+              <CardDescription className="mt-2">
+                Every link is rendered from the managed JSON contract, so the public page stays in
+                sync without handing canonical ownership to React Router.
+              </CardDescription>
+            </div>
+          </CardHeader>
+        </Card>
+
+        <div className={cn('grid gap-4', linkGridClass(data.layout_variant))}>
+          {data.links.map((link) => (
+            <Card key={link.id} className="rounded-[1.75rem] border-slate-200/80 bg-white/95 shadow-sm">
+              <CardHeader className="gap-4">
+                <div className="flex items-start justify-between gap-4">
+                  <div>
+                    <Badge
+                      variant="outline"
+                      className="mb-3 rounded-full border-slate-200 bg-slate-50 px-3 py-1 text-slate-700"
+                    >
+                      {link.provider_display_name}
+                    </Badge>
+                    <CardTitle className="text-xl">{link.title}</CardTitle>
+                  </div>
+                  <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-500">
+                    #{link.display_order}
+                  </span>
+                </div>
+                <CardDescription>
+                  {link.description ||
+                    'A curated public destination rendered through the managed social contract.'}
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4 text-sm text-slate-600">
+                  <div className="flex items-center gap-2 font-medium text-slate-900">
+                    <Link2 className="h-4 w-4" />
+                    <span className="break-all">{link.url}</span>
+                  </div>
+                  {link.source_url !== link.url ? (
+                    <p className="mt-2 text-xs text-slate-500">Source: {link.source_url}</p>
+                  ) : null}
+                </div>
+
+                <Button asChild className="w-full sm:w-auto">
+                  <a
+                    href={link.url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    aria-label={`Visit ${link.title}`}
+                  >
+                    Visit
+                    <ExternalLink className="h-4 w-4" />
+                  </a>
+                </Button>
+              </CardContent>
+            </Card>
+          ))}
+        </div>
+      </>
+    )
+  }
+
+  return (
+    <PublicSocialShell
+      projectName={projectName}
+      surface="link_tree"
+      title="Social Link Tree"
+      eyebrow="Public social routing"
+      description={description}
+      status={status}
+      navigation={navigation}
+      stats={stats}
+      providerAllowlist={data?.provider_allowlist ?? []}
+      embedProviderAllowlist={data?.embed_provider_allowlist ?? []}
+    >
+      {content}
+    </PublicSocialShell>
+  )
+}
+{% endraw -%}

@@ -11,6 +11,7 @@ from quickscale_modules_social.contracts import (
     DEFAULT_SOCIAL_PROVIDER_ALLOWLIST,
     SOCIAL_EMBEDS_CACHE_KEY,
     SOCIAL_EMBEDS_PATH,
+    SOCIAL_EMBED_RESOLUTION_PENDING,
     SOCIAL_INTEGRATION_BASE_PATH,
     SOCIAL_INTEGRATION_EMBEDS_PATH,
     SOCIAL_LINKS_CACHE_KEY,
@@ -73,6 +74,16 @@ class SocialEmbedRecord:
     url: str
     source_url: str
     display_order: int
+    resolution_status: str
+    resolution_error: str | None
+    embed_url: str | None
+    thumbnail_url: str | None
+    embed_width: int | None
+    embed_height: int | None
+    thumbnail_width: int | None
+    thumbnail_height: int | None
+    last_resolution_attempt_at: str | None
+    last_resolved_at: str | None
 
     @classmethod
     def from_model(cls, embed: SocialEmbed) -> SocialEmbedRecord:
@@ -89,6 +100,25 @@ class SocialEmbedRecord:
             url=embed.normalized_url,
             source_url=embed.url,
             display_order=embed.display_order,
+            resolution_status=embed.resolution_status
+            or SOCIAL_EMBED_RESOLUTION_PENDING,
+            resolution_error=embed.resolution_error or None,
+            embed_url=embed.resolved_embed_url or None,
+            thumbnail_url=embed.resolved_thumbnail_url or None,
+            embed_width=embed.resolved_width,
+            embed_height=embed.resolved_height,
+            thumbnail_width=embed.resolved_thumbnail_width,
+            thumbnail_height=embed.resolved_thumbnail_height,
+            last_resolution_attempt_at=(
+                embed.last_resolution_attempt_at.isoformat()
+                if embed.last_resolution_attempt_at is not None
+                else None
+            ),
+            last_resolved_at=(
+                embed.last_resolved_at.isoformat()
+                if embed.last_resolved_at is not None
+                else None
+            ),
         )
 
 

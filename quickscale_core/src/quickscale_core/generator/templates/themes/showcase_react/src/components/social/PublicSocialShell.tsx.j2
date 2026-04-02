@@ -1,0 +1,250 @@
+{% raw -%}
+import {
+  ArrowRight,
+  Compass,
+  ExternalLink,
+  Home,
+  Link2,
+  PlaySquare,
+  Sparkles,
+} from 'lucide-react'
+import { Badge } from '@/components/ui/badge'
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
+import type { PublicSocialSurface } from '@/hooks/useModules'
+import type {
+  PublicSocialNavigation,
+  SocialPayloadStatus,
+} from '@/hooks/usePublicSocialSurface'
+import { cn } from '@/lib/utils'
+
+type PublicSocialShellProps = {
+  projectName: string
+  surface: PublicSocialSurface
+  title: string
+  eyebrow: string
+  description: string
+  status: SocialPayloadStatus | 'loading'
+  navigation: PublicSocialNavigation
+  stats: Array<{ label: string; value: string }>
+  providerAllowlist: string[]
+  embedProviderAllowlist: string[]
+  children: React.ReactNode
+}
+
+const statusLabel: Record<PublicSocialShellProps['status'], string> = {
+  loading: 'Loading',
+  enabled: 'Live',
+  empty: 'Ready',
+  disabled: 'Disabled',
+  error: 'Needs attention',
+}
+
+const statusClassName: Record<PublicSocialShellProps['status'], string> = {
+  loading: 'border-white/20 bg-white/10 text-white',
+  enabled: 'border-emerald-300/40 bg-emerald-400/15 text-emerald-100',
+  empty: 'border-sky-300/40 bg-sky-400/15 text-sky-100',
+  disabled: 'border-amber-300/40 bg-amber-400/15 text-amber-50',
+  error: 'border-rose-300/40 bg-rose-400/15 text-rose-50',
+}
+
+function formatProviderLabel(provider: string): string {
+  return provider
+    .split('-')
+    .filter(Boolean)
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+    .join(' ')
+}
+
+function navLinkClass(active: boolean): string {
+  return cn(
+    'inline-flex items-center gap-2 rounded-full border px-4 py-2 text-sm font-medium transition-colors',
+    active
+      ? 'border-white bg-white text-slate-950 shadow-sm'
+      : 'border-white/15 text-white/80 hover:bg-white/10 hover:text-white',
+  )
+}
+
+function actionLinkClass(primary: boolean): string {
+  return cn(
+    'inline-flex items-center gap-2 rounded-full px-5 py-3 text-sm font-semibold transition-colors',
+    primary
+      ? 'bg-white text-slate-950 hover:bg-slate-100'
+      : 'border border-white/20 bg-white/10 text-white hover:bg-white/20',
+  )
+}
+
+export function PublicSocialShell({
+  projectName,
+  surface,
+  title,
+  eyebrow,
+  description,
+  status,
+  navigation,
+  stats,
+  providerAllowlist,
+  embedProviderAllowlist,
+  children,
+}: PublicSocialShellProps) {
+  const switchHref = surface === 'link_tree' ? navigation.embeds : navigation.linkTree
+  const switchLabel = surface === 'link_tree' ? 'Browse embeds' : 'Open link tree'
+
+  return (
+    <div className="space-y-6">
+      <section className="relative overflow-hidden rounded-[2rem] border border-slate-800 bg-[linear-gradient(135deg,#020617_0%,#0f172a_58%,#1d4ed8_100%)] text-white shadow-2xl">
+        <div className="absolute -right-24 top-8 h-56 w-56 rounded-full bg-sky-400/20 blur-3xl" />
+        <div className="absolute bottom-0 left-0 h-48 w-48 rounded-full bg-cyan-300/10 blur-3xl" />
+        <div className="relative space-y-8 p-6 sm:p-8 lg:p-10">
+          <div className="flex flex-wrap items-center gap-3">
+            <Badge className="border-white/15 bg-white/10 text-white hover:bg-white/10">
+              Public social surface
+            </Badge>
+            <span className="text-sm text-slate-300">{projectName}</span>
+          </div>
+
+          <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_300px]">
+            <div>
+              <p className="text-xs font-semibold uppercase tracking-[0.32em] text-sky-200">
+                {eyebrow}
+              </p>
+              <h1 className="mt-4 text-4xl font-semibold tracking-tight sm:text-5xl">{title}</h1>
+              <p className="mt-4 max-w-2xl text-base leading-7 text-slate-200 sm:text-lg">
+                {description}
+              </p>
+
+              <div className="mt-6 flex flex-wrap gap-3">
+                <a href={switchHref} className={actionLinkClass(true)}>
+                  {switchLabel}
+                  <ArrowRight className="h-4 w-4" />
+                </a>
+                <a href={navigation.home} className={actionLinkClass(false)}>
+                  <Home className="h-4 w-4" />
+                  Back to app
+                </a>
+              </div>
+            </div>
+
+            <div className="grid gap-3 rounded-[1.75rem] border border-white/15 bg-white/10 p-4 backdrop-blur">
+              <div className="flex items-center justify-between gap-3 rounded-2xl border border-white/10 bg-black/10 px-4 py-3">
+                <span className="text-sm font-medium text-slate-300">State</span>
+                <span
+                  className={cn(
+                    'inline-flex items-center rounded-full border px-3 py-1 text-xs font-semibold uppercase tracking-[0.24em]',
+                    statusClassName[status],
+                  )}
+                >
+                  {statusLabel[status]}
+                </span>
+              </div>
+
+              {stats.map((stat) => (
+                <div
+                  key={stat.label}
+                  className="rounded-2xl border border-white/10 bg-black/10 px-4 py-3"
+                >
+                  <p className="text-xs font-semibold uppercase tracking-[0.24em] text-slate-400">
+                    {stat.label}
+                  </p>
+                  <p className="mt-2 text-sm font-semibold text-white">{stat.value}</p>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          <div className="flex flex-wrap gap-2">
+            <a href={navigation.linkTree} className={navLinkClass(surface === 'link_tree')}>
+              <Link2 className="h-4 w-4" />
+              Link tree
+            </a>
+            <a href={navigation.embeds} className={navLinkClass(surface === 'embeds')}>
+              <PlaySquare className="h-4 w-4" />
+              Embeds
+            </a>
+            <a href={navigation.home} className={navLinkClass(false)}>
+              <ExternalLink className="h-4 w-4" />
+              Dashboard
+            </a>
+          </div>
+        </div>
+      </section>
+
+      <section className="grid gap-4 lg:grid-cols-[minmax(0,2fr)_minmax(280px,1fr)]">
+        <div className="space-y-4">{children}</div>
+
+        <div className="space-y-4">
+          <Card className="rounded-[1.75rem] border-slate-200/80 bg-white/95 shadow-sm">
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2 text-xl">
+                <Compass className="h-5 w-5 text-slate-700" />
+                Route ownership
+              </CardTitle>
+              <CardDescription>
+                Django keeps these public URLs canonical while the shared React bundle hydrates
+                the page content.
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4 text-sm text-slate-600">
+              <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+                Full-document navigation from the dashboard preserves <strong>/social</strong>{' '}
+                and <strong>/social/embeds</strong> as Django-owned public routes instead of
+                routing them through the SPA.
+              </div>
+              <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+                The page content comes from the frozen managed JSON transport, so enabled, empty,
+                disabled, and error states stay explicit.
+              </div>
+            </CardContent>
+          </Card>
+
+          <Card className="rounded-[1.75rem] border-slate-200/80 bg-white/95 shadow-sm">
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2 text-xl">
+                <Sparkles className="h-5 w-5 text-slate-700" />
+                Provider coverage
+              </CardTitle>
+              <CardDescription>
+                Public surfaces stay constrained to the managed allowlists exposed by the backend
+                contract.
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-5">
+              <div className="space-y-3">
+                <p className="text-xs font-semibold uppercase tracking-[0.28em] text-slate-500">
+                  Public links
+                </p>
+                <div className="flex flex-wrap gap-2">
+                  {providerAllowlist.map((provider) => (
+                    <Badge
+                      key={provider}
+                      variant="outline"
+                      className="rounded-full border-slate-200 bg-slate-50 px-3 py-1 text-slate-700"
+                    >
+                      {formatProviderLabel(provider)}
+                    </Badge>
+                  ))}
+                </div>
+              </div>
+
+              <div className="space-y-3">
+                <p className="text-xs font-semibold uppercase tracking-[0.28em] text-slate-500">
+                  Embed-capable providers
+                </p>
+                <div className="flex flex-wrap gap-2">
+                  {embedProviderAllowlist.map((provider) => (
+                    <Badge
+                      key={provider}
+                      className="rounded-full border-0 bg-slate-900 px-3 py-1 text-white"
+                    >
+                      {formatProviderLabel(provider)}
+                    </Badge>
+                  ))}
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+      </section>
+    </div>
+  )
+}
+{% endraw -%}

@@ -51,13 +51,36 @@ class SocialEmbedAdmin(admin.ModelAdmin):
     list_display = [
         "title",
         "provider_name",
+        "resolution_status",
         "is_published",
         "display_order",
+        "last_resolution_attempt_at",
         "updated_at",
     ]
-    list_filter = ["provider_name", "is_published"]
-    search_fields = ["title", "description", "url", "normalized_url"]
-    readonly_fields = ["normalized_url", "created_at", "updated_at"]
+    list_filter = ["provider_name", "resolution_status", "is_published"]
+    search_fields = [
+        "title",
+        "description",
+        "url",
+        "normalized_url",
+        "resolution_error",
+        "resolved_embed_url",
+    ]
+    readonly_fields = [
+        "resolution_status",
+        "resolution_error",
+        "last_resolution_attempt_at",
+        "last_resolved_at",
+        "normalized_url",
+        "resolved_embed_url",
+        "resolved_thumbnail_url",
+        "resolved_width",
+        "resolved_height",
+        "resolved_thumbnail_width",
+        "resolved_thumbnail_height",
+        "created_at",
+        "updated_at",
+    ]
     ordering = ["display_order", "title", "pk"]
     fieldsets = [
         (
@@ -74,9 +97,30 @@ class SocialEmbedAdmin(admin.ModelAdmin):
             },
         ),
         (
-            "Normalized record",
+            "Resolution status",
             {
-                "fields": ["normalized_url", "created_at", "updated_at"],
+                "fields": [
+                    "resolution_status",
+                    "resolution_error",
+                    "last_resolution_attempt_at",
+                    "last_resolved_at",
+                ]
+            },
+        ),
+        (
+            "Resolved metadata",
+            {
+                "fields": [
+                    "normalized_url",
+                    "resolved_embed_url",
+                    "resolved_thumbnail_url",
+                    "resolved_width",
+                    "resolved_height",
+                    "resolved_thumbnail_width",
+                    "resolved_thumbnail_height",
+                    "created_at",
+                    "updated_at",
+                ],
                 "classes": ["collapse"],
             },
         ),

@@ -44,11 +44,11 @@ QuickScale is a **Django project generator** that creates production-ready SaaS 
 - **One-command deployment**: Deploy to Railway with `quickscale deploy railway`
 - **Full ownership**: Generated projects are 100% yours to customize—no vendor lock-in
 - **Standardized stack**: Build multiple client projects faster with consistent best practices
-- **Implemented first-party modules on the main branch today**: auth, backups, blog, crm, forms, listings, notifications, and storage
+- **Implemented first-party modules on the main branch today**: auth, backups, blog, crm, forms, listings, notifications, social, and storage
 
 🧭 **Evolution Path**: QuickScale already includes first-party modules and starter themes for current projects, while the broader community platform, marketplace, and ecosystem expansion remain future-facing. [Read the full evolution strategy](./docs/overview/quickscale.md#evolution-strategy-personal-toolkit-first).
 
-The current published release is v0.78.0, which ships the notifications module and opens QuickScale's post-MVP expansion release line. Main-branch docs and package metadata are aligned on this release.
+The current published release is v0.78.0, which ships the notifications module and opens QuickScale's post-MVP expansion release line. Main branch now also carries the v0.79.0 social-module implementation, but the published release metadata remains on v0.78.0 until the social release is cut.
 
 On the main branch, backups is the admin/ops-first safety module: private local artifacts are the default, optional private remote offload is supported, and generated local Docker and Railway PostgreSQL projects use PostgreSQL 18 custom dumps as the real backup/restore path. JSON artifacts are export-only rather than restore inputs, admin download and validate stay local-file-only in v1, and the BackupPolicy admin page exposes a guarded restore action only for row-backed local artifacts already present on disk. Exact filename confirmation and the existing environment gate remain required, admin restore never materializes remote-only artifacts, CLI restore keeps its existing syntax, and already-generated projects that predate this follow-up must manually adopt the current Docker/CI/E2E PostgreSQL 18 tooling updates.
 

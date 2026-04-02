@@ -1384,7 +1384,9 @@ def get_default_backups_config() -> dict[str, Any]:
 
 def _resolve_backups_config(config: Mapping[str, Any]) -> dict[str, Any]:
     """Merge backups options with defaults while preserving explicit overrides."""
-    return get_default_backups_config() | normalize_backups_module_options(config)
+    resolved = get_default_backups_config()
+    resolved.update(normalize_backups_module_options(config))
+    return resolved
 
 
 def validate_backups_module_options(config: Mapping[str, Any]) -> list[str]:

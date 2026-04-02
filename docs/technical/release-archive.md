@@ -16,6 +16,7 @@ Dates and short summaries below mirror the linked release artifacts and [CHANGEL
 
 | Version | Artifact Date | Phase | Key Changes | Status | Docs |
 |---------|---------------|-------|-------------|--------|------|
+| **v0.79.0** | 2026-04-02 | Post-MVP | Social module, admin-managed links and embeds, generated backend transport, public React social pages, and the archived implementation checklist moved out of the roadmap | 🚧 Archived implementation | [Impl](../releases-archive/release-v0.79.0-implementation.md) |
 | **v0.78.0** | 2026-03-30 | Post-MVP | Notifications module, app-owned rendering, recipient-granular delivery tracking, and post-MVP expansion kickoff | ✅ Complete | [Summary](../releases/release-v0.78.0.md) |
 | **v0.77.0** | 2026-03-31 | MVP | Backups module MVP closeout baseline plus the archived PostgreSQL 18 hardening continuation, guarded BackupPolicy-admin local restore, and retrospective archival notes | ✅ Archived retrospective | [Impl](../releases-archive/release-v0.77.0-implementation.md) |
 | **v0.76.0** | 2026-03-21 | MVP | Storage module, canonical public media URLs, `public_base_url` contract cleanup | ✅ Complete | [Summary](../releases/release-v0.76.0.md) |

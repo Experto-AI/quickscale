@@ -43,12 +43,46 @@ class TestReactThemeGeneration:
         assert (frontend_path / "src" / "main.tsx").exists()
         assert (frontend_path / "src" / "App.tsx").exists()
         assert (frontend_path / "src" / "index.css").exists()
+        assert (frontend_path / "src" / "hooks" / "usePublicSocialSurface.ts").exists()
+        assert (
+            frontend_path / "src" / "components" / "social" / "PublicSocialShell.tsx"
+        ).exists()
+        assert (
+            frontend_path / "src" / "pages" / "SocialLinkTreePublicPage.tsx"
+        ).exists()
+        assert (frontend_path / "src" / "pages" / "SocialEmbedsPublicPage.tsx").exists()
+        assert (frontend_path / "src" / "test" / "PublicSocialPages.test.tsx").exists()
 
         # Components directory
         assert (frontend_path / "src" / "components").is_dir()
 
         # shadcn/ui lib utilities
         assert (frontend_path / "src" / "lib" / "utils.ts").exists()
+
+    def test_react_theme_social_embeds_use_backend_owned_preview_metadata(
+        self, tmp_path
+    ):
+        """Generated social embed pages should consume backend-owned preview fields."""
+        generator = ProjectGenerator(theme="showcase_react")
+        project_name = "react_social_embed_contract"
+        output_path = tmp_path / project_name
+
+        generator.generate(project_name, output_path)
+
+        social_hook = (
+            output_path / "frontend" / "src" / "hooks" / "usePublicSocialSurface.ts"
+        ).read_text()
+        embeds_page = (
+            output_path / "frontend" / "src" / "pages" / "SocialEmbedsPublicPage.tsx"
+        ).read_text()
+
+        assert "resolution_status" in social_hook
+        assert "embed_url" in social_hook
+        assert "thumbnail_url" in social_hook
+        assert "function extractYouTubeVideoId" not in embeds_page
+        assert "function extractTikTokVideoId" not in embeds_page
+        assert "record.embed_url" in embeds_page
+        assert "record.resolution_error" in embeds_page
 
     def test_react_theme_prettier_config_matches_templates(self, tmp_path):
         """Prettier config should match generated React source style."""
@@ -134,6 +168,8 @@ class TestReactThemeGeneration:
         # Should have consistent filenames for Django static files
         assert "entryFileNames" in vite_config
         assert "assetFileNames" in vite_config
+        assert "'/_quickscale'" in vite_config
+        assert "'/social'" in vite_config
 
     def test_react_theme_tsconfig_correct(self, tmp_path):
         """TypeScript config should have correct settings"""
@@ -804,12 +840,26 @@ class TestReactThemeModuleActivationMatrix:
         )
         assert 'href="/social"' in base_template
         assert 'href="/social/embeds"' in base_template
-        assert "Public Social Surface" in link_tree_template
-        assert "qs-social-rail" in link_tree_template
-        assert "QuickScale reserves <code>/social</code>" in link_tree_template
-        assert "Public Social Surface" in embeds_template
-        assert "qs-social-rail" in embeds_template
-        assert "QuickScale reserves <code>/social/embeds</code>" in embeds_template
+        assert 'id="root" class="qs-social-react-shell"' in link_tree_template
+        assert "Social module not active" in link_tree_template
+        assert (
+            "{% if settings.QUICKSCALE_SOCIAL_LINK_TREE_ENABLED or "
+            "settings.QUICKSCALE_SOCIAL_EMBEDS_ENABLED %}"
+        ) in link_tree_template
+        assert "frontend/assets/index.css" in link_tree_template
+        assert "frontend/assets/index.js" in link_tree_template
+        assert "surface: 'link_tree'" in link_tree_template
+        assert "endpoint: '/_quickscale/social/'" in link_tree_template
+        assert 'id="root" class="qs-social-react-shell"' in embeds_template
+        assert "Social module not active" in embeds_template
+        assert (
+            "{% if settings.QUICKSCALE_SOCIAL_LINK_TREE_ENABLED or "
+            "settings.QUICKSCALE_SOCIAL_EMBEDS_ENABLED %}"
+        ) in embeds_template
+        assert "frontend/assets/index.css" in embeds_template
+        assert "frontend/assets/index.js" in embeds_template
+        assert "surface: 'embeds'" in embeds_template
+        assert "endpoint: '/_quickscale/social/embeds/'" in embeds_template
 
     def test_react_routes_cover_all_module_navigation_targets(self, tmp_path):
         """React router should include routes for every module link exposed by the UI."""

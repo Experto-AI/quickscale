@@ -53,7 +53,7 @@ QuickScale follows an evolution-aligned roadmap that starts as a personal toolki
 
 2. **Phase 2: Notifications, Vertical Modules & Theme Expansion (Post-MVP)** 🚧 _In Progress_
   - ✅ Notifications module (v0.78.0) - transactional email foundation with app-owned rendering, recipient-granular tracking, and Anymail-backed Resend delivery
-  - 📋 Social & Link Tree module (v0.79.0) - social links page + media embeds
+  - 🚧 Social & Link Tree module (v0.79.0) - implementation archived; release closeout pending
   - 📋 Listings Theme (v0.80.0) - React frontend for property listings (sell/rent)
   - 📋 CRM Theme (v0.81.0) - React frontend for CRM module
   - 📋 Billing module (v0.82.0) - Stripe integration
@@ -83,13 +83,14 @@ QuickScale follows an evolution-aligned roadmap that starts as a personal toolki
 - **v0.76.0:** Storage Module (cloud file hosting + CDN-ready media infrastructure) 🎯
 - **v0.77.0:** Backups module (private local + optional private remote workflows, guarded BackupPolicy-admin local restore plus CLI restore) ✅
 - **v0.78.0:** Notifications Module (transactional email foundation; app-owned rendering, recipient-granular tracking, and Anymail-backed Resend delivery) ✅
+- **v0.79.0:** Social & Link Tree module (implementation archived; reader-facing release summary still pending) 🚧
 - **v0.80.0:** Real Estate MVP (static + listings + social links) 🎯
 - **v0.83.0:** SaaS Feature Parity (auth, billing, teams, notifications foundation) 🎯
 - **v1.0.0+:** Community platform (if demand exists)
 
 **Status:**
-- **Current Status:** main branch and published release metadata are aligned at v0.78.0; notifications shipped and opened the post-MVP expansion release line
-- **In Progress:** v0.79.0 planning and post-v0.78.0 follow-up only
+- **Current Status:** the published release remains v0.78.0, while main branch now carries the v0.79.0 social-module implementation and is in release-closeout verification
+- **In Progress:** v0.79.0 release closeout, reader-facing summary, and release preparation
 - **Next Planned Scope After v0.78.0:** v0.79.0 - Social & Link Tree module
 - **Next Milestone:** v0.79.0 - Social & Link Tree module
 - **Plan/Apply System:** v0.68.0-v0.71.0 - Terraform-style configuration ✅ Complete
@@ -160,119 +161,17 @@ This release starts QuickScale's post-MVP expansion line and ships the notificat
 
 ### v0.79.0: `quickscale_modules.social` - Social & Link Tree Module
 
-**Status**: 📋 Planned
+**Status**: 🚧 Detailed implementation archived; published release still pending
 
-**Strategic Context**: v0.79.0 should be the first audience-facing module after notifications. The release must add a theme-agnostic backend module for managing social presence and curated embeds while shipping first-class `showcase_react` consumption. The goal is to improve public-site storytelling for agencies and creator-style projects without turning QuickScale into a provider-sync platform.
+This implemented release scope now lives outside the active roadmap. The detailed v0.79.0 checklist, support matrix, validation notes, and deferred items now live in the implementation archive, while the published release metadata remains at v0.78.0 until the v0.79.0 reader-facing summary and release cut are completed.
 
-**Release Goal**: QuickScale can enable `social`, manage social links and curated embeds in Django admin, and expose generated-project-owned read-only integration payloads backed by the module service layer through plan/apply alone. Fresh `showcase_react` generations, plus documented manual adoption in older generated projects, then render a branded link tree at `/social` and an embed gallery at `/social/embeds` using that same normalized backend contract.
+**Release artifacts**:
+- [Implementation archive](../releases-archive/release-v0.79.0-implementation.md)
 
-**Architectural Guardrails**:
-- [ ] Keep `quickscale_modules.social` theme-agnostic; React work belongs in `showcase_react` integration, not inside the module package.
-- [ ] Keep any public HTTP integration in generated-project or theme-owned files backed by module Python services; the module package itself must not ship public HTTP APIs.
-- [x] Follow manifest-driven planner/apply patterns used by existing modules; no manual patching of generated settings or URLs.
-- [ ] Keep runtime configuration authoritative in generated settings and `quickscale.yml`; do not create a second mutable configuration surface in the database.
-- [ ] Support read-only external-provider consumption only; no posting, OAuth account linking, inbox/reply workflows, or background provider sync jobs.
-- [ ] Use a provider allowlist and normalized QuickScale-owned payloads; do not make arbitrary third-party embed HTML the primary rendering contract.
-- [ ] HTML theme parity remains out of scope for v0.79.0 beyond backend compatibility; dedicated polish stays in Phase 3.
-
-**Scope Decision (planned)**:
-- **Included in v0.79.0**: module package skeleton, manifest-backed configuration, admin-managed social links, curated secret-free embeds, generated-project integration endpoints or payloads backed by module services, fixed built-in social page routes for fresh `showcase_react` generations, caching and rate-limit guardrails, docs, and tests.
-- **Explicitly deferred beyond v0.79.0**: provider auth/write APIs, automated feed ingestion or sync, newsletters/broadcast tooling, click analytics dashboards, background worker extraction, HTML-theme-first UX, listings-specific presentation coupling, and Meta-backed embed paths that require app-review or token management.
-
-**Support Matrix (approved)**:
-- **Existing generated projects**: `quickscale apply` may add backend-managed settings, admin/runtime wiring, and generated-project integration endpoints or payloads automatically, but it does not rewrite user-owned `showcase_react` routes, navigation, or page source.
-- **Fresh `showcase_react` generations**: ship the full backend + React experience, including the fixed public routes `/social` and `/social/embeds`.
-- **Existing projects that want the React UX**: adopt the documented `showcase_react` template changes manually after backend wiring is in place.
-
-**Prerequisites**:
-- ✅ React Default Theme (v0.74.0) for the first-class frontend UX
-- ✅ Plan/Apply system and manifest-based module wiring (v0.68.0-v0.71.0)
-- Notifications (v0.78.0) is not a dependency for the initial social module scope
-
-**Planner / Module Contract**:
-- [x] Create `quickscale_modules/social/module.yml` with mutable options for link-tree enablement, default layout variant (`list`, `cards`, `grid`), embeds enablement, provider allowlist, cache TTL, and optional per-page item limits. Public routes stay fixed at `/social` and `/social/embeds` in v0.79.0.
-- [x] Keep route-bearing config out of the manifest for v0.79.0; do not add mutable public path, slug, or embed-gallery path fields.
-- [x] Keep the config surface small and operator-understandable; do not introduce provider-specific secret fields in v0.79.0 unless a supported provider strictly requires them.
-- [x] Add planner prompts, defaults, and normalizers in the CLI so `quickscale plan` and `quickscale plan --reconfigure` round-trip the `modules.social` block safely.
-- [x] Ensure apply-time validation fails explicitly on unsupported providers, invalid numeric limits, or contradictory config combinations such as all public social surfaces being disabled.
-
-**Backend Domain Model & Django Admin**:
-- [ ] Create the `quickscale_modules/social` Django app package with README, app config, migrations, admin registration, tests, and standard module packaging.
-- [ ] Add `SocialLink` as the primary curated profile/action link model with fields for platform, label, URL, display order, active flag, and optional short supporting copy.
-- [ ] Add a curated embed model (for example `SocialEmbed`) that stores provider, source URL, display order, active flag, optional editorial title/caption override, and normalized resolution metadata needed by generated-project integration serializers or view payloads.
-- [ ] Derive icon treatment from platform/provider enums rather than persisting arbitrary icon markup in the database.
-- [ ] Provide admin workflows for create, edit, reorder, publish/unpublish, and operator-facing validation feedback for invalid URLs or unsupported providers.
-- [ ] Keep admin ownership authoritative for v0.79.0; public CRUD is out of scope.
-
-**Provider Resolution, Validation & Caching**:
-- [ ] Support curated embed resolution for an explicit allowlist only. Minimum target set: TikTok and YouTube for embeds; Instagram, Facebook, X/Twitter, and LinkedIn remain link-tree-only in v0.79.0 unless a credentialed compliance path is approved before implementation starts.
-- [x] Add shared URL normalization and provider detection helpers before planner prompts, apply validation, admin cleaning, or runtime resolution so every consumer uses the same canonical rules.
-- [ ] Implement a resolver service that rejects non-allowlisted providers, enforces request timeouts, normalizes provider responses into QuickScale-owned fields, and records last-success or last-error metadata needed for operator visibility.
-- [ ] Persist or cache only the minimal provider data needed for the approved render path; do not invent a broad long-lived normalization layer for providers whose terms only support direct front-end embedding.
-- [ ] Use Django cache for resolved embed payloads with config-driven TTL; do not introduce a shared job system or permanent sync pipeline in v0.79.0.
-- [ ] Add rate-limiting and abuse guardrails on any user-triggerable embed-resolution surface.
-- [ ] Ensure provider failures degrade gracefully so broken embeds do not crash page rendering or block unrelated social content.
-
-**Generated-Project Integration Surface**:
-- [ ] Expose any read-only public JSON endpoints needed by the React frontend from generated-project or theme-owned integration files backed by module service calls, not from the module package itself.
-- [ ] Return normalized JSON contracts that the React frontend can render without provider-specific parsing logic leaking into every component.
-- [ ] Keep ordering deterministic and filter out inactive, invalid, or unresolved content as appropriate.
-- [x] Keep the generated-project-owned backend integration surface safe for existing-project apply updates without requiring automatic edits to user-owned `showcase_react` source.
-- [ ] Document the integration payload or endpoint examples in the module README or generated-project docs.
-
-**Apply-Time Wiring & Generated Project Integration**:
-- [x] Wire the module through deterministic managed settings and generated-project backend integration generation rather than ad hoc file patching.
-- [x] Add `social` to the generated-project module registry everywhere module presence is runtime-managed. Existing generated projects only receive backend/runtime wiring automatically; React bridge, route, and navigation source changes remain fresh-generation or manual-adoption work.
-- [x] Generate project-owned social integration views/endpoints in managed backend files outside the module package; do not expose module-owned public HTTP URLs as the primary contract.
-- [x] Generate Django settings defaults for the fixed public routes (`/social`, `/social/embeds`), embed settings, supported providers, and cache TTL.
-- [ ] Register only the backend/runtime wiring needed for social through managed URL surfaces and ensure disabled features do not expose dead routes.
-- [x] Keep `.env.example` changes minimal; the preferred v0.79.0 path ships without required provider secrets.
-
-**React Default Theme Integration (`showcase_react`, fresh generation or manual adoption only)**:
-- [x] Add a `social` flag to the frontend module-config bridge used by `useModules()`.
-- [ ] Create a public link tree page at `/social` that consumes the generated-project integration surface and renders platform-aware cards/buttons with branded icon treatment.
-- [ ] Create an embed gallery page at `/social/embeds` that renders normalized provider payloads using provider-specific React components where needed.
-- [ ] Add empty-state, disabled-module, and provider-error UX so generated projects fail cleanly when no links or embeds are configured.
-- [ ] Keep the initial UX mobile-first and marketing-facing; do not couple it to listings-specific layout assumptions in v0.79.0.
-- [x] Update theme navigation, routing, and any shared page registry needed to surface the module when installed in freshly generated projects.
-- [ ] Add frontend tests for link-tree and embed-rendering flows using mocked API payloads, not live provider traffic.
-
-**Implementation Phasing (handoff order)**:
-1. [x] Phase A: contract closeout, fixed-route config surface, and shared URL normalization/provider helper foundations.
-2. [x] Phase B: planner/apply wiring plus existing-project-safe backend integration surfaces.
-3. [ ] Phase C: backend models, admin, provider resolution, caching, and operator-facing failure states for curated embeds.
-4. [ ] Phase D: `showcase_react` integration, routes, components, and module-bridge updates for fresh generation and documented manual adoption.
-5. [ ] Phase E: split support-matrix tests, documentation, and release artifacts.
-
-**Testing & Quality Gates**:
-- [ ] Unit tests for model validation, provider detection, URL normalization, resolver normalization, and cache-key behavior.
-- [ ] Integration tests for admin ordering and publishing, generated-project integration response contracts, and public filtering of inactive records.
-- [ ] Planner/apply regression coverage confirming `modules.social` config generation, reconfigure stability, managed settings output, generated-project integration wiring, and existing-project backend-only support with no automatic `showcase_react` file churn.
-- [ ] React/Vitest coverage for the fresh-generation link tree, embed gallery, empty states, and provider-specific renderer selection using mocked API contracts.
-- [ ] E2E coverage for `quickscale plan` → `quickscale apply` → working React social page in a freshly generated project, with external provider calls mocked or fixture-backed so CI remains deterministic.
-- [ ] Repository quality gate remains `make check`, with any additional targeted module or theme commands documented in the implementation archive.
-
-**Documentation & Release Closeout**:
-- [ ] Add `quickscale_modules/social/README.md` with config example, fixed built-in routes, API surface, supported providers, and operator notes.
-- [ ] Update user-facing docs that enumerate current first-party modules after the release ships.
-- [ ] Document the v0.79 support matrix explicitly, including backend-only automatic support for existing generated projects and the manual-adoption path for `showcase_react` UX on older projects.
-- [ ] Publish the implementation archive and, if warranted, a reader-facing release summary when v0.79.0 ships.
-- [ ] Replace this roadmap section with a concise pointer once release artifacts exist.
-
-**Success Criteria**:
-- [x] `quickscale plan` can configure `modules.social` without manual YAML editing.
-- [ ] `quickscale apply` on an existing generated project adds working admin-managed social links, deterministic managed backend wiring, and generated-project integration surfaces that stay outside the module package without mutating theme-owned React files.
-- [ ] Freshly generated or manually updated `showcase_react` projects render a branded link tree page at `/social` and an embed gallery at `/social/embeds` when the module is installed and configured.
-- [ ] Curated embeds for the supported provider allowlist render through normalized backend data and degrade safely on provider failure.
-- [ ] CI-safe tests cover planner/apply wiring, existing-project backend-only support, backend APIs, and fresh-generation frontend rendering without relying on live third-party network calls.
-
-**Deferred Follow-up**:
-- [ ] click analytics and richer social-performance dashboards
-- [ ] provider auth, posting, or automated feed sync jobs
-- [ ] Instagram and Facebook embeds only after a compliant credentialed path is approved and documented
-- [ ] HTML theme parity work
-- [ ] listings + social composition and real-estate-specific presentation polish in v0.80.0
-- [ ] additional providers or moderation workflows only if real project demand appears
+**Current closeout scope**:
+- publish the reader-facing v0.79.0 release summary and update release metadata when the release is cut
+- keep end-to-end `quickscale plan` → `quickscale apply` → React public-page coverage deferred to [v0.86.0](#v0860-module-workflow-validation--real-world-testing)
+- keep provider auth or write APIs, automated sync, analytics, and HTML-theme polish deferred beyond v0.79.0
 
 ---
 

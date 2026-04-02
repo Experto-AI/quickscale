@@ -33,12 +33,22 @@ SOCIAL_PAYLOAD_HTTP_STATUS = {
     SOCIAL_STATUS_DISABLED: 200,
     SOCIAL_STATUS_ERROR: 503,
 }
+SOCIAL_EMBED_RESOLUTION_PENDING = "pending"
+SOCIAL_EMBED_RESOLUTION_RESOLVED = "resolved"
+SOCIAL_EMBED_RESOLUTION_ERROR = "error"
+SOCIAL_EMBED_RESOLUTION_CHOICES = (
+    (SOCIAL_EMBED_RESOLUTION_PENDING, "Pending"),
+    (SOCIAL_EMBED_RESOLUTION_RESOLVED, "Resolved"),
+    (SOCIAL_EMBED_RESOLUTION_ERROR, "Error"),
+)
 
 _SCHEMELESS_URL_PATTERN = re.compile(
     r"^[A-Za-z0-9][A-Za-z0-9.-]*\.[A-Za-z]{2,}(?:[:/].*)?$"
 )
 _PROVIDER_TOKEN_PATTERN = re.compile(r"[^a-z0-9-]+")
 _MULTI_DASH_PATTERN = re.compile(r"-{2,}")
+_YOUTUBE_EMBED_PATH_PATTERN = re.compile(r"^/(?:embed|live|shorts|v)/([^/?#]+)$")
+_TIKTOK_VIDEO_PATH_PATTERN = re.compile(r"/video/(\d+)")
 _TRACKING_QUERY_PREFIXES = ("utm_",)
 _TRACKING_QUERY_NAMES = {
     "fbclid",
@@ -53,6 +63,9 @@ _TRACKING_QUERY_NAMES = {
 }
 _TRUE_VALUES = {"1", "true", "yes", "on"}
 _FALSE_VALUES = {"0", "false", "no", "off"}
+_YOUTUBE_EMBED_DIMENSIONS = (560, 315)
+_YOUTUBE_THUMBNAIL_DIMENSIONS = (480, 360)
+_TIKTOK_EMBED_DIMENSIONS = (325, 575)
 
 
 class SocialConfigurationError(Exception):
@@ -89,6 +102,18 @@ class SocialRuntimeSettingsSnapshot:
     cache_ttl_seconds: int
     links_per_page: int
     embeds_per_page: int
+
+
+@dataclass(frozen=True)
+class ResolvedSocialEmbedMetadata:
+    """Provider-safe inline preview metadata for a curated social embed."""
+
+    embed_url: str
+    thumbnail_url: str | None
+    embed_width: int | None
+    embed_height: int | None
+    thumbnail_width: int | None
+    thumbnail_height: int | None
 
 
 SOCIAL_PROVIDER_CATALOG: tuple[SocialProviderMetadata, ...] = (
@@ -196,6 +221,77 @@ def social_provider_supports_embeds(provider: Any) -> bool:
     """Return whether a provider supports curated embeds in v0.79.0."""
     metadata = get_social_provider_metadata(provider)
     return bool(metadata and metadata.supports_embeds)
+
+
+def _query_value(query: str, key: str) -> str | None:
+    for query_key, value in parse_qsl(query, keep_blank_values=False):
+        if query_key == key and value.strip():
+            return value.strip()
+    return None
+
+
+def _resolve_youtube_embed_metadata(url: str) -> ResolvedSocialEmbedMetadata:
+    parsed = urlsplit(url)
+    video_id = _query_value(parsed.query, "v")
+    if video_id is None:
+        path_match = _YOUTUBE_EMBED_PATH_PATTERN.fullmatch(_canonical_path(parsed.path))
+        video_id = path_match.group(1) if path_match is not None else None
+
+    if not video_id:
+        raise ValueError(
+            "QuickScale could not derive a canonical YouTube video id for inline preview metadata."
+        )
+
+    embed_query_items = [("rel", "0")]
+    playlist_id = _query_value(parsed.query, "list")
+    if playlist_id:
+        embed_query_items.append(("list", playlist_id))
+
+    embed_url = (
+        f"https://www.youtube.com/embed/{video_id}?{urlencode(embed_query_items)}"
+    )
+    return ResolvedSocialEmbedMetadata(
+        embed_url=embed_url,
+        thumbnail_url=f"https://i.ytimg.com/vi/{video_id}/hqdefault.jpg",
+        embed_width=_YOUTUBE_EMBED_DIMENSIONS[0],
+        embed_height=_YOUTUBE_EMBED_DIMENSIONS[1],
+        thumbnail_width=_YOUTUBE_THUMBNAIL_DIMENSIONS[0],
+        thumbnail_height=_YOUTUBE_THUMBNAIL_DIMENSIONS[1],
+    )
+
+
+def _resolve_tiktok_embed_metadata(url: str) -> ResolvedSocialEmbedMetadata:
+    parsed = urlsplit(url)
+    path_match = _TIKTOK_VIDEO_PATH_PATTERN.search(_canonical_path(parsed.path))
+    video_id = path_match.group(1) if path_match is not None else None
+    if not video_id:
+        raise ValueError(
+            "QuickScale needs a canonical TikTok video URL before it can resolve inline preview metadata."
+        )
+
+    return ResolvedSocialEmbedMetadata(
+        embed_url=f"https://www.tiktok.com/embed/v2/{video_id}",
+        thumbnail_url=None,
+        embed_width=_TIKTOK_EMBED_DIMENSIONS[0],
+        embed_height=_TIKTOK_EMBED_DIMENSIONS[1],
+        thumbnail_width=None,
+        thumbnail_height=None,
+    )
+
+
+def resolve_social_embed_metadata(
+    url: str,
+    *,
+    provider: Any | None = None,
+) -> ResolvedSocialEmbedMetadata:
+    """Return backend-owned inline preview metadata for a curated social embed."""
+    resolved = resolve_social_target(url, provider=provider)
+    if resolved.provider == "youtube":
+        return _resolve_youtube_embed_metadata(resolved.url)
+    if resolved.provider == "tiktok":
+        return _resolve_tiktok_embed_metadata(resolved.url)
+
+    raise ValueError("Embeds support only TikTok and YouTube in v0.79.0.")
 
 
 def social_payload_status_code(status: Any) -> int:
@@ -463,8 +559,13 @@ def get_social_runtime_settings() -> SocialRuntimeSettingsSnapshot:
 __all__ = [
     "DEFAULT_SOCIAL_EMBED_PROVIDER_ALLOWLIST",
     "DEFAULT_SOCIAL_PROVIDER_ALLOWLIST",
+    "ResolvedSocialEmbedMetadata",
     "SOCIAL_EMBEDS_CACHE_KEY",
     "SOCIAL_EMBEDS_PATH",
+    "SOCIAL_EMBED_RESOLUTION_CHOICES",
+    "SOCIAL_EMBED_RESOLUTION_ERROR",
+    "SOCIAL_EMBED_RESOLUTION_PENDING",
+    "SOCIAL_EMBED_RESOLUTION_RESOLVED",
     "SOCIAL_INTEGRATION_BASE_PATH",
     "SOCIAL_INTEGRATION_EMBEDS_PATH",
     "SOCIAL_LAYOUT_VARIANTS",
@@ -488,6 +589,7 @@ __all__ = [
     "normalize_social_provider_allowlist",
     "normalize_social_url",
     "resolve_social_target",
+    "resolve_social_embed_metadata",
     "social_payload_status_code",
     "social_provider_supports_embeds",
 ]

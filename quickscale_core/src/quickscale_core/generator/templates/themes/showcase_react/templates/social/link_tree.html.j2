@@ -3,287 +3,82 @@
 {% block title %}Social | {% endraw %}{{ project_name }}{% raw %}{% endblock %}
 
 {% block extra_css %}
+<link rel="stylesheet" href="{% static 'frontend/assets/index.css' %}" />
 <style>
     .qs-main {
-        max-width: 1280px;
+        max-width: 1200px;
+        padding-top: 1.75rem;
+        padding-bottom: 2.5rem;
     }
-    .qs-social-shell {
-        display: grid;
-        gap: 1.5rem;
-        align-items: start;
+    .qs-social-react-shell {
+        min-height: 70vh;
     }
-    @media (min-width: 960px) {
-        .qs-social-shell {
-            grid-template-columns: minmax(240px, 280px) minmax(0, 1fr);
-        }
-    }
-    .qs-social-rail,
-    .qs-social-stack {
-        display: grid;
-        gap: 1.5rem;
-    }
-    .qs-social-rail,
-    .qs-social-hero,
-    .qs-social-card {
-        background: #ffffff;
-        border: 1px solid #e2e8f0;
-        border-radius: 1rem;
-        padding: 1.5rem;
-        box-shadow: 0 16px 40px rgba(15, 23, 42, 0.06);
-    }
-    .qs-social-rail {
-        position: sticky;
-        top: 1.5rem;
-        background: linear-gradient(180deg, #ffffff 0%, #f8fafc 100%);
-    }
-    .qs-social-rail-eyebrow {
-        display: inline-flex;
-        align-items: center;
-        width: fit-content;
-        padding: 0.28rem 0.7rem;
-        border-radius: 999px;
-        background: #e2e8f0;
-        color: #0f172a;
-        font-size: 0.74rem;
-        font-weight: 700;
-        letter-spacing: 0.04em;
-        text-transform: uppercase;
-    }
-    .qs-social-rail h1 {
-        font-size: 1.5rem;
-        line-height: 1.1;
-    }
-    .qs-social-rail-copy {
-        color: #475569;
-    }
-    .qs-social-rail-group {
-        display: grid;
-        gap: 0.75rem;
-        padding-top: 0.25rem;
-    }
-    .qs-social-rail-label {
-        font-size: 0.78rem;
-        font-weight: 700;
-        letter-spacing: 0.04em;
-        text-transform: uppercase;
-        color: #64748b;
-    }
-    .qs-social-nav {
-        display: grid;
-        gap: 0.65rem;
-    }
-    .qs-social-nav-link {
-        display: flex;
-        align-items: center;
-        justify-content: space-between;
-        padding: 0.8rem 0.95rem;
-        border-radius: 0.85rem;
+    .qs-social-react-shell:empty::before {
+        content: 'Loading public social page...';
+        display: block;
+        width: 100%;
+        padding: 1rem 1.25rem;
         border: 1px solid #cbd5e1;
-        background: #ffffff;
-        color: #0f172a;
-        font-weight: 600;
-        text-decoration: none;
-    }
-    .qs-social-nav-link:hover {
-        background: #eff6ff;
-        border-color: #93c5fd;
-        text-decoration: none;
-    }
-    .qs-social-nav-link-active {
-        background: #0f172a;
-        border-color: #0f172a;
-        color: #ffffff;
-    }
-    .qs-social-nav-link-active:hover {
-        background: #1e293b;
-        border-color: #1e293b;
-    }
-    .qs-social-meta {
-        display: grid;
-        gap: 0.85rem;
-    }
-    .qs-social-meta div {
-        display: grid;
-        gap: 0.2rem;
-    }
-    .qs-social-meta dt {
-        font-size: 0.84rem;
-        color: #64748b;
-    }
-    .qs-social-meta dd {
-        margin: 0;
-        color: #0f172a;
-        font-weight: 600;
-    }
-    .qs-social-pill {
-        display: inline-flex;
-        align-items: center;
-        padding: 0.25rem 0.65rem;
-        border-radius: 999px;
-        background: #dbeafe;
-        color: #1d4ed8;
-        font-size: 0.78rem;
-        font-weight: 700;
-        letter-spacing: 0.03em;
-        text-transform: uppercase;
-    }
-    .qs-social-hero h1 {
-        margin-top: 1rem;
-        font-size: 2rem;
-        line-height: 1.1;
-    }
-    .qs-social-copy {
-        margin-top: 0.75rem;
+        border-radius: 1rem;
+        background: linear-gradient(135deg, #ffffff 0%, #eff6ff 100%);
         color: #475569;
-        max-width: 62ch;
-    }
-    .qs-social-actions {
-        display: flex;
-        flex-wrap: wrap;
-        gap: 0.75rem;
-        margin-top: 1rem;
-    }
-    .qs-social-button {
-        display: inline-flex;
-        align-items: center;
-        justify-content: center;
-        padding: 0.7rem 1rem;
-        border-radius: 0.75rem;
-        border: 1px solid #2563eb;
-        background: #2563eb;
-        color: #ffffff;
         font-weight: 600;
-        text-decoration: none;
-    }
-    .qs-social-button:hover {
-        text-decoration: none;
-        background: #1d4ed8;
-    }
-    .qs-social-button-muted {
-        background: #ffffff;
-        color: #0f172a;
-        border-color: #cbd5e1;
-    }
-    .qs-social-button-muted:hover {
-        background: #f8fafc;
-    }
-    .qs-social-grid {
-        display: grid;
-        gap: 1rem;
-        grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
-    }
-    .qs-social-card h2 {
-        font-size: 1.05rem;
-        margin-bottom: 0.5rem;
-    }
-    .qs-social-card p,
-    .qs-social-card li {
-        color: #475569;
-    }
-    .qs-social-list {
-        margin: 0;
-        padding-left: 1.1rem;
-    }
-    .qs-social-empty {
-        border-style: dashed;
-        background: linear-gradient(135deg, #f8fafc 0%, #eff6ff 100%);
-    }
-    .qs-social-empty p + p {
-        margin-top: 0.65rem;
     }
 </style>
 {% endblock %}
 
 {% block content %}
-<div class="qs-social-shell">
-    <aside class="qs-social-rail">
-        <span class="qs-social-rail-eyebrow">Public Social Surface</span>
-        <h1>Social</h1>
-        <p class="qs-social-rail-copy">
-            This page stays public and shareable outside the React app shell, while still following the same showcase visual language.
-        </p>
-
-        <section class="qs-social-rail-group">
-            <span class="qs-social-rail-label">Navigate</span>
-            <nav class="qs-social-nav" aria-label="Social page navigation">
-                <a class="qs-social-nav-link qs-social-nav-link-active" href="/social">Link tree</a>
-                {% if settings.QUICKSCALE_SOCIAL_EMBEDS_ENABLED %}
-                <a class="qs-social-nav-link" href="/social/embeds">Embeds</a>
-                {% endif %}
-                <a class="qs-social-nav-link" href="/">App home</a>
-            </nav>
-        </section>
-
-        <section class="qs-social-rail-group">
-            <span class="qs-social-rail-label">Current setup</span>
-            <dl class="qs-social-meta">
-                <div>
-                    <dt>Status</dt>
-                    <dd>{% if settings.QUICKSCALE_SOCIAL_LINK_TREE_ENABLED %}Enabled{% else %}Disabled{% endif %}</dd>
-                </div>
-                <div>
-                    <dt>Layout</dt>
-                    <dd><code>{{ settings.QUICKSCALE_SOCIAL_LAYOUT_VARIANT }}</code></dd>
-                </div>
-                <div>
-                    <dt>Links / page</dt>
-                    <dd><code>{{ settings.QUICKSCALE_SOCIAL_LINKS_PER_PAGE }}</code></dd>
-                </div>
-            </dl>
-        </section>
-    </aside>
-
-    <div class="qs-social-stack">
-        <section class="qs-social-hero">
-            <span class="qs-social-pill">
-                {% if settings.QUICKSCALE_SOCIAL_LINK_TREE_ENABLED %}Link tree enabled{% else %}Link tree disabled{% endif %}
-            </span>
-            <h1>Social Link Tree</h1>
-            <p class="qs-social-copy">
-                QuickScale reserves <code>/social</code> as the public social surface for curated links.
-                This page gives the route a stable home even before any social links have been published.
-            </p>
-            <div class="qs-social-actions">
-                {% if settings.QUICKSCALE_SOCIAL_EMBEDS_ENABLED %}
-                <a class="qs-social-button" href="/social/embeds">Browse embeds</a>
-                {% endif %}
-                <a class="qs-social-button qs-social-button-muted" href="/">Return home</a>
-            </div>
-        </section>
-
-        <section class="qs-social-grid">
-            <article class="qs-social-card">
-                <h2>Status</h2>
-                <p>
-                    {% if settings.QUICKSCALE_SOCIAL_LINK_TREE_ENABLED %}
-                    The public link tree route is enabled at <code>/social</code>.
-                    {% else %}
-                    The public link tree route is currently disabled in project settings.
-                    {% endif %}
-                </p>
-            </article>
-
-            <article class="qs-social-card">
-                <h2>Layout</h2>
-                <p>Configured layout variant: <code>{{ settings.QUICKSCALE_SOCIAL_LAYOUT_VARIANT }}</code></p>
-                <p>Links per page: <code>{{ settings.QUICKSCALE_SOCIAL_LINKS_PER_PAGE }}</code></p>
-            </article>
-
-            <article class="qs-social-card">
-                <h2>Providers</h2>
-                <ul class="qs-social-list">
-                    {% for provider in settings.QUICKSCALE_SOCIAL_PROVIDER_ALLOWLIST %}
-                    <li>{{ provider }}</li>
-                    {% endfor %}
-                </ul>
-            </article>
-
-            <article class="qs-social-card qs-social-empty">
-                <h2>Published Links</h2>
-                <p>No curated social links are available yet.</p>
-                <p>When the social module starts publishing link data, this route will render it here instead of falling through to a 404.</p>
-            </article>
-        </section>
+{% if settings.QUICKSCALE_SOCIAL_LINK_TREE_ENABLED or settings.QUICKSCALE_SOCIAL_EMBEDS_ENABLED %}
+<div id="root" class="qs-social-react-shell"></div>
+<noscript>
+    <div class="qs-alert qs-alert-info">
+        JavaScript is required to render the managed public social link tree on this page.
     </div>
-</div>
+</noscript>
+{% else %}
+<section class="qs-card">
+  <h1>Social module not active</h1>
+  <p>
+    This theme reserves <code>/social</code>, but the managed public social surface only hydrates
+    when the social module is installed and at least one public social setting is enabled.
+  </p>
+</section>
+{% endif %}
+{% endblock %}{% endraw %}
+
+{% raw %}{% block extra_js %}
+{% if settings.QUICKSCALE_SOCIAL_LINK_TREE_ENABLED or settings.QUICKSCALE_SOCIAL_EMBEDS_ENABLED %}
+<script>
+  window.__QUICKSCALE__ = {
+    projectName: "{% endraw %}{{ project_name }}{% raw %}",
+    modules: {
+      auth: false,
+      blog: false,
+      listings: false,
+      crm: false,
+      forms: false,
+      storage: false,
+      backups: false,
+      notifications: false,
+      social: {% if settings.QUICKSCALE_SOCIAL_LINK_TREE_ENABLED or settings.QUICKSCALE_SOCIAL_EMBEDS_ENABLED %}true{% else %}false{% endif %},
+      billing: false,
+      teams: false,
+    },
+    modulePaths: {
+      social: "{% if settings.QUICKSCALE_SOCIAL_LINK_TREE_ENABLED %}/social{% elif settings.QUICKSCALE_SOCIAL_EMBEDS_ENABLED %}/social/embeds{% else %}/social{% endif %}",
+    },
+    publicPage: {
+      module: 'social',
+      surface: 'link_tree',
+      endpoint: '/_quickscale/social/',
+      navigation: {
+        home: '/',
+        linkTree: '/social',
+        embeds: '/social/embeds',
+      },
+    },
+  }
+</script>
+<script type="module" src="{% static 'frontend/assets/index.js' %}"></script>
+{% endif %}
 {% endblock %}{% endraw %}

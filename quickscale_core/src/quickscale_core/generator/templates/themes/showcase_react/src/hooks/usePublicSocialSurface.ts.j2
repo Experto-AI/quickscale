@@ -1,0 +1,242 @@
+{% raw -%}
+import { useQuery } from '@tanstack/react-query'
+import { useProjectConfig, type PublicSocialSurface } from '@/hooks/useModules'
+
+export type SocialPayloadStatus = 'enabled' | 'empty' | 'disabled' | 'error'
+
+export interface PublicSocialNavigation {
+  home: string
+  linkTree: string
+  embeds: string
+}
+
+interface SocialLinkRecord {
+  id: number
+  title: string
+  description: string
+  provider_name: string
+  provider_display_name: string
+  url: string
+  source_url: string
+  display_order: number
+}
+
+type SocialEmbedResolutionStatus = 'pending' | 'resolved' | 'error'
+
+interface SocialEmbedRecord extends SocialLinkRecord {
+  resolution_status: SocialEmbedResolutionStatus
+  resolution_error: string | null
+  embed_url: string | null
+  thumbnail_url: string | null
+  embed_width: number | null
+  embed_height: number | null
+  thumbnail_width: number | null
+  thumbnail_height: number | null
+  last_resolution_attempt_at: string | null
+  last_resolved_at: string | null
+}
+
+interface SocialBasePayload {
+  module: 'social'
+  surface: PublicSocialSurface
+  status: SocialPayloadStatus
+  enabled: boolean
+  public_path: string
+  integration_base_path: string
+  integration_embeds_path: string
+  provider_allowlist: string[]
+  embed_provider_allowlist: string[]
+  error: string | null
+}
+
+export interface SocialLinkTreePayload extends SocialBasePayload {
+  surface: 'link_tree'
+  layout_variant: string
+  links_per_page: number
+  total_links: number
+  links: SocialLinkRecord[]
+}
+
+export interface SocialEmbedsPayload extends SocialBasePayload {
+  surface: 'embeds'
+  cache_ttl_seconds: number
+  embeds_per_page: number
+  total_embeds: number
+  embeds: SocialEmbedRecord[]
+}
+
+type SocialPayloadBySurface = {
+  link_tree: SocialLinkTreePayload
+  embeds: SocialEmbedsPayload
+}
+
+const DEFAULT_ENDPOINTS: Record<PublicSocialSurface, string> = {
+  link_tree: '/_quickscale/social/',
+  embeds: '/_quickscale/social/embeds/',
+}
+
+const DEFAULT_NAVIGATION: PublicSocialNavigation = {
+  home: '/',
+  linkTree: '/social',
+  embeds: '/social/embeds',
+}
+
+function isStringArray(value: unknown): value is string[] {
+  return Array.isArray(value) && value.every((item) => typeof item === 'string')
+}
+
+function isOptionalString(value: unknown): value is string | null {
+  return value === null || typeof value === 'string'
+}
+
+function isOptionalNumber(value: unknown): value is number | null {
+  return value === null || typeof value === 'number'
+}
+
+function isSocialLinkRecord(value: unknown): value is SocialLinkRecord {
+  if (value == null || typeof value !== 'object') {
+    return false
+  }
+
+  const record = value as Record<string, unknown>
+  return (
+    typeof record.id === 'number' &&
+    typeof record.title === 'string' &&
+    typeof record.description === 'string' &&
+    typeof record.provider_name === 'string' &&
+    typeof record.provider_display_name === 'string' &&
+    typeof record.url === 'string' &&
+    typeof record.source_url === 'string' &&
+    typeof record.display_order === 'number'
+  )
+}
+
+function isSocialEmbedResolutionStatus(value: unknown): value is SocialEmbedResolutionStatus {
+  return ['pending', 'resolved', 'error'].includes(String(value))
+}
+
+function isSocialEmbedRecord(value: unknown): value is SocialEmbedRecord {
+  if (!isSocialLinkRecord(value)) {
+    return false
+  }
+
+  const record = value as Record<string, unknown>
+  return (
+    isSocialEmbedResolutionStatus(record.resolution_status) &&
+    isOptionalString(record.resolution_error) &&
+    isOptionalString(record.embed_url) &&
+    isOptionalString(record.thumbnail_url) &&
+    isOptionalNumber(record.embed_width) &&
+    isOptionalNumber(record.embed_height) &&
+    isOptionalNumber(record.thumbnail_width) &&
+    isOptionalNumber(record.thumbnail_height) &&
+    isOptionalString(record.last_resolution_attempt_at) &&
+    isOptionalString(record.last_resolved_at)
+  )
+}
+
+function hasBasePayload(
+  value: unknown,
+  surface: PublicSocialSurface,
+): value is SocialBasePayload {
+  if (value == null || typeof value !== 'object') {
+    return false
+  }
+
+  const payload = value as Record<string, unknown>
+  return (
+    payload.module === 'social' &&
+    payload.surface === surface &&
+    ['enabled', 'empty', 'disabled', 'error'].includes(String(payload.status)) &&
+    typeof payload.enabled === 'boolean' &&
+    typeof payload.public_path === 'string' &&
+    typeof payload.integration_base_path === 'string' &&
+    typeof payload.integration_embeds_path === 'string' &&
+    isStringArray(payload.provider_allowlist) &&
+    isStringArray(payload.embed_provider_allowlist) &&
+    (payload.error === null || typeof payload.error === 'string')
+  )
+}
+
+function isLinkTreePayload(value: unknown): value is SocialLinkTreePayload {
+  if (!hasBasePayload(value, 'link_tree')) {
+    return false
+  }
+
+  const payload = value as Record<string, unknown>
+  return (
+    typeof payload.layout_variant === 'string' &&
+    typeof payload.links_per_page === 'number' &&
+    typeof payload.total_links === 'number' &&
+    Array.isArray(payload.links) &&
+    payload.links.every(isSocialLinkRecord)
+  )
+}
+
+function isEmbedsPayload(value: unknown): value is SocialEmbedsPayload {
+  if (!hasBasePayload(value, 'embeds')) {
+    return false
+  }
+
+  const payload = value as Record<string, unknown>
+  return (
+    typeof payload.cache_ttl_seconds === 'number' &&
+    typeof payload.embeds_per_page === 'number' &&
+    typeof payload.total_embeds === 'number' &&
+    Array.isArray(payload.embeds) &&
+    payload.embeds.every(isSocialEmbedRecord)
+  )
+}
+
+async function fetchPublicSocialPayload<TSurface extends PublicSocialSurface>(
+  surface: TSurface,
+  endpoint: string,
+): Promise<SocialPayloadBySurface[TSurface]> {
+  const response = await fetch(endpoint, {
+    headers: {
+      Accept: 'application/json',
+    },
+  })
+
+  let payload: unknown
+  try {
+    payload = await response.json()
+  } catch {
+    throw new Error(`QuickScale social ${surface} payload was not valid JSON`)
+  }
+
+  if (surface === 'link_tree' && isLinkTreePayload(payload)) {
+    return payload as SocialPayloadBySurface[TSurface]
+  }
+
+  if (surface === 'embeds' && isEmbedsPayload(payload)) {
+    return payload as SocialPayloadBySurface[TSurface]
+  }
+
+  throw new Error(
+    `QuickScale social ${surface} payload did not match the managed contract (HTTP ${response.status})`,
+  )
+}
+
+export function usePublicSocialSurface<TSurface extends PublicSocialSurface>(
+  surface: TSurface,
+) {
+  const config = useProjectConfig()
+  const publicPage = config.publicPage?.surface === surface ? config.publicPage : undefined
+  const endpoint = publicPage?.endpoint ?? DEFAULT_ENDPOINTS[surface]
+  const navigation = publicPage?.navigation ?? DEFAULT_NAVIGATION
+
+  const query = useQuery<SocialPayloadBySurface[TSurface], Error>({
+    queryKey: ['public-social', surface, endpoint],
+    queryFn: () => fetchPublicSocialPayload(surface, endpoint),
+    retry: false,
+  })
+
+  return {
+    projectName: config.projectName,
+    endpoint,
+    navigation,
+    ...query,
+  }
+}
+{% endraw -%}

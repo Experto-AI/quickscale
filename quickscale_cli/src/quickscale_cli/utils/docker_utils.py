@@ -17,7 +17,11 @@ def is_docker_running() -> bool:
     try:
         subprocess.run(["docker", "info"], capture_output=True, check=True, timeout=5)
         return True
-    except subprocess.SubprocessError, FileNotFoundError, subprocess.TimeoutExpired:
+    except (
+        subprocess.SubprocessError,
+        FileNotFoundError,
+        subprocess.TimeoutExpired,
+    ):
         return False
 
 
@@ -39,7 +43,11 @@ def get_docker_compose_command() -> list[str]:
             ["docker", "compose", "version"], capture_output=True, check=True, timeout=2
         )
         return ["docker", "compose"]
-    except subprocess.SubprocessError, FileNotFoundError, subprocess.TimeoutExpired:
+    except (
+        subprocess.SubprocessError,
+        FileNotFoundError,
+        subprocess.TimeoutExpired,
+    ):
         # Fall back to docker-compose (v1 standalone)
         return ["docker-compose"]
 

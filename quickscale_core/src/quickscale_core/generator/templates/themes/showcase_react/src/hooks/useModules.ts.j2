@@ -17,10 +17,26 @@ interface QuickScaleModulePaths {
   social: string
 }
 
-interface QuickScaleConfig {
+export type PublicSocialSurface = 'link_tree' | 'embeds'
+
+interface QuickScalePublicPageNavigation {
+  home: string
+  linkTree: string
+  embeds: string
+}
+
+interface QuickScalePublicPageConfig {
+  module: 'social'
+  surface: PublicSocialSurface
+  endpoint: string
+  navigation: QuickScalePublicPageNavigation
+}
+
+export interface QuickScaleConfig {
   projectName: string
   modules: QuickScaleModules
   modulePaths: QuickScaleModulePaths
+  publicPage?: QuickScalePublicPageConfig
 }
 
 declare global {

@@ -7,6 +7,7 @@ from django.contrib import admin
 from django.test import Client
 from django.urls import reverse
 
+from quickscale_modules_social.contracts import SOCIAL_EMBED_RESOLUTION_RESOLVED
 from quickscale_modules_social.models import SocialEmbed, SocialLink
 
 
@@ -39,6 +40,54 @@ class TestSocialAdmin:
         assert response.status_code == 302
         assert link.provider_name == "youtube"
         assert link.normalized_url == "https://www.youtube.com/watch?v=abc123"
+
+    def test_social_embed_admin_exposes_resolution_fields(self) -> None:
+        """The admin should surface embed resolution state and metadata to operators."""
+        social_embed_admin = admin.site._registry[SocialEmbed]
+
+        assert "resolution_status" in social_embed_admin.list_display
+        assert "resolution_status" in social_embed_admin.list_filter
+        for field_name in [
+            "resolution_status",
+            "resolution_error",
+            "last_resolution_attempt_at",
+            "last_resolved_at",
+            "resolved_embed_url",
+            "resolved_thumbnail_url",
+        ]:
+            assert field_name in social_embed_admin.readonly_fields
+        assert any(
+            "resolution_status" in fieldset[1]["fields"]
+            for fieldset in social_embed_admin.fieldsets
+        )
+        assert any(
+            "resolved_embed_url" in fieldset[1]["fields"]
+            for fieldset in social_embed_admin.fieldsets
+        )
+
+    def test_social_embed_add_view_records_resolution_metadata(
+        self, admin_client: Client
+    ) -> None:
+        """Admin embed creation should persist backend-owned resolution metadata."""
+        response = admin_client.post(
+            reverse("admin:quickscale_modules_social_socialembed_add"),
+            {
+                "title": "QuickScale launch short",
+                "description": "Short-form launch clip.",
+                "provider_name": "",
+                "url": "https://www.youtube.com/shorts/abc123",
+                "is_published": "on",
+                "display_order": "2",
+                "_save": "Save",
+            },
+        )
+
+        embed = SocialEmbed.objects.get()
+
+        assert response.status_code == 302
+        assert embed.resolution_status == SOCIAL_EMBED_RESOLUTION_RESOLVED
+        assert embed.resolved_embed_url == "https://www.youtube.com/embed/abc123?rel=0"
+        assert embed.last_resolution_attempt_at is not None
 
     def test_social_embed_add_view_rejects_non_embed_provider(
         self, admin_client: Client

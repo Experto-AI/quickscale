@@ -1,0 +1,285 @@
+{% raw -%}
+import { ExternalLink, PlaySquare } from 'lucide-react'
+import { Badge } from '@/components/ui/badge'
+import { Button } from '@/components/ui/button'
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
+import { PublicSocialShell } from '@/components/social/PublicSocialShell'
+import {
+  usePublicSocialSurface,
+  type SocialEmbedsPayload,
+} from '@/hooks/usePublicSocialSurface'
+
+function embedFrameStyle(
+  record: SocialEmbedsPayload['embeds'][number],
+): React.CSSProperties | undefined {
+  if (record.embed_width == null || record.embed_height == null) {
+    return undefined
+  }
+  if (record.embed_width < 1 || record.embed_height < 1) {
+    return undefined
+  }
+
+  return {
+    aspectRatio: `${record.embed_width} / ${record.embed_height}`,
+  }
+}
+
+export function SocialEmbedsPublicPage() {
+  const { data, error, isError, isLoading, navigation, projectName } = usePublicSocialSurface(
+    'embeds',
+  )
+
+  const status = isLoading ? 'loading' : isError || data == null ? 'error' : data.status
+  const description = isLoading
+    ? 'Loading the managed public embed gallery so the Django-owned route can hydrate without being absorbed by the SPA.'
+    : isError || data == null
+      ? 'The page booted, but the public embed payload could not be loaded cleanly from the managed endpoint.'
+      : data.status === 'enabled'
+        ? 'Featured clips stay on the Django-owned /social/embeds route while React renders backend-owned preview metadata into a richer public media gallery.'
+        : data.status === 'empty'
+          ? 'The embed route is live and ready for the first curated clip, reel, or video without moving ownership into the SPA router.'
+          : data.status === 'disabled'
+            ? 'The route is still reserved by Django, but curated embeds are currently paused in the managed social settings.'
+            : data.error ??
+              'The managed social contract reported an error while preparing the public embed gallery.'
+
+  const stats = [
+    {
+      label: 'Public route',
+      value: data?.public_path ?? navigation.embeds,
+    },
+    {
+      label: 'Published embeds',
+      value: isLoading ? 'Syncing…' : String(data?.total_embeds ?? 0),
+    },
+    {
+      label: 'Cache window',
+      value: isLoading ? 'Loading' : `${data?.cache_ttl_seconds ?? 300}s`,
+    },
+  ]
+
+  let content: React.ReactNode
+
+  if (isLoading) {
+    content = (
+      <Card className="rounded-[1.75rem] border-slate-200/80 bg-white/95 shadow-sm">
+        <CardHeader>
+          <CardTitle>Loading curated embeds</CardTitle>
+          <CardDescription>
+            The public gallery is waiting for the managed social payload.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="grid gap-3 md:grid-cols-2">
+          {Array.from({ length: 2 }, (_, index) => (
+            <div
+              key={index}
+              className="aspect-video animate-pulse rounded-[1.5rem] border border-slate-200 bg-slate-100"
+            />
+          ))}
+        </CardContent>
+      </Card>
+    )
+  } else if (isError || data == null) {
+    content = (
+      <Card className="rounded-[1.75rem] border-rose-200 bg-rose-50/80 shadow-sm">
+        <CardHeader>
+          <CardTitle>Public embed gallery unavailable</CardTitle>
+          <CardDescription>
+            The shared bundle loaded, but the managed social endpoint did not provide a valid
+            payload.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="text-sm text-rose-700">{error?.message}</CardContent>
+      </Card>
+    )
+  } else if (data.status === 'disabled') {
+    content = (
+      <Card className="rounded-[1.75rem] border-amber-200 bg-amber-50/80 shadow-sm">
+        <CardHeader>
+          <CardTitle>Embed gallery paused</CardTitle>
+          <CardDescription>
+            The route still resolves publicly, but embeds are disabled right now.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-3 text-sm text-amber-900">
+          <p>
+            Keeping the page reachable makes the disabled state explicit and preserves Django as the
+            canonical owner of /social/embeds.
+          </p>
+          <p>
+            Once embeds are re-enabled, the same route will render live media again with no router
+            handoff.
+          </p>
+        </CardContent>
+      </Card>
+    )
+  } else if (data.status === 'error') {
+    content = (
+      <Card className="rounded-[1.75rem] border-rose-200 bg-rose-50/80 shadow-sm">
+        <CardHeader>
+          <CardTitle>Embed configuration needs attention</CardTitle>
+          <CardDescription>
+            The managed contract surfaced an error instead of curated media.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-3 text-sm text-rose-700">
+          <p>{data.error}</p>
+          <p>
+            Fix the social settings and reload this page to restore the public embed gallery without
+            changing the route owner.
+          </p>
+        </CardContent>
+      </Card>
+    )
+  } else if (data.embeds.length === 0) {
+    content = (
+      <Card className="rounded-[1.75rem] border-sky-200 bg-sky-50/80 shadow-sm">
+        <CardHeader>
+          <CardTitle>Ready for the first embed</CardTitle>
+          <CardDescription>
+            The public gallery is live, but no curated media has been published yet.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-3 text-sm text-slate-700">
+          <p>
+            Publish a YouTube or TikTok record and the managed payload will start filling this page
+            immediately while the public route stays anchored in Django.
+          </p>
+          <p>
+            The current cap is <strong>{data.embeds_per_page}</strong> embed
+            {data.embeds_per_page === 1 ? '' : 's'} per page with a cache window of{' '}
+            <strong>{data.cache_ttl_seconds}</strong> seconds.
+          </p>
+        </CardContent>
+      </Card>
+    )
+  } else {
+    content = (
+      <>
+        <Card className="rounded-[1.75rem] border-slate-200/80 bg-white/95 shadow-sm">
+          <CardHeader className="gap-4">
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <Badge className="rounded-full bg-slate-900 px-3 py-1 text-white hover:bg-slate-900">
+                Managed public embeds
+              </Badge>
+              <span className="text-sm font-medium text-slate-500">
+                {data.total_embeds} featured clip{data.total_embeds === 1 ? '' : 's'}
+              </span>
+            </div>
+            <div>
+              <CardTitle className="text-2xl">Curated media gallery</CardTitle>
+              <CardDescription className="mt-2">
+                The managed transport decides what appears here; the public page only handles
+                presentation, backend-owned preview metadata, and provider-safe fallbacks.
+              </CardDescription>
+            </div>
+          </CardHeader>
+        </Card>
+
+        <div className="grid gap-4 md:grid-cols-2">
+          {data.embeds.map((record) => {
+            return (
+              <Card
+                key={record.id}
+                className="rounded-[1.75rem] border-slate-200/80 bg-white/95 shadow-sm"
+              >
+                <CardContent className="space-y-5 p-5">
+                  <div
+                    className="relative aspect-video overflow-hidden rounded-[1.5rem] border border-slate-200 bg-slate-950"
+                    style={embedFrameStyle(record)}
+                  >
+                    {record.embed_url ? (
+                      <iframe
+                        title={`${record.title} embed`}
+                        src={record.embed_url}
+                        className="h-full w-full"
+                        allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+                        allowFullScreen
+                      />
+                    ) : (
+                      <>
+                        {record.thumbnail_url ? (
+                          <img
+                            src={record.thumbnail_url}
+                            alt=""
+                            aria-hidden="true"
+                            className="h-full w-full object-cover opacity-40"
+                            loading="lazy"
+                          />
+                        ) : null}
+                        <div className="absolute inset-0 flex h-full flex-col items-center justify-center gap-3 px-6 text-center text-sm text-slate-200">
+                          <PlaySquare className="h-8 w-8 text-sky-300" />
+                          <p className="font-medium">
+                            {record.resolution_status === 'error'
+                              ? 'Preview needs attention'
+                              : `Preview opens on ${record.provider_display_name}`}
+                          </p>
+                          <p className="max-w-xs text-slate-400">
+                            {record.resolution_error ??
+                              'This curated record is still public and shareable, but the backend has not resolved an inline preview yet.'}
+                          </p>
+                        </div>
+                      </>
+                    )}
+                  </div>
+
+                  <div className="space-y-4">
+                    <div className="flex flex-wrap items-center justify-between gap-3">
+                      <Badge
+                        variant="outline"
+                        className="rounded-full border-slate-200 bg-slate-50 px-3 py-1 text-slate-700"
+                      >
+                        {record.provider_display_name}
+                      </Badge>
+                      <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-500">
+                        #{record.display_order}
+                      </span>
+                    </div>
+
+                    <div>
+                      <CardTitle className="text-xl">{record.title}</CardTitle>
+                      <CardDescription className="mt-2">
+                        {record.description ||
+                          'A curated public embed rendered through the managed social contract.'}
+                      </CardDescription>
+                    </div>
+
+                    <Button asChild className="w-full sm:w-auto">
+                      <a
+                        href={record.url}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        aria-label={`Open ${record.title} on ${record.provider_display_name}`}
+                      >
+                        Open on provider
+                        <ExternalLink className="h-4 w-4" />
+                      </a>
+                    </Button>
+                  </div>
+                </CardContent>
+              </Card>
+            )
+          })}
+        </div>
+      </>
+    )
+  }
+
+  return (
+    <PublicSocialShell
+      projectName={projectName}
+      surface="embeds"
+      title="Social Embeds"
+      eyebrow="Public media routing"
+      description={description}
+      status={status}
+      navigation={navigation}
+      stats={stats}
+      providerAllowlist={data?.provider_allowlist ?? []}
+      embedProviderAllowlist={data?.embed_provider_allowlist ?? []}
+    >
+      {content}
+    </PublicSocialShell>
+  )
+}
+{% endraw -%}
