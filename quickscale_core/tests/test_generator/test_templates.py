@@ -641,6 +641,15 @@ class TestDevOpsTemplateRendering:
         assert "apt.postgresql.org" in output
         assert "apt.postgresql.org.asc" in output
         assert "postgresql-client-18" in output
+        assert 'echo "/usr/lib/postgresql/18/bin" >> "$GITHUB_PATH"' in output
+        assert (
+            'test "$(command -v pg_dump)" = "/usr/lib/postgresql/18/bin/pg_dump"'
+            in output
+        )
+        assert (
+            'test "$(command -v pg_restore)" = "/usr/lib/postgresql/18/bin/pg_restore"'
+            in output
+        )
         assert "pg_dump --version" in output
         assert "pg_restore --version" in output
         assert "gpg --dearmor" not in output

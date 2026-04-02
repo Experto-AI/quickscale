@@ -403,6 +403,15 @@ class TestFullE2EWorkflow:
         assert "apt.postgresql.org" in ci_content
         assert "apt.postgresql.org.asc" in ci_content
         assert "postgresql-client-18" in ci_content
+        assert 'echo "/usr/lib/postgresql/18/bin" >> "$GITHUB_PATH"' in ci_content
+        assert (
+            'test "$(command -v pg_dump)" = "/usr/lib/postgresql/18/bin/pg_dump"'
+            in ci_content
+        )
+        assert (
+            'test "$(command -v pg_restore)" = "/usr/lib/postgresql/18/bin/pg_restore"'
+            in ci_content
+        )
         assert "pg_dump --version" in ci_content
         assert "pg_restore --version" in ci_content
         assert "gpg --dearmor" not in ci_content

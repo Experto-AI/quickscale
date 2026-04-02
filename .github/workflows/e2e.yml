@@ -82,9 +82,12 @@ jobs:
           | sudo tee /etc/apt/sources.list.d/pgdg.list > /dev/null
         sudo apt-get update
         sudo apt-get install -y postgresql-client-18
+        echo "/usr/lib/postgresql/18/bin" >> "$GITHUB_PATH"
 
     - name: Verify PostgreSQL 18 client tooling
       run: |
+        test "$(command -v pg_dump)" = "/usr/lib/postgresql/18/bin/pg_dump"
+        test "$(command -v pg_restore)" = "/usr/lib/postgresql/18/bin/pg_restore"
         pg_dump --version | grep "PostgreSQL) 18"
         pg_restore --version | grep "PostgreSQL) 18"
 
@@ -196,6 +199,9 @@ jobs:
         grep -q "apt.postgresql.org" /tmp/test_docker_project/.github/workflows/ci.yml
         grep -q "apt.postgresql.org.asc" /tmp/test_docker_project/.github/workflows/ci.yml
         grep -q "postgresql-client-18" /tmp/test_docker_project/.github/workflows/ci.yml
+        grep -q 'echo "/usr/lib/postgresql/18/bin" >> "$GITHUB_PATH"' /tmp/test_docker_project/.github/workflows/ci.yml
+        grep -q 'test "$(command -v pg_dump)" = "/usr/lib/postgresql/18/bin/pg_dump"' /tmp/test_docker_project/.github/workflows/ci.yml
+        grep -q 'test "$(command -v pg_restore)" = "/usr/lib/postgresql/18/bin/pg_restore"' /tmp/test_docker_project/.github/workflows/ci.yml
         ! grep -q "gpg --dearmor" /tmp/test_docker_project/.github/workflows/ci.yml
 
     - name: Validate docker-compose configuration

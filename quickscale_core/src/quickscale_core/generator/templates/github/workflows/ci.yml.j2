@@ -37,9 +37,12 @@ jobs:
           | sudo tee /etc/apt/sources.list.d/pgdg.list > /dev/null
         sudo apt-get update
         sudo apt-get install -y postgresql-client-18
+        echo "/usr/lib/postgresql/18/bin" >> "$GITHUB_PATH"
 
     - name: Verify PostgreSQL 18 client tooling
       run: |
+        test "$(command -v pg_dump)" = "/usr/lib/postgresql/18/bin/pg_dump"
+        test "$(command -v pg_restore)" = "/usr/lib/postgresql/18/bin/pg_restore"
         pg_dump --version | grep "PostgreSQL) 18"
         pg_restore --version | grep "PostgreSQL) 18"
 
