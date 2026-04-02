@@ -147,34 +147,9 @@ jobs:
           fi
         done
 
-    - name: Run tests (quickscale_core) - Unit & Integration only
+    - name: Run repository coverage gate
       run: |
-        poetry run pytest quickscale_core -m "not e2e" --cov=quickscale_core --cov-report=xml --cov-report=term --cov-fail-under=90
-
-    - name: Run tests (quickscale_cli)
-      run: |
-        poetry run pytest quickscale_cli --cov=quickscale_cli --cov-report=xml --cov-report=term --cov-fail-under=90
-
-    - name: Run module manifest contract tests
-      run: |
-        poetry run pytest quickscale_cli/tests/test_module_manifest_contract.py
-
-    - name: Run tests (quickscale_modules)
-      run: |
-        # Test modules using centralized dependencies
-        # PYTHONPATH set to module dir so tests.settings is importable
-        # Repository coverage policy is enforced via scripts/test_unit.sh in the
-        # release path; keep this repo CI step informational for per-module output.
-        for mod in quickscale_modules/*/; do
-          if [ -d "${mod}tests" ]; then
-            mod_name=$(basename "$mod")
-            pkg_name="quickscale_modules_${mod_name}"
-            echo "Testing module: $mod_name"
-            PYTHONPATH="${mod}:${mod}src" poetry run pytest "${mod}tests/" \
-              --cov="$pkg_name" --cov-report=term \
-              -p pytest_django --ds=tests.settings || true
-          fi
-        done
+        ./scripts/test_unit.sh
 
     - name: Upload coverage reports
       uses: codecov/codecov-action@v4

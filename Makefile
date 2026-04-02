@@ -163,6 +163,10 @@ install:
 # Run all tests
 test:
 	@set -e; \
+	if [ "$(strip $(ACTIVE_SECTIONS))" = "quickscale core cli modules" ] && [ -z "$(MODULE)" ]; then \
+		./scripts/test_unit.sh; \
+		exit 0; \
+	fi; \
 	if [ -n "$(filter quickscale,$(ACTIVE_SECTIONS))" ]; then \
 		echo "ℹ️ quickscale has no test suite to run."; \
 	fi; \

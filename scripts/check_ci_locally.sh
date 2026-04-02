@@ -63,27 +63,7 @@ echo "✓ Type checks passed"
 
 echo ""
 echo "[4/5] Running unit/integration tests..."
-
-echo "  → Testing quickscale_core..."
-poetry run pytest quickscale_core -m "not e2e" --cov=quickscale_core --cov-report=term -q || FAILED=true
-
-echo "  → Testing quickscale_cli..."
-poetry run pytest quickscale_cli -m "not e2e" --cov=quickscale_cli --cov-report=term -q || FAILED=true
-
-echo "  → Testing quickscale_modules..."
-for mod in quickscale_modules/*; do
-    if [ -d "$mod" ] && [ -d "$mod/tests" ]; then
-        mod_name=$(basename "$mod")
-        echo "    → Testing module: $mod_name"
-        # Package name format: quickscale_modules_<name> (underscores, not hyphens)
-        pkg_name="quickscale_modules_${mod_name}"
-        # Use ROOT poetry environment with PYTHONPATH pointing to module
-        # Coverage uses package name (importable), not filesystem path
-        PYTHONPATH="$mod:$mod/src" poetry run pytest "$mod/tests/" -q \
-            --cov="$pkg_name" --cov-report=term \
-            -p pytest_django --ds=tests.settings || FAILED=true
-    fi
-done
+./scripts/test_unit.sh || FAILED=true
 
 if [ "$FAILED" = true ]; then
     echo ""

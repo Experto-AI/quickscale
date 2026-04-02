@@ -22,6 +22,25 @@ cleanup_temp_files() {
 
 trap cleanup_temp_files EXIT
 
+persist_coverage_xml() {
+  local stage_name="$1"
+  local coverage_xml="$2"
+  local target_path=""
+
+  case "$stage_name" in
+    quickscale_core)
+      target_path="quickscale_core/coverage.xml"
+      ;;
+    quickscale_cli)
+      target_path="quickscale_cli/coverage.xml"
+      ;;
+  esac
+
+  if [ -n "$target_path" ] && [ -f "$coverage_xml" ]; then
+    cp "$coverage_xml" "$target_path"
+  fi
+}
+
 show_help() {
   echo "Usage: $0 [OPTIONS] [-- <pytest-args>]"
   echo ""
@@ -138,6 +157,7 @@ run_pytest_stage() {
     -o "addopts="
     "--cov=${coverage_target}"
     "--cov-report=xml:${coverage_xml}"
+    --cov-fail-under=0
   )
 
   if [ "$include_html_report" = true ]; then
@@ -166,6 +186,7 @@ run_pytest_stage() {
 
   local coverage_pct
   coverage_pct="$(extract_coverage_percent "$coverage_xml" || true)"
+  persist_coverage_xml "$stage_name" "$coverage_xml"
   if [ -n "$coverage_pct" ]; then
     printf '%s|%s\n' "$stage_name" "$coverage_pct" >> "$COVERAGE_RESULTS_FILE"
   fi
