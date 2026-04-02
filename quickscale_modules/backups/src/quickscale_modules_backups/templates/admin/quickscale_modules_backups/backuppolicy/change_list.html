@@ -8,6 +8,9 @@
     </form>
 </li>
 <li>
+    <a href="{% url 'admin:quickscale_modules_backups_backuppolicy_restore' %}" class="button">Restore backup</a>
+</li>
+<li>
     <form action="{% url 'admin:quickscale_modules_backups_backuppolicy_prune' %}" method="post">
         {% csrf_token %}
         <button type="submit" class="button">Prune expired backups</button>

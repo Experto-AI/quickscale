@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from collections.abc import Iterator
 from contextlib import contextmanager
+from enum import StrEnum
 import hashlib
 import json
 import os
@@ -21,6 +22,7 @@ from typing import TYPE_CHECKING, Any, Protocol, Sequence
 import django
 from django.apps import apps
 from django.conf import settings
+from django.db import DatabaseError
 from django.core.files import File
 from django.core.management import call_command
 from django.utils import timezone as django_timezone
@@ -212,12 +214,29 @@ class BackupPolicySnapshot:
 
 
 @dataclass(frozen=True)
+class RestoreWarning:
+    """Structured non-fatal warning emitted after restore execution."""
+
+    code: str
+    message: str
+    details: dict[str, str] | None = None
+
+
+class RestoreSourceResolutionMode(StrEnum):
+    """How restore source resolution may use private remote artifacts."""
+
+    REMOTE_FALLBACK = "remote_fallback"
+    LOCAL_ONLY = "local_only"
+
+
+@dataclass(frozen=True)
 class RestoreResult:
     """Return value for guarded restore execution."""
 
     executed: bool
     dry_run: bool
     message: str
+    warnings: tuple[RestoreWarning, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -809,6 +828,9 @@ def restore_backup_artifact(
     confirmation: str,
     dry_run: bool = False,
     allow_production: bool = False,
+    resolution_mode: RestoreSourceResolutionMode = (
+        RestoreSourceResolutionMode.REMOTE_FALLBACK
+    ),
     shell_runner: ShellCommandRunner | None = None,
     policy: BackupPolicySnapshot | None = None,
     remote_materializer: RemoteMaterializer | None = None,
@@ -819,6 +841,7 @@ def restore_backup_artifact(
         confirmation=confirmation,
         dry_run=dry_run,
         allow_production=allow_production,
+        resolution_mode=resolution_mode,
         shell_runner=shell_runner,
         policy=policy,
         remote_materializer=remote_materializer,
@@ -832,6 +855,9 @@ def restore_backup_source(
     confirmation: str,
     dry_run: bool = False,
     allow_production: bool = False,
+    resolution_mode: RestoreSourceResolutionMode = (
+        RestoreSourceResolutionMode.REMOTE_FALLBACK
+    ),
     shell_runner: ShellCommandRunner | None = None,
     policy: BackupPolicySnapshot | None = None,
     remote_materializer: RemoteMaterializer | None = None,
@@ -840,6 +866,7 @@ def restore_backup_source(
     with _resolve_restore_source(
         artifact=artifact,
         file_path=file_path,
+        resolution_mode=resolution_mode,
         policy=policy,
         remote_materializer=remote_materializer,
     ) as restore_source:
@@ -924,18 +951,67 @@ def restore_backup_source(
         runner = shell_runner or _run_shell_command
         runner(command, env=env)
 
+        restore_warnings: tuple[RestoreWarning, ...] = ()
         if restore_source.artifact is not None:
-            restore_source.artifact.status = BackupArtifact.STATUS_RESTORED
-            restore_source.artifact.restored_at = django_timezone.now()
-            restore_source.artifact.save(
-                update_fields=["status", "restored_at", "updated_at"]
+            restore_warnings = _persist_restore_artifact_metadata(
+                restore_source.artifact,
+                restored_at=django_timezone.now(),
             )
 
         return RestoreResult(
             executed=True,
             dry_run=False,
             message=(f"Restore executed for {restore_source.confirmation_value}."),
+            warnings=restore_warnings,
         )
+
+
+def _persist_restore_artifact_metadata(
+    artifact: BackupArtifact,
+    *,
+    restored_at: datetime,
+) -> tuple[RestoreWarning, ...]:
+    """Best-effort persist restore metadata after pg_restore succeeds."""
+    try:
+        updated_rows = BackupArtifact.objects.filter(pk=artifact.pk).update(
+            status=BackupArtifact.STATUS_RESTORED,
+            restored_at=restored_at,
+            updated_at=restored_at,
+        )
+    except DatabaseError as exc:
+        return (
+            RestoreWarning(
+                code="artifact_metadata_not_persisted_after_restore",
+                message=(
+                    "Restore executed, but backup artifact metadata could not be "
+                    "persisted after the restored database changed."
+                ),
+                details={
+                    "artifact_id": str(artifact.pk),
+                    "error_type": exc.__class__.__name__,
+                    "filename": artifact.filename,
+                },
+            ),
+        )
+
+    if updated_rows == 0:
+        return (
+            RestoreWarning(
+                code="artifact_row_missing_after_restore",
+                message=(
+                    "Restore executed, but the original backup artifact row no "
+                    "longer exists in the restored database."
+                ),
+                details={
+                    "artifact_id": str(artifact.pk),
+                    "filename": artifact.filename,
+                },
+            ),
+        )
+
+    artifact.status = BackupArtifact.STATUS_RESTORED
+    artifact.restored_at = restored_at
+    return ()
 
 
 def _build_backup_metadata(
@@ -1195,7 +1271,9 @@ def _collect_local_backup_validation_issues(
     if backup_format == "json":
         try:
             json.loads(local_path.read_text(encoding="utf-8"))
-        except UnicodeDecodeError, json.JSONDecodeError:
+        except UnicodeDecodeError:
+            issues.append("json backup payload is not valid JSON")
+        except json.JSONDecodeError:
             issues.append("json backup payload is not valid JSON")
 
     return issues
@@ -1290,6 +1368,7 @@ def _resolve_restore_source(
     *,
     artifact: BackupArtifact | None,
     file_path: str | Path | None,
+    resolution_mode: RestoreSourceResolutionMode,
     policy: BackupPolicySnapshot | None,
     remote_materializer: RemoteMaterializer | None,
 ) -> Iterator[ResolvedRestoreSource]:
@@ -1320,6 +1399,13 @@ def _resolve_restore_source(
             artifact=artifact,
         )
         return
+
+    if resolution_mode == RestoreSourceResolutionMode.LOCAL_ONLY:
+        raise BackupRestoreBlocked(
+            "Restore blocked because the local backup artifact is missing and "
+            "this restore source resolution mode does not allow private remote "
+            "materialization."
+        )
 
     if not artifact.remote_key:
         raise BackupRestoreBlocked(

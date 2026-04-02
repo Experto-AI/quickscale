@@ -1,0 +1,100 @@
+{% extends "admin/base_site.html" %}
+
+{% block breadcrumbs %}
+<div class="breadcrumbs">
+    <a href="{% url 'admin:index' %}">Home</a>
+    &rsaquo;
+    <a href="{% url 'admin:app_list' app_label=opts.app_label %}">{{ opts.app_config.verbose_name }}</a>
+    &rsaquo;
+    <a href="{{ changelist_url }}">{{ opts.verbose_name_plural|capfirst }}</a>
+    &rsaquo;
+    <a href="{{ change_url }}">{{ policy }}</a>
+    &rsaquo;
+    Restore backup artifact
+</div>
+{% endblock %}
+
+{% block content %}
+<div id="content-main">
+    <p>
+        Admin restore is limited to row-backed PostgreSQL custom dump artifacts whose
+        local file is already present on disk. This page never materializes
+        remote-only artifacts.
+    </p>
+    <p>
+        Dry-run validation and restore both require the exact artifact filename. The
+        existing environment gate still applies to executable restore.
+    </p>
+
+    {% if eligible_artifacts or form.is_bound %}
+    <form method="post" novalidate>
+        {% csrf_token %}
+        {% if form.non_field_errors %}
+        <ul class="errorlist nonfield">
+            {% for error in form.non_field_errors %}
+            <li>{{ error }}</li>
+            {% endfor %}
+        </ul>
+        {% endif %}
+
+        <fieldset class="module aligned">
+            <div class="form-row">
+                {{ form.artifact_id.errors }}
+                <div>
+                    {{ form.artifact_id.label_tag }}
+                    {{ form.artifact_id }}
+                    <div class="help">{{ form.artifact_id.help_text }}</div>
+                </div>
+            </div>
+            <div class="form-row">
+                {{ form.confirmation.errors }}
+                <div>
+                    {{ form.confirmation.label_tag }}
+                    {{ form.confirmation }}
+                    <div class="help">{{ form.confirmation.help_text }}</div>
+                </div>
+            </div>
+        </fieldset>
+
+        {% if selected_artifact %}
+        <p>
+            Selected artifact: <strong>{{ selected_artifact.filename }}</strong>
+        </p>
+        {% endif %}
+
+        <div class="submit-row">
+            <button type="submit" class="default" name="operation" value="dry_run">Dry-run validation</button>
+            <button type="submit" name="operation" value="restore">Restore backup</button>
+        </div>
+    </form>
+    {% endif %}
+
+    {% if eligible_artifacts %}
+    <h2>Eligible local artifacts</h2>
+    <table class="listing">
+        <thead>
+            <tr>
+                <th scope="col">Filename</th>
+                <th scope="col">Classification</th>
+                <th scope="col">Status</th>
+                <th scope="col">Created</th>
+                <th scope="col">Local path</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for artifact in eligible_artifacts %}
+            <tr>
+                <th scope="row">{{ artifact.filename }}</th>
+                <td>{{ artifact.restore_scope_label }}</td>
+                <td>{{ artifact.get_status_display }}</td>
+                <td>{{ artifact.created_at }}</td>
+                <td>{{ artifact.local_path }}</td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+    {% else %}
+    <p>No eligible local backup artifacts are currently present on disk for admin restore.</p>
+    {% endif %}
+</div>
+{% endblock %}

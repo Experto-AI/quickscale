@@ -521,12 +521,17 @@ as the real disaster-recovery path. JSON artifacts are export-only: they
 remain acceptable for non-PostgreSQL development/test fixture export and
 operator inspection, but they are NOT a supported restore surface for
 generated PostgreSQL projects. Admin create/delete/history flows remain
-available, but admin download and validate stay local-file-only in v1; there
-is no standalone admin upload/offload action and no admin materialization path
-for remote-only artifacts. Scheduled execution remains command-driven only
-(`manage.py backups_create --scheduled` or equivalent platform cron job), and
-destructive restore execution remains CLI-only with explicit confirmation plus
-environment guards. Private-remote credentials MUST be referenced by
+available, admin download and validate stay local-file-only in v1, and the
+BackupPolicy admin page exposes a guarded restore surface only for row-backed
+local artifacts already present on disk; there is no standalone admin
+upload/offload action and no admin materialization path for remote-only
+artifacts. Scheduled execution remains command-driven only
+(`manage.py backups_create --scheduled` or equivalent platform cron job).
+Destructive restore execution remains guarded across both supported surfaces:
+BackupPolicy-admin restore requires exact filename confirmation plus the
+existing environment gate and never materializes remote-only artifacts, while
+CLI restore remains available with its existing syntax under the same
+guardrails. Private-remote credentials MUST be referenced by
 environment-variable name only; raw credential values MUST NOT be persisted in
 `quickscale.yml`, `.quickscale/state.yml`, or `BackupArtifact` rows. When
 `modules.backups.local_directory` is repo-relative, `quickscale apply` MUST add

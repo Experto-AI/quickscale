@@ -50,7 +50,7 @@ QuickScale is a **Django project generator** that creates production-ready SaaS 
 
 The current published release is v0.78.0, which ships the notifications module and opens QuickScale's post-MVP expansion release line. Main-branch docs and package metadata are aligned on this release.
 
-On the main branch, backups is the admin/ops-first safety module: private local artifacts are the default, optional private remote offload is supported, and generated local Docker and Railway PostgreSQL projects use PostgreSQL 18 custom dumps as the real backup/restore path. JSON artifacts are export-only rather than restore inputs, admin download and validate stay local-file-only in v1, restore stays CLI-only and guarded, and already-generated projects that predate this follow-up must manually adopt the current Docker/CI/E2E PostgreSQL 18 tooling updates.
+On the main branch, backups is the admin/ops-first safety module: private local artifacts are the default, optional private remote offload is supported, and generated local Docker and Railway PostgreSQL projects use PostgreSQL 18 custom dumps as the real backup/restore path. JSON artifacts are export-only rather than restore inputs, admin download and validate stay local-file-only in v1, and the BackupPolicy admin page exposes a guarded restore action only for row-backed local artifacts already present on disk. Exact filename confirmation and the existing environment gate remain required, admin restore never materializes remote-only artifacts, CLI restore keeps its existing syntax, and already-generated projects that predate this follow-up must manually adopt the current Docker/CI/E2E PostgreSQL 18 tooling updates.
 
 ## Documentation Guide
 

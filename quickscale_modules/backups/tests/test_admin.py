@@ -8,7 +8,7 @@ from typing import TYPE_CHECKING, cast
 from unittest.mock import patch
 
 import pytest
-from django.contrib import admin
+from django.contrib import admin, messages
 from django.contrib.auth import get_user_model
 from django.contrib.messages import get_messages
 from django.contrib.messages.storage.fallback import FallbackStorage
@@ -19,7 +19,12 @@ from django.urls import reverse
 
 from quickscale_modules_backups.admin import BackupArtifactAdmin, BackupPolicyAdmin
 from quickscale_modules_backups.models import BackupArtifact, BackupPolicy
-from quickscale_modules_backups.services import BackupError
+from quickscale_modules_backups.services import (
+    BackupError,
+    RestoreResult,
+    RestoreSourceResolutionMode,
+    RestoreWarning,
+)
 
 if TYPE_CHECKING:
     from django.contrib.auth.base_user import AbstractBaseUser
@@ -129,11 +134,83 @@ class TestBackupPolicyAdmin:
 
         assert response.status_code == 200
         assert "Create backup now" in content
+        assert "Restore backup" in content
         assert "Prune expired backups" in content
         assert (
             reverse("admin:quickscale_modules_backups_backuppolicy_create") in content
         )
+        assert (
+            reverse("admin:quickscale_modules_backups_backuppolicy_restore") in content
+        )
         assert reverse("admin:quickscale_modules_backups_backuppolicy_prune") in content
+
+    def test_restore_page_renders_guarded_local_restore_workflow(
+        self,
+        admin_client: Client,
+        backup_policy: BackupPolicy,
+        postgresql_backup_artifact: BackupArtifact,
+    ) -> None:
+        del backup_policy
+        response = admin_client.get(
+            reverse("admin:quickscale_modules_backups_backuppolicy_restore"),
+            {"artifact_id": str(postgresql_backup_artifact.pk)},
+        )
+
+        content = response.content.decode("utf-8")
+
+        assert response.status_code == 200
+        assert "Restore backup artifact" in content
+        assert "Dry-run validation" in content
+        assert "Restore backup" in content
+        assert postgresql_backup_artifact.filename in content
+        assert "Selected artifact:" in content
+        assert "remote-only artifacts" in content
+
+    def test_restore_page_denies_staff_user_without_backups_permissions(
+        self,
+    ) -> None:
+        user = get_user_model().objects.create_user(
+            username="backups-staff-no-restore-access",
+            email="backups-staff-no-restore-access@example.com",
+            password="staffpass123",
+            is_staff=True,
+        )
+        client = Client()
+        client.force_login(user)
+
+        response = client.get(
+            reverse("admin:quickscale_modules_backups_backuppolicy_restore")
+        )
+
+        assert response.status_code == 403
+
+    def test_restore_submission_denies_staff_user_without_change_permission(
+        self,
+        postgresql_backup_artifact: BackupArtifact,
+    ) -> None:
+        user = get_user_model().objects.create_user(
+            username="backups-staff-no-restore-change",
+            email="backups-staff-no-restore-change@example.com",
+            password="staffpass123",
+            is_staff=True,
+        )
+        client = Client()
+        client.force_login(user)
+
+        with patch(
+            "quickscale_modules_backups.admin.restore_backup_artifact"
+        ) as mocked_restore:
+            response = client.post(
+                reverse("admin:quickscale_modules_backups_backuppolicy_restore"),
+                {
+                    "artifact_id": str(postgresql_backup_artifact.pk),
+                    "confirmation": postgresql_backup_artifact.filename,
+                    "operation": "dry_run",
+                },
+            )
+
+        assert response.status_code == 403
+        mocked_restore.assert_not_called()
 
     @pytest.mark.parametrize(
         ("url_name", "patched_symbol"),
@@ -197,7 +274,139 @@ class TestBackupPolicyAdmin:
         notice = policy_admin.restore_notice(backup_policy)
 
         assert "--file PATH" in notice
-        assert "validate and download local artifacts" in notice
+        assert "exact filename" in notice
+        assert "Remote-only artifacts are never materialized through admin" in notice
+
+    def test_restore_page_reports_confirmation_failure(
+        self,
+        admin_client: Client,
+        backup_policy: BackupPolicy,
+        postgresql_backup_artifact: BackupArtifact,
+    ) -> None:
+        del backup_policy
+        response = admin_client.post(
+            reverse("admin:quickscale_modules_backups_backuppolicy_restore"),
+            {
+                "artifact_id": str(postgresql_backup_artifact.pk),
+                "confirmation": f"{postgresql_backup_artifact.filename}-wrong",
+                "operation": "dry_run",
+            },
+        )
+
+        assert response.status_code == 200
+        assert (
+            "Confirmation must exactly match the backup filename."
+            in response.content.decode("utf-8")
+        )
+
+    @pytest.mark.parametrize(
+        ("artifact_kind", "expected_error"),
+        [
+            (
+                "remote_only",
+                "Admin restore only supports row-backed local artifacts already present on disk.",
+            ),
+            (
+                "missing_local",
+                "The selected local backup artifact is no longer present on disk, and admin restore will not materialize remote-only artifacts.",
+            ),
+        ],
+    )
+    def test_restore_page_rejects_ineligible_local_restore_submissions(
+        self,
+        admin_client: Client,
+        backup_policy: BackupPolicy,
+        postgresql_backup_artifact: BackupArtifact,
+        artifact_kind: str,
+        expected_error: str,
+    ) -> None:
+        del backup_policy
+        if artifact_kind == "remote_only":
+            postgresql_backup_artifact.local_path = ""
+            postgresql_backup_artifact.storage_target = (
+                BackupArtifact.STORAGE_TARGET_PRIVATE_REMOTE
+            )
+            postgresql_backup_artifact.remote_key = (
+                "private/backups/remote-artifact.dump"
+            )
+            postgresql_backup_artifact.save(
+                update_fields=[
+                    "local_path",
+                    "storage_target",
+                    "remote_key",
+                    "updated_at",
+                ]
+            )
+        else:
+            Path(postgresql_backup_artifact.local_path).unlink()
+
+        with patch(
+            "quickscale_modules_backups.admin.restore_backup_artifact"
+        ) as mocked_restore:
+            response = admin_client.post(
+                reverse("admin:quickscale_modules_backups_backuppolicy_restore"),
+                {
+                    "artifact_id": str(postgresql_backup_artifact.pk),
+                    "confirmation": postgresql_backup_artifact.filename,
+                    "operation": "restore",
+                },
+            )
+
+        assert response.status_code == 200
+        mocked_restore.assert_not_called()
+        assert expected_error in response.content.decode("utf-8")
+
+    def test_restore_page_reports_success_and_warning_as_separate_messages(
+        self,
+        admin_client: Client,
+        backup_policy: BackupPolicy,
+        postgresql_backup_artifact: BackupArtifact,
+    ) -> None:
+        del backup_policy
+        warning = RestoreWarning(
+            code="artifact_row_missing_after_restore",
+            message=(
+                "Restore executed, but the original backup artifact row no longer "
+                "exists in the restored database."
+            ),
+        )
+
+        with patch(
+            "quickscale_modules_backups.admin.restore_backup_artifact",
+            return_value=RestoreResult(
+                executed=True,
+                dry_run=False,
+                message=f"Restore executed for {postgresql_backup_artifact.filename}.",
+                warnings=(warning,),
+            ),
+        ) as mocked_restore:
+            response = admin_client.post(
+                reverse("admin:quickscale_modules_backups_backuppolicy_restore"),
+                {
+                    "artifact_id": str(postgresql_backup_artifact.pk),
+                    "confirmation": postgresql_backup_artifact.filename,
+                    "operation": "restore",
+                },
+                follow=True,
+            )
+
+        assert response.status_code == 200
+        mocked_restore.assert_called_once_with(
+            postgresql_backup_artifact,
+            confirmation=postgresql_backup_artifact.filename,
+            dry_run=False,
+            resolution_mode=RestoreSourceResolutionMode.LOCAL_ONLY,
+        )
+        assert [
+            (message.level, message.message)
+            for message in get_messages(response.wsgi_request)
+        ] == [
+            (
+                messages.SUCCESS,
+                f"Restore executed for {postgresql_backup_artifact.filename}.",
+            ),
+            (messages.WARNING, warning.message),
+        ]
 
     def test_create_backup_now_button_runs_from_custom_operator_endpoint(
         self,
@@ -376,7 +585,10 @@ class TestBackupArtifactAdmin:
             "Admin download and validate only work when the local file is present."
             in notice
         )
+        assert "BackupArtifact admin page remains download/validate-focused." in notice
+        assert "BackupPolicy admin page" in notice
         assert "--file /path/to/backup.dump" in notice
+        assert "Admin intentionally does not execute restores." not in notice
 
     def test_admin_availability_notice_explains_remote_only_artifacts(self) -> None:
         artifact = BackupArtifact.objects.create(

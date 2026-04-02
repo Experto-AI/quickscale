@@ -8,15 +8,15 @@ Private operational database backups for QuickScale projects.
 - Artifact metadata with checksums, size, engine details, best-effort server-version capture, and operator tracking
 - Private local backup storage by default
 - Optional private S3-compatible offload without using public media URLs or `public_base_url`
-- Retention pruning and a guarded CLI restore entrypoint for PostgreSQL dump artifacts
+- Retention pruning and guarded restore entrypoints for PostgreSQL dump artifacts
 - JSON export artifacts for non-PostgreSQL development/test fixture export or operator inspection
 
 ## Authoritative contract
 
 - For generated QuickScale PostgreSQL projects, the supported local Docker and Railway create/restore path targets PostgreSQL 18 server/client tooling and native PostgreSQL custom dumps.
 - JSON artifacts are export-only. They are useful for non-PostgreSQL development/test fixture export and operator inspection, but they are not a supported restore input for generated PostgreSQL projects.
-- Admin download and validate stay local-file-only in v1. Remote offload does not create an admin upload, admin materialization, or admin restore surface.
-- Restore remains CLI-only and guarded. This README documents the implemented contract on main, and the runtime and template behavior already match it.
+- Admin download and validate stay local-file-only in v1. The BackupPolicy admin page exposes a guarded restore surface only for row-backed local artifacts already present on disk. Remote offload does not create an admin upload/offload action, and admin restore never materializes remote-only artifacts.
+- CLI restore remains available with unchanged syntax under the same exact filename confirmation and environment-guard requirements. This README documents the implemented contract on main, and the runtime and template behavior already match it.
 - `quickscale apply` can update managed settings and module wiring, but already-generated projects that predate this follow-up must manually adopt the current Docker/CI/E2E PostgreSQL 18 tooling updates. Fresh generations pick up those template-side changes automatically.
 
 ## Planner and apply workflow
@@ -59,7 +59,7 @@ modules:
 - Admin download and validate only operate when the local artifact file is present.
 - Raw private-remote credentials are never stored in `quickscale.yml`, `.quickscale/state.yml`, or `BackupArtifact` rows.
 - Scheduled execution is command-driven only. Use platform cron or scheduled jobs that call a management command.
-- Destructive restore execution is CLI-only and requires explicit confirmation plus environment guards.
+- Destructive restore execution is guarded. BackupPolicy-admin restore is limited to row-backed local artifacts already present on disk, never materializes remote-only artifacts, and requires exact filename confirmation plus the existing environment gate; CLI restore remains available under the same guardrails.
 - Repo-relative `local_directory` values are added to `.gitignore` during `quickscale apply`; absolute paths are left to operator-managed ignore policy.
 
 ## Django admin
@@ -75,9 +75,10 @@ Admin capabilities include:
 - create backup now
 - validate selected artifacts when the local file is present
 - download local artifacts through a staff-only admin view
+- restore a row-backed local artifact from the BackupPolicy admin page when the local file is present and the operator satisfies exact filename confirmation plus the environment gate
 - prune expired artifacts
 - delete artifacts while removing private files first
-- no separate upload/offload admin action; private remote offload only happens during backup creation when `target_mode` is `private_remote`
+- no separate upload/offload admin action and no admin materialization path for remote-only artifacts; private remote offload only happens during backup creation when `target_mode` is `private_remote`
 
 ## Management commands
 
@@ -105,9 +106,11 @@ python manage.py backups_prune
 
 ### Restore an artifact
 
-The guarded restore entrypoint supports either a stored artifact id or an
-operator-supplied dump file path. JSON artifacts remain export-only and are not
-a supported restore input for generated PostgreSQL projects.
+The guarded restore surfaces include BackupPolicy admin for row-backed local
+artifacts already present on disk and the CLI entrypoint for either a stored
+artifact id or an operator-supplied dump file path. JSON artifacts remain
+export-only and are not a supported restore input for generated PostgreSQL
+projects.
 
 ```bash
 python manage.py backups_restore 12 --confirm BACKUP_FILENAME.dump --dry-run
@@ -122,8 +125,12 @@ Rules to remember:
   filename or the supplied file basename
 - `backups_validate` and `backups_restore` are separate commands; only restore
   uses `--confirm`
+- BackupPolicy-admin restore is local-artifact-only: the recorded file must
+  already be on disk, the exact filename must be re-entered, and the admin flow
+  never materializes remote-only artifacts
 
-Production-style restores require an explicit environment gate:
+Production-style restores, including the BackupPolicy admin action, require an
+explicit environment gate:
 
 ```bash
 export QUICKSCALE_BACKUPS_ALLOW_RESTORE=true
@@ -181,7 +188,7 @@ The referenced environment variables must be set in the runtime environment. For
 
 ## Limitations of the MVI
 
-- Admin download and validate only work when the local file is present.
-- PostgreSQL custom-format restore execution is supported only through the CLI workflow
-- Existing generated projects must manually adopt Docker/CI/E2E PostgreSQL 18 tooling updates
-- Scheduler orchestration remains external to the module
+- Admin download, validate, and restore only work when the local file is present.
+- Operator-supplied file-path restore remains CLI-only.
+- Existing generated projects must manually adopt Docker/CI/E2E PostgreSQL 18 tooling updates.
+- Scheduler orchestration remains external to the module.

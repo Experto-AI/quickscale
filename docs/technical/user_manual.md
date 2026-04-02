@@ -368,9 +368,9 @@ docker:
   create_superuser: false
 ```
 
-On the main branch, `backups` is the admin/ops-first safety option in that set: private local artifacts are the default, optional private remote offload is supported, and generated local Docker and Railway PostgreSQL projects use PostgreSQL 18 custom dumps as the real backup/restore path. JSON artifacts are export-only rather than restore inputs, admin download and validate stay local-file-only in v1, restore stays CLI-only and guarded, and already-generated projects that predate this follow-up must manually adopt the current Docker/CI/E2E PostgreSQL 18 tooling updates.
+On the main branch, `backups` is the admin/ops-first safety option in that set: private local artifacts are the default, optional private remote offload is supported, and generated local Docker and Railway PostgreSQL projects use PostgreSQL 18 custom dumps as the real backup/restore path. JSON artifacts are export-only rather than restore inputs, admin download and validate stay local-file-only in v1, and the BackupPolicy admin page exposes a guarded restore action only for row-backed local artifacts already present on disk. Exact filename confirmation and the existing environment gate remain required, admin restore never materializes remote-only artifacts, and CLI restore keeps its existing syntax.
 
-If you enable `backups` in a generated PostgreSQL project, the guarded restore surface supports both tracked artifact ids and operator-supplied dump files:
+If you enable `backups` in a generated PostgreSQL project, you can restore a row-backed local artifact from the BackupPolicy admin page under those same confirmation and environment guards, or use the CLI when you need artifact-id or operator-supplied file-path restore:
 
 ```bash
 poetry run python manage.py backups_create

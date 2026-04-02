@@ -184,7 +184,8 @@ Railway automatically provisions PostgreSQL and provides the `DATABASE_URL` envi
 
 - QuickScale-generated Railway deployments provision PostgreSQL 18, and the backups follow-up defines PostgreSQL 18 custom dumps as the real backup/restore path for generated Railway projects.
 - JSON artifacts are export-only; do not treat them as a restore surface for Railway PostgreSQL deployments.
-- Admin download and validate stay local-file-only in v1. Restore stays CLI-only and guarded.
+- Admin download and validate stay local-file-only in v1.
+- The BackupPolicy admin page exposes a guarded restore action only for row-backed local artifacts already present on disk; exact filename confirmation and the existing environment gate remain required, admin restore never materializes remote-only artifacts, and CLI restore keeps its existing syntax.
 - `quickscale apply` does not rewrite user-owned Docker, CI, or E2E files in already-generated projects. If your project predates the PostgreSQL 18 backups follow-up, manually adopt the PostgreSQL 18 tooling updates reflected in the current Docker, CI, and E2E templates.
 - This guide reflects the implemented contract on main: runtime enforcement and generated templates now match it.
 

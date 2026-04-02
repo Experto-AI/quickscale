@@ -6,24 +6,63 @@ import json
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
+from django import forms
 from django.contrib import admin, messages
+from django.core.exceptions import PermissionDenied
 from django.http import FileResponse, HttpRequest, HttpResponse, HttpResponseRedirect
+from django.template.response import TemplateResponse
 from django.urls import path, reverse
 from django.utils.html import format_html
 
 from quickscale_modules_backups.models import BackupArtifact, BackupPolicy
 from quickscale_modules_backups.services import (
     BackupError,
+    RestoreSourceResolutionMode,
     create_backup,
     delete_artifact_files,
     download_backup_path,
     ensure_default_policy,
     prune_expired_backups,
+    restore_backup_artifact,
     validate_backup_artifact,
 )
 
 if TYPE_CHECKING:
     from django.contrib.auth.base_user import AbstractBaseUser
+
+
+class BackupPolicyRestoreForm(forms.Form):
+    """Collect the selected local artifact and exact filename confirmation."""
+
+    artifact_id = forms.IntegerField(
+        label="Eligible local artifact",
+        min_value=1,
+        widget=forms.Select(),
+        help_text=(
+            "Choose a row-backed PostgreSQL dump artifact whose local file is "
+            "already present on disk."
+        ),
+    )
+    confirmation = forms.CharField(
+        label="Exact artifact filename",
+        strip=False,
+        help_text=(
+            "Type the exact filename of the selected artifact before dry-run "
+            "validation or restore can continue."
+        ),
+    )
+
+    def __init__(
+        self,
+        *args: Any,
+        artifact_choices: list[tuple[int, str]],
+        **kwargs: Any,
+    ) -> None:
+        super().__init__(*args, **kwargs)
+        self.fields["artifact_id"].widget.choices = [
+            ("", "Select an eligible local backup artifact"),
+            *artifact_choices,
+        ]
 
 
 @admin.register(BackupPolicy)
@@ -102,15 +141,21 @@ class BackupPolicyAdmin(admin.ModelAdmin):
     change_list_template = (
         "admin/quickscale_modules_backups/backuppolicy/change_list.html"
     )
+    restore_template_name = "admin/quickscale_modules_backups/backuppolicy/restore.html"
 
     def get_urls(self) -> list[Any]:
-        """Add explicit operator endpoints for backup creation and pruning."""
+        """Add explicit operator endpoints for backup creation, restore, and pruning."""
         urls = super().get_urls()
         custom_urls = [
             path(
                 "ops/create/",
                 self.admin_site.admin_view(self.create_backup_view),
                 name="quickscale_modules_backups_backuppolicy_create",
+            ),
+            path(
+                "ops/restore/",
+                self.admin_site.admin_view(self.restore_backup_view),
+                name="quickscale_modules_backups_backuppolicy_restore",
             ),
             path(
                 "ops/prune/",
@@ -172,6 +217,198 @@ class BackupPolicyAdmin(admin.ModelAdmin):
             reverse("admin:quickscale_modules_backups_backuppolicy_changelist")
         )
 
+    def restore_backup_view(self, request: HttpRequest) -> HttpResponse:
+        """Render and execute the guarded local-artifact restore workflow."""
+        if request.method == "POST":
+            if not self.has_change_permission(request):
+                raise PermissionDenied
+        elif not self.has_view_or_change_permission(request):
+            raise PermissionDenied
+
+        policy = ensure_default_policy()
+        eligible_artifacts = self._get_admin_restore_candidates()
+        form = BackupPolicyRestoreForm(
+            artifact_choices=self._build_restore_artifact_choices(eligible_artifacts)
+        )
+        selected_artifact: BackupArtifact | None = None
+
+        if request.method == "POST":
+            form = BackupPolicyRestoreForm(
+                request.POST,
+                artifact_choices=self._build_restore_artifact_choices(
+                    eligible_artifacts
+                ),
+            )
+            posted_artifact_id = self._parse_restore_artifact_id(
+                request.POST.get("artifact_id")
+            )
+            selected_artifact = self._get_restore_artifact_by_id(posted_artifact_id)
+
+            if not eligible_artifacts:
+                form.add_error(
+                    None,
+                    "No eligible local backup artifacts are currently available for admin restore.",
+                )
+
+            if posted_artifact_id is not None and selected_artifact is None:
+                form.add_error(
+                    "artifact_id",
+                    "The selected backup artifact no longer exists.",
+                )
+            elif selected_artifact is not None:
+                ineligible_reason = self._get_admin_restore_ineligible_reason(
+                    selected_artifact
+                )
+                if ineligible_reason is not None:
+                    form.add_error("artifact_id", ineligible_reason)
+
+            operation = request.POST.get("operation")
+            if operation not in {"dry_run", "restore"}:
+                form.add_error(
+                    None,
+                    "Choose either dry-run validation or restore before continuing.",
+                )
+
+            if (
+                form.is_valid()
+                and selected_artifact is not None
+                and operation is not None
+            ):
+                try:
+                    result = restore_backup_artifact(
+                        selected_artifact,
+                        confirmation=form.cleaned_data["confirmation"],
+                        dry_run=operation == "dry_run",
+                        resolution_mode=RestoreSourceResolutionMode.LOCAL_ONLY,
+                    )
+                except BackupError as exc:
+                    form.add_error(None, str(exc))
+                else:
+                    self.message_user(
+                        request,
+                        result.message,
+                        level=messages.SUCCESS,
+                    )
+                    for warning in result.warnings:
+                        self.message_user(
+                            request,
+                            warning.message,
+                            level=messages.WARNING,
+                        )
+
+                    if operation == "dry_run":
+                        return HttpResponseRedirect(
+                            f"{reverse('admin:quickscale_modules_backups_backuppolicy_restore')}"
+                            f"?artifact_id={selected_artifact.pk}"
+                        )
+                    return HttpResponseRedirect(
+                        reverse(
+                            "admin:quickscale_modules_backups_backuppolicy_changelist"
+                        )
+                    )
+        else:
+            selected_artifact = self._get_restore_artifact_by_id(
+                self._parse_restore_artifact_id(request.GET.get("artifact_id"))
+            )
+            initial_artifact_id = (
+                selected_artifact.pk if selected_artifact is not None else None
+            )
+            if initial_artifact_id is not None:
+                form = BackupPolicyRestoreForm(
+                    initial={"artifact_id": initial_artifact_id},
+                    artifact_choices=self._build_restore_artifact_choices(
+                        eligible_artifacts
+                    ),
+                )
+
+        change_url = reverse(
+            "admin:quickscale_modules_backups_backuppolicy_change",
+            args=[policy.pk],
+        )
+        context = {
+            **self.admin_site.each_context(request),
+            "opts": self.model._meta,
+            "title": "Restore backup artifact",
+            "form": form,
+            "policy": policy,
+            "change_url": change_url,
+            "changelist_url": reverse(
+                "admin:quickscale_modules_backups_backuppolicy_changelist"
+            ),
+            "eligible_artifacts": eligible_artifacts,
+            "selected_artifact": selected_artifact,
+        }
+        return TemplateResponse(request, self.restore_template_name, context)
+
+    def _build_restore_artifact_choices(
+        self,
+        artifacts: list[BackupArtifact],
+    ) -> list[tuple[int, str]]:
+        """Build the select options for eligible local restore artifacts."""
+        return [
+            (
+                int(artifact.pk),
+                (
+                    f"{artifact.filename}"
+                    f" ({artifact.restore_scope_label()}, {artifact.created_at:%Y-%m-%d %H:%M:%S})"
+                ),
+            )
+            for artifact in artifacts
+            if artifact.pk is not None
+        ]
+
+    def _get_admin_restore_candidates(self) -> list[BackupArtifact]:
+        """Return the current admin-eligible local restore artifacts."""
+        artifacts = BackupArtifact.objects.order_by("-created_at")
+        return [
+            artifact
+            for artifact in artifacts
+            if self._get_admin_restore_ineligible_reason(artifact) is None
+        ]
+
+    def _get_admin_restore_ineligible_reason(
+        self,
+        artifact: BackupArtifact,
+    ) -> str | None:
+        """Return why an artifact cannot be restored from the admin surface."""
+        if artifact.status == BackupArtifact.STATUS_DELETED:
+            return "Deleted backup artifacts cannot be restored from admin."
+        if artifact.is_export_only() or artifact.backup_format != "pg_dump_custom":
+            return (
+                "Admin restore only supports PostgreSQL custom-format backup artifacts."
+            )
+        if artifact.effective_restore_scope() not in {
+            BackupArtifact.RESTORE_SCOPE_LOCAL_ONLY,
+            BackupArtifact.RESTORE_SCOPE_PORTABLE,
+        }:
+            return "This backup artifact is not classified as an eligible restore candidate."
+        if not artifact.local_path:
+            return "Admin restore only supports row-backed local artifacts already present on disk."
+        if not Path(artifact.local_path).exists():
+            return (
+                "The selected local backup artifact is no longer present on disk, and "
+                "admin restore will not materialize remote-only artifacts."
+            )
+        return None
+
+    def _get_restore_artifact_by_id(
+        self,
+        artifact_id: int | None,
+    ) -> BackupArtifact | None:
+        """Re-fetch one artifact row by id for each admin restore request."""
+        if artifact_id is None:
+            return None
+        return BackupArtifact.objects.filter(pk=artifact_id).first()
+
+    def _parse_restore_artifact_id(self, value: str | None) -> int | None:
+        """Parse the selected artifact id from the request payload."""
+        if value is None:
+            return None
+        try:
+            return int(value)
+        except TypeError, ValueError:
+            return None
+
     def change_view(
         self,
         request: HttpRequest,
@@ -212,10 +449,13 @@ class BackupPolicyAdmin(admin.ModelAdmin):
     @admin.display(description="Restore safety")
     def restore_notice(self, obj: BackupPolicy) -> str:
         return (
-            "Destructive restore execution is intentionally CLI-only. Admin users can "
-            "validate and download local artifacts, but restore requires the guarded "
-            "CLI with either an artifact id or --file PATH, explicit confirmation, "
-            "and environment guards."
+            "Guarded admin restore is available only from the BackupPolicy change "
+            "list for row-backed local PostgreSQL dump artifacts that are already "
+            "present on disk. Operators must choose an eligible artifact, re-enter "
+            "the exact filename, and satisfy the existing environment gate. Remote-"
+            "only artifacts are never materialized through admin, and CLI restore "
+            "keeps its current artifact-id and --file PATH entrypoints under the "
+            "same guardrails."
         )
 
     @admin.action(description="Create backup now")
@@ -428,8 +668,7 @@ class BackupArtifactAdmin(admin.ModelAdmin):
         elif obj.is_portable():
             classification_note = (
                 "Classification: portable. This artifact is marked as a portable "
-                "restore candidate, but restore still runs only through the guarded "
-                "CLI workflow."
+                "restore candidate."
             )
         else:
             classification_note = (
@@ -439,10 +678,13 @@ class BackupArtifactAdmin(admin.ModelAdmin):
         return (
             f"{classification_note} "
             "Admin download and validate only work when the local file is present. "
-            "Use 'python manage.py backups_restore <id> --confirm <filename>' or "
+            "This BackupArtifact admin page remains download/validate-focused. For "
+            "eligible row-backed local PostgreSQL dump artifacts already present on "
+            "disk, use the guarded restore flow on the BackupPolicy admin page. Use "
+            "'python manage.py backups_restore <id> --confirm <filename>' or "
             "'python manage.py backups_restore --file /path/to/backup.dump --confirm "
-            "backup.dump' for destructive restores. Admin intentionally does not "
-            "execute restores."
+            "backup.dump' for artifact-id and operator-supplied file-path restores "
+            "outside that admin surface."
         )
 
     @admin.action(description="Validate selected backups")

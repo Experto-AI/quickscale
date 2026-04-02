@@ -78,3 +78,7 @@ class Command(BaseCommand):
             raise CommandError(str(exc)) from exc
 
         self.stdout.write(self.style.SUCCESS(result.message))
+        for warning in result.warnings:
+            self.stdout.write(
+                self.style.WARNING(f"Warning [{warning.code}]: {warning.message}")
+            )
