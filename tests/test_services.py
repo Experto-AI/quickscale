@@ -5,8 +5,9 @@ from __future__ import annotations
 import hashlib
 import json
 from datetime import datetime, timedelta, timezone
-from io import StringIO
+from io import BytesIO, StringIO
 from pathlib import Path
+from types import SimpleNamespace
 from typing import Any, cast
 from unittest.mock import patch
 
@@ -84,6 +85,26 @@ def _mock_postgresql_18_contract(
         backup_services,
         "_get_postgresql_tool_version",
         fake_get_postgresql_tool_version,
+    )
+
+
+def _private_remote_policy_snapshot(
+    *,
+    local_directory: str = ".quickscale/backups",
+) -> BackupPolicySnapshot:
+    return BackupPolicySnapshot(
+        retention_days=14,
+        naming_prefix="db",
+        target_mode=BackupPolicy.TARGET_MODE_PRIVATE_REMOTE,
+        local_directory=local_directory,
+        remote_bucket_name="private-backups",
+        remote_prefix="ops/backups",
+        remote_endpoint_url="https://object-storage.example.invalid",
+        remote_region_name="us-east-1",
+        remote_access_key_id_env_var="TEST_BACKUPS_ACCESS_KEY",
+        remote_secret_access_key_env_var="TEST_BACKUPS_SECRET_KEY",
+        automation_enabled=False,
+        schedule="0 2 * * *",
     )
 
 
@@ -1720,3 +1741,233 @@ class TestBackupLifecycle:
                 confirmation=postgresql_artifact_file.name,
                 dry_run=True,
             )
+
+
+class TestBackupServiceHelpers:
+    """Focused tests for helper branches that underpin coverage policy enforcement."""
+
+    def test_collect_local_backup_validation_issues_and_restore_source_checks(
+        self,
+        tmp_path: Path,
+    ) -> None:
+        missing_issues = backup_services._collect_local_backup_validation_issues(
+            None,
+            backup_format="json",
+        )
+        assert missing_issues == ["local backup artifact is missing"]
+
+        missing_source = backup_services.ResolvedRestoreSource(
+            confirmation_value="missing.dump",
+            local_path=tmp_path / "missing.dump",
+            backup_format="pg_dump_custom",
+        )
+        assert backup_services._get_restore_source_validation_issues(
+            missing_source
+        ) == [f"restore file not found: {missing_source.local_path}"]
+
+        directory_source = backup_services.ResolvedRestoreSource(
+            confirmation_value=tmp_path.name,
+            local_path=tmp_path,
+            backup_format="pg_dump_custom",
+        )
+        assert backup_services._get_restore_source_validation_issues(
+            directory_source
+        ) == [f"restore file is not a regular file: {tmp_path}"]
+
+    def test_build_pg_commands_include_optional_connection_settings(
+        self,
+        tmp_path: Path,
+    ) -> None:
+        local_path = tmp_path / "backup.dump"
+        connection_settings = {
+            "HOST": "db.internal",
+            "PORT": "5432",
+            "USER": "backup-user",
+            "NAME": "quickscale",
+            "PASSWORD": "top-secret",
+        }
+
+        dump_command, dump_env = backup_services._build_pg_dump_command(
+            local_path,
+            connection_settings,
+        )
+        restore_command, restore_env = backup_services._build_pg_restore_command(
+            local_path,
+            connection_settings,
+        )
+
+        assert dump_command == [
+            "pg_dump",
+            "--format=c",
+            "--file",
+            str(local_path),
+            "--host",
+            "db.internal",
+            "--port",
+            "5432",
+            "--username",
+            "backup-user",
+            "quickscale",
+        ]
+        assert dump_env == {"PGPASSWORD": "top-secret"}
+        assert restore_command == [
+            "pg_restore",
+            "--clean",
+            "--if-exists",
+            "--no-owner",
+            "--host",
+            "db.internal",
+            "--port",
+            "5432",
+            "--username",
+            "backup-user",
+            "--dbname",
+            "quickscale",
+            str(local_path),
+        ]
+        assert restore_env == {"PGPASSWORD": "top-secret"}
+
+    def test_pg_commands_require_database_name(self, tmp_path: Path) -> None:
+        local_path = tmp_path / "backup.dump"
+
+        with pytest.raises(
+            BackupConfigurationError,
+            match=r"DATABASES\['default'\]\['NAME'\] is required",
+        ):
+            backup_services._build_pg_dump_command(local_path, {"NAME": ""})
+
+        with pytest.raises(
+            BackupConfigurationError,
+            match=r"DATABASES\['default'\]\['NAME'\] is required",
+        ):
+            backup_services._build_pg_restore_command(local_path, {"NAME": ""})
+
+    def test_run_shell_command_merges_env_and_wraps_failures(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        recorded_envs: list[dict[str, str]] = []
+
+        def successful_run(*args: Any, **kwargs: Any) -> SimpleNamespace:
+            del args
+            recorded_envs.append(cast(dict[str, str], kwargs["env"]))
+            return SimpleNamespace(returncode=0, stdout="", stderr="")
+
+        monkeypatch.setattr(backup_services.subprocess, "run", successful_run)
+        backup_services._run_shell_command(["echo", "ok"], env={"PGPASSWORD": "pw"})
+        assert recorded_envs and recorded_envs[0]["PGPASSWORD"] == "pw"
+
+        def failing_run(*args: Any, **kwargs: Any) -> SimpleNamespace:
+            del args, kwargs
+            return SimpleNamespace(returncode=1, stdout="boom", stderr="")
+
+        monkeypatch.setattr(backup_services.subprocess, "run", failing_run)
+        with pytest.raises(BackupError, match="Command failed: echo ok :: boom"):
+            backup_services._run_shell_command(["echo", "ok"])
+
+    def test_run_shell_command_wraps_missing_pg_restore_binary(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        def missing_binary(*args: Any, **kwargs: Any) -> None:
+            del args, kwargs
+            raise FileNotFoundError("pg_restore")
+
+        monkeypatch.setattr(backup_services.subprocess, "run", missing_binary)
+
+        with pytest.raises(
+            BackupError,
+            match="Required executable 'pg_restore' is not installed in this runtime",
+        ) as exc_info:
+            backup_services._run_shell_command(["pg_restore", "--version"])
+
+        assert "postgresql-client-18" in str(exc_info.value)
+
+    def test_resolve_private_remote_credentials_requires_configured_env_values(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        policy = _private_remote_policy_snapshot()
+        monkeypatch.delenv("TEST_BACKUPS_ACCESS_KEY", raising=False)
+        monkeypatch.delenv("TEST_BACKUPS_SECRET_KEY", raising=False)
+
+        with pytest.raises(
+            BackupConfigurationError,
+            match="TEST_BACKUPS_ACCESS_KEY",
+        ):
+            backup_services._resolve_private_remote_credentials(policy)
+
+        monkeypatch.setenv("TEST_BACKUPS_ACCESS_KEY", "access-key")
+        with pytest.raises(
+            BackupConfigurationError,
+            match="TEST_BACKUPS_SECRET_KEY",
+        ):
+            backup_services._resolve_private_remote_credentials(policy)
+
+    def test_private_remote_storage_helpers_use_resolved_credentials(
+        self,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        monkeypatch.setenv("TEST_BACKUPS_ACCESS_KEY", "access-key")
+        monkeypatch.setenv("TEST_BACKUPS_SECRET_KEY", "secret-key")
+        policy = _private_remote_policy_snapshot(local_directory=str(tmp_path))
+        local_path = tmp_path / "artifact.dump"
+        local_path.write_bytes(b"backup-bytes")
+        destination = tmp_path / "materialized" / "artifact.dump"
+
+        uploaded: list[tuple[dict[str, object], str, bytes]] = []
+        deleted: list[tuple[dict[str, object], str]] = []
+        remote_payloads = {"ops/backups/artifact.dump": b"remote-artifact"}
+
+        class FakeStorage:
+            def __init__(self, **options: object) -> None:
+                self.options = options
+
+            def save(self, remote_key: str, handle: Any) -> str:
+                uploaded.append((self.options, remote_key, handle.read()))
+                return remote_key
+
+            def open(self, remote_key: str, mode: str = "rb") -> BytesIO:
+                assert mode == "rb"
+                return BytesIO(remote_payloads[remote_key])
+
+            def delete(self, remote_key: str) -> None:
+                deleted.append((self.options, remote_key))
+
+        with patch("storages.backends.s3.S3Storage", FakeStorage):
+            remote_key = backup_services._upload_to_private_remote(local_path, policy)
+            backup_services._materialize_private_remote_key(
+                remote_key,
+                policy,
+                destination,
+            )
+            backup_services._delete_private_remote_key(remote_key, policy)
+
+        expected_options = {
+            "bucket_name": "private-backups",
+            "querystring_auth": True,
+            "default_acl": "",
+            "endpoint_url": "https://object-storage.example.invalid",
+            "region_name": "us-east-1",
+            "access_key": "access-key",
+            "secret_key": "secret-key",
+        }
+        assert remote_key == "ops/backups/artifact.dump"
+        assert uploaded == [(expected_options, remote_key, b"backup-bytes")]
+        assert destination.read_bytes() == b"remote-artifact"
+        assert deleted == [(expected_options, remote_key)]
+
+    def test_restore_execution_allowed_honors_debug_and_env(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        with override_settings(DEBUG=True):
+            assert backup_services._restore_execution_allowed() is True
+
+        with override_settings(DEBUG=False):
+            monkeypatch.setenv("QUICKSCALE_BACKUPS_ALLOW_RESTORE", "true")
+            assert backup_services._restore_execution_allowed() is True
+
+            monkeypatch.setenv("QUICKSCALE_BACKUPS_ALLOW_RESTORE", "false")
+            assert backup_services._restore_execution_allowed() is False
