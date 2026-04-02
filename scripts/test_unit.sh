@@ -9,8 +9,18 @@
 set -e
 
 SHOW_FULL_OUTPUT=false
-COVERAGE_THRESHOLD=90
+# Repository policy is dual-threshold: protect floor quality per file while
+# enforcing a 90% overall mean across the maintained test matrix.
+COVERAGE_MEAN_THRESHOLD=90
+FILE_COVERAGE_THRESHOLD=80
 PYTEST_EXTRA_ARGS=()
+COVERAGE_RESULTS_FILE="$(mktemp)"
+
+cleanup_temp_files() {
+  rm -f "$COVERAGE_RESULTS_FILE"
+}
+
+trap cleanup_temp_files EXIT
 
 show_help() {
   echo "Usage: $0 [OPTIONS] [-- <pytest-args>]"
@@ -62,6 +72,49 @@ extract_coverage_percent() {
   awk -v rate="$line_rate" 'BEGIN { printf "%.2f", rate * 100 }'
 }
 
+extract_low_coverage_lines() {
+  local coverage_report="$1"
+
+  awk -v threshold="$FILE_COVERAGE_THRESHOLD" '
+    /^Name[[:space:]]+Stmts[[:space:]]+Miss[[:space:]]+Cover/ {
+      in_report = 1
+      next
+    }
+    !in_report || /^-+/ || $1 == "TOTAL" {
+      next
+    }
+    NF >= 4 {
+      cover = $4
+      gsub(/%/, "", cover)
+      if ((cover + 0) < threshold) {
+        print
+      }
+    }
+  ' "$coverage_report"
+}
+
+check_overall_mean_coverage() {
+  if [ ! -s "$COVERAGE_RESULTS_FILE" ]; then
+    return 0
+  fi
+
+  local overall_mean
+  overall_mean="$({
+    awk -F'|' '{ sum += $2; count += 1 } END { if (count > 0) printf "%.2f", sum / count }' "$COVERAGE_RESULTS_FILE"
+  })"
+
+  echo "📊 Coverage policy summary:"
+  awk -F'|' '{ printf "  → %s: %s%%\n", $1, $2 }' "$COVERAGE_RESULTS_FILE"
+  echo "  → overall mean: ${overall_mean}% (minimum ${COVERAGE_MEAN_THRESHOLD}%)"
+
+  if awk -v mean="$overall_mean" -v threshold="$COVERAGE_MEAN_THRESHOLD" 'BEGIN { exit (mean + 0 >= threshold ? 0 : 1) }'; then
+    return 0
+  fi
+
+  echo "  → Overall mean coverage is below ${COVERAGE_MEAN_THRESHOLD}%."
+  return 1
+}
+
 run_pytest_stage() {
   local stage_name="$1"
   local coverage_target="$2"
@@ -71,9 +124,13 @@ run_pytest_stage() {
 
   local coverage_xml
   coverage_xml="$(mktemp)"
+  local coverage_report
+  coverage_report="$(mktemp)"
   local run_log
   run_log="$(mktemp)"
   local stage_exit=0
+  local coverage_policy_exit=0
+  local coverage_report_exit=0
 
   local -a shared_args=(
     --tb=long
@@ -81,7 +138,6 @@ run_pytest_stage() {
     -o "addopts="
     "--cov=${coverage_target}"
     "--cov-report=xml:${coverage_xml}"
-    "--cov-fail-under=${COVERAGE_THRESHOLD}"
   )
 
   if [ "$include_html_report" = true ]; then
@@ -96,13 +152,6 @@ run_pytest_stage() {
     --cov-report=term-missing
   )
 
-  show_coverage_failure_details() {
-    echo "  → Coverage below ${COVERAGE_THRESHOLD}%; showing missing lines:"
-    set +e
-    poetry run coverage report -m || true
-    set -e
-  }
-
   if [ "$SHOW_FULL_OUTPUT" = true ]; then
     set +e
     "${stage_cmd[@]}" "${shared_args[@]}" "${full_args[@]}" "${PYTEST_EXTRA_ARGS[@]}"
@@ -113,24 +162,38 @@ run_pytest_stage() {
     "${stage_cmd[@]}" "${shared_args[@]}" "${quiet_args[@]}" "${PYTEST_EXTRA_ARGS[@]}" 2>&1 | tee "$run_log"
     stage_exit=${PIPESTATUS[0]}
     set -e
+  fi
 
-    if [ $stage_exit -ne 0 ] && grep -q "Required test coverage of" "$run_log"; then
-      show_coverage_failure_details
+  local coverage_pct
+  coverage_pct="$(extract_coverage_percent "$coverage_xml" || true)"
+  if [ -n "$coverage_pct" ]; then
+    printf '%s|%s\n' "$stage_name" "$coverage_pct" >> "$COVERAGE_RESULTS_FILE"
+  fi
+
+  set +e
+  poetry run coverage report -m --fail-under=0 > "$coverage_report"
+  coverage_report_exit=$?
+  set -e
+
+  if [ $coverage_report_exit -eq 0 ]; then
+    local low_coverage_lines
+    low_coverage_lines="$(extract_low_coverage_lines "$coverage_report")"
+    if [ -n "$low_coverage_lines" ]; then
+      coverage_policy_exit=1
+      echo "  → Files below ${FILE_COVERAGE_THRESHOLD}% coverage:"
+      printf '%s\n' "$low_coverage_lines"
     fi
   fi
 
-  if [ $stage_exit -eq 0 ]; then
-    local coverage_pct
-    coverage_pct="$(extract_coverage_percent "$coverage_xml" || true)"
-    if [ -n "$coverage_pct" ]; then
-      echo "  → ${stage_name} coverage reached: ${coverage_pct}% (minimum ${COVERAGE_THRESHOLD}%)"
-    else
-      echo "  → ${stage_name} coverage reached (minimum ${COVERAGE_THRESHOLD}%)"
-    fi
+  if [ -n "$coverage_pct" ]; then
+    echo "  → ${stage_name} coverage recorded: ${coverage_pct}%"
   fi
 
-  rm -f "$coverage_xml" "$run_log"
-  return $stage_exit
+  rm -f "$coverage_xml" "$coverage_report" "$run_log"
+  if [ $stage_exit -ne 0 ] || [ $coverage_policy_exit -ne 0 ]; then
+    return 1
+  fi
+  return 0
 }
 
 echo "🧪 Running unit and integration tests..."
@@ -139,6 +202,7 @@ if [ "$SHOW_FULL_OUTPUT" = true ]; then
 else
   echo "Output mode: dots"
 fi
+echo "Coverage policy: ${COVERAGE_MEAN_THRESHOLD}% overall mean, ${FILE_COVERAGE_THRESHOLD}% per file"
 echo ""
 
 # Track exit codes
@@ -199,6 +263,11 @@ if [ -d "quickscale_modules" ]; then
   done
 else
   echo "  → No quickscale_modules directory found"
+fi
+
+echo ""
+if ! check_overall_mean_coverage; then
+  EXIT_CODE=1
 fi
 
 echo ""

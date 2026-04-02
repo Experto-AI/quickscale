@@ -8,6 +8,8 @@ omit =
     */conftest.py
     */generator/templates/*
     */generator/templates/**/*
+    */migrations/*
+    */migrations/**/*
     */*.j2
     */**/*.j2
 

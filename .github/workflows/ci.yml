@@ -13,10 +13,10 @@ jobs:
 
     steps:
     - name: Checkout code
-      uses: actions/checkout@v4
+      uses: actions/checkout@v6
 
     - name: Set up Python 3.14
-      uses: actions/setup-python@v5
+      uses: actions/setup-python@v6
       with:
         python-version: "3.14"
 
@@ -46,10 +46,12 @@ jobs:
 
     - name: Verify PostgreSQL 18 client tooling
       run: |
+        test -x /usr/lib/postgresql/18/bin/pg_dump
+        test -x /usr/lib/postgresql/18/bin/pg_restore
         test "$(command -v pg_dump)" = "/usr/lib/postgresql/18/bin/pg_dump"
         test "$(command -v pg_restore)" = "/usr/lib/postgresql/18/bin/pg_restore"
-        pg_dump --version | grep "PostgreSQL) 18"
-        pg_restore --version | grep "PostgreSQL) 18"
+        /usr/lib/postgresql/18/bin/pg_dump --version | grep -F "(PostgreSQL) 18"
+        /usr/lib/postgresql/18/bin/pg_restore --version | grep -F "(PostgreSQL) 18"
 
     - name: Install dependencies
       run: |
@@ -71,10 +73,10 @@ jobs:
 
     steps:
     - name: Checkout code
-      uses: actions/checkout@v4
+      uses: actions/checkout@v6
 
     - name: Set up Python ${{ matrix.python-version }}
-      uses: actions/setup-python@v5
+      uses: actions/setup-python@v6
       with:
         python-version: ${{ matrix.python-version }}
 
@@ -97,7 +99,7 @@ jobs:
         echo "$HOME/.local/bin" >> $GITHUB_PATH
 
     - name: Cache Poetry dependencies
-      uses: actions/cache@v4
+      uses: actions/cache@v5
       with:
         path: |
           ~/.cache/pypoetry
@@ -161,13 +163,15 @@ jobs:
       run: |
         # Test modules using centralized dependencies
         # PYTHONPATH set to module dir so tests.settings is importable
+        # Repository coverage policy is enforced via scripts/test_unit.sh in the
+        # release path; keep this repo CI step informational for per-module output.
         for mod in quickscale_modules/*/; do
           if [ -d "${mod}tests" ]; then
             mod_name=$(basename "$mod")
             pkg_name="quickscale_modules_${mod_name}"
             echo "Testing module: $mod_name"
             PYTHONPATH="${mod}:${mod}src" poetry run pytest "${mod}tests/" \
-              --cov="$pkg_name" --cov-report=term --cov-fail-under=90 \
+              --cov="$pkg_name" --cov-report=term \
               -p pytest_django --ds=tests.settings || true
           fi
         done
@@ -190,10 +194,10 @@ jobs:
 
     steps:
     - name: Checkout code
-      uses: actions/checkout@v4
+      uses: actions/checkout@v6
 
     - name: Set up Python 3.14
-      uses: actions/setup-python@v5
+      uses: actions/setup-python@v6
       with:
         python-version: "3.14"
 

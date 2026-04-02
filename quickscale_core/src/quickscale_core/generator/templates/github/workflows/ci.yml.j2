@@ -15,10 +15,10 @@ jobs:
         django-version: ["6.0"]
 
     steps:
-    - uses: actions/checkout@v4
+    - uses: actions/checkout@v6
 
     - name: Set up Python {% raw %}${{ matrix.python-version }}{% endraw %}
-      uses: actions/setup-python@v5
+      uses: actions/setup-python@v6
       with:
         python-version: {% raw %}${{ matrix.python-version }}{% endraw %}
 
@@ -41,10 +41,12 @@ jobs:
 
     - name: Verify PostgreSQL 18 client tooling
       run: |
+        test -x /usr/lib/postgresql/18/bin/pg_dump
+        test -x /usr/lib/postgresql/18/bin/pg_restore
         test "$(command -v pg_dump)" = "/usr/lib/postgresql/18/bin/pg_dump"
         test "$(command -v pg_restore)" = "/usr/lib/postgresql/18/bin/pg_restore"
-        pg_dump --version | grep "PostgreSQL) 18"
-        pg_restore --version | grep "PostgreSQL) 18"
+        /usr/lib/postgresql/18/bin/pg_dump --version | grep -F "(PostgreSQL) 18"
+        /usr/lib/postgresql/18/bin/pg_restore --version | grep -F "(PostgreSQL) 18"
 
     - name: Install Poetry
       uses: snok/install-poetry@v1
@@ -54,7 +56,7 @@ jobs:
 
     - name: Load cached venv
       id: cached-poetry-dependencies
-      uses: actions/cache@v4
+      uses: actions/cache@v5
       with:
         path: .venv
         key: venv-{% raw %}${{ runner.os }}-${{ matrix.python-version }}-${{ hashFiles('**/poetry.lock') }}{% endraw %}
@@ -90,15 +92,15 @@ jobs:
     if: {% raw %}${{ hashFiles('frontend/package.json') != '' }}{% endraw %}
 
     steps:
-    - uses: actions/checkout@v4
+    - uses: actions/checkout@v6
 
     - name: Set up Node.js
-      uses: actions/setup-node@v4
+      uses: actions/setup-node@v6
       with:
         node-version: '24'
 
     - name: Install pnpm
-      uses: pnpm/action-setup@v4
+      uses: pnpm/action-setup@v5
       with:
         version: 10.28.2
 
@@ -107,7 +109,7 @@ jobs:
       run: echo "STORE_PATH=$(pnpm store path --silent)" >> $GITHUB_ENV
 
     - name: Setup pnpm cache
-      uses: actions/cache@v4
+      uses: actions/cache@v5
       with:
         path: {% raw %}${{ env.STORE_PATH }}{% endraw %}
         key: {% raw %}${{ runner.os }}-pnpm-store-${{ hashFiles('frontend/pnpm-lock.yaml') }}{% endraw %}

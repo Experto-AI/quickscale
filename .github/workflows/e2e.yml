@@ -50,10 +50,10 @@ jobs:
 
     steps:
     - name: Checkout code
-      uses: actions/checkout@v4
+      uses: actions/checkout@v6
 
     - name: Set up Python 3.14
-      uses: actions/setup-python@v5
+      uses: actions/setup-python@v6
       with:
         python-version: "3.14"
 
@@ -86,13 +86,15 @@ jobs:
 
     - name: Verify PostgreSQL 18 client tooling
       run: |
+        test -x /usr/lib/postgresql/18/bin/pg_dump
+        test -x /usr/lib/postgresql/18/bin/pg_restore
         test "$(command -v pg_dump)" = "/usr/lib/postgresql/18/bin/pg_dump"
         test "$(command -v pg_restore)" = "/usr/lib/postgresql/18/bin/pg_restore"
-        pg_dump --version | grep "PostgreSQL) 18"
-        pg_restore --version | grep "PostgreSQL) 18"
+        /usr/lib/postgresql/18/bin/pg_dump --version | grep -F "(PostgreSQL) 18"
+        /usr/lib/postgresql/18/bin/pg_restore --version | grep -F "(PostgreSQL) 18"
 
     - name: Cache Poetry dependencies
-      uses: actions/cache@v4
+      uses: actions/cache@v5
       with:
         path: |
           ~/.cache/pypoetry
@@ -131,7 +133,7 @@ jobs:
 
     - name: Upload E2E test screenshots
       if: failure()
-      uses: actions/upload-artifact@v4
+      uses: actions/upload-artifact@v7
       with:
         name: e2e-screenshots
         path: |
@@ -152,7 +154,7 @@ jobs:
 
     - name: Upload test results
       if: always()
-      uses: actions/upload-artifact@v4
+      uses: actions/upload-artifact@v7
       with:
         name: e2e-test-results
         path: |
@@ -166,10 +168,10 @@ jobs:
 
     steps:
     - name: Checkout code
-      uses: actions/checkout@v4
+      uses: actions/checkout@v6
 
     - name: Set up Python 3.14
-      uses: actions/setup-python@v5
+      uses: actions/setup-python@v6
       with:
         python-version: "3.14"
 
@@ -195,14 +197,20 @@ jobs:
 
     - name: Verify generated CI workflow contract
       run: |
-        grep -q "runs-on: ubuntu-24.04" /tmp/test_docker_project/.github/workflows/ci.yml
-        grep -q "apt.postgresql.org" /tmp/test_docker_project/.github/workflows/ci.yml
-        grep -q "apt.postgresql.org.asc" /tmp/test_docker_project/.github/workflows/ci.yml
-        grep -q "postgresql-client-18" /tmp/test_docker_project/.github/workflows/ci.yml
-        grep -q 'echo "/usr/lib/postgresql/18/bin" >> "$GITHUB_PATH"' /tmp/test_docker_project/.github/workflows/ci.yml
-        grep -q 'test "$(command -v pg_dump)" = "/usr/lib/postgresql/18/bin/pg_dump"' /tmp/test_docker_project/.github/workflows/ci.yml
-        grep -q 'test "$(command -v pg_restore)" = "/usr/lib/postgresql/18/bin/pg_restore"' /tmp/test_docker_project/.github/workflows/ci.yml
-        ! grep -q "gpg --dearmor" /tmp/test_docker_project/.github/workflows/ci.yml
+        grep -qF "runs-on: ubuntu-24.04" /tmp/test_docker_project/.github/workflows/ci.yml
+        grep -qF "actions/checkout@v6" /tmp/test_docker_project/.github/workflows/ci.yml
+        grep -qF "actions/setup-python@v6" /tmp/test_docker_project/.github/workflows/ci.yml
+        grep -qF "apt.postgresql.org" /tmp/test_docker_project/.github/workflows/ci.yml
+        grep -qF "apt.postgresql.org.asc" /tmp/test_docker_project/.github/workflows/ci.yml
+        grep -qF "postgresql-client-18" /tmp/test_docker_project/.github/workflows/ci.yml
+        grep -qF 'echo "/usr/lib/postgresql/18/bin" >> "$GITHUB_PATH"' /tmp/test_docker_project/.github/workflows/ci.yml
+        grep -qF 'test -x /usr/lib/postgresql/18/bin/pg_dump' /tmp/test_docker_project/.github/workflows/ci.yml
+        grep -qF 'test -x /usr/lib/postgresql/18/bin/pg_restore' /tmp/test_docker_project/.github/workflows/ci.yml
+        grep -qF 'test "$(command -v pg_dump)" = "/usr/lib/postgresql/18/bin/pg_dump"' /tmp/test_docker_project/.github/workflows/ci.yml
+        grep -qF 'test "$(command -v pg_restore)" = "/usr/lib/postgresql/18/bin/pg_restore"' /tmp/test_docker_project/.github/workflows/ci.yml
+        grep -qF '/usr/lib/postgresql/18/bin/pg_dump --version | grep -F "(PostgreSQL) 18"' /tmp/test_docker_project/.github/workflows/ci.yml
+        grep -qF '/usr/lib/postgresql/18/bin/pg_restore --version | grep -F "(PostgreSQL) 18"' /tmp/test_docker_project/.github/workflows/ci.yml
+        ! grep -qF "gpg --dearmor" /tmp/test_docker_project/.github/workflows/ci.yml
 
     - name: Validate docker-compose configuration
       working-directory: /tmp/test_docker_project
