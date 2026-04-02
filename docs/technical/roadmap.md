@@ -134,59 +134,12 @@ This release completed QuickScale's shared media-storage milestone: the storage 
 
 ### v0.77.0: `quickscale_modules.backups` - Database Backup & Restore Module
 
-**Status**: ✅ Archived retrospectively on 2026-03-31; hardening follow-up implemented on 2026-04-01
+**Status**: ✅ Archived retrospectively on 2026-03-31; hardening continuation archived on 2026-04-01
 
-This MVP closeout release is now archived outside the roadmap. QuickScale's backups module shipped private local backups by default, optional private remote offload, admin-driven create/validate/download/prune/delete workflows, a guarded BackupPolicy-admin restore surface for row-backed local artifacts already present on disk, plan/apply integration, and unchanged guarded CLI restore support without coupling backup artifacts to public media delivery.
+This completed release now lives outside the active roadmap. The original MVP closeout scope and the detailed PostgreSQL 18 / guarded BackupPolicy-admin restore hardening continuation now live in the implementation archive.
 
 **Release artifacts**:
 - [Implementation archive](../releases-archive/release-v0.77.0-implementation.md)
-
-**Implemented hardening follow-up (2026-04-01)**:
-- [x] Move backups from same-instance operational artifacts toward real PostgreSQL disaster-recovery/shareable dumps that can be restored into another instance or a fresh deploy for local Docker-style projects and Railway deploys.
-- **Out of scope for this follow-up**: provider snapshots, rowless remote-key restore, broader admin restore expansion beyond the guarded local-only BackupPolicy surface, import/register workflows, scheduler extraction, and broad project-snapshot bundles.
-
-This hardening continuation landed as one implementation stack: phase 1 documented the PostgreSQL 18 / export-only JSON / guarded BackupPolicy-admin local-only restore / manual existing-project adoption contract first, and the remaining phases aligned runtime, Docker, CI, and validation behavior with that contract.
-
-- **Phase 1 - contract and docs first**:
-  - [x] Update the backups contract in `decisions.md` first, then align `README.md`, `user_manual.md`, the module README, and Railway deployment docs.
-  - [x] Make the user-facing contract explicit: generated QuickScale PostgreSQL local/Railway flows target PostgreSQL 18, native PostgreSQL custom dumps are the real backup path, JSON artifacts are export-only rather than disaster-recovery backups, and BackupPolicy-admin restore is guarded local-only while CLI restore syntax stays unchanged.
-- **Phase 2 - additive schema and admin classification**:
-  - [x] Add `restore_scope`, `database_server_major`, and `dump_client_major` to `BackupArtifact`.
-  - [x] Backfill legacy JSON artifacts to `export_only`.
-  - [x] Backfill legacy `pg_dump_custom` artifacts conservatively to `local_only`.
-  - [x] Update admin messaging so `export_only`, `local_only`, and portable artifacts are visibly distinct.
-- **Phase 3 - create/restore hardening**:
-  - [x] Remove automatic PostgreSQL JSON fallback from the real backup path.
-  - [x] Require PostgreSQL 18 tooling and a PostgreSQL 18 server for PostgreSQL create/restore flows.
-  - [x] Keep JSON only for non-PostgreSQL dev/test fixture export paths.
-- **Phase 4 - smallest safe portable restore contract**:
-  - [x] Keep the current positional `artifact_id` restore entrypoint and add additive `--file PATH` support for the CLI surface.
-  - [x] Keep exact filename confirmation mandatory for both CLI restore modes and for the guarded BackupPolicy-admin restore flow.
-  - [x] Keep BackupPolicy-admin restore limited to row-backed local artifacts already present on disk; do not materialize remote artifacts through the admin surface.
-  - [x] Keep admin download/validate local-file-only in v1.
-  - [x] Treat file-mode CLI restore as an operator escape hatch for PostgreSQL custom dumps that pass the PG18 preflight; do not claim QuickScale-only provenance in v1.
-- **Phase 5 - validation and workflow alignment**:
-  - [x] Add service, admin, model, migration, and management-command coverage for the new contract.
-  - [x] Add non-debug Railway-mode regressions for hard-fail PostgreSQL create and row-backed remote restore after local-file loss.
-  - [x] Pin the active local E2E harness and GitHub E2E workflow to the PostgreSQL 18 contract and current `plan`/`apply` flow.
-  - [x] Update generated apply output so restore guidance matches the final artifact-id plus file-mode contract.
-
-**Resolved contract checkpoints**:
-- [x] Confirm this follow-up stays attached to the archived v0.77.0 scope as a hardening continuation, rather than being re-scoped into a later numbered release.
-- [x] Confirm the generated-project contract is intentionally PostgreSQL-18-only for both local Docker and Railway, and document the manual adoption path for already-generated projects.
-- [x] Confirm `artifact_id` stays the positional restore operand and `--file PATH` remains additive rather than replacing the current CLI shape.
-- [x] Confirm file-mode restore must stay behind the same destructive execution guards as artifact-id restore: same dry-run behavior, same environment gate, and same `--allow-production` semantics.
-- [x] Confirm BackupPolicy-admin restore only operates on row-backed local artifacts already present on disk and never materializes remote-only artifacts.
-- [x] Confirm `local_only` is only a conservative legacy row classification and must not be read as a portability claim for raw file restores.
-- [x] Confirm admin download/validate remain local-file-only in v1, and BackupPolicy-admin restore follows the same local-only rule.
-- [x] Confirm the explicit PostgreSQL 18 client-packaging route for generated Docker images and repo-owned CI/E2E runners before code work starts, and bind the related assertions to that exact package choice.
-- [x] Confirm the GitHub E2E workflow keeps a generated-project validation job on the current `plan`/`apply` flow instead of silently dropping that gate.
-- [x] Confirm implementation resumed only after the contract above was reviewed and accepted, because the remaining risk was in restore semantics and validation scope rather than missing code search.
-
-**Deferred follow-up**:
-- comprehensive project snapshots (database + media + environment bundle) moved beyond v0.77.0 until real operational demand justifies them
-- shared scheduler extraction remains deferred until more than one QuickScale feature needs recurring-job infrastructure
-- richer backup dashboards remain deferred until the Django admin surface proves insufficient
 
 ---
 

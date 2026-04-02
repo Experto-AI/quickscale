@@ -17,7 +17,7 @@ Dates and short summaries below mirror the linked release artifacts and [CHANGEL
 | Version | Artifact Date | Phase | Key Changes | Status | Docs |
 |---------|---------------|-------|-------------|--------|------|
 | **v0.78.0** | 2026-03-30 | Post-MVP | Notifications module, app-owned rendering, recipient-granular delivery tracking, and post-MVP expansion kickoff | ✅ Complete | [Summary](../releases/release-v0.78.0.md) |
-| **v0.77.0** | 2026-03-31 | MVP | Backups module MVP closeout baseline with private local/remote workflows and retrospective archival notes | ✅ Archived retrospective | [Impl](../releases-archive/release-v0.77.0-implementation.md) |
+| **v0.77.0** | 2026-03-31 | MVP | Backups module MVP closeout baseline plus the archived PostgreSQL 18 hardening continuation, guarded BackupPolicy-admin local restore, and retrospective archival notes | ✅ Archived retrospective | [Impl](../releases-archive/release-v0.77.0-implementation.md) |
 | **v0.76.0** | 2026-03-21 | MVP | Storage module, canonical public media URLs, `public_base_url` contract cleanup | ✅ Complete | [Summary](../releases/release-v0.76.0.md) |
 | **v0.75.0** | 2026-02-23 | MVP | Forms module with admin-managed schemas, DRF API, spam protection, and notifications | ✅ Complete | [Summary](../releases/release-v0.75.0.md) |
 | **v0.74.0** | 2026-02-05 | MVP | React default theme (`showcase_react`) with Vite, TypeScript, TanStack Query, and Zustand | ✅ Complete | [Summary](../releases/release-v0.74.0.md) |
