@@ -871,6 +871,7 @@ class TestReactThemeModuleActivationMatrix:
         assert 'href="/social/embeds"' in base_template
         assert 'id="root" class="qs-social-react-shell"' in link_tree_template
         assert "Social module not active" in link_tree_template
+        assert "{% load static %}" in link_tree_template
         assert (
             "{% if settings.QUICKSCALE_SOCIAL_LINK_TREE_ENABLED or "
             "settings.QUICKSCALE_SOCIAL_EMBEDS_ENABLED %}"
@@ -881,6 +882,7 @@ class TestReactThemeModuleActivationMatrix:
         assert "endpoint: '/_quickscale/social/'" in link_tree_template
         assert 'id="root" class="qs-social-react-shell"' in embeds_template
         assert "Social module not active" in embeds_template
+        assert "{% load static %}" in embeds_template
         assert (
             "{% if settings.QUICKSCALE_SOCIAL_LINK_TREE_ENABLED or "
             "settings.QUICKSCALE_SOCIAL_EMBEDS_ENABLED %}"
