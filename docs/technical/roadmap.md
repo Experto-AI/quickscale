@@ -669,6 +669,7 @@ Following the standard from `module-extension.md`:
 **Status & Discovery**:
 - [ ] Expand `quickscale status` to show installed modules, versions, and richer diagnostics
 - [ ] Implement `quickscale list-modules` command for available modules
+- [ ] Filter `quickscale plan` module selection to release-ready modules by default and keep experimental entries opt-in
 - [ ] Add module version tracking and compatibility checking
 
 **Enhanced UX**:
@@ -717,6 +718,9 @@ Following the standard from `module-extension.md`:
 - [ ] Real-world validation: Embed modules in 3+ client projects and document edge cases
 - [ ] Safety validation: Automated tests verify user's code never modified by module updates
 - [ ] Testing: E2E tests for multi-module workflows, conflict scenarios, and rollback functionality
+- [ ] Dogfood regression coverage: hyphenated `project.slug` plus underscored `project.package` must work across apply, reconfigure, and remove flows
+- [ ] Auth adoption guardrails: fail early with actionable remediation when auth/custom-user wiring is requested after incompatible migration history already exists
+- [ ] Idempotency regression coverage: repeated apply/remove cycles must not duplicate managed settings or URL wiring
 - [ ] Storage validation: add upload/write/read integration coverage for local storage and mocked S3-compatible backends
 - [ ] Storage/blog workflow validation: add Plan → Apply → Blog publish E2E coverage with CDN-backed media URLs
 - [ ] Storage URL regression validation: verify helper-built public media URLs remain canonical across blog rendering and upload flows in real project scaffolds

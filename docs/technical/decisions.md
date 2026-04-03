@@ -356,6 +356,8 @@ docker:
 - ✅ Version-controllable (stored in git)
 - ✅ User-editable and reviewable
 - ✅ One file per project
+- ✅ `project.slug` is the filesystem/service identity
+- ✅ `project.package` is the Python import/package identity and MUST NOT be inferred from the project directory name
 - ✅ Location: Project root
 
 #### **Applied State Schema** (`.quickscale/state.yml`, v0.69.0+)
@@ -365,7 +367,8 @@ System-managed state file tracking what has been applied:
 ```yaml
 version: 0.79.0
 project:
-  name: myapp
+  slug: myapp
+  package: myapp
   theme: showcase_react
 applied_modules:
   - name: auth
@@ -387,6 +390,7 @@ last_apply_at: 2025-12-03T14:32:00Z
 - ✅ Auto-generated and auto-updated by `quickscale apply`
 - ✅ Do NOT edit manually (system will overwrite)
 - ✅ One file per project
+- ✅ Preserve explicit `project.slug` and `project.package` identity in state
 - ✅ Location: `.quickscale/state.yml`
 
 #### **Operational Properties**

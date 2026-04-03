@@ -197,7 +197,7 @@ Based on analysis of established Django CMS platforms (Wagtail, Django CMS, Mezz
 
 **v0.41.0 Status:**
 - ✅ **Preserved**: Complete v0.41.0 codebase archived in `../quickscale-legacy/` directory
-- ✅ **Documented**: Legacy analysis guidance consolidated under `docs/legacy/` (to be created in Phase 1)
+- ✅ **Archive-only background**: `docs/legacy/` now keeps only minimal historical references that still add context; active rationale lives in the current overview and technical docs
 - ❌ **Not Migrated**: Existing v0.41.0 projects will NOT automatically migrate
 - ❌ **No Migration Tools**: Automated migration is out-of-scope for MVP
 

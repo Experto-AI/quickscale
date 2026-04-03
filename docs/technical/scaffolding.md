@@ -137,7 +137,7 @@ quickscale/
 │   ├── index.md
 │   ├── overview/
 │   ├── technical/
-│   └── legacy/
+│   └── legacy/                     # archive-only background (not active SSOT)
 ├── scripts/
 │   ├── bootstrap.sh                # Initial project setup - installs dependencies, configures pre-commit hooks
 │   ├── install_global.sh           # Install Poetry globally - use this FIRST to avoid version conflicts (DO NOT use pip install poetry)
@@ -262,7 +262,7 @@ quickscale_modules/           # No __init__.py at namespace root
 ```
 
 - When a feature proves reusable, extract it into `quickscale_modules/<feature>/` and commit to the monorepo.
--- For archival history, keep long-form rationale and comparisons in `docs/legacy/` rather than the repo root.
+- For exceptional historical background only, keep minimal archive material in `docs/legacy/`; active rationale belongs in current `docs/overview/` and `docs/technical/` docs.
 
 Requirements vs Packaging note: See [Package Structure and Naming Conventions in decisions.md](./decisions.md#package-structure-and-naming-conventions) for canonical guidance on generated project dependencies versus package metadata.
 
@@ -691,7 +691,8 @@ myapp/
 ```yaml
 version: 0.79.0
 project:
-  name: myapp
+  slug: myapp
+  package: myapp
   theme: showcase_react
 applied_modules:
   - name: auth
@@ -711,7 +712,7 @@ last_apply_at: 2025-12-03T14:32:00Z
 
 Location: `.quickscale/state.yml`
 Management: System-generated, do NOT edit manually
-Purpose: Records applied configuration state for idempotency and drift detection
+Purpose: Records applied configuration state for idempotency, drift detection, and explicit project identity
 
 ---
 
