@@ -1,7 +1,7 @@
 # QuickScale Development Roadmap
 
 > **You are here**: [QuickScale](../../START_HERE.md) → [Technical](../index.md) → **Roadmap** (Timeline & Tasks)
-> **Related docs**: [Decisions](decisions.md) | [Scaffolding](scaffolding.md) | [Release Archive](release-archive.md) | [Start Here](../../START_HERE.md)
+> **Related docs**: [Decisions](decisions.md) | [Scaffolding](scaffolding.md) | [Changelog](../../CHANGELOG.md) | [Release Archive](release-archive.md) | [Start Here](../../START_HERE.md)
 
 ## General Introduction
 
@@ -106,7 +106,7 @@ QuickScale follows an evolution-aligned roadmap that starts as a personal toolki
 **Target Audience:** Development team, project managers, stakeholders tracking progress
 
 - **Completed Releases:** See [CHANGELOG.md](../../CHANGELOG.md)
-- **Release doc layout:** Reader-facing summaries live in [docs/releases/](../releases/) when published; detailed implementation/review artifacts and older records live in [docs/releases-archive/](../releases-archive/)
+- **Release doc layout:** [CHANGELOG.md](../../CHANGELOG.md) is the canonical history index; [docs/releases/](../releases/) holds the default public summaries; [docs/releases-archive/](../releases-archive/) is reserved for exception-only maintainer records and legacy archived docs
 - **Technical SSOT**: [decisions.md](./decisions.md)
 - **Scaffolding SSOT**: [scaffolding.md](./scaffolding.md)
 - **Strategic Vision**: [quickscale.md](../overview/quickscale.md)
@@ -119,7 +119,7 @@ List of upcoming releases with detailed implementation tasks:
 
 ---
 
-Release summaries currently exist in [docs/releases/](../releases/) for selected completed releases. Detailed implementation/review artifacts remain in [docs/releases-archive/](../releases-archive/). When a completed release is archived, keep a concise pointer here and move the detailed implementation checklist into the corresponding release documents.
+After release closeout, keep only a concise pointer in the roadmap. Put canonical history in [CHANGELOG.md](../../CHANGELOG.md), use [docs/releases/](../releases/) for the default reader-facing summary, and use [docs/releases-archive/](../releases-archive/) only when an exceptional maintainer record is needed.
 
 ---
 
@@ -142,10 +142,10 @@ This release completed QuickScale's shared media-storage milestone: the storage 
 
 **Status**: ✅ Archived retrospectively on 2026-03-31; hardening continuation archived on 2026-04-01
 
-This completed release now lives outside the active roadmap. The original MVP closeout scope and the detailed PostgreSQL 18 / guarded BackupPolicy-admin restore hardening continuation now live in the implementation archive.
+This completed release now lives outside the active roadmap. The original MVP closeout scope and the detailed PostgreSQL 18 / guarded BackupPolicy-admin restore hardening continuation now live in an exception-only maintainer implementation archive.
 
 **Release artifacts**:
-- [Implementation archive](../releases-archive/release-v0.77.0-implementation.md)
+- [Maintainer implementation archive (exception)](../releases-archive/release-v0.77.0-implementation.md)
 
 **Deferred follow-up**:
 - broader database + media + environment portability workflows moved to [v0.88.0](#v0880-disaster-recovery--environment-migration-workflows)
@@ -169,12 +169,12 @@ This release starts QuickScale's post-MVP expansion line and ships the notificat
 
 ### v0.79.0: `quickscale_modules.social` - Social & Link Tree Module
 
-**Status**: 🚧 Detailed implementation archived; published release still pending
+**Status**: 🚧 Maintainer implementation archive exists; published release still pending
 
-This implemented release scope now lives outside the active roadmap. The detailed v0.79.0 checklist, support matrix, validation notes, and deferred items now live in the implementation archive, while the published release metadata remains at v0.78.0 until the v0.79.0 reader-facing summary and release cut are completed.
+This implemented release scope now lives outside the active roadmap. The detailed v0.79.0 checklist, support matrix, validation notes, and deferred items now live in an exception-only maintainer implementation archive, while the published release metadata remains at v0.78.0 until the v0.79.0 reader-facing summary and release cut are completed.
 
 **Release artifacts**:
-- [Implementation archive](../releases-archive/release-v0.79.0-implementation.md)
+- [Maintainer implementation archive (exception)](../releases-archive/release-v0.79.0-implementation.md)
 
 **Current closeout scope**:
 - publish the reader-facing v0.79.0 release summary and update release metadata when the release is cut

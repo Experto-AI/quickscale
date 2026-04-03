@@ -1,0 +1,22 @@
+{
+    "chat.tools.terminal.autoApprove": {
+        "docker run": true,
+        "quickscale": true,
+        "/^bash scripts/test_all\\.sh 2>&1$/": {
+            "approve": true,
+            "matchCommandLine": true
+        },
+        "./scripts/lint_frontend.sh": true,
+        "./scripts/test_unit.sh": true,
+        "/^\\./scripts/version_tool\\.sh update$/": {
+            "approve": true,
+            "matchCommandLine": true
+        }
+    },
+    "chat.mcp.discovery.enabled": {
+        "claude-desktop": true,
+        "windsurf": true,
+        "cursor-global": true,
+        "cursor-workspace": true
+    }
+}

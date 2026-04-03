@@ -195,7 +195,6 @@ htmlcov/
 
 # CODE
 
-.vscode/
 .claude/
 
 # Ignore AI prompts but keep workflows tracked

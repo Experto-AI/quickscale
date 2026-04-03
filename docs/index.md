@@ -41,8 +41,8 @@
   - [Railway Deployment](deployment/railway.md) - Deploy to Railway platform
 
 - **Releases**
-  - [Release Summaries](releases/) - Reader-facing summaries for recent releases when published
-  - [Release Archive & Legacy Notes](technical/release-archive.md) - Historical implementation/review index plus notes about legacy release files outside the current summary/archive split
+  - [Release Summaries](releases/) - Default reader-facing release notes for published releases
+  - [Release Archive Policy & Legacy Notes](technical/release-archive.md) - Exception-only maintainer records and guidance for legacy archive files
 
 ---
 

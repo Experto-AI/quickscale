@@ -1,5 +1,7 @@
 # Review Report: [TASK_ID] - [TASK_NAME]
 
+> Archive-only maintainer template. Use [release_summary_template.md](./release_summary_template.md) for the default public release note.
+
 **Task**: [SHORT_GOAL_STATEMENT]
 **Release**: [RELEASE_VERSION]
 **Review Date**: [YYYY-MM-DD]
@@ -372,17 +374,19 @@ These are NOT issues with current implementation, but potential future enhanceme
 ## TEMPLATE USAGE NOTES
 
 **This template should be used for:**
-- Post-implementation quality reviews of roadmap tasks
-- Comprehensive assessment before commit/merge
-- Documentation of review findings and recommendations
+- Formal archived post-implementation quality reviews of roadmap tasks
+- Comprehensive assessment before commit/merge when a durable review artifact is needed
+- Documentation of review findings and recommendations for exception archive records
 
-**Companion document**: This review document should reference a corresponding implementation document (`release-v[VERSION]-implementation.md`) created in `docs/releases-archive/` using the [release implementation template](./release_implementation_template.md).
+**Default public companion**: When the release is published, reference `docs/releases/release-v[VERSION].md` created from the [release summary template](./release_summary_template.md).
+
+**Optional archive companion**: Reference a corresponding implementation document (`release-v[VERSION]-implementation.md`) only when an archived implementation record exists, using the [release implementation template](./release_implementation_template.md).
 
 **Filename format**: Save as `release-v[VERSION]-review.md` in `docs/releases-archive/`
 - Example: `release-v0.53.3-review.md`
-- Companion: `release-v0.53.3-implementation.md`
+- Archive companion: `release-v0.53.3-implementation.md`
 
-**Optional public-facing companion**: If maintainers publish a concise release summary, store it separately as `docs/releases/release-v[VERSION].md`.
+**Default public-facing companion**: If the release is published, store its concise summary as `docs/releases/release-v[VERSION].md`.
 
 **How to use this template:**
 1. Replace all `[PLACEHOLDERS]` with actual values
@@ -413,6 +417,7 @@ These are NOT issues with current implementation, but potential future enhanceme
 - Include actual test output and validation results
 
 **Related Documentation:**
-- [Release Implementation Template](./release_implementation_template.md) - Template for implementation documentation
+- [Release Summary Template](./release_summary_template.md) - Template for public release summaries
+- [Release Implementation Template](./release_implementation_template.md) - Template for archived implementation documentation
 - [Roadmap Task Review Prompt](../../.github/prompts/roadmap-task-review.prompt.md) - Automated review prompt
 - [Review Guidelines](../contrib/review.md) - Quality control stage documentation

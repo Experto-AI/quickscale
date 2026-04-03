@@ -1,6 +1,6 @@
 # Changelog
 
-Use `docs/releases/` for reader-facing release summaries when published, `docs/releases-archive/` for detailed implementation/review artifacts, and `docs/technical/roadmap.md` for active release status. Entries are version-ordered; listed dates reflect the recorded artifact date when available.
+`CHANGELOG.md` is the canonical QuickScale release history index. Use `docs/releases/` for the default reader-facing summary when a public release note exists, `docs/releases-archive/` only for exception-only maintainer records, and `docs/technical/roadmap.md` for active release status. Entries are version-ordered; listed dates reflect the recorded artifact date when available.
 
 - v0.78.0 — 2026-03-30 — Notifications Module (first post-MVP expansion release; transactional email foundation, Anymail-backed Resend delivery, recipient-granular tracking, and signed delivery webhooks)
 - v0.77.0 — internal main-branch baseline — Backups Module (private database backups, optional private remote offload, guarded CLI restore, and scheduler-ready command hooks; no separate published release artifact before v0.78.0)

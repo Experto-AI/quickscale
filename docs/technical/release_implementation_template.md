@@ -1,22 +1,25 @@
 # Release Implementation Template
 
 <!--
-release_implementation_template.md - Standard Release Implementation Documentation Template
+release_implementation_template.md - Release Implementation Archive Template
 
-PURPOSE: Provides a consistent structure for documenting archived QuickScale release implementations in docs/releases-archive/
+PURPOSE: Provides a consistent structure for documenting exception-only QuickScale release implementation records in docs/releases-archive/
 
-USAGE: Copy this template when creating a detailed release implementation document. Fill in all sections
-       with release-specific details. Save as release-v[VERSION]-implementation.md in docs/releases-archive/.
-       Reader-facing summaries, when published, belong in docs/releases/ as release-v[VERSION].md.
+USAGE: Copy this template only when a release needs a detailed archived implementation document.
+       Fill in all sections with release-specific details. Save as release-v[VERSION]-implementation.md
+       in docs/releases-archive/. Use release_summary_template.md for the default public artifact in
+       docs/releases/.
 
-TARGET AUDIENCE: Maintainers, contributors, users reviewing release history
+TARGET AUDIENCE: Maintainers, contributors, and reviewers handling exception archive records
 -->
 
 ## Overview
 
-This document provides the standard template for QuickScale release implementation documentation. All release implementation notes should follow this structure to ensure consistency, completeness, and traceability.
+This document provides the standard template for QuickScale release implementation archive records. All archived implementation notes should follow this structure to ensure consistency, completeness, and traceability.
 
-**Companion document**: After implementation is complete, a release review document (`release-v[VERSION]-review.md`) may be created in `docs/releases-archive/` using the [release review template](./release_review_template.md) to document quality assessment and approval status.
+**Default public companion**: For a published release, create `docs/releases/release-v[VERSION].md` using the [release summary template](./release_summary_template.md).
+
+**Optional archive companion**: After implementation is complete, a release review document (`release-v[VERSION]-review.md`) may be created in `docs/releases-archive/` using the [release review template](./release-review-template.md) to document quality assessment and approval status.
 
 ## Template Structure
 
@@ -133,12 +136,13 @@ command to validate feature 3
 
 ## Release Checklist
 
+- [ ] `CHANGELOG.md` updated
+- [ ] Reader-facing summary added to `docs/releases/` when the release is public
 - [ ] All roadmap tasks marked as implemented
 - [ ] All tests passing
 - [ ] Code quality checks passing (ruff format, ruff check)
 - [ ] Documentation updated
-- [ ] Archived implementation notes committed to docs/releases-archive/
-- [ ] Reader-facing summary added to docs/releases/ when applicable
+- [ ] Archived implementation notes committed to `docs/releases-archive/` only when an exception record is needed
 - [ ] Roadmap updated with completion status
 - [ ] Version numbers consistent across packages
 - [ ] Validation commands tested
@@ -174,14 +178,20 @@ command to validate feature 3
 
 ## Template Usage Guidelines
 
-### When to Create Release Documents
+### When to Create Archive Implementation Documents
 
-Create a release document for:
-- **Major version releases** (X.0.0) - Always required
-- **Minor version releases** (0.X.0) - Always required for new features
-- **Patch releases** (0.0.X) - Optional, only for significant bug fixes
-- **Release candidates** - Optional, can document in main release
-- **Milestone completions** - When multiple tasks culminate in a testable deliverable
+Create an archived implementation document only when:
+- the release is internal-only, unpublished, or still awaiting public closeout
+- a retrospective or exception baseline needs maintainer-facing detail
+- operational, validation, or handoff detail would overwhelm the public summary
+- maintainers need a durable archive record for later follow-up
+
+For normal published releases:
+- update `CHANGELOG.md`
+- publish `docs/releases/release-vX.XX.X.md` from [release_summary_template.md](./release_summary_template.md)
+- skip the implementation archive unless one of the exception cases above applies
+
+Review archives remain optional and should be created only when a formal archived review is needed.
 
 ### Writing Guidelines
 
@@ -213,15 +223,15 @@ Use these standard status indicators:
 ### File Naming Convention
 
 Release implementation documents should be named:
-- `release-vX.XX.X-implementation.md` for standard releases
-- `release-vX.XX.X-rc1-implementation.md` for release candidates
+- `release-vX.XX.X-implementation.md` for archived implementation records
+- `release-vX.XX.X-rc1-implementation.md` for archived release candidates
 
 Release review documents should be named:
 - `release-vX.XX.X-review.md` for quality reviews
 
 Store in: `docs/releases-archive/`
 
-Optional reader-facing summary:
+Default public reader-facing summary, when published:
 - `docs/releases/release-vX.XX.X.md`
 
 **Naming rationale**: The `-implementation` suffix distinguishes implementation documentation (what was built, how it works, test results) from review documentation (quality assessment, compliance checks, approval status).
@@ -229,16 +239,18 @@ Optional reader-facing summary:
 ### Maintenance
 
 - **Update roadmap** after completing release
-- **Link from README** for major releases
-- **Keep archive artifacts in `docs/releases-archive/`** and publish concise summaries in `docs/releases/` only when needed
+- **Update `CHANGELOG.md`** as the canonical history index
+- **Link from README** for major releases when appropriate
+- **Keep archive artifacts in `docs/releases-archive/`** only for justified exception records, and publish concise summaries in `docs/releases/` as the default public artifact
 - **Keep template current** - update this template when patterns evolve
 
 ---
 
 **Related Documentation:**
+- [Release Summary Template](./release_summary_template.md) - Template for public release summaries
 - [Roadmap](./roadmap.md) - Track task implementation progress
 - [Technical Decisions](./decisions.md) - Architectural decisions and rules
 - [Scaffolding](./scaffolding.md) - Project structure patterns
 - [Release Summaries](../releases/) - Reader-facing release notes when published
-- [Release Archive](../releases-archive/) - Detailed implementation and review artifacts
-- [Release Review Template](./release_review_template.md) - Template for quality review documentation
+- [Release Archive](../releases-archive/) - Exception-only maintainer implementation and review artifacts
+- [Release Review Template](./release-review-template.md) - Template for quality review documentation

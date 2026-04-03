@@ -65,9 +65,12 @@ TARGET AUDIENCE: Maintainers, core contributors, community package developers, C
 - ✅ decisions.md is authoritative - always wins conflicts
 - ✅ Update decisions.md FIRST, then other docs
 - ✅ Contributing guides: `docs/contrib/*.md`
-- ✅ Release summaries: `docs/releases/release-vX.XX.X.md` when a reader-facing note is published
-- ✅ Detailed implementation/review docs: `docs/releases-archive/release-vX.XX.X-{implementation,review}.md` (archived)
-- ✅ Legacy review files may still exist under `docs/releases/`; keep new maintainer-focused artifacts in `docs/releases-archive/`
+- ✅ `CHANGELOG.md` is the canonical release history index for all versions
+- ✅ Release summaries: `docs/releases/release-vX.XX.X.md` are the default public artifact for published releases
+- ✅ Public release summaries stay reader-facing and outcome-oriented; keep implementation checklists and maintainer-only validation detail in archive docs when needed
+- ✅ Detailed implementation/review docs: `docs/releases-archive/release-vX.XX.X-{implementation,review}.md` are optional exception-only maintainer records
+- ✅ Use archive docs only for internal baselines, retrospective records, formal reviews, or unreleased work
+- ✅ Legacy release-review files in `docs/releases-archive/` and historical snapshots should be preserved as historical exceptions rather than the current default workflow
 - ❌ Never contradict decisions.md elsewhere
 
 **Package README Policy:**
@@ -920,6 +923,9 @@ Other documents (README.md, roadmap.md, scaffolding.md, commercial.md) MUST refe
 ## Document Responsibilities
 
 - **decisions.md**: Technical decisions, MVP matrix, tie-breakers (authoritative)
+- **CHANGELOG.md**: Canonical all-version release history index
+- **docs/releases/**: Reader-facing release summaries (default public artifact)
+- **docs/releases-archive/**: Exception-only maintainer records and legacy archived release docs
 - **roadmap.md**: Timeline, phases, tasks
 - **scaffolding.md**: Layout examples
 - **README.md**: Project overview, user guide, repo-level navigation

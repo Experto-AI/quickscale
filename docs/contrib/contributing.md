@@ -118,38 +118,49 @@ Before contributing, familiarize yourself with these key project documents:
 - **[Technical Roadmap](../technical/roadmap.md)** - Current development roadmap and task tracking
 - **[Technical Decisions](../technical/decisions.md)** - What's IN vs OUT of scope
 - **[Scaffolding Guide](../technical/scaffolding.md)** - Directory layout and project structure
-- **[Release Implementation Template](../technical/release_implementation_template.md)** - Standard format for archived implementation notes
-- **[Release Review Template](../technical/release_review_template.md)** - Standard format for archived review notes
+- **[Release Summary Template](../technical/release_summary_template.md)** - Standard format for public release summaries
+- **[Release Implementation Template](../technical/release_implementation_template.md)** - Exception-archive format for maintainer implementation notes
+- **[Release Review Template](../technical/release-review-template.md)** - Exception-archive format for formal release reviews
 
 ---
 
 ## Release Documentation Policy
 
-When a roadmap release or major roadmap item is implemented, maintainers should preserve release documentation in the repository's mixed layout: concise reader-facing summaries in `docs/releases/` when a public-facing note is warranted, and detailed implementation/review artifacts in `docs/releases-archive/`. This keeps the roadmap focused on upcoming work without overloading `docs/releases/` with maintainer-only detail.
+When a roadmap release or major roadmap item is implemented, keep the release record simple and public-first:
+
+- `CHANGELOG.md` is the canonical all-version history index.
+- `docs/releases/` holds the default reader-facing release summary for published releases.
+- `docs/releases-archive/` is reserved for exception-only maintainer records such as internal-only baselines, retrospective records, formal review artifacts, or unreleased work.
+
+This keeps the roadmap focused on active work without turning the archive into a second changelog.
 
 ### Required Release Documentation Conventions
 
-- **Summary filename**: `docs/releases/release-<version>.md` (e.g. `release-v0.75.0.md`) when a reader-facing summary is published
-- **Implementation filename**: `docs/releases-archive/release-<version>-implementation.md` (e.g. `release-v0.52.0-implementation.md`)
-- **Review filename**: `docs/releases-archive/release-<version>-review.md` (e.g. `release-v0.52.0-review.md`)
+- **Changelog entry**: Add or update the version entry in `CHANGELOG.md` for every completed release record.
+- **Summary filename**: `docs/releases/release-<version>.md` (e.g. `release-v0.75.0.md`) for the default public release note.
+- **Summary template**: Use `docs/technical/release_summary_template.md` for new public summaries.
+- **Implementation filename**: `docs/releases-archive/release-<version>-implementation.md` only when an exceptional maintainer record is needed.
+- **Review filename**: `docs/releases-archive/release-<version>-review.md` only when a formal archived review is produced.
+- **Minimum content (summary)**: release focus, shipped outcomes, breaking changes or migration notes when relevant, validation summary, and deferred follow-up.
 - **Minimum content (implementation)**: release title, release date, summary of verifiable improvements, completed tasks checklist, validation commands, and a short "Next steps" list
 - **Minimum content (review)**: comprehensive quality assessment, scope compliance check, code quality validation, testing review, approval status
 - Link back to the roadmap and to `decisions.md` where appropriate
-- Not every release requires every artifact; avoid promising a summary file that does not exist yet
-- Older releases may still have review files under `docs/releases/`; treat those as legacy placements rather than the current maintainer workflow
+- Not every release needs an archive artifact; avoid creating implementation/review docs by default
+- Historical snapshots or older branches may contain release-review files outside the current summary/archive split; treat those as legacy placements rather than the current maintainer workflow
 
 ### Release Documentation Process
 
 Follow these steps after completing a release:
 
-1. Create `docs/releases-archive/release-<version>-implementation.md` with implementation details, test results, and validation when detailed archival notes are needed
-2. Create `docs/releases-archive/release-<version>-review.md` when a formal quality review is produced
-3. Add `docs/releases/release-<version>.md` only when a concise reader-facing release summary is warranted
-4. Commit the release documentation
-5. Replace the completed release section with a concise pointer only when a summary or archive artifact exists
-6. Update indexes/README links if necessary
+1. Update `CHANGELOG.md` with the release version, date, and concise shipped outcome.
+2. For a published release, add `docs/releases/release-<version>.md` using the release summary template.
+3. Create `docs/releases-archive/release-<version>-implementation.md` only when a detailed maintainer record is needed.
+4. Create `docs/releases-archive/release-<version>-review.md` only when a formal quality review is produced.
+5. For internal-only, retrospective, or unreleased work, archive docs may stand alone until or unless a public summary is published.
+6. Replace the completed roadmap section with a concise pointer once the changelog entry and any required summary or exception archive record exist.
+7. Update indexes/README links if necessary.
 
-This policy ensures completed work is archived in a discoverable place and the roadmap remains current and actionable.
+This policy keeps public release history easy to scan, preserves maintainer detail when it adds value, and keeps the roadmap current and actionable.
 
 ---
 
@@ -164,7 +175,7 @@ QuickScale uses structured prompts for automated development workflows:
 **Complete task implementation workflow** - Covers PLAN → CODE → REVIEW → TESTING stages for implementing roadmap tasks.
 
 ### [roadmap-task-review.prompt.md](../../.github/prompts/roadmap-task-review.prompt.md)
-**Post-implementation quality review** - Comprehensive code review of completed implementation. Takes release version as parameter (e.g., `0.68.0`) and generates `docs/releases-archive/release-v{VERSION}-review.md`.
+**Post-implementation quality review** - Comprehensive code review of completed implementation. Takes release version as parameter (e.g., `0.68.0`) and can generate `docs/releases-archive/release-v{VERSION}-review.md` when a formal archived review is needed.
 
 ### [release-commit-message-and-roadmap-cleaning.prompt.md](../../.github/prompts/release-commit-message-and-roadmap-cleaning.prompt.md)
 **Release finalization** - Generate release commit message, clean up roadmap after release completion.

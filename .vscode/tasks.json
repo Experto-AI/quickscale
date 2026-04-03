@@ -1,0 +1,18 @@
+{
+	"version": "2.0.0",
+	"tasks": [
+		{
+			"label": "test:backups-module-unit",
+			"type": "shell",
+			"command": "make",
+			"args": [
+				"MODULE=backups",
+				"test-unit",
+				"--",
+				"--modules"
+			],
+			"isBackground": false,
+			"group": "test"
+		}
+	]
+}
