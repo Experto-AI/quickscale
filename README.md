@@ -129,5 +129,5 @@ Embed records extend the base contract with backend-owned preview metadata:
 
 - [Roadmap entry](../../docs/technical/roadmap.md)
 - [Changelog](../../CHANGELOG.md)
-- Official v0.79.0 public release note: pending until the tagged release is cut in `docs/releases/`
+- [Official v0.79.0 public release note](../../docs/releases/release-v0.79.0.md)
 - [Maintainer module index](../README.md)
