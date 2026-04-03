@@ -17,10 +17,10 @@ This document guides the planning and analysis stage of programming, where you i
 Before planning any implementation, thoroughly understand the project by consulting:
 
 - **[README.md](../../README.md)**: Overview of the project to understand the project and its purpose.
-- **[Technical Decisions](../technical/decisions.md)**: Authoritative architectural decisions, technical specifications, and MVP feature scope.
+ - **[Technical Decisions](../technical/decisions.md)**: Authoritative architectural decisions, technical specifications, and current implementation scope.
   - Technical stack enumeration and description.
   - Architectural patterns and boundaries.
-  - MVP vs. Post-MVP scope definitions.
+  - Current implementation boundaries and historical-label guidance.
   - Explicit prohibitions and anti-patterns.
 - **[Scaffolding Guide](../technical/scaffolding.md)**: Directory layout and project structure.
   - Repository-level directory layout.

@@ -21,10 +21,10 @@
   - [Module Extension Contract](technical/module-extension.md) - Extension surfaces, support tiers, and per-module contracts
 
 - **Overview**
-  - [QuickScale Strategic Vision](overview/quickscale.md) - Evolution strategy and competitive positioning
-  - [Competitive Analysis](overview/competitive_analysis.md) - vs SaaS Pegasus and alternatives
-  - [Commercial Extensions](overview/commercial.md) - Business model and licensing
-  - [Packages](overview/packages.md) - PyPI naming and roadmap
+  - [QuickScale Strategic Vision](overview/quickscale.md) - Creator-led positioning and current evolution rationale
+  - [Competitive Analysis](overview/competitive_analysis.md) - Concise comparison with Django starter alternatives
+  - [Commercial Extensions](overview/commercial.md) - Current commercial-use rights and constraints
+  - [Packages](overview/packages.md) - Current package naming and surface notes
 
 - **Contributing**
   - [Contributing Guide](contrib/contributing.md) - Development workflow overview
@@ -34,14 +34,14 @@
   - [Debug Guide](contrib/debug.md) - Debugging and root cause analysis
 
 - **Planning**
-  - [Analytics Provider Comparison](planning/analytics-provider-comparison.md) - Provider evaluation for v0.87.0 analytics module
-  - [Email Sender Comparison](planning/email-sender-comparison.md) - Provider evaluation for v0.78.0 notifications module
+  - [Analytics Provider Comparison](planning/analytics-provider-comparison.md) - Provider evaluation for analytics implementation planning
+  - [Email Sender Comparison](planning/email-sender-comparison.md) - Provider evaluation for notification delivery planning
 
 - **Deployment**
   - [Railway Deployment](deployment/railway.md) - Deploy to Railway platform
 
 - **Releases**
-  - [Release Notes](releases/) - Official tagged GitHub release notes and release-PR artifacts for published releases
+  - [Release Notes](releases/) - Official tagged GitHub release notes for published releases
   - [Release Summary Template](technical/release_summary_template.md) - Template for the single public release-note workflow
 
 ---

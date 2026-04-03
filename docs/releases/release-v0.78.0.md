@@ -7,13 +7,13 @@
 
 ## Summary
 
-This release ships **`quickscale_modules.notifications`** and starts QuickScale's post-MVP expansion release line. The new module provides a transactional email foundation built around app-owned template rendering, a read-only operational settings snapshot backed by generated Django settings and environment variables, recipient-granular delivery tracking, Django email compatibility with the Anymail Resend backend, signed replay-safe webhook ingestion for delivery events, and generated-project wiring through QuickScale's planner and apply flows.
+This release ships **`quickscale_modules.notifications`** and adds a transactional email foundation to the published QuickScale stack. The new module provides app-owned template rendering, a read-only operational settings snapshot backed by generated Django settings and environment variables, recipient-granular delivery tracking, Django email compatibility with the Anymail Resend backend, signed replay-safe webhook ingestion for delivery events, and generated-project wiring through QuickScale's planner and apply flows.
 
 **Related docs:** [Changelog](../../CHANGELOG.md) | [Roadmap](../technical/roadmap.md) | [Technical Decisions](../technical/decisions.md)
 
 ## Highlights
 
-- Introduced `quickscale_modules.notifications` as QuickScale's first post-MVP expansion module.
+- Introduced `quickscale_modules.notifications` as QuickScale's first published notifications module.
 - Standardized transactional-email delivery around Django email compatibility with the Anymail Resend backend.
 - Added app-owned rendering, recipient-granular delivery tracking, and signed webhook ingestion for delivery events.
 - Wired notifications through planner or apply configuration, generated settings, `.env.example`, and forms submission delivery while keeping runtime configuration authoritative in generated settings and environment variables.
@@ -22,7 +22,7 @@ This release ships **`quickscale_modules.notifications`** and starts QuickScale'
 
 ### Features
 
-- **Transactional Email Foundation**: QuickScale now ships a first-party notifications module for auth flows, forms follow-up, admin or ops messages, and future post-MVP modules that need email delivery.
+- **Transactional Email Foundation**: QuickScale now ships a first-party notifications module for auth flows, forms follow-up, admin or ops messages, and later QuickScale features that need email delivery.
 - **App-Owned Rendering**: Notification content is rendered inside the Django application so templates, layout behavior, and context validation stay testable and portable.
 - **Recipient-Granular Tracking**: Delivery tracking is recorded per recipient instead of per bulk send, making provider IDs, event history, and failures easier to audit.
 - **Signed Webhook Ingestion**: Delivery-event webhooks are replay-safe and verified before status updates are written into QuickScale-owned records.
@@ -32,7 +32,7 @@ This release ships **`quickscale_modules.notifications`** and starts QuickScale'
 
 ### Improvements
 
-- **Post-MVP Release Line Begins**: v0.78.0 is the first published release in QuickScale's post-MVP expansion track.
+- **Published Stack Expansion**: v0.78.0 adds notifications to the released first-party module line.
 - **Current Module Set Updated**: Public docs now reflect notifications alongside auth, backups, blog, crm, forms, listings, and storage as the current first-party module set.
 - **Runtime Guardrails**: Production-targeted notifications configurations now fail loudly when live-delivery requirements are incomplete instead of silently falling back to console email.
 
@@ -53,7 +53,7 @@ make check
 
 ## Deferred Follow-up
 
-The following items remain deferred to later post-MVP releases:
+The following items remain deferred to later milestones:
 
 - inbound or reply workflows
 - provider-hosted templates, broadcast or newsletter tooling, and multi-provider failover

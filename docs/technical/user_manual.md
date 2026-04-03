@@ -11,7 +11,7 @@ What belongs in this file:
 - Practical step-by-step commands and examples users should run locally (bootstrap, tests, linters, quickscale CLI usage, short troubleshooting tips).
 
 What does NOT belong in this file (and where to put it):
-- Architectural decisions, MVP scope, and tie-breakers → `decisions.md` (authoritative).
+- Architectural decisions, implementation scope, and tie-breakers → `decisions.md` (authoritative).
 - Long-term roadmap, release milestones, and planning → `roadmap.md`.
 - Package and generator scaffolding details (templates, deep structure) → `scaffolding.md` and template files in `quickscale_core`.
 - User-facing getting-started narrative and marketing material → top-level `README.md`.

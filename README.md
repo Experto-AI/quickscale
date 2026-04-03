@@ -32,7 +32,7 @@ TARGET AUDIENCE: New users, potential adopters, GitHub visitors, developers eval
 
 ## QuickScale: Compose your Django SaaS.
 
-QuickScale is a **composable Django framework** for building client SaaS applications. Start with a stable core, add reusable modules, customize themes, and deploy faster—while maintaining the flexibility to create commercial extensions and build a community ecosystem.
+QuickScale is a **creator-led Django project generator and module workspace** for building client SaaS applications. It grew out of repeated owner/client work and now turns those patterns into reusable starter themes, first-party modules, and production-ready foundations.
 
 ---
 
@@ -45,10 +45,11 @@ QuickScale is a **Django project generator** that creates production-ready SaaS 
 - **Full ownership**: Generated projects are 100% yours to customize—no vendor lock-in
 - **Standardized stack**: Build multiple client projects faster with consistent best practices
 - **Implemented first-party modules on the main branch today**: auth, backups, blog, crm, forms, listings, notifications, social, and storage
+- **Creator-led evolution**: New capabilities land because they solve real project needs first, then get generalized into the shared stack
 
-🧭 **Evolution Path**: QuickScale already includes first-party modules and starter themes for current projects, while the broader community platform, marketplace, and ecosystem expansion remain future-facing. [Read the full evolution strategy](./docs/overview/quickscale.md#evolution-strategy-personal-toolkit-first).
+The current published release is v0.79.0, which adds the social module to the published stack with curated social links, embeds, backend-owned preview metadata, and Django-owned React public pages for fresh `showcase_react` generations. Existing projects keep their user-owned React routes and page files, so older `showcase_react` apps adopt those public pages manually when needed.
 
-The current published release is v0.79.0, which adds the social module to the published stack and continues QuickScale's post-MVP expansion line with curated social links, embeds, backend-owned preview metadata, and fresh React public pages for new project generations.
+QuickScale evolves through tagged releases and real owner usage rather than a separate phase model. For the current implementation surface, use [decisions.md](./docs/technical/decisions.md), [roadmap.md](./docs/technical/roadmap.md), and [CHANGELOG.md](./CHANGELOG.md).
 
 On the main branch, backups is the admin/ops-first safety module: private local artifacts are the default, optional private remote offload is supported, and generated local Docker and Railway PostgreSQL projects use PostgreSQL 18 custom dumps as the real backup/restore path. JSON artifacts are export-only rather than restore inputs, admin download and validate stay local-file-only in v1, and the BackupPolicy admin page exposes a guarded restore action only for row-backed local artifacts already present on disk. Exact filename confirmation and the existing environment gate remain required, admin restore never materializes remote-only artifacts, CLI restore keeps its existing syntax, and already-generated projects that predate this follow-up must manually adopt the current Docker/CI/E2E PostgreSQL 18 tooling updates.
 
@@ -58,14 +59,14 @@ On the main branch, backups is the admin/ops-first safety module: private local 
 - 📖 **New user?** You're in the right place. This README shows you what QuickScale is and how to get started.
 - 🔧 **Need commands?** See [user_manual.md](./docs/technical/user_manual.md) for all commands and workflows
 - 🚀 **Deploying to Railway?** See [railway.md](./docs/deployment/railway.md) for Railway deployment guide
-- 📋 **Planning a feature?** Check [decisions.md](./docs/technical/decisions.md) for the authoritative MVP scope and technical rules
+- 📋 **Planning a feature?** Check [decisions.md](./docs/technical/decisions.md) for the authoritative implementation scope and technical rules
 - 🗓️ **Timeline & tasks?** See [roadmap.md](./docs/technical/roadmap.md)
 - 🏗️ **Project structure?** See [scaffolding.md](./docs/technical/scaffolding.md) for complete directory layouts
 - 🎯 **Why QuickScale?** See [quickscale.md](./docs/overview/quickscale.md) for competitive positioning
 
 **Quick Reference:**
-- **MVP** = Phase 1 (production-focused personal toolkit with first-party modules/themes)
-- **Post-MVP** = Phase 2+ (broader post-MVP expansion; community-platform capabilities remain optional at v1.0.0+)
+- **Current distribution** = Modules embed via git subtree; starter themes generate once and become user-owned code
+- **Release history** = [CHANGELOG.md](./CHANGELOG.md) plus official tagged release notes in `docs/releases/`
 - **Generated Project** = Output of `quickscale plan`, then entering the generated directory and running `quickscale apply`
 
 See [decisions.md - Document Responsibilities](./docs/technical/decisions.md#document-responsibilities) for complete terminology and Single Source of Truth reference
@@ -78,13 +79,10 @@ See [decisions.md - Document Responsibilities](./docs/technical/decisions.md#doc
 If package README text differs from repo docs, [README.md](./README.md) and [decisions.md](./docs/technical/decisions.md) win.
 
 
-### Primary Use Cases (MVP):
+### Primary Use Cases:
 - **Solo Developer**: Build client projects faster with production-ready foundations
 - **Development Agency**: Standardize your tech stack across client engagements
-
-### Future Use Cases (Post-MVP):
-- **Commercial Extension Developer**: Create and sell premium modules/themes
-- **Open Source Contributor**: Extend the ecosystem with modules and themes
+- **Creator Maintaining Multiple Projects**: Reuse working patterns across owner-led or client-facing Django applications
 
 ### Development Flow
 1. `quickscale plan myapp` → Interactive configuration wizard
@@ -98,7 +96,7 @@ If package README text differs from repo docs, [README.md](./README.md) and [dec
 - `project.slug`: filesystem/service slug (for directory names)
 - `project.package`: Python package/import name (for Django module paths)
 
-ℹ️ The [MVP Feature Matrix](./docs/technical/decisions.md#mvp-feature-matrix-authoritative) is the single source of truth for what's in or out.
+ℹ️ The [implementation surface matrix](./docs/technical/decisions.md#mvp-feature-matrix-authoritative) is the single source of truth for what QuickScale currently owns.
 
 ### What You Get
 

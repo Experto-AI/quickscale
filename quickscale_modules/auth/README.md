@@ -371,7 +371,7 @@ Apache 2.0 License - Same as QuickScale project
 
 - **Issues**: [GitHub Issues](https://github.com/Experto-AI/quickscale/issues)
 - **Docs**: [QuickScale Documentation](https://github.com/Experto-AI/quickscale/tree/main/docs)
-- **Community**: Coming in Post-MVP phases
+- **Release updates**: Follow the main QuickScale docs and tagged release notes for current support surface changes
 
 ---
 

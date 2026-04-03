@@ -5,10 +5,10 @@
 
 ## General Introduction
 
-**Purpose:** This document outlines the development timeline, implementation phases, and specific tasks for building QuickScale.
+**Purpose:** This document tracks the active development timeline, versioned milestone scope, and archived pointers for recent QuickScale releases.
 
 **Content Guidelines:**
-- Organize tasks by phases with clear deliverables and success criteria
+- Organize work by versioned milestones with clear deliverables and success criteria
 - Include specific implementation tasks with technical requirements
 - Provide timeline estimates and dependency relationships
 - Track progress and update status as work is completed
@@ -16,7 +16,7 @@
 - Reference other documents for context but avoid duplicating their content
 
 **What to Add Here:**
-- New development phases and milestone planning
+- New milestone planning and release-specific task tracking
 - Specific implementation tasks and acceptance criteria
 - Timeline updates and progress tracking
 - Resource allocation and team assignments
@@ -31,50 +31,28 @@
 
 ## Broad Overview of the Roadmap
 
-QuickScale follows an evolution-aligned roadmap that starts as a personal toolkit and potentially evolves into a community platform based on real usage and demand.
+QuickScale's roadmap is milestone-led. It tracks shipped release pointers, the current implementation line, and the next versioned scopes already tied to concrete repository work. Older phase labels still appear in some historical notes, but they are not the active roadmap structure.
 
-**Evolution Strategy:** Personal toolkit first, community platform later. See [quickscale.md](../overview/quickscale.md#evolution-strategy-personal-toolkit-first).
+## Current Milestone Summary
 
-
-**Roadmap Phases:**
-
-1. **Phase 1: Foundation + Core Modules (React Theme Default)** ✅ _Complete_
-   - ✅ Theme system infrastructure and split branch management (v0.61.0-v0.62.0)
-   - ✅ Auth module (v0.63.0) - production-ready with django-allauth
-   - ✅ Listings module (v0.67.0) - generic base for vertical themes
-   - ✅ Plan/Apply System core (v0.68.0-v0.70.0) - Terraform-style configuration
-   - ✅ **Plan/Apply System complete** (v0.71.0) - Module manifests & config mutability
-   - ✅ Plan/Apply Cleanup (v0.72.0) - Remove legacy init/embed commands
-   - ✅ CRM module (v0.73.0) - native Django CRM app (API-only)
-   - ✅ **React Default Theme** (v0.74.0) - React + shadcn/ui as default
-   - ✅ **Forms module** (v0.75.0) - generic form builder with CLI integration ✅ Complete
-  - ✅ Storage module (v0.76.0) - cloud file hosting, media storage adapters, CDN integration
-  - ✅ Backups module (v0.77.0) - private database backups, optional private remote offload, guarded BackupPolicy-admin local restore plus CLI restore, and scheduler-ready command hooks
-
-2. **Phase 2: Notifications, Analytics, Vertical Modules & Theme Expansion (Post-MVP)** 🚧 _In Progress_
-  - ✅ Notifications module (v0.78.0) - transactional email foundation with app-owned rendering, recipient-granular tracking, and Anymail-backed Resend delivery
-  - ✅ Social & Link Tree module (v0.79.0) - curated social links and embeds with backend-owned preview metadata and React public pages
-  - 📋 Analytics module (v0.80.0) - PostHog-backed website analytics with React + HTML theme injection and cross-module conversion hooks
-  - 📋 Listings Theme (v0.81.0) - React frontend for property listings (sell/rent)
-  - 📋 CRM Theme (v0.82.0) - React frontend for CRM module
-  - 📋 Billing module (v0.83.0) - Stripe integration
-  - 📋 Teams module (v0.84.0) - multi-tenancy
-
-3. **Phase 3: Secondary Theme, Validation & Platform Expansion** 📋 _Planned_
-  - 📋 HTML theme polish and parity improvements (v0.85.0+) - maintain the server-rendered secondary option alongside the React default
-   - HTML theme remains as secondary option (simpler projects)
-  - 📋 Advanced module management features (v0.86.0)
-  - 📋 Workflow validation and real-world testing (v0.87.0)
-  - 📋 Disaster recovery & environment migration workflows (v0.88.0)
-
-4. **Phase 4: Community Platform (Optional v1.0.0+)** 📋 _Future_
-   - 📋 PyPI package distribution
-   - 📋 Theme package system
-   - 📋 Marketplace and community features
+| Version | Status | Focus | Notes |
+|---------|--------|-------|-------|
+| v0.76.0 | ✅ Released | Storage module | Archived in release note and changelog |
+| v0.77.0 | ✅ Internal baseline | Backups module | Changelog-only historical baseline |
+| v0.78.0 | ✅ Released | Notifications module | Archived in release note and changelog |
+| v0.79.0 | ✅ Released | Social module | React public pages ship on fresh `showcase_react` generations; older projects adopt them manually |
+| v0.80.0 | 📋 Planned | Analytics module | Active next milestone |
+| v0.81.0 | 📋 Planned | Listings theme | Real-estate-oriented frontend milestone |
+| v0.82.0 | 📋 Planned | CRM theme | React frontend for CRM module |
+| v0.83.0 | 📋 Planned | Billing module | Stripe integration |
+| v0.84.0 | 📋 Planned | Teams module | Multi-tenancy and team workflows |
+| v0.85.0+ | 📋 Planned | HTML theme polish | Server-rendered secondary option maintenance |
+| v0.86.0 | 📋 Planned | Module management UX | Advanced update/status/discovery workflows |
+| v0.87.0 | 📋 Planned | Workflow validation | Real-world module safety and E2E validation |
+| v0.88.0 | 📋 Planned | Disaster recovery | Environment migration and promotion workflows |
 
 **Legend:**
 - ✅ = Completed
-- 🚧 = In Progress
 - 📋 = Planned/Not Started
 
 **Key Milestones:**
@@ -85,13 +63,12 @@ QuickScale follows an evolution-aligned roadmap that starts as a personal toolki
 - **v0.76.0:** Storage Module (cloud file hosting + CDN-ready media infrastructure) ✅
 - **v0.77.0:** Backups module (private local + optional private remote workflows, guarded BackupPolicy-admin local restore plus CLI restore) ✅
 - **v0.78.0:** Notifications Module (transactional email foundation; app-owned rendering, recipient-granular tracking, and Anymail-backed Resend delivery) ✅
-- **v0.79.0:** Social & Link Tree module (curated social links and embeds, backend-owned preview metadata, and React public pages) ✅
+- **v0.79.0:** Social & Link Tree module (curated social links and embeds, backend-owned preview metadata, and React public pages for fresh `showcase_react` generations; older projects adopt manually) ✅
 - **v0.80.0:** Analytics Module (PostHog website analytics; React + HTML theme injection; cross-module conversion hooks) 🎯
-- **v0.81.0:** Real Estate MVP (static + listings + social links) 🎯
+- **v0.81.0:** Real-estate vertical baseline (static + listings + social links) 🎯
 - **v0.84.0:** SaaS Feature Parity (auth, billing, teams, notifications foundation) 🎯
 - **v0.87.0:** Workflow validation (multi-module, storage/CDN, and deployment validation) 🎯
 - **v0.88.0:** Disaster recovery & environment migration workflows 🎯
-- **v1.0.0+:** Community platform (if demand exists)
 
 **Status:**
 - **Current Status:** v0.79.0 is now the published release, and the next active roadmap scope is v0.80.0 analytics
@@ -120,38 +97,6 @@ List of upcoming releases with detailed implementation tasks:
 ---
 
 After release closeout, keep only a concise pointer in the roadmap. Put canonical history in [CHANGELOG.md](../../CHANGELOG.md), and for published releases add `docs/releases/release-vX.XX.X.md` as the single official release note linked from the GitHub tag and release PR. Keep unreleased closeout status in the roadmap until that release note exists.
-
----
-
-### v0.76.0: `quickscale_modules.storage` - Media Storage & CDN Integration Module
-
-**Status**: ✅ Released and archived on 2026-03-21
-
-Archived release record: see [Reader-facing summary](../releases/release-v0.76.0.md) and [CHANGELOG.md](../../CHANGELOG.md). Remaining storage workflow validation stays tracked under [v0.87.0](#v0870-module-workflow-validation--real-world-testing).
-
----
-
-### v0.77.0: `quickscale_modules.backups` - Database Backup & Restore Module
-
-**Status**: ✅ Internal baseline recorded; no tagged public release note
-
-Archived release record: see [CHANGELOG.md](../../CHANGELOG.md). Broader database, media, and environment portability work stays tracked under [v0.88.0](#v0880-disaster-recovery--environment-migration-workflows).
-
----
-
-### v0.78.0: `quickscale_modules.notifications` - Notifications Module
-
-**Status**: ✅ Released on 2026-03-30
-
-Archived release record: see [Reader-facing summary](../releases/release-v0.78.0.md) and [CHANGELOG.md](../../CHANGELOG.md). Later notifications expansion remains deferred to future post-MVP releases.
-
----
-
-### v0.79.0: `quickscale_modules.social` - Social & Link Tree Module
-
-**Status**: ✅ Released on 2026-04-03
-
-Archived release record: see [Reader-facing summary](../releases/release-v0.79.0.md) and [CHANGELOG.md](../../CHANGELOG.md). End-to-end `quickscale plan` → `quickscale apply` → React public-page validation stays tracked under [v0.87.0](#v0870-module-workflow-validation--real-world-testing); provider auth or write APIs, automated sync, and HTML-theme polish remain deferred beyond v0.79.0.
 
 ---
 
@@ -602,7 +547,7 @@ Following the standard from `module-extension.md`:
 **Why Deferred**:
 - Focus on notifications, Plan/Apply system, and core modules first (v0.68-v0.83)
 - Showcase architecture provides maximum value when multiple modules exist
-- Current simple welcome page is adequate for MVP
+- Current simple welcome page is adequate for the shipped generator output
 
 **Implementation Plan**: After v0.84.0 (SaaS Feature Parity milestone), evaluate whether to implement showcase architecture or keep simple welcome page. Decision criteria:
 - Are 3+ modules complete and production-ready?
@@ -769,110 +714,3 @@ Application source code also moves through the normal git/deploy pipeline. The p
 - [ ] Verify backup artifacts and migration manifests never expose raw secrets or public backup URLs
 
 ---
-
-### v1.0.0+: Community Platform (Optional Evolution)
-
-**🎯 Objective**: IF proven successful personally, evolve into community platform.
-
-**Timeline**: 12-18+ months after MVP (or never, if personal toolkit is enough)
-
-**Version Strategy**: Major version (v1.0.0) for community platform features
-
-**Example Release Sequence**:
-- **v1.0.0**: PyPI publishing + package distribution
-- **v1.1.0**: Theme package system
-- **v1.2.0**: Marketplace basics
-- **v1.x.0**: Advanced community features
-
-**Prerequisites Before Starting v1.0.0**:
-- ✅ 10+ successful client projects built with QuickScale
-- ✅ 5+ proven reusable modules extracted
-- ✅ Clear evidence that others want to use your patterns
-- ✅ Bandwidth to support community and marketplace
-
-#### v1.0.0: Package Distribution
-
-When you're ready to share with community:
-
-- [ ] **Setup PyPI publishing for modules**
-  - [ ] Convert git subtree modules to pip-installable packages
-  - [ ] Use PEP 420 implicit namespaces (`quickscale_modules.*`)
-  - [ ] Implement semantic versioning and compatibility tracking
-  - [ ] Create GitHub Actions for automated publishing
-- [ ] **Create private PyPI for commercial modules** (see [commercial.md](../overview/commercial.md))
-  - [ ] Set up private package repository
-  - [ ] Implement license validation for commercial modules
-  - [ ] Create subscription-based access system
-- [ ] **Document package creation for community contributors**
-  - [ ] Package structure guidelines
-  - [ ] Contribution process
-  - [ ] Quality standards and testing requirements
-
----
-
-#### v1.1.0: Theme Package System
-
-If reusable business logic patterns emerge:
-
-- [ ] **Create theme package structure** (`quickscale_themes.*`)
-  - [ ] Define theme interface and base classes
-  - [ ] Implement theme inheritance system
-  - [ ] Create theme packaging guidelines
-- [ ] **Create example themes**
-  - [ ] `quickscale_themes.starter` - Basic starter theme
-  - [ ] `quickscale_themes.todo` - TODO app example
-  - [ ] Document theme customization patterns
-- [ ] **Document theme creation guide**
-  - [ ] Theme architecture overview
-  - [ ] Base model and business logic patterns
-  - [ ] Frontend integration guidelines
-
-**Theme Structure Reference**: See [scaffolding.md §4 (Post-MVP Themes)](./scaffolding.md#post-mvp-structure).
-
----
-
-#### v1.2.0: Marketplace & Community
-
-Only if there's real demand:
-
-- [ ] **Build package registry/marketplace**
-  - [ ] Package discovery and search
-  - [ ] Ratings and reviews system
-  - [ ] Module/theme compatibility tracking
-- [ ] **Create community contribution guidelines**
-  - [ ] Code of conduct
-  - [ ] Contribution process and standards
-  - [ ] Issue and PR templates
-- [ ] **Setup extension approval process**
-  - [ ] Quality review checklist
-  - [ ] Security audit process
-  - [ ] Compatibility verification
-- [ ] **Build commercial module subscription system**
-  - [ ] License management
-  - [ ] Payment integration
-  - [ ] Customer access control
-
-See [commercial.md](../overview/commercial.md) for detailed commercial distribution strategies.
-
----
-
-#### v1.3.0: Advanced Configuration
-
-If YAML config proves useful in Phase 2:
-
-- [ ] **Implement full configuration schema**
-  - [ ] Module/theme selection via config
-  - [ ] Environment-specific overrides
-  - [ ] Customization options
-- [ ] **Add module/theme selection via config**
-  - [ ] Declarative module dependencies
-  - [ ] Theme selection and variants
-- [ ] **Create migration tools for config updates**
-  - [ ] Schema version migration scripts
-  - [ ] Backward compatibility checks
-- [ ] **Build configuration validation UI** (optional)
-  - [ ] Web-based config editor
-  - [ ] Real-time validation
-  - [ ] Preview generated project
-
-**IMPORTANT**: v1.0.0+ is OPTIONAL. Many successful solo developers and agencies never need a community platform. Evaluate carefully before investing in marketplace features.

@@ -2,8 +2,8 @@
 
 `CHANGELOG.md` is the canonical QuickScale release history index. For published releases, pair each version entry with a single official release note in `docs/releases/` linked from the GitHub tag and release PR. Use `docs/technical/roadmap.md` for active or unreleased release status. Entries are version-ordered; listed dates reflect the recorded artifact date when available.
 
-- v0.79.0 — 2026-04-03 — Social & Link Tree Module (curated social links and embeds, backend-owned YouTube/TikTok preview metadata, managed `/_quickscale/social/` integration endpoints, and fresh `showcase_react` public pages for new project generations)
-- v0.78.0 — 2026-03-30 — Notifications Module (first post-MVP expansion release; transactional email foundation, Anymail-backed Resend delivery, recipient-granular tracking, and signed delivery webhooks)
+- v0.79.0 — 2026-04-03 — Social & Link Tree Module (curated social links and embeds, backend-owned YouTube/TikTok preview metadata, managed `/_quickscale/social/` integration endpoints, and Django-owned public React pages for fresh `showcase_react` generations; older projects adopt those pages manually)
+- v0.78.0 — 2026-03-30 — Notifications Module (transactional email foundation, Anymail-backed Resend delivery, recipient-granular tracking, and signed delivery webhooks)
 - v0.77.0 — internal main-branch baseline — Backups Module (private database backups, optional private remote offload, guarded CLI restore, and scheduler-ready command hooks; no tagged public release note was published for this internal baseline)
 - v0.76.0 — 2026-03-21 — Storage Module (cloud file hosting, media storage adapters, CDN-ready media infrastructure)
 - v0.75.0 — 2026-02-23 — Forms Module (generic customizable form builder with admin, DRF API, spam protection, GDPR anonymization, and React mount point)
@@ -24,7 +24,7 @@
 - v0.60.0 — 2025-10-19 — Railway Deployment Support (automated deployment via quickscale deploy railway)
 - v0.59.0 — 2025-10-18 — CLI Development Commands (Docker/Django operation wrappers)
 - v0.58.0 — 2025-10-18 — Comprehensive E2E testing infrastructure with Playwright and PostgreSQL
-- v0.57.0 — 2025-10-15 — MVP Launch: Production-Ready Personal Toolkit
+- v0.57.0 — 2025-10-15 — Production-ready generator baseline
 - v0.56.0 — 2025-10-13 — Quality, Testing & CI/CD
 - v0.55.0 — 2025-10-13 — CLI implementation
 - v0.54.0 — 2025-10-13 — Project Generator

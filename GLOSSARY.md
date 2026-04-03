@@ -24,7 +24,7 @@
 ### Git Subtree
 **Definition**: Git mechanism for embedding external repository code into a subdirectory of your project while preserving history and enabling bidirectional updates.
 
-**QuickScale Usage**: MVP (Phase 1) distribution mechanism for:
+**QuickScale Usage**: Current distribution mechanism for:
 - Embedding modules from QuickScale into client projects
 - Sharing code across multiple client projects
 - Contributing improvements back to QuickScale
@@ -34,7 +34,20 @@
 - `quickscale update` → Pulls latest module changes
 - `quickscale push --module <name>` → Contributes improvements back
 
-**See**: [decisions.md - Personal Toolkit Git Subtree](./docs/technical/decisions.md#integration-note-personal-toolkit-git-subtree), [plan-apply-system.md](./docs/technical/plan-apply-system.md)
+**See**: [decisions.md - Git Subtree Workflow](./docs/technical/decisions.md#integration-note-personal-toolkit-git-subtree), [plan-apply-system.md](./docs/technical/plan-apply-system.md)
+
+---
+
+<a id="historical-release-era-labels"></a>
+### Historical Documentation Labels
+**Definition**: Older QuickScale documents may use legacy release-era shorthand from earlier planning and repository organization.
+
+**Current Guidance**:
+- Treat those labels as historical shorthand for earlier planning and release discussions
+- Use versioned release history, the roadmap, and the implementation surface matrix for the current authoritative picture
+- Do not use those labels to redefine current behavior or active documentation scope
+
+**See**: [CHANGELOG.md](./CHANGELOG.md), [roadmap.md](./docs/technical/roadmap.md), [decisions.md - Implementation Surface Matrix](./docs/technical/decisions.md#mvp-feature-matrix-authoritative)
 
 ---
 
@@ -48,9 +61,9 @@
 - Theme-agnostic (works with all themes)
 - Users can contribute improvements back
 
-**Distribution**: Split branches (git subtree) for MVP; PyPI for Post-MVP
+**Distribution**: Split branches (git subtree) today. Any additional distribution model becomes part of the contract only when it is implemented and documented.
 
-**Examples**: `auth`, `billing`, `teams`, `blog`, `listings`
+**Examples**: `auth`, `backups`, `blog`, `crm`, `forms`, `listings`, `notifications`, `social`, `storage`
 
 **See**: [decisions.md - Module Architecture](./docs/technical/decisions.md#module-theme-architecture)
 
@@ -109,45 +122,6 @@ quickscale/
 
 ---
 
-### MVP (Minimum Viable Product)
-**Definition**: Phase 1 of QuickScale (v0.56-v0.77.0) - Production-focused "Personal Toolkit" for solo developers and development agencies to build client projects faster with first-party modules and themes.
-
-**Scope**:
-- ✅ Django project generator (`quickscale plan`, then enter the generated directory and run `quickscale apply`)
-- ✅ Git subtree module distribution
-- ✅ Production-ready foundations (Docker, PostgreSQL, testing, CI/CD)
-- ✅ `showcase_react` starter theme as the default frontend
-- ✅ `showcase_html` as the secondary starter theme option
-- ✅ Early first-party vertical themes inside the monorepo (for example `crm`)
-- ❌ Broader theme expansion beyond the current first-party MVP set (Post-MVP)
-- ❌ PyPI distribution (Post-MVP)
-- ❌ Marketplace (Post-MVP)
-
-**Primary Use Case**: Fast client project spinup with code reuse across YOUR projects
-
-**Synonym**: Phase 1, Personal Toolkit, Foundation Phase (v0.52-v0.55)
-
-**Opposite**: Post-MVP
-
-**See**: [decisions.md - MVP Feature Matrix](./docs/technical/decisions.md#mvp-feature-matrix-authoritative), [quickscale.md - Evolution Strategy](./docs/overview/quickscale.md#evolution-strategy-personal-toolkit-first)
-
----
-
-### Personal Toolkit
-**Definition**: MVP (Phase 1) implementation strategy where QuickScale serves as a personal development accelerator for YOUR client projects, using git subtree for code sharing.
-
-**Philosophy**: Build simple tools for your own use first, extract patterns from real client work, evolve to community platform only when proven necessary.
-
-**Key Principle**: "Start simple, grow organically based on real usage" - avoid building marketplace features until you have multiple successful client projects proving the patterns work.
-
-**Synonym**: MVP, Phase 1
-
-**Opposite**: Community Platform (Post-MVP)
-
-**See**: [quickscale.md - Personal Toolkit Strategy](./docs/overview/quickscale.md#evolution-strategy-personal-toolkit-first)
-
----
-
 ### Plan/Apply Workflow
 **Definition**: Terraform-style declarative configuration workflow where users define desired state in YAML and QuickScale applies changes incrementally.
 
@@ -166,23 +140,24 @@ quickscale/
 
 ---
 
-### Post-MVP
-**Definition**: Phase 2+ of QuickScale (v0.78.0+) - Broader post-MVP expansion beyond the personal-toolkit scope, with community-platform capabilities remaining optional for v1.0.0+.
+### Release Milestone
+**Definition**: A versioned roadmap target used to group the current implementation work for an upcoming QuickScale release.
 
-**Planned Features**:
-- ✅ Broader theme expansion beyond the current first-party MVP set
-- ✅ PyPI package distribution
-- ✅ Community marketplace
-- ✅ Commercial subscription model
-- ✅ Advanced integrations (AI, analytics)
+**Current Guidance**:
+- Keep concrete upcoming milestone details in [roadmap.md](./docs/technical/roadmap.md)
 
-**Evolution Path**: Organic growth based on proven MVP usage, not speculative features
+**See**: [roadmap.md](./docs/technical/roadmap.md)
 
-**Synonym**: Phase 2+, Post-MVP Expansion
+---
 
-**Opposite**: MVP
+### Release Note
+**Definition**: The official public summary for a tagged QuickScale release, published under `docs/releases/` and linked from the GitHub tag and release PR.
 
-**See**: [quickscale.md - Post-MVP Vision](./docs/overview/quickscale.md#future-strategy), [roadmap.md](./docs/technical/roadmap.md)
+**Current Rule**:
+- `CHANGELOG.md` remains the canonical history index
+- `docs/releases/release-vX.XX.X.md` is the single reader-facing release artifact for a tagged version
+
+**See**: [CHANGELOG.md](./CHANGELOG.md), [docs/releases/](./docs/releases/)
 
 ---
 
@@ -226,7 +201,7 @@ quickscale/
 **Definition**: The authoritative document or location for specific information. When conflicts arise, the SSOT always wins.
 
 **QuickScale SSOTs**:
-- **Technical Rules**: [decisions.md](./docs/technical/decisions.md) - Authoritative for all architectural decisions, technical rules, MVP scope
+- **Technical Rules**: [decisions.md](./docs/technical/decisions.md) - Authoritative for all architectural decisions and current implementation boundaries
 - **Terminology**: This glossary (GLOSSARY.md)
 - **Directory Structure**: [scaffolding.md](./docs/technical/scaffolding.md)
 - **Roadmap**: [roadmap.md](./docs/technical/roadmap.md)
@@ -242,15 +217,15 @@ quickscale/
 
 **Categories**:
 1. **Showcase Themes** - Minimal foundations (React default, HTML secondary option)
-2. **Vertical Themes** - Complete industry apps (real estate, SaaS)
+2. **Vertical Themes** - Complete industry apps when they are explicitly implemented and documented
 
 **Distribution**: Generator templates (one-time copy)
 
 **Key Difference from Modules**:
-- Themes: Frontend-focused, one-time generation, not updated
-- Modules: Backend-focused, ongoing updates via git subtree/PyPI
+- Themes: Frontend-focused, one-time generation, not updated automatically after project creation
+- Modules: Backend-focused, ongoing updates via git subtree
 
-**Examples**: `showcase_react`, `showcase_html`, `crm`, `saas_starter`
+**Examples**: `showcase_react`, `showcase_html`
 
 **See**: [decisions.md - Theme Architecture](./docs/technical/decisions.md#module-theme-architecture)
 
@@ -265,10 +240,9 @@ quickscale/
 - Complete UI/UX implementation
 - Ready for customization, not production deployment
 
-**Examples**:
-- `crm` - CRM application with React frontend patterns (v0.75.0+)
-- `saas_starter` - SaaS with billing and teams (planned)
-- `job_board` - Job listings and applications (planned)
+**Current Guidance**:
+- Vertical themes become part of the supported contract only when a roadmap milestone lands and the release docs point to shipped behavior
+- Do not treat illustrative names in older planning docs as shipped generator guarantees
 
 **Opposite**: Showcase Theme (minimal starter)
 
@@ -289,27 +263,16 @@ quickscale/
 
 ---
 
-### Foundation Phase
-**Definition**: Early QuickScale releases (v0.52-v0.55) focused on building incremental foundations before MVP.
-
-**Synonym**: Pre-MVP
-
-**Opposite**: MVP (v0.56+)
-
-**See**: [decisions.md - Terminology](./docs/technical/decisions.md#mvp-vs-post-mvp-scope)
-
----
-
 ## Related Documentation
 
 - **[decisions.md](./docs/technical/decisions.md)** - Authoritative technical rules and architectural decisions
 - **[scaffolding.md](./docs/technical/scaffolding.md)** - Directory structures and file layouts
 - **[plan-apply-system.md](./docs/technical/plan-apply-system.md)** - Plan/apply workflow specification
-- **[quickscale.md](./docs/overview/quickscale.md)** - Strategic vision and evolution rationale
-- **[roadmap.md](./docs/technical/roadmap.md)** - Development timeline and phases
+- **[quickscale.md](./docs/overview/quickscale.md)** - Current positioning and evolution rationale
+- **[roadmap.md](./docs/technical/roadmap.md)** - Development timeline and milestones
 
 ---
 
-**Last Updated**: 2026-03-21
+**Last Updated**: 2026-04-03
 **Maintained By**: QuickScale maintainers
 **Feedback**: Open issue if terms need clarification or addition

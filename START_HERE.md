@@ -10,9 +10,9 @@ QuickScale = **Django Generator** + **Reusable Modules** + **Production Foundati
 
 **Input**: `quickscale plan myapp` (interactive config), enter the generated directory, then run `quickscale apply`
 **Output**: Complete Django project with Docker, PostgreSQL, testing, CI/CD, and security best practices
-**Current Distribution**: Reusable modules are installed via git subtree during MVP; PyPI distribution remains Post-MVP
+**Current Distribution**: Reusable modules are installed via git subtree, and starter themes are generated once into user-owned project code
 
-**Current Status**: The current published release is v0.79.0, the post-MVP expansion line is active, and v0.80.0 analytics is the next planned milestone
+**Current Status**: The current published release is v0.79.0. See [roadmap.md](./docs/technical/roadmap.md) for upcoming work.
 **Target Audience**: Solo developers and development agencies building client projects
 
 ---
@@ -24,12 +24,11 @@ For complete definitions, see **[GLOSSARY.md](./GLOSSARY.md)**. Here are the ess
 | Term | Quick Definition | Learn More |
 |------|------------------|------------|
 | **Generated Project** | The standalone Django app created by `quickscale plan`, then entering the generated directory and running `quickscale apply` | [GLOSSARY.md](./GLOSSARY.md#generated-project) |
-| **MVP** | Phase 1 (v0.56-v0.77.0) - Personal toolkit for client projects | [GLOSSARY.md](./GLOSSARY.md#mvp-minimum-viable-product) |
-| **Post-MVP** | Phase 2+ (v0.78+) - Broader expansion beyond MVP; community-platform work is optional at v1.0.0+ | [GLOSSARY.md](./GLOSSARY.md#post-mvp) |
 | **Module** | Reusable Django app (auth, backups, blog, listings, notifications, social, storage) | [GLOSSARY.md](./GLOSSARY.md#module) |
 | **Theme** | Frontend scaffolding (React default, HTML secondary option) | [GLOSSARY.md](./GLOSSARY.md#theme) |
 | **Git Subtree** | Distribution mechanism for sharing code | [GLOSSARY.md](./GLOSSARY.md#git-subtree) |
 | **Plan/Apply** | Terraform-style declarative workflow | [GLOSSARY.md](./GLOSSARY.md#planapply-workflow) |
+| **Release Note** | Official public summary for a tagged QuickScale version | [GLOSSARY.md](./GLOSSARY.md#release-note) |
 
 ---
 
@@ -205,18 +204,17 @@ Detailed guides for specific stages:
 ## Quick Answers to Common Questions
 
 ### "Is QuickScale production-ready?"
-**Phase 1 (MVP)** is complete through v0.77.0, and **Post-MVP** began with the v0.78.0 notifications release. The current published release is v0.79.0, and the roadmap tracks the active v0.80.0 analytics planning scope and next milestones.
+The current generator, starter-theme workflow, and published first-party module line are active and maintained through tagged releases. The current published release is v0.79.0. See [roadmap.md](./docs/technical/roadmap.md) for upcoming work.
 See: [roadmap.md](./docs/technical/roadmap.md)
 
 ### "Can I use it for my client projects?"
-**Yes!** That's the primary MVP use case. QuickScale generates standalone Django projects you own completely - no vendor lock-in.
-See: [README.md - Primary Use Cases](./README.md#primary-use-cases-mvp)
+**Yes!** That's the primary current use case. QuickScale generates standalone Django projects you own completely - no vendor lock-in.
+See: [README.md - Primary Use Cases](./README.md#primary-use-cases)
 
-### "What's the difference between MVP and Post-MVP?"
-- **MVP (v0.56-v0.77)**: Personal toolkit, git subtree distribution, React + shadcn/ui default
-- **Post-MVP (v0.78+)**: Broader post-MVP expansion including additional themes and packaging options, with community-platform capabilities optional at v1.0.0+
+### "How should I read older docs that use legacy release-era labels?"
+Treat those labels as historical release-era shorthand from earlier planning. The active documentation now describes the current implementation directly through versioned releases, the roadmap, and the implementation surface matrix.
 
-See: [GLOSSARY.md - MVP](./GLOSSARY.md#mvp-minimum-viable-product) | [GLOSSARY.md - Post-MVP](./GLOSSARY.md#post-mvp)
+See: [GLOSSARY.md - Historical Documentation Labels](./GLOSSARY.md#historical-release-era-labels) | [roadmap.md](./docs/technical/roadmap.md)
 
 ### "How do I deploy a generated project?"
 **Railway** (recommended): One-command deployment via `quickscale deploy railway`

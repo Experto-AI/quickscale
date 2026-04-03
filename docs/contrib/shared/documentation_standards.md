@@ -9,7 +9,7 @@ This file contains documentation standards that apply across all programming sta
 - **[Technical Decisions](../../technical/decisions.md)**: Authoritative architectural decisions and technical specifications.
   - Technical stack enumeration and description.
   - Architectural patterns and boundaries.
-  - MVP vs. Post-MVP scope definitions.
+    - Current implementation boundaries and historical-label guidance.
   - Explicit prohibitions and anti-patterns.
 - **[Scaffolding Guide](../../technical/scaffolding.md)**: Directory layout and project structure.
   - Repository-level directory layout.

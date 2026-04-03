@@ -41,7 +41,7 @@ TARGET AUDIENCE: Maintainers, core contributors, community package developers, C
 
 ## Quick Reference (AI Context)
 
-**MVP Essentials:**
+**Current Essentials:**
 - ✅ CLI workflow: `quickscale plan myapp`, enter the generated directory, then run `quickscale apply`
 - ✅ Generates standalone Django project (Poetry + pyproject.toml)
 - ✅ Production-ready: Docker, PostgreSQL, pytest, CI/CD, security best practices
@@ -80,22 +80,19 @@ TARGET AUDIENCE: Maintainers, core contributors, community package developers, C
 - ✅ `quickscale_modules/*` MUST have README.md (distributed as standalone)
 - ❌ Never treat package README.md files as authoritative architecture, scope, or policy documents
 
-## MVP vs Post-MVP Scope
+<a id="mvp-vs-post-mvp-scope"></a>
+## Current Implementation Scope
 
-**Terminology:**
-- Foundation Phase: v0.52-v0.55 (incremental foundation)
-- MVP: v0.56-v0.77.0 (production-focused personal toolkit with first-party modules/themes)
-- Post-MVP: v0.78+ (broader post-MVP expansion; community-platform capabilities remain optional at v1.0.0+)
+**Current Contract:**
+- ✅ `quickscale_core`: scaffolding and shared generator/runtime support
+- ✅ `quickscale_cli`: plan/apply plus development, deployment, and module-management workflows
+- ✅ Generated project: standalone Django application that the user owns completely
+- ✅ Settings: standalone settings by default (no automatic inheritance from core)
+- ✅ First-party modules and starter themes that are implemented in-repo and documented per release
 
-**MVP (v0.56-v0.77.0):**
-- ✅ `quickscale_core`: Scaffolding + git subtree integration (monolithic package)
-- ✅ `quickscale_cli`: Plan/apply workflow (`quickscale plan`, enter the generated directory, then run `quickscale apply`)
-- ✅ Generated project: Standalone Django (user owns completely)
-- ✅ Settings: Standalone settings.py (NO inheritance from core by default)
-- ✅ First-party modules and themes within the repository
-- ❌ Marketplace/community-platform capabilities - Post-MVP
+**Historical note:** Older docs may still use legacy release-era shorthand from earlier planning. Treat those labels as historical context only; active documentation should describe the implemented surface directly.
 
-**MVP Output:** See [scaffolding.md §3](./scaffolding.md#mvp-structure)
+**Current Generated Output:** See [scaffolding.md §3](./scaffolding.md#mvp-structure)
 
 ### Module & Theme Architecture {#module-theme-architecture}
 
@@ -424,7 +421,7 @@ last_apply_at: 2025-12-03T14:32:00Z
 
 #### **Related Files**
 
-- **Module tracking**: `.quickscale/config.yml` (v0.62.0+) — Records module branches and versions for `quickscale update` and `quickscale push --module <name>` operations. Will consolidate into `state.yml` post-MVP.
+- **Module tracking**: `.quickscale/config.yml` (v0.62.0+) — Records module branches and versions for `quickscale update` and `quickscale push --module <name>` operations. If the tracking model changes later, the current docs and release notes must describe that change explicitly.
 - **User manual**: See [user_manual.md §4.3](./user_manual.md#43-planapply-commands-shipped-in-v0680) for workflow examples and CLI usage.
 - **Project structure**: See [scaffolding.md §5](./scaffolding.md#generated-project-output) for complete project layout including state files.
 
@@ -744,23 +741,12 @@ disable_error_code = var-annotated
 
 ---
 
-**Post-MVP (v1.0.0+):**
-- 📦 `quickscale_modules/*`: Optional PyPI packages (for easier installation)
-- 📦 `quickscale_themes/*`: Optional PyPI packages (alternative to generator templates)
-- 📦 YAML configuration system (declarative project definition)
-- 📦 Marketplace ecosystem (commercial extensions)
+**Extended package-layout note:** See [scaffolding.md §4](./scaffolding.md#post-mvp-structure) for maintainer-side namespace and package-layout reference material. It is not part of the current generated-project contract unless a release note and this file say otherwise.
 
-**Structure:** See [scaffolding.md §4](./scaffolding.md#post-mvp-structure)
+<a id="mvp-feature-matrix-authoritative"></a>
+## Implementation Surface Matrix (authoritative)
 
-**Packaging Rules:**
-- ✅ `quickscale_core`: Regular package (has `__init__.py`)
-- ✅ `quickscale_modules/`, `quickscale_themes/`: PEP 420 namespaces (NO `__init__.py` at root)
-- ✅ Poetry + pyproject.toml for ALL packages
-- ✅ `find_namespace_packages()` for modules/themes (Post-MVP)
-
-## MVP Feature Matrix (authoritative)
-
-This matrix is the authoritative source of truth for **what is IN / OUT / PLANNED for the MVP** at the **feature level**.
+This matrix is the authoritative source of truth for **what is shipped, optional, or not part of the current QuickScale contract** at the feature level.
 
 **Scope**: High-level features and capabilities (e.g., "Docker support", "Testing infrastructure")
 
@@ -768,16 +754,16 @@ This matrix is the authoritative source of truth for **what is IN / OUT / PLANNE
 
 **For implementation details**: See [roadmap.md](./roadmap.md) which implements the features defined in this matrix.
 
-**Tie-breaker rule**: If roadmap.md conflicts with this matrix on feature scope, this matrix wins. Update ROADMAP to match.
+**Tie-breaker rule**: If roadmap.md conflicts with this matrix on implementation scope, this matrix wins. Update ROADMAP to match.
 
-Other documents (README.md, roadmap.md, scaffolding.md, commercial.md) MUST reference this section when describing MVP scope; decisions.md is the tie-breaker for any ambiguity.
+Other documents (README.md, roadmap.md, scaffolding.md, commercial.md) MUST reference this section when describing current implementation scope; decisions.md is the tie-breaker for any ambiguity.
 
-| Feature / Area | MVP Status | Notes / Decision Reference |
+| Feature / Area | Current Status | Notes / Decision Reference |
 |---|---:|---|
 | **CORE CLI & SCAFFOLDING** |
 | `quickscale plan <project>` and `quickscale apply` | IN (v0.68.0+) | Primary workflow. Terraform-style declarative configuration. Creates `quickscale.yml`, then executes it. |
 | Generate Django starter (manage.py, settings.py, urls.py, wsgi/asgi, templates, pyproject.toml) | IN | Starter uses `pyproject.toml` (Poetry). Generated projects include a `pyproject.toml` and `poetry.lock` by default; `requirements.txt` is not generated. |
-| `quickscale_core` package (monolithic, src layout) | IN | Treat `quickscale_core` as a regular monolithic package in MVP (explicit `__init__.py`). See Section: "Core package shape" in this file. |
+| `quickscale_core` package (monolithic, src layout) | IN | Treat `quickscale_core` as a regular monolithic package in the current implementation (explicit `__init__.py`). See Section: "Core package shape" in this file. |
 | `quickscale_core` embedding via git-subtree (manual documented workflow) | IN (manual) | Manual subtree commands are documented and supported; embedding is opt-in and advanced. |
 | CLI development commands (`up`, `down`, `shell`, `manage`, `logs`, `ps`) | IN (v0.59.0) | User-friendly wrappers for Docker/Django operations to improve developer experience. |
 | CLI module management commands (`update`, `push`) | IN (v0.62.0) | Module update/push via split branches. Module embedding now handled by `quickscale apply`. |
@@ -785,7 +771,7 @@ Other documents (README.md, roadmap.md, scaffolding.md, commercial.md) MUST refe
 | Module manifests (`module.yml`) with mutable/immutable config | IN (v0.71.0+) | **v0.71.0**: Each module includes `module.yml` declaring config options as mutable or immutable. `quickscale apply` updates settings.py for mutable changes. See [§Module Manifest Architecture](#module-manifest-architecture). |
 | `quickscale remove <module>` command | IN (v0.71.0+) | **v0.71.0**: Remove embedded modules with cleanup. Data loss warning required. Re-embed for new config. |
 | Settings inheritance from `quickscale_core` into generated project | OPTIONAL | Default generated project uses standalone `settings.py`. If user explicitly embeds `quickscale_core`, optional settings inheritance is allowed and documented. |
-| **PRODUCTION-READY FOUNDATIONS (Competitive Requirement)** | | **See [competitive_analysis.md §1-3](../overview/competitive_analysis.md#-critical-for-mvp-viability-must-have)** |
+| **PRODUCTION-READY FOUNDATIONS** | | **See [competitive_analysis.md](../overview/competitive_analysis.md)** |
 | Docker setup (Dockerfile + docker-compose.yml) | IN | Production-ready multi-stage Dockerfile + local dev docker-compose with PostgreSQL & Redis services. Match Cookiecutter quality. |
 | PostgreSQL configuration (dev + production) | IN | PostgreSQL only for all environments. `DATABASE_URL` is required in local settings; no SQLite fallback or compatibility mode. |
 | Environment-based configuration (.env + split settings) | IN | settings/base.py, settings/local.py, settings/production.py pattern. Secure SECRET_KEY loading from environment. |
@@ -799,10 +785,10 @@ Other documents (README.md, roadmap.md, scaffolding.md, commercial.md) MUST refe
 | **MODULES & DISTRIBUTION** |
 | `quickscale_modules/` (split branch distribution) | IN (v0.62.0+) | Modules distributed via git subtree split branches. Embed via `quickscale plan --add <name>` + `quickscale apply`. |
 | Themes (React default + HTML secondary option) | IN (v0.61.0+) | `showcase_react` and `showcase_html` ship as generator templates with one-time copy during apply. |
-| `quickscale_themes/` packaged themes | OUT (Post-MVP) | Themes as PyPI packages is Post-MVP. Current: generator templates only. |
+| `quickscale_themes/` packaged themes | NOT CURRENT | Themes ship today as generator templates only; treat package distribution as out of contract unless a later release documents it. |
 | YAML declarative configuration (`quickscale.yml`) | IN (v0.68.0+) | **v0.68.0**: Shipped as part of Plan/Apply system. `quickscale plan` creates `quickscale.yml`, `quickscale apply` executes it. Terraform-style workflow. See [§Plan/Apply Architecture](#planapply-architecture). |
 | State tracking (`.quickscale/state.yml`) | IN (v0.69.0+) | **v0.69.0**: Applied state tracking for incremental applies. Distinguishes desired state (`quickscale.yml`) from applied state (`.quickscale/state.yml`). |
-| PyPI / private-registry distribution for commercial modules | OUT (Post-MVP) | Commercial distribution is Post-MVP (see commercial.md). |
+| PyPI / private-registry distribution for commercial modules | NOT CURRENT | Commercial distribution is not part of the current shipped contract (see commercial.md for non-authoritative background). |
 
 **Notes:**
 - This table is authoritative for release planning
@@ -812,9 +798,9 @@ Other documents (README.md, roadmap.md, scaffolding.md, commercial.md) MUST refe
 ## Authoritative Policies
 
 **Settings Inheritance:**
-- ✅ MVP: Standalone `settings.py` (no automatic inheritance from quickscale_core)
+- ✅ Current generated projects: Standalone `settings.py` (no automatic inheritance from quickscale_core)
 - ✅ Optional: Manual inheritance after git subtree embed (advanced users)
-- ❌ NO automatic settings inheritance in MVP
+- ❌ NO automatic settings inheritance in generated projects
 
 **Packaging (All QuickScale Packages):**
 - ✅ Poetry package manager
@@ -845,7 +831,7 @@ Other documents (README.md, roadmap.md, scaffolding.md, commercial.md) MUST refe
 - `./scripts/lint.sh` - **Format and lint** - runs Ruff format + check across all packages (replaces Black + Flake8)
 - `./scripts/test_all.sh` - **Test all packages** - executes full test suite across quickscale_core, quickscale_cli, and modules
 - `./scripts/test_e2e.sh` - **End-to-end tests** - runs E2E tests with PostgreSQL container and browser automation (slow, for release validation)
-- `./scripts/publish.sh` - **Publish to PyPI** - automates package publishing workflow (Post-MVP for modules)
+- `./scripts/publish.sh` - **Publish to PyPI** - internal packaging helper; not part of the current module distribution contract
 - `./scripts/version_tool.sh` - **Version management** - bumps version numbers across all packages consistently
 - `./scripts/quickscale_legacy_symlink.sh` - **Legacy compatibility** - manages symlinks for legacy QuickScale installations
 
@@ -880,7 +866,7 @@ Other documents (README.md, roadmap.md, scaffolding.md, commercial.md) MUST refe
 - ✅ `quickscale remove <module>` - Remove embedded module
 - ✅ `quickscale push --module <name>` - Contribute module improvements
 
-**Post-MVP (Future):**
+**Not currently shipped:**
 - ❌ `quickscale validate` - YAML configuration validation (requires config system)
 - ❌ `quickscale generate` - Generate from config (requires config system)
 - 📋 `quickscale plan --add auth@v0.63.0` - Pin specific module versions
@@ -926,7 +912,7 @@ Other documents (README.md, roadmap.md, scaffolding.md, commercial.md) MUST refe
 
 ## Document Responsibilities
 
-- **decisions.md**: Technical decisions, MVP matrix, tie-breakers (authoritative)
+- **decisions.md**: Technical decisions, implementation surface matrix, tie-breakers (authoritative)
 - **CHANGELOG.md**: Canonical all-version release history index
 - **docs/releases/**: Official published release notes linked from GitHub tags and release PRs
 - **docs/technical/release_summary_template.md**: Template for official published release notes
@@ -934,7 +920,7 @@ Other documents (README.md, roadmap.md, scaffolding.md, commercial.md) MUST refe
 - **scaffolding.md**: Layout examples
 - **README.md**: Project overview, user guide, repo-level navigation
 - **package README.md files**: Package-local installation and responsibility summaries (informational only)
-- **commercial.md**: Commercial models (Post-MVP)
+- **commercial.md**: Commercial distribution background and constraints
 
 **Rule:** Update decisions.md FIRST when changing scope.
 
@@ -1008,23 +994,23 @@ Other documents (README.md, roadmap.md, scaffolding.md, commercial.md) MUST refe
 
 **Usage**: See [user_manual.md §2.1](./user_manual.md#21-end-to-end-e2e-tests) for running instructions.
 
-## Architecture (Post-MVP Vision)
+## Current Architecture Boundaries
 
-**Library-Style Backend Modules:**
-- ✅ Backend Modules: Reusable packages (auth, payments, billing, admin)
-- ✅ Themes: Starting point applications (customize for business needs)
-- ✅ Frontends: Directory-based presentation layer
-- ✅ Built on proven Django foundations (django-allauth, dj-stripe, etc.)
+**Library-Style Boundaries:**
+- ✅ Backend modules are reusable Django apps embedded into generated projects and updated through the current git-subtree workflow
+- ✅ Themes are starting points that users own after generation
+- ✅ Frontends remain directory-based presentation layers
+- ✅ Proven Django foundations stay preferred over custom abstractions
 
-**MVP Status:**
-- ✅ `quickscale_core`: Scaffolding, utilities
-- ✅ Directory-based frontends: Scaffolded templates
-- ❌ `quickscale_modules/*`: Post-MVP only
-- ❌ `quickscale_themes/*`: Post-MVP only
+**Current Shipped Surfaces:**
+- ✅ `quickscale_core`: scaffolding, templates, and shared generator/runtime support
+- ✅ Directory-based frontends: scaffolded templates and starter-theme assets
+- ✅ `quickscale_modules/*`: first-party module workspace inside the repository, with released modules documented per version
+- ❌ Independent package-registry distribution is not part of the current contract unless a release note and this file explicitly say so
 
 **See:** [scaffolding.md §2-3](./scaffolding.md#mvp-structure) for layouts
 
-### Module Boundaries (Post-MVP)
+### Module Boundaries
 
 **Admin Module (`quickscale_modules.admin`):**
 - ✅ Enhanced Django admin interface
@@ -1050,44 +1036,30 @@ class OrderProcessor:
         self.payment_service = payment_service or services.DefaultPaymentService()
 ```
 
-### Configuration (Post-MVP)
+### Configuration Boundaries
 
-**MVP:**
+**Current workflow:**
 - ✅ Standard Django `settings.py` generated from `quickscale.yml`
 - ✅ Declarative desired state in `quickscale.yml`
 - ✅ Applied state tracking in `.quickscale/state.yml`
 - ✅ Standalone generated projects after `quickscale apply`
 
-**Post-MVP (Illustrative - NOT Implemented):**
-```yaml
-# Example only - NOT used in MVP
-schema_version: 2
-project: {name: mystore, version: 0.57.0}
-theme: starter
-backend_extensions: myapp.extensions
-modules:
-  payments: {provider: stripe}
-  billing: {provider: stripe}
-frontend: {source: ./custom_frontend/, variant: default}
-```
-
-**CLI (Post-MVP Ideas):**
+**Not currently shipped:**
 - `quickscale validate` - Validate config
 - `quickscale generate` - Generate from config
-- ❌ NOT in MVP
+- ❌ Not part of the current command surface
 
 ### Distribution Strategy
 
-**MVP - Git Subtree:**
+**Current - Git Subtree:**
 - ✅ Primary distribution mechanism
 - ✅ CLI workflow: `quickscale plan myapp`, enter the generated directory, then run `quickscale apply`
 - ✅ Manual git subtree commands (documented)
 - ✅ No package registries, offline development
 
-**Post-MVP - PyPI:**
-- 📦 Optional for modules/themes only
-- 📦 NOT for core (stays git-based)
-- 📦 For commercial extensions, marketplace
+**Not part of the current contract:**
+- ❌ PyPI or private-registry distribution for modules/themes
+- ❌ Third-party registry or storefront workflows
 
 **Backward Compatibility:**
 - ❌ Intentionally breaking from legacy QuickScale
@@ -1112,7 +1084,7 @@ QuickScale uses a layered Django-native extension model. Each module declares wh
 
 See [docs/technical/module-extension.md](module-extension.md) for the full contract, per-module surface declarations, and rollout plan.
 
-**MVP Frontend:**
+**Current Frontend Boundaries:**
 - ✅ Optional `custom_frontend/` directory
 - ✅ Basic variant support
 - ✅ Standard Django templates
@@ -1122,30 +1094,11 @@ See [docs/technical/module-extension.md](module-extension.md) for the full contr
 
 ### Database Architecture
 
-**Standard Django Apps (Post-MVP):**
-- ✅ Each module is a Django app with `app_label`
-- ✅ Tables: `{app_label}_{model_name}` (Django default)
+**Current database rules:**
+- ✅ Embedded modules remain standard Django apps with `app_label`
+- ✅ Tables follow Django defaults (`{app_label}_{model_name}`)
 - ✅ Standard migrations handle dependencies
-- ✅ Proven at scale (Wagtail, Django CMS)
-
-```python
-# Post-MVP example
-class Transaction(models.Model):
-    amount = models.DecimalField(max_digits=10, decimal_places=2)
-    class Meta:
-        app_label = 'quickscale_payments'
-# Table: quickscale_payments_transaction
-```
-
-**INSTALLED_APPS (Post-MVP):**
-```python
-INSTALLED_APPS = [
-    'quickscale_core',
-    # 'quickscale_modules.auth',
-    # 'quickscale_modules.payments',
-    # 'quickscale_themes.starter',
-]
-```
+- ✅ Do not invent custom table-naming schemes to simulate a plugin system
 
 ## Operational Decisions
 
@@ -1166,10 +1119,10 @@ INSTALLED_APPS = [
 - Delivery tracking is recipient-granular. A multi-recipient send fans out into one tracked provider send/message ID per recipient delivery record.
 - Provider-visible tags/metadata are optional and limited to a tiny non-sensitive allowlist. Internal correlation identifiers stay local to QuickScale-owned records.
 
-**Post-MVP Only:**
-- ❌ PEP 420 namespace packages (Post-MVP: independent module distribution)
-- ❌ Hook/event system (deferred to Post-MVP)
-- ❌ Advanced configuration layers beyond the shipped `quickscale.yml` + `.quickscale/state.yml` workflow (deferred to Post-MVP)
+**Not part of the current contract:**
+- ❌ Independent namespace-package distribution for published modules/themes
+- ❌ Hook/event systems beyond the documented extension contract
+- ❌ Advanced configuration layers beyond the shipped `quickscale.yml` + `.quickscale/state.yml` workflow
 
 ## Prohibitions (Critical - DO NOT)
 
@@ -1192,20 +1145,20 @@ INSTALLED_APPS = [
 - ❌ HTTP APIs from modules (expose Python service layer only)
 - ❌ Tight coupling themes to modules
 
-**Configuration (Post-MVP):**
+**Configuration:**
 - ❌ Execute code in config files (pure data YAML only)
 - ❌ Deep nesting in config syntax (keep flat and readable)
 
 ## Package Structure
 
-**PEP 420 Namespace Packages (Post-MVP):**
+**Namespace Packaging Notes (maintainer reference, not current generated-project contract):**
 - ✅ `quickscale_modules/`, `quickscale_themes/`: PEP 420 namespaces (no `__init__.py` at root)
 - ✅ `quickscale_core`: Regular package (has `__init__.py`)
 - ✅ Use `find_namespace_packages()` in `pyproject.toml`
 
 **See:** [scaffolding.md §6](./scaffolding.md#6-naming-import-matrix-summary) for complete matrix
 
-**Migration Checklist (MVP → Post-MVP):**
+**Namespace Packaging Checklist:**
 1. ✅ Verify editable install works
 2. ❌ Delete namespace `__init__.py` files
 3. ✅ Update to `find_namespace_packages()`
