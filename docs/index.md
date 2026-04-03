@@ -33,6 +33,10 @@
   - [Testing Guide](contrib/testing.md) - Test generation
   - [Debug Guide](contrib/debug.md) - Debugging and root cause analysis
 
+- **Planning**
+  - [Analytics Provider Comparison](planning/analytics-provider-comparison.md) - Provider evaluation for v0.87.0 analytics module
+  - [Email Sender Comparison](planning/email-sender-comparison.md) - Provider evaluation for v0.78.0 notifications module
+
 - **Deployment**
   - [Railway Deployment](deployment/railway.md) - Deploy to Railway platform
 
