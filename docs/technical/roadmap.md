@@ -1,7 +1,7 @@
 # QuickScale Development Roadmap
 
 > **You are here**: [QuickScale](../../START_HERE.md) → [Technical](../index.md) → **Roadmap** (Timeline & Tasks)
-> **Related docs**: [Decisions](decisions.md) | [Scaffolding](scaffolding.md) | [Changelog](../../CHANGELOG.md) | [Release Archive](release-archive.md) | [Start Here](../../START_HERE.md)
+> **Related docs**: [Decisions](decisions.md) | [Scaffolding](scaffolding.md) | [Changelog](../../CHANGELOG.md) | [Release Summary Template](release_summary_template.md) | [Start Here](../../START_HERE.md)
 
 ## General Introduction
 
@@ -53,7 +53,7 @@ QuickScale follows an evolution-aligned roadmap that starts as a personal toolki
 
 2. **Phase 2: Notifications, Analytics, Vertical Modules & Theme Expansion (Post-MVP)** 🚧 _In Progress_
   - ✅ Notifications module (v0.78.0) - transactional email foundation with app-owned rendering, recipient-granular tracking, and Anymail-backed Resend delivery
-  - 🚧 Social & Link Tree module (v0.79.0) - implementation archived; release closeout pending
+  - 🚧 Social & Link Tree module (v0.79.0) - implementation complete; official release note pending tag
   - 📋 Analytics module (v0.80.0) - PostHog-backed website analytics with React + HTML theme injection and cross-module conversion hooks
   - 📋 Listings Theme (v0.81.0) - React frontend for property listings (sell/rent)
   - 📋 CRM Theme (v0.82.0) - React frontend for CRM module
@@ -85,7 +85,7 @@ QuickScale follows an evolution-aligned roadmap that starts as a personal toolki
 - **v0.76.0:** Storage Module (cloud file hosting + CDN-ready media infrastructure) 🎯
 - **v0.77.0:** Backups module (private local + optional private remote workflows, guarded BackupPolicy-admin local restore plus CLI restore) ✅
 - **v0.78.0:** Notifications Module (transactional email foundation; app-owned rendering, recipient-granular tracking, and Anymail-backed Resend delivery) ✅
-- **v0.79.0:** Social & Link Tree module (implementation archived; reader-facing release summary still pending) 🚧
+- **v0.79.0:** Social & Link Tree module (release closeout in progress; official release note pending tag) 🚧
 - **v0.80.0:** Analytics Module (PostHog website analytics; React + HTML theme injection; cross-module conversion hooks) 🎯
 - **v0.81.0:** Real Estate MVP (static + listings + social links) 🎯
 - **v0.84.0:** SaaS Feature Parity (auth, billing, teams, notifications foundation) 🎯
@@ -95,7 +95,7 @@ QuickScale follows an evolution-aligned roadmap that starts as a personal toolki
 
 **Status:**
 - **Current Status:** the published release remains v0.78.0, while main branch now carries the v0.79.0 social-module implementation and is in release-closeout verification
-- **In Progress:** v0.79.0 release closeout, reader-facing summary, and release preparation
+- **In Progress:** v0.79.0 release closeout, official release note preparation, and release preparation
 - **Next Planned Scope After v0.79.0:** v0.80.0 - Analytics module (PostHog website analytics + React/HTML theme injection)
 - **Next Milestone:** v0.80.0 - Analytics Module
 - **Plan/Apply System:** v0.68.0-v0.71.0 - Terraform-style configuration ✅ Complete
@@ -106,7 +106,7 @@ QuickScale follows an evolution-aligned roadmap that starts as a personal toolki
 **Target Audience:** Development team, project managers, stakeholders tracking progress
 
 - **Completed Releases:** See [CHANGELOG.md](../../CHANGELOG.md)
-- **Release doc layout:** [CHANGELOG.md](../../CHANGELOG.md) is the canonical history index; [docs/releases/](../releases/) holds the default public summaries; [docs/releases-archive/](../releases-archive/) is reserved for exception-only maintainer records and legacy archived docs
+- **Release doc layout:** [CHANGELOG.md](../../CHANGELOG.md) is the canonical history index; for each published release, `docs/releases/release-vX.XX.X.md` is the single official release note linked from the GitHub tag and release PR; the roadmap tracks active and unreleased release status until that note exists
 - **Technical SSOT**: [decisions.md](./decisions.md)
 - **Scaffolding SSOT**: [scaffolding.md](./scaffolding.md)
 - **Strategic Vision**: [quickscale.md](../overview/quickscale.md)
@@ -119,7 +119,7 @@ List of upcoming releases with detailed implementation tasks:
 
 ---
 
-After release closeout, keep only a concise pointer in the roadmap. Put canonical history in [CHANGELOG.md](../../CHANGELOG.md), use [docs/releases/](../releases/) for the default reader-facing summary, and use [docs/releases-archive/](../releases-archive/) only when an exceptional maintainer record is needed.
+After release closeout, keep only a concise pointer in the roadmap. Put canonical history in [CHANGELOG.md](../../CHANGELOG.md), and for published releases add `docs/releases/release-vX.XX.X.md` as the single official release note linked from the GitHub tag and release PR. Keep unreleased closeout status in the roadmap until that release note exists.
 
 ---
 
@@ -140,12 +140,12 @@ This release completed QuickScale's shared media-storage milestone: the storage 
 
 ### v0.77.0: `quickscale_modules.backups` - Database Backup & Restore Module
 
-**Status**: ✅ Archived retrospectively on 2026-03-31; hardening continuation archived on 2026-04-01
+**Status**: ✅ Internal baseline recorded; no tagged public release note
 
-This completed release now lives outside the active roadmap. The original MVP closeout scope and the detailed PostgreSQL 18 / guarded BackupPolicy-admin restore hardening continuation now live in an exception-only maintainer implementation archive.
+This internal main-branch baseline now lives outside the active roadmap. The canonical history entry is in [CHANGELOG.md](../../CHANGELOG.md). Because no tagged GitHub release was cut for v0.77.0, there is no official `docs/releases/` note for this version.
 
-**Release artifacts**:
-- [Maintainer implementation archive (exception)](../releases-archive/release-v0.77.0-implementation.md)
+**Release record**:
+- [Canonical changelog index](../../CHANGELOG.md)
 
 **Deferred follow-up**:
 - broader database + media + environment portability workflows moved to [v0.88.0](#v0880-disaster-recovery--environment-migration-workflows)
@@ -169,15 +169,15 @@ This release starts QuickScale's post-MVP expansion line and ships the notificat
 
 ### v0.79.0: `quickscale_modules.social` - Social & Link Tree Module
 
-**Status**: 🚧 Maintainer implementation archive exists; published release still pending
+**Status**: 🚧 Release closeout in progress; tagged public release note still pending
 
-This implemented release scope now lives outside the active roadmap. The detailed v0.79.0 checklist, support matrix, validation notes, and deferred items now live in an exception-only maintainer implementation archive, while the published release metadata remains at v0.78.0 until the v0.79.0 reader-facing summary and release cut are completed.
+This implemented release scope remains in the roadmap until the tagged release is cut. The official release note will be created in `docs/releases/release-v0.79.0.md` and linked from the GitHub tag and release PR when publication is complete. Until then, the published release metadata remains at v0.78.0.
 
-**Release artifacts**:
-- [Maintainer implementation archive (exception)](../releases-archive/release-v0.79.0-implementation.md)
+**Planned release artifact**:
+- official public release note in `docs/releases/` once the tag and release PR are cut
 
 **Current closeout scope**:
-- publish the reader-facing v0.79.0 release summary and update release metadata when the release is cut
+- publish the official v0.79.0 release note in `docs/releases/` and update release metadata when the release is cut
 - keep end-to-end `quickscale plan` → `quickscale apply` → React public-page coverage deferred to [v0.87.0](#v0870-module-workflow-validation--real-world-testing)
 - keep provider auth or write APIs, automated sync, and HTML-theme polish deferred beyond v0.79.0
 - track analytics foundations and public-page instrumentation follow-up under v0.80.0 (Analytics Module)

@@ -3,6 +3,8 @@
 **Release Date:** 2026-03-21
 **Status:** ✅ Released
 
+**Release Artifact:** This document is the official public release note linked from the GitHub tag and release PR for v0.76.0.
+
 ## Summary
 
 This release completes QuickScale's shared media-storage milestone and makes storage-backed projects easier to reason about across local development and S3-compatible deployments. The storage contract now centers on `public_base_url` for canonical public media URLs, removes the older `custom_domain` path, and aligns blog media handling so uploads, featured images, avatars, and thumbnails all resolve through the same helper-built URL rules.

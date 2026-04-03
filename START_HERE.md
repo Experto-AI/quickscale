@@ -12,7 +12,7 @@ QuickScale = **Django Generator** + **Reusable Modules** + **Production Foundati
 **Output**: Complete Django project with Docker, PostgreSQL, testing, CI/CD, and security best practices
 **Current Distribution**: Reusable modules are installed via git subtree during MVP; PyPI distribution remains Post-MVP
 
-**Current Status**: Released metadata and the main branch are aligned at v0.78.0; notifications shipped and the post-MVP expansion line is now active
+**Current Status**: The current published metadata remains v0.78.0; main branch also carries the unreleased v0.79.0 social-module implementation, and the post-MVP expansion line is now active
 **Target Audience**: Solo developers and development agencies building client projects
 
 ---
@@ -197,8 +197,8 @@ Detailed guides for specific stages:
 - [overview/packages.md](./docs/overview/packages.md) - PyPI naming
 
 **Release History**:
-- [docs/releases/](./docs/releases/) - reader-facing release summaries for recent releases when published
-- [release-archive.md](./docs/technical/release-archive.md) - archived implementation/review index for historical releases
+- [docs/releases/](./docs/releases/) - official public release notes linked from GitHub tags and release PRs
+- [release_summary_template.md](./docs/technical/release_summary_template.md) - template for the single public release-note workflow
 
 ---
 
@@ -223,13 +223,12 @@ See: [GLOSSARY.md - MVP](./GLOSSARY.md#mvp-minimum-viable-product) | [GLOSSARY.m
 See: [deployment/railway.md](./docs/deployment/railway.md)
 
 ### "Where are the release notes?"
-Recent reader-facing summaries live in [docs/releases/](./docs/releases/) when published.
-Historical implementation/review records are indexed in [release-archive.md](./docs/technical/release-archive.md) and stored in [docs/releases-archive/](./docs/releases-archive/).
-Some older review files also remain in [docs/releases/](./docs/releases/) as legacy placements.
-Current release status and unfinished scope remain in [roadmap.md](./docs/technical/roadmap.md).
+Published release notes live in [docs/releases/](./docs/releases/). Each file there is the official public release note linked from the GitHub tag and release PR.
+[CHANGELOG.md](./CHANGELOG.md) remains the canonical all-version history index.
+Active or unreleased release status remains in [roadmap.md](./docs/technical/roadmap.md) until a tagged public release note exists.
 
 ### "What modules are available?"
-Current first-party modules include **auth, backups, blog, crm, forms, listings, notifications, and storage**. The current published metadata is v0.78.0, which starts the post-MVP expansion line. The monorepo also contains **billing** and **teams** directories as planned placeholders for follow-on modules.
+Current first-party modules on the main branch include **auth, backups, blog, crm, forms, listings, notifications, social, and storage**. The current published metadata remains v0.78.0, while main also carries the unreleased v0.79.0 social implementation. The monorepo also contains **billing** and **teams** directories as planned placeholders for follow-on modules.
 See: [quickscale_modules/](./quickscale_modules/) for the current package list and per-module README files.
 
 ### "Can I contribute?"

@@ -66,11 +66,11 @@ TARGET AUDIENCE: Maintainers, core contributors, community package developers, C
 - ✅ Update decisions.md FIRST, then other docs
 - ✅ Contributing guides: `docs/contrib/*.md`
 - ✅ `CHANGELOG.md` is the canonical release history index for all versions
-- ✅ Release summaries: `docs/releases/release-vX.XX.X.md` are the default public artifact for published releases
-- ✅ Public release summaries stay reader-facing and outcome-oriented; keep implementation checklists and maintainer-only validation detail in archive docs when needed
-- ✅ Detailed implementation/review docs: `docs/releases-archive/release-vX.XX.X-{implementation,review}.md` are optional exception-only maintainer records
-- ✅ Use archive docs only for internal baselines, retrospective records, formal reviews, or unreleased work
-- ✅ Legacy release-review files in `docs/releases-archive/` and historical snapshots should be preserved as historical exceptions rather than the current default workflow
+- ✅ Published release notes: `docs/releases/release-vX.XX.X.md` are the single official release document linked from the GitHub tag and release PR
+- ✅ Use `docs/technical/release_summary_template.md` for every published release note
+- ✅ Public release notes stay reader-facing and outcome-oriented; keep maintainer-only closeout detail in the release PR or active roadmap section instead of a second repository doc
+- ✅ Unreleased or internal-only versions stay in `roadmap.md` and `CHANGELOG.md` until a tagged public release exists
+- ❌ Do not maintain separate implementation/review release docs or release-archive trees
 - ❌ Never contradict decisions.md elsewhere
 
 **Package README Policy:**
@@ -924,9 +924,9 @@ Other documents (README.md, roadmap.md, scaffolding.md, commercial.md) MUST refe
 
 - **decisions.md**: Technical decisions, MVP matrix, tie-breakers (authoritative)
 - **CHANGELOG.md**: Canonical all-version release history index
-- **docs/releases/**: Reader-facing release summaries (default public artifact)
-- **docs/releases-archive/**: Exception-only maintainer records and legacy archived release docs
-- **roadmap.md**: Timeline, phases, tasks
+- **docs/releases/**: Official published release notes linked from GitHub tags and release PRs
+- **docs/technical/release_summary_template.md**: Template for official published release notes
+- **roadmap.md**: Timeline, phases, tasks, and active or unreleased release closeout status
 - **scaffolding.md**: Layout examples
 - **README.md**: Project overview, user guide, repo-level navigation
 - **package README.md files**: Package-local installation and responsibility summaries (informational only)

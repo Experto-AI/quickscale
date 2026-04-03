@@ -1,21 +1,22 @@
 # Release Summary Template
 
 <!--
-release_summary_template.md - Standard Public Release Summary Template
+release_summary_template.md - Standard Public Release Note Template
 
-PURPOSE: Provides a consistent structure for reader-facing QuickScale release summaries in docs/releases/
+PURPOSE: Provides a consistent structure for the official QuickScale release notes in docs/releases/
 
-USAGE: Copy this template when publishing a new public release summary. Fill in the sections with
-       release-specific details and save as release-v[VERSION].md in docs/releases/.
+USAGE: Copy this template when publishing a tagged QuickScale release note. Fill in the sections with
+       release-specific details and save as release-v[VERSION].md in docs/releases/. Link this file
+       from the GitHub tag and release PR.
 
 TARGET AUDIENCE: Users, evaluators, contributors, and maintainers scanning public release history
 -->
 
 ## Overview
 
-This document provides the standard template for public QuickScale release summaries. Use it as the default published release artifact alongside the canonical version entry in `CHANGELOG.md`.
+This document provides the standard template for official public QuickScale release notes. Use it alongside the canonical version entry in `CHANGELOG.md`. Each published version gets a single release note in `docs/releases/`.
 
-**Optional archive companions**: Create `docs/releases-archive/release-v[VERSION]-implementation.md` or `docs/releases-archive/release-v[VERSION]-review.md` only when the release needs exceptional maintainer-only detail such as an internal baseline, retrospective record, formal review artifact, or unpublished closeout snapshot.
+**Publication rule**: Create a file in `docs/releases/` only when it is the release note that will be linked from the GitHub tag and release PR. If a version is still unreleased or internal-only, keep its status in `roadmap.md` and `CHANGELOG.md` until publication.
 
 ## Template Structure
 
@@ -83,8 +84,8 @@ This document provides the standard template for public QuickScale release summa
 
 Use this template for:
 - every published QuickScale release that should have a public summary
-- milestone releases where readers need a concise explanation beyond the changelog line
-- retrospective publication of a summary for a release that previously only had maintainer archive records
+- the single repo release note referenced by the GitHub tag and release PR
+- retrospective publication of a public note for an older tagged release that lacks one
 
 ### Writing Guidelines
 
@@ -92,8 +93,9 @@ Use this template for:
 2. Focus on what shipped and what changed for users or maintainers.
 3. Link to `roadmap.md`, `decisions.md`, and `CHANGELOG.md` instead of duplicating deep implementation detail.
 4. Mention breaking changes and migration steps only when they materially affect adopters.
-5. Do not promise archive implementation/review documents unless they actually exist.
-6. Do not include completed-task checklists, maintainer-only support matrices, or raw validation dumps in the public summary; move that detail to an exception archive record when needed.
+5. Treat this file as the single official release artifact linked from the GitHub tag and release PR.
+6. Do not include completed-task checklists, maintainer-only support matrices, or raw validation dumps in the public summary.
+7. Keep extra closeout detail in the release PR or in the roadmap while the release is still unpublished instead of creating a second repository document.
 
 ### File Naming Convention
 
@@ -107,6 +109,4 @@ Store in: `docs/releases/`
 - [CHANGELOG.md](../../CHANGELOG.md) - Canonical all-version release history index
 - [Roadmap](./roadmap.md) - Active and upcoming release scope
 - [Technical Decisions](./decisions.md) - Authoritative release-policy and architecture rules
-- [Release Archive](./release-archive.md) - Exception-only maintainer archive policy
-- [Release Implementation Template](./release_implementation_template.md) - Optional archive template for detailed maintainer implementation notes
-- [Release Review Template](./release-review-template.md) - Optional archive template for formal quality reviews
+- [Release Notes](../releases/) - Published QuickScale release notes

@@ -41,8 +41,8 @@
   - [Railway Deployment](deployment/railway.md) - Deploy to Railway platform
 
 - **Releases**
-  - [Release Summaries](releases/) - Default reader-facing release notes for published releases
-  - [Release Archive Policy & Legacy Notes](technical/release-archive.md) - Exception-only maintainer records and guidance for legacy archive files
+  - [Release Notes](releases/) - Official tagged GitHub release notes and release-PR artifacts for published releases
+  - [Release Summary Template](technical/release_summary_template.md) - Template for the single public release-note workflow
 
 ---
 
