@@ -1,4 +1,8 @@
-# Sprint Plan: Real Estate Agency Focus (v0.75.0 - v0.79.0)
+# Sprint Plan: Real Estate Agency Focus (Historical Planning Snapshot)
+
+> **Status:** Historical planning artifact kept for context.
+> The release sequence in this document was drafted before later roadmap changes and before the v0.79.0 social release was published.
+> Use [roadmap.md](../technical/roadmap.md) as the current source for actual release order and status, and use [release-v0.79.0.md](../releases/release-v0.79.0.md) for the official social-module release summary.
 
 ## Sprint Goal
 Prioritize and complete modules essential for building a production-ready Real Estate Agency website using QuickScale with React frontend, following the agency's phased launch strategy.
@@ -9,7 +13,9 @@ User needs to create a Real Estate Agency web page using QuickScale. The sprint 
 ## Duration
 Estimated: 12-18 weeks (based on module complexity and dependencies)
 
-## Current State (v0.74.0)
+## Planning Baseline
+
+This file preserves an earlier prioritization model for the real-estate use case. The tables below are useful as scenario-planning context, but they are not the authoritative current release schedule.
 
 **✅ Completed:**
 - React Default Theme (showcase_react) with shadcn/ui
@@ -18,7 +24,7 @@ Estimated: 12-18 weeks (based on module complexity and dependencies)
 - CRM Module (v0.73.0) - API-only backend
 - Plan/Apply System (v0.68.0-v0.71.0) - Terraform-style configuration
 
-**📋 Next Release:** v0.75.0 - Listings Theme (React frontend for property listings)
+**Superseded planning assumption:** this document originally expected Listings Theme first and Social earlier in the sequence. The actual published roadmap later moved social to [v0.79.0](../releases/release-v0.79.0.md), while Listings Theme, CRM Theme, Billing, and Teams remain later roadmap items.
 
 ## Real Estate Agency Phased Launch Strategy
 

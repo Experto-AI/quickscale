@@ -2,6 +2,7 @@
 
 `CHANGELOG.md` is the canonical QuickScale release history index. For published releases, pair each version entry with a single official release note in `docs/releases/` linked from the GitHub tag and release PR. Use `docs/technical/roadmap.md` for active or unreleased release status. Entries are version-ordered; listed dates reflect the recorded artifact date when available.
 
+- v0.79.0 — 2026-04-03 — Social & Link Tree Module (curated social links and embeds, backend-owned YouTube/TikTok preview metadata, managed `/_quickscale/social/` integration endpoints, and fresh `showcase_react` public pages for new project generations)
 - v0.78.0 — 2026-03-30 — Notifications Module (first post-MVP expansion release; transactional email foundation, Anymail-backed Resend delivery, recipient-granular tracking, and signed delivery webhooks)
 - v0.77.0 — internal main-branch baseline — Backups Module (private database backups, optional private remote offload, guarded CLI restore, and scheduler-ready command hooks; no tagged public release note was published for this internal baseline)
 - v0.76.0 — 2026-03-21 — Storage Module (cloud file hosting, media storage adapters, CDN-ready media infrastructure)

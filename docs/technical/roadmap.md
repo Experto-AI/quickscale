@@ -53,7 +53,7 @@ QuickScale follows an evolution-aligned roadmap that starts as a personal toolki
 
 2. **Phase 2: Notifications, Analytics, Vertical Modules & Theme Expansion (Post-MVP)** 🚧 _In Progress_
   - ✅ Notifications module (v0.78.0) - transactional email foundation with app-owned rendering, recipient-granular tracking, and Anymail-backed Resend delivery
-  - 🚧 Social & Link Tree module (v0.79.0) - implementation complete; official release note pending tag
+  - ✅ Social & Link Tree module (v0.79.0) - curated social links and embeds with backend-owned preview metadata and React public pages
   - 📋 Analytics module (v0.80.0) - PostHog-backed website analytics with React + HTML theme injection and cross-module conversion hooks
   - 📋 Listings Theme (v0.81.0) - React frontend for property listings (sell/rent)
   - 📋 CRM Theme (v0.82.0) - React frontend for CRM module
@@ -82,10 +82,10 @@ QuickScale follows an evolution-aligned roadmap that starts as a personal toolki
 - **v0.72.0:** Plan/Apply Cleanup (remove legacy commands) ✅
 - **v0.74.0:** React Default Theme (React + shadcn/ui) ✅
 - **v0.75.0:** Forms Module (generic form builder with DRF API, spam protection, GDPR anonymization) ✅
-- **v0.76.0:** Storage Module (cloud file hosting + CDN-ready media infrastructure) 🎯
+- **v0.76.0:** Storage Module (cloud file hosting + CDN-ready media infrastructure) ✅
 - **v0.77.0:** Backups module (private local + optional private remote workflows, guarded BackupPolicy-admin local restore plus CLI restore) ✅
 - **v0.78.0:** Notifications Module (transactional email foundation; app-owned rendering, recipient-granular tracking, and Anymail-backed Resend delivery) ✅
-- **v0.79.0:** Social & Link Tree module (release closeout in progress; official release note pending tag) 🚧
+- **v0.79.0:** Social & Link Tree module (curated social links and embeds, backend-owned preview metadata, and React public pages) ✅
 - **v0.80.0:** Analytics Module (PostHog website analytics; React + HTML theme injection; cross-module conversion hooks) 🎯
 - **v0.81.0:** Real Estate MVP (static + listings + social links) 🎯
 - **v0.84.0:** SaaS Feature Parity (auth, billing, teams, notifications foundation) 🎯
@@ -94,8 +94,8 @@ QuickScale follows an evolution-aligned roadmap that starts as a personal toolki
 - **v1.0.0+:** Community platform (if demand exists)
 
 **Status:**
-- **Current Status:** the published release remains v0.78.0, while main branch now carries the v0.79.0 social-module implementation and is in release-closeout verification
-- **In Progress:** v0.79.0 release closeout, official release note preparation, and release preparation
+- **Current Status:** v0.79.0 is now the published release, and the next active roadmap scope is v0.80.0 analytics
+- **In Progress:** v0.80.0 planning and implementation prep for PostHog-backed website analytics
 - **Next Planned Scope After v0.79.0:** v0.80.0 - Analytics module (PostHog website analytics + React/HTML theme injection)
 - **Next Milestone:** v0.80.0 - Analytics Module
 - **Plan/Apply System:** v0.68.0-v0.71.0 - Terraform-style configuration ✅ Complete
@@ -127,14 +127,7 @@ After release closeout, keep only a concise pointer in the roadmap. Put canonica
 
 **Status**: ✅ Released and archived on 2026-03-21
 
-This release completed QuickScale's shared media-storage milestone: the storage contract now uses `public_base_url` as the single public media URL source, the deprecated `custom_domain` path was removed from module/CLI/planner behavior, and blog uploads plus thumbnails resolve through canonical helper-built URLs.
-
-**Release artifacts**:
-- [Reader-facing summary](../releases/release-v0.76.0.md)
-
-**Deferred follow-up**:
-- deeper storage upload/write/read integration coverage moved to [v0.87.0](#v0870-module-workflow-validation--real-world-testing)
-- Plan → Apply → Blog publish E2E workflow validation with CDN-backed media moved to [v0.87.0](#v0870-module-workflow-validation--real-world-testing)
+Archived release record: see [Reader-facing summary](../releases/release-v0.76.0.md) and [CHANGELOG.md](../../CHANGELOG.md). Remaining storage workflow validation stays tracked under [v0.87.0](#v0870-module-workflow-validation--real-world-testing).
 
 ---
 
@@ -142,13 +135,7 @@ This release completed QuickScale's shared media-storage milestone: the storage 
 
 **Status**: ✅ Internal baseline recorded; no tagged public release note
 
-This internal main-branch baseline now lives outside the active roadmap. The canonical history entry is in [CHANGELOG.md](../../CHANGELOG.md). Because no tagged GitHub release was cut for v0.77.0, there is no official `docs/releases/` note for this version.
-
-**Release record**:
-- [Canonical changelog index](../../CHANGELOG.md)
-
-**Deferred follow-up**:
-- broader database + media + environment portability workflows moved to [v0.88.0](#v0880-disaster-recovery--environment-migration-workflows)
+Archived release record: see [CHANGELOG.md](../../CHANGELOG.md). Broader database, media, and environment portability work stays tracked under [v0.88.0](#v0880-disaster-recovery--environment-migration-workflows).
 
 ---
 
@@ -156,31 +143,15 @@ This internal main-branch baseline now lives outside the active roadmap. The can
 
 **Status**: ✅ Released on 2026-03-30
 
-This release starts QuickScale's post-MVP expansion line and ships the notifications module as the new transactional-email foundation. Generated projects now have an opinionated delivery path centered on a read-only operational settings snapshot backed by Django settings and environment variables, app-owned email rendering, recipient-granular delivery tracking, Django email compatibility with the Anymail Resend backend, and signed webhook ingestion for delivery events.
-
-**Release artifacts**:
-- [Reader-facing summary](../releases/release-v0.78.0.md)
-
-**Deferred follow-up**:
-- inbound or reply workflows, provider-hosted templates, and richer broadcast/newsletter tooling remain deferred to later post-MVP releases
-- multi-provider failover and shared async worker extraction remain deferred beyond v0.78.0
+Archived release record: see [Reader-facing summary](../releases/release-v0.78.0.md) and [CHANGELOG.md](../../CHANGELOG.md). Later notifications expansion remains deferred to future post-MVP releases.
 
 ---
 
 ### v0.79.0: `quickscale_modules.social` - Social & Link Tree Module
 
-**Status**: 🚧 Release closeout in progress; tagged public release note still pending
+**Status**: ✅ Released on 2026-04-03
 
-This implemented release scope remains in the roadmap until the tagged release is cut. The official release note will be created in `docs/releases/release-v0.79.0.md` and linked from the GitHub tag and release PR when publication is complete. Until then, the published release metadata remains at v0.78.0.
-
-**Planned release artifact**:
-- official public release note in `docs/releases/` once the tag and release PR are cut
-
-**Current closeout scope**:
-- publish the official v0.79.0 release note in `docs/releases/` and update release metadata when the release is cut
-- keep end-to-end `quickscale plan` → `quickscale apply` → React public-page coverage deferred to [v0.87.0](#v0870-module-workflow-validation--real-world-testing)
-- keep provider auth or write APIs, automated sync, and HTML-theme polish deferred beyond v0.79.0
-- track analytics foundations and public-page instrumentation follow-up under v0.80.0 (Analytics Module)
+Archived release record: see [Reader-facing summary](../releases/release-v0.79.0.md) and [CHANGELOG.md](../../CHANGELOG.md). End-to-end `quickscale plan` → `quickscale apply` → React public-page validation stays tracked under [v0.87.0](#v0870-module-workflow-validation--real-world-testing); provider auth or write APIs, automated sync, and HTML-theme polish remain deferred beyond v0.79.0.
 
 ---
 
