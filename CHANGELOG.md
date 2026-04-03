@@ -1,9 +1,9 @@
 # Changelog
 
-`CHANGELOG.md` is the canonical QuickScale release history index. Use `docs/releases/` for the default reader-facing summary when a public release note exists, `docs/releases-archive/` only for exception-only maintainer records, and `docs/technical/roadmap.md` for active release status. Entries are version-ordered; listed dates reflect the recorded artifact date when available.
+`CHANGELOG.md` is the canonical QuickScale release history index. For published releases, pair each version entry with a single official release note in `docs/releases/` linked from the GitHub tag and release PR. Use `docs/technical/roadmap.md` for active or unreleased release status. Entries are version-ordered; listed dates reflect the recorded artifact date when available.
 
 - v0.78.0 — 2026-03-30 — Notifications Module (first post-MVP expansion release; transactional email foundation, Anymail-backed Resend delivery, recipient-granular tracking, and signed delivery webhooks)
-- v0.77.0 — internal main-branch baseline — Backups Module (private database backups, optional private remote offload, guarded CLI restore, and scheduler-ready command hooks; no separate published release artifact before v0.78.0)
+- v0.77.0 — internal main-branch baseline — Backups Module (private database backups, optional private remote offload, guarded CLI restore, and scheduler-ready command hooks; no tagged public release note was published for this internal baseline)
 - v0.76.0 — 2026-03-21 — Storage Module (cloud file hosting, media storage adapters, CDN-ready media infrastructure)
 - v0.75.0 — 2026-02-23 — Forms Module (generic customizable form builder with admin, DRF API, spam protection, GDPR anonymization, and React mount point)
 - v0.74.0 — 2026-02-05 — React Default Theme (showcase_react theme with Vite, TypeScript, TanStack Query, and Zustand)

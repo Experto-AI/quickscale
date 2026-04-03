@@ -267,8 +267,7 @@ quickscale/
 ├── docs/                     # Documentation
 │   ├── technical/            # Technical specs
 │   ├── contrib/              # Contributing guides
-│   ├── releases/             # Reader-facing release summaries (when published)
-│   └── releases-archive/     # Detailed implementation/review artifacts
+│   └── releases/             # Official tagged GitHub release notes
 ├── scripts/                  # Helper scripts
 │   ├── bootstrap.sh          # Development setup
 │   ├── test_unit.sh          # Run unit and integration tests

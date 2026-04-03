@@ -3,19 +3,20 @@
 **Release Date:** 2026-03-30
 **Status:** ✅ Released
 
+**Release Artifact:** This document is the official public release note linked from the GitHub tag and release PR for v0.78.0.
+
 ## Summary
 
 This release ships **`quickscale_modules.notifications`** and starts QuickScale's post-MVP expansion release line. The new module provides a transactional email foundation built around app-owned template rendering, a read-only operational settings snapshot backed by generated Django settings and environment variables, recipient-granular delivery tracking, Django email compatibility with the Anymail Resend backend, signed replay-safe webhook ingestion for delivery events, and generated-project wiring through QuickScale's planner and apply flows.
 
-**Related docs:** [Roadmap](../technical/roadmap.md) | [Technical Decisions](../technical/decisions.md) | [Release Archive](../technical/release-archive.md)
+**Related docs:** [Changelog](../../CHANGELOG.md) | [Roadmap](../technical/roadmap.md) | [Technical Decisions](../technical/decisions.md)
 
-## Completed Tasks
+## Highlights
 
-- [x] Added the `quickscale_modules.notifications` package as QuickScale's first post-MVP expansion module.
-- [x] Standardized the initial delivery path around Django email compatibility with the Anymail Resend backend.
-- [x] Added app-owned email rendering, context validation, recipient-granular delivery tracking, and signed webhook ingestion.
-- [x] Kept notifications configuration authoritative in generated Django settings and environment variables, with the database snapshot limited to read-only operator visibility.
-- [x] Wired notifications through planner or apply configuration, generated settings, `.env.example` synchronization, and forms submission delivery.
+- Introduced `quickscale_modules.notifications` as QuickScale's first post-MVP expansion module.
+- Standardized transactional-email delivery around Django email compatibility with the Anymail Resend backend.
+- Added app-owned rendering, recipient-granular delivery tracking, and signed webhook ingestion for delivery events.
+- Wired notifications through planner or apply configuration, generated settings, `.env.example`, and forms submission delivery while keeping runtime configuration authoritative in generated settings and environment variables.
 
 ## What's New
 
