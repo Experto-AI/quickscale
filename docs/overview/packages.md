@@ -45,7 +45,7 @@ P2 — Differentiation & themes (polish and verticals)
  - `quickscale-theme-bulma` — Bulma CSS theme (existing styling option)
 
 P3 — Integrations & tooling (lower priority / optional)
- - `quickscale-module-analytics` — Sentry, usage dashboards, basic analytics
+- `quickscale-module-analytics` — website analytics integrations, consent-safe instrumentation, and later product analytics hooks
  - `quickscale-module-payments` — payment helpers (non-Stripe or common helpers)
  - `quickscale-module-sendgrid` — SendGrid email integration helper
  - `quickscale-module-sentry` — Sentry scaffolding and integration examples

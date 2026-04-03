@@ -59,11 +59,13 @@ QuickScale follows an evolution-aligned roadmap that starts as a personal toolki
   - 📋 Billing module (v0.82.0) - Stripe integration
   - 📋 Teams module (v0.83.0) - multi-tenancy
 
-3. **Phase 3: Secondary Theme & Cross-Cutting Validation** 📋 _Planned_
+3. **Phase 3: Secondary Theme, Validation & Platform Expansion** 📋 _Planned_
   - 📋 HTML theme polish and parity improvements (v0.84.0+) - maintain the server-rendered secondary option alongside the React default
    - HTML theme remains as secondary option (simpler projects)
   - 📋 Advanced module management features (v0.85.0)
   - 📋 Workflow validation and real-world testing (v0.86.0)
+  - 📋 Analytics foundations & integrations (v0.87.0)
+  - 📋 Disaster recovery & environment migration workflows (v0.88.0)
 
 4. **Phase 4: Community Platform (Optional v1.0.0+)** 📋 _Future_
    - 📋 PyPI package distribution
@@ -86,6 +88,9 @@ QuickScale follows an evolution-aligned roadmap that starts as a personal toolki
 - **v0.79.0:** Social & Link Tree module (implementation archived; reader-facing release summary still pending) 🚧
 - **v0.80.0:** Real Estate MVP (static + listings + social links) 🎯
 - **v0.83.0:** SaaS Feature Parity (auth, billing, teams, notifications foundation) 🎯
+- **v0.86.0:** Workflow validation (multi-module, storage/CDN, and deployment validation) 🎯
+- **v0.87.0:** Analytics foundations (website analytics first, integration-first module posture) 🎯
+- **v0.88.0:** Disaster recovery & environment migration workflows 🎯
 - **v1.0.0+:** Community platform (if demand exists)
 
 **Status:**
@@ -142,6 +147,9 @@ This completed release now lives outside the active roadmap. The original MVP cl
 **Release artifacts**:
 - [Implementation archive](../releases-archive/release-v0.77.0-implementation.md)
 
+**Deferred follow-up**:
+- broader database + media + environment portability workflows moved to [v0.88.0](#v0880-disaster-recovery--environment-migration-workflows)
+
 ---
 
 ### v0.78.0: `quickscale_modules.notifications` - Notifications Module
@@ -171,7 +179,8 @@ This implemented release scope now lives outside the active roadmap. The detaile
 **Current closeout scope**:
 - publish the reader-facing v0.79.0 release summary and update release metadata when the release is cut
 - keep end-to-end `quickscale plan` → `quickscale apply` → React public-page coverage deferred to [v0.86.0](#v0860-module-workflow-validation--real-world-testing)
-- keep provider auth or write APIs, automated sync, analytics, and HTML-theme polish deferred beyond v0.79.0
+- keep provider auth or write APIs, automated sync, and HTML-theme polish deferred beyond v0.79.0
+- track analytics foundations and public-page instrumentation follow-up under v0.87.0 (Analytics Foundations & Integrations)
 
 ---
 
@@ -355,7 +364,9 @@ This implemented release scope now lives outside the active roadmap. The detaile
 - [ ] Generalize interactive per-module configuration so `quickscale plan` can invoke manifest-backed configurators across all supported modules
 - [ ] Add dependency-aware planner sequencing for multi-module setups
 - [ ] Expand `quickscale plan --reconfigure` into a safe all-modules workflow with merge-preserving updates
+- [ ] Expose explicit forms → notifications planner/apply configuration for submission delivery defaults, recipients, and template wiring when both modules are enabled
 - [ ] Add planner regression coverage for mixed module stacks, dependency prompts, and option-retention behavior
+- [ ] Add mixed-module regression coverage for forms + notifications delivery, fallback behavior, and option-retention across reconfigure flows
 
 **Testing**:
 - [ ] Test batch operations with multiple modules
@@ -393,9 +404,123 @@ This implemented release scope now lives outside the active roadmap. The detaile
 - [ ] Storage validation: add upload/write/read integration coverage for local storage and mocked S3-compatible backends
 - [ ] Storage/blog workflow validation: add Plan → Apply → Blog publish E2E coverage with CDN-backed media URLs
 - [ ] Storage URL regression validation: verify helper-built public media URLs remain canonical across blog rendering and upload flows in real project scaffolds
+- [ ] Forms/notifications workflow validation: add Plan → Apply → form submission → tracked delivery coverage, plus fallback validation when notifications is absent or disabled
+- [ ] Railway CDN reconciliation: validate Railway edge/custom-domain/CDN guidance against the storage `public_base_url` contract and document the supported static-vs-media split
 - [ ] Documentation: Create "Safe Module Updates" guide with screenshots and case studies
 
 **Rationale**: Module embed/update commands implemented in v0.62.0, Plan/Apply system in v0.68.0-v0.71.0. This release validates those systems work safely in production after real usage across multiple client projects.
+
+---
+
+### v0.87.0: `quickscale_modules.analytics` - Analytics Foundations & Integrations
+
+**Status**: 📋 Planned
+
+**Objective**: Add analytics as an integration-first module for generated projects, starting with website analytics and a small QuickScale-owned event contract rather than a first-party Google Analytics replacement.
+
+**Scope Guardrails**:
+- website analytics comes first; product analytics, observability, and embedded BI/reporting remain later follow-up
+- provider wiring, consent hooks, and fixed instrumentation belong in QuickScale; raw collection/storage/dashboards should stay with established providers in the first pass
+- forms submissions and public social interactions are the first cross-module conversion hooks worth standardizing
+
+**Provider Evaluation Matrix**:
+
+| Provider | Best fit in QuickScale | Strengths against current constraints | Constraints / risks | v0.87 decision implication |
+| --- | --- | --- | --- | --- |
+| **Plausible** | Default website analytics candidate | privacy-first posture, low consent friction, simple script injection, straightforward pageview/outbound/download/search coverage across React and HTML themes | narrower product analytics surface, hosted-first posture, less GA-style attribution depth | strongest current candidate for the single approved v0.87 provider |
+| **GA4** | Google-compatible comparison point | market familiarity, ad ecosystem compatibility, strongest user-recognition for "Google Analytics-like" requests | consent mode complexity, heavier event taxonomy, more cookie/identity/compliance surface | evaluate and document, but defer implementation unless chosen as the single default |
+| **Matomo** | Advanced self-hosted website analytics comparison | closest self-hosted GA-style breadth, goals/internal search/ecommerce path, strong fit for teams that want control | larger operational surface, more configuration complexity, consent obligations remain jurisdiction-dependent | keep in evaluation scope and defer unless self-hosted requirements outweigh simplicity |
+| **Umami** | Lightweight self-hosted website analytics comparison | smaller surface than Matomo, privacy-friendly defaults, clean fit for simple public-site stats | separate runtime stack outside Django, lighter feature depth, less GA-style parity | keep as a secondary self-hosted evaluation path, not a promised first-cut integration |
+| **PostHog** | Later product analytics follow-up | strong event schemas, funnels, retention, and feature-adoption analysis | not a website-analytics-first tool, larger identity model surface, more instrumentation discipline required | defer beyond v0.87; use only as a later product-analytics benchmark |
+
+**Recommended v0.87 first cut**:
+- choose exactly one approved website-analytics provider for v0.87 so the release stays aligned with the current single-provider product-policy rule
+- current leading candidate is Plausible
+- keep GA4, Matomo, and Umami as explicit evaluation paths and documented deferrals instead of promising multiple adapters in the first implementation
+- keep PostHog, observability, and broader BI/reporting as later follow-up
+
+**Implementation Tasks**:
+- [ ] Research and lock the v1 analytics contract: website analytics vs product analytics vs observability
+- [ ] Confirm the provider evaluation matrix and choose the single approved website-analytics provider for v0.87
+- [ ] Add planner/apply configuration for the approved provider while leaving room for later extension only if product policy changes
+- [ ] Add safe script/endpoint injection for both React and HTML theme families
+- [ ] Add fixed instrumentation hooks for page views, React route changes, outbound links, downloads, and internal search
+- [ ] Add forms-module submission and social/public-page conversion hooks through a small first-party event vocabulary
+- [ ] Document the approved provider, the evaluated alternatives, and the criteria that would justify a later provider-policy exception
+- [ ] Add consent and identity guardrails with anonymous-default behavior and explicit authenticated-user opt-in
+- [ ] Add operator diagnostics for provider configuration, required environment variables, and test-event verification
+
+**Testing**:
+- [ ] Planner/apply regression coverage for analytics config and theme wiring
+- [ ] Frontend integration tests for route tracking and conversion hooks in both supported theme families
+- [ ] End-to-end validation for pageview plus form-submission event emission without coupling QuickScale to a first-party dashboard stack
+
+---
+
+### v0.88.0: Disaster Recovery & Environment Migration Workflows
+
+**Status**: 📋 Planned
+
+**Objective**: Extend the current database-first backups line into controlled project snapshot and environment migration workflows for generated projects across local, Railway develop, and Railway production.
+
+**Scope Guardrails**:
+- keep the v0.77 database-first restore contract authoritative until broader portability workflows are specified, implemented, and validated
+- keep secrets as references or required operator inputs only; never persist raw credential values in snapshot artifacts or migration manifests
+- treat database dumps, media sync, and environment metadata as separate surfaces with explicit restore/promotion rules instead of a single opaque "whole system" blob
+
+**Portable Artifact Boundaries**:
+
+| Artifact / surface | Included in the promotion workflow | Boundary rule |
+| --- | --- | --- |
+| **Database dump** | Yes | PostgreSQL custom dump is the restore artifact for generated PostgreSQL projects; JSON export remains inspection/test-fixture only |
+| **Media sync manifest** | Yes | carry object keys, paths, checksums, and target mapping; do not treat public URLs or CDN hostnames as source-of-truth state |
+| **Environment-variable name manifest** | Yes | carry names, purpose, required/optional status, and target owner; never persist raw secret values |
+| **Release metadata snapshot** | Yes | carry QuickScale version, enabled modules, git SHA, and sanitized config/version notes needed to reproduce the environment |
+| **Promotion verification report** | Yes | carry dry-run output, smoke-test results, operator confirmations, and rollback references |
+| **Raw secrets / provider tokens** | No | remain in local secret storage, Railway variables, or the target secret manager only |
+| **CDN, DNS, and custom-domain resources** | No | reference by host or resource name only; manage them as provider-owned infrastructure outside backup artifacts |
+| **Static build artifacts** | No | rebuild through the normal deploy pipeline; do not ship them as restore/promotion artifacts |
+
+Application source code also moves through the normal git/deploy pipeline. The portable artifact set is limited to the operational surfaces above and must not turn into a second code-distribution channel.
+
+**Workflow Checklist**:
+
+**Local → Railway develop**:
+- [ ] Capture a fresh local release checkpoint: current git SHA via the normal deploy path, plus a PostgreSQL dump, media sync manifest, environment-variable name manifest, release metadata snapshot, and baseline smoke-check notes
+- [ ] Provision Railway develop prerequisites: PostgreSQL 18 target, storage backend, media host/CDN target, and environment-variable slots owned by Railway rather than the artifact set
+- [ ] Run a dry-run migration plan against Railway develop and fail early on missing variables, incompatible storage targets, or restore-surface mismatches
+- [ ] Apply the generated project/configuration to Railway develop without exporting or storing raw secrets inside migration artifacts
+- [ ] Restore the database dump, sync media objects through the manifest, and run migrations or repair steps required by the target environment
+- [ ] Verify Railway develop with smoke checks covering auth, forms/notifications, storage URLs, and backups guardrails before treating it as the next promotion source
+
+**Railway develop → Railway production**:
+- [ ] Capture a fresh develop snapshot instead of reusing the earlier local artifact set so production promotion starts from the validated develop state
+- [ ] Diff the develop and production environment-variable name manifests and resolve required production-only values before promotion begins
+- [ ] Confirm production storage, `public_base_url`, CDN/domain prerequisites, and destructive-step confirmations before any restore or sync action
+- [ ] Run a dry-run production promotion plan with explicit rollback references and a signed operator checkpoint
+- [ ] Promote database and media using the same separated artifact surfaces rather than a single opaque environment bundle
+- [ ] Run production smoke checks, record the promotion verification report, and preserve rollback artifacts long enough to reverse the cutover if needed
+
+**Railway production → Railway develop (recovery rehearsal / disaster recovery)**:
+- [ ] Capture a fresh production recovery checkpoint: current production git SHA/release metadata, a production database dump, media sync manifest, environment-variable name manifest, and the latest verification report references
+- [ ] Provision or refresh an isolated Railway develop recovery target so production data is restored into non-production database, storage, and domain surfaces only
+- [ ] Run a dry-run recovery plan that remaps production hosts, media targets, and variable ownership into develop-safe values before any restore begins
+- [ ] Restore database and media into Railway develop using the separated artifact set, with any required data-sanitization or operator-access controls applied before broader testing
+- [ ] Reconcile the recovered develop environment with the target git/deploy state for the improvements you want to test, without copying raw production secrets into the recovery artifacts
+- [ ] Run smoke and regression checks in Railway develop, then record the recovery verification report and rollback references so the same flow can serve both rehearsal and disaster-recovery needs
+
+**Implementation Tasks**:
+- [ ] Define the supported project-snapshot contract: database dump, media sync manifest, environment-variable name inventory, version metadata, and restore/promotion instructions
+- [ ] Decide whether broader project portability remains inside `quickscale_modules.backups` or becomes a companion ops workflow
+- [ ] Add dry-run environment migration plans for local → Railway develop, Railway develop → Railway production, and Railway production → Railway develop based on the explicit artifact boundaries above
+- [ ] Add Railway-specific capture/apply helpers for service variables, media prerequisites, and release metadata without persisting raw credentials
+- [ ] Add integrity checks, rollback guidance, and explicit operator confirmations for destructive restore/promotion steps
+- [ ] Document disaster-recovery workflows separately from environment-promotion workflows so operators know what is and is not transported automatically
+
+**Testing**:
+- [ ] Validate database restore, media sync, and environment metadata handoff independently before full project-promotion flows
+- [ ] End-to-end rehearse representative local → Railway develop, Railway develop → Railway production, and Railway production → Railway develop migrations
+- [ ] Verify backup artifacts and migration manifests never expose raw secrets or public backup URLs
 
 ---
 
