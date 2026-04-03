@@ -18,6 +18,7 @@
   - [User Manual](technical/user_manual.md) - Commands and workflows
   - [Development](technical/development.md) - Dev environment setup
   - [Plan/Apply System](technical/plan-apply-system.md) - Terraform-style workflow
+  - [Module Extension Contract](technical/module-extension.md) - Extension surfaces, support tiers, and per-module contracts
 
 - **Overview**
   - [QuickScale Strategic Vision](overview/quickscale.md) - Evolution strategy and competitive positioning

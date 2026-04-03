@@ -1083,20 +1083,24 @@ frontend: {source: ./custom_frontend/, variant: default}
 - ❌ Intentionally breaking from legacy QuickScale
 - ❌ No automated migration
 
-### Backend Extensions & Frontends {#backend-extensions-policy}
+### Module Extension Contract {#backend-extensions-policy}
 
-**MVP Backend:**
-- ❌ NO `backend_extensions.py` generated
-- ✅ Add local Django app for customizations
-- ✅ Use `AppConfig.ready()` for wiring
+QuickScale uses a layered Django-native extension model. Each module declares which extension surfaces it supports from a standard approved set. Projects extend modules through a project-owned extension app, never by editing module source directly.
 
-**Post-MVP Pattern (Illustrative):**
-```python
-# backend_extensions.py - NOT in MVP
-from quickscale_themes.starter import models
-class ExtendedUser(models.User):
-    department = models.CharField(max_length=100)
-```
+**Approved extension surfaces:**
+- Settings contract
+- Template overrides
+- Signals/events
+- Helper/service APIs
+- Admin base classes
+- Abstract base models (domain modules only)
+- Managed integration files (QuickScale-owned, never user-edited)
+
+**Two support tiers:**
+- **Tier 1 (Stable):** Project-owned app, settings, template overrides, documented service APIs, documented signals. Survives module updates with minimal merge work.
+- **Tier 2 (Structured):** Module-specific subclassing (abstract models, admin bases). Survives minor updates when the contract is documented and versioned.
+
+See [docs/technical/module-extension.md](module-extension.md) for the full contract, per-module surface declarations, and rollout plan.
 
 **MVP Frontend:**
 - ✅ Optional `custom_frontend/` directory

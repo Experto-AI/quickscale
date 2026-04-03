@@ -1,6 +1,8 @@
 # Client extensions example
 
-This folder contains a minimal, opt-in example showing how a generated QuickScale project can expose a single, discoverable place for project-specific backend customizations without changing the generator.
+This folder contains a minimal example showing how a generated QuickScale project can expose a single, discoverable place for project-specific backend customizations without changing the generator.
+
+This pattern is currently opt-in. It will become a default-generated first-class app in a future release.
 
 How to use in a generated project:
 
@@ -11,6 +13,5 @@ How to use in a generated project:
 Design notes:
 - `AppConfig.ready()` calls `backend_extensions.register()` if present.
 - Keep `register()` idempotent and avoid side effects on import.
-- This is an opt-in pattern. The MVP generator keeps generated projects minimal and does not include this directory by default.
 
-See also: [Backend Extensions Policy](../../docs/technical/decisions.md#backend-extensions-policy)
+See also: [Module Extension Contract](../../docs/technical/module-extension.md)
