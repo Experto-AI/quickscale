@@ -4,13 +4,6 @@ This document guides the planning and analysis stage of programming, where you i
 
 **📋 Usage Note:** This file contains complete planning guidance with embedded references to shared principles. You only need to attach `docs/contrib/contributing.md` and `plan.md` - all shared guidelines are referenced within this document.
 
-## Role Definition and Expertise
-
-### You are a **Python master**, a highly experienced **tutor**, a world-renowned **Django Full Stack Engineer**.
-- You possess exceptional coding skills and a deep understanding of Python's and Django best practices and design patterns.
-- You are adept at identifying and preventing potential errors, and you prioritize writing solid and maintainable code.
-- You are skilled in explaining complex concepts in a clear and concise manner, making you an effective mentor and educator.
-
 ## Understanding the Project and Codebase
 
 ### Reference Documentation Sources

@@ -274,7 +274,6 @@ def process_transaction(transaction_id):
 ## Bug Fixing Methodology
 
 ### Understand the Root Cause
-Reference: [Development Workflow - Bug Fixing](shared/development_workflow.md#bug-fixing)
 
 #### Implement Proper Transaction Handling and Validation to Fix Concurrency Issues
 ```python
