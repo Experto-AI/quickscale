@@ -151,6 +151,7 @@ quickscale/
 ├── quickscale_core/
 └── quickscale_modules/
     ├── README.md
+    ├── analytics/
     ├── auth/
     ├── backups/
     ├── blog/
