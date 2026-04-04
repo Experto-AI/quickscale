@@ -2,8 +2,24 @@
 
 A guide for keeping `experto-ai-web` and `bap-web` current with new QuickScale releases.
 
-Trigger prompt for the primary approach:
+Trigger prompt for the manual agent-assisted fallback:
 > "I have a new quickscale project at `/tmp/xxxx`, incorporate the current web at `$HOME/current-web` — follow `docs/planning/beta-site-migration.md`"
+
+## Planned maintainer automation surface (v0.81.0)
+
+This playbook is being formalized as a beta-site-only maintainer workflow for `experto-ai-web` and `bap-web`.
+
+```bash
+make beta-migrate-fresh DONOR=/abs/path/to/existing-beta-site RECIPIENT=/abs/path/to/fresh-scaffold
+make beta-migrate-in-place DONOR=/abs/path/to/fresh-scaffold RECIPIENT=/abs/path/to/existing-beta-site
+```
+
+Rules for the planned maintainer tool:
+- backed by Python scripts under `scripts/`, not a QuickScale module and not a public `quickscale` CLI command
+- `DONOR` and `RECIPIENT` are the only required operator inputs and must be provided explicitly on every run
+- prefer deterministic Python transforms over bash-heavy pipelines
+- if a step cannot be resolved safely, stop and emit a partial report with `completed_steps`, `skipped_steps`, `changed_files`, and `pending_manual_actions` for a maintainer or AI coding assistant to continue
+- until the tooling lands, the reference workflows below remain canonical
 
 ---
 
@@ -18,9 +34,15 @@ Both produce the same end result. The fresh-first approach is recommended becaus
 
 After the initial catch-up, use **ongoing maintenance** for all future updates.
 
+## Deterministic automation boundary
+
+- **Fresh-first** is the primary deterministic automation target. It can be automated through local verification, while final repo replacement, push, deploy, secret setup, and smoke approval remain explicit operator steps.
+- **In-place** can automate the file transforms and verification steps, but should keep a mandatory review checkpoint before `quickscale apply` when new modules or infrastructure diffs appear.
+- **Both paths** must avoid copying `.git`, `media/`, `.env`, or `poetry.lock` between projects. Generate derived artifacts only in the active working tree when the workflow explicitly reaches that step.
+
 ---
 
-## Agent execution — fresh-first approach (primary)
+## Reference workflow — fresh-first approach (primary)
 
 ### Inputs
 
@@ -33,7 +55,7 @@ The RECIPIENT must already exist — run `quickscale plan <slug> && quickscale a
 **Best practice: use the same slug as the existing project** (`experto-ai-web`, `bap-web`) to avoid
 package name substitutions in transplanted Django files.
 
-The agent derives everything else from these two paths.
+Set both variables explicitly before running any snippet in this section. The tool or assistant derives everything else from these two paths and does not assume fallback locations.
 
 ---
 
@@ -42,8 +64,8 @@ The agent derives everything else from these two paths.
 ```python
 import tomllib, yaml, os
 
-DONOR     = os.environ.get("DONOR",     os.path.expanduser("~/Code/experto-ai-web"))
-RECIPIENT = os.environ.get("RECIPIENT", "/tmp/test80")
+DONOR     = os.environ["DONOR"]
+RECIPIENT = os.environ["RECIPIENT"]
 
 with open(f"{DONOR}/pyproject.toml",     "rb") as f: d_toml = tomllib.load(f)
 with open(f"{RECIPIENT}/pyproject.toml", "rb") as f: r_toml = tomllib.load(f)
@@ -337,7 +359,7 @@ git push origin migrate/fresh-scaffold
 
 ---
 
-## Agent execution — in-place alternative
+## Reference workflow — in-place alternative
 
 Use this when you prefer to stay in the existing git repo without copying files to a temp location.
 
@@ -351,6 +373,8 @@ RECIPIENT = path to the existing beta site         (e.g. ~/Code/experto-ai-web)
 The fresh scaffold is used only as a source of infrastructure files. The existing project's
 custom content (pages, components, Django files) stays in place throughout.
 
+Set both variables explicitly before running any snippet in this section. The scaffold path is a required donor input rather than a fallback location.
+
 ---
 
 ### Step 0 — Derive variables
@@ -358,8 +382,8 @@ custom content (pages, components, Django files) stays in place throughout.
 ```python
 import tomllib, yaml, os
 
-DONOR     = os.environ.get("DONOR",     "/tmp/test80")
-RECIPIENT = os.environ.get("RECIPIENT", os.path.expanduser("~/Code/experto-ai-web"))
+DONOR     = os.environ["DONOR"]
+RECIPIENT = os.environ["RECIPIENT"]
 
 with open(f"{DONOR}/pyproject.toml",     "rb") as f: d_toml = tomllib.load(f)
 with open(f"{RECIPIENT}/pyproject.toml", "rb") as f: r_toml = tomllib.load(f)
@@ -606,7 +630,7 @@ git checkout -b feat/add-<module>
 quickscale apply               # embeds module, regenerates wiring
 quickscale manage migrate
 
-# 2. Copy new pages if the module ships a React page (see module→page map above)
+# 2. Copy new pages if the module ships a React page (use the earlier in-place Step 6 copy patterns when relevant)
 # 3. Add route in App.tsx if it's a dashboard page (not needed for public-surface pages)
 
 pytest && cd frontend && pnpm test && cd ..
@@ -710,17 +734,16 @@ railway redeploy <deployment-id> --service experto-ai-web
 
 ```
 [ ] DONOR and RECIPIENT paths confirmed
-[ ] Migration branch created
-[ ] Step 2: infrastructure files copied and slug references fixed
-[ ] Step 3: pyproject.toml merge script ran without errors
-[ ] Step 4: package.json merge script ran without errors
-[ ] Step 5: quickscale.yml updated — reviewed module list before proceeding
-[ ] Step 6: quickscale apply completed
-[ ] Step 7: quickscale manage migrate completed
-[ ] Step 8: new module React pages copied; no existing pages overwritten
-[ ] Step 9: poetry lock ran; pnpm install ran; pnpm build passed; tests pass
-[ ] Step 10: local smoke-test — existing pages intact, new module pages work
-[ ] Step 11: committed
+[ ] Fresh-first throwaway recipient prepared or in-place migration branch created
+[ ] Fresh-first only: recipient identity fixed if slug/package differed
+[ ] Fresh-first only: App.tsx, custom pages/components, utilities, Django files, and missing path deps copied
+[ ] In-place only: infrastructure files copied and slug references fixed
+[ ] In-place only: pyproject.toml and frontend/package.json merged
+[ ] In-place only: quickscale.yml updated, reviewed, and `quickscale apply` completed
+[ ] In-place only: missing module React pages/hooks copied without overwriting existing pages
+[ ] Verification stack completed: `poetry lock`, `poetry install`, `pnpm install`, `pnpm build`, `quickscale manage migrate`, `pytest`, and `pnpm test`
+[ ] Local smoke-test completed — existing pages intact and new module pages work
+[ ] Result committed or staged in the target repo
 [ ] Module env vars set in Railway (storage, notifications if added)
 [ ] Merged to main and Railway deployment confirmed
 [ ] Migrations visible in Railway logs
@@ -739,6 +762,18 @@ railway redeploy <deployment-id> --service experto-ai-web
 [ ] Env vars set in Railway for any new modules
 [ ] Merged to main; Railway deployment confirmed
 ```
+
+## AI assistant continuation guide
+
+Use this when the maintainer tool is only partially implemented or stops intentionally at a review checkpoint.
+
+1. Read this playbook and the v0.81.0 roadmap milestone before changing the automation behavior.
+2. Determine the mode from the provided `DONOR` and `RECIPIENT` values rather than inferring from directory names.
+3. Resume from the last completed deterministic step in the tool's report instead of rerunning earlier destructive steps.
+4. Fresh-first continuation order: identity fix → frontend copies → Django file copies → path dependencies → local verification → manual repo handoff.
+5. In-place continuation order: infrastructure copies → config merges → module review checkpoint → `quickscale apply` → missing module pages/hooks → local verification.
+6. If a step would require guessing about module adoption, deploy timing, or secrets, stop, record the skipped work in `skipped_steps`, and leave the operator follow-up in `pending_manual_actions`.
+7. The minimum handoff payload for partial automation is `mode`, `completed_steps`, `skipped_steps`, `changed_files`, and `pending_manual_actions`.
 
 ---
 
@@ -768,7 +803,7 @@ re-run apply — it skips re-embedding and only updates the wiring files.
 Local edits exist in a module directory. Stash or commit first. To contribute the edits upstream:
 `quickscale push --module <name>`.
 
-### Frontend build fails after Phase 2 file copies
+### Frontend build fails after fresh-first or in-place file-copy steps
 
 A copied file imports something not yet present in the recipient. Read the build error message,
 find the missing import in the donor's `frontend/src/`, and copy only that file.
@@ -799,9 +834,8 @@ railway run --service <slug> python manage.py migrate
 ### Dockerfile build fails (PostgreSQL 18 client step)
 
 Requires `python:3.14-slim-bookworm` (explicit Debian variant), not `python:3.14-slim`.
-Verify the `FROM` line was copied from the donor in Step 2.
+For the in-place workflow, verify Step 2 preserved the donor `FROM` line. For the fresh-first workflow, verify the fresh scaffold still uses `python:3.14-slim-bookworm` before continuing.
 
 ### `django-markdownx` import error at startup
 
-The blog module requires `django-markdownx`. Confirm the pyproject.toml merge in Step 3 included
-it from the donor's non-path dependencies. Run `poetry lock && poetry install`.
+The blog module requires `django-markdownx`. For the in-place workflow, confirm Step 3 merged it from the donor's non-path dependencies. For the fresh-first workflow, confirm the fresh scaffold already includes it before rerunning `poetry lock && poetry install`.

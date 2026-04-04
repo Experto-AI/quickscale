@@ -48,14 +48,15 @@ This table is the single milestone summary for shipped history and the active fo
 | v0.78.0 | ✅ Released | Notifications module | Transactional email foundation with app-owned rendering, recipient-granular tracking, and Anymail-backed Resend delivery; archived in release note and changelog |
 | v0.79.0 | ✅ Released | Social and Link Tree module | Curated social links and embeds, backend-owned preview metadata, and React public pages for fresh `showcase_react` generations; older projects adopt them manually |
 | v0.80.0 | 📋 Planned | Analytics module | PostHog website analytics with flat mutable settings, service-style backend hooks, and fresh `showcase_react` starter support; existing projects adopt frontend snippets manually |
-| v0.81.0 | 📋 Planned | Listings theme | Real-estate vertical baseline with static pages, listings, and social links |
-| v0.82.0 | 📋 Planned | CRM theme | React frontend for the CRM module |
-| v0.83.0 | 📋 Planned | Billing module | Stripe integration |
-| v0.84.0 | 📋 Planned | Teams module | Multi-tenancy and team workflows as part of SaaS feature parity with auth, billing, teams, and notifications foundation |
-| v0.85.0+ | 📋 Planned | HTML theme polish | Server-rendered secondary option maintenance |
-| v0.86.0 | 📋 Planned | Module management UX | Advanced update, status, and discovery workflows |
-| v0.87.0 | 📋 Planned | Workflow validation | Real-world multi-module, storage/CDN, deployment, safety, and end-to-end validation |
-| v0.88.0 | 📋 Planned | Disaster recovery | Disaster recovery plus environment migration and promotion workflows |
+| v0.81.0 | 📋 Planned | Beta-site migration maintainer tooling | Make-invoked Python automation for the fresh-first and in-place beta-site catch-up workflows |
+| v0.82.0 | 📋 Planned | Listings theme | Real-estate vertical baseline with static pages, listings, and social links |
+| v0.83.0 | 📋 Planned | CRM theme | React frontend for the CRM module |
+| v0.84.0 | 📋 Planned | Billing module | Stripe integration |
+| v0.85.0 | 📋 Planned | Teams module | Multi-tenancy and team workflows as part of SaaS feature parity with auth, billing, teams, and notifications foundation |
+| v0.86.0+ | 📋 Planned | HTML theme polish | Server-rendered secondary option maintenance |
+| v0.87.0 | 📋 Planned | Module management UX | Advanced update, status, and discovery workflows |
+| v0.88.0 | 📋 Planned | Workflow validation | Real-world multi-module, storage/CDN, deployment, safety, and end-to-end validation |
+| v0.89.0 | 📋 Planned | Disaster recovery | Disaster recovery plus environment migration and promotion workflows |
 
 **Legend:**
 - ✅ = Completed, released, or internally baselined
@@ -65,7 +66,7 @@ This table is the single milestone summary for shipped history and the active fo
 - **Current release:** v0.79.0 is the published release
 - **Active next milestone:** v0.80.0 analytics is the current planning and implementation-prep scope
 - **Plan/Apply System:** v0.68.0-v0.71.0 - Terraform-style configuration ✅ Complete
-- **SaaS Parity:** v0.84.0 - auth, billing, teams modules complete on top of the notifications foundation
+- **SaaS Parity:** v0.85.0 - auth, billing, teams modules complete on top of the notifications foundation
 
 ## Notes and References
 
@@ -348,7 +349,92 @@ Following [module-extension.md](./module-extension.md), analytics v0.80.0 uses t
 
 ---
 
-### v0.81.0: Listings Theme (React Frontend for Listings)
+### v0.81.0: Beta-Site Migration Maintainer Tooling
+
+**Status**: 📋 Planned
+
+**Planning document**: [Beta Site Migration Playbook](../planning/beta-site-migration.md) — maintainer-only catch-up workflows for `experto-ai-web` and `bap-web`.
+
+**Objective**: Ship beta-site-only maintainer automation for the fresh-first and in-place catch-up flows as Make-invoked Python tooling. The supported surface is `make beta-migrate-fresh` and `make beta-migrate-in-place`; this milestone does not add a public `quickscale` CLI command or a QuickScale module.
+
+**Scope Guardrails**:
+- beta-site-only maintainer workflow; keep the surface out of `quickscale --help`
+- use Make as the maintainer entrypoint and Python scripts under `scripts/`; prefer structured TOML/YAML/JSON manipulation over bash-heavy pipelines
+- keep `DONOR` and `RECIPIENT` as explicit required inputs; no path auto-discovery
+- preserve QuickScale ownership boundaries: older user-owned theme files remain manual-adoption territory outside this documented beta-site workflow
+- fresh-first is the primary deterministic path; in-place may pause at explicit review checkpoints rather than guessing through destructive merges
+- do not automate git push, PR merge, Railway deploy, or secret population; print next steps instead
+- do not copy `.git`, `media/`, `.env`, or `poetry.lock` between projects; regenerate derived artifacts only inside the active working tree when the workflow explicitly reaches that step
+
+#### A. Maintainer Command Surface
+
+- [ ] Add `make beta-migrate-fresh DONOR=/abs/path RECIPIENT=/abs/path`
+- [ ] Add `make beta-migrate-in-place DONOR=/abs/path RECIPIENT=/abs/path`
+- [ ] Add `make beta-migrate-help` to print required variables, modes, and safety notes
+- [ ] Route the Make targets through `poetry run python scripts/beta_migrate.py <mode>` so the implementation stays in Python rather than shell
+- [ ] Document the targets in `Makefile` help, `scripts/README.md`, and the migration playbook
+
+#### B. Python Script Architecture
+
+- [ ] Create `scripts/beta_migrate.py` as the single entrypoint with `fresh-first` and `in-place` modes
+- [ ] Use stdlib `argparse`, `pathlib`, `shutil`, `subprocess`, `json`, and `tomllib`; use existing YAML/TOML writer dependencies only where writes are required
+- [ ] Model shared state explicitly with typed data structures for resolved identities, migration inputs, planned actions, and pending manual actions
+- [ ] Keep shared helpers in Python functions first; split into an additional helper module only if the file becomes hard to review
+
+#### C. Shared Deterministic Helpers
+
+- [ ] Resolve `project.slug`, `project.package`, module lists, and filesystem paths from `quickscale.yml` and `pyproject.toml`
+- [ ] Validate required files exist before mutation begins, with explicit blocker messages when they do not
+- [ ] Enforce clean git state for the in-place recipient before destructive file replacement or `quickscale apply`
+- [ ] Implement a `--dry-run` mode that prints the exact planned actions without mutating files
+- [ ] Emit a machine-readable and human-readable report with `completed_steps`, `skipped_steps`, `changed_files`, and `pending_manual_actions`
+- [ ] Stop with a pending-actions report whenever the script cannot safely choose between multiple valid outcomes
+
+#### D. Fresh-First Flow
+
+- [ ] Implement the current reference steps in order: identity reconciliation, `App.tsx`, custom-only pages, non-`ui/` component directories, src utilities, selected Django files, and missing module path dependencies
+- [ ] Preserve the fresh scaffold's managed files and fresher infrastructure exactly as classified in the playbook table
+- [ ] Add verification subprocess steps for `poetry lock`, `poetry install`, `pnpm install`, `pnpm build`, `quickscale manage migrate`, `pytest`, and `pnpm test`
+- [ ] Treat the production-repo replacement, push, and deploy sequence as a printed follow-up checklist rather than an automatic side effect
+
+#### E. In-Place Flow
+
+- [ ] Implement deterministic infrastructure file copies from donor to recipient, including slug/package substitution
+- [ ] Merge `pyproject.toml` by taking donor non-path dependencies and retaining recipient module path dependencies
+- [ ] Merge `frontend/package.json` while preserving the recipient package name
+- [ ] Update `quickscale.yml` with newly introduced modules only
+- [ ] Require an explicit review checkpoint before `quickscale apply` when the module diff or infrastructure diff is non-empty
+- [ ] After `quickscale apply`, copy only the missing module-owned React pages, hooks, and components documented in the playbook
+- [ ] Reuse the same verification subprocess stack as fresh-first
+
+#### F. Deterministic Boundary and Pending Work Contract
+
+- [ ] Fresh-first should be able to run deterministically through local verification on a throwaway recipient
+- [ ] In-place should be allowed to stop before `quickscale apply` with a complete pending-actions report if module adoption needs operator review
+- [ ] Both modes must print the remaining manual tasks for smoke testing, env vars, PR creation, merge, deploy, and rollback
+- [ ] If only a partial implementation ships, the report format becomes the handoff contract for the next AI coding assistant rather than silent TODO comments in code
+
+#### G. Implementation Sequence for an AI Coding Assistant
+
+1. Freeze the maintainer surface first: Make targets, required env vars, script modes, and report format.
+2. Implement shared identity and report helpers plus `--dry-run` before any destructive file mutation.
+3. Land fresh-first file operations and verification before attempting in-place automation.
+4. Implement in-place pre-apply merges next, then add the explicit review checkpoint.
+5. Only after the checkpoint is stable, automate the post-apply React page adoption steps.
+6. If in-place full automation is not yet safe, stop at the checkpoint and ship the pending-actions report rather than guessing.
+7. Keep docs in sync with the shipped behavior: `docs/planning/beta-site-migration.md`, `scripts/README.md`, and `Makefile` help must match the tool exactly.
+8. Do not expand this maintainer workflow into a public `quickscale` CLI feature inside v0.81.0.
+
+#### H. Validation
+
+- [ ] Add focused pytest coverage for deterministic transformation helpers using temp directories and fixture projects
+- [ ] Rehearse fresh-first on throwaway copies of both beta sites
+- [ ] Rehearse in-place on throwaway branches with a deliberately added module diff
+- [ ] Verify dry-run and pending-actions outputs are sufficient for a second AI coding assistant to resume without rereading repository history
+
+---
+
+### v0.82.0: Listings Theme (React Frontend for Listings)
 
 **Status**: 📋 Planned
 
@@ -380,7 +466,7 @@ Following [module-extension.md](./module-extension.md), analytics v0.80.0 uses t
 
 ---
 
-### v0.82.0: CRM Theme (React Frontend for CRM)
+### v0.83.0: CRM Theme (React Frontend for CRM)
 
 **Status**: 📋 Planned
 
@@ -407,7 +493,7 @@ Following [module-extension.md](./module-extension.md), analytics v0.80.0 uses t
 
 ---
 
-### v0.83.0: `quickscale_modules.billing` - Billing Module
+### v0.84.0: `quickscale_modules.billing` - Billing Module
 
 **Status**: 📋 Planned
 
@@ -436,7 +522,7 @@ Following [module-extension.md](./module-extension.md), analytics v0.80.0 uses t
 
 ---
 
-### v0.84.0: `quickscale_modules.teams` - Teams/Multi-tenancy Module
+### v0.85.0: `quickscale_modules.teams` - Teams/Multi-tenancy Module
 
 **Status**: 📋 Planned
 
@@ -465,9 +551,9 @@ Following [module-extension.md](./module-extension.md), analytics v0.80.0 uses t
 
 ---
 
-### Module Showcase Architecture (Deferred to Post-v0.84.0)
+### Module Showcase Architecture (Deferred to Post-v0.85.0)
 
-**Status**: 🚧 **NOT YET IMPLEMENTED** - Deferred to post-v0.84.0
+**Status**: 🚧 **NOT YET IMPLEMENTED** - Deferred to post-v0.85.0
 
 **Current Reality** (v0.66.0):
 - ✅ Basic context processor exists (`quickscale_core/context_processors.py`)
@@ -477,11 +563,11 @@ Following [module-extension.md](./module-extension.md), analytics v0.80.0 uses t
 - ❌ Current `index.html.j2`: Simple welcome page only
 
 **Why Deferred**:
-- Focus on notifications, Plan/Apply system, and core modules first (v0.68-v0.83)
+- Focus on the current core roadmap line through SaaS feature parity first (v0.68.0-v0.85.0)
 - Showcase architecture provides maximum value when multiple modules exist
 - Current simple welcome page is adequate for the shipped generator output
 
-**Implementation Plan**: After v0.84.0 (SaaS Feature Parity milestone), evaluate whether to implement showcase architecture or keep simple welcome page. Decision criteria:
+**Implementation Plan**: After v0.85.0 (SaaS Feature Parity milestone), evaluate whether to implement showcase architecture or keep simple welcome page. Decision criteria:
 - Are 3+ modules complete and production-ready?
 - Is module discovery a user pain point?
 - Would showcase provide meaningful marketing value?
@@ -490,7 +576,7 @@ Following [module-extension.md](./module-extension.md), analytics v0.80.0 uses t
 
 ---
 
-### v0.85.0+: HTML Secondary Theme Polish (Optional)
+### v0.86.0+: HTML Secondary Theme Polish (Optional)
 
 **Status**: 📋 Planned (low priority, after SaaS Feature Parity)
 
@@ -502,7 +588,7 @@ Following [module-extension.md](./module-extension.md), analytics v0.80.0 uses t
 
 ---
 
-### v0.86.0: Advanced Module Management Features
+### v0.87.0: Advanced Module Management Features
 
 **Note**: Basic module management commands (`quickscale update`, `quickscale push --module <name>`) are implemented in **v0.62.0**. Plan/Apply system implemented in **v0.68.0-v0.71.0**. This release adds advanced features for managing multiple modules.
 
@@ -539,7 +625,7 @@ Following [module-extension.md](./module-extension.md), analytics v0.80.0 uses t
 - [ ] Test conflict resolution workflows
 - [ ] E2E testing of enhanced UX features
 
-**Future Enhancements** (v0.87.0+, evaluate after v0.84.0):
+**Future Enhancements** (v0.88.0+, evaluate after v0.85.0):
 - [ ] Module versioning: `quickscale plan --add auth@v0.63.0` - Pin specific module version
 - [ ] Semantic versioning compatibility checks
 - [ ] Automatic migration scripts for breaking changes
@@ -551,7 +637,7 @@ Following [module-extension.md](./module-extension.md), analytics v0.80.0 uses t
 
 ---
 
-### v0.87.0: Module Workflow Validation & Real-World Testing
+### v0.88.0: Module Workflow Validation & Real-World Testing
 
 **Objective**: Validate that module updates work safely in real client projects and don't affect user's custom code.
 
@@ -580,7 +666,7 @@ Following [module-extension.md](./module-extension.md), analytics v0.80.0 uses t
 
 ---
 
-### v0.88.0: Disaster Recovery & Environment Migration Workflows
+### v0.89.0: Disaster Recovery & Environment Migration Workflows
 
 **Status**: 📋 Planned
 
