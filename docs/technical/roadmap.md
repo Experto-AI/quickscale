@@ -35,46 +35,35 @@ QuickScale's roadmap is milestone-led. It tracks shipped release pointers, the c
 
 ## Current Milestone Summary
 
-| Version | Status | Focus | Notes |
-|---------|--------|-------|-------|
-| v0.76.0 | ✅ Released | Storage module | Archived in release note and changelog |
-| v0.77.0 | ✅ Internal baseline | Backups module | Changelog-only historical baseline |
-| v0.78.0 | ✅ Released | Notifications module | Archived in release note and changelog |
-| v0.79.0 | ✅ Released | Social module | React public pages ship on fresh `showcase_react` generations; older projects adopt them manually |
-| v0.80.0 | 📋 Planned | Analytics module | Active next milestone |
-| v0.81.0 | 📋 Planned | Listings theme | Real-estate-oriented frontend milestone |
-| v0.82.0 | 📋 Planned | CRM theme | React frontend for CRM module |
+This table is the single milestone summary for shipped history and the active forward roadmap.
+
+| Version | Status | Milestone | Details |
+|---------|--------|-----------|---------|
+| v0.71.0 | ✅ Completed | Plan/Apply system | Terraform-style configuration system complete |
+| v0.72.0 | ✅ Completed | Plan/Apply cleanup | Legacy commands removed after the Plan/Apply rollout |
+| v0.74.0 | ✅ Completed | React default theme | React + shadcn/ui baseline shipped |
+| v0.75.0 | ✅ Completed | Forms module | Generic form builder with DRF API, spam protection, and GDPR anonymization |
+| v0.76.0 | ✅ Released | Storage module | Cloud file hosting plus CDN-ready media infrastructure; archived in release note and changelog |
+| v0.77.0 | ✅ Internal baseline | Backups module | Private local and optional private remote workflows, guarded BackupPolicy-admin local restore, and CLI restore; changelog-only historical baseline |
+| v0.78.0 | ✅ Released | Notifications module | Transactional email foundation with app-owned rendering, recipient-granular tracking, and Anymail-backed Resend delivery; archived in release note and changelog |
+| v0.79.0 | ✅ Released | Social and Link Tree module | Curated social links and embeds, backend-owned preview metadata, and React public pages for fresh `showcase_react` generations; older projects adopt them manually |
+| v0.80.0 | 📋 Planned | Analytics module | PostHog website analytics, React and HTML theme injection, and cross-module conversion hooks; active next milestone |
+| v0.81.0 | 📋 Planned | Listings theme | Real-estate vertical baseline with static pages, listings, and social links |
+| v0.82.0 | 📋 Planned | CRM theme | React frontend for the CRM module |
 | v0.83.0 | 📋 Planned | Billing module | Stripe integration |
-| v0.84.0 | 📋 Planned | Teams module | Multi-tenancy and team workflows |
+| v0.84.0 | 📋 Planned | Teams module | Multi-tenancy and team workflows as part of SaaS feature parity with auth, billing, teams, and notifications foundation |
 | v0.85.0+ | 📋 Planned | HTML theme polish | Server-rendered secondary option maintenance |
-| v0.86.0 | 📋 Planned | Module management UX | Advanced update/status/discovery workflows |
-| v0.87.0 | 📋 Planned | Workflow validation | Real-world module safety and E2E validation |
-| v0.88.0 | 📋 Planned | Disaster recovery | Environment migration and promotion workflows |
+| v0.86.0 | 📋 Planned | Module management UX | Advanced update, status, and discovery workflows |
+| v0.87.0 | 📋 Planned | Workflow validation | Real-world multi-module, storage/CDN, deployment, safety, and end-to-end validation |
+| v0.88.0 | 📋 Planned | Disaster recovery | Disaster recovery plus environment migration and promotion workflows |
 
 **Legend:**
-- ✅ = Completed
+- ✅ = Completed, released, or internally baselined
 - 📋 = Planned/Not Started
 
-**Key Milestones:**
-- **v0.71.0:** Plan/Apply System Complete ✅
-- **v0.72.0:** Plan/Apply Cleanup (remove legacy commands) ✅
-- **v0.74.0:** React Default Theme (React + shadcn/ui) ✅
-- **v0.75.0:** Forms Module (generic form builder with DRF API, spam protection, GDPR anonymization) ✅
-- **v0.76.0:** Storage Module (cloud file hosting + CDN-ready media infrastructure) ✅
-- **v0.77.0:** Backups module (private local + optional private remote workflows, guarded BackupPolicy-admin local restore plus CLI restore) ✅
-- **v0.78.0:** Notifications Module (transactional email foundation; app-owned rendering, recipient-granular tracking, and Anymail-backed Resend delivery) ✅
-- **v0.79.0:** Social & Link Tree module (curated social links and embeds, backend-owned preview metadata, and React public pages for fresh `showcase_react` generations; older projects adopt manually) ✅
-- **v0.80.0:** Analytics Module (PostHog website analytics; React + HTML theme injection; cross-module conversion hooks) 🎯
-- **v0.81.0:** Real-estate vertical baseline (static + listings + social links) 🎯
-- **v0.84.0:** SaaS Feature Parity (auth, billing, teams, notifications foundation) 🎯
-- **v0.87.0:** Workflow validation (multi-module, storage/CDN, and deployment validation) 🎯
-- **v0.88.0:** Disaster recovery & environment migration workflows 🎯
-
 **Status:**
-- **Current Status:** v0.79.0 is now the published release, and the next active roadmap scope is v0.80.0 analytics
-- **In Progress:** v0.80.0 planning and implementation prep for PostHog-backed website analytics
-- **Next Planned Scope After v0.79.0:** v0.80.0 - Analytics module (PostHog website analytics + React/HTML theme injection)
-- **Next Milestone:** v0.80.0 - Analytics Module
+- **Current release:** v0.79.0 is the published release
+- **Active next milestone:** v0.80.0 analytics is the current planning and implementation-prep scope
 - **Plan/Apply System:** v0.68.0-v0.71.0 - Terraform-style configuration ✅ Complete
 - **SaaS Parity:** v0.84.0 - auth, billing, teams modules complete on top of the notifications foundation
 
