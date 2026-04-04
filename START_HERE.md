@@ -1,6 +1,6 @@
 # 🚀 Start Here - QuickScale Documentation Guide
 
-**Quick Mental Model**: QuickScale is a Django project generator that creates production-ready SaaS applications in minutes. It generates standalone projects you own completely, with optional reusable modules for common features (for example auth, backups, blog, listings, notifications, social, and storage). Think "create-react-app" but for Django SaaS applications.
+**Quick Mental Model**: QuickScale is a Django project generator that creates production-ready SaaS applications in minutes. It generates standalone projects you own completely, with optional reusable modules for common features (for example analytics, auth, backups, blog, listings, notifications, social, and storage). Think "create-react-app" but for Django SaaS applications.
 
 ---
 
@@ -12,7 +12,7 @@ QuickScale = **Django Generator** + **Reusable Modules** + **Production Foundati
 **Output**: Complete Django project with Docker, PostgreSQL, testing, CI/CD, and security best practices
 **Current Distribution**: Reusable modules are installed via git subtree, and starter themes are generated once into user-owned project code
 
-**Current Status**: The current published release is v0.79.0. See [roadmap.md](./docs/technical/roadmap.md) for upcoming work.
+**Current Status**: The current published release is v0.80.0. See [roadmap.md](./docs/technical/roadmap.md) for upcoming work.
 **Target Audience**: Solo developers and development agencies building client projects
 
 ---
@@ -24,7 +24,7 @@ For complete definitions, see **[GLOSSARY.md](./GLOSSARY.md)**. Here are the ess
 | Term | Quick Definition | Learn More |
 |------|------------------|------------|
 | **Generated Project** | The standalone Django app created by `quickscale plan`, then entering the generated directory and running `quickscale apply` | [GLOSSARY.md](./GLOSSARY.md#generated-project) |
-| **Module** | Reusable Django app (auth, backups, blog, listings, notifications, social, storage) | [GLOSSARY.md](./GLOSSARY.md#module) |
+| **Module** | Reusable Django app (analytics, auth, backups, blog, listings, notifications, social, storage) | [GLOSSARY.md](./GLOSSARY.md#module) |
 | **Theme** | Frontend scaffolding (React default, HTML secondary option) | [GLOSSARY.md](./GLOSSARY.md#theme) |
 | **Git Subtree** | Distribution mechanism for sharing code | [GLOSSARY.md](./GLOSSARY.md#git-subtree) |
 | **Plan/Apply** | Terraform-style declarative workflow | [GLOSSARY.md](./GLOSSARY.md#planapply-workflow) |
@@ -204,7 +204,7 @@ Detailed guides for specific stages:
 ## Quick Answers to Common Questions
 
 ### "Is QuickScale production-ready?"
-The current generator, starter-theme workflow, and published first-party module line are active and maintained through tagged releases. The current published release is v0.79.0. See [roadmap.md](./docs/technical/roadmap.md) for upcoming work.
+The current generator, starter-theme workflow, and published first-party module line are active and maintained through tagged releases. The current published release is v0.80.0. See [roadmap.md](./docs/technical/roadmap.md) for upcoming work.
 See: [roadmap.md](./docs/technical/roadmap.md)
 
 ### "Can I use it for my client projects?"
@@ -226,7 +226,7 @@ Published release notes live in [docs/releases/](./docs/releases/). Each file th
 Active or unreleased release status remains in [roadmap.md](./docs/technical/roadmap.md) until a tagged public release note exists.
 
 ### "What modules are available?"
-Current published first-party modules include **auth, backups, blog, crm, forms, listings, notifications, social, and storage**. The monorepo also contains **billing** and **teams** directories as planned placeholders for follow-on modules.
+Current published first-party modules include **analytics, auth, backups, blog, crm, forms, listings, notifications, social, and storage**. The monorepo also contains **billing** and **teams** directories as planned placeholders for follow-on modules.
 See: [quickscale_modules/](./quickscale_modules/) for the current package list and per-module README files.
 
 ### "Can I contribute?"
@@ -323,6 +323,6 @@ decisions.md scaffolding.md roadmap.md   contrib/*
 
 ---
 
-**Last Updated**: 2026-04-03
-**QuickScale Version**: v0.79.0
+**Last Updated**: 2026-04-04
+**QuickScale Version**: v0.80.0
 **Feedback**: Open an issue if this guide needs improvement!

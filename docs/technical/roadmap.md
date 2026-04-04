@@ -47,7 +47,7 @@ This table is the single milestone summary for shipped history and the active fo
 | v0.77.0 | ✅ Internal baseline | Backups module | Private local and optional private remote workflows, guarded BackupPolicy-admin local restore, and CLI restore; changelog-only historical baseline |
 | v0.78.0 | ✅ Released | Notifications module | Transactional email foundation with app-owned rendering, recipient-granular tracking, and Anymail-backed Resend delivery; archived in release note and changelog |
 | v0.79.0 | ✅ Released | Social and Link Tree module | Curated social links and embeds, backend-owned preview metadata, and React public pages for fresh `showcase_react` generations; older projects adopt them manually |
-| v0.80.0 | 📋 Planned | Analytics module | PostHog website analytics with flat mutable settings, service-style backend hooks, and fresh `showcase_react` starter support; existing projects adopt frontend snippets manually |
+| v0.80.0 | ✅ Released | Analytics module | PostHog website analytics with flat mutable settings, service-style capture hooks, env-example sync and operator guidance, and fresh `showcase_react` starter support; existing projects still adopt frontend snippets manually |
 | v0.81.0 | 📋 Planned | Listings theme | Real-estate vertical baseline with static pages, listings, and social links |
 | v0.82.0 | 📋 Planned | CRM theme | React frontend for the CRM module |
 | v0.83.0 | 📋 Planned | Billing module | Stripe integration |
@@ -62,8 +62,8 @@ This table is the single milestone summary for shipped history and the active fo
 - 📋 = Planned/Not Started
 
 **Status:**
-- **Current release:** v0.79.0 is the published release
-- **Active next milestone:** v0.80.0 analytics is the current planning and implementation-prep scope
+- **Current release:** v0.80.0 is the published release
+- **Active next milestone:** v0.81.0 listings theme is the current planning and implementation-prep scope
 - **Plan/Apply System:** v0.68.0-v0.71.0 - Terraform-style configuration ✅ Complete
 - **SaaS Parity:** v0.84.0 - auth, billing, teams modules complete on top of the notifications foundation
 
@@ -91,11 +91,15 @@ After release closeout, keep only a concise pointer in the roadmap. Put canonica
 
 ### v0.80.0: `quickscale_modules.analytics` - Analytics Module
 
-**Status**: 📋 Planned
+**Status**: ✅ Released
+
+**Release note**: [Release v0.80.0 - Analytics Module](../releases/release-v0.80.0.md)
+
+**Closeout note**: Canonical release history now lives in [CHANGELOG.md](../../CHANGELOG.md) and the official release note above. Only deferred follow-up items remain unchecked in this archived milestone section.
 
 **Planning document**: [Analytics Provider Comparison](../planning/analytics-provider-comparison.md) — provider evaluation and reviewed v0.80.0 implementation contract.
 
-**Objective**: Ship PostHog as the only approved website-analytics provider for v0.80.0. The implementation is intentionally backend-first: flat mutable analytics settings, service-style capture helpers, narrow forms/social hooks, and fresh-generation `showcase_react` starter support without rewriting existing user-owned theme files.
+**Objective**: Shipped PostHog as the only approved website-analytics provider for v0.80.0. The implementation stays intentionally backend-first: flat mutable analytics settings, service-style capture helpers, guarded forms/social hooks, fresh-generation `showcase_react` starter support, and a manual server-rendered template-tag path without rewriting existing user-owned theme files.
 
 **Scope Guardrails**:
 - PostHog only in v0.80.0; no runtime multi-provider seam and no Plausible implementation path in this milestone
@@ -117,25 +121,25 @@ After release closeout, keep only a concise pointer in the roadmap. Put canonica
 Add `quickscale_cli/src/quickscale_cli/analytics_contract.py` following the same pattern as `notifications_contract.py` and `social_contract.py`.
 
 **Constants and defaults**:
-- [ ] Define `ANALYTICS_PROVIDER_POSTHOG = "posthog"` and `ANALYTICS_PROVIDERS = ("posthog",)` as the approved v0.80.0 provider set
-- [ ] Define `DEFAULT_ANALYTICS_POSTHOG_API_KEY_ENV_VAR = "POSTHOG_API_KEY"` and `DEFAULT_ANALYTICS_POSTHOG_HOST_ENV_VAR = "POSTHOG_HOST"`
-- [ ] Define `ANALYTICS_POSTHOG_DEFAULT_HOST = "https://us.i.posthog.com"` and `ANALYTICS_POSTHOG_EU_HOST = "https://eu.i.posthog.com"` as known host values
-- [ ] Define the first-party event vocabulary constants: `ANALYTICS_EVENT_PAGEVIEW`, `ANALYTICS_EVENT_FORM_SUBMIT`, `ANALYTICS_EVENT_SOCIAL_LINK_CLICK`
+- [x] Define `ANALYTICS_PROVIDER_POSTHOG = "posthog"` and `ANALYTICS_PROVIDERS = ("posthog",)` as the approved v0.80.0 provider set
+- [x] Define `DEFAULT_ANALYTICS_POSTHOG_API_KEY_ENV_VAR = "POSTHOG_API_KEY"` and `DEFAULT_ANALYTICS_POSTHOG_HOST_ENV_VAR = "POSTHOG_HOST"`
+- [x] Define `ANALYTICS_POSTHOG_DEFAULT_HOST = "https://us.i.posthog.com"` and `ANALYTICS_POSTHOG_EU_HOST = "https://eu.i.posthog.com"` as known host values
+- [x] Define the first-party event vocabulary constants: `ANALYTICS_EVENT_PAGEVIEW`, `ANALYTICS_EVENT_FORM_SUBMIT`, `ANALYTICS_EVENT_SOCIAL_LINK_CLICK`
 
 **Contract functions**:
-- [ ] `default_analytics_module_options()` returns `enabled`, `provider`, `posthog_api_key_env_var`, `posthog_host_env_var`, `posthog_host`, `exclude_debug`, `exclude_staff`, `anonymous_by_default`
-- [ ] `normalize_analytics_module_options(options)` strips leading/trailing whitespace, lower-cases provider token, and validates env-var name pattern
-- [ ] `resolve_analytics_module_options(options)` merges defaults with normalized overrides
-- [ ] `validate_analytics_env_var_reference(option_name, value)` reuses the same `^[A-Z][A-Z0-9_]*$` pattern as notifications
-- [ ] `validate_analytics_module_options(options)` returns issue list: provider must be in `ANALYTICS_PROVIDERS`; env-var references must pass pattern; `exclude_debug`, `exclude_staff`, and `anonymous_by_default` must be booleans
-- [ ] `analytics_production_targeted(options)` returns True when analytics is enabled and a non-placeholder API key env var reference is set
-- [ ] Export canonical `__all__`
+- [x] `default_analytics_module_options()` returns `enabled`, `provider`, `posthog_api_key_env_var`, `posthog_host_env_var`, `posthog_host`, `exclude_debug`, `exclude_staff`, `anonymous_by_default`
+- [x] `normalize_analytics_module_options(options)` strips leading/trailing whitespace, lower-cases provider token, and validates env-var name pattern
+- [x] `resolve_analytics_module_options(options)` merges defaults with normalized overrides
+- [x] `validate_analytics_env_var_reference(option_name, value)` reuses the same `^[A-Z][A-Z0-9_]*$` pattern as notifications
+- [x] `validate_analytics_module_options(options)` returns issue list: provider must be in `ANALYTICS_PROVIDERS`; env-var references must pass pattern; `exclude_debug`, `exclude_staff`, and `anonymous_by_default` must be booleans
+- [x] `analytics_production_targeted(options)` returns True when analytics is enabled and a non-placeholder API key env var reference is set
+- [x] Export canonical `__all__`
 
 ---
 
 #### B. Module Catalog Registration
 
-- [ ] Add `analytics` entry to `MODULE_CATALOG` in `quickscale_cli/src/quickscale_cli/module_catalog.py` with a description aligned to the narrower contract:
+- [x] Add `analytics` entry to `MODULE_CATALOG` in `quickscale_cli/src/quickscale_cli/module_catalog.py` with a description aligned to the narrower contract:
   ```python
   ModuleCatalogEntry(
       name="analytics",
@@ -151,29 +155,29 @@ Add `quickscale_cli/src/quickscale_cli/analytics_contract.py` following the same
 Add `_analytics_wiring(options)` following the same pattern as `_notifications_wiring` and `_social_wiring`.
 
 **Generated Django settings**:
-- [ ] Add `quickscale_modules_analytics` to `INSTALLED_APPS`
-- [ ] Write flat mutable settings instead of a single `QUICKSCALE_ANALYTICS` dict:
-  - [ ] `QUICKSCALE_ANALYTICS_ENABLED`
-  - [ ] `QUICKSCALE_ANALYTICS_PROVIDER`
-  - [ ] `QUICKSCALE_ANALYTICS_POSTHOG_API_KEY_ENV_VAR`
-  - [ ] `QUICKSCALE_ANALYTICS_POSTHOG_HOST_ENV_VAR`
-  - [ ] `QUICKSCALE_ANALYTICS_POSTHOG_HOST`
-  - [ ] `QUICKSCALE_ANALYTICS_EXCLUDE_DEBUG`
-  - [ ] `QUICKSCALE_ANALYTICS_EXCLUDE_STAFF`
-  - [ ] `QUICKSCALE_ANALYTICS_ANONYMOUS_BY_DEFAULT`
-- [ ] Do not add an analytics context processor
-- [ ] Document in the generated settings comments that analytics is disabled automatically in `DEBUG=True` environments when `exclude_debug=True`
+- [x] Add `quickscale_modules_analytics` to `INSTALLED_APPS`
+- [x] Write flat mutable settings instead of a single `QUICKSCALE_ANALYTICS` dict:
+  - [x] `QUICKSCALE_ANALYTICS_ENABLED`
+  - [x] `QUICKSCALE_ANALYTICS_PROVIDER`
+  - [x] `QUICKSCALE_ANALYTICS_POSTHOG_API_KEY_ENV_VAR`
+  - [x] `QUICKSCALE_ANALYTICS_POSTHOG_HOST_ENV_VAR`
+  - [x] `QUICKSCALE_ANALYTICS_POSTHOG_HOST`
+  - [x] `QUICKSCALE_ANALYTICS_EXCLUDE_DEBUG`
+  - [x] `QUICKSCALE_ANALYTICS_EXCLUDE_STAFF`
+  - [x] `QUICKSCALE_ANALYTICS_ANONYMOUS_BY_DEFAULT`
+- [x] Do not add an analytics context processor
+- [x] Document in the generated settings comments that analytics is disabled automatically in `DEBUG=True` environments when `exclude_debug=True`
 
 **`.env.example` additions**:
-- [ ] `POSTHOG_API_KEY=` (required for live analytics)
-- [ ] `POSTHOG_HOST=` (optional, defaults to `https://us.i.posthog.com`)
-- [ ] `VITE_POSTHOG_KEY=` and `VITE_POSTHOG_HOST=` for fresh `showcase_react` generations or explicit manual frontend adoption
+- [x] `POSTHOG_API_KEY=` (required for live analytics)
+- [x] `POSTHOG_HOST=` (optional, defaults to `https://us.i.posthog.com`)
+- [x] `VITE_POSTHOG_KEY=` and `VITE_POSTHOG_HOST=` for fresh `showcase_react` generations or explicit manual frontend adoption
 
 **Planner/apply operator output**:
-- [ ] Show the PostHog dashboard URL and live events verification link
-- [ ] Remind operators to set `POSTHOG_API_KEY` and `POSTHOG_HOST` as Railway service variables for runtime
-- [ ] Remind operators that `VITE_POSTHOG_KEY` and `VITE_POSTHOG_HOST` are build-time vars for fresh `showcase_react` generations or manual frontend adoption
-- [ ] State explicitly that existing React/HTML theme files remain user-owned and are not rewritten by `quickscale apply`
+- [x] Show the PostHog dashboard URL and live events verification link
+- [x] Remind operators to set `POSTHOG_API_KEY` and `POSTHOG_HOST` as Railway service variables for runtime
+- [x] Remind operators that `VITE_POSTHOG_KEY` and `VITE_POSTHOG_HOST` are build-time vars for fresh `showcase_react` generations or manual frontend adoption
+- [x] State explicitly that existing React/HTML theme files remain user-owned and are not rewritten by `quickscale apply`
 
 ---
 
@@ -197,82 +201,82 @@ quickscale_modules/analytics/
 ```
 
 **Service-style module exception**:
-- [ ] Use the documented exception in `decisions.md`: v0.80.0 analytics does not require `models.py`, `admin.py`, `urls.py`, or migrations because the approved contract is integration-only
+- [x] Use the documented exception in `decisions.md`: v0.80.0 analytics does not require `models.py`, `admin.py`, `urls.py`, or migrations because the approved contract is integration-only
 
 **`apps.py`** — PostHog Python SDK initialization:
-- [ ] Read the flat `QUICKSCALE_ANALYTICS_*` settings from `django.conf.settings`
-- [ ] If analytics is disabled, or if `exclude_debug=True` while `settings.DEBUG` is true, set the SDK to disabled and return
-- [ ] Read the API key from `os.environ.get(QUICKSCALE_ANALYTICS_POSTHOG_API_KEY_ENV_VAR, "")`
-- [ ] Read the host from `os.environ.get(QUICKSCALE_ANALYTICS_POSTHOG_HOST_ENV_VAR, "")` and fall back to `QUICKSCALE_ANALYTICS_POSTHOG_HOST`
-- [ ] If the API key is empty, disable the SDK and emit a warning outside DEBUG mode
-- [ ] If configuration is present, initialize the PostHog SDK without raising startup exceptions
-- [ ] Analytics failure must never prevent Django app startup
+- [x] Read the flat `QUICKSCALE_ANALYTICS_*` settings from `django.conf.settings`
+- [x] If analytics is disabled, or if `exclude_debug=True` while `settings.DEBUG` is true, set the SDK to disabled and return
+- [x] Read the API key from `os.environ.get(QUICKSCALE_ANALYTICS_POSTHOG_API_KEY_ENV_VAR, "")`
+- [x] Read the host from `os.environ.get(QUICKSCALE_ANALYTICS_POSTHOG_HOST_ENV_VAR, "")` and fall back to `QUICKSCALE_ANALYTICS_POSTHOG_HOST`
+- [x] If the API key is empty, disable the SDK and emit a warning outside DEBUG mode
+- [x] If configuration is present, initialize the PostHog SDK without raising startup exceptions
+- [x] Analytics failure must never prevent Django app startup
 
 **`events.py`** — first-party event vocabulary:
-- [ ] `ANALYTICS_EVENT_FORM_SUBMIT = "form_submit"`
-- [ ] `ANALYTICS_EVENT_SOCIAL_LINK_CLICK = "social_link_click"`
-- [ ] `ANALYTICS_EVENT_PAGEVIEW = "$pageview"`
-- [ ] Other modules import these constants instead of hardcoding event names
+- [x] `ANALYTICS_EVENT_FORM_SUBMIT = "form_submit"`
+- [x] `ANALYTICS_EVENT_SOCIAL_LINK_CLICK = "social_link_click"`
+- [x] `ANALYTICS_EVENT_PAGEVIEW = "$pageview"`
+- [x] Other modules import these constants instead of hardcoding event names
 
 **`services.py`** — server-side capture helpers:
-- [ ] `is_analytics_active() -> bool` returns True only when the SDK is initialized and not disabled
-- [ ] `capture_event(distinct_id: str, event: str, properties: dict | None = None) -> None` wraps `posthog.capture()` and never raises
-- [ ] `capture_form_submit(distinct_id: str, form_id: int | str, form_name: str = "", extra: dict | None = None) -> None` emits the canonical forms event payload
-- [ ] `capture_social_link_click(distinct_id: str, provider: str, link_id: int | str, extra: dict | None = None) -> None` emits the canonical social link click payload
-- [ ] `get_distinct_id(request) -> str` returns a user PK string only when the operator has opted out of anonymous-by-default; otherwise it uses a stable session identifier
+- [x] `is_analytics_active() -> bool` returns True only when the SDK is initialized and not disabled
+- [x] `capture_event(distinct_id: str, event: str, properties: dict | None = None) -> None` wraps `posthog.capture()` and never raises
+- [x] `capture_form_submit(distinct_id: str, form_id: int | str, form_name: str = "", extra: dict | None = None) -> None` emits the canonical forms event payload
+- [x] `capture_social_link_click(distinct_id: str, provider: str, link_id: int | str, extra: dict | None = None) -> None` emits the canonical social link click payload
+- [x] `get_distinct_id(request) -> str` returns a user PK string only when the operator has opted out of anonymous-by-default; otherwise it uses a stable session identifier
 
 ---
 
 #### E. Frontend Scope and Adoption Boundaries
 
 **Fresh `showcase_react` generations only**:
-- [ ] Add dormant PostHog starter support inside the generator-owned `showcase_react` templates
-- [ ] The starter wiring initializes only when `VITE_POSTHOG_KEY` is present and not a placeholder
-- [ ] React route tracking uses PostHog's `history_change` pageview mode
-- [ ] Fresh generations pick up the starter support automatically after the template update lands
+- [x] Add dormant PostHog starter support inside the generator-owned `showcase_react` templates
+- [x] The starter wiring initializes only when `VITE_POSTHOG_KEY` is present and not a placeholder
+- [x] React route tracking uses PostHog's `history_change` pageview mode
+- [x] Fresh generations pick up the starter support automatically after the template update lands
 
 **Existing React and HTML projects**:
-- [ ] `quickscale apply` does not rewrite existing `frontend/package.json`, `src/main.*`, `src/App.*`, or Django template files
-- [ ] Existing projects adopt any React or HTML analytics snippets manually if they want frontend capture
-- [ ] Documentation must keep that manual-adoption boundary explicit rather than implying managed retrofits
+- [x] `quickscale apply` does not rewrite existing `frontend/package.json`, `src/main.*`, `src/App.*`, or Django template files
+- [x] Existing projects adopt any React or HTML analytics snippets manually if they want frontend capture
+- [x] Documentation must keep that manual-adoption boundary explicit rather than implying managed retrofits
 
 **HTML theme scope in v0.80.0**:
-- [ ] Document the manual template-snippet path for server-rendered pages
-- [ ] Do not add an analytics context processor or promise apply-managed HTML template mutation
+- [x] Add and document the manual template-tag path for server-rendered pages
+- [x] Do not add an analytics context processor or promise apply-managed HTML template mutation
 
 ---
 
 #### F. Cross-Module Hooks
 
 **Forms → Analytics**:
-- [ ] Wire the forms submission success path with a guarded direct optional import of `analytics.services.capture_form_submit`
-- [ ] If analytics is not installed, not enabled, or not importable, forms submission continues normally with no analytics side effect
-- [ ] Do not generate analytics-specific glue in a project-owned extension app for v0.80.0
+- [x] Wire the forms submission success path with a guarded direct optional import of `analytics.services.capture_form_submit`
+- [x] If analytics is not installed, not enabled, or not importable, forms submission continues normally with no analytics side effect
+- [x] Do not generate analytics-specific glue in a project-owned extension app for v0.80.0
 
 **Social → Analytics**:
-- [ ] Limit click tracking to QuickScale-owned generated public pages/templates that QuickScale already owns
-- [ ] Do not promise automatic instrumentation for project-owned custom social pages or existing user-owned theme files
+- [x] Limit click tracking to QuickScale-owned generated public pages/templates that QuickScale already owns
+- [x] Do not promise automatic instrumentation for project-owned custom social pages or existing user-owned theme files
 
 ---
 
 #### G. CLI Plan/Apply Integration
 
 **`quickscale plan`**:
-- [ ] Add `analytics` to the module selection menu with description "PostHog website analytics (free tier: 1M events/month)"
-- [ ] Prompt for enable/disable, API key env var name, host, exclude-debug, exclude-staff, and anonymous-by-default behavior
-- [ ] Keep the planner output focused on PostHog only; Plausible remains documentation, not a runtime option
+- [x] Add `analytics` to the module selection menu with description "PostHog website analytics (free tier: 1M events/month)"
+- [x] Prompt for enable/disable, API key env var name, host, exclude-debug, exclude-staff, and anonymous-by-default behavior
+- [x] Keep the planner output focused on PostHog only; Plausible remains documentation, not a runtime option
 
 **`quickscale apply`**:
-- [ ] Add the analytics module to `INSTALLED_APPS`
-- [ ] Write the flat `QUICKSCALE_ANALYTICS_*` settings
-- [ ] Update `.env.example` with the PostHog runtime vars and the React build-time vars
-- [ ] Emit operator next steps and manual-adoption guidance for existing frontend files
-- [ ] Do not mutate existing React or HTML theme files
+- [x] Add the analytics module to `INSTALLED_APPS`
+- [x] Write the flat `QUICKSCALE_ANALYTICS_*` settings
+- [x] Update `.env.example` with the PostHog runtime vars and the React build-time vars
+- [x] Emit operator next steps and manual-adoption guidance for existing frontend files
+- [x] Do not mutate existing React or HTML theme files
 
 **`quickscale plan --reconfigure`**:
-- [ ] Analytics settings remain mutable and re-runnable through the planner
-- [ ] Disabling analytics removes the backend/module wiring and flat settings
-- [ ] Disabling analytics does not attempt to clean up user-owned frontend snippets or custom event calls
+- [x] Analytics settings remain mutable and re-runnable through the planner
+- [x] Disabling analytics removes the backend/module wiring and flat settings
+- [x] Disabling analytics does not attempt to clean up user-owned frontend snippets or custom event calls
 
 **`quickscale status`**:
 - [ ] Show provider, host, API key env var name, env-var presence in the current environment, and SDK state
@@ -281,10 +285,10 @@ quickscale_modules/analytics/
 
 #### H. Railway Compatibility
 
-- [ ] `POSTHOG_API_KEY` and `POSTHOG_HOST` must be Railway service variables for runtime use
-- [ ] `VITE_POSTHOG_KEY` and `VITE_POSTHOG_HOST` are build-time vars for fresh `showcase_react` generations or manual adoption paths
-- [ ] `https://eu.i.posthog.com` remains the documented EU host option
-- [ ] Apply-time guidance should call out CSP or referrer-policy implications when operators lock down outbound script or API hosts
+- [x] `POSTHOG_API_KEY` and `POSTHOG_HOST` must be Railway service variables for runtime use
+- [x] `VITE_POSTHOG_KEY` and `VITE_POSTHOG_HOST` are build-time vars for fresh `showcase_react` generations or manual adoption paths
+- [x] `https://eu.i.posthog.com` remains the documented EU host option
+- [x] Apply-time guidance should call out CSP or referrer-policy implications when operators lock down outbound script or API hosts
 
 ---
 
@@ -293,58 +297,58 @@ quickscale_modules/analytics/
 Following [module-extension.md](./module-extension.md), analytics v0.80.0 uses the narrower service-style contract.
 
 **What QuickScale owns**:
-- Flat `QUICKSCALE_ANALYTICS_*` settings
-- `apps.py`, `events.py`, and `services.py`
-- Guarded forms hook support
-- Social click tracking only where QuickScale owns the generated public page/template
-- Dormant `showcase_react` starter support for fresh generations
+- [x] Flat `QUICKSCALE_ANALYTICS_*` settings
+- [x] `apps.py`, `events.py`, and `services.py`
+- [x] Guarded forms hook support
+- [x] Social click tracking only where QuickScale owns the generated public page/template
+- [x] Dormant `showcase_react` starter support for fresh generations
 
 **What the project owns**:
-- Existing theme files and any manual analytics adoption inside them
-- Custom event capture from project-owned views, templates, and React components
-- Any project-owned extension-app glue beyond the shipped module contract
-- PostHog dashboards, funnels, goals, and broader product analytics configuration
+- [x] Existing theme files and any manual analytics adoption inside them
+- [x] Custom event capture from project-owned views, templates, and React components
+- [x] Any project-owned extension-app glue beyond the shipped module contract
+- [x] PostHog dashboards, funnels, goals, and broader product analytics configuration
 
 **Structured extension points (Tier 1)**:
-- `QUICKSCALE_ANALYTICS_*` settings
-- `analytics.services.capture_event(...)`
-- `analytics.services.capture_form_submit(...)`
-- `analytics.services.capture_social_link_click(...)`
-- `analytics.services.get_distinct_id(request)`
-- `analytics.events.*`
+- [x] `QUICKSCALE_ANALYTICS_*` settings
+- [x] `analytics.services.capture_event(...)`
+- [x] `analytics.services.capture_form_submit(...)`
+- [x] `analytics.services.capture_social_link_click(...)`
+- [x] `analytics.services.get_distinct_id(request)`
+- [x] `analytics.events.*`
 
 **Upgrade expectations**:
-- Existing user-owned frontend files are not rewritten by analytics apply/reconfigure flows
-- Direct edits under `modules/analytics/` remain outside the supported extension contract
+- [x] Existing user-owned frontend files are not rewritten by analytics apply/reconfigure flows
+- [x] Direct edits under `modules/analytics/` remain outside the supported extension contract
 
 ---
 
 #### J. Testing Scope
 
 **Contract unit tests** (`quickscale_cli/tests/test_analytics_contract.py`):
-- [ ] Defaults, normalization, validation, and production-targeted checks cover the approved PostHog-only options
+- [x] Defaults, normalization, validation, and production-targeted checks cover the approved PostHog-only options
 
 **Wiring spec tests** (`quickscale_cli/tests/test_module_wiring_specs.py`):
-- [ ] Analytics enabled writes the flat `QUICKSCALE_ANALYTICS_*` settings and adds `quickscale_modules_analytics` to `INSTALLED_APPS`
-- [ ] Analytics disabled omits the module wiring
-- [ ] No analytics context processor is added
+- [x] Analytics enabled writes the flat `QUICKSCALE_ANALYTICS_*` settings and adds `quickscale_modules_analytics` to `INSTALLED_APPS`
+- [x] Analytics disabled omits the module wiring
+- [x] No analytics context processor is added
 
 **Module unit tests** (`quickscale_modules/analytics/tests/`):
-- [ ] `apps.py` disables safely when configuration is missing or DEBUG exclusion applies, and never raises
-- [ ] `services.py` no-ops safely when analytics is inactive and emits the expected event payload shapes when active
-- [ ] `events.py` exposes the stable event vocabulary constants
+- [x] `apps.py` disables safely when configuration is missing or DEBUG exclusion applies, and never raises
+- [x] `services.py` no-ops safely when analytics is inactive and emits the expected event payload shapes when active
+- [x] `events.py` exposes the stable event vocabulary constants
 
 **Cross-module tests**:
-- [ ] Forms submission keeps working when analytics is absent and emits the expected event only when the guarded optional import path is available
-- [ ] Social click tracking coverage is limited to QuickScale-owned generated public pages/templates
+- [x] Forms submission keeps working when analytics is absent and emits the expected event only when the guarded optional import path is available
+- [x] Social click tracking coverage is limited to QuickScale-owned generated public pages/templates
 
 **Frontend/generator tests**:
-- [ ] Fresh `showcase_react` generations include the dormant analytics starter support
-- [ ] Applying analytics to an existing project does not rewrite user-owned React or HTML theme files
+- [x] Fresh `showcase_react` generations include the dormant analytics starter support
+- [x] Applying analytics to an existing project does not rewrite user-owned React or HTML theme files
 
 **Manual / smoke verification**:
 - [ ] PostHog live events view confirms pageviews and first-party conversion events on a fresh-generated React project
-- [ ] Existing projects rely on documented manual adoption steps for frontend analytics
+- [x] Existing projects rely on documented manual adoption steps for frontend analytics
 
 ---
 
