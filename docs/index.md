@@ -34,6 +34,7 @@
   - [Debug Guide](contrib/debug.md) - Debugging and root cause analysis
 
 - **Planning**
+  - [Beta Site Migration Playbook](planning/beta-site-migration.md) - Step-by-step guide for keeping experto-ai-web and bap-web current with new QuickScale releases
   - [Analytics Provider Comparison](planning/analytics-provider-comparison.md) - Provider evaluation for analytics implementation planning
   - [Email Sender Comparison](planning/email-sender-comparison.md) - Provider evaluation for notification delivery planning
 
