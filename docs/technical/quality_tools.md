@@ -5,7 +5,7 @@ QuickScale provides a comprehensive code quality analysis script that goes beyon
 ## Running Quality Analysis
 
 ```bash
-./scripts/check_quality.sh
+make quality
 ```
 
 ## What Gets Analyzed
@@ -150,17 +150,17 @@ Contains:
 
 The quality analysis script complements existing tools:
 
-| Tool | Purpose | When to Run |
-|------|---------|-------------|
-| `./scripts/lint.sh` | Format + basic linting (ruff) | Before every commit |
-| `./scripts/check_ci_locally.sh` | Full CI checks (lint + type + test) | Before push to GitHub |
-| `./scripts/check_quality.sh` | Deep quality analysis | Weekly / before major releases |
+| Command | Purpose | When to Run |
+|---------|---------|-------------|
+| `make lint` | Format + basic linting (ruff) | Before every commit |
+| `make ci` | Full CI checks (lint + type + test) | Before push to GitHub |
+| `make quality` | Deep quality analysis | Weekly / before major releases |
 
 ## Workflow Recommendations
 
-1. **Daily development:** Use `lint.sh` for quick fixes
-2. **Before push:** Run `check_ci_locally.sh` to ensure CI will pass
-3. **Weekly health check:** Run `check_quality.sh` to catch technical debt early
+1. **Daily development:** Use `make lint` for quick fixes
+2. **Before push:** Run `make ci` to ensure CI will pass
+3. **Weekly health check:** Run `make quality` to catch technical debt early
 4. **Before releases:** Review quality reports and address critical issues
 
 ## Interpreting Results

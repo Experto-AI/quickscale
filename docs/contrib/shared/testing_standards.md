@@ -277,29 +277,28 @@ def test_calculate_discount_with_valid_percent():
 
 ## LLM-Friendly Test Analysis
 
-For AI assistants and LLMs analyzing test failures, QuickScale provides specialized testing output modes:
+For AI assistants and LLMs analyzing test failures, use these commands:
 
 ```bash
-# Show only failures (for debugging specific issues)
-./run_tests.sh --failures-only --unit
+# Stop on first failure (focused debugging)
+poetry run pytest quickscale_core/tests --exitfirst --tb=short -m "not e2e"
 
-# Stop on first failure (for quick issue identification)
-./run_tests.sh --exitfirst --unit
+# Run a single test file
+poetry run pytest quickscale_core/tests/test_integration.py --tb=short
+
+# Verbose output for a section
+make test -- --core
+
+# E2E tests (requires Docker)
+make test-e2e
 ```
 
-### LLM Mode Features
-- **Ultra-minimal output**: Only shows essential information for analysis
-- **Clean formatting**: Optimized for AI consumption and pattern recognition
-- **No file output**: Results displayed directly in terminal for immediate copying
-- **Failure summary**: Clear indication of test success/failure with exit codes
-- **Timestamp tracking**: When tests were executed for correlation analysis
-
 ### LLM Testing Workflow
-1. **Run targeted tests**: Use `./run_tests.sh --failures-only --unit` or `./run_tests.sh -f --unit` to get clean output
+1. **Run targeted tests**: Use `make test -- --core` (or `--cli`, `--modules`) to get section-specific output
 2. **Copy output to LLM**: Paste the terminal output directly to your LLM for analysis
 3. **Pattern analysis**: LLM can identify failure patterns and suggest systematic fixes
-4. **Iterative testing**: Use `--exitfirst` to focus on one failure at a time
-5. **Verification**: Re-run with LLM mode to confirm fixes resolve issues
+4. **Iterative testing**: Use `poetry run pytest <path> --exitfirst --tb=short` to focus on one failure at a time
+5. **Verification**: Re-run `make test` to confirm fixes resolve all issues
 
 ### Example LLM Analysis Prompt Template
 ```
@@ -329,220 +328,158 @@ The LLM-friendly modes support systematic testing by:
 ```
 What are you testing?
 
-🔧 QuickScale CLI/Generator Logic
-└─ Unit Test (tests/quickscale_generator/)
-   └─ Mock all external dependencies
+🔧 QuickScale Core (generator, templates, file utils, config)
+└─ Unit/Integration Test → quickscale_core/tests/
+   ├─ Standard unit test: no marker
+   └─ Multi-step workflow: @pytest.mark.integration
 
-🏛️ Django Functionality
-├─ Simple model/utility functions?
-│  └─ Unit Test (tests/django_functionality/domain/)
-│     └─ Use Django TestCase with PostgreSQL test database
-│
-└─ Requires Django URLs/templates/full app structure?
-   └─ Integration Test (tests/integration/)
-      └─ Use quickscale plan + apply with real project
+⚙️ QuickScale CLI (plan, apply, status, up, down...)
+└─ Unit Test → quickscale_cli/tests/
+   └─ Use cli_runner fixture; mock filesystem and Docker
 
-🎬 Complete User Journey
-└─ E2E Test (tests/e2e/)
-   └─ Docker environment + real services
+🧩 Module Logic (auth, crm, blog, and other quickscale_modules)
+└─ Unit Test → quickscale_modules/<name>/tests/
+   └─ Django TestCase; run with --ds=tests.settings
+
+🎬 Complete User Journey (requires running Docker)
+└─ E2E Test → @pytest.mark.e2e (quickscale_core/ or quickscale_cli/)
+   └─ Run via: make test-e2e
 ```
 
-### Unit Tests (`tests/quickscale_generator/` and domain-specific)
+### Unit Tests (`quickscale_core/tests/`, `quickscale_cli/tests/`, `quickscale_modules/*/tests/`)
 **Purpose**: Test individual components in isolation with mocked dependencies.
 
 **When to Use**:
-- Testing QuickScale CLI commands and generator logic
-- Testing individual functions, classes, or modules
-- Testing business logic without external dependencies
-- Testing utility functions and helpers
+- QuickScale core generator logic, templates, file utilities
+- CLI commands (plan, apply, status, etc.)
+- Module-specific Django business logic
+- Utility functions and helpers
 
 **Key Characteristics**:
 - **Fast execution** (< 1 second per test)
-- **PostgreSQL test database** for Django tests
 - **Use mocks** for external dependencies
 - **Test isolated behavior** of single components
+- Module tests use `--ds=tests.settings` Django settings
 
-**Example - QuickScale Generator Unit Test**:
+**Example - CLI command unit test**:
 ```python
-# tests/quickscale_generator/cli/test_init_command.py
-@patch('quickscale.commands.init_command.os.makedirs')
-@patch('quickscale.commands.init_command.shutil.copytree')
-def test_init_command_creates_project_structure(mock_copytree, mock_makedirs):
-    """Test that init command creates proper project structure."""
-    # Arrange
-    project_name = "test_project"
-
-    # Act
-    result = run_init_command(project_name)
-
-    # Assert
-    assert result.success is True
-    mock_makedirs.assert_called_once()
-    mock_copytree.assert_called_once()
+# quickscale_cli/tests/commands/test_plan_command.py
+def test_plan_command_creates_config(tmp_path, cli_runner):
+    """Test that plan command creates a project config file."""
+    result = cli_runner.invoke(cli, ['plan', '--name', 'myproject'], catch_exceptions=False)
+    assert result.exit_code == 0
 ```
 
-**Example - Django Component Unit Test**:
+**Example - Core generator unit test**:
 ```python
-# tests/django_functionality/credit_system/test_credit_models.py
-class TestCreditModel(TestCase):
-    """Unit tests for Credit model behavior."""
-
-    def test_credit_consumption_calculation(self):
-        """Test credit consumption calculation logic."""
-        # Arrange
-        credit = Credit(amount=100, used=30)
-
-        # Act
-        remaining = credit.get_remaining()
-
-        # Assert
-        assert remaining == 70
+# quickscale_core/tests/test_generator/test_generator.py
+def test_generator_creates_manage_py(generated_project_path):
+    """Test that the generator produces a valid manage.py."""
+    assert (generated_project_path / "manage.py").exists()
 ```
 
-### Integration Tests (`tests/integration/`)
-**Purpose**: Test how multiple components work together using real QuickScale projects.
+### Integration Tests (`@pytest.mark.integration` in `quickscale_core/tests/`)
+**Purpose**: Test multi-step generation workflows that span multiple internal components.
 
 **When to Use**:
-- Authentication flows requiring Django URL resolution
-- Complete payment workflows with Stripe integration
-- Cross-system interactions (auth + credits + payments)
-- Features requiring full Django project structure
-
-**Key Indicators**:
-- 🚨 Test fails with `"No module named 'core.urls'"`
-- 🚨 Test uses `reverse('account_login')` or similar
-- 🚨 Test requires allauth, admin, or complete Django ecosystem
+- End-to-end project generation followed by validation
+- Workflows that span multiple internal components
+- Tests that use `ProjectGenerator` directly with real filesystem output
 
 **Key Characteristics**:
-- **Use real QuickScale projects** created with `quickscale plan` + `quickscale apply` in `/tmp`
-- **PostgreSQL test database** in Docker container
-- **Test system boundaries** and component interactions
-- **Moderate execution time** (5-30 seconds per test)
-- Tests requiring allauth, admin, or complete Django ecosystem
-- Cross-app functionality (credits + stripe + auth)
+- Marked with `@pytest.mark.integration`
+- Use `tmp_path` for filesystem isolation
+- Use `ProjectGenerator` directly (not CLI invocation)
+- **Included** in `make test` runs (not excluded)
+- Moderate execution time (1-10 seconds per test)
 
-**Example - Integration Test with Dynamic Project**:
+**Example**:
 ```python
-# tests/integration/test_auth_credit_integration.py
-def test_user_registration_creates_credit_account(dynamic_project_generator):
-    """Test that user registration automatically creates credit account."""
-    # Arrange - Generate real QuickScale project
-    project_dir = dynamic_project_generator.generate_project("test_auth_credits")
+# quickscale_core/tests/test_integration.py
+@pytest.mark.integration
+class TestProjectGenerationIntegration:
+    """End-to-end integration tests."""
 
-    # Set up Django environment for the generated project
-    setup_django_for_project(project_dir)
+    def test_generate_and_validate_project(self, tmp_path):
+        """Generate project and verify it is a valid Django project."""
+        generator = ProjectGenerator(theme="showcase_html")
+        output_path = tmp_path / "integration_test"
 
-    # Act - Use real Django test client
-    client = Client()
-    response = client.post('/accounts/signup/', {
-        'email': 'test@example.com',
-        'password1': 'testpass123',
-        'password2': 'testpass123'
-    })
+        generator.generate("integration_test", output_path)
 
-    # Assert - Check real database state
-    user = User.objects.get(email='test@example.com')
-    credit_account = CreditAccount.objects.get(user=user)
-    assert credit_account.balance == 0
-    assert response.status_code == 302
+        assert (output_path / "manage.py").exists()
+        assert (output_path / "integration_test").is_dir()
+        assert (output_path / "pyproject.toml").exists()
 ```
 
-### E2E Tests (`tests/e2e/`)
-**Purpose**: Test complete user workflows with Docker containerization.
+### E2E Tests (`@pytest.mark.e2e`)
+**Purpose**: Test complete user workflows with real Docker containers.
 
 **When to Use**:
-- Testing complete user journeys from start to finish
-- Testing with real external services (Stripe, email)
-- Testing deployment and production-like scenarios
-- Testing performance and scalability
+- Testing CLI commands that start/stop Docker services (`quickscale up`, `quickscale down`)
+- Testing with real databases and external services
+- Production-like scenarios
 
 **Key Characteristics**:
-- **Real Docker environment** with PostgreSQL database
-- **Real external dependencies**
-- **Slow execution** (30+ seconds per test)
-- **Production-like setup**
+- Marked with `@pytest.mark.e2e`
+- **Excluded** from `make test` by default
+- Run via `make test-e2e` (requires Docker running)
+- Use `quickscale_cli.main.cli` via `CliRunner` or `subprocess`
+- Slow execution (30+ seconds per test)
+
+**Example**:
+```python
+# quickscale_cli/tests/test_e2e_development_workflow.py
+@pytest.mark.e2e
+class TestDevelopmentCommandsE2E:
+    """End-to-end tests requiring real Docker containers."""
+
+    def test_up_starts_services(self, tmp_path, cli_runner):
+        """Test that quickscale up starts Docker services."""
+        generator = ProjectGenerator(theme="showcase_html")
+        generator.generate("e2e_test", tmp_path / "e2e_test")
+        result = cli_runner.invoke(cli, ['up'], catch_exceptions=False)
+        assert result.exit_code == 0
+```
 
 ### Database Configuration for Tests
 
-**PostgreSQL Test Database**: All tests use PostgreSQL via Docker for consistency with production.
+**PostgreSQL Test Database**: Unit/integration tests that need a database use PostgreSQL via Docker.
 
-**Unit Tests**: Use `tests/docker-compose.test.yml` with PostgreSQL container
-**Integration Tests**: Real projects use PostgreSQL via dynamic project generation
-**E2E Tests**: Full Docker environment with PostgreSQL
-
-**Test Database Setup**:
+**Setup**:
 ```bash
-# Start PostgreSQL test database
-docker-compose -f tests/docker-compose.test.yml up -d test-db
+# Start PostgreSQL test database (quickscale_core)
+docker-compose -f quickscale_core/tests/docker-compose.test.yml up -d test-db
 
-# Run tests
-./scripts/test_unit.sh
+# Run unit and integration tests
+make test
 
 # Cleanup
-docker-compose -f tests/docker-compose.test.yml down
+docker-compose -f quickscale_core/tests/docker-compose.test.yml down
 ```
-
-**Example - E2E Test**:
-```python
-# tests/e2e/test_complete_user_journey.py
-def test_complete_subscription_workflow(docker_environment):
-    """Test complete user journey from signup to service usage."""
-    # Arrange - Real Docker environment
-    base_url = docker_environment.get_base_url()
-
-    # Act & Assert - Real browser automation
-    with selenium_driver() as driver:
-        # User signs up
-        driver.get(f"{base_url}/accounts/signup/")
-        # ... complete browser workflow
-
-        # User purchases credits
-        # ... real Stripe payment flow
-
-        # User consumes credits
-        # ... real service usage
-```
-
-### Dynamic Project Generation Rules
-
-**ALWAYS use `quickscale plan` + `quickscale apply` for**:
-- Tests requiring Django URL resolution
-- Template rendering requiring full Django context
-- Cross-app functionality tests
-- Admin interface tests
-
-**NEVER use for**:
-- Individual model method tests
-- Utility function tests
-- CLI command logic tests
-- Simple database operations
 
 ### Testing Application by Stage
 
 ### Planning Stage
 - **Identify test category**: Use decision tree above
-- Plan for testable code design
-- Consider test data requirements
-- **Plan dynamic project needs**: If integration tests needed, plan project structure
+- Plan for testable code design with dependency injection
+- Consider which package the test lives in
 
 ### Implementation Stage
 - Write implementation code first
 - Design for testability using dependency injection
 - Create focused, single-responsibility functions
-- **Consider URL structure**: If Django URLs needed, plan for integration tests
 
 ### Quality Control Stage
 - Write comprehensive tests after implementation
-- **Verify correct test category**: Unit vs Integration vs E2E
+- **Verify correct test category and location**: Which package, which marker
 - Ensure tests focus on behavior, not implementation
 - Validate test isolation and proper mocking
-- **Validate dynamic project usage**: Ensure integration tests use real projects
 
 ### Debugging Stage
 - Use tests to reproduce bugs
 - Write regression tests for bug fixes
 - Verify that fixes don't break existing functionality
-- Use tests to validate root cause analysis
 - **Root cause analysis for test failures**: Determine if test or code is wrong
 
 ---

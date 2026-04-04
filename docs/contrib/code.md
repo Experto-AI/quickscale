@@ -465,7 +465,7 @@ During implementation, ensure you have:
 
 ## Code Quality Analysis
 
-For deep quality analysis tooling (dead code detection, complexity metrics, duplication), see [Quality Analysis Tools](../technical/quality_tools.md).
+Run `make quality` for deep analysis (dead code, complexity, duplication). See [Quality Analysis Tools](../technical/quality_tools.md) for full documentation.
 
 ## Next Steps
 

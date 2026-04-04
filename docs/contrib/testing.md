@@ -22,22 +22,43 @@ Use this guide in the **TESTING stage** after:
 ```
 What are you testing?
 
-🔧 QuickScale CLI/Generator Logic
-└─ Unit Test (tests/quickscale_generator/)
-   └─ Mock all external dependencies
+🔧 QuickScale Core (generator, templates, file utils, config)
+└─ Unit/Integration Test → quickscale_core/tests/
+   ├─ Standard unit tests: no marker needed
+   └─ Multi-step workflow tests: @pytest.mark.integration
 
-🏛️ Django Functionality
-├─ Simple model/utility functions?
-│  └─ Unit Test (tests/django_functionality/domain/)
-│     └─ Use Django TestCase with PostgreSQL test database
-│
-└─ Requires Django URLs/templates/full app structure?
-   └─ Integration Test (tests/integration/)
-      └─ Use quickscale plan + apply with real project
+⚙️ QuickScale CLI (commands: plan, apply, status, up, down...)
+└─ Unit Test → quickscale_cli/tests/
+   └─ Use cli_runner fixture; mock filesystem and Docker
 
-🎬 Complete User Journey
-└─ E2E Test (tests/e2e/)
-   └─ Docker environment + real services
+🧩 Module Logic (auth, crm, blog, and other quickscale_modules)
+└─ Unit Test → quickscale_modules/<name>/tests/
+   └─ Django TestCase with --ds=tests.settings
+
+🎬 Complete User Journey (requires running Docker)
+└─ E2E Test → @pytest.mark.e2e (anywhere in quickscale_core/ or quickscale_cli/)
+   └─ Run separately via: make test-e2e
+```
+
+## Running Tests
+
+```bash
+# Unit + integration tests for all packages (excludes e2e)
+make test
+
+# Unit tests only (no integration tests)
+make test-unit
+
+# Run tests for a specific section
+make test -- --core      # quickscale_core only
+make test -- --cli       # quickscale_cli only
+make test -- --modules   # quickscale_modules only
+
+# Stop on first failure (direct pytest)
+poetry run pytest quickscale_core/tests --exitfirst --tb=short -m "not e2e"
+
+# E2E tests only (requires Docker)
+make test-e2e
 ```
 
 ## Unit Tests Recipe
@@ -48,95 +69,110 @@ What are you testing?
 - QuickScale CLI commands and generator logic
 - Individual functions, classes, or modules
 - Business logic without external dependencies
-- Utility functions and helpers
 
 **Key Requirements**:
 - Fast execution (< 1 second per test)
 - Mock all external dependencies
 - Test isolated behavior
-- PostgreSQL test database for Django tests
 
-**Example**:
+**Example — CLI command test**:
 ```python
-# tests/quickscale_generator/cli/test_init_command.py
-@patch('quickscale.commands.init_command.os.makedirs')
-@patch('quickscale.commands.init_command.shutil.copytree')
-def test_init_command_creates_project_structure(mock_copytree, mock_makedirs):
-    """Test that init command creates proper project structure."""
-    # Arrange
-    project_name = "test_project"
+# quickscale_cli/tests/commands/test_plan_command.py
+from click.testing import CliRunner
+from quickscale_cli.main import cli
 
-    # Act
-    result = run_init_command(project_name)
-
-    # Assert
-    assert result.success is True
-    mock_makedirs.assert_called_once()
-    mock_copytree.assert_called_once()
+def test_plan_command_creates_config(tmp_path, cli_runner):
+    """Test that plan command creates a project config file."""
+    result = cli_runner.invoke(cli, ['plan', '--name', 'myproject'], catch_exceptions=False)
+    assert result.exit_code == 0
 ```
+
+**Example — Core generator unit test**:
+```python
+# quickscale_core/tests/test_generator/test_generator.py
+def test_generator_creates_manage_py(generated_project_path):
+    """Test that the generator produces a valid manage.py."""
+    assert (generated_project_path / "manage.py").exists()
+```
+
+Available fixtures (`quickscale_core/tests/conftest.py`):
+- `generated_project_path` — generates a full project into `tmp_path` and returns the path
+- `sample_project_name` — returns `"testproject"`
+- `sample_project_config` — returns a config dict
+
+Available fixtures (`quickscale_cli/tests/conftest.py`):
+- `cli_runner` — Click `CliRunner` instance
+- `sample_project_name` — returns `"testproject"`
 
 ## Integration Tests Recipe
 
-**Purpose**: Test how multiple components work together using real QuickScale projects.
+**Purpose**: Test multi-step workflows inside the core generator (not multi-package).
 
 **When to Use**:
-- Authentication flows requiring Django URL resolution
-- Complete payment workflows with Stripe integration
-- Cross-system interactions (auth + credits + payments)
-- Features requiring full Django project structure
-
-**Key Indicators You Need Integration Tests**:
-- 🚨 Test fails with `"No module named 'core.urls'"`
-- 🚨 Test uses `reverse('account_login')` or similar
-- 🚨 Test requires allauth, admin, or complete Django ecosystem
+- End-to-end project generation followed by validation
+- Workflows that span multiple internal components but don't need Docker
 
 **Key Requirements**:
-- Use real QuickScale projects created with `quickscale plan` + `quickscale apply` in `/tmp`
-- PostgreSQL test database in Docker container
-- Test system boundaries and component interactions
-- Moderate execution time (5-30 seconds per test)
+- Mark with `@pytest.mark.integration`
+- Use `tmp_path` for filesystem isolation
+- Use `ProjectGenerator` directly (no CLI invocation needed)
+- **Included** in `make test` runs (not excluded)
 
 **Example**:
 ```python
-# tests/integration/test_auth_credit_integration.py
-def test_user_registration_creates_credit_account(dynamic_project_generator):
-    """Test that user registration automatically creates credit account."""
-    # Arrange - Generate real QuickScale project
-    project_dir = dynamic_project_generator.generate_project("test_auth_credits")
+# quickscale_core/tests/test_integration.py
+@pytest.mark.integration
+class TestProjectGenerationIntegration:
+    """End-to-end integration tests."""
 
-    # Set up Django environment for the generated project
-    setup_django_for_project(project_dir)
+    def test_generate_and_validate_project(self, tmp_path):
+        """Generate project and verify it is a valid Django project."""
+        generator = ProjectGenerator(theme="showcase_html")
+        output_path = tmp_path / "integration_test"
 
-    # Act - Use real Django test client
-    client = Client()
-    response = client.post('/accounts/signup/', {
-        'email': 'test@example.com',
-        'password1': 'testpass123',
-        'password2': 'testpass123'
-    })
+        generator.generate("integration_test", output_path)
 
-    # Assert - Check real database state
-    user = User.objects.get(email='test@example.com')
-    credit_account = CreditAccount.objects.get(user=user)
-    assert credit_account.balance == 0
-    assert response.status_code == 302
+        assert (output_path / "manage.py").exists()
+        assert (output_path / "integration_test").is_dir()
+        assert (output_path / "pyproject.toml").exists()
 ```
 
 ## E2E Tests Recipe
 
-**Purpose**: Test complete user workflows with Docker containerization.
+**Purpose**: Test complete user workflows with real Docker containers.
 
 **When to Use**:
-- Complete user journeys from start to finish
-- Testing with real external services (Stripe, email)
-- Deployment and production-like scenarios
-- Performance and scalability testing
+- Testing CLI commands that start/stop Docker services (`quickscale up`, `quickscale down`)
+- Testing with real databases and external services
+- Production-like scenarios
 
 **Key Requirements**:
-- Real Docker environment with PostgreSQL database
-- Real external dependencies
-- Slow execution (30+ seconds per test)
-- Production-like setup
+- Mark with `@pytest.mark.e2e`
+- **Excluded** from `make test` by default
+- Run via `make test-e2e` (requires Docker running)
+- Use `quickscale_cli.main.cli` via `CliRunner` or `subprocess`
+
+**Example**:
+```python
+# quickscale_cli/tests/test_e2e_development_workflow.py
+@pytest.mark.e2e
+class TestDevelopmentCommandsE2E:
+    """End-to-end tests for development commands with real Docker containers."""
+
+    def test_up_and_down_workflow(self, tmp_path, cli_runner):
+        """Test that quickscale up starts and quickscale down stops services."""
+        # Generate project first
+        generator = ProjectGenerator(theme="showcase_html")
+        generator.generate("e2e_test", tmp_path / "e2e_test")
+
+        # Start services
+        result = cli_runner.invoke(cli, ['up'], catch_exceptions=False)
+        assert result.exit_code == 0
+
+        # Stop services
+        result = cli_runner.invoke(cli, ['down'], catch_exceptions=False)
+        assert result.exit_code == 0
+```
 
 ## Test Contamination Prevention Checklist
 

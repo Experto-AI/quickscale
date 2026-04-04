@@ -205,21 +205,26 @@ Added section on proper parameter handling in queries
 When debugging test failures, use specialized output modes to focus on actual issues:
 
 ```bash
-# Show only failed tests (filter out noise from passing tests)
-./run_tests.sh --failures-only --unit
+# Stop immediately at first failure (focused debugging)
+poetry run pytest quickscale_core/tests --exitfirst --tb=short -m "not e2e"
 
-# Stop immediately at first failure (for focused debugging)
-./run_tests.sh --exitfirst --unit
+# Run verbose output for a section to see failure details
+make test -- --core
+
+# Run a single test file to isolate the problem
+poetry run pytest quickscale_core/tests/test_integration.py --tb=short
+
+# E2E tests (requires Docker)
+make test-e2e
 ```
 
 **Why use these modes for debugging:**
-- **Eliminates noise**: Hundreds of passing tests contaminate the analysis context
-- **Focuses attention**: Only shows actual failures that need investigation
-- **Clean format**: Minimal output optimized for systematic analysis
-- **Immediate feedback**: Stop-on-first-failure prevents cascading failure noise
-- **Root cause clarity**: Clean output makes it easier to identify underlying issues
+- **Focuses attention**: Stop-on-first-failure prevents cascading failure noise
+- **Targeted runs**: Single-file pytest runs isolate the failing component
+- **Root cause clarity**: Section flags (`--core`, `--cli`, `--modules`) narrow the scope
+- **Immediate feedback**: Faster iteration than running the entire suite
 
-**When debugging test failures, avoid standard verbose output** which includes irrelevant passing test information that obscures the actual problems requiring attention and contaminates the debugging context.
+**When debugging test failures, use targeted single-file or section runs** rather than the full suite, so failure details are visible without noise from unrelated passing tests.
 
 ```python
 # Systematic debugging approach
