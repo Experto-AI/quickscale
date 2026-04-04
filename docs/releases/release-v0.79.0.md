@@ -59,6 +59,6 @@ None — this is a new additive module and release-documentation synchronization
 
 ## Deferred Follow-up
 
-- End-to-end `quickscale plan` → `quickscale apply` → React public-page validation remains deferred to [v0.88.0](../technical/roadmap.md#v0880-module-workflow-validation--real-world-testing).
+- End-to-end `quickscale plan` → `quickscale apply` → React public-page validation remains deferred to [v0.89.0](../technical/roadmap.md#v0890-module-workflow-validation--real-world-testing).
 - Provider auth or write APIs, automated sync, and HTML-theme polish remain deferred beyond v0.79.0.
 - Existing-project React theme adoption continues to be manual rather than an automatic rewrite of user-owned routes and page files.

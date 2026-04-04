@@ -49,14 +49,14 @@ This table is the single milestone summary for shipped history and the active fo
 | v0.79.0 | ✅ Released | Social and Link Tree module | Curated social links and embeds, backend-owned preview metadata, and React public pages for fresh `showcase_react` generations; older projects adopt them manually |
 | v0.80.0 | 📋 Planned | Analytics module | PostHog website analytics with flat mutable settings, service-style backend hooks, and fresh `showcase_react` starter support; existing projects adopt frontend snippets manually |
 | v0.81.0 | 📋 Planned | Beta-site migration maintainer tooling | Make-invoked Python automation for the fresh-first and in-place beta-site catch-up workflows |
-| v0.82.0 | 📋 Planned | Listings theme | Real-estate vertical baseline with static pages, listings, and social links |
-| v0.83.0 | 📋 Planned | CRM theme | React frontend for the CRM module |
-| v0.84.0 | 📋 Planned | Billing module | Stripe integration |
-| v0.85.0 | 📋 Planned | Teams module | Multi-tenancy and team workflows as part of SaaS feature parity with auth, billing, teams, and notifications foundation |
-| v0.86.0+ | 📋 Planned | HTML theme polish | Server-rendered secondary option maintenance |
-| v0.87.0 | 📋 Planned | Module management UX | Advanced update, status, and discovery workflows |
-| v0.88.0 | 📋 Planned | Workflow validation | Real-world multi-module, storage/CDN, deployment, safety, and end-to-end validation |
-| v0.89.0 | 📋 Planned | Disaster recovery | Disaster recovery plus environment migration and promotion workflows |
+| v0.82.0 | 📋 Planned | Disaster recovery | Disaster recovery plus environment migration and promotion workflows |
+| v0.83.0 | 📋 Planned | Listings theme | Real-estate vertical baseline with static pages, listings, and social links |
+| v0.84.0 | 📋 Planned | CRM theme | React frontend for the CRM module |
+| v0.85.0 | 📋 Planned | Billing module | Stripe integration |
+| v0.86.0 | 📋 Planned | Teams module | Multi-tenancy and team workflows as part of SaaS feature parity with auth, billing, teams, and notifications foundation |
+| v0.87.0+ | 📋 Planned | HTML theme polish | Server-rendered secondary option maintenance |
+| v0.88.0 | 📋 Planned | Module management UX | Advanced update, status, and discovery workflows |
+| v0.89.0 | 📋 Planned | Workflow validation | Real-world multi-module, storage/CDN, deployment, safety, and end-to-end validation |
 
 **Legend:**
 - ✅ = Completed, released, or internally baselined
@@ -66,7 +66,7 @@ This table is the single milestone summary for shipped history and the active fo
 - **Current release:** v0.79.0 is the published release
 - **Active next milestone:** v0.80.0 analytics is the current planning and implementation-prep scope
 - **Plan/Apply System:** v0.68.0-v0.71.0 - Terraform-style configuration ✅ Complete
-- **SaaS Parity:** v0.85.0 - auth, billing, teams modules complete on top of the notifications foundation
+- **SaaS Parity:** v0.86.0 - auth, billing, teams modules complete on top of the notifications foundation
 
 ## Notes and References
 
@@ -434,239 +434,7 @@ Following [module-extension.md](./module-extension.md), analytics v0.80.0 uses t
 
 ---
 
-### v0.82.0: Listings Theme (React Frontend for Listings)
-
-**Status**: 📋 Planned
-
-**Strategic Context**: React frontend for property listings (sell & rent), building on the `showcase_react` foundation from v0.74.0 and the Listings module backend from v0.67.0. Prioritized for the Real Estate Agency use case.
-
-**Prerequisites**:
-- ✅ Listings Module (v0.67.0)
-- ✅ React Default Theme (v0.74.0)
-
-**Theme Features**:
-- **Extends**: `showcase_react` base patterns
-- **Components**: Property Cards, Search/Filter Bar, Detail View, Image Gallery, Map View
-- **API Integration**: Consumes Listings Module REST APIs
-- **Listing Types**: Sell and Rent with type-specific filters
-
-**Implementation Tasks**:
-- [ ] Listings-specific page layouts (grid, list, map views)
-- [ ] Property card component with image, price, type (sell/rent), location
-- [ ] Search and filter bar (price range, type, location, bedrooms, etc.)
-- [ ] Property detail view with image gallery and contact form
-- [ ] Listings dashboard with stats and featured properties
-- [ ] Responsive design for mobile property browsing
-- [ ] SEO-friendly property pages (meta tags, structured data)
-
-**Testing**:
-- [ ] E2E tests: Plan → Apply → Working Listings project
-- [ ] Unit tests for filter/search components
-- [ ] API integration tests with Listings backend
-
----
-
-### v0.83.0: CRM Theme (React Frontend for CRM)
-
-**Status**: 📋 Planned
-
-**Strategic Context**: React frontend specifically for the CRM module, building on the `showcase_react` foundation from v0.74.0.
-
-**Prerequisites**:
-- ✅ CRM Module (v0.73.0)
-- ✅ React Default Theme (v0.74.0)
-
-**Theme Features**:
-- **Extends**: `showcase_react` base patterns
-- **Components**: Kanban Board, Contact List, Deal Detail View, Pipeline Management
-- **API Integration**: Consumes CRM Module REST APIs
-
-**Implementation Tasks**:
-- [ ] CRM-specific page layouts
-- [ ] Kanban board for deal pipeline
-- [ ] Contact and company list views
-- [ ] Detail views with inline editing
-- [ ] Dashboard with CRM metrics
-
-**Testing**:
-- [ ] E2E tests: Plan → Apply → Working CRM project
-
----
-
-### v0.84.0: `quickscale_modules.billing` - Billing Module
-
-**Status**: 📋 Planned
-
-**Stripe Integration**:
-- [ ] Set up dj-stripe for Stripe API integration
-- [ ] Configure webhook endpoints for payment events
-- [ ] Implement subscription lifecycle management
-- [ ] Add payment method handling (cards, etc.)
-
-**Pricing & Plans**:
-- [ ] Create pricing tier models and admin
-- [ ] Implement plan creation and management
-- [ ] Add usage tracking and limits
-- [ ] Create pricing page templates
-
-**Subscription Management**:
-- [ ] Build subscription dashboard for users
-- [ ] Implement plan upgrades/downgrades
-- [ ] Add billing history and invoices
-- [ ] Create cancellation and pause functionality
-
-**Testing**:
-- [ ] Unit tests for billing models and logic
-- [ ] Integration tests with Stripe webhooks
-- [ ] E2E tests for subscription flows
-
----
-
-### v0.85.0: `quickscale_modules.teams` - Teams/Multi-tenancy Module
-
-**Status**: 📋 Planned
-
-**Team Management**:
-- [ ] Create team and membership models
-- [ ] Implement team creation and settings
-- [ ] Add member invitation system
-- [ ] Build team dashboard interface
-
-**Role-Based Permissions**:
-- [ ] Define role hierarchy (Owner, Admin, Member)
-- [ ] Implement permission checking decorators
-- [ ] Add role assignment and management
-- [ ] Create permission-based UI elements
-
-**Multi-Tenancy**:
-- [ ] Implement row-level security patterns
-- [ ] Add team-scoped data isolation
-- [ ] Create tenant-aware querysets
-- [ ] Handle cross-team data access
-
-**Testing**:
-- [ ] Unit tests for team models and permissions
-- [ ] Integration tests for invitation flows
-- [ ] E2E tests for multi-tenancy scenarios
-
----
-
-### Module Showcase Architecture (Deferred to Post-v0.85.0)
-
-**Status**: 🚧 **NOT YET IMPLEMENTED** - Deferred to post-v0.85.0
-
-**Current Reality** (v0.66.0):
-- ✅ Basic context processor exists (`quickscale_core/context_processors.py`)
-- ❌ Showcase landing page with module cards: **NOT implemented**
-- ❌ Module preview pages: **NOT implemented**
-- ❌ Showcase CSS styles: **NOT implemented**
-- ❌ Current `index.html.j2`: Simple welcome page only
-
-**Why Deferred**:
-- Focus on the current core roadmap line through SaaS feature parity first (v0.68.0-v0.85.0)
-- Showcase architecture provides maximum value when multiple modules exist
-- Current simple welcome page is adequate for the shipped generator output
-
-**Implementation Plan**: After v0.85.0 (SaaS Feature Parity milestone), evaluate whether to implement showcase architecture or keep simple welcome page. Decision criteria:
-- Are 3+ modules complete and production-ready?
-- Is module discovery a user pain point?
-- Would showcase provide meaningful marketing value?
-
-**If Implemented**: See [decisions.md: Module & Theme Architecture](./decisions.md#module-theme-architecture) for implementation patterns.
-
----
-
-### v0.86.0+: HTML Secondary Theme Polish (Optional)
-
-**Status**: 📋 Planned (low priority, after SaaS Feature Parity)
-
-**Rationale**: React theme is now the default (v0.74.0). The HTML theme remains the lightweight secondary option for users preferring a simpler server-rendered stack.
-
-**See**: [user_manual.md](../technical/user_manual.md) for current theme architecture and user-facing theme selection guidance.
-
-**When Implemented**: See [decisions.md: Module & Theme Architecture](./decisions.md#module-theme-architecture) for implementation guidance covering the supported React default and HTML secondary theme set.
-
----
-
-### v0.87.0: Advanced Module Management Features
-
-**Note**: Basic module management commands (`quickscale update`, `quickscale push --module <name>`) are implemented in **v0.62.0**. Plan/Apply system implemented in **v0.68.0-v0.71.0**. This release adds advanced features for managing multiple modules.
-
-**Planner follow-up**: Cross-module planner work now lives directly in the checklist below; there is no separate temporary handoff doc.
-
-**Batch Operations**:
-- [ ] Implement `quickscale update --all` command
-- [ ] Add batch conflict resolution
-- [ ] Create progress indicators for batch operations
-- [ ] Implement rollback for failed batch updates
-
-**Status & Discovery**:
-- [ ] Expand `quickscale status` to show installed modules, versions, and richer diagnostics
-- [ ] Implement `quickscale list-modules` command for available modules
-- [ ] Filter `quickscale plan` module selection to release-ready modules by default and keep experimental entries opt-in
-- [ ] Add module version tracking and compatibility checking
-
-**Enhanced UX**:
-- [ ] Improve diff previews and summaries
-- [ ] Add interactive conflict resolution
-- [ ] Implement better error messages and progress indicators
-
-**Planner UX & Cross-Module Configuration**:
-- [ ] Generalize interactive per-module configuration so `quickscale plan` can invoke manifest-backed configurators across all supported modules
-- [ ] Add dependency-aware planner sequencing for multi-module setups
-- [ ] Expand `quickscale plan --reconfigure` into a safe all-modules workflow with merge-preserving updates
-- [ ] Expose explicit forms → notifications planner/apply configuration for submission delivery defaults, recipients, and template wiring when both modules are enabled
-- [ ] Add planner regression coverage for mixed module stacks, dependency prompts, and option-retention behavior
-- [ ] Add mixed-module regression coverage for forms + notifications delivery, fallback behavior, and option-retention across reconfigure flows
-
-**Testing**:
-- [ ] Test batch operations with multiple modules
-- [ ] Verify status and discovery commands
-- [ ] Test conflict resolution workflows
-- [ ] E2E testing of enhanced UX features
-
-**Future Enhancements** (v0.88.0+, evaluate after v0.85.0):
-- [ ] Module versioning: `quickscale plan --add auth@v0.63.0` - Pin specific module version
-- [ ] Semantic versioning compatibility checks
-- [ ] Automatic migration scripts for breaking changes
-- [ ] Extraction helper scripts (optional, only if manual workflow becomes bottleneck)
-
-**Success Criteria**: Implement advanced features only when:
-- Manual subtree operations exceed 10 instances/month across maintainers OR
-- Teams have performed 5+ module extractions manually and report significant time savings from automation
-
----
-
-### v0.88.0: Module Workflow Validation & Real-World Testing
-
-**Objective**: Validate that module updates work safely in real client projects and don't affect user's custom code.
-
-**Success Criteria**:
-- Automated tests verify user's `templates/`, `static/`, and project code never modified by module updates
-- Module update workflow documented with real project examples
-- Safety features prevent accidental code modification
-- Rollback procedure documented and tested
-- Case studies from 3+ client projects using modules
-
-**Implementation Tasks**:
-- [ ] Real-world validation: Embed modules in 3+ client projects and document edge cases
-- [ ] Safety validation: Automated tests verify user's code never modified by module updates
-- [ ] Testing: E2E tests for multi-module workflows, conflict scenarios, and rollback functionality
-- [ ] Dogfood regression coverage: hyphenated `project.slug` plus underscored `project.package` must work across apply, reconfigure, and remove flows
-- [ ] Auth adoption guardrails: fail early with actionable remediation when auth/custom-user wiring is requested after incompatible migration history already exists
-- [ ] Idempotency regression coverage: repeated apply/remove cycles must not duplicate managed settings or URL wiring
-- [ ] Storage validation: add upload/write/read integration coverage for local storage and mocked S3-compatible backends
-- [ ] Storage/blog workflow validation: add Plan → Apply → Blog publish E2E coverage with CDN-backed media URLs
-- [ ] Storage URL regression validation: verify helper-built public media URLs remain canonical across blog rendering and upload flows in real project scaffolds
-- [ ] Forms/notifications workflow validation: add Plan → Apply → form submission → tracked delivery coverage, plus fallback validation when notifications is absent or disabled
-- [ ] Railway CDN reconciliation: validate Railway edge/custom-domain/CDN guidance against the storage `public_base_url` contract and document the supported static-vs-media split
-- [ ] Documentation: Create "Safe Module Updates" guide with screenshots and case studies
-
-**Rationale**: Module embed/update commands implemented in v0.62.0, Plan/Apply system in v0.68.0-v0.71.0. This release validates those systems work safely in production after real usage across multiple client projects.
-
----
-
-### v0.89.0: Disaster Recovery & Environment Migration Workflows
+### v0.82.0: Disaster Recovery & Environment Migration Workflows
 
 **Status**: 📋 Planned
 
@@ -730,5 +498,237 @@ Application source code also moves through the normal git/deploy pipeline. The p
 - [ ] Validate database restore, media sync, and environment metadata handoff independently before full project-promotion flows
 - [ ] End-to-end rehearse representative local → Railway develop, Railway develop → Railway production, and Railway production → Railway develop migrations
 - [ ] Verify backup artifacts and migration manifests never expose raw secrets or public backup URLs
+
+---
+
+### v0.83.0: Listings Theme (React Frontend for Listings)
+
+**Status**: 📋 Planned
+
+**Strategic Context**: React frontend for property listings (sell & rent), building on the `showcase_react` foundation from v0.74.0 and the Listings module backend from v0.67.0. Prioritized for the Real Estate Agency use case.
+
+**Prerequisites**:
+- ✅ Listings Module (v0.67.0)
+- ✅ React Default Theme (v0.74.0)
+
+**Theme Features**:
+- **Extends**: `showcase_react` base patterns
+- **Components**: Property Cards, Search/Filter Bar, Detail View, Image Gallery, Map View
+- **API Integration**: Consumes Listings Module REST APIs
+- **Listing Types**: Sell and Rent with type-specific filters
+
+**Implementation Tasks**:
+- [ ] Listings-specific page layouts (grid, list, map views)
+- [ ] Property card component with image, price, type (sell/rent), location
+- [ ] Search and filter bar (price range, type, location, bedrooms, etc.)
+- [ ] Property detail view with image gallery and contact form
+- [ ] Listings dashboard with stats and featured properties
+- [ ] Responsive design for mobile property browsing
+- [ ] SEO-friendly property pages (meta tags, structured data)
+
+**Testing**:
+- [ ] E2E tests: Plan → Apply → Working Listings project
+- [ ] Unit tests for filter/search components
+- [ ] API integration tests with Listings backend
+
+---
+
+### v0.84.0: CRM Theme (React Frontend for CRM)
+
+**Status**: 📋 Planned
+
+**Strategic Context**: React frontend specifically for the CRM module, building on the `showcase_react` foundation from v0.74.0.
+
+**Prerequisites**:
+- ✅ CRM Module (v0.73.0)
+- ✅ React Default Theme (v0.74.0)
+
+**Theme Features**:
+- **Extends**: `showcase_react` base patterns
+- **Components**: Kanban Board, Contact List, Deal Detail View, Pipeline Management
+- **API Integration**: Consumes CRM Module REST APIs
+
+**Implementation Tasks**:
+- [ ] CRM-specific page layouts
+- [ ] Kanban board for deal pipeline
+- [ ] Contact and company list views
+- [ ] Detail views with inline editing
+- [ ] Dashboard with CRM metrics
+
+**Testing**:
+- [ ] E2E tests: Plan → Apply → Working CRM project
+
+---
+
+### v0.85.0: `quickscale_modules.billing` - Billing Module
+
+**Status**: 📋 Planned
+
+**Stripe Integration**:
+- [ ] Set up dj-stripe for Stripe API integration
+- [ ] Configure webhook endpoints for payment events
+- [ ] Implement subscription lifecycle management
+- [ ] Add payment method handling (cards, etc.)
+
+**Pricing & Plans**:
+- [ ] Create pricing tier models and admin
+- [ ] Implement plan creation and management
+- [ ] Add usage tracking and limits
+- [ ] Create pricing page templates
+
+**Subscription Management**:
+- [ ] Build subscription dashboard for users
+- [ ] Implement plan upgrades/downgrades
+- [ ] Add billing history and invoices
+- [ ] Create cancellation and pause functionality
+
+**Testing**:
+- [ ] Unit tests for billing models and logic
+- [ ] Integration tests with Stripe webhooks
+- [ ] E2E tests for subscription flows
+
+---
+
+### v0.86.0: `quickscale_modules.teams` - Teams/Multi-tenancy Module
+
+**Status**: 📋 Planned
+
+**Team Management**:
+- [ ] Create team and membership models
+- [ ] Implement team creation and settings
+- [ ] Add member invitation system
+- [ ] Build team dashboard interface
+
+**Role-Based Permissions**:
+- [ ] Define role hierarchy (Owner, Admin, Member)
+- [ ] Implement permission checking decorators
+- [ ] Add role assignment and management
+- [ ] Create permission-based UI elements
+
+**Multi-Tenancy**:
+- [ ] Implement row-level security patterns
+- [ ] Add team-scoped data isolation
+- [ ] Create tenant-aware querysets
+- [ ] Handle cross-team data access
+
+**Testing**:
+- [ ] Unit tests for team models and permissions
+- [ ] Integration tests for invitation flows
+- [ ] E2E tests for multi-tenancy scenarios
+
+---
+
+### Module Showcase Architecture (Deferred to Post-v0.86.0)
+
+**Status**: 🚧 **NOT YET IMPLEMENTED** - Deferred to post-v0.86.0
+
+**Current Reality** (v0.66.0):
+- ✅ Basic context processor exists (`quickscale_core/context_processors.py`)
+- ❌ Showcase landing page with module cards: **NOT implemented**
+- ❌ Module preview pages: **NOT implemented**
+- ❌ Showcase CSS styles: **NOT implemented**
+- ❌ Current `index.html.j2`: Simple welcome page only
+
+**Why Deferred**:
+- Focus on the current core roadmap line through SaaS feature parity first (v0.68.0-v0.86.0)
+- Showcase architecture provides maximum value when multiple modules exist
+- Current simple welcome page is adequate for the shipped generator output
+
+**Implementation Plan**: After v0.86.0 (SaaS Feature Parity milestone), evaluate whether to implement showcase architecture or keep simple welcome page. Decision criteria:
+- Are 3+ modules complete and production-ready?
+- Is module discovery a user pain point?
+- Would showcase provide meaningful marketing value?
+
+**If Implemented**: See [decisions.md: Module & Theme Architecture](./decisions.md#module-theme-architecture) for implementation patterns.
+
+---
+
+### v0.87.0+: HTML Secondary Theme Polish (Optional)
+
+**Status**: 📋 Planned (low priority, after SaaS Feature Parity)
+
+**Rationale**: React theme is now the default (v0.74.0). The HTML theme remains the lightweight secondary option for users preferring a simpler server-rendered stack.
+
+**See**: [user_manual.md](../technical/user_manual.md) for current theme architecture and user-facing theme selection guidance.
+
+**When Implemented**: See [decisions.md: Module & Theme Architecture](./decisions.md#module-theme-architecture) for implementation guidance covering the supported React default and HTML secondary theme set.
+
+---
+
+### v0.88.0: Advanced Module Management Features
+
+**Note**: Basic module management commands (`quickscale update`, `quickscale push --module <name>`) are implemented in **v0.62.0**. Plan/Apply system implemented in **v0.68.0-v0.71.0**. This release adds advanced features for managing multiple modules.
+
+**Planner follow-up**: Cross-module planner work now lives directly in the checklist below; there is no separate temporary handoff doc.
+
+**Batch Operations**:
+- [ ] Implement `quickscale update --all` command
+- [ ] Add batch conflict resolution
+- [ ] Create progress indicators for batch operations
+- [ ] Implement rollback for failed batch updates
+
+**Status & Discovery**:
+- [ ] Expand `quickscale status` to show installed modules, versions, and richer diagnostics
+- [ ] Implement `quickscale list-modules` command for available modules
+- [ ] Filter `quickscale plan` module selection to release-ready modules by default and keep experimental entries opt-in
+- [ ] Add module version tracking and compatibility checking
+
+**Enhanced UX**:
+- [ ] Improve diff previews and summaries
+- [ ] Add interactive conflict resolution
+- [ ] Implement better error messages and progress indicators
+
+**Planner UX & Cross-Module Configuration**:
+- [ ] Generalize interactive per-module configuration so `quickscale plan` can invoke manifest-backed configurators across all supported modules
+- [ ] Add dependency-aware planner sequencing for multi-module setups
+- [ ] Expand `quickscale plan --reconfigure` into a safe all-modules workflow with merge-preserving updates
+- [ ] Expose explicit forms → notifications planner/apply configuration for submission delivery defaults, recipients, and template wiring when both modules are enabled
+- [ ] Add planner regression coverage for mixed module stacks, dependency prompts, and option-retention behavior
+- [ ] Add mixed-module regression coverage for forms + notifications delivery, fallback behavior, and option-retention across reconfigure flows
+
+**Testing**:
+- [ ] Test batch operations with multiple modules
+- [ ] Verify status and discovery commands
+- [ ] Test conflict resolution workflows
+- [ ] E2E testing of enhanced UX features
+
+**Future Enhancements** (v0.89.0+, evaluate after v0.86.0):
+- [ ] Module versioning: `quickscale plan --add auth@v0.63.0` - Pin specific module version
+- [ ] Semantic versioning compatibility checks
+- [ ] Automatic migration scripts for breaking changes
+- [ ] Extraction helper scripts (optional, only if manual workflow becomes bottleneck)
+
+**Success Criteria**: Implement advanced features only when:
+- Manual subtree operations exceed 10 instances/month across maintainers OR
+- Teams have performed 5+ module extractions manually and report significant time savings from automation
+
+---
+
+### v0.89.0: Module Workflow Validation & Real-World Testing
+
+**Objective**: Validate that module updates work safely in real client projects and don't affect user's custom code.
+
+**Success Criteria**:
+- Automated tests verify user's `templates/`, `static/`, and project code never modified by module updates
+- Module update workflow documented with real project examples
+- Safety features prevent accidental code modification
+- Rollback procedure documented and tested
+- Case studies from 3+ client projects using modules
+
+**Implementation Tasks**:
+- [ ] Real-world validation: Embed modules in 3+ client projects and document edge cases
+- [ ] Safety validation: Automated tests verify user's code never modified by module updates
+- [ ] Testing: E2E tests for multi-module workflows, conflict scenarios, and rollback functionality
+- [ ] Dogfood regression coverage: hyphenated `project.slug` plus underscored `project.package` must work across apply, reconfigure, and remove flows
+- [ ] Auth adoption guardrails: fail early with actionable remediation when auth/custom-user wiring is requested after incompatible migration history already exists
+- [ ] Idempotency regression coverage: repeated apply/remove cycles must not duplicate managed settings or URL wiring
+- [ ] Storage validation: add upload/write/read integration coverage for local storage and mocked S3-compatible backends
+- [ ] Storage/blog workflow validation: add Plan → Apply → Blog publish E2E coverage with CDN-backed media URLs
+- [ ] Storage URL regression validation: verify helper-built public media URLs remain canonical across blog rendering and upload flows in real project scaffolds
+- [ ] Forms/notifications workflow validation: add Plan → Apply → form submission → tracked delivery coverage, plus fallback validation when notifications is absent or disabled
+- [ ] Railway CDN reconciliation: validate Railway edge/custom-domain/CDN guidance against the storage `public_base_url` contract and document the supported static-vs-media split
+- [ ] Documentation: Create "Safe Module Updates" guide with screenshots and case studies
+
+**Rationale**: Module embed/update commands implemented in v0.62.0, Plan/Apply system in v0.68.0-v0.71.0. This release validates those systems work safely in production after real usage across multiple client projects.
 
 ---
