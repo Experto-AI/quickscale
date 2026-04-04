@@ -55,6 +55,11 @@ MODULE_CATALOG: tuple[ModuleCatalogEntry, ...] = (
         ready=True,
     ),
     ModuleCatalogEntry(
+        name="analytics",
+        description="PostHog website analytics with flat settings and starter-theme support",
+        ready=True,
+    ),
+    ModuleCatalogEntry(
         name="social",
         description="Curated social links and embeds with managed backend integration",
         ready=True,

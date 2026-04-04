@@ -5,6 +5,7 @@ import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { PublicSocialShell } from '@/components/social/PublicSocialShell'
 import { usePublicSocialSurface } from '@/hooks/usePublicSocialSurface'
+import { trackSocialLinkClick } from '@/lib/analytics'
 import { cn } from '@/lib/utils'
 
 function layoutLabel(layoutVariant: string): string {
@@ -221,6 +222,14 @@ export function SocialLinkTreePublicPage() {
                     target="_blank"
                     rel="noopener noreferrer"
                     aria-label={`Visit ${link.title}`}
+                    onClick={() =>
+                      trackSocialLinkClick({
+                        provider: link.provider_name,
+                        linkId: link.id,
+                        surface: 'link_tree',
+                        targetUrl: link.url,
+                      })
+                    }
                   >
                     Visit
                     <ExternalLink className="h-4 w-4" />

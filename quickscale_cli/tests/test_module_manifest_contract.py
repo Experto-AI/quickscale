@@ -6,6 +6,7 @@ import re
 from pathlib import Path
 
 from quickscale_cli.commands.module_config import (
+    get_default_analytics_config,
     get_default_auth_config,
     get_default_backups_config,
     get_default_blog_config,
@@ -22,6 +23,7 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 MODULES_ROOT = REPO_ROOT / "quickscale_modules"
 
 DEFAULT_CONFIG_FACTORIES = {
+    "analytics": get_default_analytics_config,
     "auth": get_default_auth_config,
     "blog": get_default_blog_config,
     "listings": get_default_listings_config,

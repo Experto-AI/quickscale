@@ -4,6 +4,7 @@ import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { PublicSocialShell } from '@/components/social/PublicSocialShell'
+import { trackSocialLinkClick } from '@/lib/analytics'
 import {
   usePublicSocialSurface,
   type SocialEmbedsPayload,
@@ -250,6 +251,14 @@ export function SocialEmbedsPublicPage() {
                         target="_blank"
                         rel="noopener noreferrer"
                         aria-label={`Open ${record.title} on ${record.provider_display_name}`}
+                        onClick={() =>
+                          trackSocialLinkClick({
+                            provider: record.provider_name,
+                            linkId: record.id,
+                            surface: 'embeds',
+                            targetUrl: record.url,
+                          })
+                        }
                       >
                         Open on provider
                         <ExternalLink className="h-4 w-4" />

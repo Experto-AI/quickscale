@@ -12,6 +12,13 @@ from typing import Any, cast
 
 import click
 
+from quickscale_cli.analytics_contract import (
+    ANALYTICS_POSTHOG_DEFAULT_HOST,
+    DEFAULT_ANALYTICS_POSTHOG_API_KEY_ENV_VAR,
+    DEFAULT_ANALYTICS_POSTHOG_HOST_ENV_VAR,
+    resolve_analytics_module_options,
+    validate_analytics_module_options,
+)
 from quickscale_cli.backups_contract import (
     BACKUPS_REMOTE_ACCESS_KEY_ID_ENV_VAR_OPTION,
     BACKUPS_REMOTE_SECRET_ACCESS_KEY_ENV_VAR_OPTION,
@@ -467,6 +474,27 @@ def _validate_module_prerequisites(qs_config: QuickScaleConfig) -> None:
             )
             raise click.Abort()
 
+    analytics_config = qs_config.modules.get("analytics")
+    if analytics_config is not None:
+        analytics_issues = validate_analytics_module_options(
+            analytics_config.options or {}
+        )
+        if analytics_issues:
+            click.secho(
+                "\n❌ Analytics module configuration is incomplete for apply:",
+                fg="red",
+                err=True,
+            )
+            for issue in analytics_issues:
+                click.echo(f"  • {issue}", err=True)
+            click.echo(
+                "\n💡 Re-run 'quickscale plan --reconfigure --configure-modules' or edit "
+                "quickscale.yml to correct the analytics values. Existing React and HTML "
+                "theme files remain user-owned and are not rewritten by analytics apply.",
+                err=True,
+            )
+            raise click.Abort()
+
     social_config = qs_config.modules.get("social")
     if social_config is not None:
         social_issues = validate_social_module_options(social_config.options or {})
@@ -602,6 +630,108 @@ def _sync_notifications_env_example(
         return False
 
     click.secho("✅ Updated .env.example with notifications env vars", fg="green")
+    return True
+
+
+def _render_analytics_env_example_block(
+    options: Mapping[str, Any] | None,
+) -> str:
+    """Render the managed analytics section for `.env.example`."""
+    resolved = resolve_analytics_module_options(options)
+    api_key_env_var = str(
+        resolved.get(
+            "posthog_api_key_env_var",
+            DEFAULT_ANALYTICS_POSTHOG_API_KEY_ENV_VAR,
+        )
+        or DEFAULT_ANALYTICS_POSTHOG_API_KEY_ENV_VAR
+    ).strip()
+    host_env_var = str(
+        resolved.get(
+            "posthog_host_env_var",
+            DEFAULT_ANALYTICS_POSTHOG_HOST_ENV_VAR,
+        )
+        or DEFAULT_ANALYTICS_POSTHOG_HOST_ENV_VAR
+    ).strip()
+    host = str(
+        resolved.get("posthog_host", ANALYTICS_POSTHOG_DEFAULT_HOST)
+        or ANALYTICS_POSTHOG_DEFAULT_HOST
+    ).strip()
+
+    return "\n".join(
+        [
+            "# QuickScale Analytics (managed)",
+            "# Runtime PostHog variables for the backend analytics module.",
+            "# VITE_* variables are for fresh showcase_react generations or manual frontend adoption.",
+            f"# Leave {host_env_var} blank to fall back to {host}.",
+            f"{api_key_env_var}=",
+            f"{host_env_var}=",
+            "VITE_POSTHOG_KEY=",
+            "VITE_POSTHOG_HOST=",
+            "# End QuickScale Analytics",
+        ]
+    )
+
+
+def _sync_analytics_env_example(
+    output_path: Path,
+    qs_config: QuickScaleConfig,
+) -> bool:
+    """Keep `.env.example` aligned with analytics env-var names and scope."""
+    analytics_config = qs_config.modules.get("analytics")
+    env_example_path = output_path / ".env.example"
+    if not env_example_path.exists():
+        return True
+
+    start_marker = "# QuickScale Analytics (managed)"
+    end_marker = "# End QuickScale Analytics"
+
+    try:
+        content = env_example_path.read_text()
+    except OSError as e:
+        click.secho(
+            f"⚠️  Failed to read .env.example for analytics wiring: {e}",
+            fg="yellow",
+        )
+        return False
+
+    rendered_block: str | None = None
+    if analytics_config is not None:
+        resolved = resolve_analytics_module_options(analytics_config.options or {})
+        if bool(resolved.get("enabled", True)):
+            rendered_block = _render_analytics_env_example_block(resolved)
+
+    if start_marker in content and end_marker in content:
+        before, remainder = content.split(start_marker, maxsplit=1)
+        _, after = remainder.split(end_marker, maxsplit=1)
+        if rendered_block is None:
+            updated_content = before.rstrip("\n")
+            if after.strip():
+                if updated_content:
+                    updated_content += "\n"
+                updated_content += after.lstrip("\n")
+            elif updated_content:
+                updated_content += "\n"
+        else:
+            updated_content = before + rendered_block + after
+    else:
+        if rendered_block is None:
+            return True
+        suffix = "" if content.endswith("\n") else "\n"
+        updated_content = content + suffix + "\n" + rendered_block + "\n"
+
+    try:
+        env_example_path.write_text(updated_content)
+    except OSError as e:
+        click.secho(
+            f"⚠️  Failed to update .env.example for analytics wiring: {e}",
+            fg="yellow",
+        )
+        return False
+
+    if rendered_block is None:
+        click.secho("✅ Removed analytics env vars from .env.example", fg="green")
+    else:
+        click.secho("✅ Updated .env.example with analytics env vars", fg="green")
     return True
 
 
@@ -1120,6 +1250,62 @@ def _display_next_steps(
                 "when you are ready to own email delivery through the module."
             )
 
+    if "analytics" in modules:
+        analytics_options = resolve_analytics_module_options(
+            modules["analytics"].options or {}
+        )
+        click.echo("\n  # Analytics setup")
+        if bool(analytics_options.get("enabled", True)):
+            posthog_api_key_env_var = str(
+                analytics_options.get(
+                    "posthog_api_key_env_var",
+                    DEFAULT_ANALYTICS_POSTHOG_API_KEY_ENV_VAR,
+                )
+                or DEFAULT_ANALYTICS_POSTHOG_API_KEY_ENV_VAR
+            )
+            posthog_host_env_var = str(
+                analytics_options.get(
+                    "posthog_host_env_var",
+                    DEFAULT_ANALYTICS_POSTHOG_HOST_ENV_VAR,
+                )
+                or DEFAULT_ANALYTICS_POSTHOG_HOST_ENV_VAR
+            )
+            posthog_host = str(
+                analytics_options.get(
+                    "posthog_host",
+                    ANALYTICS_POSTHOG_DEFAULT_HOST,
+                )
+                or ANALYTICS_POSTHOG_DEFAULT_HOST
+            )
+            click.echo("  PostHog dashboard: https://app.posthog.com")
+            click.echo(
+                "  Live events: https://app.posthog.com/project/<project-id>/activity/explore"
+            )
+            click.echo(
+                "  Set runtime Railway service variables: "
+                f"`{posthog_api_key_env_var}` and optionally `{posthog_host_env_var}`."
+            )
+            click.echo(
+                f"  Leave `{posthog_host_env_var}` blank to fall back to {posthog_host}."
+            )
+            click.echo(
+                "  Set build-time `VITE_POSTHOG_KEY` and `VITE_POSTHOG_HOST` only for "
+                "fresh `showcase_react` generations or manual frontend adoption."
+            )
+            click.echo(
+                "  Existing React and HTML theme files remain user-owned; quickscale apply "
+                "does not rewrite them for analytics."
+            )
+            click.echo(
+                "  If you enforce CSP or referrer-policy restrictions, allow outbound "
+                "requests to your configured PostHog API host."
+            )
+        else:
+            click.echo(
+                "  Analytics is embedded but disabled. Re-enable it in quickscale.yml "
+                "when you are ready to capture events."
+            )
+
     if "social" in modules:
         click.echo("\n  # Social integration")
         click.echo(
@@ -1324,6 +1510,20 @@ def _execute_apply_steps(
         _print_apply_failure_summary(
             failed_step="notifications env example sync",
             reason="Unable to update .env.example with the configured notifications env-var names.",
+        )
+        raise click.Abort()
+
+    if not _sync_analytics_env_example(ctx.output_path, ctx.qs_config):
+        _save_project_state(
+            ctx.output_path,
+            ctx.qs_config,
+            ctx.existing_state,
+            embedded_modules,
+            ctx.delta,
+        )
+        _print_apply_failure_summary(
+            failed_step="analytics env example sync",
+            reason="Unable to update .env.example with the configured analytics env-var names.",
         )
         raise click.Abort()
 

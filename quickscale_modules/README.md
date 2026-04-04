@@ -17,6 +17,7 @@ These directories currently include packaging and implementation scaffolding. Us
 | [crm](./crm/README.md) | CRM module with local packaging, tests, and manifest |
 | [forms](./forms/README.md) | Forms module with local packaging, tests, and manifest |
 | [listings](./listings/README.md) | Listings module with local packaging, tests, and manifest |
+| [analytics](./analytics/README.md) | Service-style PostHog analytics module with flat settings, capture helpers, and template-tag support |
 | [social](./social/README.md) | Social module with packaged Django app, managed runtime services, admin workflows, and React-facing contracts |
 | [storage](./storage/README.md) | Storage module with local packaging, tests, and manifest |
 | [backups](./backups/README.md) | Admin/ops-first backups module with private local/remote artifact workflows |

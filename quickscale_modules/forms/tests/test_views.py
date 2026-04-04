@@ -1,5 +1,7 @@
 """Tests for Forms module views"""
 
+from unittest.mock import Mock
+
 import pytest
 from django.core.cache import cache
 from django.core import mail
@@ -93,6 +95,145 @@ class TestFormSubmitAPIView:
         sub = FormSubmission.objects.filter(form=form).first()
         assert sub is not None
         assert sub.values.filter(field_name="full_name").exists()
+
+    @override_settings(QUICKSCALE_ANALYTICS_ENABLED=True)
+    def test_submission_captures_analytics_when_available(
+        self, api_client, form, form_field, email_field, monkeypatch
+    ):
+        """Successful submissions should call the guarded analytics helper when present."""
+        analytics_services = Mock()
+        analytics_services.get_distinct_id.return_value = "session:test-visitor"
+
+        def analytics_is_installed(app_label: str) -> bool:
+            return app_label == "quickscale_modules_analytics"
+
+        monkeypatch.setattr(
+            "quickscale_modules_forms.views.apps.is_installed",
+            analytics_is_installed,
+        )
+        monkeypatch.setattr(
+            "quickscale_modules_forms.views.import_module",
+            lambda module_path: analytics_services,
+        )
+
+        url = reverse("quickscale_forms:form-submit", kwargs={"slug": "test-contact"})
+        data = {"full_name": "Alice", "email": "alice@example.com"}
+
+        cache.clear()
+        response = api_client.post(url, data=data, format="json")
+        cache.clear()
+
+        assert response.status_code == 201
+        analytics_services.get_distinct_id.assert_called_once()
+        analytics_services.capture_form_submit.assert_called_once_with(
+            "session:test-visitor",
+            form.pk,
+            form.title,
+            extra={"form_slug": form.slug},
+        )
+
+    @override_settings(QUICKSCALE_ANALYTICS_ENABLED=True)
+    def test_submission_ignores_missing_analytics_module(
+        self, api_client, form, form_field, email_field, monkeypatch
+    ):
+        """Missing analytics package should stay a clean no-op after submit."""
+
+        def analytics_is_installed(app_label: str) -> bool:
+            return app_label == "quickscale_modules_analytics"
+
+        def missing_analytics(_module_path: str):
+            raise ImportError("analytics not installed")
+
+        monkeypatch.setattr(
+            "quickscale_modules_forms.views.apps.is_installed",
+            analytics_is_installed,
+        )
+        monkeypatch.setattr(
+            "quickscale_modules_forms.views.import_module",
+            missing_analytics,
+        )
+
+        url = reverse("quickscale_forms:form-submit", kwargs={"slug": "test-contact"})
+        data = {"full_name": "Alice", "email": "alice@example.com"}
+
+        cache.clear()
+        response = api_client.post(url, data=data, format="json")
+        cache.clear()
+
+        assert response.status_code == 201
+        assert FormSubmission.objects.filter(form=form).count() == 1
+
+    @override_settings(QUICKSCALE_ANALYTICS_ENABLED=False)
+    def test_submission_skips_analytics_when_disabled_but_installed_and_env_present(
+        self,
+        api_client,
+        form,
+        form_field,
+        email_field,
+        monkeypatch,
+    ):
+        """Disabled analytics must not import services even when the package remains installed."""
+
+        def analytics_is_installed(app_label: str) -> bool:
+            return app_label == "quickscale_modules_analytics"
+
+        def fail_import(module_path: str):
+            raise AssertionError(
+                "analytics services should not load when runtime analytics is disabled"
+            )
+
+        monkeypatch.setenv("POSTHOG_API_KEY", "test-posthog-key")
+        monkeypatch.setattr(
+            "quickscale_modules_forms.views.apps.is_installed",
+            analytics_is_installed,
+        )
+        monkeypatch.setattr(
+            "quickscale_modules_forms.views.import_module",
+            fail_import,
+        )
+
+        url = reverse("quickscale_forms:form-submit", kwargs={"slug": "test-contact"})
+        data = {"full_name": "Alice", "email": "alice@example.com"}
+
+        cache.clear()
+        response = api_client.post(url, data=data, format="json")
+        cache.clear()
+
+        assert response.status_code == 201
+        assert FormSubmission.objects.filter(form=form).count() == 1
+
+    @override_settings(QUICKSCALE_ANALYTICS_ENABLED=True)
+    def test_submission_stays_non_blocking_when_analytics_capture_fails(
+        self, api_client, form, form_field, email_field, monkeypatch
+    ):
+        """Analytics capture failure must not block the public success response."""
+        analytics_services = Mock()
+        analytics_services.get_distinct_id.return_value = "session:test-visitor"
+        analytics_services.capture_form_submit.side_effect = RuntimeError(
+            "posthog unavailable"
+        )
+
+        def analytics_is_installed(app_label: str) -> bool:
+            return app_label == "quickscale_modules_analytics"
+
+        monkeypatch.setattr(
+            "quickscale_modules_forms.views.apps.is_installed",
+            analytics_is_installed,
+        )
+        monkeypatch.setattr(
+            "quickscale_modules_forms.views.import_module",
+            lambda module_path: analytics_services,
+        )
+
+        url = reverse("quickscale_forms:form-submit", kwargs={"slug": "test-contact"})
+        data = {"full_name": "Alice", "email": "alice@example.com"}
+
+        cache.clear()
+        response = api_client.post(url, data=data, format="json")
+        cache.clear()
+
+        assert response.status_code == 201
+        assert FormSubmission.objects.filter(form=form).count() == 1
 
     def test_submission_persists_when_notification_delivery_fails(
         self, api_client, form, form_field, email_field, monkeypatch

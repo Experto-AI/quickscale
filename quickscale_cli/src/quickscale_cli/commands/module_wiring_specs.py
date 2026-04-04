@@ -6,6 +6,9 @@ from pprint import pformat
 from textwrap import dedent
 from typing import Any, Mapping
 
+from quickscale_cli.analytics_contract import (
+    resolve_analytics_module_options,
+)
 from quickscale_cli.backups_contract import (
     BACKUPS_REMOTE_ACCESS_KEY_ID_ENV_VAR_OPTION,
     BACKUPS_REMOTE_SECRET_ACCESS_KEY_ENV_VAR_OPTION,
@@ -350,6 +353,44 @@ def _backups_wiring(options: Mapping[str, Any]) -> ModuleWiringSpec:
     )
 
 
+def _analytics_wiring(options: Mapping[str, Any]) -> ModuleWiringSpec:
+    resolved = resolve_analytics_module_options(options)
+    if not bool(resolved.get("enabled", True)):
+        return ModuleWiringSpec()
+
+    settings = {
+        "QUICKSCALE_ANALYTICS_ENABLED": True,
+        "QUICKSCALE_ANALYTICS_PROVIDER": str(
+            resolved.get("provider", "posthog")
+        ).strip()
+        or "posthog",
+        "QUICKSCALE_ANALYTICS_POSTHOG_API_KEY_ENV_VAR": str(
+            resolved.get("posthog_api_key_env_var", "POSTHOG_API_KEY")
+        ).strip()
+        or "POSTHOG_API_KEY",
+        "QUICKSCALE_ANALYTICS_POSTHOG_HOST_ENV_VAR": str(
+            resolved.get("posthog_host_env_var", "POSTHOG_HOST")
+        ).strip()
+        or "POSTHOG_HOST",
+        "QUICKSCALE_ANALYTICS_POSTHOG_HOST": str(
+            resolved.get("posthog_host", "https://us.i.posthog.com")
+        ).strip()
+        or "https://us.i.posthog.com",
+        "QUICKSCALE_ANALYTICS_EXCLUDE_DEBUG": bool(resolved.get("exclude_debug", True)),
+        "QUICKSCALE_ANALYTICS_EXCLUDE_STAFF": bool(
+            resolved.get("exclude_staff", False)
+        ),
+        "QUICKSCALE_ANALYTICS_ANONYMOUS_BY_DEFAULT": bool(
+            resolved.get("anonymous_by_default", True)
+        ),
+    }
+
+    return ModuleWiringSpec(
+        apps=("quickscale_modules_analytics",),
+        settings=settings,
+    )
+
+
 def _notifications_wiring(options: Mapping[str, Any]) -> ModuleWiringSpec:
     resolved = resolve_notifications_module_options(options)
     runtime_email_backend = notifications_runtime_email_backend(resolved)
@@ -604,6 +645,7 @@ MODULE_WIRING_BUILDERS = {
     "forms": _forms_wiring,
     "storage": _storage_wiring,
     "backups": _backups_wiring,
+    "analytics": _analytics_wiring,
     "notifications": _notifications_wiring,
 }
 

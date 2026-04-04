@@ -12,6 +12,7 @@ from quickscale_cli.commands.module_commands import (
     _install_module_dependencies,
     _perform_module_embed,
     _print_installation_error,
+    _resolve_embedded_module_install_path,
     _update_single_module,
     _validate_git_environment,
     _validate_module_not_exists,
@@ -249,6 +250,7 @@ class TestPerformModuleEmbed:
         mock_install.return_value = True
         module_dir = tmp_path / "modules" / "auth"
         module_dir.mkdir(parents=True)
+        (module_dir / "pyproject.toml").touch()
 
         result = _perform_module_embed(
             tmp_path,
@@ -302,6 +304,9 @@ class TestPerformModuleEmbed:
     ):
         """Test embedding fails when dependency installation fails."""
         mock_install.return_value = False
+        module_dir = tmp_path / "modules" / "listings"
+        module_dir.mkdir(parents=True)
+        (module_dir / "pyproject.toml").touch()
 
         result = _perform_module_embed(
             tmp_path,
@@ -317,12 +322,53 @@ class TestPerformModuleEmbed:
 class TestInstallModuleDependencies:
     """Tests for _install_module_dependencies function."""
 
+    def test_resolve_embedded_module_install_path_prefers_nested_split_package(
+        self,
+        tmp_path,
+    ):
+        """Split-repo module layouts should keep using the nested package path."""
+        module_dir = tmp_path / "modules" / "auth"
+        nested_dir = module_dir / "quickscale_modules" / "auth"
+        nested_dir.mkdir(parents=True)
+        (nested_dir / "pyproject.toml").touch()
+        (module_dir / "pyproject.toml").touch()
+
+        resolved = _resolve_embedded_module_install_path(tmp_path, "auth")
+
+        assert resolved == nested_dir
+
+    def test_resolve_embedded_module_install_path_supports_root_package_layout(
+        self,
+        tmp_path,
+    ):
+        """Packaged modules like analytics should install from the module root."""
+        module_dir = tmp_path / "modules" / "analytics"
+        module_dir.mkdir(parents=True)
+        (module_dir / "pyproject.toml").touch()
+
+        resolved = _resolve_embedded_module_install_path(tmp_path, "analytics")
+
+        assert resolved == module_dir
+
+    def test_resolve_embedded_module_install_path_returns_none_without_pyproject(
+        self,
+        tmp_path,
+    ):
+        """Modules without Python packaging metadata should skip Poetry install."""
+        module_dir = tmp_path / "modules" / "static_assets"
+        module_dir.mkdir(parents=True)
+
+        resolved = _resolve_embedded_module_install_path(tmp_path, "static_assets")
+
+        assert resolved is None
+
     @patch("quickscale_cli.commands.module_commands.subprocess.run")
     def test_successful_installation(self, mock_run, tmp_path):
         """Test successful dependency installation."""
         # Create module directory
         module_dir = tmp_path / "modules" / "auth"
         module_dir.mkdir(parents=True)
+        (module_dir / "pyproject.toml").touch()
 
         # Mock successful subprocess calls
         mock_run.return_value = Mock(returncode=0)
@@ -331,6 +377,32 @@ class TestInstallModuleDependencies:
 
         assert result is True
         assert mock_run.call_count == 2  # poetry add + poetry install
+
+    @patch("quickscale_cli.commands.module_commands.subprocess.run")
+    def test_root_module_path_detection(self, mock_run, tmp_path):
+        """Root-package modules should install directly from their module path."""
+        module_dir = tmp_path / "modules" / "analytics"
+        module_dir.mkdir(parents=True)
+        (module_dir / "pyproject.toml").touch()
+
+        mock_run.return_value = Mock(returncode=0)
+
+        result = _install_module_dependencies(tmp_path, "analytics")
+
+        assert result is True
+        first_call_args = mock_run.call_args_list[0][0][0]
+        assert "./modules/analytics" in " ".join(first_call_args)
+
+    @patch("quickscale_cli.commands.module_commands.subprocess.run")
+    def test_skips_install_when_no_python_package_detected(self, mock_run, tmp_path):
+        """Modules without a Python package should skip Poetry installation cleanly."""
+        module_dir = tmp_path / "modules" / "docs_only"
+        module_dir.mkdir(parents=True)
+
+        result = _install_module_dependencies(tmp_path, "docs_only")
+
+        assert result is True
+        mock_run.assert_not_called()
 
     def test_module_directory_not_found(self, tmp_path):
         """Test installation fails when module directory doesn't exist."""
@@ -343,6 +415,7 @@ class TestInstallModuleDependencies:
         """Test installation fails when poetry add fails."""
         module_dir = tmp_path / "modules" / "auth"
         module_dir.mkdir(parents=True)
+        (module_dir / "pyproject.toml").touch()
 
         # Mock failed poetry add
         mock_run.return_value = Mock(returncode=1, stderr="Error", stdout="")
@@ -356,6 +429,7 @@ class TestInstallModuleDependencies:
         """Test installation fails when poetry install fails."""
         module_dir = tmp_path / "modules" / "auth"
         module_dir.mkdir(parents=True)
+        (module_dir / "pyproject.toml").touch()
 
         # First call (poetry add) succeeds, second (poetry install) fails
         mock_run.side_effect = [
@@ -394,6 +468,7 @@ class TestInstallModuleDependencies:
 
         module_dir = tmp_path / "modules" / "auth"
         module_dir.mkdir(parents=True)
+        (module_dir / "pyproject.toml").touch()
 
         # Use CalledProcessError which is the actual exception subprocess.run can raise
         mock_run.side_effect = subprocess.CalledProcessError(1, ["poetry", "add"])

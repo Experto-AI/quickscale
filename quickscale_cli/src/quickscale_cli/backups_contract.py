@@ -10,6 +10,7 @@ from collections.abc import Mapping
 import re
 from typing import Any
 
+from quickscale_cli.analytics_contract import normalize_analytics_module_options
 from quickscale_cli.notifications_contract import normalize_notifications_module_options
 from quickscale_cli.social_contract import normalize_social_module_options
 
@@ -107,6 +108,8 @@ def sanitize_module_options(
     options: Mapping[str, Any] | None,
 ) -> dict[str, Any]:
     """Return module options safe for config/state persistence."""
+    if module_name == "analytics":
+        return normalize_analytics_module_options(options)
     if module_name == "backups":
         return normalize_backups_module_options(options)
     if module_name == "notifications":

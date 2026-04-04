@@ -13,6 +13,14 @@ from typing import Any, Mapping, Optional
 
 import click
 
+from quickscale_cli.analytics_contract import (
+    ANALYTICS_POSTHOG_DEFAULT_HOST,
+    DEFAULT_ANALYTICS_POSTHOG_API_KEY_ENV_VAR,
+    DEFAULT_ANALYTICS_POSTHOG_HOST_ENV_VAR,
+    default_analytics_module_options,
+    resolve_analytics_module_options,
+    validate_analytics_module_options,
+)
 from quickscale_cli.backups_contract import (
     BACKUPS_REMOTE_ACCESS_KEY_ID_ENV_VAR_OPTION,
     BACKUPS_REMOTE_SECRET_ACCESS_KEY_ENV_VAR_OPTION,
@@ -1800,6 +1808,123 @@ def apply_notifications_configuration(
 
 
 # ============================================================================
+# ANALYTICS MODULE CONFIGURATION
+# ============================================================================
+
+
+def get_default_analytics_config() -> dict[str, Any]:
+    """Return default configuration for the analytics module."""
+    return default_analytics_module_options()
+
+
+def _raise_for_invalid_analytics_config(config: Mapping[str, Any]) -> None:
+    """Abort with actionable messaging when analytics config is invalid."""
+    issues = validate_analytics_module_options(config)
+    if not issues:
+        return
+
+    click.secho("\n❌ Invalid analytics module configuration:", fg="red", err=True)
+    for issue in issues:
+        click.echo(f"  • {issue}", err=True)
+    raise click.Abort()
+
+
+def configure_analytics_module(
+    non_interactive: bool = False,
+    existing_config: Mapping[str, Any] | None = None,
+) -> dict[str, Any]:
+    """Configure analytics module settings interactively or with defaults."""
+    defaults = resolve_analytics_module_options(existing_config)
+
+    if non_interactive:
+        click.echo("\n⚙️  Using default analytics module configuration...")
+        click.echo("  • Runtime: " + ("Enabled" if defaults["enabled"] else "Disabled"))
+        click.echo(f"  • Provider: {defaults['provider']}")
+        click.echo("  • API key env var: " + str(defaults["posthog_api_key_env_var"]))
+        click.echo("  • Host: " + str(defaults["posthog_host"]))
+        _raise_for_invalid_analytics_config(defaults)
+        return defaults
+
+    click.echo("\n⚙️  Configuring analytics module...")
+    click.echo(
+        "Analytics is PostHog-only in v0.80.0. QuickScale owns the backend "
+        "settings and capture helpers, while existing React/HTML theme files stay "
+        "user-owned for manual frontend adoption.\n"
+    )
+
+    config = resolve_analytics_module_options(
+        {
+            "enabled": click.confirm(
+                "Enable the analytics runtime?",
+                default=bool(defaults["enabled"]),
+            ),
+            "provider": "posthog",
+            "posthog_api_key_env_var": click.prompt(
+                "PostHog API key environment variable",
+                default=(
+                    str(defaults["posthog_api_key_env_var"]).strip()
+                    or DEFAULT_ANALYTICS_POSTHOG_API_KEY_ENV_VAR
+                ),
+                show_default=True,
+            ).strip(),
+            "posthog_host_env_var": click.prompt(
+                "PostHog host environment variable",
+                default=(
+                    str(defaults["posthog_host_env_var"]).strip()
+                    or DEFAULT_ANALYTICS_POSTHOG_HOST_ENV_VAR
+                ),
+                show_default=True,
+            ).strip(),
+            "posthog_host": (
+                click.prompt(
+                    "PostHog host URL",
+                    default=(
+                        str(defaults["posthog_host"]).strip()
+                        or ANALYTICS_POSTHOG_DEFAULT_HOST
+                    ),
+                    show_default=True,
+                ).strip()
+                or ANALYTICS_POSTHOG_DEFAULT_HOST
+            ),
+            "exclude_debug": click.confirm(
+                "Disable analytics automatically when DEBUG=True?",
+                default=bool(defaults["exclude_debug"]),
+            ),
+            "exclude_staff": click.confirm(
+                "Exclude staff users from analytics capture?",
+                default=bool(defaults["exclude_staff"]),
+            ),
+            "anonymous_by_default": click.confirm(
+                "Use anonymous session-based distinct IDs by default?",
+                default=bool(defaults["anonymous_by_default"]),
+            ),
+        }
+    )
+    _raise_for_invalid_analytics_config(config)
+    return config
+
+
+def apply_analytics_configuration(project_path: Path, config: dict[str, Any]) -> None:
+    """Apply analytics module configuration via managed wiring files."""
+    resolved = resolve_analytics_module_options(config)
+    _raise_for_invalid_analytics_config(resolved)
+    _regenerate_wiring_for_module(project_path, "analytics", resolved)
+
+    click.echo("\n📋 Configuration applied:")
+    click.echo("  • Runtime: " + ("Enabled" if resolved["enabled"] else "Disabled"))
+    click.echo("  • Provider: " + str(resolved["provider"]))
+    click.echo("  • API key env var: " + str(resolved["posthog_api_key_env_var"]))
+    click.echo("  • Host env var: " + str(resolved["posthog_host_env_var"]))
+    click.echo("  • Host fallback: " + str(resolved["posthog_host"]))
+    click.echo(
+        "  • Exclusions: "
+        + ("debug" if resolved["exclude_debug"] else "debug allowed")
+        + ", "
+        + ("staff excluded" if resolved["exclude_staff"] else "staff included")
+    )
+
+
+# ============================================================================
 # SOCIAL MODULE CONFIGURATION
 # ============================================================================
 
@@ -1935,5 +2060,6 @@ MODULE_CONFIGURATORS = {
         configure_notifications_module,
         apply_notifications_configuration,
     ),
+    "analytics": (configure_analytics_module, apply_analytics_configuration),
     "social": (configure_social_module, apply_social_configuration),
 }

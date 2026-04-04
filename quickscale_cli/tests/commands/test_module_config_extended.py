@@ -22,6 +22,7 @@ from quickscale_cli.commands.module_config import (
     _filter_new_apps,
     _generate_auth_settings_addition,
     _is_app_in_installed_apps,
+    apply_analytics_configuration,
     apply_auth_configuration,
     apply_backups_configuration,
     apply_blog_configuration,
@@ -30,11 +31,13 @@ from quickscale_cli.commands.module_config import (
     apply_notifications_configuration,
     apply_social_configuration,
     apply_storage_configuration,
+    configure_analytics_module,
     configure_backups_module,
     configure_storage_module,
     configure_crm_module,
     configure_notifications_module,
     configure_social_module,
+    get_default_analytics_config,
     get_default_backups_config,
     get_default_crm_config,
     get_default_notifications_config,
@@ -547,6 +550,47 @@ class TestAddDjangoFilterDependencyEdgeCases:
 class TestModuleWiringSpecs:
     """Regression tests for module wiring spec collisions"""
 
+    def test_analytics_wiring_emits_flat_settings(self):
+        """Analytics wiring should emit flat settings plus the analytics app."""
+        specs = build_module_wiring_specs(
+            {
+                "analytics": {
+                    "posthog_api_key_env_var": "OPS_POSTHOG_API_KEY",
+                    "posthog_host_env_var": "OPS_POSTHOG_HOST",
+                    "posthog_host": "https://eu.i.posthog.com",
+                    "exclude_staff": True,
+                    "anonymous_by_default": False,
+                }
+            }
+        )
+
+        apps, _, settings, _ = collect_wiring(specs)
+
+        assert "quickscale_modules_analytics" in apps
+        assert settings["QUICKSCALE_ANALYTICS_ENABLED"] is True
+        assert settings["QUICKSCALE_ANALYTICS_PROVIDER"] == "posthog"
+        assert (
+            settings["QUICKSCALE_ANALYTICS_POSTHOG_API_KEY_ENV_VAR"]
+            == "OPS_POSTHOG_API_KEY"
+        )
+        assert (
+            settings["QUICKSCALE_ANALYTICS_POSTHOG_HOST_ENV_VAR"] == "OPS_POSTHOG_HOST"
+        )
+        assert (
+            settings["QUICKSCALE_ANALYTICS_POSTHOG_HOST"] == "https://eu.i.posthog.com"
+        )
+        assert settings["QUICKSCALE_ANALYTICS_EXCLUDE_STAFF"] is True
+        assert settings["QUICKSCALE_ANALYTICS_ANONYMOUS_BY_DEFAULT"] is False
+
+    def test_analytics_wiring_disabled_omits_managed_settings(self):
+        """Disabled analytics should not contribute apps or managed settings."""
+        specs = build_module_wiring_specs({"analytics": {"enabled": False}})
+
+        apps, _, settings, _ = collect_wiring(specs)
+
+        assert "quickscale_modules_analytics" not in apps
+        assert "QUICKSCALE_ANALYTICS_ENABLED" not in settings
+
     def test_blog_and_listings_markdownx_media_path_uses_blog_value(self):
         """`MARKDOWNX_MEDIA_PATH` should remain stable with blog and listings."""
         specs = build_module_wiring_specs(
@@ -1039,6 +1083,81 @@ class TestStorageModuleConfig:
             project,
             "storage",
             get_default_storage_config() | {"backend": "local"},
+        )
+
+
+class TestAnalyticsModuleConfig:
+    """Tests for analytics module configurator registration and wiring."""
+
+    def test_analytics_default_config_keys_match_manifest_contract_intent(self):
+        config = get_default_analytics_config()
+
+        assert config["enabled"] is True
+        assert config["provider"] == "posthog"
+        assert config["posthog_api_key_env_var"] == "POSTHOG_API_KEY"
+        assert config["posthog_host_env_var"] == "POSTHOG_HOST"
+        assert config["posthog_host"] == "https://us.i.posthog.com"
+        assert config["exclude_debug"] is True
+        assert config["exclude_staff"] is False
+        assert config["anonymous_by_default"] is True
+
+    def test_analytics_in_module_configurators(self):
+        assert "analytics" in MODULE_CONFIGURATORS
+
+        config = configure_analytics_module(non_interactive=True)
+
+        assert config["enabled"] is True
+        assert config["provider"] == "posthog"
+        assert config["anonymous_by_default"] is True
+
+    @patch("quickscale_cli.commands.module_config.click.prompt")
+    @patch("quickscale_cli.commands.module_config.click.confirm")
+    def test_configure_analytics_interactive(self, mock_confirm, mock_prompt):
+        """Interactive analytics configuration should normalize custom values."""
+        mock_confirm.side_effect = [True, False, True, False]
+        mock_prompt.side_effect = [
+            "OPS_POSTHOG_API_KEY",
+            "OPS_POSTHOG_HOST",
+            "eu.i.posthog.com/",
+        ]
+
+        config = configure_analytics_module(non_interactive=False)
+
+        assert config["enabled"] is True
+        assert config["provider"] == "posthog"
+        assert config["posthog_api_key_env_var"] == "OPS_POSTHOG_API_KEY"
+        assert config["posthog_host_env_var"] == "OPS_POSTHOG_HOST"
+        assert config["posthog_host"] == "https://eu.i.posthog.com"
+        assert config["exclude_debug"] is False
+        assert config["exclude_staff"] is True
+        assert config["anonymous_by_default"] is False
+
+    @patch("quickscale_cli.commands.module_config._regenerate_wiring_for_module")
+    def test_apply_analytics_configuration_regenerates_managed_wiring(
+        self,
+        mock_regenerate,
+        tmp_path,
+    ):
+        project = _make_project(tmp_path)
+
+        apply_analytics_configuration(
+            project,
+            {
+                "posthog_api_key_env_var": "OPS_POSTHOG_API_KEY",
+                "posthog_host": "eu.i.posthog.com/",
+                "exclude_staff": True,
+            },
+        )
+
+        mock_regenerate.assert_called_once_with(
+            project,
+            "analytics",
+            get_default_analytics_config()
+            | {
+                "posthog_api_key_env_var": "OPS_POSTHOG_API_KEY",
+                "posthog_host": "https://eu.i.posthog.com",
+                "exclude_staff": True,
+            },
         )
 
 

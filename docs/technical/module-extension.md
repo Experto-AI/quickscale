@@ -17,7 +17,7 @@ Define a standard, Django-native way for QuickScale modules to be extended in ge
 
 QuickScale standardizes on a **layered Django-native extension contract**:
 
-1. **Project-owned extension app** as the canonical place for signal registration, admin customization, orchestration, project-only service wrappers, and glue code that must survive module updates.
+1. **Project-owned extension app, when a project uses one,** as the canonical place for signal registration, admin customization, orchestration, project-only service wrappers, and glue code that must survive module updates.
 2. **Stable module-owned extension surfaces** chosen from the approved set below — each module declares which surfaces it supports; no module needs all of them.
 
 This is the most Django-native and update-compatible model. It matches the mainstream Django patterns: project-level overrides, explicit registration, package-level contracts, and selective subclassing rather than a mandatory inheritance hierarchy.
@@ -26,7 +26,7 @@ This is the most Django-native and update-compatible model. It matches the mains
 
 #### 1. Project-Owned Extension App
 
-Generated projects include a project-owned extension app as the canonical place for:
+When a project adopts a project-owned extension app, it is the canonical place for:
 
 - signal registration
 - admin customization
@@ -35,7 +35,15 @@ Generated projects include a project-owned extension app as the canonical place 
 - optional integrations
 - glue code that should survive module updates untouched
 
-This app is the first-class home for project-specific backend customization. See [examples/client_extensions/README.md](../../examples/client_extensions/README.md).
+This pattern is the preferred home for project-specific backend customization when a module needs project-owned glue, but QuickScale does not require every module or milestone to generate or depend on it.
+
+Analytics v0.80.0 is the current example of the narrower service-style contract:
+- QuickScale owns flat `QUICKSCALE_ANALYTICS_*` settings and analytics service APIs
+- forms integration uses a guarded direct optional import rather than generated extension-app glue
+- social click tracking is limited to QuickScale-owned generated public pages/templates
+- existing user-owned frontend files adopt additional analytics wiring manually
+
+See [examples/client_extensions/README.md](../../examples/client_extensions/README.md).
 
 #### 2. Standard Approved Extension Surfaces
 
@@ -60,7 +68,7 @@ Every module does **not** need to implement every surface.
 | Foundation/auth | Project-owned foundational model plus module integration surfaces | `auth` |
 | Domain/content | Optional abstract models and admin bases, templates, settings | `listings`, parts of `blog`, future vertical modules |
 | Data-driven | Configuration, admin, API, settings, selected signals | `forms`, parts of `crm` |
-| Integration/service | Settings plus helper/service APIs | `storage`, `notifications` |
+| Integration/service | Settings plus helper/service APIs | `storage`, `notifications`, `analytics` |
 | Operational | Settings, commands, services, admin actions | `backups` |
 | Theme/frontend | User-owned generated code | showcase themes |
 
@@ -68,7 +76,7 @@ Every module does **not** need to implement every surface.
 
 | Tier | Meaning | Upgrade expectation |
 | --- | --- | --- |
-| Tier 1: Stable | Project-owned app, settings, template overrides, documented helper/service APIs, documented signals | Should survive normal module updates with minimal or no merge work |
+| Tier 1: Stable | Project-owned app when adopted, settings, template overrides, documented helper/service APIs, documented signals | Should survive normal module updates with minimal or no merge work |
 | Tier 2: Structured | Module-specific subclassing such as abstract models or admin bases | Usually survivable across minor updates if the contract is documented and versioned |
 
 Any direct edit to files under `modules/<name>/` is outside the supported extension contract. Users who make such edits accept responsibility for manual reconciliation during `quickscale update`.
@@ -127,6 +135,7 @@ Every module README should include a required section using this taxonomy:
 | `forms` | Keep admin/data-driven configuration as primary model; document signals/service hooks for custom submission workflows |
 | `storage` | Keep helper/service API and settings contract; do not force inheritance |
 | `backups` | Keep operational settings and commands; document service layer and explicit non-goals for subclassing |
+| `analytics` | Service-style integration module: flat settings plus helper/service APIs; no generated extension-app requirement for v0.80.0; forms use a guarded optional import and social click tracking stays limited to QuickScale-owned generated public pages/templates |
 | `notifications` | Promote `send_notification`-style service contract and template override paths; document stable versus internal APIs |
 | `social` | Define the extension contract before the full runtime implementation ships |
 
@@ -161,7 +170,7 @@ Every module README should include a required section using this taxonomy:
 
 ## Final Rule
 
-> Extend QuickScale primarily through a **project-owned extension app** and the module's **documented extension surfaces**. Use abstract base classes only for modules that are explicitly designed for subclassing. Avoid editing embedded module source directly; extension should happen through the module's documented surfaces or the project-owned extension app.
+> Extend QuickScale through a **project-owned extension app** when a module requires project-owned glue, and otherwise through the module's **documented extension surfaces**. Use abstract base classes only for modules that are explicitly designed for subclassing. Avoid editing embedded module source directly; extension should happen through the module's documented surfaces rather than ad hoc edits inside embedded module code.
 
 ## References
 

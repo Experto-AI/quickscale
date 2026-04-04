@@ -1,0 +1,59 @@
+name: analytics
+version: "0.80.0"
+description: "Service-style PostHog analytics foundation with flat settings, capture helpers, and manual template-tag support"
+
+config:
+  mutable:
+    enabled:
+      type: boolean
+      default: true
+      django_setting: QUICKSCALE_ANALYTICS_ENABLED
+      description: "Enable the analytics runtime. When disabled, QuickScale removes managed backend analytics wiring."
+
+    provider:
+      type: string
+      default: "posthog"
+      django_setting: QUICKSCALE_ANALYTICS_PROVIDER
+      description: "Approved analytics provider for v0.80.0. PostHog is the only supported option."
+
+    posthog_api_key_env_var:
+      type: string
+      default: "POSTHOG_API_KEY"
+      django_setting: QUICKSCALE_ANALYTICS_POSTHOG_API_KEY_ENV_VAR
+      description: "Environment-variable name containing the PostHog project API key."
+
+    posthog_host_env_var:
+      type: string
+      default: "POSTHOG_HOST"
+      django_setting: QUICKSCALE_ANALYTICS_POSTHOG_HOST_ENV_VAR
+      description: "Optional environment-variable name containing the PostHog ingestion host override."
+
+    posthog_host:
+      type: string
+      default: "https://us.i.posthog.com"
+      django_setting: QUICKSCALE_ANALYTICS_POSTHOG_HOST
+      description: "Fallback PostHog ingestion host used when the host env var is blank."
+
+    exclude_debug:
+      type: boolean
+      default: true
+      django_setting: QUICKSCALE_ANALYTICS_EXCLUDE_DEBUG
+      description: "Disable analytics automatically when Django DEBUG is true."
+
+    exclude_staff:
+      type: boolean
+      default: false
+      django_setting: QUICKSCALE_ANALYTICS_EXCLUDE_STAFF
+      description: "Skip request-scoped analytics payloads for authenticated staff users."
+
+    anonymous_by_default:
+      type: boolean
+      default: true
+      django_setting: QUICKSCALE_ANALYTICS_ANONYMOUS_BY_DEFAULT
+      description: "Use session-based anonymous distinct IDs unless operators explicitly opt into authenticated identity linkage."
+
+dependencies:
+  - posthog>=3.7.4,<4.0.0
+
+django_apps:
+  - quickscale_modules_analytics

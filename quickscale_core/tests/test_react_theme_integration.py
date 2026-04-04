@@ -43,6 +43,7 @@ class TestReactThemeGeneration:
         assert (frontend_path / "src" / "main.tsx").exists()
         assert (frontend_path / "src" / "App.tsx").exists()
         assert (frontend_path / "src" / "index.css").exists()
+        assert (frontend_path / "src" / "posthog-js.d.ts").exists()
         assert (frontend_path / "src" / "hooks" / "usePublicSocialSurface.ts").exists()
         assert (
             frontend_path / "src" / "components" / "social" / "PublicSocialShell.tsx"
@@ -57,6 +58,7 @@ class TestReactThemeGeneration:
         assert (frontend_path / "src" / "components").is_dir()
 
         # shadcn/ui lib utilities
+        assert (frontend_path / "src" / "lib" / "analytics.ts").exists()
         assert (frontend_path / "src" / "lib" / "utils.ts").exists()
 
     def test_react_theme_social_embeds_use_backend_owned_preview_metadata(
@@ -153,6 +155,7 @@ class TestReactThemeGeneration:
         # State management
         assert "@tanstack/react-query" in deps
         assert "zustand" in deps
+        assert "posthog-js" in deps
 
         # UI dependencies (shadcn/ui stack)
         assert "class-variance-authority" in deps
@@ -313,6 +316,56 @@ class TestReactThemeGeneration:
 
         # Build script should include TypeScript check
         assert "tsc" in scripts["build"] or "typescript" in scripts["build"]
+
+    def test_react_theme_analytics_support_stays_dormant_and_frontend_only(
+        self, tmp_path
+    ):
+        """Dormant analytics starter support should live in frontend assets only."""
+        generator = ProjectGenerator(theme="showcase_react")
+        project_name = "react_analytics_starter_test"
+        output_path = tmp_path / project_name
+
+        generator.generate(project_name, output_path)
+
+        main_source = (output_path / "frontend" / "src" / "main.tsx").read_text()
+        analytics_source = (
+            output_path / "frontend" / "src" / "lib" / "analytics.ts"
+        ).read_text()
+        app_source = (output_path / "frontend" / "src" / "App.tsx").read_text()
+        django_index = (output_path / "templates" / "index.html").read_text()
+
+        assert "initializeAnalytics()" in main_source
+        assert "VITE_POSTHOG_KEY" in analytics_source
+        assert "VITE_POSTHOG_HOST" in analytics_source
+        assert "your-posthog-key" in analytics_source
+        assert "capture_pageview: 'history_change'" in analytics_source
+        assert "trackSocialLinkClick" not in app_source
+        assert "posthog" not in django_index.lower()
+        assert "VITE_POSTHOG_KEY" not in django_index
+
+    def test_react_theme_social_click_tracking_stays_on_generated_public_pages(
+        self, tmp_path
+    ):
+        """Social click capture should stay limited to QuickScale-owned public pages."""
+        generator = ProjectGenerator(theme="showcase_react")
+        project_name = "react_social_click_tracking_test"
+        output_path = tmp_path / project_name
+
+        generator.generate(project_name, output_path)
+
+        link_tree_page = (
+            output_path / "frontend" / "src" / "pages" / "SocialLinkTreePublicPage.tsx"
+        ).read_text()
+        embeds_page = (
+            output_path / "frontend" / "src" / "pages" / "SocialEmbedsPublicPage.tsx"
+        ).read_text()
+        app_source = (output_path / "frontend" / "src" / "App.tsx").read_text()
+
+        assert "trackSocialLinkClick" in link_tree_page
+        assert "surface: 'link_tree'" in link_tree_page
+        assert "trackSocialLinkClick" in embeds_page
+        assert "surface: 'embeds'" in embeds_page
+        assert "trackSocialLinkClick" not in app_source
 
 
 @pytest.mark.integration

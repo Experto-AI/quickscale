@@ -164,6 +164,25 @@ def _check_auth_module_migrations(
     return True
 
 
+def _resolve_embedded_module_install_path(
+    project_path: Path,
+    module: str,
+) -> Path | None:
+    """Return the installable package path for an embedded module, if any."""
+    module_dir = project_path / "modules" / module
+    if not module_dir.exists():
+        return None
+
+    nested_path = module_dir / "quickscale_modules" / module
+    if nested_path.exists() and (nested_path / "pyproject.toml").exists():
+        return nested_path
+
+    if (module_dir / "pyproject.toml").exists():
+        return module_dir
+
+    return None
+
+
 def _perform_module_embed(
     project_path: Path,
     module: str,
@@ -194,17 +213,7 @@ def _perform_module_embed(
         _, applier = MODULE_CONFIGURATORS[module]
         applier(project_path, config)
 
-    # Install dependencies for modules that need it
-    if module in [
-        "auth",
-        "blog",
-        "listings",
-        "crm",
-        "forms",
-        "storage",
-        "backups",
-        "notifications",
-    ]:
+    if _resolve_embedded_module_install_path(project_path, module) is not None:
         if not _install_module_dependencies(project_path, module):
             return False
 
@@ -328,17 +337,19 @@ def _install_module_dependencies(project_path: Path, module: str) -> bool:
             )
             return False
 
-        # Determine the correct path to add
-        target_path = module_dir
-        nested_path = module_dir / "quickscale_modules" / module
+        target_path = _resolve_embedded_module_install_path(project_path, module)
+        if target_path is None:
+            click.echo(
+                f"  • No installable Python package detected for {module}; skipping Poetry install."
+            )
+            return True
 
-        if nested_path.exists() and (nested_path / "pyproject.toml").exists():
+        if target_path != module_dir:
             click.secho(
                 f"⚠️  Warning: Detected full repository in {module} module path.",
                 fg="yellow",
             )
-            click.echo(f"   Using nested path: {nested_path.relative_to(project_path)}")
-            target_path = nested_path
+            click.echo(f"   Using nested path: {target_path.relative_to(project_path)}")
 
         # Install the module
         click.echo(f"  • Installing {module} module...")

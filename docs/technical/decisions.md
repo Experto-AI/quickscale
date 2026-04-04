@@ -333,7 +333,7 @@ Projects are managed through two configuration files with clear separation of co
 User-editable configuration file with this structure:
 
 ```yaml
-version: 0.79.0
+version: 0.80.0
 project:
   slug: myapp
   package: myapp
@@ -362,18 +362,18 @@ docker:
 System-managed state file tracking what has been applied:
 
 ```yaml
-version: 0.79.0
+version: 0.80.0
 project:
   slug: myapp
   package: myapp
   theme: showcase_react
 applied_modules:
   - name: auth
-    version: 0.79.0
+    version: 0.80.0
     commit: abc123def456
     applied_at: 2025-12-03T14:30:00Z
   - name: listings
-    version: 0.79.0
+    version: 0.80.0
     commit: xyz789uvw012
     applied_at: 2025-12-03T14:31:00Z
 docker:
@@ -490,7 +490,7 @@ Automatic changes made:
 **Current workflow**:
 ```yaml
 # quickscale.yml (v0.68.0+)
-version: 0.79.0
+version: 0.80.0
 project:
   slug: myproject
   package: myproject
@@ -565,7 +565,7 @@ workflow coverage are aligned to it.
 **Manifest Schema:**
 ```yaml
 name: auth
-version: 0.79.0
+version: 0.80.0
 config:
   mutable:
     registration_enabled:
@@ -612,6 +612,11 @@ config:
 **Architectural Decision (v0.67.0):** Every QuickScale module must be complete, embeddable, and usable immediately after `quickscale apply`. This checklist ensures no gaps between planning and implementation.
 
 #### **Required Components (All Modules)**
+
+**Service-style exception (integration-only modules):**
+- [ ] If a module's approved contract is settings plus helper/service APIs only, it may omit `models.py`, `views.py`, `urls.py`, `admin.py`, and migrations
+- [ ] This exception must be called out explicitly in `decisions.md` or the active roadmap milestone before implementation starts
+- [ ] Service-style modules still require package metadata, documented public APIs, lifecycle wiring when needed, and tests for the shipped contract
 
 <a id="package-structure-and-naming-conventions"></a>
 **1. Package Structure:**
@@ -679,12 +684,12 @@ disable_error_code = var-annotated
 **2. Source Code (src/quickscale_modules_<name>/):**
 - [ ] `__init__.py` — Module version (e.g., `__version__ = "0.67.0"`)
 - [ ] `apps.py` — Django AppConfig with proper `name` and `label`
-- [ ] `models.py` — **Concrete model(s)** for immediate use (not just abstract base classes)
-- [ ] `views.py` — Views with `model` attribute set (not requiring subclassing)
-- [ ] `urls.py` — URL patterns with `app_name` for namespacing
-- [ ] `admin.py` — Admin registration for concrete models (not just base admin classes)
-- [ ] `migrations/0001_initial.py` — **Initial migration for concrete models**
-- [ ] `migrations/__init__.py` — Migrations package init
+- [ ] `models.py` — **Concrete model(s)** for immediate use (required for domain modules; not required for explicitly approved service-style/integration-only modules)
+- [ ] `views.py` — Views with `model` attribute set (required when the module ships routed views)
+- [ ] `urls.py` — URL patterns with `app_name` for namespacing (required when the module ships routed views)
+- [ ] `admin.py` — Admin registration for concrete models or operational surfaces (required only when the module ships an admin surface)
+- [ ] `migrations/0001_initial.py` — **Initial migration for concrete models** (not required for explicitly approved service-style/integration-only modules)
+- [ ] `migrations/__init__.py` — Migrations package init (only when migrations exist)
 
 **3. Templates (if applicable):**
 - [ ] `templates/quickscale_modules_<name>/` — Zero-style semantic HTML templates
@@ -708,7 +713,7 @@ disable_error_code = var-annotated
 - [ ] Update "no modules installed" condition to include new module
 
 **6. Testing:**
-- [ ] Unit tests for models, views, filters, admin
+- [ ] Unit tests for the shipped module contract (models/views/admin for domain modules; services and lifecycle helpers for service-style modules)
 - [ ] 90% overall mean + 80% per file minimum coverage (CI enforced)
 - [ ] Tests use concrete models (not abstract stubs)
 
@@ -717,6 +722,11 @@ disable_error_code = var-annotated
 - [ ] Verify split branch exists: `splits/<name>-module`
 
 #### **Rationale**
+
+**Why service-style modules can skip models/admin/migrations when explicitly approved:**
+- Some modules exist to wrap an external provider or shared runtime behavior rather than own domain data
+- Forcing placeholder models, admin classes, or migrations creates fake extension seams and misleading maintenance work
+- The exception must stay explicit so modules do not silently narrow their supported contract
 
 **Why concrete models are required (not just abstract):**
 - Modules must work immediately after `quickscale apply`
@@ -1067,7 +1077,7 @@ class OrderProcessor:
 
 ### Module Extension Contract {#backend-extensions-policy}
 
-QuickScale uses a layered Django-native extension model. Each module declares which extension surfaces it supports from a standard approved set. Projects extend modules through a project-owned extension app, never by editing module source directly.
+QuickScale uses a layered Django-native extension model. Each module declares which extension surfaces it supports from a standard approved set. Projects extend modules through a project-owned extension app when project-owned glue is required, never by editing module source directly. Service-style integration modules may intentionally expose Tier 1 support only through settings, helper/service APIs, and QuickScale-owned generated files when that narrower contract is documented explicitly.
 
 **Approved extension surfaces:**
 - Settings contract

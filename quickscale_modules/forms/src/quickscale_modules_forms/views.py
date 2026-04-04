@@ -4,8 +4,12 @@ from __future__ import annotations
 
 import csv
 import io
+import logging
+from importlib import import_module
 from typing import Any
 
+from django.apps import apps
+from django.conf import settings
 from django.db import transaction
 from django.db.models import Count
 from django.http import Http404, HttpResponse
@@ -31,6 +35,50 @@ from quickscale_modules_forms.serializers import (
     FormSubmissionCreateSerializer,
 )
 from quickscale_modules_forms.throttles import FormSubmitThrottle
+
+logger = logging.getLogger(__name__)
+
+
+def _capture_submission_analytics(submission: FormSubmission, request: Request) -> None:
+    """Best-effort analytics hook for successful public form submissions."""
+    if not apps.is_installed("quickscale_modules_analytics"):
+        return
+    if not bool(getattr(settings, "QUICKSCALE_ANALYTICS_ENABLED", False)):
+        return
+
+    try:
+        analytics_services = import_module("quickscale_modules_analytics.services")
+    except ImportError:
+        return
+
+    capture_form_submit = getattr(analytics_services, "capture_form_submit", None)
+    get_distinct_id = getattr(analytics_services, "get_distinct_id", None)
+    if not callable(capture_form_submit) or not callable(get_distinct_id):
+        return
+
+    django_request = getattr(request, "_request", request)
+
+    try:
+        distinct_id = get_distinct_id(django_request)
+        if not isinstance(distinct_id, str):
+            distinct_id = str(distinct_id or "")
+        distinct_id = distinct_id.strip()
+        if not distinct_id:
+            return
+
+        capture_form_submit(
+            distinct_id,
+            submission.form_id,
+            submission.form.title,
+            extra={"form_slug": submission.form.slug},
+        )
+    except Exception:
+        logger.warning(
+            "Failed to capture analytics event for submission #%s (form: %s)",
+            submission.pk,
+            submission.form.slug,
+            exc_info=True,
+        )
 
 
 class FormSchemaAPIView(RetrieveAPIView):
@@ -111,6 +159,7 @@ class FormSubmitAPIView(CreateAPIView):
 
         # Notifications run outside the transaction — delivery failure must not roll back submission
         notify_submission(submission)
+        _capture_submission_analytics(submission, request)
 
         return Response(
             {

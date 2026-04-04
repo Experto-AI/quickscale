@@ -44,8 +44,10 @@ from quickscale_cli.commands.apply_command import (
     _run_migrations_in_docker,
     _run_poetry_install,
     _run_post_generation_steps,
+    _render_analytics_env_example_block,
     _save_project_state,
     _start_docker,
+    _sync_analytics_env_example,
     _sync_notifications_env_example,
     _update_module_config_in_state,
 )
@@ -593,6 +595,63 @@ class TestLoadAndValidateConfig:
             "    sender_email: ops@example.com\n"
             "    resend_domain: mg.example.com\n"
             '    resend_api_key_env_var: ""\n'
+            "docker:\n"
+            "  start: false\n"
+        )
+
+        with pytest.raises(click.Abort):
+            _load_and_validate_config(config)
+
+    def test_analytics_module_options_are_normalized_on_load(self, tmp_path):
+        """Analytics provider and host values should be canonicalized on apply load."""
+        config = tmp_path / "quickscale.yml"
+        config.write_text(
+            'version: "1"\n'
+            "project:\n"
+            "  slug: myapp\n"
+            "  package: myapp\n"
+            "  theme: showcase_html\n"
+            "modules:\n"
+            "  analytics:\n"
+            "    provider: PostHog\n"
+            "    posthog_api_key_env_var: ' OPS_POSTHOG_API_KEY '\n"
+            "    posthog_host_env_var: ' OPS_POSTHOG_HOST '\n"
+            "    posthog_host: eu.i.posthog.com/\n"
+            "docker:\n"
+            "  start: false\n"
+        )
+
+        result = _load_and_validate_config(config)
+        rewritten = config.read_text()
+
+        assert result.modules["analytics"].options["provider"] == "posthog"
+        assert (
+            result.modules["analytics"].options["posthog_api_key_env_var"]
+            == "OPS_POSTHOG_API_KEY"
+        )
+        assert (
+            result.modules["analytics"].options["posthog_host_env_var"]
+            == "OPS_POSTHOG_HOST"
+        )
+        assert (
+            result.modules["analytics"].options["posthog_host"]
+            == "https://eu.i.posthog.com"
+        )
+        assert "provider: posthog" in rewritten
+        assert "https://eu.i.posthog.com" in rewritten
+
+    def test_analytics_module_requires_valid_env_var_names(self, tmp_path):
+        """Apply should reject analytics env-var references that are not env vars."""
+        config = tmp_path / "quickscale.yml"
+        config.write_text(
+            'version: "1"\n'
+            "project:\n"
+            "  slug: myapp\n"
+            "  package: myapp\n"
+            "  theme: showcase_html\n"
+            "modules:\n"
+            "  analytics:\n"
+            "    posthog_api_key_env_var: ops-posthog-api-key\n"
             "docker:\n"
             "  start: false\n"
         )
@@ -1292,6 +1351,53 @@ class TestDisplayNextSteps:
         assert "OPS_RESEND_API_KEY" in output
         assert "OPS_NOTIFICATIONS_WEBHOOK_SECRET" in output
 
+    def test_analytics_mentions_posthog_env_vars_and_manual_frontend_adoption(
+        self,
+        tmp_path,
+        capsys,
+    ):
+        """Analytics next steps should call out PostHog env vars and scope."""
+        config = Mock()
+        config.project.slug = "myapp"
+        config.docker.start = False
+        config.modules = {
+            "analytics": Mock(
+                options={
+                    "enabled": True,
+                    "posthog_api_key_env_var": "OPS_POSTHOG_API_KEY",
+                    "posthog_host_env_var": "OPS_POSTHOG_HOST",
+                    "posthog_host": "https://eu.i.posthog.com",
+                }
+            )
+        }
+
+        _display_next_steps(tmp_path, config, False)
+        output = capsys.readouterr().out
+
+        assert "PostHog dashboard" in output
+        assert "OPS_POSTHOG_API_KEY" in output
+        assert "OPS_POSTHOG_HOST" in output
+        assert "VITE_POSTHOG_KEY" in output
+        assert "Existing React and HTML theme files remain user-owned" in output
+        assert "CSP or referrer-policy restrictions" in output
+
+    def test_analytics_disabled_mentions_reenable_instruction(
+        self,
+        tmp_path,
+        capsys,
+    ):
+        """Disabled analytics should still produce explicit operator guidance."""
+        config = Mock()
+        config.project.slug = "myapp"
+        config.docker.start = False
+        config.modules = {"analytics": Mock(options={"enabled": False})}
+
+        _display_next_steps(tmp_path, config, False)
+        output = capsys.readouterr().out
+
+        assert "Analytics is embedded but disabled" in output
+        assert "when you are ready to capture events" in output
+
     def test_social_mentions_managed_transport_and_manual_theme_adoption(
         self,
         tmp_path,
@@ -1349,6 +1455,83 @@ class TestNotificationsEnvExampleSync:
         assert "OLD_WEBHOOK" not in updated
         assert "OPS_RESEND_API_KEY=" in updated
         assert "OPS_NOTIFICATIONS_WEBHOOK_SECRET=" in updated
+
+
+class TestAnalyticsEnvExampleSync:
+    """Tests for analytics `.env.example` synchronization."""
+
+    def test_render_analytics_env_example_block_uses_custom_env_vars(self):
+        """The rendered analytics block should expose runtime and Vite env vars."""
+        block = _render_analytics_env_example_block(
+            {
+                "posthog_api_key_env_var": "OPS_POSTHOG_API_KEY",
+                "posthog_host_env_var": "OPS_POSTHOG_HOST",
+                "posthog_host": "https://eu.i.posthog.com",
+            }
+        )
+
+        assert "# QuickScale Analytics (managed)" in block
+        assert "OPS_POSTHOG_API_KEY=" in block
+        assert "OPS_POSTHOG_HOST=" in block
+        assert "VITE_POSTHOG_KEY=" in block
+        assert "VITE_POSTHOG_HOST=" in block
+        assert "https://eu.i.posthog.com" in block
+
+    def test_sync_analytics_env_example_replaces_managed_block(self, tmp_path):
+        env_example = tmp_path / ".env.example"
+        env_example.write_text(
+            "SECRET_KEY=test\n"
+            "# QuickScale Analytics (managed)\n"
+            "OLD_POSTHOG_KEY=\n"
+            "OLD_POSTHOG_HOST=\n"
+            "# End QuickScale Analytics\n"
+        )
+        qs_config = Mock()
+        qs_config.modules = {
+            "analytics": Mock(
+                options={
+                    "enabled": True,
+                    "posthog_api_key_env_var": "OPS_POSTHOG_API_KEY",
+                    "posthog_host_env_var": "OPS_POSTHOG_HOST",
+                    "posthog_host": "https://eu.i.posthog.com",
+                }
+            )
+        }
+
+        result = _sync_analytics_env_example(tmp_path, qs_config)
+
+        assert result is True
+        updated = env_example.read_text()
+        assert "OLD_POSTHOG_KEY" not in updated
+        assert "OLD_POSTHOG_HOST" not in updated
+        assert "OPS_POSTHOG_API_KEY=" in updated
+        assert "OPS_POSTHOG_HOST=" in updated
+        assert "VITE_POSTHOG_KEY=" in updated
+        assert "VITE_POSTHOG_HOST=" in updated
+
+    def test_sync_analytics_env_example_removes_managed_block_when_disabled(
+        self,
+        tmp_path,
+    ):
+        env_example = tmp_path / ".env.example"
+        env_example.write_text(
+            "SECRET_KEY=test\n"
+            "# QuickScale Analytics (managed)\n"
+            "POSTHOG_API_KEY=\n"
+            "POSTHOG_HOST=\n"
+            "# End QuickScale Analytics\n"
+            "KEEP_ME=1\n"
+        )
+        qs_config = Mock()
+        qs_config.modules = {"analytics": Mock(options={"enabled": False})}
+
+        result = _sync_analytics_env_example(tmp_path, qs_config)
+
+        assert result is True
+        updated = env_example.read_text()
+        assert "# QuickScale Analytics (managed)" not in updated
+        assert "POSTHOG_API_KEY=" not in updated
+        assert "KEEP_ME=1" in updated
 
 
 # ============================================================================
@@ -1451,6 +1634,65 @@ class TestBackupsApplyHelpers:
 
 class TestExecuteApplySteps:
     """Tests for _execute_apply_steps module-selection matrix."""
+
+    @patch("quickscale_cli.commands.apply_command._display_next_steps")
+    @patch("quickscale_cli.commands.apply_command._save_project_state")
+    @patch("quickscale_cli.commands.apply_command._run_post_generation_steps")
+    @patch("quickscale_cli.commands.apply_command._sync_analytics_env_example")
+    @patch("quickscale_cli.commands.apply_command._sync_notifications_env_example")
+    @patch("quickscale_cli.commands.apply_command._ensure_backups_gitignore_rules")
+    @patch("quickscale_cli.commands.apply_command._regenerate_managed_wiring_for_apply")
+    @patch("quickscale_cli.commands.apply_command._embed_modules_step")
+    @patch("quickscale_cli.commands.apply_command._init_git_with_config")
+    @patch("quickscale_cli.commands.apply_command._generate_new_project")
+    def test_analytics_env_sync_failure_aborts_apply(
+        self,
+        mock_generate_new_project,
+        mock_init_git,
+        mock_embed_modules_step,
+        mock_regenerate_wiring,
+        mock_backups_gitignore,
+        mock_notifications_env_sync,
+        mock_analytics_env_sync,
+        mock_run_post,
+        mock_save_state,
+        mock_display_next_steps,
+    ):
+        """Apply should abort cleanly if analytics env-example sync fails."""
+        mock_embed_modules_step.return_value = EmbedModulesResult(
+            success=True,
+            embedded_modules=[],
+            failed_module=None,
+        )
+        mock_regenerate_wiring.return_value = True
+        mock_backups_gitignore.return_value = True
+        mock_notifications_env_sync.return_value = True
+        mock_analytics_env_sync.return_value = False
+
+        ctx = Mock()
+        ctx.existing_state = None
+        ctx.output_path = Path("/tmp/proj")
+        ctx.manifests = {}
+        ctx.delta = Mock()
+        ctx.delta.modules_to_add = []
+        ctx.delta.has_mutable_config_changes = False
+        ctx.qs_config = Mock()
+        ctx.qs_config.modules = {"analytics": Mock(options={})}
+        ctx.qs_config.docker.start = False
+        ctx.qs_config.docker.build = True
+
+        with pytest.raises(click.Abort):
+            _execute_apply_steps(
+                ctx,
+                force=False,
+                no_docker=False,
+                no_modules=False,
+                verbose_docker=False,
+            )
+
+        mock_save_state.assert_called_once()
+        mock_run_post.assert_not_called()
+        mock_display_next_steps.assert_not_called()
 
     @pytest.mark.parametrize(
         "modules",
@@ -1840,3 +2082,84 @@ class TestManagedSocialApplyRegression:
         assert "QUICKSCALE_SOCIAL_EMBEDS_PER_PAGE" in managed_settings
         assert "build_social_link_tree_payload" in managed_social_views
         assert "build_social_embeds_payload" in managed_social_views
+
+
+class TestManagedAnalyticsApplyRegression:
+    """Regression coverage for existing-project analytics apply behavior."""
+
+    def test_existing_project_analytics_regeneration_preserves_user_owned_frontend_files(
+        self, tmp_path
+    ):
+        """Existing-project apply should refresh backend analytics wiring without frontend churn."""
+        project_name = "analytics_existing_project"
+        output_path = tmp_path / project_name
+        generator = ProjectGenerator(theme="showcase_react")
+        generator.generate(project_name, output_path)
+
+        package_json = output_path / "frontend" / "package.json"
+        main_file = output_path / "frontend" / "src" / "main.tsx"
+        app_file = output_path / "frontend" / "src" / "App.tsx"
+        analytics_file = output_path / "frontend" / "src" / "lib" / "analytics.ts"
+        index_template = output_path / "templates" / "index.html"
+
+        package_json.write_text(
+            package_json.read_text().replace(
+                '  "version": "0.0.1",\n',
+                '  "version": "0.0.1",\n  "userOwnedPackageMarker": true,\n',
+            )
+        )
+        main_file.write_text(
+            "// user-owned analytics bootstrap customization\n" + main_file.read_text()
+        )
+        app_file.write_text(
+            "// user-owned app routing customization\n" + app_file.read_text()
+        )
+        analytics_file.write_text(
+            "// user-owned analytics helper customization\n"
+            + analytics_file.read_text()
+        )
+        index_template.write_text(
+            "<!-- user-owned index template customization -->\n"
+            + index_template.read_text()
+        )
+
+        expected_package_json = package_json.read_text()
+        expected_main_file = main_file.read_text()
+        expected_app_file = app_file.read_text()
+        expected_analytics_file = analytics_file.read_text()
+        expected_index_template = index_template.read_text()
+
+        ctx = Mock()
+        ctx.output_path = output_path
+        ctx.existing_state = Mock()
+        ctx.delta = Mock()
+        ctx.delta.modules_unchanged = ["analytics"]
+        ctx.qs_config = Mock()
+        ctx.qs_config.project.package = project_name
+        ctx.qs_config.modules = {
+            "analytics": Mock(
+                options={
+                    "enabled": True,
+                    "posthog_api_key_env_var": "POSTHOG_API_KEY",
+                    "posthog_host_env_var": "POSTHOG_HOST",
+                    "posthog_host": "https://eu.i.posthog.com",
+                    "exclude_debug": True,
+                    "exclude_staff": False,
+                    "anonymous_by_default": True,
+                }
+            )
+        }
+
+        assert _regenerate_managed_wiring_for_apply(ctx, embedded_modules=[]) is True
+        assert package_json.read_text() == expected_package_json
+        assert main_file.read_text() == expected_main_file
+        assert app_file.read_text() == expected_app_file
+        assert analytics_file.read_text() == expected_analytics_file
+        assert index_template.read_text() == expected_index_template
+
+        managed_settings = (
+            output_path / project_name / "settings" / "modules.py"
+        ).read_text()
+
+        assert "QUICKSCALE_ANALYTICS_ENABLED" in managed_settings
+        assert "QUICKSCALE_ANALYTICS_POSTHOG_API_KEY_ENV_VAR" in managed_settings
