@@ -24,6 +24,8 @@ merge_strategy: append
 # Plan
 <!-- Add rules for planning and architectural design here -->
 [include](#shared)
+- **Important context (always read)**:
+    - docs/contrib/plan.md
 
 # Codebase Discovery
 <!-- Add rules for discovery and comprehension here -->
@@ -36,11 +38,18 @@ merge_strategy: append
 # Implement
 <!-- Add rules for writing code (e.g. backend specific syntax) here -->
 [include](#shared)
+- **Important context (always read)**:
+    - docs/contrib/code.md
 
 # Quality Gate
 <!-- Add rules for testing, linting, and quality enforcement here -->
 [include](#shared)
+- **Important context (always read)**:
+    - docs/contrib/testing.md
+    - docs/contrib/debug.md
 
 # Change Review
 <!-- Add rules for PR review and change management here -->
 [include](#shared)
+- **Important context (always read)**:
+    - docs/contrib/review.md
