@@ -1,21 +1,23 @@
 # Testing Stage Guide
 
-This guide covers test generation AFTER implementation and code review are complete.
+This guide defines QuickScale testing conventions, test selection, and test authoring rules for implemented behavior.
+
+Shared documents in [shared/](shared/) remain authoritative when guidance overlaps. This guide shows how to apply those project rules during testing work.
 
 ## Core Principle: Implementation-First Testing
 
 **Always write implementation code first, then add tests after.**
 
-- ✅ Implementation complete → Code reviewed → Write tests
+- ✅ Implementation complete → Write tests
 - ❌ Never write tests before implementing functionality
 - ❌ Never generate test code before implementation is complete
 
 ## When to Use This Guide
 
-Use this guide in the **TESTING stage** after:
-1. ✅ Implementation is complete (CODE stage done)
-2. ✅ Code has been reviewed (REVIEW stage done)
-3. Now ready to generate comprehensive tests
+Use this guide when you need to:
+1. Choose the correct test category and location
+2. Write or update tests for implemented behavior
+3. Run the relevant test commands for the affected area
 
 ## Test Category Decision Tree
 

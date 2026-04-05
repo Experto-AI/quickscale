@@ -1,16 +1,18 @@
 # Contributing to QuickScale
 
-> **You are here**: [QuickScale](../../START_HERE.md) → [Contributing](../index.md) → **Contributing Guide** (Workflow Overview)
+> **You are here**: [QuickScale](../../START_HERE.md) → [Contributing](../index.md) → **Contributing Guide** (Guide Map)
 > **Related docs**: [Code Guide](code.md) | [Testing Guide](testing.md) | [Development Setup](../technical/development.md) | [Start Here](../../START_HERE.md)
 
-Welcome! This guide will help you understand the development workflow and where to find the right documentation for each stage of contribution.
+Welcome! This guide maps the contribution documentation and authority boundaries for contributors and AI assistants.
 
-## Development Workflow
+## Contribution Guides
 
-QuickScale follows a structured development workflow with focused, stage-specific guides. Follow these stages in order for any code change:
+The files in `docs/contrib/` define project-specific implementation rules and reference material. They do not prescribe a required execution flow. Different human and agent workflows may sequence planning, implementation, review, testing, and debugging differently.
 
-### 1. 📋 [PLAN](plan.md) - Planning & Task Review
-**Use when:** Planning a roadmap from scratch OR reviewing/adjusting task specifications before implementation.
+When guidance overlaps, the shared documents in `docs/contrib/shared/` are authoritative. The stage guides below show how to apply those shared rules to a specific kind of work.
+
+### 📋 [PLAN](plan.md) - Planning & Task Review
+**Use when:** Clarifying scope, breaking down work, or reviewing task specifications before or during implementation.
 
 **Key activities:**
 - Understand project context (read decisions.md, scaffolding.md, README.md)
@@ -19,13 +21,9 @@ QuickScale follows a structured development workflow with focused, stage-specifi
 - Pre-task review (validate scope, check for conflicts)
 - Plan for architecture compliance
 
-**Referenced by prompts:**
-- `roadmap-plan-review-and-update.prompt.md` (primary)
-- `roadmap-task-implementation.prompt.md` (pre-implementation review)
-
 ---
 
-### 2. 💻 [CODE](code.md) - Implementation
+### 💻 [CODE](code.md) - Implementation
 **Use when:** Writing implementation code following approved specifications.
 
 **Key activities:**
@@ -35,13 +33,10 @@ QuickScale follows a structured development workflow with focused, stage-specifi
 - Use type hints and proper documentation
 - **Strict scope enforcement** (implement ONLY what's in the task checklist)
 
-**Referenced by prompts:**
-- `roadmap-task-implementation.prompt.md` (primary)
-
 ---
 
-### 3. ✅ [REVIEW](review.md) - Quality Control
-**Use when:** Reviewing generated code AFTER implementation, BEFORE writing tests.
+### ✅ [REVIEW](review.md) - Quality Control
+**Use when:** Reviewing planned or implemented changes for correctness, architecture, scope, and documentation quality.
 
 **Key activities:**
 - Verify technical stack compliance
@@ -51,14 +46,10 @@ QuickScale follows a structured development workflow with focused, stage-specifi
 - Verify documentation completeness
 - Pre-commit quality checklist
 
-**Referenced by prompts:**
-- `roadmap-task-implementation.prompt.md` (self-review after coding)
-- `release-commit-message-and-roadmap-cleaning.prompt.md` (final review)
-
 ---
 
-### 4. 🧪 [TESTING](testing.md) - Test Generation
-**Use when:** Generating tests AFTER implementation is complete AND code-reviewed.
+### 🧪 [TESTING](testing.md) - Test Generation
+**Use when:** Selecting, writing, or organizing tests for implemented behavior, and when choosing the correct test category for the repo.
 
 **Key activities:**
 - Implementation-first testing approach
@@ -68,13 +59,10 @@ QuickScale follows a structured development workflow with focused, stage-specifi
 - Proper mock usage (NO global mocking)
 - Arrange-Act-Assert pattern
 
-**Referenced by prompts:**
-- `roadmap-task-implementation.prompt.md` (after code and review stages)
-
 ---
 
-### 5. 🐛 [DEBUG](debug.md) - Debugging & Root Cause Analysis
-**Use when:** Debugging issues, fixing failing tests, or addressing bugs.
+### 🐛 [DEBUG](debug.md) - Debugging & Root Cause Analysis
+**Use when:** Diagnosing failing tests, regressions, or bugs and fixing root causes.
 
 **Key activities:**
 - Root cause analysis (never mask symptoms)
@@ -83,15 +71,11 @@ QuickScale follows a structured development workflow with focused, stage-specifi
 - Minimal fixes addressing root cause
 - Add regression tests after fixes
 
-**Referenced by prompts:**
-- Can be invoked manually when debugging is needed
-- Referenced during test failure analysis
-
 ---
 
 ## Shared Principles
 
-These foundational documents are referenced by all stage files:
+These shared documents are the authoritative rule sources for project-specific engineering practices. When a stage guide overlaps with one of these documents, follow the shared document.
 
 ### [Code Principles](shared/code_principles.md)
 **SOLID, DRY, KISS, Explicit Failure** - Core coding principles with examples for each stage.
@@ -122,38 +106,20 @@ Before contributing, familiarize yourself with these key project documents:
 
 ---
 
-## GitHub Prompts
-
-QuickScale uses structured prompts for automated development workflows:
-
-### [roadmap-plan-review-and-update.prompt.md](../../.github/prompts/roadmap-plan-review-and-update.prompt.md)
-**Roadmap planning and validation** - Choose next release, validate implementation plan, reconcile with decisions.md.
-
-### [roadmap-task-implementation.prompt.md](../../.github/prompts/roadmap-task-implementation.prompt.md)
-**Complete task implementation workflow** - Covers PLAN → CODE → REVIEW → TESTING stages for implementing roadmap tasks.
-
-### [roadmap-task-review.prompt.md](../../.github/prompts/roadmap-task-review.prompt.md)
-**Post-implementation quality review** - Comprehensive code review of completed implementation. Takes release version as parameter (e.g., `0.68.0`) and can support final release review before the public release note and roadmap cleanup.
-
-### [release-commit-message-and-roadmap-cleaning.prompt.md](../../.github/prompts/release-commit-message-and-roadmap-cleaning.prompt.md)
-**Release finalization** - Generate release commit message, clean up roadmap after release completion.
-
----
-
 ## Quick Start Guide
 
 ### For New Contributors
 1. Read [README.md](../../README.md) to understand the project
 2. Review [Technical Decisions](../technical/decisions.md) to understand scope
 3. Check [Technical Roadmap](../technical/roadmap.md) for available tasks
-4. Follow the workflow stages above when implementing
+4. Open the shared rules and stage guides relevant to the task
 
 ### For Code Changes
-```
-PLAN → CODE → REVIEW → TESTING → (DEBUG if needed)
-```
+Use the guides that match the work in front of you:
 
-Each stage has a focused guide that tells you exactly what to do and what rules to follow.
+- Use the shared documents as the project rule source of truth
+- Use PLAN, CODE, REVIEW, TESTING, and DEBUG as task-specific reference guides
+- Let your execution workflow decide the order in which those guides are applied
 
 ---
 
@@ -163,5 +129,3 @@ Each stage has a focused guide that tells you exactly what to do and what rules 
 - **Architecture questions**: See [Architecture Guidelines](shared/architecture_guidelines.md)
 - **Testing questions**: Review [Testing Standards](shared/testing_standards.md)
 - **Bugs or issues**: Follow [DEBUG](debug.md) guide
-
-Happy contributing! 🚀

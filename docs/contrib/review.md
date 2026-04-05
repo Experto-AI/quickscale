@@ -2,7 +2,7 @@
 
 This document guides the quality control stage of programming, where you ensure changes comply with project standards and quality requirements.
 
-**📋 Usage Note:** This file contains complete quality control guidance with embedded references to shared principles. You only need to attach `docs/contrib/contributing.md` and `review.md` - all shared guidelines are referenced within this document.
+Shared documents in [shared/](shared/) remain authoritative when guidance overlaps. This guide defines how to apply those project rules during review.
 
 ## Quality Control Principles
 
