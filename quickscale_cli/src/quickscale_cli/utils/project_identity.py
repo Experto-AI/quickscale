@@ -5,11 +5,16 @@ The canonical identity model is:
 - package: Python import package
 """
 
+from __future__ import annotations
+
 from dataclasses import dataclass
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 from quickscale_cli.schema.config_schema import QuickScaleConfig, validate_config
-from quickscale_cli.schema.state_schema import QuickScaleState, StateManager
+
+if TYPE_CHECKING:
+    from quickscale_cli.schema.state_schema import QuickScaleState
 
 
 @dataclass(frozen=True)
@@ -53,6 +58,8 @@ def load_identity_from_config_file(project_path: Path) -> ProjectIdentity | None
 
 def load_identity_from_state_file(project_path: Path) -> ProjectIdentity | None:
     """Load identity from .quickscale/state.yml if present and valid."""
+    from quickscale_cli.schema.state_schema import StateManager
+
     try:
         state = StateManager(project_path).load()
     except Exception:

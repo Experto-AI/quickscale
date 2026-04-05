@@ -5,21 +5,23 @@ A guide for keeping `experto-ai-web` and `bap-web` current with new QuickScale r
 Trigger prompt for the manual agent-assisted fallback:
 > "I have a new quickscale project at `/tmp/xxxx`, incorporate the current web at `$HOME/current-web` — follow `docs/planning/beta-site-migration.md`"
 
-## Planned maintainer automation surface (v0.81.0)
+## Current maintainer automation surface (v0.81.0 internal baseline)
 
-This playbook is being formalized as a beta-site-only maintainer workflow for `experto-ai-web` and `bap-web`.
+This playbook documents the shipped beta-site-only maintainer workflow for `experto-ai-web` and `bap-web`.
 
 ```bash
 make beta-migrate-fresh DONOR=/abs/path/to/existing-beta-site RECIPIENT=/abs/path/to/fresh-scaffold
 make beta-migrate-in-place DONOR=/abs/path/to/fresh-scaffold RECIPIENT=/abs/path/to/existing-beta-site
 ```
 
-Rules for the planned maintainer tool:
+Rules for the current maintainer tool:
+- `make beta-migrate-fresh` runs deterministic file mutation on the throwaway recipient and executes the local verification stack by default; add `DRY_RUN=1` to emit the plan/report without mutating files
+- `make beta-migrate-in-place` currently stops at a structured pre-apply checkpoint report; it does not yet run the in-place copy/apply/verification sequence
 - backed by Python scripts under `scripts/`, not a QuickScale module and not a public `quickscale` CLI command
 - `DONOR` and `RECIPIENT` are the only required operator inputs and must be provided explicitly on every run
 - prefer deterministic Python transforms over bash-heavy pipelines
 - if a step cannot be resolved safely, stop and emit a partial report with `completed_steps`, `skipped_steps`, `changed_files`, and `pending_manual_actions` for a maintainer or AI coding assistant to continue
-- until the tooling lands, the reference workflows below remain canonical
+- the reference workflows below remain canonical for the current automation boundary and the manual continuation steps
 
 ---
 
@@ -30,14 +32,14 @@ Rules for the planned maintainer tool:
 | **Fresh-first (primary)** | Fresh scaffold at `/tmp/xxxx` | Custom content from existing project → fresh scaffold | You want a clean starting point; infrastructure is correct from the start |
 | **In-place (alternative)** | Existing project at `$HOME/current-web` | Infrastructure files from a fresh scaffold → existing project | You want to stay in the existing git repo and not move files |
 
-Both produce the same end result. The fresh-first approach is recommended because the fresh scaffold already has a correct, up-to-date `Dockerfile`, `pyproject.toml`, and frontend build config with no merges required.
+Both approaches can get you to the same end result, but the shipped automation is intentionally split: fresh-first executes through local verification on a throwaway recipient, while in-place currently serves as the checkpoint/report handoff for the manual continuation path. The fresh-first approach is recommended because the fresh scaffold already has a correct, up-to-date `Dockerfile`, `pyproject.toml`, and frontend build config with no merges required.
 
 After the initial catch-up, use **ongoing maintenance** for all future updates.
 
 ## Deterministic automation boundary
 
-- **Fresh-first** is the primary deterministic automation target. It can be automated through local verification, while final repo replacement, push, deploy, secret setup, and smoke approval remain explicit operator steps.
-- **In-place** can automate the file transforms and verification steps, but should keep a mandatory review checkpoint before `quickscale apply` when new modules or infrastructure diffs appear.
+- **Fresh-first** is the primary deterministic automation target. The shipped target mutates the throwaway recipient and runs local verification by default; final repo replacement, push, deploy, secret setup, and smoke approval remain explicit operator steps.
+- **In-place** is currently a checkpoint/report-only surface. The shipped target resolves identities and diffs, enforces clean-git preflight, and stops at the explicit pre-apply review checkpoint; copy/apply/post-apply/verification steps remain manual or future follow-up.
 - **Both paths** must avoid copying `.git`, `media/`, `.env`, or `poetry.lock` between projects. Generate derived artifacts only in the active working tree when the workflow explicitly reaches that step.
 
 ---
@@ -359,9 +361,11 @@ git push origin migrate/fresh-scaffold
 
 ---
 
-## Reference workflow — in-place alternative
+## Reference workflow — in-place alternative (manual continuation after checkpoint)
 
 Use this when you prefer to stay in the existing git repo without copying files to a temp location.
+
+Current tooling boundary: `make beta-migrate-in-place ...` emits the checkpoint report for this section only. Treat that report as the handoff into this reference workflow. Every step below is manual maintainer or AI-assisted continuation after the checkpoint has been reviewed and approved; none of them run automatically in the v0.81.0 baseline.
 
 ### Inputs
 
@@ -734,13 +738,13 @@ railway redeploy <deployment-id> --service experto-ai-web
 
 ```
 [ ] DONOR and RECIPIENT paths confirmed
-[ ] Fresh-first throwaway recipient prepared or in-place migration branch created
+[ ] Fresh-first throwaway recipient prepared, or for in-place the checkpoint report emitted from a clean migration branch
 [ ] Fresh-first only: recipient identity fixed if slug/package differed
 [ ] Fresh-first only: App.tsx, custom pages/components, utilities, Django files, and missing path deps copied
-[ ] In-place only: infrastructure files copied and slug references fixed
-[ ] In-place only: pyproject.toml and frontend/package.json merged
-[ ] In-place only: quickscale.yml updated, reviewed, and `quickscale apply` completed
-[ ] In-place only: missing module React pages/hooks copied without overwriting existing pages
+[ ] In-place only: checkpoint report reviewed and manual continuation copied infrastructure files and fixed slug references
+[ ] In-place only: checkpoint-guided manual continuation merged pyproject.toml and frontend/package.json
+[ ] In-place only: checkpoint-guided manual continuation updated quickscale.yml, reviewed it, and completed `quickscale apply`
+[ ] In-place only: checkpoint-guided manual continuation copied missing module React pages/hooks without overwriting existing pages
 [ ] Verification stack completed: `poetry lock`, `poetry install`, `pnpm install`, `pnpm build`, `quickscale manage migrate`, `pytest`, and `pnpm test`
 [ ] Local smoke-test completed — existing pages intact and new module pages work
 [ ] Result committed or staged in the target repo
@@ -771,7 +775,7 @@ Use this when the maintainer tool is only partially implemented or stops intenti
 2. Determine the mode from the provided `DONOR` and `RECIPIENT` values rather than inferring from directory names.
 3. Resume from the last completed deterministic step in the tool's report instead of rerunning earlier destructive steps.
 4. Fresh-first continuation order: identity fix → frontend copies → Django file copies → path dependencies → local verification → manual repo handoff.
-5. In-place continuation order: infrastructure copies → config merges → module review checkpoint → `quickscale apply` → missing module pages/hooks → local verification.
+5. In-place continuation order after the emitted checkpoint report: infrastructure copies → config merges → `quickscale.yml` review → `quickscale apply` → missing module pages/hooks → local verification.
 6. If a step would require guessing about module adoption, deploy timing, or secrets, stop, record the skipped work in `skipped_steps`, and leave the operator follow-up in `pending_manual_actions`.
 7. The minimum handoff payload for partial automation is `mode`, `completed_steps`, `skipped_steps`, `changed_files`, and `pending_manual_actions`.
 

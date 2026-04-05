@@ -30,6 +30,8 @@
 #   make ci-e2e               - Run CI checks including E2E tests
 #   make docs                 - Compile contributing docs
 #   make install              - Install QuickScale globally
+#   make beta-migrate-fresh DONOR=/abs/path RECIPIENT=/abs/path - Run fresh-first beta migration on a throwaway recipient
+#   make beta-migrate-in-place DONOR=/abs/path RECIPIENT=/abs/path - Emit the baseline in-place checkpoint report
 #   make build                - Build all distribution packages
 #   make publish-build        - Build packages only (no publish)
 #   make publish-test         - Publish to TestPyPI
@@ -47,6 +49,7 @@
         quality check ci ci-e2e \
         docs \
         build clean \
+		beta-migrate-fresh beta-migrate-in-place \
         publish-build publish-test publish-prod publish-full publish-module \
         legacy-mount legacy-unmount legacy-status \
         version-check version-update bump-version \
@@ -87,6 +90,10 @@ help:
 	@echo "  make setup                - Install Poetry dependencies only"
 	@echo "  make bootstrap            - Full bootstrap (Python check + poetry install)"
 	@echo "  make install              - Install QuickScale CLI globally"
+	@echo "  make beta-migrate-fresh DONOR=/abs/path RECIPIENT=/abs/path - Run fresh-first on a throwaway recipient"
+	@echo "                             Default: mutate recipient + local verification; DRY_RUN=1 plans only"
+	@echo "  make beta-migrate-in-place DONOR=/abs/path RECIPIENT=/abs/path - Emit baseline in-place checkpoint report only"
+	@echo "                             No copy/apply/verification execution yet; optional: REPORT=/abs/path/report.json"
 	@echo ""
 	@echo "Testing:"
 	@echo "  make test                 - Run all unit + integration tests"
@@ -157,6 +164,54 @@ setup:
 # Install QuickScale CLI globally
 install:
 	@scripts/install_global.sh
+
+# Run beta-site migration using the fresh-first workflow on a throwaway recipient.
+beta-migrate-fresh:
+	@set -e; \
+	if [ -z "$(DONOR)" ] || [ -z "$(RECIPIENT)" ]; then \
+		echo "Error: DONOR and RECIPIENT are required absolute paths (optional: DRY_RUN=1 REPORT=/abs/path/report.json)."; \
+		exit 1; \
+	fi; \
+	dry_run_args=""; \
+	if [ "$(DRY_RUN)" = "1" ] || [ "$(DRY_RUN)" = "true" ] || [ "$(DRY_RUN)" = "yes" ]; then \
+		dry_run_args="--dry-run"; \
+	fi; \
+	if [ -n "$(REPORT)" ]; then \
+		poetry run python scripts/beta_migrate.py fresh-first \
+			--donor "$(DONOR)" \
+			--recipient "$(RECIPIENT)" \
+			$$dry_run_args \
+			--report-path "$(REPORT)"; \
+	else \
+		poetry run python scripts/beta_migrate.py fresh-first \
+			--donor "$(DONOR)" \
+			--recipient "$(RECIPIENT)" \
+			$$dry_run_args; \
+	fi
+
+# Emit the baseline in-place checkpoint report without copy/apply/verification execution.
+beta-migrate-in-place:
+	@set -e; \
+	if [ -z "$(DONOR)" ] || [ -z "$(RECIPIENT)" ]; then \
+		echo "Error: DONOR and RECIPIENT are required absolute paths (optional: DRY_RUN=1 REPORT=/abs/path/report.json)."; \
+		exit 1; \
+	fi; \
+	dry_run_args=""; \
+	if [ "$(DRY_RUN)" = "1" ] || [ "$(DRY_RUN)" = "true" ] || [ "$(DRY_RUN)" = "yes" ]; then \
+		dry_run_args="--dry-run"; \
+	fi; \
+	if [ -n "$(REPORT)" ]; then \
+		poetry run python scripts/beta_migrate.py in-place \
+			--donor "$(DONOR)" \
+			--recipient "$(RECIPIENT)" \
+			$$dry_run_args \
+			--report-path "$(REPORT)"; \
+	else \
+		poetry run python scripts/beta_migrate.py in-place \
+			--donor "$(DONOR)" \
+			--recipient "$(RECIPIENT)" \
+			$$dry_run_args; \
+	fi
 
 # --- Testing ---
 

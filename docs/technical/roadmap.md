@@ -48,7 +48,7 @@ This table is the single milestone summary for shipped history and the active fo
 | v0.78.0 | ✅ Released | Notifications module | Transactional email foundation with app-owned rendering, recipient-granular tracking, and Anymail-backed Resend delivery; archived in release note and changelog |
 | v0.79.0 | ✅ Released | Social and Link Tree module | Curated social links and embeds, backend-owned preview metadata, and React public pages for fresh `showcase_react` generations; older projects adopt them manually |
 | v0.80.0 | ✅ Released | Analytics module | PostHog website analytics with flat mutable settings, service-style backend hooks, and fresh `showcase_react` starter support; existing projects adopt frontend snippets manually |
-| v0.81.0 | 📋 Planned | Beta-site migration maintainer tooling | Make-invoked Python automation for the fresh-first and in-place beta-site catch-up workflows |
+| v0.81.0 | ✅ Internal baseline | Beta-site migration maintainer tooling | Maintainer-only Make/Python surface: fresh-first executes through local verification by default, while in-place currently emits a checkpoint report only |
 | v0.82.0 | 📋 Planned | Disaster recovery | Disaster recovery plus environment migration and promotion workflows |
 | v0.83.0 | 📋 Planned | Listings theme | Real-estate vertical baseline with static pages, listings, and social links |
 | v0.84.0 | 📋 Planned | CRM theme | React frontend for the CRM module |
@@ -64,7 +64,7 @@ This table is the single milestone summary for shipped history and the active fo
 
 **Status:**
 - **Current release:** v0.80.0 is the published release
-- **Active next milestone:** v0.81.0 beta-site migration maintainer tooling is the current planning and implementation-prep scope; the listings theme remains queued for v0.83.0
+- **Active next milestone:** v0.82.0 disaster recovery is the next planned milestone; v0.81.0 now serves as the current internal beta-site maintainer baseline
 - **Plan/Apply System:** v0.68.0-v0.71.0 - Terraform-style configuration ✅ Complete
 - **SaaS Parity:** v0.86.0 - auth, billing, teams modules complete on top of the notifications foundation
 
@@ -355,16 +355,18 @@ Following [module-extension.md](./module-extension.md), analytics v0.80.0 uses t
 
 ### v0.81.0: Beta-Site Migration Maintainer Tooling
 
-**Status**: 📋 Planned
+**Status**: ✅ Internal baseline
 
 **Planning document**: [Beta Site Migration Playbook](../planning/beta-site-migration.md) — maintainer-only catch-up workflows for `experto-ai-web` and `bap-web`.
 
-**Objective**: Ship beta-site-only maintainer automation for the fresh-first and in-place catch-up flows as Make-invoked Python tooling. The supported surface is `make beta-migrate-fresh` and `make beta-migrate-in-place`; this milestone does not add a public `quickscale` CLI command or a QuickScale module.
+**Objective**: Ship beta-site-only maintainer automation as Make-invoked Python tooling without expanding the public `quickscale` CLI surface. The supported surface is `make beta-migrate-fresh` and `make beta-migrate-in-place`.
 
-**Milestone success criteria**:
+The shipped split is intentional: `make beta-migrate-fresh` mutates the throwaway recipient and runs the shared local verification stack by default unless `DRY_RUN=1`, while `make beta-migrate-in-place` currently returns the structured pre-apply checkpoint report only. Broader in-place copy/apply/post-apply automation remains manual or future follow-up work.
+
+**Internal baseline outcomes**:
 - fresh-first runs through planning, mutation, local verification, and structured reporting on throwaway copies
-- in-place can stop safely at an explicit pre-apply checkpoint when module or infrastructure adoption still needs maintainer review
-- the shipped maintainer docs agree on the supported command surface and report handoff expectations before the milestone is treated complete
+- in-place stops safely at an explicit pre-apply checkpoint when module or infrastructure adoption still needs maintainer review
+- the shipped maintainer docs agree on the supported command surface and report handoff expectations
 - report output is detailed enough for a second AI coding assistant or maintainer to resume without rereading repository history
 
 **Scope Guardrails**:
@@ -378,55 +380,52 @@ Following [module-extension.md](./module-extension.md), analytics v0.80.0 uses t
 
 #### A. Maintainer Command Surface
 
-- [ ] Add `make beta-migrate-fresh DONOR=/abs/path RECIPIENT=/abs/path`
-- [ ] Add `make beta-migrate-in-place DONOR=/abs/path RECIPIENT=/abs/path`
-- [ ] Route the Make targets through `poetry run python scripts/beta_migrate.py fresh-first|in-place` so the implementation stays in Python rather than shell
-- [ ] Document the shipped invocation details in `Makefile` help, `scripts/README.md`, and the migration playbook
+- [x] Add `make beta-migrate-fresh DONOR=/abs/path RECIPIENT=/abs/path`
+- [x] Add `make beta-migrate-in-place DONOR=/abs/path RECIPIENT=/abs/path`
+- [x] Route the Make targets through `poetry run python scripts/beta_migrate.py fresh-first|in-place` so the implementation stays in Python rather than shell
+- [x] Document the shipped invocation details in `Makefile` help, `scripts/README.md`, and the migration playbook
 
 #### B. Python Script Architecture
 
-- [ ] Create `scripts/beta_migrate.py` as the single entrypoint with `fresh-first` and `in-place` modes
-- [ ] Use stdlib `argparse`, `pathlib`, `shutil`, `subprocess`, `json`, and `tomllib`; use existing YAML/TOML writer dependencies only where writes are required
-- [ ] Model shared state explicitly with typed data structures for resolved identities, migration inputs, planned actions, and pending manual actions
-- [ ] Keep shared helpers in Python functions first; split into an additional helper module only if the file becomes hard to review
+- [x] Create `scripts/beta_migrate.py` as the single entrypoint with `fresh-first` and `in-place` modes
+- [x] Use stdlib `argparse`, `pathlib`, `shutil`, `subprocess`, `json`, and `tomllib`; use existing YAML/TOML writer dependencies only where writes are required
+- [x] Model shared state explicitly with typed data structures for resolved identities, migration inputs, planned actions, and pending manual actions
+- [x] Keep shared helpers in Python functions first; split into an additional helper module only if the file becomes hard to review
 
 #### C. Shared Deterministic Helpers
 
-- [ ] Resolve `project.slug`, `project.package`, module lists, filesystem paths, and whether slug/package reconciliation is required from `quickscale.yml` and `pyproject.toml`
-- [ ] Validate required files exist before mutation begins, with explicit blocker messages when they do not
-- [ ] Enforce clean git state for the in-place recipient before destructive file replacement or `quickscale apply`
-- [ ] Implement a `--dry-run` mode that prints the exact planned actions without mutating files
-- [ ] Emit a machine-readable and human-readable report that preserves the playbook handoff contract; use the continuation guide as the authoritative field list for resume-specific payload details
-- [ ] Stop with a pending-actions report whenever the script cannot safely choose between multiple valid outcomes
+- [x] Resolve `project.slug`, `project.package`, module lists, filesystem paths, and whether slug/package reconciliation is required from `quickscale.yml` and `pyproject.toml`
+- [x] Validate required files exist before mutation begins, with explicit blocker messages when they do not
+- [x] Enforce clean git state for the in-place recipient before destructive file replacement or `quickscale apply`
+- [x] Implement a `--dry-run` mode that prints the exact planned actions without mutating files
+- [x] Emit a machine-readable and human-readable report that preserves the playbook handoff contract; use the continuation guide as the authoritative field list for resume-specific payload details
+- [x] Stop with a pending-actions report whenever the script cannot safely choose between multiple valid outcomes
 
 #### D. Fresh-First Flow
 
-- [ ] Implement the current reference steps in order: identity reconciliation, `App.tsx`, custom-only pages, non-`ui/` component directories, src utilities, selected Django files, and missing module path dependencies
-- [ ] Keep recipient-owned managed files in place during fresh-first, especially `settings/modules.py`, `urls_modules.py`, `railway.json`, `settings/base.py`, and `settings/local.py`
-- [ ] Preserve the fresh scaffold's managed files and fresher infrastructure exactly as classified in the playbook table
-- [ ] Add verification subprocess steps for `poetry lock`, `poetry install`, `pnpm install`, `pnpm build`, `quickscale manage migrate`, `pytest`, and `pnpm test`
-- [ ] Treat the production-repo replacement, push, and deploy sequence as a printed follow-up checklist rather than an automatic side effect
+- [x] Implement the current reference steps in order: identity reconciliation, `App.tsx`, custom-only pages, non-`ui/` component directories, src utilities, selected Django files, and missing module path dependencies
+- [x] Keep recipient-owned managed files in place during fresh-first, especially `settings/modules.py`, `urls_modules.py`, `railway.json`, `settings/base.py`, and `settings/local.py`
+- [x] Preserve the fresh scaffold's managed files and fresher infrastructure exactly as classified in the playbook table
+- [x] Add verification subprocess steps for `poetry lock`, `poetry install`, `pnpm install`, `pnpm build`, `quickscale manage migrate`, `pytest`, and `pnpm test`
+- [x] Treat the production-repo replacement, push, and deploy sequence as a printed follow-up checklist rather than an automatic side effect
 
-#### E. In-Place Flow
+#### E. In-Place Checkpoint Baseline
 
+- [x] Resolve donor/recipient identities, module diff, path dependency diff, and clean-git preflight for the in-place report path
+- [x] Stop at the explicit pre-apply review checkpoint with planned actions and pending manual actions instead of guessing through in-place mutation
 - [ ] Implement deterministic infrastructure file copies from donor to recipient, including slug/package substitution
-- [ ] Merge `pyproject.toml` by taking donor non-path dependencies and retaining recipient module path dependencies
-- [ ] Merge `frontend/package.json` while preserving the recipient package name
-- [ ] Update `quickscale.yml` with newly introduced modules only
-- [ ] Summarize infrastructure and module diffs before the review checkpoint so maintainer approval for `quickscale apply` is based on concrete changes
-- [ ] Require an explicit review checkpoint before `quickscale apply` when the module diff or infrastructure diff is non-empty
-- [ ] Keep recipient custom routes, pages, components, and Django custom files in place; only copy module-owned React surfaces that are still missing after `quickscale apply`
-- [ ] After `quickscale apply`, copy only the missing module-owned React pages, hooks, and components documented in the playbook
-- [ ] Reuse the same verification subprocess stack as fresh-first
+- [ ] Merge `pyproject.toml` and `frontend/package.json` in the recipient working tree
+- [ ] Update `quickscale.yml`, run `quickscale apply`, and copy only the missing module-owned React surfaces
+- [ ] Reuse the same verification subprocess stack as fresh-first after the in-place apply path exists
 
 #### F. Deterministic Boundary and Pending Work Contract
 
-- [ ] Fresh-first should be able to run deterministically through local verification on a throwaway recipient
-- [ ] In-place should be allowed to stop before `quickscale apply` with a complete pending-actions report if module adoption needs operator review
-- [ ] Both modes must print the remaining manual tasks for smoke testing, env vars, PR creation, merge, deploy, and rollback
-- [ ] If only a partial implementation ships or a run stops at a checkpoint, the report format becomes the handoff contract for the next AI coding assistant rather than silent TODO comments in code
+- [x] Fresh-first should be able to run deterministically through local verification on a throwaway recipient
+- [x] In-place should be allowed to stop before `quickscale apply` with a complete pending-actions report if module adoption needs operator review
+- [x] Both modes must print the remaining manual tasks for smoke testing, env vars, PR creation, merge, deploy, and rollback
+- [x] If only a partial implementation ships or a run stops at a checkpoint, the report format becomes the handoff contract for the next AI coding assistant rather than silent TODO comments in code
 
-#### G. Implementation Sequence for an AI Coding Assistant
+#### G. Follow-Up Sequence for Later In-Place Automation
 
 1. Freeze the maintainer surface first: Make targets, required env vars, script modes, and report format.
 2. Implement shared identity and report helpers plus `--dry-run` before any destructive file mutation.
@@ -439,11 +438,11 @@ Following [module-extension.md](./module-extension.md), analytics v0.80.0 uses t
 
 #### H. Validation
 
-- [ ] Add focused pytest coverage for deterministic transformation helpers using temp directories and fixture projects
-- [ ] Rehearse fresh-first in both same-slug and different-slug scenarios so identity reconciliation is validated rather than assumed
+- [x] Add focused pytest coverage for deterministic transformation helpers using temp directories and fixture projects
+- [x] Rehearse fresh-first in both same-slug and different-slug scenarios so identity reconciliation is validated rather than assumed
 - [ ] Rehearse fresh-first on throwaway copies of both beta sites
-- [ ] Rehearse in-place on throwaway branches with a deliberately added module diff
-- [ ] Verify dry-run and pending-actions outputs are sufficient for a second AI coding assistant to resume without rereading repository history
+- [x] Rehearse the shipped in-place checkpoint path in temp-fixture repos with a deliberately added module diff so the pre-apply report is validated rather than assumed
+- [x] Verify dry-run and pending-actions outputs are sufficient for a second AI coding assistant to resume without rereading repository history
 
 ---
 
