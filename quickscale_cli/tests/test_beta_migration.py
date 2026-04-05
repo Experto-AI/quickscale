@@ -37,6 +37,7 @@ def _write_project(
     path_dependencies: tuple[str, ...] = (),
     include_docker_files: bool = True,
     include_use_modules_hook: bool = True,
+    include_frontend_infra_files: bool = True,
 ) -> Path:
     root.mkdir(parents=True, exist_ok=True)
     modules_block = ""
@@ -150,6 +151,37 @@ def _write_project(
         json.dumps({"name": slug, "private": True}, indent=2) + "\n"
     )
 
+    if include_frontend_infra_files:
+        (root / ".pre-commit-config.yaml").write_text(f"# {marker}-pre-commit-marker\n")
+        (root / "frontend" / "vite.config.ts").write_text(
+            f"// {marker}-vite-marker {slug}\n"
+        )
+        (root / "frontend" / "tsconfig.json").write_text(
+            json.dumps({"marker": f"{marker}-tsconfig-marker", "slug": slug}, indent=2)
+            + "\n"
+        )
+        (root / "frontend" / "tsconfig.app.json").write_text(
+            json.dumps(
+                {"marker": f"{marker}-tsconfig-app-marker", "slug": slug}, indent=2
+            )
+            + "\n"
+        )
+        (root / "frontend" / "tsconfig.node.json").write_text(
+            json.dumps(
+                {"marker": f"{marker}-tsconfig-node-marker", "slug": slug}, indent=2
+            )
+            + "\n"
+        )
+        (root / "frontend" / "eslint.config.js").write_text(
+            f"// {marker}-eslint-marker {slug}\n"
+        )
+        (root / "frontend" / "postcss.config.js").write_text(
+            f"// {marker}-postcss-marker {slug}\n"
+        )
+        (root / "frontend" / "prettier.config.js").write_text(
+            f"// {marker}-prettier-marker {slug}\n"
+        )
+
     if include_use_modules_hook:
         (frontend_src / "hooks").mkdir(parents=True, exist_ok=True)
         (frontend_src / "hooks" / "useModules.ts").write_text(
@@ -220,6 +252,81 @@ def _install_verification_success_stub(
             stdout=f"stdout:{joined}",
             stderr=f"stderr:{joined}",
         )
+
+    monkeypatch.setattr(subprocess, "run", fake_run)
+    return calls
+
+
+def _install_in_place_success_stub(
+    monkeypatch: pytest.MonkeyPatch,
+    *,
+    recipient: Path,
+    package: str,
+) -> list[tuple[tuple[str, ...], Path]]:
+    calls: list[tuple[tuple[str, ...], Path]] = []
+    original_run = subprocess.run
+
+    def fake_run(command, cwd=None, **kwargs):
+        command_tuple = tuple(command)
+        call_cwd = Path(cwd) if cwd is not None else Path.cwd()
+
+        if (
+            len(command_tuple) >= 3
+            and command_tuple[0] == "git"
+            and command_tuple[1] == "-C"
+        ):
+            return original_run(command, cwd=cwd, **kwargs)
+
+        if command_tuple == ("quickscale", "apply"):
+            pyproject_path = recipient / "pyproject.toml"
+            pyproject_text = pyproject_path.read_text()
+            new_dependency_lines = (
+                'quickscale-module-forms = {path = "./modules/forms", develop = true}\n'
+                'quickscale-module-social = {path = "./modules/social", develop = true}\n\n'
+            )
+            if (
+                'quickscale-module-forms = {path = "./modules/forms", develop = true}'
+                not in pyproject_text
+            ):
+                pyproject_path.write_text(
+                    pyproject_text.replace(
+                        "[tool.poetry.group.dev.dependencies]\n",
+                        new_dependency_lines + "[tool.poetry.group.dev.dependencies]\n",
+                    )
+                )
+
+            (recipient / ".quickscale").mkdir(exist_ok=True)
+            (recipient / ".quickscale" / "state.yml").write_text("applied: true\n")
+            (recipient / "modules" / "forms").mkdir(parents=True, exist_ok=True)
+            (recipient / "modules" / "social").mkdir(parents=True, exist_ok=True)
+            (recipient / "modules" / "forms" / "README.md").write_text("forms module\n")
+            (recipient / "modules" / "social" / "README.md").write_text(
+                "social module\n"
+            )
+            settings_modules_path = recipient / package / "settings" / "modules.py"
+            settings_modules_path.write_text(
+                settings_modules_path.read_text() + "FORMS = True\nSOCIAL = True\n"
+            )
+            return subprocess.CompletedProcess(
+                command_tuple,
+                0,
+                stdout="stdout:quickscale apply",
+                stderr="stderr:quickscale apply",
+            )
+
+        if command_tuple in [
+            argv for argv, _display, _cwd_suffix in EXPECTED_VERIFICATION_SEQUENCE
+        ]:
+            calls.append((command_tuple, call_cwd))
+            joined = " ".join(command_tuple)
+            return subprocess.CompletedProcess(
+                command_tuple,
+                0,
+                stdout=f"stdout:{joined}",
+                stderr=f"stderr:{joined}",
+            )
+
+        return original_run(command, cwd=cwd, **kwargs)
 
     monkeypatch.setattr(subprocess, "run", fake_run)
     return calls
@@ -296,6 +403,27 @@ def test_parse_cli_args_supports_modes_and_optional_flags(tmp_path: Path) -> Non
     assert parsed.mode == "fresh-first"
     assert parsed.dry_run is True
     assert parsed.report_path == report_path
+
+
+def test_parse_cli_args_supports_in_place_continuation_flag(tmp_path: Path) -> None:
+    """In-place parsing should expose the explicit continuation opt-in."""
+    donor = tmp_path / "donor"
+    recipient = tmp_path / "recipient"
+
+    parsed = parse_cli_args(
+        [
+            "in-place",
+            "--donor",
+            str(donor),
+            "--recipient",
+            str(recipient),
+            "--continue-after-checkpoint",
+        ]
+    )
+
+    assert parsed.mode == "in-place"
+    assert parsed.continue_after_checkpoint is True
+    assert parsed.dry_run is False
 
 
 def test_plan_blocks_relative_paths() -> None:
@@ -429,6 +557,47 @@ def test_in_place_clean_git_worktree_yields_checkpoint_report(tmp_path: Path) ->
     )
 
 
+def test_run_in_place_without_continuation_keeps_checkpoint_default(
+    tmp_path: Path,
+) -> None:
+    """The in-place run path should stay checkpoint-only unless continuation is explicit."""
+    donor = _write_project(
+        tmp_path / "donor",
+        slug="fresh-donor",
+        package="fresh_donor",
+        marker="donor",
+        modules=("auth", "social"),
+    )
+    recipient = _write_project(
+        tmp_path / "recipient",
+        slug="beta-site",
+        package="beta_site",
+        marker="recipient",
+        modules=("auth",),
+    )
+    _init_clean_git_repo(recipient)
+
+    original_quickscale = (recipient / "quickscale.yml").read_text()
+    report = run_beta_migration(
+        BetaMigrationInput(
+            mode="in-place",
+            donor=donor,
+            recipient=recipient,
+            dry_run=False,
+        )
+    )
+
+    assert report.status == "checkpoint"
+    assert report.phase == "in-place-checkpoint"
+    assert report.changed_files == []
+    assert report.verification_results == []
+    assert (recipient / "quickscale.yml").read_text() == original_quickscale
+    assert any(
+        action.action == "run-in-place-continuation-later"
+        for action in report.pending_manual_actions
+    )
+
+
 def test_in_place_dirty_git_worktree_blocks(tmp_path: Path) -> None:
     """Dirty in-place recipients should fail the clean-git preflight check."""
     donor = _write_project(
@@ -464,6 +633,220 @@ def test_in_place_dirty_git_worktree_blocks(tmp_path: Path) -> None:
     assert any(
         check.name == "recipient-clean-git-worktree" and check.status == "failed"
         for check in report.preflight_checks
+    )
+
+
+def test_run_in_place_with_continuation_executes_apply_and_verification(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Explicit in-place continuation should merge, apply, adopt missing surfaces, and verify."""
+    donor = _write_project(
+        tmp_path / "donor",
+        slug="fresh-donor",
+        package="fresh_donor",
+        marker="donor",
+        modules=("auth", "forms", "social"),
+        path_dependencies=(
+            "quickscale-module-auth",
+            "quickscale-module-forms",
+            "quickscale-module-social",
+        ),
+    )
+    recipient = _write_project(
+        tmp_path / "recipient",
+        slug="beta-site",
+        package="beta_site",
+        marker="recipient",
+        modules=("auth",),
+        path_dependencies=("quickscale-module-auth",),
+    )
+
+    donor_pyproject = donor / "pyproject.toml"
+    donor_pyproject.write_text(
+        donor_pyproject.read_text().replace(
+            'Django = ">=6.0.3,<7.0.0"\n',
+            'Django = ">=6.1.0,<7.0.0"\ndjango-markdownx = "^4.0.7"\n',
+        )
+    )
+
+    donor_package_json_path = donor / "frontend" / "package.json"
+    donor_package_json = json.loads(donor_package_json_path.read_text())
+    donor_package_json["scripts"] = {"build": "vite build", "test": "vitest run"}
+    donor_package_json["dependencies"] = {"react": "^19.0.0"}
+    donor_package_json_path.write_text(json.dumps(donor_package_json, indent=2) + "\n")
+
+    (donor / "frontend" / "src" / "pages" / "FormsPage.tsx").write_text(
+        "export default 'donor-forms';\n"
+    )
+    (recipient / "frontend" / "src" / "pages" / "FormsPage.tsx").write_text(
+        "export default 'recipient-forms';\n"
+    )
+    (donor / "frontend" / "src" / "pages" / "SocialLinkTreePublicPage.tsx").write_text(
+        "export default 'donor-link-tree';\n"
+    )
+    (donor / "frontend" / "src" / "pages" / "SocialEmbedsPublicPage.tsx").write_text(
+        "export default 'donor-embeds';\n"
+    )
+    (donor / "frontend" / "src" / "components" / "social").mkdir(
+        parents=True, exist_ok=True
+    )
+    (recipient / "frontend" / "src" / "components" / "social").mkdir(
+        parents=True, exist_ok=True
+    )
+    (
+        donor / "frontend" / "src" / "components" / "social" / "PublicSocialShell.tsx"
+    ).write_text("export default 'donor-social-shell';\n")
+    (
+        recipient / "frontend" / "src" / "components" / "social" / "ExistingBadge.tsx"
+    ).write_text("export default 'recipient-existing-social';\n")
+    (donor / "frontend" / "src" / "hooks" / "usePublicSocialSurface.ts").write_text(
+        "export const marker = 'donor-public-social-hook'\n"
+    )
+
+    _init_clean_git_repo(recipient)
+
+    calls = _install_in_place_success_stub(
+        monkeypatch,
+        recipient=recipient,
+        package="beta_site",
+    )
+    report = run_beta_migration(
+        BetaMigrationInput(
+            mode="in-place",
+            donor=donor,
+            recipient=recipient,
+            dry_run=False,
+            continue_after_checkpoint=True,
+        )
+    )
+
+    assert report.status == "ready"
+    assert report.phase == "in-place-executed"
+    _assert_verification_report(report, recipient, calls)
+
+    quickscale_text = (recipient / "quickscale.yml").read_text()
+    assert "forms:" in quickscale_text
+    assert "social:" in quickscale_text
+
+    dockerfile_text = (recipient / "Dockerfile").read_text()
+    assert "donor-docker-marker" in dockerfile_text
+    assert "beta_site.settings.production" in dockerfile_text
+    assert "fresh_donor.settings.production" not in dockerfile_text
+
+    compose_text = (recipient / "docker-compose.yml").read_text()
+    assert "donor-compose-marker" in compose_text
+    assert "beta-site_backend" in compose_text
+    assert (
+        "DATABASE_URL=postgresql://postgres:postgres@db:5432/beta_site" in compose_text
+    )
+
+    hook_text = (recipient / "frontend" / "src" / "hooks" / "useModules.ts").read_text()
+    assert "projectName: 'beta-site'" in hook_text
+    assert "donor-hook-marker" in hook_text
+
+    assert (
+        "donor-pre-commit-marker" in (recipient / ".pre-commit-config.yaml").read_text()
+    )
+    assert (
+        "donor-vite-marker" in (recipient / "frontend" / "vite.config.ts").read_text()
+    )
+    assert (
+        "donor-eslint-marker"
+        in (recipient / "frontend" / "eslint.config.js").read_text()
+    )
+    assert (
+        "donor-postcss-marker"
+        in (recipient / "frontend" / "postcss.config.js").read_text()
+    )
+    assert (
+        "donor-prettier-marker"
+        in (recipient / "frontend" / "prettier.config.js").read_text()
+    )
+
+    pyproject_text = (recipient / "pyproject.toml").read_text()
+    assert 'Django = ">=6.1.0,<7.0.0"' in pyproject_text
+    assert 'django-markdownx = "^4.0.7"' in pyproject_text
+    assert (
+        'quickscale-module-auth = {path = "./modules/auth", develop = true}'
+        in pyproject_text
+    )
+    assert (
+        'quickscale-module-forms = {path = "./modules/forms", develop = true}'
+        in pyproject_text
+    )
+    assert (
+        'quickscale-module-social = {path = "./modules/social", develop = true}'
+        in pyproject_text
+    )
+    assert 'DJANGO_SETTINGS_MODULE = "beta_site.settings.local"' in pyproject_text
+
+    package_json = json.loads((recipient / "frontend" / "package.json").read_text())
+    assert package_json["name"] == "beta-site"
+    assert package_json["scripts"] == {
+        "build": "vite build",
+        "test": "vitest run",
+    }
+    assert package_json["dependencies"] == {"react": "^19.0.0"}
+
+    assert (
+        "recipient-forms"
+        in (recipient / "frontend" / "src" / "pages" / "FormsPage.tsx").read_text()
+    )
+    assert (
+        "donor-link-tree"
+        in (
+            recipient / "frontend" / "src" / "pages" / "SocialLinkTreePublicPage.tsx"
+        ).read_text()
+    )
+    assert (
+        "donor-embeds"
+        in (
+            recipient / "frontend" / "src" / "pages" / "SocialEmbedsPublicPage.tsx"
+        ).read_text()
+    )
+    assert (
+        "recipient-existing-social"
+        in (
+            recipient
+            / "frontend"
+            / "src"
+            / "components"
+            / "social"
+            / "ExistingBadge.tsx"
+        ).read_text()
+    )
+    assert (
+        "donor-social-shell"
+        in (
+            recipient
+            / "frontend"
+            / "src"
+            / "components"
+            / "social"
+            / "PublicSocialShell.tsx"
+        ).read_text()
+    )
+    assert (
+        "donor-public-social-hook"
+        in (
+            recipient / "frontend" / "src" / "hooks" / "usePublicSocialSurface.ts"
+        ).read_text()
+    )
+
+    assert (recipient / ".quickscale" / "state.yml").exists()
+    assert any(path.endswith(".quickscale/state.yml") for path in report.changed_files)
+    assert any(
+        path.endswith("frontend/src/pages/SocialLinkTreePublicPage.tsx")
+        for path in report.changed_files
+    )
+    assert any(
+        action.action == "review-user-owned-react-routing"
+        for action in report.pending_manual_actions
+    )
+    assert any(
+        action.action == "run-local-smoke-checks"
+        for action in report.pending_manual_actions
     )
 
 
@@ -860,7 +1243,6 @@ def test_run_beta_migration_cli_writes_report_and_stdout_json(tmp_path: Path) ->
         ],
         stdout=stdout,
     )
-
     assert exit_code == 0
     output = stdout.getvalue()
     summary, json_payload = output.strip().split("\n\n", maxsplit=1)

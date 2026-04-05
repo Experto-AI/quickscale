@@ -349,12 +349,12 @@ quickscale plan myapp --overwrite
 
 The wizard guides you through:
 1. **Theme selection**: Choose from available themes (showcase_html, showcase_react)
-2. **Module selection**: Select optional modules to include. On the main branch and in the current v0.80.0 release, implemented first-party modules include analytics, auth, backups, blog, crm, forms, listings, notifications, social, and storage.
+2. **Module selection**: Select optional modules to include. On the main branch and in the current v0.81.0 release, implemented first-party modules include analytics, auth, backups, blog, crm, forms, listings, notifications, social, and storage.
 3. **Docker configuration**: Configure Docker build/start options and optional first-start superuser creation
 
 **Generated `quickscale.yml` example**:
 ```yaml
-version: 0.80.0
+version: 0.81.0
 project:
   slug: myapp
   package: myapp

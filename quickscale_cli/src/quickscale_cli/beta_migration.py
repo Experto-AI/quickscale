@@ -101,8 +101,27 @@ IN_PLACE_INFRASTRUCTURE_TARGETS = (
     "frontend/tsconfig.json",
     "frontend/tsconfig.app.json",
     "frontend/tsconfig.node.json",
+    "frontend/eslint.config.js",
+    "frontend/postcss.config.js",
+    "frontend/prettier.config.js",
     "frontend/src/hooks/useModules.ts",
 )
+IN_PLACE_SUBSTITUTED_INFRASTRUCTURE_TARGETS = frozenset(
+    {
+        "Dockerfile",
+        "docker-compose.yml",
+        "frontend/src/hooks/useModules.ts",
+    }
+)
+IN_PLACE_MODULE_REACT_SURFACES: dict[str, tuple[str, ...]] = {
+    "forms": ("frontend/src/pages/FormsPage.tsx",),
+    "social": (
+        "frontend/src/pages/SocialLinkTreePublicPage.tsx",
+        "frontend/src/pages/SocialEmbedsPublicPage.tsx",
+        "frontend/src/components/social",
+        "frontend/src/hooks/usePublicSocialSurface.ts",
+    ),
+}
 
 
 @dataclass(frozen=True)
@@ -184,6 +203,7 @@ class BetaMigrationInput:
     recipient: Path
     dry_run: bool = False
     report_path: Path | None = None
+    continue_after_checkpoint: bool = False
 
 
 @dataclass(frozen=True)
@@ -402,8 +422,8 @@ def build_argument_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         description=(
             "Run maintainer-only beta-site migration workflows. Fresh-first can execute "
-            "deterministically through local verification, while in-place may stop at a "
-            "checkpoint report."
+            "deterministically through local verification. In-place returns the checkpoint "
+            "report by default and only continues past it when explicitly requested."
         )
     )
     subparsers = parser.add_subparsers(dest="mode", required=True)
@@ -415,7 +435,7 @@ def build_argument_parser() -> argparse.ArgumentParser:
         ),
         (
             "in-place",
-            "Plan the in-place workflow: donor is a fresh scaffold and recipient is the existing beta site.",
+            "Run the in-place workflow: donor is a fresh scaffold and recipient is the existing beta site. It stays checkpoint-first unless --continue-after-checkpoint is supplied.",
         ),
     ):
         subparser = subparsers.add_parser(mode, help=help_text)
@@ -438,6 +458,15 @@ def build_argument_parser() -> argparse.ArgumentParser:
             "--report-path",
             help="Optional path where the JSON report should be written",
         )
+        if mode == "in-place":
+            subparser.add_argument(
+                "--continue-after-checkpoint",
+                action="store_true",
+                help=(
+                    "After the default checkpoint report is built, continue with the "
+                    "deterministic in-place copy, apply, and verification sequence"
+                ),
+            )
 
     return parser
 
@@ -452,6 +481,7 @@ def parse_cli_args(argv: Sequence[str] | None = None) -> BetaMigrationInput:
         recipient=Path(parsed.recipient),
         dry_run=parsed.dry_run,
         report_path=Path(parsed.report_path) if parsed.report_path else None,
+        continue_after_checkpoint=getattr(parsed, "continue_after_checkpoint", False),
     )
 
 
@@ -911,7 +941,7 @@ def _in_place_actions(
             step="merge-pyproject-and-frontend-package",
             description=(
                 "Merge donor non-path dependencies into recipient pyproject.toml, keep recipient path "
-                "dependencies, and merge frontend/package.json while preserving the recipient package name."
+                "dependencies and pytest settings, and merge frontend/package.json while preserving the recipient package name."
             ),
             targets=[
                 str(recipient.pyproject_path),
@@ -979,7 +1009,7 @@ def _build_pending_manual_actions(
                 detail="Resolve the reported blockers and rerun the maintainer workflow from Make.",
             )
         )
-        if report.mode == "fresh-first" and report.changed_files:
+        if report.changed_files:
             actions.append(
                 PendingManualAction(
                     action="resume-from-report",
@@ -1042,23 +1072,63 @@ def _build_pending_manual_actions(
         )
         return actions
 
+    if report.phase in {"in-place-checkpoint", "planning-only", "dry-run"}:
+        actions.extend(
+            [
+                PendingManualAction(
+                    action="review-infrastructure-and-module-diff",
+                    detail="Use this report as the explicit pre-apply checkpoint before any in-place merge or quickscale apply step.",
+                ),
+                PendingManualAction(
+                    action="run-in-place-continuation-later",
+                    detail="Opt in later with --continue-after-checkpoint (or the matching Make variable) to run the recipient quickscale.yml update, quickscale apply, post-apply React surface adoption, and local verification.",
+                ),
+                PendingManualAction(
+                    action="handle-pr-deploy-and-rollback-manually",
+                    detail="Keep PR creation, merge, deployment, env vars, and rollback as manual maintainer steps.",
+                ),
+            ]
+        )
+        return actions
+
+    known_surface_modules = sorted(
+        set(report.module_diff.donor_only if report.module_diff is not None else [])
+        & set(IN_PLACE_MODULE_REACT_SURFACES)
+    )
+    if known_surface_modules:
+        actions.append(
+            PendingManualAction(
+                action="review-user-owned-react-routing",
+                detail=(
+                    "If newly added modules need theme-owned routing or navigation adoption, update "
+                    "recipient-owned App.tsx/main.tsx manually. This continuation only copied missing "
+                    "module-owned pages, hooks, and components for: "
+                    f"{', '.join(known_surface_modules)}."
+                ),
+            )
+        )
+
     actions.extend(
         [
             PendingManualAction(
-                action="review-infrastructure-and-module-diff",
-                detail="Use this report as the explicit pre-apply checkpoint before any in-place merge or quickscale apply step.",
+                action="run-local-smoke-checks",
+                detail="Start the updated recipient, confirm the home page, admin, newly added module surfaces, and any existing custom routes.",
             ),
             PendingManualAction(
-                action="run-quickscale-apply-later",
-                detail="A later execution phase must perform the recipient quickscale.yml update, quickscale apply, and any post-apply React surface adoption.",
+                action="create-pr-and-merge",
+                detail="Review the in-place git diff, commit the changes in the recipient repo, open a PR, and merge after approval.",
             ),
             PendingManualAction(
-                action="run-local-verification-after-apply",
-                detail="After the maintainer review checkpoint and apply step, run the shared verification stack and local smoke checks.",
+                action="set-module-env-vars",
+                detail="Configure any required Railway environment variables for newly adopted modules without storing secret values in the report.",
             ),
             PendingManualAction(
-                action="handle-pr-deploy-and-rollback-manually",
-                detail="Keep PR creation, merge, deployment, env vars, and rollback as manual maintainer steps.",
+                action="deploy-and-verify",
+                detail="Deploy through the existing repo workflow, confirm migrations in logs, and run production smoke checks.",
+            ),
+            PendingManualAction(
+                action="keep-rollback-reference",
+                detail="Keep the previous git and Railway deployment reference available until the updated release is validated.",
             ),
         ]
     )
@@ -1072,7 +1142,13 @@ def _prepare_beta_migration_report(
 ) -> BetaMigrationReport:
     """Build the shared report skeleton for planning and execution paths."""
     if inputs.mode == "in-place":
-        phase = "in-place-checkpoint"
+        phase = (
+            "in-place-execution-pending"
+            if execution_intent == "run"
+            and inputs.continue_after_checkpoint
+            and not inputs.dry_run
+            else "in-place-checkpoint"
+        )
     elif inputs.dry_run:
         phase = "dry-run"
     elif execution_intent == "run":
@@ -1245,25 +1321,34 @@ def _prepare_beta_migration_report(
                 detail=MANUAL_HANDOFF_REASON,
             )
     else:
+        boundary_reason = DRY_RUN_REASON if inputs.dry_run else PHASE_BOUNDARY_REASON
+        if (
+            execution_intent == "run"
+            and inputs.continue_after_checkpoint
+            and not inputs.dry_run
+        ):
+            report.status = "checkpoint" if not report.blockers else "blocked"
+            report.pending_manual_actions = _build_pending_manual_actions(report)
+            return report
         _append_skipped_step(
             report,
             step="perform-in-place-merge-sequence",
-            detail=PHASE_BOUNDARY_REASON,
+            detail=boundary_reason,
         )
         _append_skipped_step(
             report,
             step="run-quickscale-apply",
-            detail=PHASE_BOUNDARY_REASON,
+            detail=boundary_reason,
         )
         _append_skipped_step(
             report,
             step="copy-post-apply-react-surfaces",
-            detail=PHASE_BOUNDARY_REASON,
+            detail=boundary_reason,
         )
         _append_skipped_step(
             report,
             step="execute-verification-subprocesses",
-            detail=PHASE_BOUNDARY_REASON,
+            detail=boundary_reason,
         )
 
     report.status = (
@@ -1322,12 +1407,22 @@ def _refresh_recipient_snapshot(report: BetaMigrationReport) -> ProjectSnapshot:
         raise ValueError("Recipient snapshot is unavailable.")
     refreshed = _load_project_snapshot(report.recipient.path)
     report.recipient = refreshed
-    if report.donor is not None and report.path_dependency_diff is not None:
+    if (
+        report.donor is not None
+        and report.path_dependency_diff is not None
+        and report.mode == "fresh-first"
+    ):
         report.planned_actions = _fresh_first_actions(
             report.donor,
             refreshed,
             identity_reconciliation_required=report.identity_reconciliation_required,
             path_dependency_diff=report.path_dependency_diff,
+        )
+    elif report.donor is not None and report.module_diff is not None:
+        report.planned_actions = _in_place_actions(
+            report.donor,
+            refreshed,
+            module_diff=report.module_diff,
         )
     return refreshed
 
@@ -1527,6 +1622,11 @@ def _collect_missing_path_dependency_values(
     return missing_dependencies
 
 
+def _load_json_file(path: Path) -> Any:
+    """Load a JSON file from disk."""
+    return json.loads(path.read_text())
+
+
 def _toml_literal(value: Any) -> str:
     """Serialize a limited TOML literal used by QuickScale path dependencies."""
     if isinstance(value, bool):
@@ -1538,6 +1638,10 @@ def _toml_literal(value: Any) -> str:
         return str(value)
     if isinstance(value, float):
         return str(value)
+    if isinstance(value, (list, tuple)):
+        return "[" + ", ".join(_toml_literal(item) for item in value) + "]"
+    if isinstance(value, dict):
+        return _toml_inline_table(value)
     raise ValueError(
         f"Unsupported TOML literal for beta migration path dependency sync: {value!r}"
     )
@@ -1547,6 +1651,394 @@ def _toml_inline_table(value: dict[str, Any]) -> str:
     """Serialize a TOML inline table preserving the donor key order."""
     parts = [f"{key} = {_toml_literal(item)}" for key, item in value.items()]
     return "{" + ", ".join(parts) + "}"
+
+
+def _replace_toml_section(
+    pyproject_path: Path,
+    section_name: str,
+    section_lines: Sequence[str],
+) -> bool:
+    """Replace an entire TOML section body while preserving the rest of the file."""
+    original = pyproject_path.read_text()
+    lines = original.splitlines()
+    section_header = f"[{section_name}]"
+    section_start: int | None = None
+    section_end = len(lines)
+    for index, line in enumerate(lines):
+        stripped = line.strip()
+        if stripped == section_header:
+            section_start = index
+            continue
+        if (
+            section_start is not None
+            and stripped.startswith("[")
+            and stripped.endswith("]")
+        ):
+            section_end = index
+            break
+
+    if section_start is None:
+        raise ValueError(f"Unable to locate {section_header} in {pyproject_path}")
+
+    updated_lines = lines[: section_start + 1] + list(section_lines)
+    if (
+        section_end < len(lines)
+        and updated_lines
+        and updated_lines[-1].strip() != ""
+        and lines[section_end].strip() != ""
+    ):
+        updated_lines.append("")
+    updated_lines.extend(lines[section_end:])
+    updated = "\n".join(updated_lines) + "\n"
+    if updated == original:
+        return False
+    pyproject_path.write_text(updated)
+    return True
+
+
+def _extract_non_path_dependencies(pyproject_data: dict[str, Any]) -> dict[str, Any]:
+    """Return ordered non-path Poetry dependencies from a project."""
+    dependencies = (
+        pyproject_data.get("tool", {}).get("poetry", {}).get("dependencies", {})
+    )
+    if not isinstance(dependencies, dict):
+        raise ValueError("Unable to resolve Poetry dependencies for beta migration.")
+
+    return {
+        dependency_name: dependency_value
+        for dependency_name, dependency_value in dependencies.items()
+        if not (isinstance(dependency_value, dict) and "path" in dependency_value)
+    }
+
+
+def _render_toml_key_value_lines(values: dict[str, Any]) -> list[str]:
+    """Render ordered TOML key/value lines for a section body."""
+    return [f"{key} = {_toml_literal(value)}" for key, value in values.items()]
+
+
+def _collect_git_changed_files(project_path: Path) -> list[Path]:
+    """Collect modified and untracked file paths from a git worktree."""
+    try:
+        status_result = subprocess.run(
+            [
+                "git",
+                "-C",
+                str(project_path),
+                "status",
+                "--porcelain",
+                "--untracked-files=all",
+            ],
+            capture_output=True,
+            text=True,
+            check=False,
+            timeout=10,
+        )
+    except (FileNotFoundError, subprocess.TimeoutExpired) as exc:
+        raise ValueError(
+            f"Unable to collect git-changed files for {project_path}: {exc}"
+        ) from exc
+
+    if status_result.returncode != 0:
+        stderr = (status_result.stderr or "").strip()
+        raise ValueError(stderr or f"git status failed for {project_path}.")
+
+    changed_files: list[Path] = []
+    for line in status_result.stdout.splitlines():
+        if not line:
+            continue
+        relative_path = line[3:]
+        if " -> " in relative_path:
+            relative_path = relative_path.split(" -> ", maxsplit=1)[1]
+        changed_files.append(project_path / relative_path)
+    return changed_files
+
+
+def _sync_changed_files_from_git_status(report: BetaMigrationReport) -> None:
+    """Sync changed files from the recipient git worktree into the report."""
+    if report.recipient is None:
+        raise ValueError("Recipient snapshot is unavailable.")
+
+    for changed_file in _collect_git_changed_files(report.recipient.path):
+        _record_changed_file(report, changed_file)
+
+
+def _in_place_identity_replacements(
+    donor: ProjectSnapshot, recipient: ProjectSnapshot
+) -> tuple[tuple[str, str], ...]:
+    """Return donor-to-recipient identity replacements for in-place file copies."""
+    return tuple(
+        replacement
+        for replacement in (
+            (donor.identity.package, recipient.identity.package),
+            (donor.identity.slug, recipient.identity.slug),
+        )
+        if replacement[0] != replacement[1]
+    )
+
+
+def _copy_missing_path(source: Path, destination: Path) -> list[Path]:
+    """Copy only missing files from source into destination and return created paths."""
+    if not source.exists():
+        return []
+
+    if source.is_file():
+        if destination.exists():
+            return []
+        destination.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(source, destination)
+        return [destination]
+
+    if destination.exists() and not destination.is_dir():
+        raise ValueError(
+            f"Cannot copy missing directory {source} into existing file path {destination}."
+        )
+
+    if not destination.exists():
+        _copy_path(source, destination)
+        return [destination]
+
+    copied_paths: list[Path] = []
+    for source_child in sorted(source.iterdir(), key=lambda item: item.name):
+        copied_paths.extend(
+            _copy_missing_path(source_child, destination / source_child.name)
+        )
+    return copied_paths
+
+
+def _execute_copy_managed_infrastructure_files(report: BetaMigrationReport) -> None:
+    """Copy donor infrastructure files into the in-place recipient."""
+    if report.donor is None or report.recipient is None:
+        raise ValueError("Donor and recipient snapshots are required before execution.")
+
+    replacements = _in_place_identity_replacements(report.donor, report.recipient)
+    copied_targets: list[str] = []
+    skipped_missing_targets: list[str] = []
+    for relative_path in IN_PLACE_INFRASTRUCTURE_TARGETS:
+        source_path = report.donor.path / relative_path
+        if not source_path.exists():
+            skipped_missing_targets.append(relative_path)
+            continue
+
+        destination_path = report.recipient.path / relative_path
+        _copy_path(source_path, destination_path)
+        if (
+            replacements
+            and relative_path in IN_PLACE_SUBSTITUTED_INFRASTRUCTURE_TARGETS
+            and destination_path.is_file()
+        ):
+            _replace_text_in_file(destination_path, replacements)
+        _record_changed_file(report, destination_path)
+        copied_targets.append(relative_path)
+
+    _append_completed_step(
+        report,
+        step="copy-managed-infrastructure-files",
+        detail=(
+            "Copied donor infrastructure files into the recipient with slug/package substitution where needed: "
+            f"{', '.join(copied_targets) or '(none)'}. Missing optional donor files skipped: "
+            f"{', '.join(skipped_missing_targets) or '(none)'}"
+        ),
+    )
+
+
+def _execute_merge_pyproject_and_frontend_package(report: BetaMigrationReport) -> None:
+    """Merge pyproject dependencies and frontend package.json in place."""
+    if report.donor is None or report.recipient is None:
+        raise ValueError("Donor and recipient snapshots are required before execution.")
+
+    donor_pyproject = _load_toml_file(report.donor.pyproject_path)
+    recipient_pyproject = _load_toml_file(report.recipient.pyproject_path)
+    donor_non_path_dependencies = _extract_non_path_dependencies(donor_pyproject)
+    recipient_dependencies = (
+        recipient_pyproject.get("tool", {}).get("poetry", {}).get("dependencies", {})
+    )
+    if not isinstance(recipient_dependencies, dict):
+        raise ValueError(
+            "Unable to resolve recipient Poetry dependencies for in-place merge."
+        )
+
+    recipient_path_dependencies = {
+        dependency_name: dependency_value
+        for dependency_name, dependency_value in recipient_dependencies.items()
+        if isinstance(dependency_value, dict) and "path" in dependency_value
+    }
+    merged_dependencies = {
+        **donor_non_path_dependencies,
+        **recipient_path_dependencies,
+    }
+    pyproject_changed = _replace_toml_section(
+        report.recipient.pyproject_path,
+        "tool.poetry.dependencies",
+        _render_toml_key_value_lines(merged_dependencies),
+    )
+    if pyproject_changed:
+        _record_changed_file(report, report.recipient.pyproject_path)
+        _refresh_recipient_snapshot(report)
+
+    donor_package_json = _load_json_file(
+        report.donor.path / "frontend" / "package.json"
+    )
+    recipient_package_json_path = report.recipient.path / "frontend" / "package.json"
+    recipient_package_json = _load_json_file(recipient_package_json_path)
+    recipient_package_name = recipient_package_json.get("name")
+    if not isinstance(donor_package_json, dict) or not isinstance(
+        recipient_package_json, dict
+    ):
+        raise ValueError("frontend/package.json must contain JSON objects.")
+    if not isinstance(recipient_package_name, str) or not recipient_package_name:
+        raise ValueError("Recipient frontend/package.json is missing a valid name.")
+
+    merged_package_json = dict(donor_package_json)
+    merged_package_json["name"] = recipient_package_name
+    rendered_package_json = json.dumps(merged_package_json, indent=2) + "\n"
+    package_changed = recipient_package_json_path.read_text() != rendered_package_json
+    if package_changed:
+        recipient_package_json_path.write_text(rendered_package_json)
+        _record_changed_file(report, recipient_package_json_path)
+
+    _append_completed_step(
+        report,
+        step="merge-pyproject-and-frontend-package",
+        detail=(
+            "Merged donor non-path Poetry dependencies into recipient pyproject.toml while preserving recipient path dependencies "
+            f"({', '.join(recipient_path_dependencies) or '(none)'}) and recipient pytest settings. "
+            f"frontend/package.json preserved recipient name {recipient_package_name!r}."
+        ),
+    )
+
+
+def _execute_update_quickscale_config(report: BetaMigrationReport) -> None:
+    """Add donor-only modules to the recipient quickscale.yml before apply."""
+    if report.donor is None or report.recipient is None:
+        raise ValueError("Donor and recipient snapshots are required before execution.")
+
+    donor_only_modules = report.module_diff.donor_only if report.module_diff else []
+    if not donor_only_modules:
+        _append_completed_step(
+            report,
+            step="update-quickscale-config",
+            detail="Recipient quickscale.yml already contained all donor modules.",
+        )
+        return
+
+    recipient_config = validate_config(report.recipient.config_path.read_text())
+    added_modules: list[str] = []
+    for module_name in donor_only_modules:
+        if module_name in recipient_config.modules:
+            continue
+        recipient_config.modules[module_name] = report.donor.config.modules[module_name]
+        added_modules.append(module_name)
+
+    rendered_config = generate_yaml(recipient_config)
+    if rendered_config != report.recipient.config_path.read_text():
+        report.recipient.config_path.write_text(rendered_config)
+        _record_changed_file(report, report.recipient.config_path)
+        _refresh_recipient_snapshot(report)
+
+    _append_completed_step(
+        report,
+        step="update-quickscale-config",
+        detail=(
+            "Added donor-only modules to recipient quickscale.yml before quickscale apply: "
+            f"{', '.join(added_modules) or '(none)'}"
+        ),
+    )
+
+
+def _execute_pre_apply_review_checkpoint(report: BetaMigrationReport) -> None:
+    """Record the explicit opt-in beyond the default in-place checkpoint."""
+    _append_completed_step(
+        report,
+        step="pre-apply-review-checkpoint",
+        detail=(
+            "Explicit --continue-after-checkpoint opt-in was provided, so the workflow proceeded beyond the default in-place checkpoint."
+        ),
+    )
+
+
+def _execute_quickscale_apply(report: BetaMigrationReport) -> None:
+    """Run quickscale apply in the recipient working tree."""
+    if report.recipient is None:
+        raise ValueError("Recipient snapshot is unavailable.")
+
+    try:
+        result = subprocess.run(
+            ["quickscale", "apply"],
+            cwd=report.recipient.path,
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+    except OSError as exc:
+        raise ValueError(f"quickscale apply failed to start: {exc}") from exc
+
+    try:
+        _sync_changed_files_from_git_status(report)
+    except ValueError:
+        pass
+
+    if result.returncode != 0:
+        stdout = (result.stdout or "").strip()
+        stderr = (result.stderr or "").strip()
+        command_error_parts = []
+        if stdout:
+            command_error_parts.append(f"stdout={stdout}")
+        if stderr:
+            command_error_parts.append(f"stderr={stderr}")
+        command_error_suffix = (
+            f" ({'; '.join(command_error_parts)})" if command_error_parts else ""
+        )
+        raise ValueError(
+            "quickscale apply failed with exit code "
+            f"{result.returncode}{command_error_suffix}"
+        )
+
+    _refresh_recipient_snapshot(report)
+    _append_completed_step(
+        report,
+        step="run-quickscale-apply",
+        detail="Ran quickscale apply successfully in the recipient working tree.",
+    )
+
+
+def _execute_copy_post_apply_react_surfaces(report: BetaMigrationReport) -> None:
+    """Copy only missing module-owned React surfaces after in-place apply."""
+    if report.donor is None or report.recipient is None:
+        raise ValueError("Donor and recipient snapshots are required before execution.")
+
+    donor_only_modules = report.module_diff.donor_only if report.module_diff else []
+    copied_relative_paths: list[str] = []
+    skipped_existing_paths: list[str] = []
+    missing_donor_paths: list[str] = []
+    for module_name in donor_only_modules:
+        for relative_path in IN_PLACE_MODULE_REACT_SURFACES.get(module_name, ()):
+            source_path = report.donor.path / relative_path
+            destination_path = report.recipient.path / relative_path
+            if not source_path.exists():
+                missing_donor_paths.append(relative_path)
+                continue
+
+            copied_paths = _copy_missing_path(source_path, destination_path)
+            if not copied_paths:
+                skipped_existing_paths.append(relative_path)
+                continue
+
+            for copied_path in copied_paths:
+                _record_changed_file(report, copied_path)
+                copied_relative_paths.append(
+                    str(copied_path.relative_to(report.recipient.path))
+                )
+
+    _append_completed_step(
+        report,
+        step="copy-post-apply-react-surfaces",
+        detail=(
+            "Copied only missing module-owned React surfaces after quickscale apply: "
+            f"{', '.join(copied_relative_paths) or '(none)'}. Existing recipient surfaces kept: "
+            f"{', '.join(skipped_existing_paths) or '(none)'}. Missing donor surfaces skipped: "
+            f"{', '.join(missing_donor_paths) or '(none)'}"
+        ),
+    )
 
 
 def _insert_missing_path_dependencies(
@@ -1751,10 +2243,73 @@ def _execute_fresh_first(report: BetaMigrationReport) -> BetaMigrationReport:
     return report
 
 
+def _execute_in_place(report: BetaMigrationReport) -> BetaMigrationReport:
+    """Execute the explicit in-place continuation workflow on the recipient."""
+    step_handlers: list[tuple[str, Any]] = [
+        (
+            "copy-managed-infrastructure-files",
+            _execute_copy_managed_infrastructure_files,
+        ),
+        (
+            "merge-pyproject-and-frontend-package",
+            _execute_merge_pyproject_and_frontend_package,
+        ),
+        ("update-quickscale-config", _execute_update_quickscale_config),
+        ("pre-apply-review-checkpoint", _execute_pre_apply_review_checkpoint),
+        ("run-quickscale-apply", _execute_quickscale_apply),
+        ("copy-post-apply-react-surfaces", _execute_copy_post_apply_react_surfaces),
+        ("run-verification-stack", _execute_verification_stack),
+    ]
+
+    report.phase = "in-place-executed"
+    for index, (step_name, handler) in enumerate(step_handlers):
+        try:
+            handler(report)
+        except Exception as exc:
+            report.phase = "in-place-partial"
+            report.status = "blocked"
+            try:
+                _sync_changed_files_from_git_status(report)
+            except ValueError:
+                pass
+            _append_blocker(report, f"{step_name} failed: {exc}")
+            for remaining_step_name, _ in step_handlers[index + 1 :]:
+                _append_skipped_step(
+                    report,
+                    step=remaining_step_name,
+                    detail=f"Skipped after blocker in {step_name}: {exc}",
+                )
+            return report
+
+    _append_completed_step(
+        report,
+        step="finish-in-place-run",
+        detail=(
+            "In-place continuation completed through deterministic infrastructure/config merges, quickscale apply, missing React surface adoption, and local verification."
+        ),
+    )
+    _append_skipped_step(
+        report,
+        step="handle-pr-merge-deploy-and-rollback",
+        detail=MANUAL_HANDOFF_REASON,
+    )
+    report.status = "ready"
+    return report
+
+
 def run_beta_migration(inputs: BetaMigrationInput) -> BetaMigrationReport:
     """Run the beta migration workflow for the requested mode."""
     report = _prepare_beta_migration_report(inputs, execution_intent="run")
-    if report.blockers or inputs.mode != "fresh-first" or inputs.dry_run:
+    if report.blockers or inputs.dry_run:
+        report.pending_manual_actions = _build_pending_manual_actions(report)
+        return report
+
+    if inputs.mode == "in-place":
+        if not inputs.continue_after_checkpoint:
+            report.pending_manual_actions = _build_pending_manual_actions(report)
+            return report
+
+        report = _execute_in_place(report)
         report.pending_manual_actions = _build_pending_manual_actions(report)
         return report
 

@@ -31,7 +31,7 @@
 #   make docs                 - Compile contributing docs
 #   make install              - Install QuickScale globally
 #   make beta-migrate-fresh DONOR=/abs/path RECIPIENT=/abs/path - Run fresh-first beta migration on a throwaway recipient
-#   make beta-migrate-in-place DONOR=/abs/path RECIPIENT=/abs/path - Emit the baseline in-place checkpoint report
+#   make beta-migrate-in-place DONOR=/abs/path RECIPIENT=/abs/path - Run checkpoint-first in-place beta migration
 #   make build                - Build all distribution packages
 #   make publish-build        - Build packages only (no publish)
 #   make publish-test         - Publish to TestPyPI
@@ -92,8 +92,9 @@ help:
 	@echo "  make install              - Install QuickScale CLI globally"
 	@echo "  make beta-migrate-fresh DONOR=/abs/path RECIPIENT=/abs/path - Run fresh-first on a throwaway recipient"
 	@echo "                             Default: mutate recipient + local verification; DRY_RUN=1 plans only"
-	@echo "  make beta-migrate-in-place DONOR=/abs/path RECIPIENT=/abs/path - Emit baseline in-place checkpoint report only"
-	@echo "                             No copy/apply/verification execution yet; optional: REPORT=/abs/path/report.json"
+	@echo "  make beta-migrate-in-place DONOR=/abs/path RECIPIENT=/abs/path - Run checkpoint-first in-place beta migration"
+	@echo "                             Default stays checkpoint-only; add CONTINUE=1 to run copy/apply/verification"
+	@echo "                             Optional: REPORT=/abs/path/report.json"
 	@echo ""
 	@echo "Testing:"
 	@echo "  make test                 - Run all unit + integration tests"
@@ -193,24 +194,30 @@ beta-migrate-fresh:
 beta-migrate-in-place:
 	@set -e; \
 	if [ -z "$(DONOR)" ] || [ -z "$(RECIPIENT)" ]; then \
-		echo "Error: DONOR and RECIPIENT are required absolute paths (optional: DRY_RUN=1 REPORT=/abs/path/report.json)."; \
+		echo "Error: DONOR and RECIPIENT are required absolute paths (optional: DRY_RUN=1 CONTINUE=1 REPORT=/abs/path/report.json)."; \
 		exit 1; \
 	fi; \
 	dry_run_args=""; \
+	continue_args=""; \
 	if [ "$(DRY_RUN)" = "1" ] || [ "$(DRY_RUN)" = "true" ] || [ "$(DRY_RUN)" = "yes" ]; then \
 		dry_run_args="--dry-run"; \
+	fi; \
+	if [ "$(CONTINUE)" = "1" ] || [ "$(CONTINUE)" = "true" ] || [ "$(CONTINUE)" = "yes" ]; then \
+		continue_args="--continue-after-checkpoint"; \
 	fi; \
 	if [ -n "$(REPORT)" ]; then \
 		poetry run python scripts/beta_migrate.py in-place \
 			--donor "$(DONOR)" \
 			--recipient "$(RECIPIENT)" \
 			$$dry_run_args \
+			$$continue_args \
 			--report-path "$(REPORT)"; \
 	else \
 		poetry run python scripts/beta_migrate.py in-place \
 			--donor "$(DONOR)" \
 			--recipient "$(RECIPIENT)" \
-			$$dry_run_args; \
+			$$dry_run_args \
+			$$continue_args; \
 	fi
 
 # --- Testing ---

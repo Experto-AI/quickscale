@@ -1,4 +1,4 @@
-"""Thin maintainer-only wrapper for fresh-first execution and in-place checkpoint reporting."""
+"""Thin maintainer-only wrapper for fresh-first exec and in-place flow"""
 
 from __future__ import annotations
 

@@ -48,7 +48,7 @@ This table is the single milestone summary for shipped history and the active fo
 | v0.78.0 | ✅ Released | Notifications module | Transactional email foundation with app-owned rendering, recipient-granular tracking, and Anymail-backed Resend delivery; archived in release note and changelog |
 | v0.79.0 | ✅ Released | Social and Link Tree module | Curated social links and embeds, backend-owned preview metadata, and React public pages for fresh `showcase_react` generations; older projects adopt them manually |
 | v0.80.0 | ✅ Released | Analytics module | PostHog website analytics with flat mutable settings, service-style backend hooks, and fresh `showcase_react` starter support; existing projects adopt frontend snippets manually |
-| v0.81.0 | ✅ Internal baseline | Beta-site migration maintainer tooling | Maintainer-only Make/Python surface: fresh-first executes through local verification by default, while in-place currently emits a checkpoint report only |
+| v0.81.0 | ✅ Released | Beta-site migration maintainer tooling | Maintainer-only fresh-first and checkpoint-first in-place beta-site migration workflows; archived in release note and changelog |
 | v0.82.0 | 📋 Planned | Disaster recovery | Disaster recovery plus environment migration and promotion workflows |
 | v0.83.0 | 📋 Planned | Listings theme | Real-estate vertical baseline with static pages, listings, and social links |
 | v0.84.0 | 📋 Planned | CRM theme | React frontend for the CRM module |
@@ -63,8 +63,8 @@ This table is the single milestone summary for shipped history and the active fo
 - 📋 = Planned/Not Started
 
 **Status:**
-- **Current release:** v0.80.0 is the published release
-- **Active next milestone:** v0.82.0 disaster recovery is the next planned milestone; v0.81.0 now serves as the current internal beta-site maintainer baseline
+- **Published release history:** See [CHANGELOG.md](../../CHANGELOG.md) and the official release notes in [docs/releases/](../releases/)
+- **Active next milestone:** v0.82.0 disaster recovery is the next planned milestone
 - **Plan/Apply System:** v0.68.0-v0.71.0 - Terraform-style configuration ✅ Complete
 - **SaaS Parity:** v0.86.0 - auth, billing, teams modules complete on top of the notifications foundation
 
@@ -355,94 +355,11 @@ Following [module-extension.md](./module-extension.md), analytics v0.80.0 uses t
 
 ### v0.81.0: Beta-Site Migration Maintainer Tooling
 
-**Status**: ✅ Internal baseline
+**Status**: ✅ Released
 
-**Planning document**: [Beta Site Migration Playbook](../planning/beta-site-migration.md) — maintainer-only catch-up workflows for `experto-ai-web` and `bap-web`.
+**Release note**: [Release v0.81.0 - Beta-Site Migration Maintainer Tooling](../releases/release-v0.81.0.md)
 
-**Objective**: Ship beta-site-only maintainer automation as Make-invoked Python tooling without expanding the public `quickscale` CLI surface. The supported surface is `make beta-migrate-fresh` and `make beta-migrate-in-place`.
-
-The shipped split is intentional: `make beta-migrate-fresh` mutates the throwaway recipient and runs the shared local verification stack by default unless `DRY_RUN=1`, while `make beta-migrate-in-place` currently returns the structured pre-apply checkpoint report only. Broader in-place copy/apply/post-apply automation remains manual or future follow-up work.
-
-**Internal baseline outcomes**:
-- fresh-first runs through planning, mutation, local verification, and structured reporting on throwaway copies
-- in-place stops safely at an explicit pre-apply checkpoint when module or infrastructure adoption still needs maintainer review
-- the shipped maintainer docs agree on the supported command surface and report handoff expectations
-- report output is detailed enough for a second AI coding assistant or maintainer to resume without rereading repository history
-
-**Scope Guardrails**:
-- beta-site-only maintainer workflow; keep the surface out of `quickscale --help`
-- use Make as the maintainer entrypoint and Python scripts under `scripts/`; prefer structured TOML/YAML/JSON manipulation over bash-heavy pipelines
-- keep `DONOR` and `RECIPIENT` as explicit required inputs; no path auto-discovery
-- preserve QuickScale ownership boundaries: older user-owned theme files remain manual-adoption territory outside this documented beta-site workflow
-- fresh-first is the primary deterministic path; in-place may pause at explicit review checkpoints rather than guessing through destructive merges
-- do not automate git push, PR merge, Railway deploy, or secret population; print next steps instead
-- do not copy `.git`, `media/`, `.env`, or `poetry.lock` between projects; regenerate derived artifacts only inside the active working tree when the workflow explicitly reaches that step
-
-#### A. Maintainer Command Surface
-
-- [x] Add `make beta-migrate-fresh DONOR=/abs/path RECIPIENT=/abs/path`
-- [x] Add `make beta-migrate-in-place DONOR=/abs/path RECIPIENT=/abs/path`
-- [x] Route the Make targets through `poetry run python scripts/beta_migrate.py fresh-first|in-place` so the implementation stays in Python rather than shell
-- [x] Document the shipped invocation details in `Makefile` help, `scripts/README.md`, and the migration playbook
-
-#### B. Python Script Architecture
-
-- [x] Create `scripts/beta_migrate.py` as the single entrypoint with `fresh-first` and `in-place` modes
-- [x] Use stdlib `argparse`, `pathlib`, `shutil`, `subprocess`, `json`, and `tomllib`; use existing YAML/TOML writer dependencies only where writes are required
-- [x] Model shared state explicitly with typed data structures for resolved identities, migration inputs, planned actions, and pending manual actions
-- [x] Keep shared helpers in Python functions first; split into an additional helper module only if the file becomes hard to review
-
-#### C. Shared Deterministic Helpers
-
-- [x] Resolve `project.slug`, `project.package`, module lists, filesystem paths, and whether slug/package reconciliation is required from `quickscale.yml` and `pyproject.toml`
-- [x] Validate required files exist before mutation begins, with explicit blocker messages when they do not
-- [x] Enforce clean git state for the in-place recipient before destructive file replacement or `quickscale apply`
-- [x] Implement a `--dry-run` mode that prints the exact planned actions without mutating files
-- [x] Emit a machine-readable and human-readable report that preserves the playbook handoff contract; use the continuation guide as the authoritative field list for resume-specific payload details
-- [x] Stop with a pending-actions report whenever the script cannot safely choose between multiple valid outcomes
-
-#### D. Fresh-First Flow
-
-- [x] Implement the current reference steps in order: identity reconciliation, `App.tsx`, custom-only pages, non-`ui/` component directories, src utilities, selected Django files, and missing module path dependencies
-- [x] Keep recipient-owned managed files in place during fresh-first, especially `settings/modules.py`, `urls_modules.py`, `railway.json`, `settings/base.py`, and `settings/local.py`
-- [x] Preserve the fresh scaffold's managed files and fresher infrastructure exactly as classified in the playbook table
-- [x] Add verification subprocess steps for `poetry lock`, `poetry install`, `pnpm install`, `pnpm build`, `quickscale manage migrate`, `pytest`, and `pnpm test`
-- [x] Treat the production-repo replacement, push, and deploy sequence as a printed follow-up checklist rather than an automatic side effect
-
-#### E. In-Place Checkpoint Baseline
-
-- [x] Resolve donor/recipient identities, module diff, path dependency diff, and clean-git preflight for the in-place report path
-- [x] Stop at the explicit pre-apply review checkpoint with planned actions and pending manual actions instead of guessing through in-place mutation
-- [ ] Implement deterministic infrastructure file copies from donor to recipient, including slug/package substitution
-- [ ] Merge `pyproject.toml` and `frontend/package.json` in the recipient working tree
-- [ ] Update `quickscale.yml`, run `quickscale apply`, and copy only the missing module-owned React surfaces
-- [ ] Reuse the same verification subprocess stack as fresh-first after the in-place apply path exists
-
-#### F. Deterministic Boundary and Pending Work Contract
-
-- [x] Fresh-first should be able to run deterministically through local verification on a throwaway recipient
-- [x] In-place should be allowed to stop before `quickscale apply` with a complete pending-actions report if module adoption needs operator review
-- [x] Both modes must print the remaining manual tasks for smoke testing, env vars, PR creation, merge, deploy, and rollback
-- [x] If only a partial implementation ships or a run stops at a checkpoint, the report format becomes the handoff contract for the next AI coding assistant rather than silent TODO comments in code
-
-#### G. Follow-Up Sequence for Later In-Place Automation
-
-1. Freeze the maintainer surface first: Make targets, required env vars, script modes, and report format.
-2. Implement shared identity and report helpers plus `--dry-run` before any destructive file mutation.
-3. Land fresh-first file operations and verification before attempting in-place automation.
-4. Implement in-place pre-apply merges next, then add the explicit review checkpoint.
-5. Only after the checkpoint is stable, automate the post-apply React page adoption steps.
-6. If in-place full automation is not yet safe, stop at the checkpoint and ship the pending-actions report rather than guessing.
-7. Keep docs in sync with the shipped behavior: `docs/planning/beta-site-migration.md`, `scripts/README.md`, and `Makefile` help must match the tool exactly.
-8. Do not expand this maintainer workflow into a public `quickscale` CLI feature inside v0.81.0.
-
-#### H. Validation
-
-- [x] Add focused pytest coverage for deterministic transformation helpers using temp directories and fixture projects
-- [x] Rehearse fresh-first in both same-slug and different-slug scenarios so identity reconciliation is validated rather than assumed
-- [ ] Rehearse fresh-first on throwaway copies of both beta sites
-- [x] Rehearse the shipped in-place checkpoint path in temp-fixture repos with a deliberately added module diff so the pre-apply report is validated rather than assumed
-- [x] Verify dry-run and pending-actions outputs are sufficient for a second AI coding assistant to resume without rereading repository history
+**Closeout note**: Maintainer-only beta-site migration tooling shipped with deterministic fresh-first execution and checkpoint-first in-place continuation. Canonical history now lives in [CHANGELOG.md](../../CHANGELOG.md) and the official release note; this roadmap entry remains only as a concise navigation pointer together with the [Beta Site Migration Playbook](../planning/beta-site-migration.md).
 
 ---
 

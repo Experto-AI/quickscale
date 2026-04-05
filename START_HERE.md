@@ -12,7 +12,7 @@ QuickScale = **Django Generator** + **Reusable Modules** + **Production Foundati
 **Output**: Complete Django project with Docker, PostgreSQL, testing, CI/CD, and security best practices
 **Current Distribution**: Reusable modules are installed via git subtree, and starter themes are generated once into user-owned project code
 
-**Current Status**: The current published release is v0.80.0. See [roadmap.md](./docs/technical/roadmap.md) for upcoming work.
+**Current Status**: The current published release is v0.81.0. See [roadmap.md](./docs/technical/roadmap.md) for upcoming work.
 **Target Audience**: Solo developers and development agencies building client projects
 
 ---
@@ -204,7 +204,7 @@ Detailed guides for specific stages:
 ## Quick Answers to Common Questions
 
 ### "Is QuickScale production-ready?"
-The current generator, starter-theme workflow, and published first-party module line are active and maintained through tagged releases. The current published release is v0.80.0. See [roadmap.md](./docs/technical/roadmap.md) for upcoming work.
+The current generator, starter-theme workflow, and published first-party module line are active and maintained through tagged releases. The current published release is v0.81.0. See [roadmap.md](./docs/technical/roadmap.md) for upcoming work.
 See: [roadmap.md](./docs/technical/roadmap.md)
 
 ### "Can I use it for my client projects?"
@@ -323,6 +323,6 @@ decisions.md scaffolding.md roadmap.md   contrib/*
 
 ---
 
-**Last Updated**: 2026-04-04
-**QuickScale Version**: v0.80.0
+**Last Updated**: 2026-04-05
+**QuickScale Version**: v0.81.0
 **Feedback**: Open an issue if this guide needs improvement!

@@ -5,7 +5,7 @@ A guide for keeping `experto-ai-web` and `bap-web` current with new QuickScale r
 Trigger prompt for the manual agent-assisted fallback:
 > "I have a new quickscale project at `/tmp/xxxx`, incorporate the current web at `$HOME/current-web` — follow `docs/planning/beta-site-migration.md`"
 
-## Current maintainer automation surface (v0.81.0 internal baseline)
+## Current maintainer automation surface (shipped in v0.81.0)
 
 This playbook documents the shipped beta-site-only maintainer workflow for `experto-ai-web` and `bap-web`.
 
@@ -16,7 +16,7 @@ make beta-migrate-in-place DONOR=/abs/path/to/fresh-scaffold RECIPIENT=/abs/path
 
 Rules for the current maintainer tool:
 - `make beta-migrate-fresh` runs deterministic file mutation on the throwaway recipient and executes the local verification stack by default; add `DRY_RUN=1` to emit the plan/report without mutating files
-- `make beta-migrate-in-place` currently stops at a structured pre-apply checkpoint report; it does not yet run the in-place copy/apply/verification sequence
+- `make beta-migrate-in-place` emits the structured pre-apply checkpoint report by default; add `CONTINUE=1` or `--continue-after-checkpoint` to continue through the deterministic in-place copy/apply/verification sequence
 - backed by Python scripts under `scripts/`, not a QuickScale module and not a public `quickscale` CLI command
 - `DONOR` and `RECIPIENT` are the only required operator inputs and must be provided explicitly on every run
 - prefer deterministic Python transforms over bash-heavy pipelines
@@ -32,14 +32,14 @@ Rules for the current maintainer tool:
 | **Fresh-first (primary)** | Fresh scaffold at `/tmp/xxxx` | Custom content from existing project → fresh scaffold | You want a clean starting point; infrastructure is correct from the start |
 | **In-place (alternative)** | Existing project at `$HOME/current-web` | Infrastructure files from a fresh scaffold → existing project | You want to stay in the existing git repo and not move files |
 
-Both approaches can get you to the same end result, but the shipped automation is intentionally split: fresh-first executes through local verification on a throwaway recipient, while in-place currently serves as the checkpoint/report handoff for the manual continuation path. The fresh-first approach is recommended because the fresh scaffold already has a correct, up-to-date `Dockerfile`, `pyproject.toml`, and frontend build config with no merges required.
+Both approaches can get you to the same end result, but the shipped automation is intentionally split: fresh-first executes through local verification on a throwaway recipient, while in-place remains checkpoint-first unless maintainers explicitly opt into the continuation path. The fresh-first approach is recommended because the fresh scaffold already has a correct, up-to-date `Dockerfile`, `pyproject.toml`, and frontend build config with no merges required.
 
 After the initial catch-up, use **ongoing maintenance** for all future updates.
 
 ## Deterministic automation boundary
 
 - **Fresh-first** is the primary deterministic automation target. The shipped target mutates the throwaway recipient and runs local verification by default; final repo replacement, push, deploy, secret setup, and smoke approval remain explicit operator steps.
-- **In-place** is currently a checkpoint/report-only surface. The shipped target resolves identities and diffs, enforces clean-git preflight, and stops at the explicit pre-apply review checkpoint; copy/apply/post-apply/verification steps remain manual or future follow-up.
+- **In-place** is checkpoint-first by default. The shipped target resolves identities and diffs, enforces clean-git preflight, and emits the explicit pre-apply review checkpoint; an explicit continuation opt-in then runs deterministic infrastructure copy, config merge, `quickscale apply`, missing module-owned React surface adoption, and local verification. Recipient-owned `App.tsx` and `main.tsx`, smoke checks, env vars, PR merge, deploy, and rollback remain manual.
 - **Both paths** must avoid copying `.git`, `media/`, `.env`, or `poetry.lock` between projects. Generate derived artifacts only in the active working tree when the workflow explicitly reaches that step.
 
 ---
@@ -361,11 +361,11 @@ git push origin migrate/fresh-scaffold
 
 ---
 
-## Reference workflow — in-place alternative (manual continuation after checkpoint)
+## Reference workflow — in-place alternative
 
 Use this when you prefer to stay in the existing git repo without copying files to a temp location.
 
-Current tooling boundary: `make beta-migrate-in-place ...` emits the checkpoint report for this section only. Treat that report as the handoff into this reference workflow. Every step below is manual maintainer or AI-assisted continuation after the checkpoint has been reviewed and approved; none of them run automatically in the v0.81.0 baseline.
+Current tooling boundary: `make beta-migrate-in-place ...` emits the checkpoint report by default. Add `CONTINUE=1` or `--continue-after-checkpoint` to continue through the deterministic infrastructure copy, config merge, `quickscale apply`, missing module-owned React surface adoption, and local verification steps below. Recipient-owned `App.tsx` and `main.tsx`, smoke tests, env var setup, PR merge, deploy, and rollback remain manual even after continuation succeeds.
 
 ### Inputs
 
@@ -436,20 +436,16 @@ cp "$DONOR/frontend/src/hooks/useModules.ts" "$RECIPIENT/frontend/src/hooks/useM
 sed -i "s|projectName: '${DONOR_SLUG}'|projectName: '${RECIPIENT_SLUG}'|g" \
     "$RECIPIENT/frontend/src/hooks/useModules.ts"
 
-# main.tsx — only if adding social module
-python3 -c "
-import yaml
-with open('$DONOR/quickscale.yml')     as f: d = yaml.safe_load(f)
-with open('$RECIPIENT/quickscale.yml') as f: r = yaml.safe_load(f)
-exit(0 if 'social' in d.get('modules',{}) and 'social' not in r.get('modules',{}) else 1)
-" && cp "$DONOR/frontend/src/main.tsx" "$RECIPIENT/frontend/src/main.tsx"
+# App.tsx and main.tsx remain recipient-owned in the shipped continuation path.
+# Review them manually after continuation when newly added modules need dashboard routing,
+# public-surface mounting, or navigation changes.
 ```
 
 ---
 
 ### Step 3 — Merge pyproject.toml
 
-Keep recipient's module path deps; take donor's dependency versions and pytest config.
+Keep the recipient's module path dependencies and pytest settings; merge in the donor's non-path dependency versions only.
 
 ```python
 import tomllib, tomli_w, os
@@ -460,19 +456,13 @@ RECIPIENT = os.environ["RECIPIENT"]
 with open(f"{DONOR}/pyproject.toml",     "rb") as f: d = tomllib.load(f)
 with open(f"{RECIPIENT}/pyproject.toml", "rb") as f: r = tomllib.load(f)
 
-DONOR_PKG     = d["tool"]["poetry"]["packages"][0]["include"]
-RECIPIENT_PKG = r["tool"]["poetry"]["packages"][0]["include"]
-
 module_paths = {k: v for k, v in r["tool"]["poetry"]["dependencies"].items()
                 if isinstance(v, dict) and "path" in v}
 non_paths    = {k: v for k, v in d["tool"]["poetry"]["dependencies"].items()
                 if not (isinstance(v, dict) and "path" in v)}
 r["tool"]["poetry"]["dependencies"] = {**non_paths, **module_paths}
 
-pytest_opts = {**d["tool"]["pytest"]["ini_options"]}
-pytest_opts = {k: (v.replace(DONOR_PKG, RECIPIENT_PKG) if isinstance(v, str) else v)
-               for k, v in pytest_opts.items()}
-r["tool"]["pytest"]["ini_options"] = pytest_opts
+# Keep the recipient's [tool.pytest.ini_options] block exactly as-is.
 
 with open(f"{RECIPIENT}/pyproject.toml", "wb") as f:
     tomli_w.dump(r, f)
@@ -582,15 +572,15 @@ What to do with each file in each approach.
 | `.pre-commit-config.yaml` | keep RECIPIENT's | copy from donor |
 | `frontend/vite.config.ts`, `tsconfig*.json` | keep RECIPIENT's | copy from donor |
 | `frontend/src/hooks/useModules.ts` | keep RECIPIENT's, fix `projectName` | copy from donor, fix `projectName` |
-| `frontend/src/main.tsx` | keep RECIPIENT's (already has public surface routing) | copy from donor if adding social |
-| `pyproject.toml` | keep RECIPIENT's; add any missing path deps from donor | merge: donor dep versions + recipient path deps |
+| `frontend/src/main.tsx` | keep RECIPIENT's (already has public surface routing) | keep RECIPIENT's; review manually if newly added public-surface modules need mount/provider changes |
+| `pyproject.toml` | keep RECIPIENT's; add any missing path deps from donor | merge: donor non-path dep versions + recipient path deps; preserve recipient pytest settings |
 | `frontend/package.json` | keep RECIPIENT's | merge: donor scripts + deps, keep recipient name |
 | `quickscale.yml` | keep RECIPIENT's (already has target modules) | edit: add new modules from donor |
 | `<pkg>/settings/modules.py` | auto-generated — keep RECIPIENT's | auto-generated |
 | `<pkg>/urls_modules.py` | auto-generated — keep RECIPIENT's | auto-generated |
 | `railway.json` | auto-generated — keep RECIPIENT's | auto-generated |
 | `modules/` | already embedded in RECIPIENT — keep | embedded by `quickscale apply` |
-| `frontend/src/App.tsx` | copy from donor (custom routing) | keep RECIPIENT's |
+| `frontend/src/App.tsx` | copy from donor (custom routing) | keep RECIPIENT's; review manually if newly added dashboard routing changes are needed |
 | `frontend/src/pages/` (custom) | copy pages only in DONOR (Home, About, etc.) | keep RECIPIENT's |
 | `frontend/src/pages/` (scaffold) | keep RECIPIENT's (fresher) | keep RECIPIENT's |
 | `frontend/src/components/` (custom) | copy from donor (home/, layout/, shared/, seo/, properties/) | keep RECIPIENT's |
@@ -741,10 +731,11 @@ railway redeploy <deployment-id> --service experto-ai-web
 [ ] Fresh-first throwaway recipient prepared, or for in-place the checkpoint report emitted from a clean migration branch
 [ ] Fresh-first only: recipient identity fixed if slug/package differed
 [ ] Fresh-first only: App.tsx, custom pages/components, utilities, Django files, and missing path deps copied
-[ ] In-place only: checkpoint report reviewed and manual continuation copied infrastructure files and fixed slug references
-[ ] In-place only: checkpoint-guided manual continuation merged pyproject.toml and frontend/package.json
-[ ] In-place only: checkpoint-guided manual continuation updated quickscale.yml, reviewed it, and completed `quickscale apply`
-[ ] In-place only: checkpoint-guided manual continuation copied missing module React pages/hooks without overwriting existing pages
+[ ] In-place only: checkpoint report reviewed and the continuation path or equivalent manual steps copied infrastructure files and fixed slug references
+[ ] In-place only: continuation path or equivalent manual steps merged pyproject.toml and frontend/package.json
+[ ] In-place only: continuation path or equivalent manual steps updated quickscale.yml, reviewed it, and completed `quickscale apply`
+[ ] In-place only: continuation path or equivalent manual steps copied missing module React pages/hooks without overwriting existing pages
+[ ] In-place only: recipient-owned `App.tsx` and `main.tsx` reviewed manually when newly added modules need routing or public-surface adoption
 [ ] Verification stack completed: `poetry lock`, `poetry install`, `pnpm install`, `pnpm build`, `quickscale manage migrate`, `pytest`, and `pnpm test`
 [ ] Local smoke-test completed — existing pages intact and new module pages work
 [ ] Result committed or staged in the target repo
@@ -771,11 +762,11 @@ railway redeploy <deployment-id> --service experto-ai-web
 
 Use this when the maintainer tool is only partially implemented or stops intentionally at a review checkpoint.
 
-1. Read this playbook and the v0.81.0 roadmap milestone before changing the automation behavior.
+1. Read this playbook and [Release v0.81.0 - Beta-Site Migration Maintainer Tooling](../releases/release-v0.81.0.md) before changing the automation behavior.
 2. Determine the mode from the provided `DONOR` and `RECIPIENT` values rather than inferring from directory names.
 3. Resume from the last completed deterministic step in the tool's report instead of rerunning earlier destructive steps.
 4. Fresh-first continuation order: identity fix → frontend copies → Django file copies → path dependencies → local verification → manual repo handoff.
-5. In-place continuation order after the emitted checkpoint report: infrastructure copies → config merges → `quickscale.yml` review → `quickscale apply` → missing module pages/hooks → local verification.
+5. In-place continuation order after the emitted checkpoint report or explicit continuation opt-in: infrastructure copies → config merges → `quickscale.yml` review → `quickscale apply` → missing module pages/hooks → local verification → manual review of recipient-owned `App.tsx` and `main.tsx` when newly added modules need routing or public-surface adoption.
 6. If a step would require guessing about module adoption, deploy timing, or secrets, stop, record the skipped work in `skipped_steps`, and leave the operator follow-up in `pending_manual_actions`.
 7. The minimum handoff payload for partial automation is `mode`, `completed_steps`, `skipped_steps`, `changed_files`, and `pending_manual_actions`.
 
@@ -818,9 +809,10 @@ find the missing import in the donor's `frontend/src/`, and copy only that file.
 pip install tomli-w
 ```
 
-Or run the pyproject.toml merge manually: copy the `[tool.poetry.dependencies]` section from the
-donor into the recipient, then re-add the `quickscale-module-*` path dependencies from the
-recipient's original version.
+Or run the pyproject.toml merge manually: copy only the donor's non-path
+`[tool.poetry.dependencies]` entries into the recipient, keep the recipient's
+`quickscale-module-*` path dependencies, and leave the recipient's
+`[tool.pytest.ini_options]` block unchanged.
 
 ### Social pages return 404 on production
 
