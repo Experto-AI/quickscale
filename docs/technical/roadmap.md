@@ -113,6 +113,10 @@ After release closeout, keep only a concise pointer in the roadmap. Put canonica
 
 **Primary code grouping**: `quickscale remove`, desired/applied state persistence, managed wiring regeneration, legacy tracking consumers, CLI failure handling, and operator-facing command tests.
 
+**Current status (2026-04-06)**: Audit and handoff-prep notes are complete, but no Phase 1 implementation slice has landed yet and the next handoff is still blocked on the decisions listed below. The completed item below captures the investigation work; the behavior-change and regression items remain open until code and tests merge.
+
+- [x] Audit the current `remove`/`apply`/managed-wiring behavior and capture the blocking handoff scope for the next Phase 1 implementation slice.
+
 - [ ] Update `quickscale remove` to keep legacy module tracking synchronized with desired and applied state, or explicitly retire the legacy tracking file as a source of truth for update, push, and template consumers.
 - [ ] Make `quickscale remove` return a non-zero failure and suppress the success banner when `quickscale.yml` writes, state writes, or managed wiring regeneration fail.
 - [ ] Reorder removal orchestration or add rollback so destructive filesystem removal does not complete before managed-file updates and state writes are known-good.
@@ -122,6 +126,18 @@ After release closeout, keep only a concise pointer in the roadmap. Put canonica
 - [ ] Add regression coverage for malformed desired or applied state so unrelated managed module settings are preserved by aborting the write rather than resetting to defaults.
 - [ ] Harden CLI tests so success-path assertions check `exit_code` up front and stop swallowing exceptions or conditionally accepting failure paths.
 - [ ] Add command-level regression coverage for remove partial-failure behavior, malformed config/state behavior, and managed wiring abort semantics.
+
+**Blocking items for handoff**
+
+- `quickscale remove` still deletes the embedded module tree before desired state, applied state, legacy tracking, and managed outputs are known-good, so Phase 1 still needs staged writes or rollback across `quickscale.yml`, `.quickscale/state.yml`, `.quickscale/config.yml`, managed outputs, and the module directory.
+- Managed wiring still falls back to empty or default option maps on malformed `quickscale.yml` or `.quickscale/state.yml` on some call paths, so strict abort semantics and operator-visible error propagation remain open.
+- `apply` still reaches managed wiring through both the final apply-wide regeneration path and the earlier per-module configurator path, so the implementation handoff must cover both paths or explicitly remove one of them.
+- The touched CLI suites still contain permissive success/failure assertions, so exit-code-first hardening and explicit failure-path coverage remain part of the open Phase 1 scope rather than follow-up cleanup.
+
+**Decision needed at next handoff**
+
+- Decide whether `apply` should bypass per-module managed-wiring regeneration during embed and rely only on the final authoritative regeneration pass, or whether the `module_config` path stays active and must adopt the same blocking staged and rollback-safe behavior.
+- Decide whether a managed-wiring failure after one or more embeds succeed should keep the planned partial-embed contract, or whether Phase 1 should expand to full embed rollback in the same slice.
 
 #### Phase 2: Theme Contract and Shipped Starter Surface Cleanup
 
