@@ -1,8 +1,8 @@
-# QuickScale Teams Module (Placeholder)
+# QuickScale Teams Module (Placeholder Directory)
 
-**Status**: 🚧 Infrastructure Ready - Implementation Pending
+**Status**: 🚧 Placeholder Only - Not Selectable in Public QuickScale Flows
 
-This is a placeholder module for the QuickScale teams module. The module infrastructure and distribution mechanism are ready, but the actual implementation is not yet complete.
+This directory reserves the teams module namespace and captures intended scope. It is discoverable in repository inventory and docs, but `quickscale plan`, `quickscale.yml` validation, and `quickscale apply` reject `teams` until the module is actually implemented and released.
 
 ## Planned capabilities
 
@@ -15,9 +15,15 @@ The full teams module is expected to include:
 - **Team management UI** - Dashboard, member management, settings
 - **Theme support** - HTML and React theme variants
 
-## Module Distribution
+## Current Contract
 
-This module uses **git subtree** distribution via split branches:
+- Discoverable in docs and maintainer inventory only
+- Not a shipped module selection for public plan/config/apply workflows
+- No public split-branch/update contract until the implementation ships
+
+## Planned Distribution Once Implemented
+
+When teams is implemented, it is expected to use **git subtree** distribution via split branches:
 
 - **Main branch**: `quickscale_modules/teams/` (development)
 - **Split branch**: `splits/teams-module` (distribution)
@@ -26,12 +32,12 @@ This module uses **git subtree** distribution via split branches:
 
 ## For Developers
 
-If you're contributing to this module:
+If you're contributing to this placeholder directory:
 
 1. Develop in `quickscale_modules/teams/` on the main branch
 2. Commit changes normally
 3. On release, GitHub Actions auto-splits to `splits/teams-module`
-4. Users receive updates via `quickscale update`
+4. Public plan/apply/update flows remain blocked until the module ships
 
 ## Related Modules
 
@@ -47,4 +53,4 @@ For module management commands and workflows, see:
 
 ---
 
-**Note**: This README will be replaced with full module documentation once the teams implementation is ready.
+**Note**: This README documents a placeholder directory only. It will be replaced with full public module documentation once teams is implemented and selectable.
