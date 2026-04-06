@@ -5,7 +5,7 @@ A lightweight CRM module for QuickScale projects, providing contact management, 
 ## Features
 
 - **7 Core Models**: Tag, Company, Contact, Stage, Deal, ContactNote, DealNote
-- **RESTful API**: Full CRUD operations with Django REST Framework
+- **RESTful API**: Session-authenticated CRUD operations with Django REST Framework
 - **Deal Pipeline**: Configurable stages with probability tracking
 - **Bulk Operations**: Update multiple deals at once
 - **Django Admin**: Full admin interface with inlines
@@ -44,7 +44,7 @@ Add URL patterns:
 ```python
 urlpatterns = [
     # ...
-    path('api/crm/', include('quickscale_modules_crm.urls')),
+    path('crm/', include('quickscale_modules_crm.urls')),
 ]
 ```
 
@@ -56,9 +56,9 @@ The module supports the following configuration options in `module.yml`:
 
 | Option | Type | Default | Description |
 |--------|------|---------|-------------|
-| `enable_api` | boolean | `true` | Enable/disable REST API endpoints |
-| `deals_per_page` | integer | `25` | Number of deals per page in list views |
-| `contacts_per_page` | integer | `50` | Number of contacts per page in list views |
+| `enable_api` | boolean | `true` | Enable/disable the authenticated CRM API endpoints |
+| `deals_per_page` | integer | `25` | Number of deals returned per page from the CRM deals API |
+| `contacts_per_page` | integer | `50` | Number of contacts returned per page from the CRM contacts API |
 
 ### Immutable Options
 
@@ -74,29 +74,31 @@ Default pipeline stages:
 
 ## API Endpoints
 
-All endpoints are available under `/api/crm/`:
+All authenticated API endpoints are available under `/crm/api/` when `CRM_ENABLE_API=True`:
 
 | Endpoint | Methods | Description |
 |----------|---------|-------------|
-| `/api/crm/tags/` | GET, POST | List/create tags |
-| `/api/crm/tags/{id}/` | GET, PUT, PATCH, DELETE | Tag detail |
-| `/api/crm/companies/` | GET, POST | List/create companies |
-| `/api/crm/companies/{id}/` | GET, PUT, PATCH, DELETE | Company detail |
-| `/api/crm/contacts/` | GET, POST | List/create contacts |
-| `/api/crm/contacts/{id}/` | GET, PUT, PATCH, DELETE | Contact detail |
-| `/api/crm/contacts/{id}/notes/` | GET | Contact notes |
-| `/api/crm/stages/` | GET, POST | List/create stages |
-| `/api/crm/stages/{id}/` | GET, PUT, PATCH, DELETE | Stage detail |
-| `/api/crm/deals/` | GET, POST | List/create deals |
-| `/api/crm/deals/{id}/` | GET, PUT, PATCH, DELETE | Deal detail |
-| `/api/crm/deals/{id}/notes/` | GET | Deal notes |
-| `/api/crm/deals/bulk_update_stage/` | POST | Bulk update deal stages |
-| `/api/crm/deals/mark_won/` | POST | Mark deals as won |
-| `/api/crm/deals/mark_lost/` | POST | Mark deals as lost |
-| `/api/crm/contact-notes/` | GET, POST | List/create contact notes |
-| `/api/crm/contact-notes/{id}/` | GET, PUT, PATCH, DELETE | Contact note detail |
-| `/api/crm/deal-notes/` | GET, POST | List/create deal notes |
-| `/api/crm/deal-notes/{id}/` | GET, PUT, PATCH, DELETE | Deal note detail |
+| `/crm/api/tags/` | GET, POST | List/create tags |
+| `/crm/api/tags/{id}/` | GET, PUT, PATCH, DELETE | Tag detail |
+| `/crm/api/companies/` | GET, POST | List/create companies |
+| `/crm/api/companies/{id}/` | GET, PUT, PATCH, DELETE | Company detail |
+| `/crm/api/contacts/` | GET, POST | List/create contacts |
+| `/crm/api/contacts/{id}/` | GET, PUT, PATCH, DELETE | Contact detail |
+| `/crm/api/contacts/{id}/notes/` | GET, POST | List/create contact notes |
+| `/crm/api/stages/` | GET, POST | List/create stages |
+| `/crm/api/stages/{id}/` | GET, PUT, PATCH, DELETE | Stage detail |
+| `/crm/api/deals/` | GET, POST | List/create deals |
+| `/crm/api/deals/{id}/` | GET, PUT, PATCH, DELETE | Deal detail |
+| `/crm/api/deals/{id}/notes/` | GET, POST | List/create deal notes |
+| `/crm/api/deals/bulk-update-stage/` | POST | Bulk update deal stages |
+| `/crm/api/deals/mark-won/` | POST | Mark deals as won |
+| `/crm/api/deals/mark-lost/` | POST | Mark deals as lost |
+| `/crm/api/contact-notes/` | GET, POST | List/create contact notes |
+| `/crm/api/contact-notes/{id}/` | GET, PUT, PATCH, DELETE | Contact note detail |
+| `/crm/api/deal-notes/` | GET, POST | List/create deal notes |
+| `/crm/api/deal-notes/{id}/` | GET, PUT, PATCH, DELETE | Deal note detail |
+
+All CRM API endpoints use session authentication and require an authenticated user. When `CRM_ENABLE_API=False`, the `/crm/api/` endpoints return `404` while the module dashboard remains available at `/crm/`.
 
 ### Filtering
 
@@ -131,6 +133,7 @@ Contact records with:
 - Status (lead/active/inactive)
 - Optional company association
 - Multiple tags support
+- `last_contacted_at` automatically updated when a contact note is created
 
 ### Stage
 Pipeline stages with name and order for sequencing.

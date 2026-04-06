@@ -2,14 +2,20 @@
 
 from typing import Any
 
+from django.conf import settings
 from django.db.models import Count, Sum
+from django.http import Http404
 from django.views.generic import TemplateView
 from django_filters.rest_framework import DjangoFilterBackend
 from rest_framework import status, viewsets
+from rest_framework.authentication import SessionAuthentication
 from rest_framework.decorators import action
 from rest_framework.filters import OrderingFilter, SearchFilter
+from rest_framework.pagination import PageNumberPagination
+from rest_framework.permissions import IsAuthenticated
 from rest_framework.request import Request
 from rest_framework.response import Response
+from rest_framework.views import APIView
 
 from .models import Company, Contact, ContactNote, Deal, DealNote, Stage, Tag
 from .serializers import (
@@ -66,7 +72,48 @@ class CRMDashboardView(TemplateView):
         return context
 
 
-class TagViewSet(viewsets.ModelViewSet):
+class CRMApiEnabledMixin:
+    """Hide CRM API endpoints when the module-level API toggle is disabled."""
+
+    def initial(self, request: Request, *args: Any, **kwargs: Any) -> None:
+        if not bool(getattr(settings, "CRM_ENABLE_API", True)):
+            raise Http404
+        APIView.initial(self, request, *args, **kwargs)
+
+
+class _PlainListPagination(PageNumberPagination):
+    """Paginate list endpoints without changing the list response shape."""
+
+    page_size_query_param = None
+
+    def get_paginated_response(self, data: list[Any]) -> Response:
+        return Response(data)
+
+
+class ContactPagination(_PlainListPagination):
+    """Contact page size driven by CRM_CONTACTS_PER_PAGE."""
+
+    def get_page_size(self, request: Request) -> int:
+        del request
+        return int(getattr(settings, "CRM_CONTACTS_PER_PAGE", 50) or 50)
+
+
+class DealPagination(_PlainListPagination):
+    """Deal page size driven by CRM_DEALS_PER_PAGE."""
+
+    def get_page_size(self, request: Request) -> int:
+        del request
+        return int(getattr(settings, "CRM_DEALS_PER_PAGE", 25) or 25)
+
+
+class CRMModelViewSet(CRMApiEnabledMixin, viewsets.ModelViewSet):
+    """Shared explicit auth policy for CRM API endpoints."""
+
+    authentication_classes = [SessionAuthentication]
+    permission_classes = [IsAuthenticated]
+
+
+class TagViewSet(CRMModelViewSet):
     """ViewSet for Tag model"""
 
     queryset = Tag.objects.all()
@@ -77,7 +124,7 @@ class TagViewSet(viewsets.ModelViewSet):
     ordering = ["name"]
 
 
-class CompanyViewSet(viewsets.ModelViewSet):
+class CompanyViewSet(CRMModelViewSet):
     """ViewSet for Company model"""
 
     queryset = Company.objects.all()
@@ -89,10 +136,11 @@ class CompanyViewSet(viewsets.ModelViewSet):
     ordering = ["name"]
 
 
-class ContactViewSet(viewsets.ModelViewSet):
+class ContactViewSet(CRMModelViewSet):
     """ViewSet for Contact model with nested notes"""
 
     queryset = Contact.objects.select_related("company").prefetch_related("tags")
+    pagination_class = ContactPagination
     filter_backends = [SearchFilter, DjangoFilterBackend, OrderingFilter]
     search_fields = ["first_name", "last_name", "email", "company__name"]
     filterset_fields = ["status", "company", "tags"]
@@ -125,7 +173,7 @@ class ContactViewSet(viewsets.ModelViewSet):
         return Response(serializer.data, status=status.HTTP_201_CREATED)
 
 
-class StageViewSet(viewsets.ModelViewSet):
+class StageViewSet(CRMModelViewSet):
     """ViewSet for Stage model"""
 
     queryset = Stage.objects.all()
@@ -135,12 +183,13 @@ class StageViewSet(viewsets.ModelViewSet):
     ordering = ["order"]
 
 
-class DealViewSet(viewsets.ModelViewSet):
+class DealViewSet(CRMModelViewSet):
     """ViewSet for Deal model with nested notes and bulk operations"""
 
     queryset = Deal.objects.select_related(
         "contact", "contact__company", "stage", "owner"
     ).prefetch_related("tags")
+    pagination_class = DealPagination
     filter_backends = [SearchFilter, DjangoFilterBackend, OrderingFilter]
     search_fields = ["title", "contact__first_name", "contact__last_name"]
     filterset_fields = ["stage", "owner", "tags", "contact__company"]
@@ -250,7 +299,7 @@ class DealViewSet(viewsets.ModelViewSet):
         return Response({"updated": updated}, status=status.HTTP_200_OK)
 
 
-class ContactNoteViewSet(viewsets.ModelViewSet):
+class ContactNoteViewSet(CRMModelViewSet):
     """Standalone ViewSet for ContactNote model"""
 
     queryset = ContactNote.objects.select_related("contact", "created_by")
@@ -261,7 +310,7 @@ class ContactNoteViewSet(viewsets.ModelViewSet):
     ordering = ["-created_at"]
 
 
-class DealNoteViewSet(viewsets.ModelViewSet):
+class DealNoteViewSet(CRMModelViewSet):
     """Standalone ViewSet for DealNote model"""
 
     queryset = DealNote.objects.select_related("deal", "created_by")
