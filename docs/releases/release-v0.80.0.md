@@ -59,5 +59,5 @@ make ci
 
 ## Deferred Follow-up
 
-- Richer `quickscale status` analytics diagnostics remain deferred in the archived v0.80.0 roadmap section.
+- Richer `quickscale status` analytics diagnostics remain deferred for a future milestone and are not part of the published v0.80.0 release surface.
 - Fresh-generated React smoke verification against PostHog live events remains unrun and still needs manual confirmation.
