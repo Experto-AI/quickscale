@@ -1,167 +1,55 @@
-# PLAN - Planning and Analysis Stage
+# PLAN - Planning and Analysis Guide
 
-This document guides the planning and analysis stage of programming, where you interpret user intent, understand the project and codebase, and plan implementation steps (without making code changes yet).
+This is a planning application guide. It helps you apply the project rule sources during planning without prescribing a required execution order.
 
-Shared documents in [shared/](shared/) remain authoritative when guidance overlaps. This guide shows how to apply those project rules during planning work.
+Shared documents in [shared/](shared/) remain authoritative when guidance overlaps.
 
-## Understanding the Project and Codebase
+## Use This Guide When
 
-### Reference Documentation Sources
-Before planning any implementation, thoroughly understand the project by consulting:
+- clarifying user intent and scope
+- identifying likely files, modules, or architectural layers involved
+- deciding how to keep implementation focused and testable
+- preparing reviewable implementation steps or checkpoints
 
-- **[README.md](../../README.md)**: Overview of the project to understand the project and its purpose.
- - **[Technical Decisions](../technical/decisions.md)**: Authoritative architectural decisions, technical specifications, and current implementation scope.
-  - Technical stack enumeration and description.
-  - Architectural patterns and boundaries.
-  - Current implementation boundaries and historical-label guidance.
-  - Explicit prohibitions and anti-patterns.
-- **[Scaffolding Guide](../technical/scaffolding.md)**: Directory layout and project structure.
-  - Repository-level directory layout.
-  - Package internal structures.
-  - Generated project scaffolding.
-- **[User Manual](../technical/user_manual.md)**: User commands and usage instructions.
-- **[Contributing Guidelines](contributing.md)**: Contribution guidelines index for developers and AI assistants.
+## Authoritative Sources for Planning
 
-### Study Existing Architecture and Patterns
-- Reference: [Architecture Guidelines](shared/architecture_guidelines.md)
-- Understand the established architectural layers and separation of concerns
-- Identify patterns used in similar functionality
-- Note the technical stack requirements and constraints
+Use these rule sources while planning:
 
-## Planning Principles
-
-### Apply KISS (Keep It Simple, Stupid) During Planning
-- Simplify requirements before implementation
-- Avoid over-engineering during design phase
-- Choose the simplest solution that meets requirements
-- Reference: [Code Principles - KISS](shared/code_principles.md#kiss-keep-it-simple-stupid)
-
-### Plan with SOLID Principles in Mind
-- Design classes with focused, cohesive responsibilities (SRP)
-- Plan for extension through polymorphism where variation is expected (OCP)
-- Design inheritance hierarchies with consistent behavior (LSP)
-- Plan minimal, focused interfaces (ISP)
-- Identify volatile components that need abstraction (DIP)
-- Reference: [Code Principles - SOLID](shared/code_principles.md#solid-principles)
-
-### Plan for DRY (Don't Repeat Yourself)
-- Identify common patterns before implementation
-- Plan for reusable components
-- Avoid duplicating knowledge or intent
-- Reference: [Code Principles - DRY](shared/code_principles.md#dry-dont-repeat-yourself)
-
-### Plan for Explicit Failure
-- Plan for explicit error handling
-- Design interfaces that fail fast on invalid inputs
-- Avoid planning for silent fallbacks
-- Reference: [Code Principles - Explicit Failure](shared/code_principles.md#explicit-failure)
-
-## Task Analysis and Planning
-
-### Understand User Intent and Requirements
-- Clarify ambiguous requirements before implementation
-- Break down complex requirements into simpler components
-- Identify the core functionality needed
-- Ask questions to understand the true intent behind requests
-
-### Plan Implementation Steps
-1. **Break down features into clear implementation steps with proper separation of concerns**
-   ```python
-   # Example of a well-planned feature implementation
-    1. First add the new data model
-   class SubscriptionPlan:
-       """Represents a subscription plan in the system."""
-       def __init__(self, name, price, features):
-           self.name = name
-           self.price = price
-           self.features = features
-
-    2. Then implement the service layer
-   class SubscriptionService:
-       """Handles subscription management operations."""
-       def subscribe_user(self, user_id, plan_id):
-           """Subscribe a user to a specific plan."""
-           # Implementation
-
-    3. Finally add the API endpoints
-   @app.route('/subscriptions', methods=['POST'])
-   def create_subscription():
-       """API endpoint to create a new subscription."""
-       # Implementation using the service
-   ```
-
-2. **Avoid mixing concerns and implementing unplanned features in a single function**
-   - Focus strictly on requested functionality
-   - Clarify ambiguous requirements before implementation
-   - Don't add "nice-to-have" features without explicit requests
-
-### Plan for Architecture Compliance
-- Study and follow existing architecture patterns
-- Plan new features to fit within established architectural boundaries
-- Identify appropriate layers for new functionality
-- Reference: [Architecture Guidelines](shared/architecture_guidelines.md)
-
-### Plan for Testability
-- Plan for testable code design
-- Identify what needs to be tested
-- Consider test data requirements
-- Reference: [Testing Standards](shared/testing_standards.md)
-
-## Scope and Task Boundary Planning
-
-### Define Clear Task Boundaries
-- Understand the exact boundaries of the requested change
-- Work within those boundaries without drifting
-- Reference: [Task Focus Guidelines](shared/task_focus_guidelines.md)
-
-### Plan for Focused Implementation
-- Make changes only within the explicit boundaries of the request
-- Never introduce unrelated changes when addressing a specific issue
-- Resist adding unrequested improvements that extend beyond task scope
-
-### Plan for Incremental Changes
-- Make one logical change at a time
-- Keep changes small and reviewable
-- Preserve existing interfaces and ensure backward compatibility
-
-## Documentation Planning
-
-### Plan Documentation Needs
-- Reference appropriate documentation sources when understanding requirements
-- Plan documentation needs for new features
-- Identify what needs to be documented
-- Reference: [Documentation Standards](shared/documentation_standards.md)
-
-## Quality Planning
-
-### Plan for Quality Assurance
-- Plan for adherence to technical stack requirements
-- Plan for code principle compliance
-- Plan for testing requirements
-- Plan for documentation standards
+- [Code Principles](shared/code_principles.md)
+- [Architecture Guidelines](shared/architecture_guidelines.md)
+- [Testing Standards](shared/testing_standards.md)
+- [Task Focus Guidelines](shared/task_focus_guidelines.md)
+- [Documentation Standards](shared/documentation_standards.md)
+- [Technical Decisions](../technical/decisions.md)
+- [Scaffolding Guide](../technical/scaffolding.md)
+- [README.md](../../README.md)
+- [User Manual](../technical/user_manual.md)
 
 ## Planning Checklist
 
-Before proceeding to implementation, ensure you have:
+Before implementation starts, make sure the plan captures:
 
-- [ ] Thoroughly understood the project and codebase
-- [ ] Referenced all relevant documentation sources
-- [ ] Clarified any ambiguous requirements
-- [ ] Broken down the task into clear implementation steps
-- [ ] Planned for architecture compliance
-- [ ] Planned for testability
-- [ ] Defined clear task boundaries
-- [ ] Planned for quality assurance
-- [ ] Applied KISS principle to avoid over-engineering
-- [ ] Planned for SOLID principles in design
-- [ ] Identified potential reusable components (DRY)
-- [ ] Planned for explicit error handling
-- [ ] Planned for proper documentation
+- the requested outcome and the explicit non-goals
+- the most likely files, packages, or architectural layers involved
+- architecture and stack constraints that limit the solution space
+- where existing patterns can be reused instead of introducing new abstractions
+- explicit failure and validation expectations for the changed behavior
+- the tests, checks, or commands that will show the change is correct
+- documentation that may need updates
+- any open questions that still block safe implementation
 
-## Next Steps
+## Planning Exit Criteria
 
-After completing the planning stage:
-1. Proceed to [code.md](code.md) for implementation
-2. Follow the planned steps without deviation
-3. Maintain focus on the defined task boundaries
-4. Apply the planned quality standards during implementation
+Planning is ready when:
+
+- scope boundaries are clear enough to avoid drift
+- the proposed change fits the documented architecture
+- validation is defined clearly enough to confirm the outcome
+- the remaining unknowns are small enough to resolve during execution, or are explicitly surfaced first
+
+## Related Guidance
+
+- [code.md](code.md) for implementation application
+- [review.md](review.md) for quality checks
+- [testing.md](testing.md) for repo-specific test selection and commands
+- [debug.md](debug.md) for debugging application
