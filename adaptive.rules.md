@@ -4,52 +4,51 @@ merge_strategy: append
 ---
 
 # Shared
-<!-- Add reusable principles to be included by reference here -->
-- **Authoritative SSOT (always read, this rules wins all)**:
-    - Decisions: docs/technical/decisions.md
-    - Scaffolding: docs/technical/scaffolding.md
+- **Repository SSOT (wins on conflicts, always read)**:
+    - `docs/technical/decisions.md` for scope rulings, approved stack, and tie-breakers.
+    - `docs/technical/scaffolding.md` for repository, package, and generated-project structure.
+- **Contrib authority model**:
+    - `docs/contrib/shared/` owns workflow-agnostic QuickScale engineering rules.
+    - `docs/contrib/*.md` stage guides apply those rules in a situation-specific way and do not prescribe a required workflow order.
+    - If a stage guide conflicts with a `docs/contrib/shared/` rule source, the shared document wins.
 - **Documentation precedence**:
-    - Package README files are informational context only, SSOT wins any conflicts.
+    - Package README files are informational context only; repository SSOT documents win any conflict.
+    - `README.md` and `START_HERE.md` provide orientation and current product surface but do not override `docs/technical/decisions.md`.
 - **Important context (always read)**:
-    - README.md
-    - START_HERE.md
-    - docs/contrib/contributing.md
+    - `README.md`
+    - `START_HERE.md`
+    - `docs/contrib/contributing.md`
 - **Tooling**:
-    - Makefile for common commands and workflows
+    - `Makefile` is the standard entrypoint for shared test and workflow commands.
 
 # Adaptive
-<!-- Add rules for the main orchestrator agent here -->
 [include](#shared)
+
 
 # Plan
-<!-- Add rules for planning and architectural design here -->
 [include](#shared)
-- **Important context (always read)**:
-    - docs/contrib/plan.md
+- **Secondary applied guidance (always read)**:
+    - `docs/contrib/plan.md` for planning checklists, prompts, and examples.
 
 # Codebase Discovery
-<!-- Add rules for discovery and comprehension here -->
 [include](#shared)
 
+
 # External Research
-<!-- Add rules for researching external APIs and docs here -->
 [include](#shared)
 
 # Implement
-<!-- Add rules for writing code (e.g. backend specific syntax) here -->
 [include](#shared)
-- **Important context (always read)**:
-    - docs/contrib/code.md
+- **Secondary applied guidance (always read)**:
+    - `docs/contrib/code.md` for implementation checklists, examples, and repo-specific reminders.
 
 # Quality Gate
-<!-- Add rules for testing, linting, and quality enforcement here -->
 [include](#shared)
-- **Important context (always read)**:
-    - docs/contrib/testing.md
-    - docs/contrib/debug.md
+- **Secondary applied guidance (always read)**:
+    - `docs/contrib/testing.md` for test placement, fixtures, and commands.
+    - `docs/contrib/debug.md` for root-cause-first failure diagnosis and debug loops.
 
 # Change Review
-<!-- Add rules for PR review and change management here -->
 [include](#shared)
-- **Important context (always read)**:
-    - docs/contrib/review.md
+- **Secondary applied guidance (always read)**:
+    - `docs/contrib/review.md` for review checklists and evidence prompts.
