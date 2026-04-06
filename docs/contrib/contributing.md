@@ -5,92 +5,50 @@
 
 Welcome! This guide maps the contribution documentation and authority boundaries for contributors and AI assistants.
 
-## Contribution Guides
+## Authority Model
 
-The files in `docs/contrib/` define project-specific implementation rules and reference material. They do not prescribe a required execution flow. Different human and agent workflows may sequence planning, implementation, review, testing, and debugging differently.
+The files in `docs/contrib/` define project-specific contribution guidance without prescribing a required execution flow. Different human and agent workflows may sequence planning, implementation, review, testing, and debugging differently.
 
-When guidance overlaps, the shared documents in `docs/contrib/shared/` are authoritative. The stage guides below show how to apply those shared rules to a specific kind of work.
+`docs/contrib/shared/` is the authoritative source for project-specific implementation rules.
 
-### 📋 [PLAN](plan.md) - Planning & Task Review
-**Use when:** Clarifying scope, breaking down work, or reviewing task specifications before or during implementation.
+- Shared documents define normative rules
+- Stage guides in this folder apply those rules in a specific situation
+- Stage guides do not define a competing source of truth for engineering rules
+- If a stage guide conflicts with a shared document, the shared document wins
 
-**Key activities:**
-- Understand project context (read decisions.md, scaffolding.md, README.md)
-- Break down features into clear, testable tasks
-- Define task boundaries and deliverables
-- Pre-task review (validate scope, check for conflicts)
-- Plan for architecture compliance
+## Shared Rule Sources
 
----
+Start with the authoritative rule source for the topic you are touching:
 
-### 💻 [CODE](code.md) - Implementation
-**Use when:** Writing implementation code following approved specifications.
+| Topic | Authoritative source |
+|---|---|
+| Core design principles | [Code Principles](shared/code_principles.md) |
+| Code style and local conventions | [Code Style Standards](shared/code_style_standards.md) |
+| Architecture and stack boundaries | [Architecture Guidelines](shared/architecture_guidelines.md) |
+| Testing standards | [Testing Standards](shared/testing_standards.md) |
+| Scope discipline | [Task Focus Guidelines](shared/task_focus_guidelines.md) |
+| Documentation conventions | [Documentation Standards](shared/documentation_standards.md) |
+| Debugging and bug-fix discipline | [Debugging Standards](shared/debugging_standards.md) |
+| Shared authority overview | [Shared Rule Sources](shared/README.md) |
 
-**Key activities:**
-- Apply SOLID principles during implementation
-- Follow DRY, KISS, Explicit Failure patterns
-- Maintain code structure and organization
-- Use type hints and proper documentation
-- **Strict scope enforcement** (implement ONLY what's in the task checklist)
+## Application Guides
 
----
+Use the stage guide that matches the work in front of you. These guides are workflow-agnostic application references, not required workflow steps.
 
-### ✅ [REVIEW](review.md) - Quality Control
-**Use when:** Reviewing planned or implemented changes for correctness, architecture, scope, and documentation quality.
+### 📋 [PLAN](plan.md)
+Use when clarifying scope, identifying affected areas, or preparing an implementation approach.
 
-**Key activities:**
-- Verify technical stack compliance
-- Verify architectural pattern adherence
-- Verify SOLID/DRY/KISS adherence
-- Verify scope compliance (no feature creep)
-- Verify documentation completeness
-- Pre-commit quality checklist
+### 💻 [CODE](code.md)
+Use when implementing or modifying code within an approved task boundary.
 
----
+### ✅ [REVIEW](review.md)
+Use when self-reviewing or reviewing plans, code changes, tests, and documentation.
 
-### 🧪 [TESTING](testing.md) - Test Generation
-**Use when:** Selecting, writing, or organizing tests for implemented behavior, and when choosing the correct test category for the repo.
+### 🧪 [TESTING](testing.md)
+Use when selecting test locations, writing tests, or running repo-specific test commands.
 
-**Key activities:**
-- Implementation-first testing approach
-- Choose correct test category (unit/integration/e2e)
-- Structure tests by functionality
-- Behavior-focused testing (test contracts, not internals)
-- Proper mock usage (NO global mocking)
-- Arrange-Act-Assert pattern
-
----
-
-### 🐛 [DEBUG](debug.md) - Debugging & Root Cause Analysis
-**Use when:** Diagnosing failing tests, regressions, or bugs and fixing root causes.
-
-**Key activities:**
-- Root cause analysis (never mask symptoms)
-- DMAIC process (Define, Measure, Analyze, Improve, Control)
-- Debug failing tests (determine if test or code is wrong)
-- Minimal fixes addressing root cause
-- Add regression tests after fixes
-
----
-
-## Shared Principles
-
-These shared documents are the authoritative rule sources for project-specific engineering practices. When a stage guide overlaps with one of these documents, follow the shared document.
-
-### [Code Principles](shared/code_principles.md)
-**SOLID, DRY, KISS, Explicit Failure** - Core coding principles with examples for each stage.
-
-### [Architecture Guidelines](shared/architecture_guidelines.md)
-**Tech stack, layer boundaries, package structure** - System architecture and technical decisions.
-
-### [Testing Standards](shared/testing_standards.md)
-**Complete testing reference** - Comprehensive testing standards and patterns.
-
-### [Task Focus Guidelines](shared/task_focus_guidelines.md)
-**Scope discipline** - Preventing scope creep and maintaining task boundaries.
-
-### [Documentation Standards](shared/documentation_standards.md)
-**Docstring format, comments, README structure** - Documentation conventions.
+### 🐛 [DEBUG](debug.md)
+Use when diagnosing failures, isolating regressions, and fixing verified root causes.
 
 ---
 
@@ -108,18 +66,10 @@ Before contributing, familiarize yourself with these key project documents:
 
 ## Quick Start Guide
 
-### For New Contributors
-1. Read [README.md](../../README.md) to understand the project
-2. Review [Technical Decisions](../technical/decisions.md) to understand scope
-3. Check [Technical Roadmap](../technical/roadmap.md) for available tasks
-4. Open the shared rules and stage guides relevant to the task
-
-### For Code Changes
-Use the guides that match the work in front of you:
-
-- Use the shared documents as the project rule source of truth
-- Use PLAN, CODE, REVIEW, TESTING, and DEBUG as task-specific reference guides
-- Let your execution workflow decide the order in which those guides are applied
+1. Read [README.md](../../README.md) and [Technical Decisions](../technical/decisions.md) to understand the project and scope
+2. Open the relevant shared rule sources for the change you are making
+3. Use the stage guide that matches your current task as an application checklist
+4. Let your execution workflow decide ordering; these docs do not prescribe a required sequence
 
 ---
 

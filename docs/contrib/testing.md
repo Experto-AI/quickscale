@@ -1,23 +1,25 @@
-# Testing Stage Guide
+# Testing Guide
 
-This guide defines QuickScale testing conventions, test selection, and test authoring rules for implemented behavior.
+This is a testing application guide. It combines the shared testing standards with QuickScale-specific test locations, fixtures, and commands.
 
-Shared documents in [shared/](shared/) remain authoritative when guidance overlaps. This guide shows how to apply those project rules during testing work.
+Shared documents in [shared/](shared/) remain authoritative when guidance overlaps.
 
-## Core Principle: Implementation-First Testing
-
-**Always write implementation code first, then add tests after.**
-
-- ✅ Implementation complete → Write tests
-- ❌ Never write tests before implementing functionality
-- ❌ Never generate test code before implementation is complete
-
-## When to Use This Guide
+## Use This Guide When
 
 Use this guide when you need to:
-1. Choose the correct test category and location
-2. Write or update tests for implemented behavior
-3. Run the relevant test commands for the affected area
+
+1. choose the correct test category and location
+2. write or update tests for implemented behavior
+3. run the relevant repo-specific test commands for the affected area
+
+## Authoritative Sources for Testing
+
+Apply these rule sources while working on tests:
+
+- [Testing Standards](shared/testing_standards.md)
+- [Code Principles](shared/code_principles.md)
+- [Task Focus Guidelines](shared/task_focus_guidelines.md)
+- [Debugging Standards](shared/debugging_standards.md) when failures need diagnosis
 
 ## Test Category Decision Tree
 
@@ -65,17 +67,7 @@ make test-e2e
 
 ## Unit Tests Recipe
 
-**Purpose**: Test individual components in isolation with mocked dependencies.
-
-**When to Use**:
-- QuickScale CLI commands and generator logic
-- Individual functions, classes, or modules
-- Business logic without external dependencies
-
-**Key Requirements**:
-- Fast execution (< 1 second per test)
-- Mock all external dependencies
-- Test isolated behavior
+Use the shared testing standards for structure, behavior focus, isolation, and mock discipline. This section only captures the repo-specific placement and fixtures that matter while applying those rules.
 
 **Example — CLI command test**:
 ```python
@@ -108,17 +100,7 @@ Available fixtures (`quickscale_cli/tests/conftest.py`):
 
 ## Integration Tests Recipe
 
-**Purpose**: Test multi-step workflows inside the core generator (not multi-package).
-
-**When to Use**:
-- End-to-end project generation followed by validation
-- Workflows that span multiple internal components but don't need Docker
-
-**Key Requirements**:
-- Mark with `@pytest.mark.integration`
-- Use `tmp_path` for filesystem isolation
-- Use `ProjectGenerator` directly (no CLI invocation needed)
-- **Included** in `make test` runs (not excluded)
+Use the shared testing standards for the normative rules. This section defines the repo-specific integration-test location and marker usage.
 
 **Example**:
 ```python
@@ -141,18 +123,7 @@ class TestProjectGenerationIntegration:
 
 ## E2E Tests Recipe
 
-**Purpose**: Test complete user workflows with real Docker containers.
-
-**When to Use**:
-- Testing CLI commands that start/stop Docker services (`quickscale up`, `quickscale down`)
-- Testing with real databases and external services
-- Production-like scenarios
-
-**Key Requirements**:
-- Mark with `@pytest.mark.e2e`
-- **Excluded** from `make test` by default
-- Run via `make test-e2e` (requires Docker running)
-- Use `quickscale_cli.main.cli` via `CliRunner` or `subprocess`
+Use the shared testing standards for the normative rules. This section defines the repo-specific e2e marker and command path.
 
 **Example**:
 ```python
@@ -176,38 +147,26 @@ class TestDevelopmentCommandsE2E:
         assert result.exit_code == 0
 ```
 
-## Test Contamination Prevention Checklist
+## Testing Exit Criteria
 
-### Before Writing Tests
-- [ ] No global module mocking planned
-- [ ] No global state modification planned
-- [ ] No shared mutable data planned
-- [ ] Cleanup strategy identified
+Before considering a test update complete, confirm that:
 
-### During Test Implementation
-- [ ] Use setUp/tearDown for proper test isolation
-- [ ] Store original state before modifying anything global
-- [ ] Use context managers for automatic cleanup where possible
-- [ ] Mock objects, not modules
-
-### After Writing Tests
-- [ ] Run tests in isolation - each test passes alone
-- [ ] Run tests as suite - all tests pass together
-- [ ] No contamination between tests
-- [ ] All resources properly cleaned up
-
-## Golden Rule
-
-**Every test should pass whether run in isolation or as part of the full suite. If it doesn't, you have contamination that needs to be fixed.**
+- the test category and location match the repo-specific structure above
+- the shared testing standards were followed for behavior focus, isolation, and maintainability
+- the selected commands provide enough evidence for the changed behavior
+- failures that appear during authoring are handled through root-cause debugging rather than test padding or scope drift
 
 ---
 
 ## References
 
-For detailed testing standards, see:
-- [Testing Standards](shared/testing_standards.md) - Complete reference: AAA pattern, mock usage, behavior-focused testing, fixtures, parameterization, contamination prevention
-- [Code Principles](shared/code_principles.md) - SOLID, DRY, KISS principles
-- [Architecture Guidelines](shared/architecture_guidelines.md) - System boundaries
+For authoritative testing rules, see:
 
-For debugging test failures, see:
-- [Debug Guide](debug.md) - Root cause analysis for failing tests
+- [Testing Standards](shared/testing_standards.md)
+- [Code Principles](shared/code_principles.md)
+- [Task Focus Guidelines](shared/task_focus_guidelines.md)
+
+For failure diagnosis, see:
+
+- [Debugging Standards](shared/debugging_standards.md)
+- [debug.md](debug.md)
