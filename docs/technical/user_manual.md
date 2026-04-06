@@ -354,7 +354,7 @@ The wizard guides you through:
 
 **Generated `quickscale.yml` example**:
 ```yaml
-version: 0.81.0
+version: 0.82.0
 project:
   slug: myapp
   package: myapp
@@ -383,6 +383,91 @@ poetry run python manage.py backups_restore --file /path/to/BACKUP_FILENAME.dump
 ```
 
 JSON artifacts remain export-only, not restore inputs. Existing generated projects must manually adopt later Docker/CI/E2E PostgreSQL 18 tooling updates because `quickscale apply` does not rewrite those user-owned files.
+
+### 4.4) Disaster-Recovery Commands
+
+> **Status**: ✅ Available on main for the v0.82 DR workflow surface
+>
+> These commands provide route-aware capture, plan, execute, and report flows for environment migration and disaster recovery while keeping Django work inside the backend container.
+
+QuickScale exposes one top-level DR group:
+
+```bash
+quickscale dr --help
+```
+
+Supported route labels are fixed:
+
+```text
+local-to-railway-develop
+railway-develop-to-railway-production
+railway-production-to-railway-develop
+```
+
+For Railway-backed routes, pass explicit service names instead of relying on guessed naming:
+
+```bash
+# Capture a local source snapshot for later promotion into Railway develop
+quickscale dr capture \
+  --route local-to-railway-develop
+
+# Capture from a Railway source service
+quickscale dr capture \
+  --route railway-develop-to-railway-production \
+  --source-service myapp-develop
+```
+
+Build and persist a dry-run plan for a stored snapshot:
+
+```bash
+quickscale dr plan \
+  --route railway-develop-to-railway-production \
+  --snapshot-id <snapshot_id> \
+  --source-service myapp-develop \
+  --target-service myapp-production
+```
+
+`quickscale dr plan` evaluates three separate operational surfaces:
+
+- `env_vars`: only a conservative allowlist of portable variables is eligible for automatic sync
+- `database`: validates the stored authoritative dump against the target environment through `manage.py backups_restore --dry-run`
+- `media`: validates source-side media sync using the stored media manifest and target runtime overrides
+
+Provider-owned, secret, storage, host, and other environment-specific variables are surfaced as manual actions instead of being copied automatically.
+
+Execute one or more surfaces explicitly:
+
+```bash
+quickscale dr execute \
+  --route railway-develop-to-railway-production \
+  --snapshot-id <snapshot_id> \
+  --source-service myapp-develop \
+  --target-service myapp-production \
+  --database \
+  --media \
+  --env-vars \
+  --rollback-pin-hours 24 \
+  --rollback-pin-reason "pre-production cutover"
+```
+
+Execution rules to remember:
+
+- Choose at least one surface: `--database`, `--media`, or `--env-vars`
+- Routes that involve Railway production require both `--rollback-pin-hours` and `--rollback-pin-reason`
+- `snapshot_id` is the public stored-snapshot locator for DR workflows
+- Database restore and media sync remain separate operational surfaces
+- Raw secret values are never persisted into snapshot sidecars
+
+Review the latest stored plan and execute records for one route:
+
+```bash
+quickscale dr report \
+  --route railway-develop-to-railway-production \
+  --snapshot-id <snapshot_id> \
+  --source-service myapp-develop
+```
+
+Use `--json` on `capture`, `plan`, `execute`, and `report` when you need structured output for automation.
 
 **The `apply` command** executes a configuration file to generate the project:
 
@@ -441,7 +526,7 @@ quickscale manage createsuperuser
 - ✅ Reviewable: Preview before execution
 - ✅ Modular: Includes module embedding in one step
 
-### 4.4) Module Reconfiguration Lifecycle (Remove → Re-add)
+### 4.5) Module Reconfiguration Lifecycle (Remove → Re-add)
 
 Use this workflow when you need to change immutable module options or fully refresh a module embed.
 
@@ -543,6 +628,12 @@ Run these scripts from the repository root.
 - Push module changes: `quickscale push --module <name>`
 - Remove module: `quickscale remove <module>`
 - Project status: `quickscale status`
+
+**CLI Commands (Disaster Recovery)**:
+- Capture a route source snapshot: `quickscale dr capture --route <label>`
+- Build a DR plan: `quickscale dr plan --route <label> --snapshot-id <snapshot_id>`
+- Execute selected DR surfaces: `quickscale dr execute --route <label> --snapshot-id <snapshot_id> [--database] [--media] [--env-vars]`
+- Review stored route reports: `quickscale dr report --route <label> --snapshot-id <snapshot_id>`
 
 ## Poetry — quick commands
 

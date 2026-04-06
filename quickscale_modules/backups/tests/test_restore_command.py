@@ -21,7 +21,7 @@ class TestBackupsRestoreCommand:
     def test_command_requires_one_restore_source(self) -> None:
         with pytest.raises(
             CommandError,
-            match="Provide either an artifact_id or --file PATH",
+            match="Provide either an artifact_id, --snapshot-id, or --file PATH",
         ):
             call_command(
                 "backups_restore",
@@ -79,7 +79,40 @@ class TestBackupsRestoreCommand:
         mocked_restore.assert_called_once_with(
             artifact=None,
             file_path=str(postgresql_artifact_file),
+            snapshot_id=None,
             confirmation=postgresql_artifact_file.name,
+            dry_run=True,
+            allow_production=False,
+        )
+        assert "Restore validation completed successfully" in stdout.getvalue()
+
+    def test_command_routes_snapshot_id_through_shared_restore_service(self) -> None:
+        stdout = StringIO()
+
+        with patch(
+            "quickscale_modules_backups.management.commands.backups_restore.restore_backup_source",
+            return_value=RestoreResult(
+                executed=False,
+                dry_run=True,
+                message="Restore validation completed successfully (dry run).",
+            ),
+        ) as mocked_restore:
+            call_command(
+                "backups_restore",
+                "--snapshot-id",
+                "snap-restore-123",
+                "--confirm",
+                "sample-backup.dump",
+                "--dry-run",
+                stdout=stdout,
+                stderr=StringIO(),
+            )
+
+        mocked_restore.assert_called_once_with(
+            artifact=None,
+            file_path=None,
+            snapshot_id="snap-restore-123",
+            confirmation="sample-backup.dump",
             dry_run=True,
             allow_production=False,
         )
@@ -122,6 +155,7 @@ class TestBackupsRestoreCommand:
         mocked_restore.assert_called_once_with(
             artifact=postgresql_backup_artifact,
             file_path=None,
+            snapshot_id=None,
             confirmation=postgresql_backup_artifact.filename,
             dry_run=False,
             allow_production=False,

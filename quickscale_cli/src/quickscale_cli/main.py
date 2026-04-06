@@ -5,6 +5,7 @@ import click
 import quickscale_cli
 import quickscale_core
 from quickscale_cli.commands.apply_command import apply
+from quickscale_cli.commands.dr_commands import dr
 from quickscale_cli.commands.deployment_commands import deploy
 from quickscale_cli.commands.development_commands import (
     down,
@@ -44,6 +45,7 @@ cli.add_command(ps)
 
 # Register deployment commands
 cli.add_command(deploy)
+cli.add_command(dr)
 
 # Register module management commands
 cli.add_command(update)

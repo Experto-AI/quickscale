@@ -283,7 +283,12 @@ def run_railway_command(
         ) from e
 
 
-def set_railway_variable(key: str, value: str, service: str | None = None) -> bool:
+def set_railway_variable(
+    key: str,
+    value: str,
+    service: str | None = None,
+    environment: str | None = None,
+) -> bool:
     """
     Set Railway environment variable.
 
@@ -292,12 +297,15 @@ def set_railway_variable(key: str, value: str, service: str | None = None) -> bo
         key: Environment variable name
         value: Environment variable value
         service: Service name to set variable for (optional)
+        environment: Railway environment name to target (optional)
 
     """
     try:
         cmd = ["variables", "--set", f"{key}={value}"]
         if service:
             cmd.extend(["--service", service])
+        if environment:
+            cmd.extend(["--environment", environment])
         result = run_railway_command(cmd, timeout=30)
         return result.returncode == 0
     except Exception:
@@ -305,7 +313,9 @@ def set_railway_variable(key: str, value: str, service: str | None = None) -> bo
 
 
 def set_railway_variables_batch(
-    variables: dict[str, str], service: str | None = None
+    variables: dict[str, str],
+    service: str | None = None,
+    environment: str | None = None,
 ) -> tuple[bool, list[str]]:
     """
     Set multiple Railway environment variables in a single command.
@@ -317,6 +327,7 @@ def set_railway_variables_batch(
     ----
         variables: Dictionary of environment variable names and values
         service: Service name to set variables for (optional)
+        environment: Railway environment name to target (optional)
 
     Returns:
     -------
@@ -337,6 +348,8 @@ def set_railway_variables_batch(
 
         if service:
             cmd.extend(["--service", service])
+        if environment:
+            cmd.extend(["--environment", environment])
 
         result = run_railway_command(cmd, timeout=60)
         return result.returncode == 0, []
@@ -344,7 +357,12 @@ def set_railway_variables_batch(
         # If batch setting fails, fall back to individual setting
         failed_keys = []
         for key, value in variables.items():
-            if not set_railway_variable(key, value, service):
+            if not set_railway_variable(
+                key,
+                value,
+                service,
+                environment,
+            ):
                 failed_keys.append(key)
         return len(failed_keys) == 0, failed_keys
 
@@ -656,7 +674,10 @@ def fix_poetry_lock() -> tuple[bool, str]:
         return False, f"Failed to run poetry lock: {e}"
 
 
-def get_railway_variables(service: str | None = None) -> dict[str, str] | None:
+def get_railway_variables(
+    service: str | None = None,
+    environment: str | None = None,
+) -> dict[str, str] | None:
     """
     Get all environment variables for a Railway service.
 
@@ -666,6 +687,7 @@ def get_railway_variables(service: str | None = None) -> dict[str, str] | None:
     Args:
     ----
         service: Service name (optional)
+        environment: Railway environment name (optional)
 
     Returns:
     -------
@@ -676,6 +698,8 @@ def get_railway_variables(service: str | None = None) -> dict[str, str] | None:
         cmd = ["variables"]
         if service:
             cmd.extend(["--service", service])
+        if environment:
+            cmd.extend(["--environment", environment])
 
         # Try JSON output first for reliable parsing
         json_vars = _get_railway_variables_json(cmd)

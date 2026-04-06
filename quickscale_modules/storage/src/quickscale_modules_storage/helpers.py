@@ -114,6 +114,88 @@ def select_storage_backend(
     )
 
 
+def _build_s3_storage_kwargs(selection: StorageBackendSelection) -> dict[str, Any]:
+    """Build safe kwargs for initializing an s3-compatible storage backend."""
+    kwargs: dict[str, Any] = {
+        "bucket_name": str(selection.options.get("bucket_name", "")).strip(),
+        "querystring_auth": bool(selection.options.get("querystring_auth", False)),
+        "default_acl": str(selection.options.get("default_acl", "")).strip(),
+    }
+    if endpoint_url := str(selection.options.get("endpoint_url", "")).strip():
+        kwargs["endpoint_url"] = endpoint_url
+    if region_name := str(selection.options.get("region_name", "")).strip():
+        kwargs["region_name"] = region_name
+    if access_key := str(selection.options.get("access_key_id", "")).strip():
+        kwargs["access_key"] = access_key
+    if secret_key := str(selection.options.get("secret_access_key", "")).strip():
+        kwargs["secret_key"] = secret_key
+    return kwargs
+
+
+def list_s3_compatible_media_inventory(
+    settings_obj: Any | Mapping[str, Any],
+    *,
+    storage_factory: type[Any] | None = None,
+) -> list[dict[str, Any]]:
+    """List private s3-compatible media objects without exposing credential values."""
+    selection = select_storage_backend(settings_obj)
+    if not selection.use_s3_compatible:
+        raise ValueError(
+            "S3-compatible media inventory requires an s3-compatible backend"
+        )
+
+    bucket_name = str(selection.options.get("bucket_name", "")).strip()
+    if not bucket_name:
+        raise ValueError(
+            "S3-compatible media inventory requires AWS_STORAGE_BUCKET_NAME"
+        )
+
+    resolved_storage_factory = storage_factory
+    if resolved_storage_factory is None:
+        from storages.backends.s3 import S3Storage  # type: ignore[import-untyped]
+
+        resolved_storage_factory = S3Storage
+
+    storage = resolved_storage_factory(**_build_s3_storage_kwargs(selection))
+    location_prefix = str(getattr(storage, "location", "") or "").strip().strip("/")
+    key_prefix = f"{location_prefix}/" if location_prefix else ""
+    paginator = storage.connection.meta.client.get_paginator("list_objects_v2")
+    paginate_kwargs: dict[str, Any] = {"Bucket": bucket_name}
+    if key_prefix:
+        paginate_kwargs["Prefix"] = key_prefix
+
+    inventory: list[dict[str, Any]] = []
+    for page in paginator.paginate(**paginate_kwargs):
+        for entry in page.get("Contents", []):
+            key = str(entry.get("Key") or "").strip()
+            if not key or key.endswith("/"):
+                continue
+
+            relative_path = (
+                key[len(key_prefix) :]
+                if key_prefix and key.startswith(key_prefix)
+                else key
+            )
+            inventory_item: dict[str, Any] = {
+                "relative_path": relative_path,
+                "storage_key": key,
+                "size_bytes": int(entry.get("Size") or 0),
+            }
+            provider_etag = str(entry.get("ETag") or "").strip('"')
+            if provider_etag:
+                inventory_item["provider_etag"] = provider_etag
+
+            last_modified = entry.get("LastModified")
+            if isinstance(last_modified, datetime):
+                inventory_item["modified_at"] = last_modified.astimezone(
+                    timezone.utc
+                ).isoformat()
+
+            inventory.append(inventory_item)
+
+    return inventory
+
+
 def make_cache_friendly_name(
     filename: str,
     *,
@@ -245,6 +327,7 @@ __all__ = [
     "ValidatedUpload",
     "build_public_media_url",
     "build_upload_path",
+    "list_s3_compatible_media_inventory",
     "make_cache_friendly_name",
     "sanitize_relative_media_path",
     "select_storage_backend",

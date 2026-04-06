@@ -1,8 +1,15 @@
 """Tests for backups module models."""
 
-import pytest
+from datetime import timedelta
 
-from quickscale_modules_backups.models import BackupArtifact, BackupPolicy
+import pytest
+from django.utils import timezone as django_timezone
+
+from quickscale_modules_backups.models import (
+    BackupArtifact,
+    BackupPolicy,
+    BackupSnapshot,
+)
 
 
 @pytest.mark.django_db
@@ -101,3 +108,41 @@ class TestBackupArtifactModel:
         assert artifact.is_portable() is True
         assert artifact.database_server_major is None
         assert artifact.dump_client_major is None
+
+
+@pytest.mark.django_db
+class TestBackupSnapshotModel:
+    """Tests for the internal backup snapshot model."""
+
+    def test_snapshot_str_returns_snapshot_id(self) -> None:
+        snapshot = BackupSnapshot.objects.create(
+            snapshot_id="snap-abc123",
+            local_root_path="/tmp/backups/snap-abc123",
+        )
+
+        assert str(snapshot) == "snap-abc123"
+
+    def test_has_active_rollback_pin_uses_expiration_time(self) -> None:
+        snapshot = BackupSnapshot.objects.create(
+            snapshot_id="snap-pin",
+            local_root_path="/tmp/backups/snap-pin",
+            rollback_pin_expires_at=django_timezone.now() + timedelta(hours=2),
+            rollback_pin_reason="release rollback",
+        )
+
+        assert snapshot.has_active_rollback_pin() is True
+
+        snapshot.rollback_pin_expires_at = django_timezone.now() - timedelta(minutes=1)
+
+        assert snapshot.has_active_rollback_pin() is False
+
+    def test_snapshot_id_is_immutable_after_creation(self) -> None:
+        snapshot = BackupSnapshot.objects.create(
+            snapshot_id="snap-original",
+            local_root_path="/tmp/backups/snap-original",
+        )
+
+        snapshot.snapshot_id = "snap-updated"
+
+        with pytest.raises(ValueError, match="snapshot_id is immutable"):
+            snapshot.save()

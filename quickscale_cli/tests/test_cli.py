@@ -51,6 +51,17 @@ def test_status_command_help(cli_runner):
     assert "status" in result.output.lower()
 
 
+def test_dr_command_help(cli_runner):
+    """Test DR command help displays the new public workflow surface."""
+    result = cli_runner.invoke(cli, ["dr", "--help"])
+    assert result.exit_code == 0
+    assert "disaster-recovery" in result.output.lower()
+    assert "capture" in result.output
+    assert "plan" in result.output
+    assert "execute" in result.output
+    assert "report" in result.output
+
+
 def test_remove_command_help(cli_runner):
     """Test remove command help displays correct information"""
     result = cli_runner.invoke(cli, ["remove", "--help"])
@@ -78,6 +89,7 @@ def test_cli_commands_available(cli_runner):
     assert "status" in result.output
     assert "remove" in result.output
     assert "update" in result.output
+    assert "dr" in result.output
 
     # Verify deprecated init command is not available in help output
     # (removed in v0.72.0 in favor of plan/apply workflow)

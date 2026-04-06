@@ -12,6 +12,7 @@ from PIL import Image
 from quickscale_modules_storage.helpers import (
     build_public_media_url,
     build_upload_path,
+    list_s3_compatible_media_inventory,
     make_cache_friendly_name,
     sanitize_relative_media_path,
     select_storage_backend,
@@ -74,6 +75,90 @@ class TestSelectStorageBackend:
         )
         assert resolved.backend == "r2"
         assert resolved.options["endpoint_url"].startswith("https://")
+
+    def test_list_s3_compatible_media_inventory_returns_bucket_objects(self) -> None:
+        class FakePaginator:
+            def paginate(self, **kwargs):  # type: ignore[no-untyped-def]
+                assert kwargs == {
+                    "Bucket": "media-bucket",
+                    "Prefix": "media/",
+                }
+                return [
+                    {
+                        "Contents": [
+                            {
+                                "Key": "media/blog/uploads/hero.png",
+                                "Size": 128,
+                                "ETag": '"etag-123"',
+                                "LastModified": datetime(
+                                    2026,
+                                    4,
+                                    6,
+                                    12,
+                                    30,
+                                    tzinfo=timezone.utc,
+                                ),
+                            },
+                            {
+                                "Key": "media/blog/uploads/",
+                                "Size": 0,
+                            },
+                        ]
+                    }
+                ]
+
+        class FakeClient:
+            def get_paginator(self, name: str) -> FakePaginator:
+                assert name == "list_objects_v2"
+                return FakePaginator()
+
+        class FakeStorage:
+            def __init__(self, **kwargs: object) -> None:
+                assert kwargs == {
+                    "bucket_name": "media-bucket",
+                    "querystring_auth": False,
+                    "default_acl": "",
+                    "endpoint_url": "https://objects.example.invalid",
+                    "region_name": "auto",
+                    "access_key": "key-id",
+                    "secret_key": "secret-key",
+                }
+                self.location = "media"
+                self.connection = type(
+                    "FakeConnection",
+                    (),
+                    {"meta": type("FakeMeta", (), {"client": FakeClient()})()},
+                )()
+
+        inventory = list_s3_compatible_media_inventory(
+            {
+                "QUICKSCALE_STORAGE_BACKEND": "s3",
+                "AWS_STORAGE_BUCKET_NAME": "media-bucket",
+                "AWS_S3_ENDPOINT_URL": "https://objects.example.invalid",
+                "AWS_S3_REGION_NAME": "auto",
+                "AWS_ACCESS_KEY_ID": "key-id",
+                "AWS_SECRET_ACCESS_KEY": "secret-key",
+                "AWS_QUERYSTRING_AUTH": False,
+            },
+            storage_factory=FakeStorage,
+        )
+
+        assert inventory == [
+            {
+                "relative_path": "blog/uploads/hero.png",
+                "storage_key": "media/blog/uploads/hero.png",
+                "size_bytes": 128,
+                "provider_etag": "etag-123",
+                "modified_at": "2026-04-06T12:30:00+00:00",
+            }
+        ]
+
+    def test_list_s3_compatible_media_inventory_rejects_non_s3_backend(self) -> None:
+        with pytest.raises(
+            ValueError,
+            match="requires an s3-compatible backend",
+        ):
+            list_s3_compatible_media_inventory({"QUICKSCALE_STORAGE_BACKEND": "local"})
 
 
 class TestUploadPathAndNaming:

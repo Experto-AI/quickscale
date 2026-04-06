@@ -367,64 +367,99 @@ Following [module-extension.md](./module-extension.md), analytics v0.80.0 uses t
 
 **Status**: 📋 Planned
 
-**Objective**: Extend the current database-first backups line into controlled project snapshot and environment migration workflows for generated projects across local, Railway develop, and Railway production.
+**Phase 1 note**: This milestone update locks the authoritative docs contract only. Runtime capture, resume, restore, rollback, and promotion behavior remain planned until the corresponding implementation and validation land.
+
+**Objective**: Extend the current database-first backups line into controlled stored project snapshots and environment migration workflows for generated projects across local, Railway develop, and Railway production, while keeping the v0.77 dump-restore contract authoritative.
 
 **Scope Guardrails**:
 - keep the v0.77 database-first restore contract authoritative until broader portability workflows are specified, implemented, and validated
-- keep secrets as references or required operator inputs only; never persist raw credential values in snapshot artifacts or migration manifests
-- treat database dumps, media sync, and environment metadata as separate surfaces with explicit restore/promotion rules instead of a single opaque "whole system" blob
+- keep secrets as references or required operator inputs only; never persist raw credential values in stored snapshot artifacts or migration manifests
+- keep generated-project config/state surfaces limited to `quickscale.yml`, `.quickscale/state.yml`, and `.quickscale/config.yml`; v0.82 does not add a second project-owned config or state channel
+- derive all v0.82 stored snapshot files from one private operational root under `modules.backups.local_directory`
+- keep `restore_scope` database-artifact-only for stored snapshots; broader route eligibility is evaluated separately by later CLI workflows
+- keep direct operator file-path restore as the separate dump-restore mode from v0.77 rather than a competing stored-snapshot locator
+- treat database dump, media sync, environment-variable metadata, release metadata, and promotion verification as separate operational surfaces rather than a single opaque "whole system" blob
+
+**Stored Snapshot Contract (authoritative planning baseline, not yet shipped)**:
+- stored project snapshots are internal row-backed records in the backups module; they are not user-authored config files or generated project structure
+- each stored snapshot receives an immutable opaque `snapshot_id` when its row is created, and `snapshot_id` is the only supported stored-snapshot locator
+- each stored snapshot owns exactly one authoritative database-dump `BackupArtifact` row
+- the private local layout is fixed under the backups root:
+
+```text
+<modules.backups.local_directory>/
+└── snapshots/
+  └── <snapshot_id>/
+    ├── database/
+    │   └── <backup filename>
+    ├── media-sync-manifest.json
+    ├── env-var-manifest.json
+    ├── release-metadata.json
+    └── promotion-verification.json
+```
+
+- local copies remain primary; optional private remote offload mirrors the same child keys remotely
+- `restore_scope` resolves only the authoritative database dump artifact for stored snapshots; media, env-var, release-metadata, and verification files remain adjacent but separate surfaces
+- direct operator file-path restore stays separate from stored-snapshot lookup by `snapshot_id`
+- rollback pins are time-bounded, prune-aware operational references tied to retained snapshot data; they must fail cleanly once the pinned retained data has expired or been pruned
 
 **Portable Artifact Boundaries**:
 
 | Artifact / surface | Included in the promotion workflow | Boundary rule |
 | --- | --- | --- |
-| **Database dump** | Yes | PostgreSQL custom dump is the restore artifact for generated PostgreSQL projects; JSON export remains inspection/test-fixture only |
-| **Media sync manifest** | Yes | carry object keys, paths, checksums, and target mapping; do not treat public URLs or CDN hostnames as source-of-truth state |
+| **Database dump artifact** | Yes | exactly one authoritative `BackupArtifact` dump row per stored snapshot; this is the only stored-snapshot artifact addressable by `restore_scope` |
+| **Media sync manifest** | Yes | carry object keys, paths, checksums, and target mapping; keep separate from `restore_scope` and do not treat public URLs or CDN hostnames as source-of-truth state |
 | **Environment-variable name manifest** | Yes | carry names, purpose, required/optional status, and target owner; never persist raw secret values |
-| **Release metadata snapshot** | Yes | carry QuickScale version, enabled modules, git SHA, and sanitized config/version notes needed to reproduce the environment |
-| **Promotion verification report** | Yes | carry dry-run output, smoke-test results, operator confirmations, and rollback references |
+| **Release metadata** | Yes | carry QuickScale version, enabled modules, git SHA, and sanitized config/version notes needed to reproduce the environment |
+| **Promotion verification report** | Yes | carry dry-run output, smoke-test results, operator confirmations, and rollback-pin references without collapsing the other surfaces into a single blob |
 | **Raw secrets / provider tokens** | No | remain in local secret storage, Railway variables, or the target secret manager only |
 | **CDN, DNS, and custom-domain resources** | No | reference by host or resource name only; manage them as provider-owned infrastructure outside backup artifacts |
-| **Static build artifacts** | No | rebuild through the normal deploy pipeline; do not ship them as restore/promotion artifacts |
+| **Static build artifacts** | No | rebuild through the normal git/deploy pipeline; do not ship them as restore/promotion artifacts |
 
 Application source code also moves through the normal git/deploy pipeline. The portable artifact set is limited to the operational surfaces above and must not turn into a second code-distribution channel.
 
 **Workflow Checklist**:
 
 **Local → Railway develop**:
-- [ ] Capture a fresh local release checkpoint: current git SHA via the normal deploy path, plus a PostgreSQL dump, media sync manifest, environment-variable name manifest, release metadata snapshot, and baseline smoke-check notes
-- [ ] Provision Railway develop prerequisites: PostgreSQL 18 target, storage backend, media host/CDN target, and environment-variable slots owned by Railway rather than the artifact set
-- [ ] Run a dry-run migration plan against Railway develop and fail early on missing variables, incompatible storage targets, or restore-surface mismatches
-- [ ] Apply the generated project/configuration to Railway develop without exporting or storing raw secrets inside migration artifacts
-- [ ] Restore the database dump, sync media objects through the manifest, and run migrations or repair steps required by the target environment
+- [ ] Capture a fresh local stored project snapshot: current git SHA via the normal deploy path, one authoritative PostgreSQL dump artifact, the separate media sync manifest, env-var name manifest, release metadata, and baseline smoke-check notes under `snapshots/<snapshot_id>/`
+- [ ] Provision Railway develop prerequisites: PostgreSQL 18 target, storage backend, media host/CDN target, and environment-variable slots owned by Railway rather than by the stored snapshot
+- [ ] Run a dry-run migration plan against Railway develop and fail early on missing variables, incompatible storage targets, or attempts to widen `restore_scope` beyond the stored database dump artifact
+- [ ] Apply the generated project/configuration to Railway develop without exporting or storing raw secrets inside stored snapshot artifacts
+- [ ] Restore the authoritative database dump, sync media objects through the manifest, and run migrations or repair steps required by the target environment
 - [ ] Verify Railway develop with smoke checks covering auth, forms/notifications, storage URLs, and backups guardrails before treating it as the next promotion source
 
 **Railway develop → Railway production**:
-- [ ] Capture a fresh develop snapshot instead of reusing the earlier local artifact set so production promotion starts from the validated develop state
+- [ ] Capture a fresh develop stored project snapshot instead of reusing the earlier local snapshot set so production promotion starts from the validated develop state
 - [ ] Diff the develop and production environment-variable name manifests and resolve required production-only values before promotion begins
-- [ ] Confirm production storage, `public_base_url`, CDN/domain prerequisites, and destructive-step confirmations before any restore or sync action
-- [ ] Run a dry-run production promotion plan with explicit rollback references and a signed operator checkpoint
-- [ ] Promote database and media using the same separated artifact surfaces rather than a single opaque environment bundle
-- [ ] Run production smoke checks, record the promotion verification report, and preserve rollback artifacts long enough to reverse the cutover if needed
+- [ ] Confirm production storage, `public_base_url`, CDN/domain prerequisites, destructive-step confirmations, and rollback-pin retention before any restore or sync action
+- [ ] Run a dry-run production promotion plan with explicit rollback-pin references and a signed operator checkpoint
+- [ ] Promote the database dump and media manifest using the same separated artifact surfaces rather than a single opaque environment bundle
+- [ ] Run production smoke checks, record the promotion verification report, and preserve rollback references only for the documented time-bounded retention window
 
 **Railway production → Railway develop (recovery rehearsal / disaster recovery)**:
-- [ ] Capture a fresh production recovery checkpoint: current production git SHA/release metadata, a production database dump, media sync manifest, environment-variable name manifest, and the latest verification report references
+- [ ] Capture a fresh production recovery checkpoint: current production git SHA/release metadata, a production database dump artifact, media sync manifest, environment-variable name manifest, and the latest verification report references
 - [ ] Provision or refresh an isolated Railway develop recovery target so production data is restored into non-production database, storage, and domain surfaces only
-- [ ] Run a dry-run recovery plan that remaps production hosts, media targets, and variable ownership into develop-safe values before any restore begins
-- [ ] Restore database and media into Railway develop using the separated artifact set, with any required data-sanitization or operator-access controls applied before broader testing
+- [ ] Run a dry-run recovery plan that remaps production hosts, media targets, variable ownership, and rollback-pin expectations into develop-safe values before any restore begins
+- [ ] Restore the database dump and media manifest into Railway develop using the separated artifact set, with any required data sanitization or operator-access controls applied before broader testing
 - [ ] Reconcile the recovered develop environment with the target git/deploy state for the improvements you want to test, without copying raw production secrets into the recovery artifacts
 - [ ] Run smoke and regression checks in Railway develop, then record the recovery verification report and rollback references so the same flow can serve both rehearsal and disaster-recovery needs
 
 **Implementation Tasks**:
-- [ ] Define the supported project-snapshot contract: database dump, media sync manifest, environment-variable name inventory, version metadata, and restore/promotion instructions
-- [ ] Decide whether broader project portability remains inside `quickscale_modules.backups` or becomes a companion ops workflow
+- [x] Lock the stored project-snapshot contract across the authoritative docs before runtime work mutates code or CLI behavior
+- [ ] Define the internal stored-snapshot row shape and immutable `snapshot_id` minting rules inside the backups module
+- [ ] Keep direct file-path restore as separate dump-restore mode while adding `snapshot_id`-based stored-snapshot resolution for planned v0.82 workflows
 - [ ] Add dry-run environment migration plans for local → Railway develop, Railway develop → Railway production, and Railway production → Railway develop based on the explicit artifact boundaries above
 - [ ] Add Railway-specific capture/apply helpers for service variables, media prerequisites, and release metadata without persisting raw credentials
-- [ ] Add integrity checks, rollback guidance, and explicit operator confirmations for destructive restore/promotion steps
+- [ ] Add integrity checks, resume behavior, rollback-pin handling, and explicit operator confirmations for destructive restore/promotion steps
 - [ ] Document disaster-recovery workflows separately from environment-promotion workflows so operators know what is and is not transported automatically
 
+**Acceptance Gates**:
+- [ ] Runtime closeout requires resume coverage for interrupted snapshot capture, private-remote mirroring, and promotion flows without minting alternate stored-snapshot locators
+- [ ] Runtime closeout requires rollback coverage using time-bounded, prune-aware rollback pins with clear operator feedback when the pinned data is gone
+- [ ] Runtime closeout requires partial-failure coverage so database, media, env-var metadata, release metadata, and verification surfaces can fail or recover independently with auditable status
+
 **Testing**:
-- [ ] Validate database restore, media sync, and environment metadata handoff independently before full project-promotion flows
+- [ ] Validate database dump restore, media sync, environment metadata handoff, release metadata capture, and verification reporting independently before full project-promotion flows
 - [ ] End-to-end rehearse representative local → Railway develop, Railway develop → Railway production, and Railway production → Railway develop migrations
 - [ ] Verify backup artifacts and migration manifests never expose raw secrets or public backup URLs
 

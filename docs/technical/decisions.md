@@ -333,7 +333,7 @@ Projects are managed through two configuration files with clear separation of co
 User-editable configuration file with this structure:
 
 ```yaml
-version: 0.80.0
+version: 0.82.0
 project:
   slug: myapp
   package: myapp
@@ -362,18 +362,18 @@ docker:
 System-managed state file tracking what has been applied:
 
 ```yaml
-version: 0.80.0
+version: 0.82.0
 project:
   slug: myapp
   package: myapp
   theme: showcase_react
 applied_modules:
   - name: auth
-    version: 0.80.0
+    version: 0.82.0
     commit: abc123def456
     applied_at: 2025-12-03T14:30:00Z
   - name: listings
-    version: 0.80.0
+    version: 0.82.0
     commit: xyz789uvw012
     applied_at: 2025-12-03T14:31:00Z
 docker:
@@ -490,7 +490,7 @@ Automatic changes made:
 **Current workflow**:
 ```yaml
 # quickscale.yml (v0.68.0+)
-version: 0.80.0
+version: 0.82.0
 project:
   slug: myproject
   package: myproject
@@ -565,7 +565,7 @@ workflow coverage are aligned to it.
 **Manifest Schema:**
 ```yaml
 name: auth
-version: 0.80.0
+version: 0.82.0
 config:
   mutable:
     registration_enabled:
