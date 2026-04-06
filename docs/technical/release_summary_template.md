@@ -73,8 +73,8 @@ This document provides the standard template for official public QuickScale rele
 
 ## Deferred Follow-up
 
-- [Deferred item with roadmap link]
-- [Deferred item with roadmap link]
+- [Deferred item; add a roadmap link only when the follow-up is already scheduled there, otherwise keep the note plain or replace this section with `- None.`]
+- [Second deferred item if applicable]
 
 ---
 
@@ -96,6 +96,7 @@ Use this template for:
 5. Treat this file as the single official release artifact linked from the GitHub tag and release PR.
 6. Do not include completed-task checklists, maintainer-only support matrices, or raw validation dumps in the public summary.
 7. Keep extra closeout detail in the release PR or in the roadmap while the release is still unpublished instead of creating a second repository document.
+8. After publication, keep the roadmap entry concise and keep the detailed public summary in this single release note.
 
 ### File Naming Convention
 
