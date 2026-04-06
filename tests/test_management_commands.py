@@ -100,6 +100,55 @@ def test_backups_create_command_routes_scheduled_trigger() -> None:
     )
 
 
+def test_backups_create_command_routes_resume_snapshot_id() -> None:
+    stdout = StringIO()
+    snapshot_token = object()
+    report = {
+        "snapshot_id": "snap-resume",
+        "status": "ready",
+        "local_root_path": "/tmp/backups/snap-resume",
+        "failure_note": "",
+    }
+
+    with (
+        patch(
+            "quickscale_modules_backups.management.commands.backups_create.create_backup",
+            return_value=SimpleNamespace(
+                filename="db-20260402.dump",
+                pk=17,
+                local_path="/tmp/db-20260402.dump",
+                remote_key="",
+                authoritative_snapshot=snapshot_token,
+            ),
+        ) as mocked_create,
+        patch(
+            "quickscale_modules_backups.management.commands.backups_create.build_backup_snapshot_report",
+            return_value=report,
+        ) as mocked_report,
+    ):
+        call_command(
+            "backups_create",
+            "--resume",
+            "snap-resume",
+            stdout=stdout,
+            stderr=StringIO(),
+        )
+
+    mocked_create.assert_called_once_with(
+        trigger="manual",
+        resume_snapshot_id="snap-resume",
+    )
+    mocked_report.assert_called_once_with(snapshot_token)
+    assert stdout.getvalue() == (
+        "Resumed backup db-20260402.dump\n"
+        "Artifact id: 17\n"
+        "Snapshot id: snap-resume\n"
+        "Snapshot status: ready\n"
+        "Snapshot root: /tmp/backups/snap-resume\n"
+        "Local path: /tmp/db-20260402.dump\n"
+    )
+
+
 def test_backups_create_command_outputs_json_report() -> None:
     stdout = StringIO()
     snapshot_token = object()

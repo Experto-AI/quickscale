@@ -472,7 +472,7 @@ class TestBackupLifecycle:
         assert not hasattr(artifact, "remote_access_key_id")
         assert not hasattr(artifact, "remote_secret_access_key")
 
-    def test_create_backup_marks_remote_upload_failure_and_cleans_local_file(
+    def test_create_backup_marks_remote_upload_failure_and_preserves_local_dump_for_resume(
         self,
         superuser: AbstractBaseUser,
         local_backup_settings: Path,
@@ -513,11 +513,270 @@ class TestBackupLifecycle:
         snapshot = BackupSnapshot.objects.get()
         assert artifact.status == BackupArtifact.STATUS_FAILED
         assert artifact.remote_key == ""
-        assert artifact.local_path == ""
+        assert artifact.local_path
+        assert Path(artifact.local_path).exists()
         assert "remote upload failed" in artifact.validation_notes
         assert snapshot.status == BackupSnapshot.STATUS_FAILED
         assert "database dump remote upload failed" in snapshot.failure_note
-        assert not any(path.is_file() for path in local_backup_settings.rglob("*"))
+        assert snapshot.child_descriptors_json["database"]["status"] == (
+            BackupSnapshot.STATUS_FAILED
+        )
+        assert Path(snapshot.local_root_path).exists()
+
+    def test_create_backup_resume_retries_private_remote_upload_on_same_snapshot(
+        self,
+        superuser: AbstractBaseUser,
+        local_backup_settings: Path,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        monkeypatch.setenv("TEST_BACKUPS_ACCESS_KEY", "key-id")
+        monkeypatch.setenv("TEST_BACKUPS_SECRET_KEY", "secret-key")
+        policy = BackupPolicySnapshot(
+            retention_days=14,
+            naming_prefix="db",
+            target_mode=BackupPolicy.TARGET_MODE_PRIVATE_REMOTE,
+            local_directory=str(local_backup_settings),
+            remote_bucket_name="private-backups",
+            remote_prefix="ops/backups",
+            remote_endpoint_url="https://example.invalid",
+            remote_region_name="auto",
+            remote_access_key_id_env_var="TEST_BACKUPS_ACCESS_KEY",
+            remote_secret_access_key_env_var="TEST_BACKUPS_SECRET_KEY",
+            automation_enabled=False,
+            schedule="0 2 * * *",
+        )
+
+        def failing_uploader(
+            local_path: Path, resolved_policy: BackupPolicySnapshot
+        ) -> str:
+            del local_path, resolved_policy
+            raise RuntimeError("upload exploded")
+
+        with pytest.raises(BackupError, match="Private remote upload failed"):
+            create_backup(
+                initiated_by=superuser,
+                trigger="admin",
+                policy=policy,
+                remote_uploader=cast(RemoteUploader, failing_uploader),
+            )
+
+        snapshot = BackupSnapshot.objects.get()
+        failed_artifact = snapshot.authoritative_dump
+        assert failed_artifact is not None
+        original_artifact_id = failed_artifact.pk
+        uploaded: list[tuple[str, str]] = []
+
+        def successful_uploader(
+            local_path: Path, resolved_policy: BackupPolicySnapshot
+        ) -> str:
+            uploaded.append((local_path.name, resolved_policy.remote_prefix))
+            return f"{resolved_policy.remote_prefix}/{local_path.name}"
+
+        artifact = create_backup(
+            initiated_by=superuser,
+            trigger="admin",
+            policy=policy,
+            remote_uploader=cast(RemoteUploader, successful_uploader),
+            resume_snapshot_id=snapshot.snapshot_id,
+        )
+
+        snapshot.refresh_from_db()
+        artifact.refresh_from_db()
+        snapshot_prefix = f"ops/backups/snapshots/{snapshot.snapshot_id}"
+
+        assert artifact.pk == original_artifact_id
+        assert snapshot.status == BackupSnapshot.STATUS_READY
+        assert snapshot.failure_note == ""
+        assert artifact.remote_key == f"{snapshot_prefix}/database/{artifact.filename}"
+        assert artifact.status == BackupArtifact.STATUS_READY
+        assert BackupSnapshot.objects.count() == 1
+        assert BackupArtifact.objects.count() == 1
+        assert uploaded == [
+            (artifact.filename, f"{snapshot_prefix}/database"),
+            ("media-sync-manifest.json", snapshot_prefix),
+            ("env-var-manifest.json", snapshot_prefix),
+            ("release-metadata.json", snapshot_prefix),
+            ("promotion-verification.json", snapshot_prefix),
+        ]
+
+    def test_create_backup_resume_uses_persisted_remote_location_after_settings_drift(
+        self,
+        superuser: AbstractBaseUser,
+        local_backup_settings: Path,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        monkeypatch.setenv("TEST_BACKUPS_ACCESS_KEY", "key-id")
+        monkeypatch.setenv("TEST_BACKUPS_SECRET_KEY", "secret-key")
+        base_remote_settings = {
+            "QUICKSCALE_BACKUPS_TARGET_MODE": BackupPolicy.TARGET_MODE_PRIVATE_REMOTE,
+            "QUICKSCALE_BACKUPS_LOCAL_DIRECTORY": str(local_backup_settings),
+            "QUICKSCALE_BACKUPS_REMOTE_PREFIX": "ops/backups",
+            "QUICKSCALE_BACKUPS_REMOTE_ACCESS_KEY_ID_ENV_VAR": (
+                "TEST_BACKUPS_ACCESS_KEY"
+            ),
+            "QUICKSCALE_BACKUPS_REMOTE_SECRET_ACCESS_KEY_ENV_VAR": (
+                "TEST_BACKUPS_SECRET_KEY"
+            ),
+        }
+        initial_remote_settings = {
+            **base_remote_settings,
+            "QUICKSCALE_BACKUPS_REMOTE_BUCKET_NAME": "original-bucket",
+            "QUICKSCALE_BACKUPS_REMOTE_ENDPOINT_URL": (
+                "https://original.example.invalid"
+            ),
+            "QUICKSCALE_BACKUPS_REMOTE_REGION_NAME": "original-region",
+        }
+        drifted_remote_settings = {
+            **base_remote_settings,
+            "QUICKSCALE_BACKUPS_REMOTE_BUCKET_NAME": "drifted-bucket",
+            "QUICKSCALE_BACKUPS_REMOTE_ENDPOINT_URL": (
+                "https://drifted.example.invalid"
+            ),
+            "QUICKSCALE_BACKUPS_REMOTE_REGION_NAME": "drifted-region",
+        }
+
+        def failing_uploader(
+            local_path: Path, resolved_policy: BackupPolicySnapshot
+        ) -> str:
+            del local_path, resolved_policy
+            raise RuntimeError("upload exploded")
+
+        with override_settings(**initial_remote_settings):
+            with pytest.raises(BackupError, match="Private remote upload failed"):
+                create_backup(
+                    initiated_by=superuser,
+                    trigger="admin",
+                    remote_uploader=cast(RemoteUploader, failing_uploader),
+                )
+
+        snapshot = BackupSnapshot.objects.get()
+        failed_artifact = snapshot.authoritative_dump
+        assert failed_artifact is not None
+        assert failed_artifact.remote_bucket_name == "original-bucket"
+        assert failed_artifact.remote_endpoint_url == "https://original.example.invalid"
+        assert failed_artifact.remote_region_name == "original-region"
+
+        uploaded: list[tuple[str, str, str, str, str]] = []
+
+        def successful_uploader(
+            local_path: Path, resolved_policy: BackupPolicySnapshot
+        ) -> str:
+            uploaded.append(
+                (
+                    local_path.name,
+                    resolved_policy.remote_bucket_name,
+                    resolved_policy.remote_endpoint_url,
+                    resolved_policy.remote_region_name,
+                    resolved_policy.remote_prefix,
+                )
+            )
+            return f"{resolved_policy.remote_prefix}/{local_path.name}"
+
+        with override_settings(**drifted_remote_settings):
+            artifact = create_backup(
+                initiated_by=superuser,
+                trigger="admin",
+                remote_uploader=cast(RemoteUploader, successful_uploader),
+                resume_snapshot_id=snapshot.snapshot_id,
+            )
+
+        snapshot.refresh_from_db()
+        artifact.refresh_from_db()
+        snapshot_prefix = f"ops/backups/snapshots/{snapshot.snapshot_id}"
+
+        assert uploaded == [
+            (
+                artifact.filename,
+                "original-bucket",
+                "https://original.example.invalid",
+                "original-region",
+                f"{snapshot_prefix}/database",
+            ),
+            (
+                "media-sync-manifest.json",
+                "original-bucket",
+                "https://original.example.invalid",
+                "original-region",
+                snapshot_prefix,
+            ),
+            (
+                "env-var-manifest.json",
+                "original-bucket",
+                "https://original.example.invalid",
+                "original-region",
+                snapshot_prefix,
+            ),
+            (
+                "release-metadata.json",
+                "original-bucket",
+                "https://original.example.invalid",
+                "original-region",
+                snapshot_prefix,
+            ),
+            (
+                "promotion-verification.json",
+                "original-bucket",
+                "https://original.example.invalid",
+                "original-region",
+                snapshot_prefix,
+            ),
+        ]
+        assert artifact.remote_bucket_name == "original-bucket"
+        assert artifact.remote_endpoint_url == "https://original.example.invalid"
+        assert artifact.remote_region_name == "original-region"
+
+    def test_create_backup_resume_rejects_missing_authoritative_dump_file(
+        self,
+        superuser: AbstractBaseUser,
+        local_backup_settings: Path,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        monkeypatch.setenv("TEST_BACKUPS_ACCESS_KEY", "key-id")
+        monkeypatch.setenv("TEST_BACKUPS_SECRET_KEY", "secret-key")
+        policy = BackupPolicySnapshot(
+            retention_days=14,
+            naming_prefix="db",
+            target_mode=BackupPolicy.TARGET_MODE_PRIVATE_REMOTE,
+            local_directory=str(local_backup_settings),
+            remote_bucket_name="private-backups",
+            remote_prefix="ops/backups",
+            remote_endpoint_url="https://example.invalid",
+            remote_region_name="auto",
+            remote_access_key_id_env_var="TEST_BACKUPS_ACCESS_KEY",
+            remote_secret_access_key_env_var="TEST_BACKUPS_SECRET_KEY",
+            automation_enabled=False,
+            schedule="0 2 * * *",
+        )
+
+        def failing_uploader(
+            local_path: Path, resolved_policy: BackupPolicySnapshot
+        ) -> str:
+            del local_path, resolved_policy
+            raise RuntimeError("upload exploded")
+
+        with pytest.raises(BackupError, match="Private remote upload failed"):
+            create_backup(
+                initiated_by=superuser,
+                trigger="admin",
+                policy=policy,
+                remote_uploader=cast(RemoteUploader, failing_uploader),
+            )
+
+        snapshot = BackupSnapshot.objects.get()
+        artifact = snapshot.authoritative_dump
+        assert artifact is not None
+        Path(artifact.local_path).unlink()
+
+        with pytest.raises(
+            BackupError,
+            match="original authoritative dump file is missing",
+        ):
+            create_backup(
+                initiated_by=superuser,
+                trigger="admin",
+                policy=policy,
+                resume_snapshot_id=snapshot.snapshot_id,
+            )
 
     def test_create_backup_rolls_back_uploaded_remote_object_when_remote_key_save_fails(
         self,
@@ -654,6 +913,52 @@ class TestBackupLifecycle:
         assert "snapshot sidecar capture failed" in artifact.validation_notes
         assert not (snapshot_root / "release-metadata.json").exists()
         assert (snapshot_root / "env-var-manifest.json").exists()
+
+    def test_create_backup_resume_recaptures_failed_sidecars_on_same_snapshot(
+        self,
+        superuser: AbstractBaseUser,
+        backup_policy: BackupPolicy,
+        local_backup_settings: Path,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        backup_policy.local_directory = str(local_backup_settings)
+        backup_policy.save(update_fields=["local_directory", "updated_at"])
+        original_builder = backup_services._build_release_metadata
+        call_count = 0
+
+        def flaky_release_metadata(*, captured_at: datetime) -> dict[str, Any]:
+            nonlocal call_count
+            call_count += 1
+            if call_count == 1:
+                raise BackupError("release metadata exploded")
+            return original_builder(captured_at=captured_at)
+
+        monkeypatch.setattr(
+            backup_services,
+            "_build_release_metadata",
+            flaky_release_metadata,
+        )
+
+        artifact = create_backup(initiated_by=superuser, trigger="manual")
+
+        snapshot = artifact.authoritative_snapshot
+        original_artifact_id = artifact.pk
+        assert snapshot is not None
+        assert snapshot.status == BackupSnapshot.STATUS_FAILED
+
+        resumed_artifact = create_backup(
+            initiated_by=superuser,
+            trigger="manual",
+            resume_snapshot_id=snapshot.snapshot_id,
+        )
+
+        snapshot.refresh_from_db()
+        resumed_artifact.refresh_from_db()
+        assert resumed_artifact.pk == original_artifact_id
+        assert snapshot.status == BackupSnapshot.STATUS_READY
+        assert snapshot.failure_note == ""
+        assert not resumed_artifact.validation_notes
+        assert (Path(snapshot.local_root_path) / "release-metadata.json").exists()
 
     def test_create_backup_cleans_partial_file_when_dump_generation_fails(
         self,
