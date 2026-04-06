@@ -1,105 +1,32 @@
 # Documentation Standards
 
-This file contains documentation standards that apply across all programming stages.
+This file contains the authoritative documentation standards for QuickScale.
 
 ## Documentation Sources to Follow
 
-### Primary Documentation References
-- **[README.md](../../../README.md)**: Overview of the project to understand the project and its purpose.
-- **[Technical Decisions](../../technical/decisions.md)**: Authoritative architectural decisions and technical specifications.
-  - Technical stack enumeration and description.
-  - Architectural patterns and boundaries.
-    - Current implementation boundaries and historical-label guidance.
-  - Explicit prohibitions and anti-patterns.
-- **[Scaffolding Guide](../../technical/scaffolding.md)**: Directory layout and project structure.
-  - Repository-level directory layout.
-  - Package internal structures.
-  - Generated project scaffolding.
-- **[User Manual](../../technical/user_manual.md)**: User commands and usage instructions.
-  - Installation instructions.
-  - Running tests and linters.
-  - Using the quickscale CLI.
-  - Troubleshooting.
-- **[Contributing Guidelines](../contributing.md)**: Contribution guidelines index for developers and AI assistants.
+- **[README.md](../../../README.md)**: project overview and primary contributor entrypoint
+- **[Technical Decisions](../../technical/decisions.md)**: authoritative stack, boundary, and anti-pattern decisions
+- **[Scaffolding Guide](../../technical/scaffolding.md)**: authoritative repository and package structure rules
+- **[User Manual](../../technical/user_manual.md)**: operator-facing commands, usage, and troubleshooting
+- **[Contributing Guidelines](../contributing.md)**: contributor documentation map and authority model
 
-## Code Documentation Guidelines
+## Documentation Rules
 
-### Single-Line Comments for Major Code Sections
-Use single-line comments to explain the purpose of major code sections:
+### Prefer concise purpose-first docstrings
 
-```python
-# Authentication section - handles user validation before processing
-def authenticate_user(username, password):
-    # Implementation
-```
+- Prefer single-line docstrings for small functions and classes
+- Use multi-line docstrings only when a module, class, or function needs materially more context than a single line can provide
+- Describe purpose and behavior first rather than repeating obvious mechanics
+- Match the surrounding package style when a local documentation pattern is already established
 
-### Single-Line Docstrings for Functions and Classes
-Use single-line docstrings for functions and classes. Do not use multi-line docstrings:
+### Document behavior, rationale, and boundaries
 
-```python
-def authenticate_user():
-    """Verify user credentials before allowing access."""
-    # Implementation
+- Explain why, invariants, failure behavior, or architectural boundaries when they are not obvious from the code
+- Avoid comments that narrate line-by-line mechanics
+- Keep public or externally meaningful behavior documented where readers will naturally look for it
 
-class UserManager:
-    """Manages user operations and authentication."""
-    # Implementation
-```
+### Keep documentation aligned with code and SSOT
 
-### Document Only Functionality, Not Arguments or Returns
-On docstrings for functions (single-line), document only the functionality (not arguments or returns):
-
-```python
-def process_payment(amount, method, customer_id):
-    """Process customer payment through payment gateway."""
-    # Implementation
-```
-
-**Instead of:**
-```python
-def process_payment(amount, method, customer_id):
-    """Process payment.
-    Args:
-        amount: The payment amount
-        method: The payment method
-        customer_id: The customer ID
-    Returns:
-        Transaction ID
-    """
-```
-
-### Focus on "Why" Rather Than "What"
-On single-line comments, focus on explaining why rather than what:
-
-```python
-# Using a cache here to avoid expensive recalculations on repeated calls
-result = cache.get(key) or expensive_calculation(key)
-```
-
-**Instead of:**
-```python
-# Get result from cache or calculate it
-result = cache.get(key) or expensive_calculation(key)
-```
-
-## Documentation Application by Stage
-
-### Planning Stage
-- Reference appropriate documentation sources when understanding requirements
-- Plan documentation needs for new features
-- Identify what needs to be documented
-
-### Implementation Stage
-- Write clear, concise docstrings for all public APIs
-- Add explanatory comments for complex logic
-- Document the "why" behind design decisions
-
-### Quality Control Stage
-- Verify all public APIs have proper documentation
-- Check that comments explain rationale, not mechanics
-- Ensure documentation is consistent with project standards
-
-### Debugging Stage
-- Use documentation to understand existing code behavior
-- Check if missing documentation is causing confusion
-- Update documentation when fixing bugs that reveal unclear behavior
+- Update documentation when behavior, configuration, commands, or operator expectations change
+- Treat the repository SSOT documents as authoritative for architecture, structure, and workflow claims
+- Do not let package-local README content or inline comments contradict repository SSOT

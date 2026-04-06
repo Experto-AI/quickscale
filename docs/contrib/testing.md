@@ -1,8 +1,11 @@
 # Testing Guide
 
-This is a testing application guide. It combines the shared testing standards with QuickScale-specific test locations, fixtures, and commands.
+This is a testing application guide. It combines the shared testing standards
+with QuickScale-specific test locations, fixtures, commands, examples, and
+contamination-prevention reminders.
 
-Shared documents in [shared/](shared/) remain authoritative when guidance overlaps.
+Shared documents in [shared/](shared/) remain authoritative when guidance
+overlaps.
 
 ## Use This Guide When
 
@@ -11,6 +14,7 @@ Use this guide when you need to:
 1. choose the correct test category and location
 2. write or update tests for implemented behavior
 3. run the relevant repo-specific test commands for the affected area
+4. diagnose test-setup or contamination issues
 
 ## Authoritative Sources for Testing
 
@@ -21,27 +25,36 @@ Apply these rule sources while working on tests:
 - [Task Focus Guidelines](shared/task_focus_guidelines.md)
 - [Debugging Standards](shared/debugging_standards.md) when failures need diagnosis
 
+## Applied Testing Checklist
+
+- choose the correct test category and location before writing new tests
+- assert on behavior and contracts, not internal implementation details
+- isolate external dependencies and restore any global state you modify
+- use clear arrange-act-assert structure and descriptive test names
+- add edge-case or regression coverage when changed behavior requires it
+- confirm the relevant tests pass alone and in the relevant suite
+
 ## Test Category Decision Tree
 
-```
+```text
 What are you testing?
 
-🔧 QuickScale Core (generator, templates, file utils, config)
-└─ Unit/Integration Test → quickscale_core/tests/
-   ├─ Standard unit tests: no marker needed
-   └─ Multi-step workflow tests: @pytest.mark.integration
+QuickScale Core (generator, templates, file utils, config)
+-> Unit/Integration Test -> quickscale_core/tests/
+   - Standard unit tests: no marker needed
+   - Multi-step workflow tests: @pytest.mark.integration
 
-⚙️ QuickScale CLI (commands: plan, apply, status, up, down...)
-└─ Unit Test → quickscale_cli/tests/
-   └─ Use cli_runner fixture; mock filesystem and Docker
+QuickScale CLI (commands: plan, apply, status, up, down...)
+-> Unit Test -> quickscale_cli/tests/
+   - Use cli_runner fixture; mock filesystem and Docker
 
-🧩 Module Logic (auth, crm, blog, and other quickscale_modules)
-└─ Unit Test → quickscale_modules/<name>/tests/
-   └─ Django TestCase with --ds=tests.settings
+Module Logic (auth, crm, blog, and other quickscale_modules)
+-> Unit Test -> quickscale_modules/<name>/tests/
+   - Django TestCase with --ds=tests.settings
 
-🎬 Complete User Journey (requires running Docker)
-└─ E2E Test → @pytest.mark.e2e (anywhere in quickscale_core/ or quickscale_cli/)
-   └─ Run separately via: make test-e2e
+Complete User Journey (requires running Docker)
+-> E2E Test -> @pytest.mark.e2e (anywhere in quickscale_core/ or quickscale_cli/)
+   - Run separately via: make test-e2e
 ```
 
 ## Running Tests
@@ -65,23 +78,48 @@ poetry run pytest quickscale_core/tests --exitfirst --tb=short -m "not e2e"
 make test-e2e
 ```
 
+## Database-Backed Test Setup
+
+Unit and integration tests that require PostgreSQL in `quickscale_core/` use the
+test compose file below.
+
+```bash
+# Start PostgreSQL test database (quickscale_core)
+docker-compose -f quickscale_core/tests/docker-compose.test.yml up -d test-db
+
+# Run unit and integration tests
+make test
+
+# Cleanup
+docker-compose -f quickscale_core/tests/docker-compose.test.yml down
+```
+
 ## Unit Tests Recipe
 
-Use the shared testing standards for structure, behavior focus, isolation, and mock discipline. This section only captures the repo-specific placement and fixtures that matter while applying those rules.
+Use the shared testing standards for structure, behavior focus, isolation, and
+mock discipline. This section captures the repo-specific placement and fixtures
+that matter while applying those rules.
 
 **Example — CLI command test**:
+
 ```python
 # quickscale_cli/tests/commands/test_plan_command.py
 from click.testing import CliRunner
 from quickscale_cli.main import cli
 
+
 def test_plan_command_creates_config(tmp_path, cli_runner):
     """Test that plan command creates a project config file."""
-    result = cli_runner.invoke(cli, ['plan', '--name', 'myproject'], catch_exceptions=False)
+    result = cli_runner.invoke(
+        cli,
+        ["plan", "--name", "myproject"],
+        catch_exceptions=False,
+    )
     assert result.exit_code == 0
 ```
 
 **Example — Core generator unit test**:
+
 ```python
 # quickscale_core/tests/test_generator/test_generator.py
 def test_generator_creates_manage_py(generated_project_path):
@@ -100,9 +138,11 @@ Available fixtures (`quickscale_cli/tests/conftest.py`):
 
 ## Integration Tests Recipe
 
-Use the shared testing standards for the normative rules. This section defines the repo-specific integration-test location and marker usage.
+Use the shared testing standards for the normative rules. This section defines
+the repo-specific integration-test location and marker usage.
 
 **Example**:
+
 ```python
 # quickscale_core/tests/test_integration.py
 @pytest.mark.integration
@@ -123,9 +163,11 @@ class TestProjectGenerationIntegration:
 
 ## E2E Tests Recipe
 
-Use the shared testing standards for the normative rules. This section defines the repo-specific e2e marker and command path.
+Use the shared testing standards for the normative rules. This section defines
+the repo-specific e2e marker and command path.
 
 **Example**:
+
 ```python
 # quickscale_cli/tests/test_e2e_development_workflow.py
 @pytest.mark.e2e
@@ -134,18 +176,58 @@ class TestDevelopmentCommandsE2E:
 
     def test_up_and_down_workflow(self, tmp_path, cli_runner):
         """Test that quickscale up starts and quickscale down stops services."""
-        # Generate project first
         generator = ProjectGenerator(theme="showcase_html")
         generator.generate("e2e_test", tmp_path / "e2e_test")
 
-        # Start services
-        result = cli_runner.invoke(cli, ['up'], catch_exceptions=False)
+        result = cli_runner.invoke(cli, ["up"], catch_exceptions=False)
         assert result.exit_code == 0
 
-        # Stop services
-        result = cli_runner.invoke(cli, ['down'], catch_exceptions=False)
+        result = cli_runner.invoke(cli, ["down"], catch_exceptions=False)
         assert result.exit_code == 0
 ```
+
+## Test Contamination Pitfalls
+
+### Avoid global module mocking without cleanup
+
+```python
+import sys
+from unittest.mock import MagicMock
+
+sys.modules["some_module"] = MagicMock()
+```
+
+Global module replacement like the example above leaks across tests unless you
+pair it with reliable teardown logic.
+
+### Prefer local patching or fixture-scoped setup
+
+```python
+from unittest.mock import patch
+
+
+@patch("module.function")
+def test_something(mock_function):
+    mock_function.return_value = "test_value"
+```
+
+Prefer local patching or fixture-scoped setup so cleanup is automatic and
+readable.
+
+### Restore environment and temporary resources
+
+```python
+class TestEnvironmentVariables(TestCase):
+    def setUp(self):
+        self.original_env = os.environ.copy()
+
+    def tearDown(self):
+        os.environ.clear()
+        os.environ.update(self.original_env)
+```
+
+Apply the same restoration discipline to temp files, caches, and any mutable
+global registries.
 
 ## Testing Exit Criteria
 
