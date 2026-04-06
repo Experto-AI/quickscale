@@ -200,7 +200,7 @@ them.
 | 8 | CSS Framework | Tailwind CSS | Required by shadcn/ui, utility-first |
 | 9 | Animation | Motion (Framer Motion) | De-facto standard for React animations |
 | | **Data & State** | | |
-| 10 | Routing | React Router v6 | Most mature, largest market share |
+| 10 | Routing | React Router v7 | Approved stable routing baseline for QuickScale and matches the shipped `showcase_react` dependency surface |
 | 11 | Server State | TanStack Query | Best performance, highest satisfaction |
 | 12 | Client State | Zustand | Simplest API, fastest growing, #1 sentiment |
 | 13 | Forms | React Hook Form + Zod | Most popular, best performance |
