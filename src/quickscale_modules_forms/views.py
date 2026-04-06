@@ -15,14 +15,16 @@ from django.db.models import Count
 from django.http import Http404, HttpResponse
 from django.views.generic import TemplateView
 from rest_framework import status
-from rest_framework.request import Request
+from rest_framework.authentication import SessionAuthentication
 from rest_framework.generics import (
     CreateAPIView,
     ListAPIView,
     RetrieveAPIView,
     RetrieveUpdateAPIView,
 )
+from rest_framework.pagination import PageNumberPagination
 from rest_framework.permissions import AllowAny, IsAdminUser
+from rest_framework.request import Request
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
@@ -81,9 +83,35 @@ def _capture_submission_analytics(submission: FormSubmission, request: Request) 
         )
 
 
+class FormsAdminApiMixin:
+    """Explicit auth and enablement guard for forms admin API endpoints."""
+
+    authentication_classes = [SessionAuthentication]
+    permission_classes = [IsAdminUser]
+
+    def initial(self, request: Request, *args: Any, **kwargs: Any) -> None:
+        if not bool(getattr(settings, "FORMS_SUBMISSIONS_API", True)):
+            raise Http404
+        APIView.initial(self, request, *args, **kwargs)
+
+
+class FormsSubmissionPagination(PageNumberPagination):
+    """Paginate admin submission lists without changing their list response shape."""
+
+    page_size_query_param = None
+
+    def get_page_size(self, request: Request) -> int:
+        del request
+        return int(getattr(settings, "FORMS_PER_PAGE", 25) or 25)
+
+    def get_paginated_response(self, data: list[Any]) -> Response:
+        return Response(data)
+
+
 class FormSchemaAPIView(RetrieveAPIView):
     """Return the public schema for an active form by slug"""
 
+    authentication_classes = []
     permission_classes = [AllowAny]
     serializer_class = FormSchemaSerializer
 
@@ -98,6 +126,7 @@ class FormSchemaAPIView(RetrieveAPIView):
 class FormSubmitAPIView(CreateAPIView):
     """Accept and persist a form submission; honeypot spam check; send notification"""
 
+    authentication_classes = []
     permission_classes = [AllowAny]
     throttle_classes = [FormSubmitThrottle]
     throttle_scope = "form_submit"
@@ -185,10 +214,9 @@ class FormSubmitAPIView(CreateAPIView):
             )
 
 
-class AdminFormListAPIView(ListAPIView):
+class AdminFormListAPIView(FormsAdminApiMixin, ListAPIView):
     """Staff-only: list all forms with submission counts"""
 
-    permission_classes = [IsAdminUser]
     serializer_class = AdminFormListSerializer
 
     def get_queryset(self):
@@ -197,10 +225,10 @@ class AdminFormListAPIView(ListAPIView):
         )
 
 
-class AdminSubmissionListAPIView(ListAPIView):
+class AdminSubmissionListAPIView(FormsAdminApiMixin, ListAPIView):
     """Staff-only: paginated list of submissions for a given form"""
 
-    permission_classes = [IsAdminUser]
+    pagination_class = FormsSubmissionPagination
     serializer_class = FormSubmissionAdminSerializer
 
     def get_queryset(self):
@@ -230,10 +258,9 @@ class AdminSubmissionListAPIView(ListAPIView):
         return qs
 
 
-class AdminSubmissionDetailAPIView(RetrieveUpdateAPIView):
+class AdminSubmissionDetailAPIView(FormsAdminApiMixin, RetrieveUpdateAPIView):
     """Staff-only: retrieve or patch a single submission (status / is_spam only)"""
 
-    permission_classes = [IsAdminUser]
     serializer_class = FormSubmissionAdminSerializer
     http_method_names = ["get", "patch", "head", "options"]
 
@@ -260,10 +287,8 @@ class AdminSubmissionDetailAPIView(RetrieveUpdateAPIView):
         return Response(serializer.data)
 
 
-class AdminSubmissionExportView(APIView):
+class AdminSubmissionExportView(FormsAdminApiMixin, APIView):
     """Staff-only: stream all submissions for a form as a CSV file"""
-
-    permission_classes = [IsAdminUser]
 
     def get(self, request: Request, pk: int, *args: Any, **kwargs: Any) -> HttpResponse:
         form = Form.objects.filter(pk=pk).first()

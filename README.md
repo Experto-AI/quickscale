@@ -47,11 +47,11 @@ All settings have defaults and can be overridden in your Django settings:
 
 | Setting | Default | Description |
 |---------|---------|-------------|
-| `FORMS_PER_PAGE` | `25` | Submissions per page in admin |
+| `FORMS_PER_PAGE` | `25` | Submission page size for the staff `/api/admin/forms/{id}/submissions/` endpoint |
 | `FORMS_SPAM_PROTECTION` | `True` | Enable honeypot spam protection |
 | `FORMS_RATE_LIMIT` | `"5/hour"` | Throttle rate per IP (format: `count/period`) |
 | `FORMS_DATA_RETENTION_DAYS` | `365` | Days before submission anonymization |
-| `FORMS_SUBMISSIONS_API` | `True` | Enable admin submission REST API endpoints |
+| `FORMS_SUBMISSIONS_API` | `True` | Enable the staff admin REST endpoints under `/api/admin/forms/`; when disabled they return `404` |
 
 ## REST API Endpoints
 
@@ -63,6 +63,8 @@ All settings have defaults and can be overridden in your Django settings:
 | `GET` | `/api/admin/forms/{id}/submissions/` | Staff | List submissions |
 | `GET/PATCH` | `/api/admin/forms/{id}/submissions/{sub_id}/` | Staff | Submission detail/update |
 | `GET` | `/api/admin/forms/{id}/submissions/export/` | Staff | Download CSV |
+
+The staff endpoints above are controlled by `FORMS_SUBMISSIONS_API`. The public schema and submit endpoints remain available regardless of that setting.
 
 ## Built-in Form Presets
 

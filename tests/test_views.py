@@ -345,6 +345,14 @@ class TestAdminFormListAPIView:
         assert len(response.data) >= 1
         assert "submission_count" in response.data[0]
 
+    @override_settings(FORMS_SUBMISSIONS_API=False)
+    def test_returns_404_when_admin_api_disabled(self, staff_client, form):
+        """Disabling the submissions API should hide the staff admin endpoints."""
+        url = reverse("quickscale_forms:admin-form-list")
+        response = staff_client.get(url)
+
+        assert response.status_code == 404
+
 
 @pytest.mark.django_db
 class TestAdminSubmissionListAPIView:
@@ -362,6 +370,20 @@ class TestAdminSubmissionListAPIView:
         url = reverse("quickscale_forms:admin-submission-list", kwargs={"pk": form.pk})
         response = staff_client.get(url, {"status": "pending"})
         assert response.status_code == 200
+
+    @override_settings(FORMS_PER_PAGE=1)
+    def test_respects_forms_per_page_setting(self, staff_client, form, submission):
+        """The admin submission list should page according to FORMS_PER_PAGE."""
+        FormSubmission.objects.create(
+            form=form,
+            ip_address="127.0.0.2",
+            user_agent="TestBrowser/2.0",
+        )
+        url = reverse("quickscale_forms:admin-submission-list", kwargs={"pk": form.pk})
+        response = staff_client.get(url)
+
+        assert response.status_code == 200
+        assert len(response.data) == 1
 
 
 @pytest.mark.django_db
