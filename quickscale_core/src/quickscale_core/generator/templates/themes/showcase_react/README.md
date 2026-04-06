@@ -2,6 +2,18 @@
 
 This is the React frontend for {{ project_name }}, built with QuickScale.
 
+## Shipped Surface
+
+This directory comes from QuickScale's current `showcase_react` starter theme. In the
+current release line, QuickScale ships two starter themes only:
+
+- `showcase_react` - React + TypeScript + shadcn/ui (this frontend)
+- `showcase_html` - server-rendered HTML + CSS
+
+Fresh `showcase_react` generations also include dormant PostHog starter support in
+`src/lib/analytics.ts` and Django-owned public social entrypoints at `/social` and
+`/social/embeds` that hydrate the shared React bundle outside the SPA router.
+
 ## Tech Stack
 
 - **React 19** - UI library
@@ -37,6 +49,9 @@ The frontend will be available at http://localhost:5173
 ### Development
 
 The development server proxies API requests to the Django backend at http://localhost:8000.
+
+The dormant analytics helper only initializes when `VITE_POSTHOG_KEY` contains a real
+PostHog project key. Leave it unset for the default no-op starter behavior.
 
 ```bash
 # Run tests
@@ -83,10 +98,11 @@ frontend/
 ├── src/
 │   ├── components/
 │   │   ├── layout/      # Layout components (Header, Sidebar, etc.)
+│   │   ├── social/      # Django-owned public social shell
 │   │   └── ui/          # shadcn/ui components
 │   ├── hooks/           # Custom React hooks
-│   ├── lib/             # Utility functions
-│   ├── pages/           # Page components
+│   ├── lib/             # Shared utilities + dormant analytics helper
+│   ├── pages/           # SPA pages + Django-owned public social pages
 │   ├── stores/          # Zustand stores
 │   ├── test/            # Test utilities and setup
 │   ├── App.tsx          # Main app component
@@ -97,6 +113,10 @@ frontend/
 ├── tsconfig.json
 └── vite.config.ts
 ```
+
+The generated Django project also includes `templates/social/link_tree.html` and
+`templates/social/embeds.html`, which keep those public routes under Django ownership while
+bootstrapping `window.__QUICKSCALE__.publicPage` for the shared React bundle.
 
 ## Adding shadcn/ui Components
 

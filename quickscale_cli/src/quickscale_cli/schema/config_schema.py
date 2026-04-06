@@ -11,7 +11,10 @@ from typing import Any
 
 import yaml
 
-from quickscale_cli.module_catalog import get_module_names
+from quickscale_cli.module_catalog import (
+    get_module_names,
+    get_module_readiness_reason,
+)
 from quickscale_core.utils.file_utils import validate_project_name
 
 
@@ -80,6 +83,7 @@ VALID_PROJECT_KEYS = {"slug", "package", "theme"}
 VALID_DOCKER_KEYS = {"start", "build", "create_superuser"}
 VALID_THEMES = {"showcase_html", "showcase_react"}
 AVAILABLE_MODULES = set(get_module_names(include_experimental=True))
+READY_MODULES = set(get_module_names(include_experimental=False))
 
 
 def _find_line_number(yaml_content: str, key: str) -> int | None:
@@ -304,6 +308,18 @@ def _validate_modules_section(data: dict, yaml_content: str) -> dict[str, Module
                 line=line,
                 suggestion=suggestion_text
                 or f"Available modules: {', '.join(sorted(AVAILABLE_MODULES))}",
+            )
+
+        readiness_reason = get_module_readiness_reason(module_name)
+        if readiness_reason is not None:
+            line = _find_line_number(yaml_content, module_name)
+            raise ConfigValidationError(
+                readiness_reason,
+                line=line,
+                suggestion=(
+                    "Remove it from quickscale.yml and choose a shipped module: "
+                    + ", ".join(sorted(READY_MODULES))
+                ),
             )
 
         if module_options is None:

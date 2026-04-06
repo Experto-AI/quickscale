@@ -37,6 +37,10 @@ from quickscale_cli.notifications_contract import (
     resolve_notifications_module_options,
     validate_notifications_module_options,
 )
+from quickscale_cli.module_catalog import (
+    find_not_ready_modules,
+    get_module_readiness_reason,
+)
 from quickscale_cli.social_contract import (
     SOCIAL_EMBEDS_PATH,
     SOCIAL_INTEGRATION_BASE_PATH,
@@ -61,12 +65,18 @@ from quickscale_cli.schema.state_schema import (
     ModuleState,
     ProjectState,
     QuickScaleState,
+    StateError,
     StateManager,
+)
+from quickscale_core.config import (
+    load_config as load_module_tracking_config,
+    normalize_installed_version,
+    save_config as save_module_tracking_config,
 )
 from quickscale_core.utils.git_utils import is_working_directory_clean
 from quickscale_core.generator import ProjectGenerator
 from quickscale_core.manifest import ModuleManifest
-from quickscale_core.manifest.loader import get_manifest_for_module
+from quickscale_core.manifest.loader import ManifestError, get_manifest_for_module
 from quickscale_core.settings_manager import apply_mutable_config_changes
 
 
@@ -310,13 +320,63 @@ def _start_docker(
         return success
 
 
+def _abort_for_not_ready_modules(module_names: list[str], *, source: str) -> None:
+    """Abort apply when placeholder modules appear in config or applied state."""
+    not_ready = find_not_ready_modules(module_names)
+    if not not_ready:
+        return
+
+    click.secho(
+        f"\n❌ {source} references placeholder modules that are not ready:",
+        fg="red",
+        err=True,
+        bold=True,
+    )
+    for module_name in not_ready:
+        reason = get_module_readiness_reason(module_name)
+        if reason is not None:
+            click.echo(f"  • {reason}", err=True)
+
+    click.echo(
+        "\n💡 Remove these modules from quickscale.yml or the unsupported project "
+        "state before running 'quickscale apply'.",
+        err=True,
+    )
+    raise click.Abort()
+
+
+def _abort_for_manifest_error(error: ManifestError, *, command_name: str) -> None:
+    """Abort apply/status with an actionable manifest validation message."""
+    click.secho(
+        f"\n❌ Installed module manifest error during '{command_name}':",
+        fg="red",
+        err=True,
+        bold=True,
+    )
+    click.echo(f"  • {error}", err=True)
+    click.echo(
+        "\n💡 Fix the embedded module.yml or remove and re-embed the affected "
+        f"module before running 'quickscale {command_name}' again.",
+        err=True,
+    )
+    raise click.Abort()
+
+
 def _load_module_manifests(
-    project_path: Path, module_names: list[str]
+    project_path: Path,
+    module_names: list[str],
+    *,
+    strict: bool = False,
 ) -> dict[str, ModuleManifest]:
     """Load manifests for all installed modules"""
     manifests: dict[str, ModuleManifest] = {}
     for module_name in module_names:
-        manifest = get_manifest_for_module(project_path, module_name)
+        try:
+            manifest = get_manifest_for_module(project_path, module_name, strict=strict)
+        except ManifestError as error:
+            if strict and "Manifest file not found:" not in str(error):
+                raise
+            manifest = None
         if manifest:
             manifests[module_name] = manifest
     return manifests
@@ -409,6 +469,31 @@ def _update_module_config_in_state(
             )
 
 
+def _sync_legacy_module_config_versions(
+    project_path: Path,
+    state: QuickScaleState,
+) -> None:
+    """Mirror normalized state versions into legacy module tracking for compatibility."""
+    legacy_config = load_module_tracking_config(project_path)
+    changed = False
+
+    for module_name, module_state in state.modules.items():
+        if module_name not in legacy_config.modules:
+            continue
+
+        normalized_version = normalize_installed_version(module_state.version)
+        if normalized_version is None:
+            continue
+
+        if legacy_config.modules[module_name].installed_version != normalized_version:
+            legacy_config.modules[module_name].installed_version = normalized_version
+            changed = True
+
+    if changed:
+        save_module_tracking_config(legacy_config, project_path)
+        click.secho("✅ Updated .quickscale/config.yml module versions", fg="green")
+
+
 def _sanitize_loaded_module_configs(qs_config: QuickScaleConfig) -> list[str]:
     """Normalize module configs so raw secrets never persist after apply."""
     sanitized_modules: list[str] = []
@@ -456,6 +541,10 @@ def _load_and_validate_config(config_path: Path) -> QuickScaleConfig:
 
 def _validate_module_prerequisites(qs_config: QuickScaleConfig) -> None:
     """Validate actionable module-specific prerequisites before apply proceeds."""
+    _abort_for_not_ready_modules(
+        list(qs_config.modules.keys()), source="quickscale.yml"
+    )
+
     backups_config = qs_config.modules.get("backups")
     if backups_config is not None:
         issues = validate_backups_module_options(backups_config.options or {})
@@ -1116,8 +1205,24 @@ def _save_project_state(
 
         _update_module_config_in_state(new_state, qs_config, delta)
 
+        for module_name, module_state in new_state.modules.items():
+            manifest = get_manifest_for_module(output_path, module_name)
+            if manifest is None:
+                continue
+
+            normalized_version = normalize_installed_version(manifest.version)
+            if normalized_version is not None:
+                module_state.version = normalized_version
+
         state_manager.save(new_state)
         click.secho("✅ State saved to .quickscale/state.yml", fg="green")
+        try:
+            _sync_legacy_module_config_versions(output_path, new_state)
+        except Exception as e:
+            click.secho(
+                f"⚠️  Failed to mirror module versions into .quickscale/config.yml: {e}",
+                fg="yellow",
+            )
     except Exception as e:
         click.secho(f"⚠️  Failed to save state: {e}", fg="yellow")
 
@@ -1339,14 +1444,31 @@ def _prepare_apply_context(config_path: Path) -> ApplyContext:
 
     # Load existing state if project exists
     state_manager = StateManager(output_path)
-    existing_state = state_manager.load() if output_path.exists() else None
+    try:
+        existing_state = state_manager.load() if output_path.exists() else None
+    except StateError as error:
+        click.secho(
+            f"\n❌ Failed to load .quickscale/state.yml: {error}",
+            fg="red",
+            err=True,
+        )
+        raise click.Abort() from error
 
     # Load manifests for modules (needed for config change detection)
     manifests: dict[str, ModuleManifest] = {}
     if existing_state and existing_state.modules:
-        manifests = _load_module_manifests(
-            output_path, list(existing_state.modules.keys())
+        _abort_for_not_ready_modules(
+            list(existing_state.modules.keys()),
+            source=".quickscale/state.yml",
         )
+        try:
+            manifests = _load_module_manifests(
+                output_path,
+                list(existing_state.modules.keys()),
+                strict=True,
+            )
+        except ManifestError as error:
+            _abort_for_manifest_error(error, command_name="apply")
 
     # Compute delta
     delta = compute_delta(qs_config, existing_state, manifests)

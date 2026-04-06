@@ -1,5 +1,7 @@
 """Django app configuration for QuickScale auth module"""
 
+from importlib import import_module
+
 from django.apps import AppConfig
 
 
@@ -13,7 +15,4 @@ class QuickscaleAuthConfig(AppConfig):
 
     def ready(self) -> None:
         """Import signal handlers when app is ready"""
-        try:
-            import quickscale_modules_auth.signals  # noqa: F401
-        except ImportError:
-            pass
+        import_module("quickscale_modules_auth.signals")

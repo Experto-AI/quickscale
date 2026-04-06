@@ -1,9 +1,11 @@
 """Tests for module catalog helpers."""
 
 from quickscale_cli.module_catalog import (
+    find_not_ready_modules,
     get_module_entry,
     get_module_entries,
     get_module_names,
+    get_module_readiness_reason,
 )
 
 
@@ -34,7 +36,7 @@ def test_get_module_entries_filters_experimental_by_default() -> None:
 
 
 def test_get_module_names_includes_experimental_when_requested() -> None:
-    """Explicit include_experimental should surface experimental modules."""
+    """Explicit include_experimental should surface placeholder entries."""
     names = get_module_names(include_experimental=True)
 
     assert "billing" in names
@@ -60,3 +62,20 @@ def test_get_module_entry_returns_social_metadata() -> None:
     assert entry is not None
     assert entry.name == "social"
     assert entry.ready is True
+
+
+def test_get_module_readiness_reason_reports_placeholder_modules() -> None:
+    """Placeholder directories should expose an actionable readiness message."""
+    reason = get_module_readiness_reason("billing")
+
+    assert reason is not None
+    assert "billing" in reason
+    assert "placeholder" in reason
+
+
+def test_find_not_ready_modules_filters_ready_modules() -> None:
+    """Readiness filtering should keep only known placeholder modules."""
+    assert find_not_ready_modules(["auth", "billing", "teams", "unknown"]) == [
+        "billing",
+        "teams",
+    ]

@@ -349,7 +349,7 @@ quickscale plan myapp --overwrite
 
 The wizard guides you through:
 1. **Theme selection**: Choose from available themes (showcase_html, showcase_react)
-2. **Module selection**: Select optional modules to include. In the current v0.82.0 release, implemented first-party modules include analytics, auth, backups, blog, crm, forms, listings, notifications, social, and storage.
+2. **Module selection**: Select optional modules to include. In the current v0.82.0 release, implemented first-party modules include analytics, auth, backups, blog, crm, forms, listings, notifications, social, and storage. The `billing` and `teams` directories remain placeholder inventory only; `quickscale plan`, `quickscale.yml` validation, and `quickscale apply` reject them until those modules ship.
 3. **Docker configuration**: Configure Docker build/start options and optional first-start superuser creation
 
 **Generated `quickscale.yml` example**:
@@ -517,10 +517,18 @@ quickscale apply --force
 2. Generate project from theme
 3. Initialize git repository
 4. Create initial commit
-5. Embed selected modules (via git subtree)
-6. Install Poetry dependencies
-7. Run Django migrations
-8. Start Docker services (if configured)
+5. Auto-commit pending `quickscale.yml` / `.quickscale/` changes in existing projects so git subtree embed runs from a clean tree
+6. Embed selected modules (via git subtree)
+7. Install Poetry dependencies
+8. Run Django migrations
+9. Start Docker services (if configured)
+
+For existing projects, that pre-embed auto-commit is limited to QuickScale-managed config/state files. User-owned code changes are not swept into the commit.
+
+**Installed module version tracking**:
+- After embedding, QuickScale reads each installed module version from the embedded `modules/<name>/module.yml` file.
+- `.quickscale/state.yml` records that canonical manifest version, and `.quickscale/config.yml` mirrors the same normalized value for legacy update/push compatibility.
+- If a packaged module also exposes a package version string, treat `module.yml` as authoritative and expect the package metadata to match it.
 
 **Typical Plan/Apply Workflow**:
 ```bash

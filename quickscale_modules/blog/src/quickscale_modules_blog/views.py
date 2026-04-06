@@ -14,6 +14,7 @@ from django.core.files.uploadedfile import UploadedFile
 from django.db import IntegrityError
 from django.http import HttpRequest, HttpResponse, JsonResponse
 from django.middleware.csrf import CsrfViewMiddleware
+from django.shortcuts import get_object_or_404
 from django.utils.html import escape
 from django.utils.text import slugify
 from django.views.decorators.csrf import csrf_exempt
@@ -438,7 +439,7 @@ def upload_media_api(request: HttpRequest) -> JsonResponse:
     return JsonResponse(
         {
             "id": asset.pk,
-            "url": _build_media_response_url(request, asset.file.name),
+            "url": _build_media_response_url(request, asset.file.name or ""),
             "alt": asset.alt,
             "kind": asset.kind,
             "width": asset.width,
@@ -544,7 +545,7 @@ class CategoryListView(ListView):
 
     def get_queryset(self):  # type: ignore[no-untyped-def]
         """Return published posts in the specified category"""
-        self.category = Category.objects.get(slug=self.kwargs["slug"])
+        self.category = get_object_or_404(Category, slug=self.kwargs["slug"])
         return (
             Post.objects.filter(status="published", category=self.category)
             .select_related("author", "category")
@@ -568,7 +569,7 @@ class TagListView(ListView):
 
     def get_queryset(self):  # type: ignore[no-untyped-def]
         """Return published posts with the specified tag"""
-        self.tag = Tag.objects.get(slug=self.kwargs["slug"])
+        self.tag = get_object_or_404(Tag, slug=self.kwargs["slug"])
         return (
             Post.objects.filter(status="published", tags=self.tag)
             .select_related("author", "category")

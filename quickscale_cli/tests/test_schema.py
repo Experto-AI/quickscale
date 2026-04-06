@@ -134,7 +134,7 @@ docker:
         assert config.docker.create_superuser is True
 
     def test_all_valid_modules(self):
-        """Test that all valid modules are accepted"""
+        """Test that all shipped modules are accepted"""
         yaml_content = """
 version: "1"
 project:
@@ -142,30 +142,28 @@ project:
   package: myapp
 modules:
   auth:
-  billing:
-  teams:
   blog:
   listings:
   crm:
   forms:
   storage:
   backups:
+  analytics:
   notifications:
   social:
 """
         config = validate_config(yaml_content)
 
-        assert len(config.modules) == 11
+        assert len(config.modules) == 10
         assert set(config.modules.keys()) == {
             "auth",
-            "billing",
-            "teams",
             "blog",
             "listings",
             "crm",
             "forms",
             "storage",
             "backups",
+            "analytics",
             "notifications",
             "social",
         }
@@ -319,6 +317,22 @@ modules:
             validate_config(yaml_content)
 
         assert "Unknown module 'unknown_module'" in str(exc.value)
+
+    def test_placeholder_module_is_rejected(self):
+        """Placeholder modules should not validate into quickscale.yml."""
+        yaml_content = """
+version: "1"
+project:
+  slug: myapp
+  package: myapp
+modules:
+  billing:
+"""
+        with pytest.raises(ConfigValidationError) as exc:
+            validate_config(yaml_content)
+
+        assert "billing" in str(exc.value)
+        assert "placeholder" in str(exc.value)
 
     def test_unknown_top_level_key(self):
         """Test error for unknown top-level key"""

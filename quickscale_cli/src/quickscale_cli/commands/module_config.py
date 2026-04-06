@@ -990,32 +990,12 @@ def _add_drf_and_filter_dependencies(
 
 def _get_crm_settings_addition(config: dict[str, Any]) -> str:
     """Generate settings addition for CRM module."""
-    addition = f"""
+    return f"""
 # CRM Module Settings
 CRM_DEALS_PER_PAGE = {config["deals_per_page"]}
 CRM_CONTACTS_PER_PAGE = {config["contacts_per_page"]}
 CRM_ENABLE_API = {config["enable_api"]}
 """
-    if config["enable_api"]:
-        addition += """
-# REST Framework Settings
-REST_FRAMEWORK = {
-    "DEFAULT_AUTHENTICATION_CLASSES": [
-        "rest_framework.authentication.SessionAuthentication",
-    ],
-    "DEFAULT_PERMISSION_CLASSES": [
-        "rest_framework.permissions.IsAuthenticated",
-    ],
-    "DEFAULT_PAGINATION_CLASS": "rest_framework.pagination.PageNumberPagination",
-    "PAGE_SIZE": 25,
-    "DEFAULT_FILTER_BACKENDS": [
-        "django_filters.rest_framework.DjangoFilterBackend",
-        "rest_framework.filters.SearchFilter",
-        "rest_framework.filters.OrderingFilter",
-    ],
-}
-"""
-    return addition
 
 
 def _update_crm_urls(urls_path: Path) -> None:
@@ -1073,7 +1053,6 @@ def get_default_forms_config() -> dict[str, Any]:
         "rate_limit": "5/hour",
         "data_retention_days": 365,
         "submissions_api_enabled": True,
-        "storage_backend": "django",
     }
 
 
@@ -1118,7 +1097,6 @@ def configure_forms_module(
             "Enable REST API for admin submissions?",
             default=bool(defaults["submissions_api_enabled"]),
         ),
-        "storage_backend": str(defaults["storage_backend"]),
     }
     return config
 

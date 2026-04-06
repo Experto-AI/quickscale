@@ -1,9 +1,24 @@
 """Pytest configuration for quickscale_cli tests."""
 
+import sys
+from pathlib import Path
 from unittest.mock import patch
 
 import pytest
 from click.testing import CliRunner
+
+
+# Prefer workspace source trees over any stale user-site installs.
+_REPO_ROOT = Path(__file__).resolve().parents[2]
+for _src_path in (
+    _REPO_ROOT / "quickscale/src",
+    _REPO_ROOT / "quickscale_core/src",
+    _REPO_ROOT / "quickscale_cli/src",
+):
+    _src_path_str = str(_src_path)
+    if _src_path_str in sys.path:
+        sys.path.remove(_src_path_str)
+    sys.path.insert(0, _src_path_str)
 
 
 @pytest.fixture

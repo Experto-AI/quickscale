@@ -232,6 +232,16 @@ myapp/
 └── README.md
 ```
 
+Notes:
+- Fresh `showcase_react` generations include `frontend/src/lib/analytics.ts` as dormant
+    PostHog starter wiring. It initializes only when `VITE_POSTHOG_KEY` contains a real
+    key.
+- Fresh `showcase_react` generations also include
+    `frontend/src/pages/SocialLinkTreePublicPage.tsx` and
+    `frontend/src/pages/SocialEmbedsPublicPage.tsx`, plus Django `templates/social/*.html`
+    wrappers that keep `/social` and `/social/embeds` under Django ownership while
+    hydrating the shared React bundle through `window.__QUICKSCALE__.publicPage`.
+
 ### 5.2 HTML Starter Output
 
 When the user selects `showcase_html`, the frontend stays server-rendered.

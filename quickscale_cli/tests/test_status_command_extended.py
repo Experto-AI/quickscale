@@ -8,6 +8,7 @@ from click.testing import CliRunner
 
 import pytest
 
+from quickscale_cli.schema.config_schema import ConfigValidationError
 from quickscale_cli.commands.status_command import (
     _build_json_output,
     _detect_project_context,
@@ -172,11 +173,11 @@ class TestLoadConfig:
         assert result.project.slug == "myapp"
 
     def test_invalid_config(self, tmp_path):
-        """Return None for invalid config"""
+        """Invalid configs should surface validation errors."""
         config = tmp_path / "quickscale.yml"
         config.write_text("invalid yaml: [")
-        result = _load_config(config)
-        assert result is None
+        with pytest.raises(ConfigValidationError):
+            _load_config(config)
 
 
 # ============================================================================
@@ -504,7 +505,65 @@ class TestStatusCommandExtended:
                 f.write(
                     'version: "1"\nproject:\n  slug: testapp\n  package: testapp\n  theme: showcase_html\nmodules:\n  auth:\ndocker:\n  start: false\n'
                 )
+            os.makedirs("modules/auth", exist_ok=True)
+            with open("modules/auth/module.yml", "w") as f:
+                f.write('name: auth\nversion: "1.0.0"\n')
 
             result = runner.invoke(status)
             assert result.exit_code == 0
             assert "testapp" in result.output
+
+    def test_status_fails_for_placeholder_config(self):
+        """Status should not silently ignore placeholder modules in quickscale.yml."""
+        runner = CliRunner()
+        with runner.isolated_filesystem():
+            with open("quickscale.yml", "w") as f:
+                f.write(
+                    'version: "1"\n'
+                    "project:\n"
+                    "  slug: testapp\n"
+                    "  package: testapp\n"
+                    "  theme: showcase_html\n"
+                    "modules:\n"
+                    "  billing:\n"
+                )
+
+            result = runner.invoke(status)
+
+            assert result.exit_code != 0
+            assert "placeholder" in result.output
+            assert "billing" in result.output
+
+    def test_status_fails_for_malformed_installed_manifest(self):
+        """Status should fail fast when an installed module manifest is malformed."""
+        runner = CliRunner()
+        with runner.isolated_filesystem():
+            os.makedirs(".quickscale")
+            with open(".quickscale/state.yml", "w") as f:
+                yaml.dump(
+                    {
+                        "version": "1",
+                        "project": {
+                            "slug": "testapp",
+                            "package": "testapp",
+                            "theme": "showcase_html",
+                        },
+                        "modules": {
+                            "auth": {
+                                "version": "0.70.0",
+                                "embedded_at": "2025-12-01T11:00:00",
+                                "options": {},
+                            }
+                        },
+                    },
+                    f,
+                )
+            os.makedirs("modules/auth", exist_ok=True)
+            with open("modules/auth/module.yml", "w") as f:
+                f.write("- invalid\n- list\n")
+
+            result = runner.invoke(status)
+
+            assert result.exit_code != 0
+            assert "manifest" in result.output.lower()
+            assert "auth" in result.output

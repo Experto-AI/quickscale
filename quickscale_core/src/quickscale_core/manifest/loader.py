@@ -185,7 +185,7 @@ def load_manifest_from_path(manifest_path: Path) -> ModuleManifest:
 
 
 def get_manifest_for_module(
-    project_path: Path, module_name: str
+    project_path: Path, module_name: str, *, strict: bool = False
 ) -> ModuleManifest | None:
     """Get manifest for an embedded module in a project
 
@@ -199,9 +199,16 @@ def get_manifest_for_module(
     """
     manifest_path = project_path / "modules" / module_name / "module.yml"
     if not manifest_path.exists():
+        if strict:
+            raise ManifestError(
+                f"Manifest file not found: {manifest_path}",
+                module_name,
+            )
         return None
 
     try:
         return load_manifest_from_path(manifest_path)
     except ManifestError:
+        if strict:
+            raise
         return None

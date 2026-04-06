@@ -12,6 +12,7 @@ from typing import Any
 import yaml
 
 from quickscale_cli.backups_contract import sanitize_module_options
+from quickscale_core.config import normalize_installed_version
 
 
 class StateError(Exception):
@@ -29,6 +30,9 @@ class ModuleState:
     commit_sha: str | None = None
     embedded_at: str = field(default_factory=lambda: datetime.now().isoformat())
     options: dict[str, Any] = field(default_factory=dict)
+
+    def __post_init__(self) -> None:
+        self.version = normalize_installed_version(self.version)
 
 
 @dataclass
@@ -137,7 +141,7 @@ class StateManager:
 
                 modules[module_name] = ModuleState(
                     name=module_name,
-                    version=module_info.get("version"),
+                    version=normalize_installed_version(module_info.get("version")),
                     commit_sha=module_info.get("commit_sha"),
                     embedded_at=module_info.get(
                         "embedded_at", datetime.now().isoformat()
@@ -187,7 +191,7 @@ class StateManager:
             if state.modules:
                 data["modules"] = {
                     name: {
-                        "version": module.version,
+                        "version": normalize_installed_version(module.version),
                         "commit_sha": module.commit_sha,
                         "embedded_at": module.embedded_at,
                         "options": (

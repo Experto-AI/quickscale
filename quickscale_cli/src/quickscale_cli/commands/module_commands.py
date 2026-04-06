@@ -6,9 +6,16 @@ from typing import Any
 
 import click
 
-from quickscale_cli.module_catalog import get_module_names
+from quickscale_cli.module_catalog import get_module_names, get_module_readiness_reason
+from quickscale_cli.schema.state_schema import StateError, StateManager
 
-from quickscale_core.config import add_module, load_config, update_module_version
+from quickscale_core.config import (
+    add_module,
+    load_config,
+    normalize_installed_version,
+    update_module_version,
+)
+from quickscale_core.manifest.loader import ManifestError, get_manifest_for_module
 from quickscale_core.utils.git_utils import (
     GitError,
     check_remote_branch_exists,
@@ -183,6 +190,40 @@ def _resolve_embedded_module_install_path(
     return None
 
 
+def _read_embedded_module_version(project_path: Path, module: str) -> str:
+    """Read the canonical installed version from the embedded module manifest."""
+    manifest = get_manifest_for_module(project_path, module, strict=True)
+    assert manifest is not None
+    normalized = normalize_installed_version(manifest.version)
+    return normalized or manifest.version
+
+
+def _sync_state_module_version(project_path: Path, module: str, version: str) -> None:
+    """Mirror embedded module versions into applied state when present."""
+    state_manager = StateManager(project_path)
+    state = state_manager.load()
+    if state is None or module not in state.modules:
+        return
+
+    state.modules[module].version = version
+    state_manager.save(state)
+
+
+def _validate_module_readiness(module: str) -> bool:
+    """Reject placeholder modules from embed/apply flows."""
+    readiness_reason = get_module_readiness_reason(module)
+    if readiness_reason is None:
+        return True
+
+    click.secho(f"❌ Error: {readiness_reason}", fg="red", err=True)
+    click.echo(
+        "\n💡 Placeholder directories remain in the repository for documentation and "
+        "future work only.",
+        err=True,
+    )
+    return False
+
+
 def _perform_module_embed(
     project_path: Path,
     module: str,
@@ -200,12 +241,29 @@ def _perform_module_embed(
 
     run_git_subtree_add(prefix=prefix, remote=remote, branch=branch, squash=True)
 
+    try:
+        installed_version = _read_embedded_module_version(project_path, module)
+    except ManifestError as error:
+        click.secho(
+            f"\n❌ Embedded module manifest error: {error}",
+            fg="red",
+            err=True,
+            bold=True,
+        )
+        click.echo(
+            "\n💡 Fix the embedded module.yml or remove the partial module embed "
+            "before continuing.",
+            err=True,
+        )
+        return False
+
     # Update configuration tracking
     add_module(
         module_name=module,
         prefix=prefix,
         branch=branch,
-        version="v0.72.0",
+        version=installed_version,
+        project_path=project_path,
     )
 
     # Apply module-specific configuration
@@ -273,6 +331,9 @@ def embed_module(
             return False
 
         if not _validate_module_not_exists(project_path, module):
+            return False
+
+        if not _validate_module_readiness(module):
             return False
 
         branch = f"splits/{module}-module"
@@ -463,8 +524,12 @@ def _update_single_module(
 ) -> bool:
     """Update a single module via git subtree pull."""
     click.echo(f"\n📥 Updating {name} module...")
+    project_path = Path.cwd()
 
     try:
+        # Abort before any subtree/config mutation if applied state is invalid.
+        StateManager(project_path).load()
+
         output = run_git_subtree_pull(
             prefix=info.prefix,
             remote=default_remote,
@@ -472,8 +537,9 @@ def _update_single_module(
             squash=True,
         )
 
-        # Update version in config
-        update_module_version(name, "v0.62.0")  # Placeholder version
+        installed_version = _read_embedded_module_version(project_path, name)
+        update_module_version(name, installed_version, project_path)
+        _sync_state_module_version(project_path, name, installed_version)
 
         _commit_module_update(name, info.prefix)
 
@@ -485,6 +551,25 @@ def _update_single_module(
 
         return True
 
+    except StateError as error:
+        click.secho(
+            f"❌ Failed to load .quickscale/state.yml: {error}",
+            fg="red",
+            err=True,
+        )
+        click.echo(
+            "💡 Fix .quickscale/state.yml or regenerate it with 'quickscale apply' "
+            "before updating modules.",
+            err=True,
+        )
+        return False
+    except ManifestError as e:
+        click.secho(f"❌ Failed to update {name}: {e}", fg="red", err=True)
+        click.echo(
+            f"💡 Fix modules/{name}/module.yml or remove and re-embed the module.",
+            err=True,
+        )
+        return False
     except GitError as e:
         click.secho(f"❌ Failed to update {name}: {e}", fg="red", err=True)
         click.echo(f"💡 Tip: Check for conflicts in modules/{name}/", err=True)
@@ -497,6 +582,9 @@ def _commit_module_update(module_name: str, module_prefix: str) -> None:
     config_path = Path(".quickscale") / "config.yml"
     if config_path.exists():
         tracked_paths.append(str(config_path))
+    state_path = Path(".quickscale") / "state.yml"
+    if state_path.exists():
+        tracked_paths.append(str(state_path))
 
     try:
         subprocess.run(
@@ -568,6 +656,10 @@ def update(no_preview: bool) -> None:
                 "\n💡 Tip: Install modules with 'quickscale embed --module <name>'"
             )
             return
+
+        for name in config.modules:
+            if not _validate_module_readiness(name):
+                raise click.Abort()
 
         # Show installed modules
         click.echo(f"📦 Found {len(config.modules)} installed module(s):")

@@ -6,6 +6,8 @@ from unittest.mock import Mock, patch
 import click
 import pytest
 
+from quickscale_core.manifest.loader import ManifestError
+
 from quickscale_cli.commands.module_commands import (
     _check_auth_module_migrations,
     _commit_module_update,
@@ -251,6 +253,7 @@ class TestPerformModuleEmbed:
         module_dir = tmp_path / "modules" / "auth"
         module_dir.mkdir(parents=True)
         (module_dir / "pyproject.toml").touch()
+        (module_dir / "module.yml").write_text('name: auth\nversion: "0.82.0"\n')
 
         result = _perform_module_embed(
             tmp_path,
@@ -262,7 +265,13 @@ class TestPerformModuleEmbed:
 
         assert result is True
         mock_subtree.assert_called_once()
-        mock_add_module.assert_called_once()
+        mock_add_module.assert_called_once_with(
+            module_name="auth",
+            prefix="modules/auth",
+            branch="splits/auth-module",
+            version="0.82.0",
+            project_path=tmp_path,
+        )
         mock_install.assert_called_once_with(tmp_path, "auth")
 
     @patch("quickscale_cli.commands.module_commands._install_module_dependencies")
@@ -275,6 +284,7 @@ class TestPerformModuleEmbed:
         mock_install.return_value = True
         module_dir = tmp_path / "modules" / "blog"
         module_dir.mkdir(parents=True)
+        (module_dir / "module.yml").write_text('name: blog\nversion: "0.82.0"\n')
 
         # Mock configurator
         configurator = Mock(return_value={})
@@ -307,6 +317,7 @@ class TestPerformModuleEmbed:
         module_dir = tmp_path / "modules" / "listings"
         module_dir.mkdir(parents=True)
         (module_dir / "pyproject.toml").touch()
+        (module_dir / "module.yml").write_text('name: listings\nversion: "0.82.0"\n')
 
         result = _perform_module_embed(
             tmp_path,
@@ -317,6 +328,30 @@ class TestPerformModuleEmbed:
         )
 
         assert result is False
+
+    @patch("quickscale_cli.commands.module_commands._install_module_dependencies")
+    @patch("quickscale_cli.commands.module_commands.add_module")
+    @patch("quickscale_cli.commands.module_commands.run_git_subtree_add")
+    @patch("quickscale_cli.commands.module_commands.MODULE_CONFIGURATORS", {})
+    def test_embed_fails_when_embedded_manifest_is_invalid(
+        self, mock_subtree, mock_add_module, mock_install, tmp_path
+    ):
+        """Embedding should fail fast when the embedded module manifest is malformed."""
+        module_dir = tmp_path / "modules" / "auth"
+        module_dir.mkdir(parents=True)
+        (module_dir / "module.yml").write_text("- invalid\n- list\n")
+
+        result = _perform_module_embed(
+            tmp_path,
+            "auth",
+            "https://example.com/repo.git",
+            "splits/auth-module",
+            {},
+        )
+
+        assert result is False
+        mock_add_module.assert_not_called()
+        mock_install.assert_not_called()
 
 
 class TestInstallModuleDependencies:
@@ -491,6 +526,21 @@ class TestPrintInstallationError:
 
 class TestEmbedModule:
     """Tests for embed_module function."""
+
+    @patch("quickscale_cli.commands.module_commands._validate_remote_branch")
+    @patch("quickscale_cli.commands.module_commands._validate_module_not_exists")
+    @patch("quickscale_cli.commands.module_commands._validate_git_environment")
+    def test_placeholder_module_is_rejected(
+        self, mock_git_env, mock_not_exists, mock_remote, tmp_path
+    ):
+        """Placeholder modules should never reach remote-branch validation."""
+        mock_git_env.return_value = True
+        mock_not_exists.return_value = True
+
+        result = embed_module("billing", tmp_path)
+
+        assert result is False
+        mock_remote.assert_not_called()
 
     @patch("quickscale_cli.commands.module_commands._perform_module_embed")
     @patch("quickscale_cli.commands.module_commands._check_auth_module_migrations")
@@ -733,17 +783,78 @@ class TestValidateUpdateEnvironment:
 class TestUpdateSingleModule:
     """Tests for _update_single_module function."""
 
+    @pytest.mark.parametrize(
+        ("state_contents", "expected_fragment"),
+        [
+            ("- invalid\n", "State file must be a YAML mapping"),
+            (
+                'version: "1"\nproject:\n  name: legacy-app\n  theme: showcase_react\n',
+                "Legacy state schema detected",
+            ),
+        ],
+    )
+    def test_update_aborts_before_subtree_pull_when_state_is_invalid(
+        self,
+        tmp_path,
+        monkeypatch,
+        capsys,
+        state_contents,
+        expected_fragment,
+    ):
+        """Invalid applied state should abort before any subtree or config mutation."""
+        quickscale_dir = tmp_path / ".quickscale"
+        quickscale_dir.mkdir()
+        (quickscale_dir / "state.yml").write_text(state_contents)
+        monkeypatch.chdir(tmp_path)
+        module_info = Mock(prefix="modules/auth", branch="splits/auth-module")
+
+        with (
+            patch(
+                "quickscale_cli.commands.module_commands.run_git_subtree_pull"
+            ) as mock_pull,
+            patch(
+                "quickscale_cli.commands.module_commands.update_module_version"
+            ) as mock_update_version,
+            patch(
+                "quickscale_cli.commands.module_commands._sync_state_module_version"
+            ) as mock_sync_state,
+            patch(
+                "quickscale_cli.commands.module_commands._commit_module_update"
+            ) as mock_commit,
+        ):
+            result = _update_single_module(
+                "auth",
+                module_info,
+                "https://example.com/repo.git",
+                no_preview=False,
+            )
+
+        captured = capsys.readouterr()
+
+        assert result is False
+        assert "Failed to load .quickscale/state.yml" in captured.err
+        assert expected_fragment in captured.err
+        mock_pull.assert_not_called()
+        mock_update_version.assert_not_called()
+        mock_sync_state.assert_not_called()
+        mock_commit.assert_not_called()
+
     @patch("quickscale_cli.commands.module_commands._commit_module_update")
+    @patch("quickscale_cli.commands.module_commands._sync_state_module_version")
+    @patch("quickscale_cli.commands.module_commands._read_embedded_module_version")
     @patch("quickscale_cli.commands.module_commands.update_module_version")
     @patch("quickscale_cli.commands.module_commands.run_git_subtree_pull")
     def test_successful_update(
         self,
         mock_pull,
         mock_update_version,
+        mock_read_version,
+        mock_sync_state,
         mock_commit,
     ):
         """Test successful module update."""
         mock_pull.return_value = "Changes applied successfully"
+        mock_read_version.return_value = "0.82.0"
         module_info = Mock(prefix="modules/auth", branch="splits/auth-module")
 
         result = _update_single_module(
@@ -757,20 +868,26 @@ class TestUpdateSingleModule:
             branch="splits/auth-module",
             squash=True,
         )
-        mock_update_version.assert_called_once()
+        assert mock_update_version.call_args.args[:2] == ("auth", "0.82.0")
+        assert mock_sync_state.call_args.args[:2] == (Path.cwd(), "auth")
         mock_commit.assert_called_once_with("auth", "modules/auth")
 
     @patch("quickscale_cli.commands.module_commands._commit_module_update")
+    @patch("quickscale_cli.commands.module_commands._sync_state_module_version")
+    @patch("quickscale_cli.commands.module_commands._read_embedded_module_version")
     @patch("quickscale_cli.commands.module_commands.update_module_version")
     @patch("quickscale_cli.commands.module_commands.run_git_subtree_pull")
     def test_update_with_no_preview(
         self,
         mock_pull,
         mock_update_version,
+        mock_read_version,
+        mock_sync_state,
         mock_commit,
     ):
         """Test update with preview disabled."""
         mock_pull.return_value = "Changes"
+        mock_read_version.return_value = "0.82.0"
         module_info = Mock(prefix="modules/blog", branch="splits/blog-module")
 
         result = _update_single_module(
@@ -780,6 +897,23 @@ class TestUpdateSingleModule:
         assert result is True
         mock_pull.assert_called_once()
         mock_commit.assert_called_once_with("blog", "modules/blog")
+
+    @patch("quickscale_cli.commands.module_commands._read_embedded_module_version")
+    @patch("quickscale_cli.commands.module_commands.run_git_subtree_pull")
+    def test_update_manifest_error(self, mock_pull, mock_read_version):
+        """Manifest validation failures should stop the update before commit."""
+        mock_pull.return_value = "Changes"
+        mock_read_version.side_effect = ManifestError(
+            "Manifest file not found: modules/auth/module.yml",
+            "auth",
+        )
+        module_info = Mock(prefix="modules/auth", branch="splits/auth-module")
+
+        result = _update_single_module(
+            "auth", module_info, "https://example.com/repo.git", no_preview=False
+        )
+
+        assert result is False
 
     @patch("quickscale_cli.commands.module_commands.run_git_subtree_pull")
     def test_update_git_error(self, mock_pull):
@@ -800,8 +934,19 @@ class TestCommitModuleUpdate:
     """Tests for _commit_module_update function."""
 
     @patch("quickscale_cli.commands.module_commands.subprocess.run")
-    def test_commit_module_update_commits_changes(self, mock_run):
+    def test_commit_module_update_commits_changes(
+        self,
+        mock_run,
+        tmp_path,
+        monkeypatch,
+    ):
         """Test commit helper stages paths and commits when changes exist."""
+        quickscale_dir = tmp_path / ".quickscale"
+        quickscale_dir.mkdir()
+        (quickscale_dir / "config.yml").write_text("modules: {}\n")
+        (quickscale_dir / "state.yml").write_text("modules: {}\n")
+        monkeypatch.chdir(tmp_path)
+
         mock_run.side_effect = [
             Mock(returncode=0),  # git add
             Mock(returncode=1),  # git diff --cached --quiet (changes staged)
@@ -812,7 +957,13 @@ class TestCommitModuleUpdate:
 
         add_call = mock_run.call_args_list[0]
         assert add_call.kwargs["check"] is True
-        assert add_call.args[0][:2] == ["git", "add"]
+        assert add_call.args[0] == [
+            "git",
+            "add",
+            "modules/auth",
+            ".quickscale/config.yml",
+            ".quickscale/state.yml",
+        ]
 
         commit_call = mock_run.call_args_list[2]
         assert commit_call.kwargs["check"] is True
@@ -838,6 +989,36 @@ class TestCommitModuleUpdate:
 
 class TestUpdateCommand:
     """Tests for update click command."""
+
+    @patch("quickscale_cli.commands.module_commands._update_single_module")
+    @patch("quickscale_cli.commands.module_commands.load_config")
+    @patch("quickscale_cli.commands.module_commands._validate_update_environment")
+    def test_update_rejects_placeholder_modules_before_any_subtree_work(
+        self,
+        mock_validate,
+        mock_load,
+        mock_update,
+    ):
+        """Placeholder modules should abort update before any subtree operations run."""
+        module_info = Mock(
+            installed_version="0.70.0",
+            prefix="modules/billing",
+            branch="splits/billing-module",
+        )
+        config = Mock(
+            modules={"billing": module_info},
+            default_remote="https://example.com/repo.git",
+        )
+        mock_load.return_value = config
+
+        from click.testing import CliRunner
+
+        runner = CliRunner()
+        result = runner.invoke(update, ["--no-preview"])
+
+        assert result.exit_code != 0
+        assert "placeholder" in result.output
+        mock_update.assert_not_called()
 
     @patch("quickscale_cli.commands.module_commands._update_single_module")
     @patch("quickscale_cli.commands.module_commands.load_config")

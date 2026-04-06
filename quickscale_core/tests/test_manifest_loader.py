@@ -175,6 +175,24 @@ config:
         manifest = get_manifest_for_module(project_path, "nonexistent")
         assert manifest is None
 
+    def test_get_manifest_not_found_strict_raises(self, tmp_path: Path) -> None:
+        """Strict mode should fail when module.yml is missing."""
+        project_path = tmp_path / "myproject"
+        project_path.mkdir()
+
+        with pytest.raises(ManifestError, match="Manifest file not found"):
+            get_manifest_for_module(project_path, "nonexistent", strict=True)
+
+    def test_get_manifest_invalid_strict_raises(self, tmp_path: Path) -> None:
+        """Strict mode should surface invalid embedded manifests."""
+        project_path = tmp_path / "myproject"
+        module_dir = project_path / "modules" / "auth"
+        module_dir.mkdir(parents=True)
+        (module_dir / "module.yml").write_text("- invalid\n- list\n")
+
+        with pytest.raises(ManifestError, match="auth"):
+            get_manifest_for_module(project_path, "auth", strict=True)
+
     def test_get_manifest_from_nested_src(self, tmp_path: Path) -> None:
         """Test getting manifest from src/module/module.yml pattern"""
         # Create project structure with src layout

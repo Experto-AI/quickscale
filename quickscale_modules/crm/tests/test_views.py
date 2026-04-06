@@ -1,8 +1,9 @@
 """Unit tests for CRM module API views"""
 
 import pytest
-from rest_framework import status
+from django.test import override_settings
 from django.urls import reverse
+from rest_framework import status
 
 
 @pytest.mark.django_db
@@ -118,6 +119,53 @@ class TestContactViewSet:
         )
         assert response.status_code == status.HTTP_201_CREATED
         assert response.data["text"] == "New note"
+
+    @override_settings(REST_FRAMEWORK={})
+    def test_contact_list_requires_authentication_without_host_defaults(
+        self, api_client
+    ):
+        """Explicit module auth should not depend on host DRF defaults."""
+        response = api_client.get(reverse("quickscale_crm:contact-list"))
+
+        assert response.status_code in (
+            status.HTTP_401_UNAUTHORIZED,
+            status.HTTP_403_FORBIDDEN,
+        )
+
+    @override_settings(REST_FRAMEWORK={})
+    def test_contact_list_allows_authenticated_user_without_host_defaults(
+        self, authenticated_client, contact
+    ):
+        """Authenticated CRM access should remain available without global DRF settings."""
+        response = authenticated_client.get(reverse("quickscale_crm:contact-list"))
+
+        assert response.status_code == status.HTTP_200_OK
+
+    @override_settings(CRM_ENABLE_API=False, REST_FRAMEWORK={})
+    def test_contact_list_returns_404_when_api_disabled(
+        self, authenticated_client, contact
+    ):
+        """Disabling the CRM API should hide the router endpoints."""
+        response = authenticated_client.get(reverse("quickscale_crm:contact-list"))
+
+        assert response.status_code == status.HTTP_404_NOT_FOUND
+
+    def test_create_contact_note_updates_last_contacted_at(
+        self, authenticated_client, contact
+    ):
+        """Logging a contact note should refresh the contact's last-contacted timestamp."""
+        assert contact.last_contacted_at is None
+
+        response = authenticated_client.post(
+            reverse("quickscale_crm:contact-notes", args=[contact.id]),
+            {"text": "Followed up about the proposal"},
+            format="json",
+        )
+
+        assert response.status_code == status.HTTP_201_CREATED
+
+        contact.refresh_from_db()
+        assert contact.last_contacted_at is not None
 
 
 @pytest.mark.django_db
@@ -246,3 +294,60 @@ class TestDealViewSet:
         deal.refresh_from_db()
         assert deal.stage.name == "Closed-Lost"
         assert deal.probability == 0
+
+
+@pytest.mark.django_db
+class TestCRMPageSizeSettings:
+    """Tests for CRM module-owned page size settings."""
+
+    @override_settings(CRM_CONTACTS_PER_PAGE=1, REST_FRAMEWORK={})
+    def test_contact_list_respects_contacts_per_page_setting(
+        self, authenticated_client, company
+    ):
+        """Contact pagination should use the module setting instead of global DRF config."""
+        from quickscale_modules_crm.models import Contact
+
+        Contact.objects.create(
+            first_name="Alice",
+            last_name="Able",
+            email="alice@example.com",
+            company=company,
+        )
+        Contact.objects.create(
+            first_name="Bob",
+            last_name="Baker",
+            email="bob@example.com",
+            company=company,
+        )
+
+        response = authenticated_client.get(reverse("quickscale_crm:contact-list"))
+
+        assert response.status_code == status.HTTP_200_OK
+        assert len(response.data) == 1
+
+    @override_settings(CRM_DEALS_PER_PAGE=1, REST_FRAMEWORK={})
+    def test_deal_list_respects_deals_per_page_setting(
+        self, authenticated_client, contact, stage, user
+    ):
+        """Deal pagination should use the module setting instead of global DRF config."""
+        from quickscale_modules_crm.models import Deal
+
+        Deal.objects.create(
+            title="First Deal",
+            contact=contact,
+            amount="1000.00",
+            stage=stage,
+            owner=user,
+        )
+        Deal.objects.create(
+            title="Second Deal",
+            contact=contact,
+            amount="2000.00",
+            stage=stage,
+            owner=user,
+        )
+
+        response = authenticated_client.get(reverse("quickscale_crm:deal-list"))
+
+        assert response.status_code == status.HTTP_200_OK
+        assert len(response.data) == 1

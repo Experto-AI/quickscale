@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import re
+import tomllib
 from pathlib import Path
 
 from quickscale_cli.commands.module_config import (
@@ -35,10 +36,25 @@ DEFAULT_CONFIG_FACTORIES = {
 }
 
 SETTING_NAME_PATTERN = re.compile(r"^[A-Z][A-Z0-9_]*$")
+VERSION_EXPORT_PATTERN = re.compile(r'^__version__ = "([^"]+)"$', re.MULTILINE)
 
 
 def _manifest_path(module_name: str) -> Path:
     return MODULES_ROOT / module_name / "module.yml"
+
+
+def _pyproject_path(module_name: str) -> Path:
+    return MODULES_ROOT / module_name / "pyproject.toml"
+
+
+def _package_init_path(module_name: str) -> Path:
+    return (
+        MODULES_ROOT
+        / module_name
+        / "src"
+        / f"quickscale_modules_{module_name}"
+        / "__init__.py"
+    )
 
 
 def test_ready_modules_have_valid_manifest() -> None:
@@ -77,3 +93,34 @@ def test_mutable_options_map_to_valid_django_settings() -> None:
                 f"Invalid django_setting for '{entry.name}.{option_name}': "
                 f"{option.django_setting}"
             )
+
+
+def test_blog_and_listings_version_metadata_matches_manifest_version() -> None:
+    """Blog and listings packaging metadata should mirror their manifest version."""
+    for module_name in ("blog", "listings"):
+        manifest = load_manifest_from_path(_manifest_path(module_name))
+        pyproject_version = tomllib.loads(_pyproject_path(module_name).read_text())[
+            "project"
+        ]["version"]
+        version_match = VERSION_EXPORT_PATTERN.search(
+            _package_init_path(module_name).read_text()
+        )
+
+        assert pyproject_version == manifest.version, (
+            f"{module_name} pyproject version should match module.yml: "
+            f"pyproject={pyproject_version} manifest={manifest.version}"
+        )
+        assert version_match is not None, (
+            f"{module_name} package should export __version__ in __init__.py"
+        )
+        assert version_match.group(1) == manifest.version, (
+            f"{module_name} __version__ should match module.yml: "
+            f"package={version_match.group(1)} manifest={manifest.version}"
+        )
+
+
+def test_forms_manifest_no_longer_ships_dead_storage_backend_option() -> None:
+    """Forms should not expose immutable options that have no runtime effect."""
+    manifest = load_manifest_from_path(_manifest_path("forms"))
+
+    assert "storage_backend" not in manifest.get_all_options()

@@ -7,6 +7,25 @@ from pathlib import Path
 import yaml
 
 
+def normalize_installed_version(version: str | None) -> str | None:
+    """Normalize stored module versions to the embedded manifest form."""
+    if version is None:
+        return None
+
+    normalized = version.strip()
+    if not normalized:
+        return None
+
+    if (
+        normalized[:1].lower() == "v"
+        and len(normalized) > 1
+        and normalized[1].isdigit()
+    ):
+        return normalized[1:]
+
+    return normalized
+
+
 @dataclass
 class ModuleInfo:
     """Information about an installed module"""
@@ -16,12 +35,18 @@ class ModuleInfo:
     installed_version: str
     installed_at: str
 
+    def __post_init__(self) -> None:
+        normalized = normalize_installed_version(self.installed_version)
+        if normalized is not None:
+            self.installed_version = normalized
+
     def to_dict(self) -> dict:
         """Convert to dictionary for YAML serialization"""
         return {
             "prefix": self.prefix,
             "branch": self.branch,
-            "installed_version": self.installed_version,
+            "installed_version": normalize_installed_version(self.installed_version)
+            or self.installed_version,
             "installed_at": self.installed_at,
         }
 
@@ -31,7 +56,10 @@ class ModuleInfo:
         return cls(
             prefix=data["prefix"],
             branch=data["branch"],
-            installed_version=data["installed_version"],
+            installed_version=(
+                normalize_installed_version(data["installed_version"])
+                or data["installed_version"]
+            ),
             installed_at=data["installed_at"],
         )
 
@@ -106,7 +134,7 @@ def add_module(
     config.modules[module_name] = ModuleInfo(
         prefix=prefix,
         branch=branch,
-        installed_version=version,
+        installed_version=normalize_installed_version(version) or version,
         installed_at=datetime.now().strftime("%Y-%m-%d"),
     )
 
@@ -127,7 +155,8 @@ def update_module_version(
 ) -> None:
     """Update the installed version of a module"""
     config = load_config(project_path)
+    normalized_version = normalize_installed_version(version) or version
 
     if module_name in config.modules:
-        config.modules[module_name].installed_version = version
+        config.modules[module_name].installed_version = normalized_version
         save_config(config, project_path)

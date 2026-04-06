@@ -1,10 +1,13 @@
 """Pytest configuration for quickscale_core tests."""
 
+import sys
 from pathlib import Path
 
 import pytest
 
-from quickscale_core.generator.generator import ProjectGenerator
+SRC_PATH = Path(__file__).resolve().parents[1] / "src"
+if str(SRC_PATH) not in sys.path:
+    sys.path.insert(0, str(SRC_PATH))
 
 
 @pytest.fixture
@@ -37,6 +40,8 @@ def generated_project_path(tmp_path: Path, sample_project_name: str) -> Path:
     This fixture creates a temporary project using the ProjectGenerator
     and cleans it up after the test completes.
     """
+    from quickscale_core.generator.generator import ProjectGenerator
+
     output_path = tmp_path / sample_project_name
 
     # Generate project

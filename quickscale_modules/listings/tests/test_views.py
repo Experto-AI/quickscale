@@ -122,6 +122,30 @@ class TestListingListView:
         assert response.context["filter_params"]["price_min"] == "100"
         assert response.context["filter_params"]["location"] == "NYC"
 
+    def test_listing_list_uses_shared_filterset_factory(
+        self, client, listing_factory, monkeypatch
+    ):
+        """The base list view should route filtering through the shared filterset."""
+        listing_factory(title="Published Listing", status="published")
+        calls: dict[str, bool] = {"used": False}
+
+        class RecordingFilterSet:
+            def __init__(self, data=None, queryset=None):
+                del data
+                calls["used"] = True
+                self.qs = queryset.none()
+
+        monkeypatch.setattr(
+            "quickscale_modules_listings.views.get_listing_filter",
+            lambda model: RecordingFilterSet,
+        )
+
+        response = client.get(reverse("concrete_listing_list"))
+
+        assert response.status_code == 200
+        assert calls["used"] is True
+        assert "Published Listing" not in str(response.content)
+
 
 @pytest.mark.django_db
 class TestListingDetailView:

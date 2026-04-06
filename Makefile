@@ -251,7 +251,19 @@ test:
 				mod_found=1; \
 				mod_name=$$(basename "$$mod"); \
 				echo "📦 Testing module: $$mod_name..."; \
-				PYTHONPATH="$$mod:$$mod/src" $(PYTHON) -m pytest "$$mod/tests/" -v --tb=short -o "addopts=" -m "not e2e" -p pytest_django --ds=tests.settings; \
+				module_pythonpath="$$mod"; \
+				if [ -d "$$mod/src" ]; then \
+					module_pythonpath="$$module_pythonpath:$$mod/src"; \
+				fi; \
+				for sibling in quickscale_modules/*; do \
+					if [ "$$sibling" != "$$mod" ] && [ -d "$$sibling/src" ]; then \
+						module_pythonpath="$$module_pythonpath:$$sibling/src"; \
+					fi; \
+				done; \
+				if [ -n "$$PYTHONPATH" ]; then \
+					module_pythonpath="$$module_pythonpath:$$PYTHONPATH"; \
+				fi; \
+				PYTHONPATH="$$module_pythonpath" $(PYTHON) -m pytest "$$mod/tests/" -v --tb=short -o "addopts=" -m "not e2e" -p pytest_django --ds=tests.settings; \
 			fi; \
 		done; \
 		if [ "$$mod_found" -eq 0 ]; then \
@@ -284,7 +296,19 @@ test-unit:
 				mod_found=1; \
 				mod_name=$$(basename "$$mod"); \
 				echo "📦 Unit testing module: $$mod_name..."; \
-				PYTHONPATH="$$mod:$$mod/src" $(PYTHON) -m pytest "$$mod/tests/" -v --tb=short -o "addopts=" -m "not integration and not e2e" -p pytest_django --ds=tests.settings; \
+				module_pythonpath="$$mod"; \
+				if [ -d "$$mod/src" ]; then \
+					module_pythonpath="$$module_pythonpath:$$mod/src"; \
+				fi; \
+				for sibling in quickscale_modules/*; do \
+					if [ "$$sibling" != "$$mod" ] && [ -d "$$sibling/src" ]; then \
+						module_pythonpath="$$module_pythonpath:$$sibling/src"; \
+					fi; \
+				done; \
+				if [ -n "$$PYTHONPATH" ]; then \
+					module_pythonpath="$$module_pythonpath:$$PYTHONPATH"; \
+				fi; \
+				PYTHONPATH="$$module_pythonpath" $(PYTHON) -m pytest "$$mod/tests/" -v --tb=short -o "addopts=" -m "not integration and not e2e" -p pytest_django --ds=tests.settings; \
 			fi; \
 		done; \
 		if [ "$$mod_found" -eq 0 ]; then \

@@ -225,7 +225,7 @@ class TestPlanModuleSelection:
             assert "teams - Multi-tenancy and team management" not in result.output
 
     def test_experimental_modules_visible_with_flag(self):
-        """Billing/teams should appear with --include-experimental."""
+        """Billing/teams should appear as placeholders with --include-experimental."""
         runner = CliRunner()
         with runner.isolated_filesystem():
             result = runner.invoke(
@@ -234,11 +234,29 @@ class TestPlanModuleSelection:
                 input="\n1\n\ny\ny\nn\nn\n",
             )
 
-            assert "billing - Stripe integration (experimental)" in result.output
             assert (
-                "teams - Multi-tenancy and team management (experimental)"
+                "billing - Stripe integration (placeholder, not ready)" in result.output
+            )
+            assert (
+                "teams - Multi-tenancy and team management (placeholder, not ready)"
                 in result.output
             )
+
+    def test_placeholder_modules_cannot_be_selected_with_flag(self):
+        """Billing/teams remain visible only and cannot be written into config."""
+        runner = CliRunner()
+        with runner.isolated_filesystem():
+            result = runner.invoke(
+                plan,
+                ["myapp", "--include-experimental"],
+                input="\n1\nbilling\n\ny\ny\nn\ny\n",
+            )
+
+            assert result.exit_code == 0
+            assert "placeholder" in result.output
+            with open("myapp/quickscale.yml") as f:
+                content = f.read()
+            assert "billing:" not in content
 
 
 class TestPlanDockerConfiguration:

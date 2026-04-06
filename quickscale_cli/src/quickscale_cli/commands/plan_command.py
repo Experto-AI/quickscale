@@ -13,7 +13,11 @@ import click
 
 from quickscale_cli.backups_contract import sanitize_module_options
 from quickscale_cli.commands.module_config import MODULE_CONFIGURATORS
-from quickscale_cli.module_catalog import get_module_entries
+from quickscale_cli.module_catalog import (
+    ModuleCatalogEntry,
+    get_module_entries,
+    get_module_readiness_reason,
+)
 from quickscale_cli.schema.config_schema import (
     DockerConfig,
     ModuleConfig,
@@ -34,10 +38,18 @@ AVAILABLE_THEMES = [
 
 def _get_module_choices(
     *, include_experimental: bool = False
-) -> list[tuple[str, str, bool]]:
+) -> list[ModuleCatalogEntry]:
     """Return module choices with experimental marker."""
-    entries = get_module_entries(include_experimental=include_experimental)
-    return [(entry.name, entry.description, entry.experimental) for entry in entries]
+    return get_module_entries(include_experimental=include_experimental)
+
+
+def _format_module_choice(entry: ModuleCatalogEntry) -> str:
+    """Format a catalog entry for interactive display."""
+    if not entry.ready:
+        return f"{entry.name} - {entry.description} (placeholder, not ready)"
+    if entry.experimental:
+        return f"{entry.name} - {entry.description} (experimental)"
+    return f"{entry.name} - {entry.description}"
 
 
 def _get_theme_by_index(idx: int) -> str | None:
@@ -83,7 +95,7 @@ def _select_theme() -> str:
 
 
 def _parse_module_choice(
-    part: str, available_modules: list[tuple[str, str, bool]]
+    part: str, available_modules: list[ModuleCatalogEntry]
 ) -> str | None:
     """Parse a single module choice (number or name).
 
@@ -96,20 +108,31 @@ def _parse_module_choice(
     if part.isdigit():
         idx = int(part) - 1
         if 0 <= idx < len(available_modules):
-            return available_modules[idx][0]
+            selected = available_modules[idx]
+            if not selected.ready:
+                raise ValueError(
+                    get_module_readiness_reason(selected.name)
+                    or f"Unknown module: {selected.name}"
+                )
+            return selected.name
         raise ValueError(f"Invalid number: {part}")
 
     # Handle module name
-    for module_id, _, _ in available_modules:
-        if part.lower() == module_id.lower():
-            return module_id
+    for entry in available_modules:
+        if part.lower() == entry.name.lower():
+            if not entry.ready:
+                raise ValueError(
+                    get_module_readiness_reason(entry.name)
+                    or f"Unknown module: {entry.name}"
+                )
+            return entry.name
 
     raise ValueError(f"Unknown module: {part}")
 
 
 def _parse_module_selection(
     choice: str,
-    available_modules: list[tuple[str, str, bool]],
+    available_modules: list[ModuleCatalogEntry],
 ) -> list[str]:
     """Parse comma-separated module selection.
 
@@ -137,12 +160,13 @@ def _select_modules(*, include_experimental: bool = False) -> list[str]:
     """Interactive module selection"""
     available_modules = _get_module_choices(include_experimental=include_experimental)
     click.echo("\n📦 Select modules to embed (optional):")
-    for i, (module_id, description, experimental) in enumerate(
-        available_modules,
-        start=1,
-    ):
-        experimental_label = " (experimental)" if experimental else ""
-        click.echo(f"  {i}. {module_id} - {description}{experimental_label}")
+    for i, entry in enumerate(available_modules, start=1):
+        click.echo(f"  {i}. {_format_module_choice(entry)}")
+
+    if include_experimental and any(not entry.ready for entry in available_modules):
+        click.echo(
+            "\n  Placeholder modules are shown for visibility only and cannot be selected"
+        )
 
     click.echo(
         "\n  Enter numbers separated by commas (e.g., 1,3), or press Enter to skip"
@@ -344,49 +368,47 @@ def _get_available_modules(
     existing_modules: list[str],
     *,
     include_experimental: bool = False,
-) -> list[tuple[str, str]]:
+) -> list[ModuleCatalogEntry]:
     """Get modules that are not yet installed.
 
     Returns:
         List of (module_id, description) tuples for available modules
     """
-    available = []
-    for module_id, description, _ in _get_module_choices(
-        include_experimental=include_experimental
-    ):
-        if module_id not in existing_modules:
-            available.append((module_id, description))
+    available: list[ModuleCatalogEntry] = []
+    for entry in _get_module_choices(include_experimental=include_experimental):
+        if entry.name not in existing_modules:
+            available.append(entry)
     return available
 
 
-def _display_available_modules(available: list[tuple[str, str]]) -> None:
+def _display_available_modules(available: list[ModuleCatalogEntry]) -> None:
     """Display available modules for adding"""
     click.echo("\n📦 Available Modules to Add:")
-    for i, (module_id, description) in enumerate(available, start=1):
-        click.echo(f"  {i}. {module_id} - {description}")
+    for i, entry in enumerate(available, start=1):
+        click.echo(f"  {i}. {_format_module_choice(entry)}")
 
 
 def _get_module_by_index_from_available(
-    idx: int, available: list[tuple[str, str]]
-) -> str | None:
+    idx: int, available: list[ModuleCatalogEntry]
+) -> ModuleCatalogEntry | None:
     """Get module ID by index from available list (0-based)."""
     if 0 <= idx < len(available):
-        return available[idx][0]
+        return available[idx]
     return None
 
 
 def _get_module_by_name_from_available(
-    name: str, available: list[tuple[str, str]]
-) -> str | None:
+    name: str, available: list[ModuleCatalogEntry]
+) -> ModuleCatalogEntry | None:
     """Get module ID by name from available list (case-insensitive)."""
-    for module_id, _ in available:
-        if name.lower() == module_id.lower():
-            return module_id
+    for entry in available:
+        if name.lower() == entry.name.lower():
+            return entry
     return None
 
 
 def _parse_add_module_selection(
-    choice: str, available: list[tuple[str, str]]
+    choice: str, available: list[ModuleCatalogEntry]
 ) -> list[str]:
     """Parse module selection for add mode.
 
@@ -403,16 +425,26 @@ def _parse_add_module_selection(
     parts = [p.strip() for p in choice.split(",")]
 
     for part in parts:
-        module_id = None
+        selected_entry = None
         if part.isdigit():
-            module_id = _get_module_by_index_from_available(int(part) - 1, available)
-            if module_id is None:
+            selected_entry = _get_module_by_index_from_available(
+                int(part) - 1, available
+            )
+            if selected_entry is None:
                 raise ValueError(f"Invalid number: {part}")
         else:
-            module_id = _get_module_by_name_from_available(part, available)
-            if module_id is None:
+            selected_entry = _get_module_by_name_from_available(part, available)
+            if selected_entry is None:
                 raise ValueError(f"Unknown or already installed module: {part}")
 
+        assert selected_entry is not None
+        if not selected_entry.ready:
+            raise ValueError(
+                get_module_readiness_reason(selected_entry.name)
+                or f"Unknown or already installed module: {part}"
+            )
+
+        module_id = selected_entry.name
         if module_id not in selected:
             selected.append(module_id)
 
@@ -914,7 +946,7 @@ def _save_config_with_validation(yaml_content: str, output_path: Path) -> None:
 @click.option(
     "--include-experimental",
     is_flag=True,
-    help="Show and allow experimental modules (billing, teams)",
+    help="Show placeholder module directories (billing, teams) in the picker",
 )
 @click.option(
     "--configure-modules",

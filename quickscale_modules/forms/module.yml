@@ -41,11 +41,7 @@ config:
       description: "Enable REST API endpoints for admin submission management."
 
   # Immutable options - locked at embed time, require remove + re-embed to change
-  immutable:
-    storage_backend:
-      type: string
-      default: "django"
-      description: "Storage backend for form data. 'django' uses the project database."
+  immutable: {}
 
 # Dependencies required by this module
 dependencies:

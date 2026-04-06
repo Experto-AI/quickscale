@@ -151,6 +151,18 @@ class TestGetManifestForModuleEdgeCases:
         result = get_manifest_for_module(project_path, "broken")
         assert result is None
 
+    def test_get_manifest_raises_on_manifest_error_in_strict_mode(
+        self, tmp_path: Path
+    ) -> None:
+        """Strict mode should propagate embedded manifest validation failures."""
+        project_path = tmp_path / "project"
+        module_dir = project_path / "modules" / "broken"
+        module_dir.mkdir(parents=True)
+        (module_dir / "module.yml").write_text("- invalid\n- list\n")
+
+        with pytest.raises(ManifestError, match="broken"):
+            get_manifest_for_module(project_path, "broken", strict=True)
+
     def test_get_manifest_returns_none_when_not_found(self, tmp_path: Path) -> None:
         """Returns None when module directory does not contain a manifest file."""
         project_path = tmp_path / "project"

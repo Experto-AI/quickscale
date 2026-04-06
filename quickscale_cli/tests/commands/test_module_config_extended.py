@@ -790,6 +790,38 @@ class TestModuleWiringSpecs:
         assert settings["FORMS_SUBMISSIONS_API"] is False
         assert "REST_FRAMEWORK" not in settings
 
+    def test_crm_and_forms_wiring_do_not_collide_on_rest_framework(self):
+        """CRM and forms wiring should keep distinct module-owned settings."""
+        specs = build_module_wiring_specs(
+            {
+                "crm": {
+                    "enable_api": True,
+                    "deals_per_page": 10,
+                    "contacts_per_page": 20,
+                },
+                "forms": {
+                    "forms_per_page": 15,
+                    "spam_protection_enabled": True,
+                    "rate_limit": "10/minute",
+                    "data_retention_days": 14,
+                    "submissions_api_enabled": True,
+                },
+            }
+        )
+
+        apps, _, settings, urls = collect_wiring(specs)
+
+        assert "rest_framework" in apps
+        assert "django_filters" in apps
+        assert settings["CRM_ENABLE_API"] is True
+        assert settings["CRM_DEALS_PER_PAGE"] == 10
+        assert settings["CRM_CONTACTS_PER_PAGE"] == 20
+        assert settings["FORMS_PER_PAGE"] == 15
+        assert settings["FORMS_SUBMISSIONS_API"] is True
+        assert "REST_FRAMEWORK" not in settings
+        assert ("crm/", "quickscale_modules_crm.urls") in urls
+        assert ("", "quickscale_modules_forms.urls") in urls
+
     def test_build_module_wiring_specs_skips_unknown_modules(self):
         """Unknown modules should be ignored by the wiring builder registry."""
         specs = build_module_wiring_specs(
@@ -1741,7 +1773,7 @@ class TestApplyCRMConfiguration:
         assert "'CRM_DEALS_PER_PAGE': 25" in settings
         assert "'CRM_CONTACTS_PER_PAGE': 50" in settings
         assert "'CRM_ENABLE_API': True" in settings
-        assert "REST_FRAMEWORK" in settings
+        assert "REST_FRAMEWORK" not in settings
 
         urls = (project / "myproject" / "urls_modules.py").read_text()
         assert "quickscale_modules_crm.urls" in urls

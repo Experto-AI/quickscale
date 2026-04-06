@@ -8,11 +8,19 @@ from pathlib import Path
 
 import click
 
-from quickscale_cli.schema.config_schema import QuickScaleConfig, validate_config
+from quickscale_cli.module_catalog import (
+    find_not_ready_modules,
+    get_module_readiness_reason,
+)
+from quickscale_cli.schema.config_schema import (
+    ConfigValidationError,
+    QuickScaleConfig,
+    validate_config,
+)
 from quickscale_cli.schema.delta import compute_delta, format_delta
-from quickscale_cli.schema.state_schema import QuickScaleState, StateManager
+from quickscale_cli.schema.state_schema import QuickScaleState, StateError, StateManager
 from quickscale_core.manifest import ModuleManifest
-from quickscale_core.manifest.loader import get_manifest_for_module
+from quickscale_core.manifest.loader import ManifestError, get_manifest_for_module
 
 
 def _get_docker_status() -> dict[str, str] | None:
@@ -78,15 +86,15 @@ def _detect_project_context() -> tuple[Path | None, Path | None, Path | None]:
 
 def _load_config(config_path: Path) -> QuickScaleConfig | None:
     """Load and validate quickscale.yml"""
-    try:
-        yaml_content = config_path.read_text()
-        return validate_config(yaml_content)
-    except Exception:
-        return None
+    yaml_content = config_path.read_text()
+    return validate_config(yaml_content)
 
 
 def _load_module_manifests(
-    project_path: Path, module_names: list[str]
+    project_path: Path,
+    module_names: list[str],
+    *,
+    strict: bool = False,
 ) -> dict[str, ModuleManifest]:
     """Load manifests for installed modules
 
@@ -100,10 +108,57 @@ def _load_module_manifests(
     """
     manifests: dict[str, ModuleManifest] = {}
     for module_name in module_names:
-        manifest = get_manifest_for_module(project_path, module_name)
+        try:
+            manifest = get_manifest_for_module(project_path, module_name, strict=strict)
+        except ManifestError as error:
+            if strict and "Manifest file not found:" not in str(error):
+                raise
+            manifest = None
         if manifest:
             manifests[module_name] = manifest
     return manifests
+
+
+def _abort_for_not_ready_modules(module_names: list[str], *, source: str) -> None:
+    """Abort status when placeholder modules appear in config or applied state."""
+    not_ready = find_not_ready_modules(module_names)
+    if not not_ready:
+        return
+
+    click.secho(
+        f"\n❌ Unsupported placeholder module state detected in {source}:",
+        fg="red",
+        err=True,
+        bold=True,
+    )
+    for module_name in not_ready:
+        reason = get_module_readiness_reason(module_name)
+        if reason is not None:
+            click.echo(f"  • {reason}", err=True)
+
+    click.echo(
+        "\n💡 Billing and teams remain placeholder directories and cannot "
+        "participate in public QuickScale plan/apply/status workflows yet.",
+        err=True,
+    )
+    raise click.Abort()
+
+
+def _abort_for_manifest_error(error: ManifestError) -> None:
+    """Abort status with an actionable manifest validation message."""
+    click.secho(
+        "\n❌ Installed module manifest error during 'status':",
+        fg="red",
+        err=True,
+        bold=True,
+    )
+    click.echo(f"  • {error}", err=True)
+    click.echo(
+        "\n💡 Fix the embedded module.yml or remove and re-embed the affected "
+        "module before running 'quickscale status' again.",
+        err=True,
+    )
+    raise click.Abort()
 
 
 def _display_project_info(state: QuickScaleState) -> None:
@@ -193,6 +248,7 @@ def _build_json_output(
     config_path: Path | None,
     state: QuickScaleState | None,
     config: QuickScaleConfig | None,
+    manifests: dict[str, ModuleManifest] | None = None,
 ) -> dict:
     """Build JSON output for status command."""
 
@@ -237,13 +293,7 @@ def _build_json_output(
             },
         }
 
-        # Load manifests for accurate config change detection
-        json_manifests = None
-        if state and state.modules:
-            json_manifests = _load_module_manifests(
-                project_path, list(state.modules.keys())
-            )
-        delta = compute_delta(config, state, json_manifests)
+        delta = compute_delta(config, state, manifests)
         output["pending_changes"] = {
             "has_changes": delta.has_changes,
             "modules_to_add": delta.modules_to_add,
@@ -266,6 +316,7 @@ def _display_text_status(
     config_path: Path | None,
     state_path: Path | None,
     state_manager: StateManager,
+    manifests: dict[str, ModuleManifest] | None = None,
 ) -> None:
     """Display status in text format."""
     # Display header
@@ -291,13 +342,15 @@ def _display_text_status(
         click.secho("\n⚠️  No state file found (.quickscale/state.yml)", fg="yellow")
         click.echo("   Run 'quickscale apply' to initialize the project state.")
 
-    # Load manifests for installed modules (needed for config change detection)
-    manifests: dict[str, ModuleManifest] | None = None
-    if state and state.modules:
-        manifests = _load_module_manifests(project_path, list(state.modules.keys()))
+    resolved_manifests = manifests
+    if resolved_manifests is None and state and state.modules:
+        resolved_manifests = _load_module_manifests(
+            project_path,
+            list(state.modules.keys()),
+        )
 
     # Display pending changes
-    _display_pending_changes(config, state, manifests)
+    _display_pending_changes(config, state, resolved_manifests)
 
     # Display Docker status
     _display_docker_status()
@@ -349,16 +402,63 @@ def status(json_output: bool) -> None:
 
     # Load state and config
     state_manager = StateManager(project_path)
-    state = state_manager.load()
-    config = _load_config(config_path) if config_path else None
+    try:
+        state = state_manager.load()
+    except StateError as error:
+        click.secho(
+            f"❌ Failed to load .quickscale/state.yml: {error}", fg="red", err=True
+        )
+        raise click.Abort() from error
+
+    try:
+        config = _load_config(config_path) if config_path else None
+    except ConfigValidationError as error:
+        click.secho(f"❌ Invalid quickscale.yml:\n{error}", fg="red", err=True)
+        raise click.Abort() from error
+    except OSError as error:
+        click.secho(f"❌ Failed to read quickscale.yml: {error}", fg="red", err=True)
+        raise click.Abort() from error
+
+    if config is not None:
+        _abort_for_not_ready_modules(
+            list(config.modules.keys()), source="quickscale.yml"
+        )
+    if state is not None:
+        _abort_for_not_ready_modules(
+            list(state.modules.keys()),
+            source=".quickscale/state.yml",
+        )
+
+    manifests: dict[str, ModuleManifest] | None = None
+    if state and state.modules:
+        try:
+            manifests = _load_module_manifests(
+                project_path,
+                list(state.modules.keys()),
+                strict=True,
+            )
+        except ManifestError as error:
+            _abort_for_manifest_error(error)
 
     # Handle JSON output
     if json_output:
-        output = _build_json_output(project_path, config_path, state, config)
+        output = _build_json_output(
+            project_path,
+            config_path,
+            state,
+            config,
+            manifests,
+        )
         click.echo(json_module.dumps(output, indent=2))
         return
 
     # Display text status
     _display_text_status(
-        project_path, state, config, config_path, state_path, state_manager
+        project_path,
+        state,
+        config,
+        config_path,
+        state_path,
+        state_manager,
+        manifests,
     )

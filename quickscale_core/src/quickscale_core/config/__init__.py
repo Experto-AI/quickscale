@@ -5,6 +5,7 @@ from quickscale_core.config.module_config import (
     ModuleInfo,
     add_module,
     load_config,
+    normalize_installed_version,
     remove_module,
     save_config,
     update_module_version,
@@ -17,5 +18,6 @@ __all__ = [
     "save_config",
     "add_module",
     "remove_module",
+    "normalize_installed_version",
     "update_module_version",
 ]

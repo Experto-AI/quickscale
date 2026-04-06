@@ -132,10 +132,10 @@ quickscale push --module auth
 **Split Branch Architecture:**
 ```
 QuickScale Repo Branches:
-├── main                       # All development (auth, billing, teams, etc.)
+├── main                       # All development (implemented modules + placeholders)
 ├── splits/auth-module         # Auto-generated from quickscale_modules/auth/
-├── splits/billing-module      # Auto-generated from quickscale_modules/billing/
-└── splits/teams-module        # Auto-generated from quickscale_modules/teams/
+├── splits/blog-module         # Auto-generated from quickscale_modules/blog/
+└── splits/storage-module      # Auto-generated from quickscale_modules/storage/
 ```
 
 **User Project Structure:**
@@ -145,11 +145,13 @@ myproject/
 │   └── config.yml             # Tracks installed modules
 ├── modules/                   # Embedded modules (git subtrees)
 │   ├── auth/                  # From splits/auth-module
-│   └── billing/               # From splits/billing-module
+│   └── blog/                  # From splits/blog-module
 └── myproject/
     └── settings/
-        └── base.py            # INSTALLED_APPS = [..., "modules.auth", "modules.billing"]
+  └── base.py            # INSTALLED_APPS = [..., "modules.auth", "modules.blog"]
 ```
+
+Billing and teams remain placeholder directories in the monorepo inventory. They are discoverable in docs and maintainer workflows, but they are not valid public `quickscale plan` / `quickscale.yml` / `quickscale apply` module selections until implementation ships.
 
 **Key Characteristics:**
 - ✅ Runtime dependencies (in INSTALLED_APPS)
@@ -164,19 +166,23 @@ myproject/
 
 **Purpose:** Complete project scaffolding ranging from empty starters to full vertical applications.
 
-**Theme Categories (v0.74.0 Decision - Updated):**
+**Current Shipped Theme Surface:**
 
-1. **Starter Themes** — Empty foundations for building custom applications
-   - `showcase_react` — **React + TypeScript + shadcn/ui (default)** ✅
-   - `showcase_html` — Pure HTML + CSS (secondary option)
-   - Minimal code, ready for module embedding
-   - Foundation for custom development
+QuickScale currently ships starter themes only:
 
-2. **Vertical Themes** — Complete applications for specific industries
-   - `crm` — CRM application, React-based (v0.75.0)
-   - `saas_starter` — SaaS with billing/teams (future)
-   - Pre-configured modules, production-ready
-   - Can be used as-is or further enhanced
+1. `showcase_react` — **React + TypeScript + shadcn/ui (default)** ✅
+  - Empty foundation for custom development
+  - Fresh generations include dormant frontend-only PostHog starter wiring in the
+    generated `frontend/src/lib/analytics.ts`
+  - Fresh generations also reserve Django-owned public social entrypoints at `/social`
+    and `/social/embeds` that hydrate the shared React bundle outside the SPA router
+
+2. `showcase_html` — Pure HTML + CSS (secondary option)
+  - Empty server-rendered foundation with no frontend build toolchain
+
+Planned vertical themes such as CRM remain roadmap work. They are not part of the
+current shipped generator surface until a release note and this file explicitly add
+them.
 
 **Default React Theme Tech Stack (v0.74.0):**
 
@@ -223,7 +229,7 @@ myproject/
 # Create project with default React theme (empty foundation)
 quickscale plan myproject
 # → Theme defaults to: showcase_react (React + shadcn/ui)
-# → Select modules to embed: auth, billing
+# → Select modules to embed: auth, blog
 quickscale apply
 
 # Create project with HTML theme (simpler alternative)
@@ -239,61 +245,50 @@ quickscale apply
 ```
 quickscale_core/generator/templates/
 └── themes/
-    # Starter Themes (empty foundations)
     ├── showcase_react/        # React + shadcn/ui (DEFAULT) ✅
-    │   ├── frontend/
-    │   │   ├── src/
-    │   │   │   ├── components/
-    │   │   │   │   └── ui/           # shadcn/ui components
-    │   │   │   ├── lib/
-    │   │   │   │   └── utils.ts      # shadcn/ui utilities
-    │   │   │   ├── pages/
-    │   │   │   ├── App.tsx
-    │   │   │   └── main.tsx
-    │   │   ├── components.json       # shadcn/ui config
-    │   │   ├── tailwind.config.js
-    │   │   ├── vite.config.ts
-    │   │   └── package.json
+  │   ├── src/
+  │   │   ├── components/
+  │   │   │   ├── social/
+  │   │   │   └── ui/               # shadcn/ui components
+  │   │   ├── hooks/
+  │   │   │   ├── useModules.ts
+  │   │   │   └── usePublicSocialSurface.ts
+  │   │   ├── lib/
+  │   │   │   ├── analytics.ts      # Dormant PostHog starter helper
+  │   │   │   └── utils.ts          # shadcn/ui utilities
+  │   │   ├── pages/
+  │   │   │   ├── SocialEmbedsPublicPage.tsx
+  │   │   │   └── SocialLinkTreePublicPage.tsx
+  │   │   ├── App.tsx
+  │   │   └── main.tsx
     │   ├── templates/
-    │   │   └── index.html.j2         # React entry point
+  │   │   ├── index.html.j2         # SPA entry point
+  │   │   └── social/
+  │   │       ├── embeds.html.j2    # Django-owned public embed route
+  │   │       └── link_tree.html.j2 # Django-owned public social route
+  │   ├── components.json.j2
+  │   ├── tailwind.config.js.j2
+  │   ├── vite.config.ts.j2
+  │   └── package.json.j2
     │   └── static/                   # Static assets
     ├── showcase_html/         # Pure HTML + CSS (secondary)
     │   ├── templates/
     │   └── static/
-    #
-    # Vertical Themes (complete applications)
-    └── crm/                   # CRM application, React-based (v0.75.0)
-        ├── frontend/          # Extends showcase_react patterns
-        │   ├── src/
-        │   │   ├── components/
-        │   │   └── pages/
-        │   └── vite.config.ts
-        ├── api/               # Django REST Framework
-        │   ├── serializers.py.j2
-        │   └── views.py.j2
-        ├── templates/         # Django templates (React entry point)
-        ├── models.py.j2       # CRM models (extends core)
-        ├── views.py.j2        # CRM views
-        └── README.md          # Vertical documentation
 ```
 
-**Starter vs Vertical Theme Comparison:**
-
-| Aspect | Starter Themes | Vertical Themes |
-|--------|----------------|-----------------|
-| **Purpose** | Empty foundation | Complete application |
-| **Modules** | None (embed later) | Pre-configured |
-| **Use case** | Custom development | Production-ready or enhance |
-| **Examples** | showcase_html, showcase_react | crm, job_board |
-| **Customization** | Build from scratch | Modify existing features |
+Fresh generations copy `showcase_react/src/**` into the generated project's
+`frontend/src/` directory and copy `showcase_react/templates/**` into Django
+`templates/`. QuickScale does not currently ship any vertical theme template trees.
 
 
 **Key Characteristics:**
 - ❌ NOT runtime dependencies (just generated code)
 - ❌ NO updates after generation (user owns and customizes)
 - ✅ One-time scaffolding, user owns completely
-- ✅ Starter themes: empty foundations for custom development
-- ✅ Vertical themes: complete applications ready for production
+- ✅ `showcase_react` and `showcase_html` are the current shipped starter themes
+- ✅ Fresh `showcase_react` generations include dormant analytics starter support and
+  Django-owned public social pages
+- ❌ Complete vertical themes are not part of the current shipped CLI surface yet
 - ✅ Module releases may extend managed backend/runtime surfaces in existing projects, but newly scaffolded theme-owned routes, navigation, registries, and page source are only guaranteed on fresh generation or explicit manual adoption
 
 ---
@@ -389,6 +384,14 @@ last_apply_at: 2025-12-03T14:32:00Z
 - ✅ One file per project
 - ✅ Preserve explicit `project.slug` and `project.package` identity in state
 - ✅ Location: `.quickscale/state.yml`
+
+#### **Installed Module Version Source**
+
+- ✅ The installed version recorded for an embedded module MUST come from that module's embedded `modules/<name>/module.yml` `version` field
+- ✅ `.quickscale/state.yml` stores that canonical manifest version for each installed module
+- ✅ `.quickscale/config.yml` mirrors the same normalized version value for legacy update/push compatibility
+- ✅ Package `pyproject.toml` version fields and any exported module `__version__` string MUST match `module.yml` when they exist
+- ✅ Legacy `v`-prefixed stored versions normalize to the manifest form without the prefix
 
 #### **Operational Properties**
 
@@ -597,8 +600,10 @@ config:
 
 **Constraints:**
 - ✅ Every module MUST have `module.yml` at package root
+- ✅ `module.yml` `version` is the canonical installed-version source after embed
 - ✅ Mutable options MUST specify `django_setting` key
 - ✅ Immutable options MUST NOT have `django_setting`
+- ✅ Package `pyproject.toml` version metadata and exported `__version__` values MUST match `module.yml` when present
 - ✅ Module code MUST read configurable values from settings (not hardcoded)
 - ✅ Backward compatible: modules without manifest treated as all-immutable
 - ✅ Options that would require rewriting generated theme-owned frontend routes, navigation, or page registries are not valid mutable plan/apply config; use fixed built-in routes or treat the frontend change as fresh-generation/manual-adoption work

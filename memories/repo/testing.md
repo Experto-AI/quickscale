@@ -1,0 +1,4 @@
+- quickscale_core tests should import workspace source by prepending quickscale_core/src in tests/conftest.py; bare pytest may otherwise resolve a stale site-packages install.
+- Single-file quickscale_core pytest runs still trip the package-level --cov-fail-under=90 gate even when assertions pass; use the full quickscale_core/tests suite for coverage-clean validation.
+- Module package tests should run from each package directory so the local pytest config applies `DJANGO_SETTINGS_MODULE=tests.settings` correctly.
+- Module and CLI validation may need explicit `PYTHONPATH` entries for local `src` directories; otherwise `~/.local` site-packages copies can shadow the worktree code.

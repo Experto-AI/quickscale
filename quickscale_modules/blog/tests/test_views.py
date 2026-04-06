@@ -216,11 +216,12 @@ class TestCategoryListView:
         assert response.context["category"] == category
 
     def test_category_list_view_nonexistent(self, client):
-        """Test category list with nonexistent slug raises DoesNotExist"""
-        from quickscale_modules_blog.models import Category
+        """Test category list with nonexistent slug returns 404"""
+        response = client.get(
+            reverse("quickscale_blog:category_list", args=["nonexistent"])
+        )
 
-        with pytest.raises(Category.DoesNotExist):
-            client.get(reverse("quickscale_blog:category_list", args=["nonexistent"]))
+        assert response.status_code == 404
 
 
 @pytest.mark.django_db
@@ -253,11 +254,10 @@ class TestTagListView:
         assert response.context["tag"] == tag
 
     def test_tag_list_view_nonexistent(self, client):
-        """Test tag list with nonexistent slug raises DoesNotExist"""
-        from quickscale_modules_blog.models import Tag
+        """Test tag list with nonexistent slug returns 404"""
+        response = client.get(reverse("quickscale_blog:tag_list", args=["nonexistent"]))
 
-        with pytest.raises(Tag.DoesNotExist):
-            client.get(reverse("quickscale_blog:tag_list", args=["nonexistent"]))
+        assert response.status_code == 404
 
 
 @pytest.mark.django_db

@@ -339,6 +339,8 @@ class TestReactThemeGeneration:
         assert "VITE_POSTHOG_HOST" in analytics_source
         assert "your-posthog-key" in analytics_source
         assert "capture_pageview: 'history_change'" in analytics_source
+        assert "export function trackSocialLinkClick" in analytics_source
+        assert "social_link_click" in analytics_source
         assert "trackSocialLinkClick" not in app_source
         assert "posthog" not in django_index.lower()
         assert "VITE_POSTHOG_KEY" not in django_index

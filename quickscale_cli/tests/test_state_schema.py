@@ -44,6 +44,12 @@ class TestModuleState:
         assert isinstance(module.embedded_at, str)
         assert module.options == {}
 
+    def test_module_state_normalizes_legacy_prefixed_version(self):
+        """Legacy v-prefixed module versions should normalize on load/save."""
+        module = ModuleState(name="auth", version="v1.0.0")
+
+        assert module.version == "1.0.0"
+
 
 class TestProjectState:
     """Tests for ProjectState dataclass"""

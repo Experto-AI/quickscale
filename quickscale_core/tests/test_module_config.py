@@ -8,6 +8,7 @@ from quickscale_core.config import (
     ModuleInfo,
     add_module,
     load_config,
+    normalize_installed_version,
     remove_module,
     save_config,
     update_module_version,
@@ -16,6 +17,11 @@ from quickscale_core.config import (
 
 class TestModuleInfo:
     """Tests for ModuleInfo dataclass"""
+
+    def test_normalize_installed_version_strips_legacy_v_prefix(self) -> None:
+        """Stored module versions should normalize to manifest-style strings."""
+        assert normalize_installed_version("v0.82.0") == "0.82.0"
+        assert normalize_installed_version("0.82.0") == "0.82.0"
 
     def test_to_dict(self) -> None:
         """Test converting ModuleInfo to dictionary"""
@@ -28,7 +34,7 @@ class TestModuleInfo:
         data = info.to_dict()
         assert data["prefix"] == "modules/auth"
         assert data["branch"] == "splits/auth-module"
-        assert data["installed_version"] == "v0.62.0"
+        assert data["installed_version"] == "0.62.0"
         assert data["installed_at"] == "2025-10-24"
 
     def test_from_dict(self) -> None:
@@ -42,7 +48,7 @@ class TestModuleInfo:
         info = ModuleInfo.from_dict(data)
         assert info.prefix == "modules/auth"
         assert info.branch == "splits/auth-module"
-        assert info.installed_version == "v0.62.0"
+        assert info.installed_version == "0.62.0"
         assert info.installed_at == "2025-10-24"
 
 
@@ -119,6 +125,7 @@ modules:
         assert config.default_remote == "https://github.com/custom/repo.git"
         assert "auth" in config.modules
         assert config.modules["auth"].prefix == "modules/auth"
+        assert config.modules["auth"].installed_version == "0.62.0"
 
 
 class TestSaveConfig:
@@ -180,7 +187,7 @@ class TestAddModule:
         assert "auth" in config.modules
         assert config.modules["auth"].prefix == "modules/auth"
         assert config.modules["auth"].branch == "splits/auth-module"
-        assert config.modules["auth"].installed_version == "v0.62.0"
+        assert config.modules["auth"].installed_version == "0.62.0"
 
     def test_add_module_sets_current_date(self, tmp_path: Path) -> None:
         """Test adding module sets current date"""
@@ -241,7 +248,7 @@ class TestUpdateModuleVersion:
         update_module_version("auth", "v0.63.0", tmp_path)
 
         config = load_config(tmp_path)
-        assert config.modules["auth"].installed_version == "v0.63.0"
+        assert config.modules["auth"].installed_version == "0.63.0"
 
     def test_update_nonexistent_module_is_safe(self, tmp_path: Path) -> None:
         """Test updating non-existent module doesn't fail"""

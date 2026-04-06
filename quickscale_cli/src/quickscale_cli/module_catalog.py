@@ -1,5 +1,6 @@
 """Module catalog metadata for QuickScale CLI."""
 
+from collections.abc import Iterable
 from dataclasses import dataclass
 
 
@@ -100,3 +101,26 @@ def get_module_entries(
     if include_experimental:
         return list(MODULE_CATALOG)
     return [entry for entry in MODULE_CATALOG if entry.ready]
+
+
+def find_not_ready_modules(module_names: Iterable[str]) -> list[str]:
+    """Return known module names that are present but not publicly ready."""
+    not_ready: list[str] = []
+    for module_name in module_names:
+        entry = get_module_entry(module_name)
+        if entry is not None and not entry.ready and module_name not in not_ready:
+            not_ready.append(module_name)
+    return sorted(not_ready)
+
+
+def get_module_readiness_reason(module_name: str) -> str | None:
+    """Return an actionable readiness error for placeholder modules."""
+    entry = get_module_entry(module_name)
+    if entry is None or entry.ready:
+        return None
+
+    return (
+        f"Module '{module_name}' is a placeholder and is not a valid shipped-module "
+        "selection yet. Billing and teams remain discoverable in docs and module "
+        "inventory only until they ship."
+    )

@@ -159,23 +159,6 @@ def _crm_wiring(options: Mapping[str, Any]) -> ModuleWiringSpec:
         "CRM_ENABLE_API": enable_api,
     }
 
-    if enable_api:
-        settings["REST_FRAMEWORK"] = {
-            "DEFAULT_AUTHENTICATION_CLASSES": [
-                "rest_framework.authentication.SessionAuthentication"
-            ],
-            "DEFAULT_PERMISSION_CLASSES": [
-                "rest_framework.permissions.IsAuthenticated"
-            ],
-            "DEFAULT_PAGINATION_CLASS": "rest_framework.pagination.PageNumberPagination",
-            "PAGE_SIZE": int(options.get("deals_per_page", 25)),
-            "DEFAULT_FILTER_BACKENDS": [
-                "django_filters.rest_framework.DjangoFilterBackend",
-                "rest_framework.filters.SearchFilter",
-                "rest_framework.filters.OrderingFilter",
-            ],
-        }
-
     return ModuleWiringSpec(
         apps=("rest_framework", "django_filters", "quickscale_modules_crm"),
         settings=settings,
@@ -197,26 +180,6 @@ def _forms_wiring(options: Mapping[str, Any]) -> ModuleWiringSpec:
         "FORMS_DATA_RETENTION_DAYS": data_retention_days,
         "FORMS_SUBMISSIONS_API": submissions_api_enabled,
     }
-
-    if submissions_api_enabled:
-        # NOTE: REST_FRAMEWORK uses last-writer-wins keyed by setting name (not merged).
-        # This dict is intentionally identical to _crm_wiring's REST_FRAMEWORK dict.
-        # Any divergence will silently drop the other module's settings.
-        settings["REST_FRAMEWORK"] = {
-            "DEFAULT_AUTHENTICATION_CLASSES": [
-                "rest_framework.authentication.SessionAuthentication"
-            ],
-            "DEFAULT_PERMISSION_CLASSES": [
-                "rest_framework.permissions.IsAuthenticated"
-            ],
-            "DEFAULT_PAGINATION_CLASS": "rest_framework.pagination.PageNumberPagination",
-            "PAGE_SIZE": forms_per_page,
-            "DEFAULT_FILTER_BACKENDS": [
-                "django_filters.rest_framework.DjangoFilterBackend",
-                "rest_framework.filters.SearchFilter",
-                "rest_framework.filters.OrderingFilter",
-            ],
-        }
 
     return ModuleWiringSpec(
         apps=("rest_framework", "django_filters", "quickscale_modules_forms"),

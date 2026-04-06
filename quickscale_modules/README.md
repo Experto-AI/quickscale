@@ -6,6 +6,8 @@ This directory is a maintainer-side inventory of reusable modules. It is not gen
 
 ## Module inventory
 
+For packaged modules, `module.yml` is the canonical source for shipped version and configuration metadata. When a module also exposes package-local version metadata, its `pyproject.toml` version and exported `__version__` value should match the manifest.
+
 ### Packaged modules
 
 These directories currently include packaging and implementation scaffolding. Use each module README for module-specific setup, behavior, and constraints.
@@ -24,7 +26,7 @@ These directories currently include packaging and implementation scaffolding. Us
 
 ### Placeholder directories
 
-These directories currently act as placeholders or documentation stubs. They do not yet have the same local packaging/test structure as the packaged modules above.
+These directories currently act as placeholders or documentation stubs. They do not yet have the same local packaging/test structure as the packaged modules above, and they remain inventory-only until implementation ships.
 
 | Module | Notes |
 |--------|-------|

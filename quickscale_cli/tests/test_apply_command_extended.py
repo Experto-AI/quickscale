@@ -5,6 +5,7 @@ from unittest.mock import Mock, patch
 
 import click
 import pytest
+import yaml
 
 from quickscale_cli.backups_contract import (
     DEFAULT_BACKUPS_REMOTE_ACCESS_KEY_ID_ENV_VAR,
@@ -39,6 +40,7 @@ from quickscale_cli.commands.apply_command import (
     _load_and_validate_config,
     _load_module_manifests,
     _normalize_backups_gitignore_entry,
+    _prepare_apply_context,
     _run_command,
     _run_migrations,
     _run_migrations_in_docker,
@@ -52,6 +54,7 @@ from quickscale_cli.commands.apply_command import (
     _update_module_config_in_state,
 )
 from quickscale_core.generator import ProjectGenerator
+from quickscale_core.manifest.loader import ManifestError
 
 
 # ============================================================================
@@ -349,6 +352,14 @@ class TestLoadModuleManifests:
         result = _load_module_manifests(Path("/tmp"), ["auth"])
         assert result == {}
 
+    @patch("quickscale_cli.commands.apply_command.get_manifest_for_module")
+    def test_strict_manifest_errors_propagate(self, mock_get):
+        """Strict manifest mode should fail instead of silently degrading."""
+        mock_get.side_effect = ManifestError("bad manifest", "auth")
+
+        with pytest.raises(ManifestError, match="auth"):
+            _load_module_manifests(Path("/tmp"), ["auth"], strict=True)
+
 
 # ============================================================================
 # _apply_mutable_config / _check_immutable_config_changes
@@ -497,6 +508,24 @@ class TestLoadAndValidateConfig:
         result = _load_and_validate_config(config)
 
         assert result.modules["backups"].options == {}
+
+    def test_placeholder_modules_are_rejected_on_load(self, tmp_path):
+        """Apply should reject placeholder modules even if they are hand-edited in."""
+        config = tmp_path / "quickscale.yml"
+        config.write_text(
+            'version: "1"\n'
+            "project:\n"
+            "  slug: myapp\n"
+            "  package: myapp\n"
+            "  theme: showcase_html\n"
+            "modules:\n"
+            "  billing:\n"
+            "docker:\n"
+            "  start: false\n"
+        )
+
+        with pytest.raises(click.Abort):
+            _load_and_validate_config(config)
 
     def test_legacy_backups_secrets_are_sanitized_on_load(self, tmp_path):
         """Legacy raw backup secrets should be rewritten to env-var references."""
@@ -717,6 +746,73 @@ class TestLoadAndValidateConfig:
         with patch.object(Path, "read_text", side_effect=OSError("disk error")):
             with pytest.raises(click.Abort):
                 _load_and_validate_config(config)
+
+
+class TestPrepareApplyContext:
+    """Tests for apply preflight context loading."""
+
+    def test_rejects_placeholder_modules_in_existing_state(self, tmp_path):
+        """Apply should abort when legacy state still references placeholders."""
+        project_path = tmp_path / "myapp"
+        project_path.mkdir()
+        config_path = project_path / "quickscale.yml"
+        config_path.write_text(
+            'version: "1"\n'
+            "project:\n"
+            "  slug: myapp\n"
+            "  package: myapp\n"
+            "  theme: showcase_html\n"
+            "docker:\n"
+            "  start: false\n"
+        )
+        (project_path / ".quickscale").mkdir()
+        (project_path / ".quickscale" / "state.yml").write_text(
+            'version: "1"\n'
+            "project:\n"
+            "  slug: myapp\n"
+            "  package: myapp\n"
+            "  theme: showcase_html\n"
+            "modules:\n"
+            "  billing:\n"
+            '    version: "0.1.0"\n'
+        )
+
+        with pytest.raises(click.Abort):
+            _prepare_apply_context(config_path)
+
+    def test_rejects_malformed_installed_manifests_before_delta(self, tmp_path):
+        """Apply should fail before delta computation when an installed manifest is bad."""
+        project_path = tmp_path / "myapp"
+        project_path.mkdir()
+        config_path = project_path / "quickscale.yml"
+        config_path.write_text(
+            'version: "1"\n'
+            "project:\n"
+            "  slug: myapp\n"
+            "  package: myapp\n"
+            "  theme: showcase_html\n"
+            "modules:\n"
+            "  auth:\n"
+            "docker:\n"
+            "  start: false\n"
+        )
+        (project_path / ".quickscale").mkdir()
+        (project_path / ".quickscale" / "state.yml").write_text(
+            'version: "1"\n'
+            "project:\n"
+            "  slug: myapp\n"
+            "  package: myapp\n"
+            "  theme: showcase_html\n"
+            "modules:\n"
+            "  auth:\n"
+            '    version: "0.70.0"\n'
+        )
+        module_dir = project_path / "modules" / "auth"
+        module_dir.mkdir(parents=True)
+        (module_dir / "module.yml").write_text("- invalid\n- list\n")
+
+        with pytest.raises(click.Abort):
+            _prepare_apply_context(config_path)
 
 
 # ============================================================================
@@ -1233,6 +1329,42 @@ class TestSaveProjectState:
         assert "legacy-secret" not in state_text
         assert "remote_access_key_id_env_var" in state_text
         assert "remote_secret_access_key_env_var" in state_text
+
+    def test_state_and_legacy_config_versions_sync_from_embedded_manifest(
+        self, tmp_path
+    ):
+        """Apply state should use embedded manifest versions and mirror them to config."""
+        module_dir = tmp_path / "modules" / "auth"
+        module_dir.mkdir(parents=True)
+        (module_dir / "module.yml").write_text('name: auth\nversion: "0.82.0"\n')
+
+        quickscale_dir = tmp_path / ".quickscale"
+        quickscale_dir.mkdir()
+        (quickscale_dir / "config.yml").write_text(
+            "default_remote: https://github.com/Experto-AI/quickscale.git\n"
+            "modules:\n"
+            "  auth:\n"
+            "    prefix: modules/auth\n"
+            "    branch: splits/auth-module\n"
+            "    installed_version: v0.70.0\n"
+            "    installed_at: '2025-01-01'\n"
+        )
+
+        config = Mock()
+        config.project.slug = "myapp"
+        config.project.package = "myapp"
+        config.project.theme = "showcase_html"
+        config.modules = {"auth": Mock(options={})}
+        delta = Mock()
+        delta.config_deltas = {}
+
+        _save_project_state(tmp_path, config, None, ["auth"], delta)
+
+        state_data = yaml.safe_load((quickscale_dir / "state.yml").read_text())
+        legacy_config = yaml.safe_load((quickscale_dir / "config.yml").read_text())
+
+        assert state_data["modules"]["auth"]["version"] == "0.82.0"
+        assert legacy_config["modules"]["auth"]["installed_version"] == "0.82.0"
 
 
 # ============================================================================
@@ -2099,7 +2231,6 @@ class TestManagedAnalyticsApplyRegression:
         package_json = output_path / "frontend" / "package.json"
         main_file = output_path / "frontend" / "src" / "main.tsx"
         app_file = output_path / "frontend" / "src" / "App.tsx"
-        analytics_file = output_path / "frontend" / "src" / "lib" / "analytics.ts"
         index_template = output_path / "templates" / "index.html"
 
         package_json.write_text(
@@ -2114,10 +2245,6 @@ class TestManagedAnalyticsApplyRegression:
         app_file.write_text(
             "// user-owned app routing customization\n" + app_file.read_text()
         )
-        analytics_file.write_text(
-            "// user-owned analytics helper customization\n"
-            + analytics_file.read_text()
-        )
         index_template.write_text(
             "<!-- user-owned index template customization -->\n"
             + index_template.read_text()
@@ -2126,7 +2253,6 @@ class TestManagedAnalyticsApplyRegression:
         expected_package_json = package_json.read_text()
         expected_main_file = main_file.read_text()
         expected_app_file = app_file.read_text()
-        expected_analytics_file = analytics_file.read_text()
         expected_index_template = index_template.read_text()
 
         ctx = Mock()
@@ -2154,7 +2280,6 @@ class TestManagedAnalyticsApplyRegression:
         assert package_json.read_text() == expected_package_json
         assert main_file.read_text() == expected_main_file
         assert app_file.read_text() == expected_app_file
-        assert analytics_file.read_text() == expected_analytics_file
         assert index_template.read_text() == expected_index_template
 
         managed_settings = (

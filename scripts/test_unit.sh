@@ -112,6 +112,26 @@ extract_low_coverage_lines() {
   ' "$coverage_report"
 }
 
+build_module_pythonpath() {
+  local module_path="$1"
+  local sibling_path=""
+  local -a path_entries=("$module_path")
+
+  if [ -d "$module_path/src" ]; then
+    path_entries+=("$module_path/src")
+  fi
+
+  for sibling_path in quickscale_modules/*; do
+    if [ "$sibling_path" = "$module_path" ] || [ ! -d "$sibling_path/src" ]; then
+      continue
+    fi
+    path_entries+=("$sibling_path/src")
+  done
+
+  local IFS=:
+  printf '%s' "${path_entries[*]}"
+}
+
 check_overall_mean_coverage() {
   if [ ! -s "$COVERAGE_RESULTS_FILE" ]; then
     return 0
@@ -258,7 +278,8 @@ echo ""
 echo "📦 Testing quickscale_modules..."
 # Test modules using ROOT poetry environment (centralized dependencies)
 # Modules are installed in editable mode via root pyproject.toml
-# PYTHONPATH set to module dir so tests.settings is importable
+# PYTHONPATH keeps the current module root first and adds sibling module src dirs
+# so cross-module imports like notifications -> forms resolve during bootstrap.
 if [ -d "quickscale_modules" ]; then
   for mod in quickscale_modules/*; do
     if [ -d "$mod" ]; then
@@ -273,7 +294,7 @@ if [ -d "quickscale_modules" ]; then
           "module ${mod_name}" \
           "$pkg_name" \
           false \
-          env "PYTHONPATH=$mod:$mod/src" poetry run pytest "$mod/tests/" \
+          env "PYTHONPATH=$(build_module_pythonpath "$mod")${PYTHONPATH:+:$PYTHONPATH}" poetry run pytest "$mod/tests/" \
             -p pytest_django --ds=tests.settings; then
           EXIT_CODE=1
         fi

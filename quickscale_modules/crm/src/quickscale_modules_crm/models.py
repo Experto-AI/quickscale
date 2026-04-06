@@ -11,8 +11,11 @@ This module provides 7 core models for CRM functionality:
 - DealNote: Notes on deals
 """
 
+from typing import Any
+
 from django.conf import settings
 from django.db import models
+from django.utils import timezone
 
 
 class Tag(models.Model):
@@ -180,6 +183,19 @@ class ContactNote(models.Model):
 
     def __str__(self) -> str:
         return f"Note on {self.contact} by {self.created_by}"
+
+    def save(self, *args: Any, **kwargs: Any) -> None:
+        """Persist the note and refresh the contact's last-contacted timestamp."""
+        is_new = self._state.adding
+        super().save(*args, **kwargs)
+
+        contact_pk = getattr(self.contact, "pk", None)
+
+        if not is_new or contact_pk is None:
+            return
+
+        timestamp = self.created_at or timezone.now()
+        Contact.objects.filter(pk=contact_pk).update(last_contacted_at=timestamp)
 
 
 class DealNote(models.Model):

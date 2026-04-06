@@ -35,7 +35,7 @@ The auth module includes a `module.yml` manifest that defines configuration opti
 
 | Option | Default | Description |
 |--------|---------|-------------|
-| `authentication_method` | `email_username` | How users authenticate (email, username, or both) |
+| `authentication_method` | `email` | How users authenticate (email, username, or both) |
 | `social_providers` | `[]` | OAuth providers (Google, GitHub, etc.) |
 
 ### Changing Configuration
@@ -143,8 +143,8 @@ AUTH_USER_MODEL = "quickscale_modules_auth.User"
 SITE_ID = 1
 
 # Allauth settings (django-allauth 65.x format)
-ACCOUNT_LOGIN_METHODS = {"email", "username"}
-ACCOUNT_SIGNUP_FIELDS = ["email*", "username*", "password1*", "password2*"]
+ACCOUNT_LOGIN_METHODS = {"email"}
+ACCOUNT_SIGNUP_FIELDS = ["email*", "password1*", "password2*"]
 ACCOUNT_EMAIL_VERIFICATION = "none"  # Set to "mandatory" or "optional" as needed
 ACCOUNT_ALLOW_REGISTRATION = True  # Set to False to disable signups
 ACCOUNT_ADAPTER = "quickscale_modules_auth.adapters.QuickscaleAccountAdapter"
@@ -164,6 +164,7 @@ from django.urls import path, include
 
 urlpatterns = [
     path("admin/", admin.site.urls),
+    path("accounts/", include("allauth.urls")),
     path("accounts/", include("quickscale_modules_auth.urls")),  # Auth URLs
     # Your other URLs
 ]
@@ -266,7 +267,7 @@ ACCOUNT_ALLOW_REGISTRATION = False  # Disable signups
 ### Change Authentication Method
 
 ```python
-# Use email only (no username) - django-allauth 65.x format
+# Use email only (default) - django-allauth 65.x format
 ACCOUNT_LOGIN_METHODS = {"email"}
 ACCOUNT_SIGNUP_FIELDS = ["email*", "password1*", "password2*"]
 
@@ -274,7 +275,7 @@ ACCOUNT_SIGNUP_FIELDS = ["email*", "password1*", "password2*"]
 ACCOUNT_LOGIN_METHODS = {"username"}
 ACCOUNT_SIGNUP_FIELDS = ["username*", "password1*", "password2*"]
 
-# Use both (default)
+# Use both (optional alternative)
 ACCOUNT_LOGIN_METHODS = {"email", "username"}
 ACCOUNT_SIGNUP_FIELDS = ["email*", "username*", "password1*", "password2*"]
 ```
