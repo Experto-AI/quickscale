@@ -99,9 +99,9 @@ For complete definitions, see **[GLOSSARY.md](./GLOSSARY.md)**. Here are the ess
 
 [DEVELOPER/CONTRIBUTOR]
 ├─ Contributing to QuickScale
-│  ├─ READ: contrib/contributing.md (workflow overview)
-│  ├─ READ: contrib/code.md (implementation guide)
-│  ├─ READ: contrib/testing.md (test standards)
+│  ├─ READ: contrib/contributing.md (authority model + guide map)
+│  ├─ READ: contrib/code.md (applied implementation guide)
+│  ├─ READ: contrib/testing.md (applied testing guide)
 │  └─ READ: development.md (dev setup)
 └─ Total Time: 90-120 minutes
 
@@ -174,16 +174,17 @@ Reference these when performing specific tasks:
 
 ### **Tier 3: Deep Dives** (Reference Only)
 
-Detailed guides for specific stages:
+Detailed contributor references to use as needed:
 
-**Contributor Workflow**:
-- [contrib/plan.md](./docs/contrib/plan.md) - Planning stage
-- [contrib/code.md](./docs/contrib/code.md) - Implementation stage
-- [contrib/review.md](./docs/contrib/review.md) - Review stage
-- [contrib/testing.md](./docs/contrib/testing.md) - Testing stage
-- [contrib/debug.md](./docs/contrib/debug.md) - Debugging stage
+**Contributor Application Guides**:
+- [contrib/plan.md](./docs/contrib/plan.md) - Planning reference
+- [contrib/code.md](./docs/contrib/code.md) - Implementation reference
+- [contrib/review.md](./docs/contrib/review.md) - Review reference
+- [contrib/testing.md](./docs/contrib/testing.md) - Testing reference
+- [contrib/debug.md](./docs/contrib/debug.md) - Debugging reference
 
-**Shared Principles**:
+**Shared Rule Sources**:
+- [contrib/shared/README.md](./docs/contrib/shared/README.md) - Authority map for project rules
 - [contrib/shared/code_principles.md](./docs/contrib/shared/code_principles.md) - SOLID, DRY, KISS
 - [contrib/shared/architecture_guidelines.md](./docs/contrib/shared/architecture_guidelines.md) - Tech stack, boundaries
 - [contrib/shared/testing_standards.md](./docs/contrib/shared/testing_standards.md) - Testing patterns
@@ -231,7 +232,7 @@ See: [quickscale_modules/](./quickscale_modules/) for the current package list a
 
 ### "Can I contribute?"
 **Yes!** Start with: [contrib/contributing.md](./docs/contrib/contributing.md)
-Workflow: PLAN → CODE → REVIEW → TEST → DEBUG
+Rule sources live in `docs/contrib/shared/`; `contrib/plan.md`, `contrib/code.md`, `contrib/review.md`, `contrib/testing.md`, and `contrib/debug.md` are workflow-agnostic application guides you use as needed.
 
 ### "Which Python/Django version?"
 - **Python**: 3.14+ required
@@ -275,12 +276,12 @@ decisions.md scaffolding.md roadmap.md   contrib/*
 → **Result**: Can build first project
 
 ### **Path 2: Contributor (90 minutes)**
-1. contrib/contributing.md (10 min) - Workflow
+1. contrib/contributing.md (10 min) - Authority model and guide map
 2. decisions.md (30 min) - Rules
-3. contrib/code.md (20 min) - Implementation
-4. contrib/testing.md (20 min) - Testing
+3. contrib/code.md (20 min) - Applied implementation guide
+4. contrib/testing.md (20 min) - Applied testing guide
 5. development.md (10 min) - Environment
-→ **Result**: Can contribute features
+→ **Result**: Can contribute within project rules
 
 ### **Path 3: Architect (120 minutes)**
 1. decisions.md (45 min) - Technical decisions
@@ -293,7 +294,7 @@ decisions.md scaffolding.md roadmap.md   contrib/*
 1. quickscale_modules/auth/README.md (15 min) - Example
 2. decisions.md § Module Architecture (20 min)
 3. scaffolding.md § Module Structure (15 min)
-4. contrib/code.md (10 min) - Coding standards
+4. contrib/code.md (10 min) - Applied implementation guide
 → **Result**: Can build custom modules
 
 ---
