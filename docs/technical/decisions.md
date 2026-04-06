@@ -174,15 +174,25 @@ QuickScale currently ships starter themes only:
   - Empty foundation for custom development
   - Fresh generations include dormant frontend-only PostHog starter wiring in the
     generated `frontend/src/lib/analytics.ts`
-  - Fresh generations also reserve Django-owned public social entrypoints at `/social`
-    and `/social/embeds` that hydrate the shared React bundle outside the SPA router
+  - Fresh generations also auto-generate Django-owned public social entrypoints at
+    `/social` and `/social/embeds` that hydrate the shared React bundle outside the
+    SPA router
+  - Those public pages are fresh-generation scaffolding only; existing projects and
+    non-React themes keep manual adoption for any equivalent public pages, while the
+    backend-managed social transport endpoints and settings wiring remain theme-agnostic
 
 2. `showcase_html` — Pure HTML + CSS (secondary option)
   - Empty server-rendered foundation with no frontend build toolchain
+  - Fresh v0.83.0 generations do not scaffold `/social` or `/social/embeds` public
+    pages
 
 Planned vertical themes such as CRM remain roadmap work. They are not part of the
 current shipped generator surface until a release note and this file explicitly add
 them.
+
+Generated starter output also excludes billing and teams routes, flags, dashboard
+cards, and navigation until those modules ship as valid public `quickscale plan` /
+`quickscale.yml` / `quickscale apply` selections.
 
 **Default React Theme Tech Stack (v0.74.0):**
 
@@ -272,13 +282,17 @@ quickscale_core/generator/templates/
   │   └── package.json.j2
     │   └── static/                   # Static assets
     ├── showcase_html/         # Pure HTML + CSS (secondary)
-    │   ├── templates/
+    │   ├── templates/         # No scaffolded public /social pages in v0.83.0+
     │   └── static/
 ```
 
 Fresh generations copy `showcase_react/src/**` into the generated project's
 `frontend/src/` directory and copy `showcase_react/templates/**` into Django
-`templates/`. QuickScale does not currently ship any vertical theme template trees.
+  `templates/`. Only fresh `showcase_react` generations auto-scaffold the Django-owned
+  public `/social` and `/social/embeds` pages. `showcase_html` does not ship those
+  public routes/templates in v0.83.0, and non-React themes must adopt any equivalent
+  public pages manually. QuickScale does not currently ship any vertical theme template
+  trees.
 
 
 **Key Characteristics:**
@@ -288,6 +302,10 @@ Fresh generations copy `showcase_react/src/**` into the generated project's
 - ✅ `showcase_react` and `showcase_html` are the current shipped starter themes
 - ✅ Fresh `showcase_react` generations include dormant analytics starter support and
   Django-owned public social pages
+- ✅ Fresh `showcase_html` generations do not scaffold public social pages; non-React
+  themes rely on manual adoption for that public page surface
+- ✅ Generated starter output excludes billing and teams placeholder routes,
+  navigation, flags, and dashboard cards until those modules ship
 - ❌ Complete vertical themes are not part of the current shipped CLI surface yet
 - ✅ Module releases may extend managed backend/runtime surfaces in existing projects, but newly scaffolded theme-owned routes, navigation, registries, and page source are only guaranteed on fresh generation or explicit manual adoption
 

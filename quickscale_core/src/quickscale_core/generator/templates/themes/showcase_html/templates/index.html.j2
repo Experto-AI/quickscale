@@ -96,23 +96,6 @@
             </article>
             {% endif %}
 
-            {% if settings.QUICKSCALE_SOCIAL_LINK_TREE_ENABLED or settings.QUICKSCALE_SOCIAL_EMBEDS_ENABLED %}
-            <article class="module-card">
-                <div class="module-card-header">
-                    <h3>Social</h3>
-                    <span class="module-badge">Active</span>
-                </div>
-                <p>Managed social link-tree and curated embeds surfaced through fixed public routes.</p>
-                <div class="module-card-actions">
-                    {% if settings.QUICKSCALE_SOCIAL_LINK_TREE_ENABLED %}
-                    <a class="module-link" href="/social">Open social</a>
-                    {% elif settings.QUICKSCALE_SOCIAL_EMBEDS_ENABLED %}
-                    <a class="module-link" href="/social/embeds">Open embeds</a>
-                    {% endif %}
-                </div>
-            </article>
-            {% endif %}
-
             {% if 'quickscale_modules_storage' in settings.INSTALLED_APPS %}
             <article class="module-card">
                 <div class="module-card-header">
@@ -152,29 +135,7 @@
             </article>
             {% endif %}
 
-            {% if 'quickscale_modules_billing' in settings.INSTALLED_APPS %}
-            <article class="module-card">
-                <div class="module-card-header">
-                    <h3>Billing</h3>
-                    <span class="module-badge">Active</span>
-                </div>
-                <p>Subscription management and payment processing infrastructure for monetized projects.</p>
-                <p class="module-note">Add your project-specific billing views to surface this module in the UI.</p>
-            </article>
-            {% endif %}
-
-            {% if 'quickscale_modules_teams' in settings.INSTALLED_APPS %}
-            <article class="module-card">
-                <div class="module-card-header">
-                    <h3>Teams</h3>
-                    <span class="module-badge">Active</span>
-                </div>
-                <p>Team collaboration and membership features for multi-user products.</p>
-                <p class="module-note">Add your project-specific team views when you are ready to expose collaboration flows.</p>
-            </article>
-            {% endif %}
-
-            {% if 'quickscale_modules_auth' not in settings.INSTALLED_APPS and 'quickscale_modules_blog' not in settings.INSTALLED_APPS and 'quickscale_modules_listings' not in settings.INSTALLED_APPS and 'quickscale_modules_crm' not in settings.INSTALLED_APPS and 'quickscale_modules_forms' not in settings.INSTALLED_APPS and 'quickscale_modules_storage' not in settings.INSTALLED_APPS and 'quickscale_modules_notifications' not in settings.INSTALLED_APPS and 'quickscale_modules_backups' not in settings.INSTALLED_APPS and 'quickscale_modules_billing' not in settings.INSTALLED_APPS and 'quickscale_modules_teams' not in settings.INSTALLED_APPS and not settings.QUICKSCALE_SOCIAL_LINK_TREE_ENABLED and not settings.QUICKSCALE_SOCIAL_EMBEDS_ENABLED %}
+            {% if 'quickscale_modules_auth' not in settings.INSTALLED_APPS and 'quickscale_modules_blog' not in settings.INSTALLED_APPS and 'quickscale_modules_listings' not in settings.INSTALLED_APPS and 'quickscale_modules_crm' not in settings.INSTALLED_APPS and 'quickscale_modules_forms' not in settings.INSTALLED_APPS and 'quickscale_modules_storage' not in settings.INSTALLED_APPS and 'quickscale_modules_notifications' not in settings.INSTALLED_APPS and 'quickscale_modules_backups' not in settings.INSTALLED_APPS %}
             <article class="module-card empty-state">
                 <div class="module-card-header">
                     <h3>No modules installed</h3>

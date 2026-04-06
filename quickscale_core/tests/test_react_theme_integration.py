@@ -672,8 +672,6 @@ class TestReactThemeModuleActivationMatrix:
         "storage",
         "backups",
         "notifications",
-        "billing",
-        "teams",
     ]
 
     @staticmethod
@@ -705,6 +703,8 @@ class TestReactThemeModuleActivationMatrix:
             module: f"quickscale_modules_{module}" for module in self.APP_BACKED_MODULES
         }
         assert app_map == expected
+        assert "billing:" not in index_html
+        assert "teams:" not in index_html
 
     @pytest.mark.parametrize(
         ("installed_apps", "expected_true"),
@@ -730,8 +730,6 @@ class TestReactThemeModuleActivationMatrix:
                     "quickscale_modules_storage",
                     "quickscale_modules_backups",
                     "quickscale_modules_notifications",
-                    "quickscale_modules_billing",
-                    "quickscale_modules_teams",
                 ],
                 {
                     "auth",
@@ -742,8 +740,6 @@ class TestReactThemeModuleActivationMatrix:
                     "storage",
                     "backups",
                     "notifications",
-                    "billing",
-                    "teams",
                 },
             ),
         ],
@@ -836,6 +832,8 @@ class TestReactThemeModuleActivationMatrix:
         assert "backups: false" in use_modules
         assert "notifications: false" in use_modules
         assert "social: false" in use_modules
+        assert "billing: false" not in use_modules
+        assert "teams: false" not in use_modules
         assert "modulePaths" in use_modules
         assert "social: '/social'" in use_modules
 
@@ -848,11 +846,15 @@ class TestReactThemeModuleActivationMatrix:
         assert "key: 'social'" in dashboard
         assert "name: 'Social'" in dashboard
         assert "modulePaths.social" in dashboard
+        assert "key: 'billing'" not in dashboard
+        assert "key: 'teams'" not in dashboard
         assert "reloadDocument={mod.reloadDocument}" in dashboard
         assert "lg:grid-cols-4" in dashboard
 
         assert "name: 'Social'" in sidebar
         assert "modulePaths.social" in sidebar
+        assert "name: 'Billing'" not in sidebar
+        assert "name: 'Teams'" not in sidebar
         assert "name: 'Notifications'" not in sidebar
         assert "name: 'Backups'" not in sidebar
         assert "reloadDocument={item.reloadDocument}" in sidebar
@@ -955,14 +957,20 @@ class TestReactThemeModuleActivationMatrix:
 
         app_tsx = (output_path / "frontend" / "src" / "App.tsx").read_text()
 
-        for path in ["/blog", "/listings", "/crm", "/billing", "/teams", "/profile"]:
+        for path in ["/blog", "/listings", "/crm", "/profile"]:
             assert f'path="{path}"' in app_tsx, f"Missing route for {path}"
+        assert 'path="/billing"' not in app_tsx
+        assert 'path="/teams"' not in app_tsx
 
-    def test_react_theme_generates_billing_and_teams_pages(self, tmp_path):
-        """Billing/Teams page templates should be generated for all-module compatibility."""
+    def test_react_theme_does_not_generate_billing_and_teams_pages(self, tmp_path):
+        """Billing/Teams starter pages should stay absent until those modules ship."""
         generator = ProjectGenerator(theme="showcase_react")
         output_path = tmp_path / "react_module_pages"
         generator.generate("react_module_pages", output_path)
 
-        assert (output_path / "frontend" / "src" / "pages" / "BillingPage.tsx").exists()
-        assert (output_path / "frontend" / "src" / "pages" / "TeamsPage.tsx").exists()
+        assert not (
+            output_path / "frontend" / "src" / "pages" / "BillingPage.tsx"
+        ).exists()
+        assert not (
+            output_path / "frontend" / "src" / "pages" / "TeamsPage.tsx"
+        ).exists()

@@ -46,6 +46,11 @@ Key rules:
 - The generated project is user-owned code
 - `showcase_react` is the default starter theme
 - `showcase_html` remains the secondary starter option
+- Fresh `showcase_react` generations auto-scaffold Django-owned public `/social` and
+    `/social/embeds` pages; `showcase_html` does not scaffold those public pages in
+    v0.83.0
+- Generated starter output excludes billing and teams placeholder routes,
+    navigation, cards, and flags until those modules ship
 - Modules embed into the generated project and can later be updated through the documented git-subtree workflow
 - QuickScale does not generate a maintainer-style `quickscale_modules/` workspace inside client projects
 
@@ -110,6 +115,10 @@ myapp/
 Notes:
 - Embedded modules are runtime dependencies that land in `modules/`
 - `quickscale apply` owns the managed backend/runtime wiring for installed modules
+- The managed social backend transport remains theme-agnostic, but only fresh
+    `showcase_react` starters auto-scaffold the public `/social` and
+    `/social/embeds` pages; non-React themes keep manual adoption for any equivalent
+    public pages
 - Existing projects keep ownership of user-edited theme routes, navigation, and page files unless documentation for a specific release explicitly says otherwise
 
 ### 3.3 Current Simplifications
@@ -220,7 +229,10 @@ myapp/
 │   ├── tailwind.config.js
 │   └── vite.config.ts
 ├── templates/
-│   └── index.html
+│   ├── index.html
+│   └── social/
+│       ├── embeds.html
+│       └── link_tree.html
 ├── static/
 │   └── images/
 ├── Dockerfile
@@ -241,6 +253,8 @@ Notes:
     `frontend/src/pages/SocialEmbedsPublicPage.tsx`, plus Django `templates/social/*.html`
     wrappers that keep `/social` and `/social/embeds` under Django ownership while
     hydrating the shared React bundle through `window.__QUICKSCALE__.publicPage`.
+- That public-page scaffolding is fresh-generation-only; existing projects and
+    non-React themes must manually adopt any equivalent public pages they want.
 
 ### 5.2 HTML Starter Output
 
@@ -263,6 +277,12 @@ myapp/
 ├── poetry.lock
 └── ...
 ```
+
+Notes:
+- Fresh `showcase_html` generations do not scaffold Django-owned public `/social` or
+    `/social/embeds` pages in v0.83.0.
+- Enabling the `social` module still wires the backend-managed transport surface, but
+    non-React themes must manually adopt any public page surface they want.
 
 ### 5.3 State and Module Metadata
 

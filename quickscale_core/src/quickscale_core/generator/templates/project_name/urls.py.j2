@@ -43,6 +43,7 @@ urlpatterns = [
     path("healthcheck/", healthcheck, name="healthcheck"),
     path("admin/", admin.site.urls),
     path("", TemplateView.as_view(template_name="index.html"), name="home"),
+{%- if theme == 'showcase_react' %}
     re_path(
         r"^social/?$",
         TemplateView.as_view(template_name="social/link_tree.html"),
@@ -53,10 +54,11 @@ urlpatterns = [
         TemplateView.as_view(template_name="social/embeds.html"),
         name="social-embeds",
     ),
+{%- endif %}
 ]
 urlpatterns += MODULE_URLPATTERNS
 
-# Custom error handlers with helpful module installation hints
+# Custom error handlers with helpful module guidance
 handler404 = "{{ package_name }}.views.custom_404_view"
 handler500 = "{{ package_name }}.views.custom_500_view"
 
@@ -77,12 +79,10 @@ if settings.DEBUG:
         pass
 {%- if theme != 'showcase_react' %}
     # In DEBUG mode, show custom 404 page instead of Django's technical 404
-    # This provides helpful hints about installing QuickScale modules
+    # This keeps shipped auth guidance ahead of the generic fallback.
     urlpatterns += [
-        # Catch module-specific URLs first (more specific patterns)
+        # Catch auth URLs first (more specific pattern)
         re_path(r"^accounts/.*", custom_404_view),
-        re_path(r"^billing/.*", custom_404_view),
-        re_path(r"^teams/.*", custom_404_view),
         # Catch-all for any other 404s (must be last)
         re_path(r".*", custom_404_view),
     ]

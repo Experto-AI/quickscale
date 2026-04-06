@@ -597,9 +597,10 @@ def _validate_module_prerequisites(qs_config: QuickScaleConfig) -> None:
                 click.echo(f"  • {issue}", err=True)
             click.echo(
                 "\n💡 Re-run 'quickscale plan --reconfigure --configure-modules' or edit "
-                "quickscale.yml to correct the social settings. This phase only wires "
-                f"the fixed public routes {SOCIAL_LINK_TREE_PATH} / {SOCIAL_EMBEDS_PATH} "
-                "plus the managed backend transport.",
+                "quickscale.yml to correct the social settings. This phase wires the "
+                "managed backend transport, and the canonical public paths remain "
+                f"{SOCIAL_LINK_TREE_PATH} and {SOCIAL_EMBEDS_PATH} for fresh "
+                "showcase_react generations or manual theme adoption.",
                 err=True,
             )
             raise click.Abort()
@@ -1418,13 +1419,13 @@ def _display_next_steps(
             + f"{SOCIAL_INTEGRATION_BASE_PATH} and {SOCIAL_INTEGRATION_EMBEDS_PATH}"
         )
         click.echo(
-            "  Fixed public routes for fresh generation or manual theme adoption: "
+            "  Fresh showcase_react generations keep Django-owned public pages at "
             + f"{SOCIAL_LINK_TREE_PATH} and {SOCIAL_EMBEDS_PATH}"
         )
         click.echo(
-            "  Existing generated projects only receive the managed backend transport "
-            "automatically; use manual theme adoption for routes/pages if you want "
-            "the public UX."
+            "  showcase_html and existing generated projects only receive the managed "
+            "backend transport automatically; use manual theme adoption if you want "
+            "those public pages."
         )
 
     click.echo("\n  Visit: http://localhost:8000")

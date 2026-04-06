@@ -1548,6 +1548,13 @@ class TestDisplayNextSteps:
         assert SOCIAL_INTEGRATION_EMBEDS_PATH in output
         assert SOCIAL_LINK_TREE_PATH in output
         assert SOCIAL_EMBEDS_PATH in output
+        assert (
+            "Fresh showcase_react generations keep Django-owned public pages" in output
+        )
+        assert (
+            "showcase_html and existing generated projects only receive the managed backend transport automatically"
+            in output
+        )
         assert "manual theme adoption" in output
 
 

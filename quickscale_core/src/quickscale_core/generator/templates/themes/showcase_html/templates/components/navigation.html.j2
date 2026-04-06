@@ -64,38 +64,6 @@
             </li>
             {% endif %}
 
-            {% if settings.QUICKSCALE_SOCIAL_LINK_TREE_ENABLED or settings.QUICKSCALE_SOCIAL_EMBEDS_ENABLED %}
-            <li class="nav-section">
-                <span class="nav-section-title">Social</span>
-                <ul class="nav-submenu">
-                    {% if settings.QUICKSCALE_SOCIAL_LINK_TREE_ENABLED %}
-                    <li><a href="/social">Link Tree</a></li>
-                    {% endif %}
-                    {% if settings.QUICKSCALE_SOCIAL_EMBEDS_ENABLED %}
-                    <li><a href="/social/embeds">Embeds</a></li>
-                    {% endif %}
-                </ul>
-            </li>
-            {% endif %}
-
-            {% if 'quickscale_modules_billing' in settings.INSTALLED_APPS %}
-            <li class="nav-section">
-                <span class="nav-section-title">Billing</span>
-                <ul class="nav-submenu">
-                    <li><span class="nav-disabled-link">Add project-specific billing views to surface this module.</span></li>
-                </ul>
-            </li>
-            {% endif %}
-
-            {% if 'quickscale_modules_teams' in settings.INSTALLED_APPS %}
-            <li class="nav-section">
-                <span class="nav-section-title">Teams</span>
-                <ul class="nav-submenu">
-                    <li><span class="nav-disabled-link">Add team views when your collaboration flows are ready.</span></li>
-                </ul>
-            </li>
-            {% endif %}
-
             {% if 'quickscale_modules_storage' in settings.INSTALLED_APPS %}
             <li class="nav-section">
                 <span class="nav-section-title">Storage</span>

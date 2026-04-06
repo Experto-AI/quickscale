@@ -11,7 +11,6 @@ import {
   Briefcase,
   ClipboardList,
   Code,
-  CreditCard,
   Database,
   ExternalLink,
   HardDrive,
@@ -20,7 +19,6 @@ import {
   Shield,
   Store,
   UserCircle,
-  Users,
 } from 'lucide-react'
 import { useModules, useProjectConfig } from '@/hooks/useModules'
 
@@ -103,20 +101,6 @@ const buildModuleInfo = (socialPath: string): ModuleCard[] => [
     href: '/admin/quickscale_modules_notifications/',
     reloadDocument: true,
     actionLabel: 'Open admin',
-  },
-  {
-    key: 'billing',
-    name: 'Billing',
-    icon: CreditCard,
-    description: 'Subscription management and payment processing',
-    href: '/billing',
-  },
-  {
-    key: 'teams',
-    name: 'Teams',
-    icon: Users,
-    description: 'Team collaboration and management features',
-    href: '/teams',
   },
 ]
 

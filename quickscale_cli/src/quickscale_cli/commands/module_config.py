@@ -1949,9 +1949,10 @@ def configure_social_module(
 
     click.echo("\n⚙️  Configuring social module...")
     click.echo(
-        "Social uses fixed public routes and a managed generated-project backend "
-        "transport. Existing projects do not receive automatic theme route/page "
-        "changes.\n"
+        "Social keeps a managed backend transport plus canonical public paths. "
+        "Fresh showcase_react generations keep the Django-owned public pages at "
+        f"{SOCIAL_LINK_TREE_PATH} and {SOCIAL_EMBEDS_PATH}, while showcase_html and "
+        "existing generated projects require manual theme adoption.\n"
     )
 
     config = resolve_social_module_options(
@@ -2017,6 +2018,11 @@ def apply_social_configuration(project_path: Path, config: dict[str, Any]) -> No
     click.echo(
         "  • Managed backend transport: "
         + f"{SOCIAL_INTEGRATION_BASE_PATH} and {SOCIAL_INTEGRATION_EMBEDS_PATH}"
+    )
+    click.echo(
+        "  • Public pages: fresh showcase_react keeps "
+        + f"{SOCIAL_LINK_TREE_PATH} and {SOCIAL_EMBEDS_PATH}; showcase_html and "
+        "existing generated projects require manual theme adoption."
     )
     click.echo("  • Layout variant: " + str(resolved["layout_variant"]))
     click.echo("  • Providers: " + ", ".join(list(resolved["provider_allowlist"])))
