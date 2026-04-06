@@ -18,5 +18,15 @@
         "windsurf": true,
         "cursor-global": true,
         "cursor-workspace": true
+    },
+    "chat.mcp.serverSampling": {
+        "v82-wt-review-with-ai-rules/.vscode/mcp.json: adaptive-context": {
+            "allowedModels": [
+                "copilot/auto",
+                "copilotcli/claude-sonnet-4.6",
+                "copilotcli/gpt-5.4",
+                "copilot/gpt-5.4"
+            ]
+        }
     }
 }
