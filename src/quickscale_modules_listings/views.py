@@ -13,6 +13,7 @@ from django.utils.text import slugify
 from django.views.generic import DetailView, ListView
 from markdownx.utils import markdownify
 
+from .filters import get_listing_filter
 from .models import Listing
 
 
@@ -144,28 +145,23 @@ class ListingListView(ListView):
     template_name = "quickscale_modules_listings/listings/listing_list.html"
     context_object_name = "listings"
     paginate_by = 12
-    filterset_class = None  # Must be set by subclass or using get_filterset_class
+    filterset_class: type[Any] | None = None
+
+    def get_filterset_class(self) -> type[Any]:
+        """Resolve the filterset class, defaulting to the shared factory."""
+        if self.filterset_class is not None:
+            return self.filterset_class
+        return get_listing_filter(self.model)
 
     def get_queryset(self) -> QuerySet:
         """Return published listings, optionally filtered"""
         queryset = super().get_queryset().filter(status="published")
-
-        # Apply filters from query params
-        price_min = self.request.GET.get("price_min")
-        price_max = self.request.GET.get("price_max")
-        location = self.request.GET.get("location")
-        status = self.request.GET.get("status")
-
-        if price_min:
-            queryset = queryset.filter(price__gte=price_min)
-        if price_max:
-            queryset = queryset.filter(price__lte=price_max)
-        if location:
-            queryset = queryset.filter(location__icontains=location)
-        if status:
-            queryset = queryset.filter(status=status)
-
-        return queryset
+        filterset_class = self.get_filterset_class()
+        self.filterset = filterset_class(
+            data=self.request.GET or None,
+            queryset=queryset,
+        )
+        return self.filterset.qs
 
     def get_context_data(self, **kwargs: Any) -> dict[str, Any]:
         """Add filter values to context"""
