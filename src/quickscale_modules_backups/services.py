@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from collections.abc import Iterator
 from contextlib import contextmanager
+from copy import deepcopy
 from enum import StrEnum
 import hashlib
 import json
@@ -11,13 +12,14 @@ import os
 import re
 import shutil
 import subprocess
-from dataclasses import asdict, dataclass
+from dataclasses import asdict, dataclass, replace
 from datetime import datetime, timedelta, timezone
 from importlib import import_module
 from io import StringIO
 from pathlib import Path
 from tempfile import TemporaryDirectory
-from typing import TYPE_CHECKING, Any, Protocol, Sequence
+from typing import TYPE_CHECKING, Any, Callable, Protocol, Sequence
+from uuid import uuid4
 
 import django
 from django.apps import apps
@@ -27,7 +29,11 @@ from django.core.files import File
 from django.core.management import call_command
 from django.utils import timezone as django_timezone
 
-from quickscale_modules_backups.models import BackupArtifact, BackupPolicy
+from quickscale_modules_backups.models import (
+    BackupArtifact,
+    BackupPolicy,
+    BackupSnapshot,
+)
 
 if TYPE_CHECKING:
     from django.contrib.auth.base_user import AbstractBaseUser
@@ -42,6 +48,14 @@ _REQUIRED_POSTGRESQL_MAJOR = 18
 _LEADING_MAJOR_VERSION_PATTERN = re.compile(r"^\s*(\d+)")
 _ANY_MAJOR_VERSION_PATTERN = re.compile(r"(\d+)")
 _POSTGRESQL_CUSTOM_ARCHIVE_MAGIC = b"PGDMP"
+_SNAPSHOTS_DIRECTORY_NAME = "snapshots"
+_SNAPSHOT_DATABASE_DIRECTORY_NAME = "database"
+_MEDIA_SYNC_MANIFEST_FILENAME = "media-sync-manifest.json"
+_ENV_VAR_MANIFEST_FILENAME = "env-var-manifest.json"
+_RELEASE_METADATA_FILENAME = "release-metadata.json"
+_PROMOTION_VERIFICATION_FILENAME = "promotion-verification.json"
+_DR_TARGET_ENV_PREFIX = "QUICKSCALE_DR_TARGET_"
+_DR_TARGET_ROUTE_KIND_KEY = "ROUTE_KIND"
 
 
 def _postgresql_18_client_tooling_guidance() -> str:
@@ -357,6 +371,421 @@ def get_local_backup_directory(policy: BackupPolicySnapshot) -> Path:
     return base_dir / directory
 
 
+def _get_source_environment() -> str:
+    """Return the active QuickScale environment name with a conservative default."""
+    return os.getenv("QUICKSCALE_ENVIRONMENT", "local").strip() or "local"
+
+
+def _mint_snapshot_id() -> str:
+    """Return an opaque stable identifier for one stored snapshot."""
+    return uuid4().hex
+
+
+def _build_snapshot_local_root(
+    policy: BackupPolicySnapshot,
+    snapshot_id: str,
+) -> Path:
+    """Resolve the private local root directory for one stored snapshot."""
+    return get_local_backup_directory(policy) / _SNAPSHOTS_DIRECTORY_NAME / snapshot_id
+
+
+def _build_snapshot_remote_root(
+    policy: BackupPolicySnapshot,
+    snapshot_id: str,
+) -> str:
+    """Return the matching private remote root key for one stored snapshot."""
+    remote_prefix = policy.remote_prefix.strip().strip("/")
+    snapshot_segment = f"{_SNAPSHOTS_DIRECTORY_NAME}/{snapshot_id}"
+    if remote_prefix:
+        return f"{remote_prefix}/{snapshot_segment}"
+    return snapshot_segment
+
+
+def _replace_policy_remote_prefix(
+    policy: BackupPolicySnapshot,
+    remote_prefix: str,
+) -> BackupPolicySnapshot:
+    """Return a copy of the policy scoped to a more specific remote prefix."""
+    return replace(policy, remote_prefix=remote_prefix)
+
+
+def _relative_snapshot_child_path(snapshot_root: Path, child_path: Path) -> str:
+    """Return a stable snapshot-relative path for one child file."""
+    return child_path.relative_to(snapshot_root).as_posix()
+
+
+def _build_snapshot_child_descriptor(
+    *,
+    kind: str,
+    status: str,
+    relative_path: str,
+    local_path: Path | None = None,
+    remote_key: str = "",
+    error: str = "",
+    size_bytes: int | None = None,
+    checksum_sha256: str = "",
+    metadata: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    """Build JSON metadata describing one child stored under a snapshot root."""
+    descriptor: dict[str, Any] = {
+        "kind": kind,
+        "status": status,
+        "relative_path": relative_path,
+        "local_path": str(local_path) if local_path is not None else "",
+    }
+    if remote_key:
+        descriptor["remote_key"] = remote_key
+    if error:
+        descriptor["error"] = error
+    if size_bytes is not None:
+        descriptor["size_bytes"] = size_bytes
+    if checksum_sha256:
+        descriptor["checksum_sha256"] = checksum_sha256
+    if metadata:
+        descriptor["metadata"] = metadata
+    return descriptor
+
+
+def _build_snapshot_database_descriptor(
+    snapshot: BackupSnapshot,
+    artifact: BackupArtifact,
+) -> dict[str, Any]:
+    """Build the authoritative dump descriptor stored on a snapshot row."""
+    local_path = Path(artifact.local_path) if artifact.local_path else None
+    snapshot_root = Path(snapshot.local_root_path)
+    relative_path = f"{_SNAPSHOT_DATABASE_DIRECTORY_NAME}/{artifact.filename}"
+    if local_path is not None:
+        try:
+            relative_path = _relative_snapshot_child_path(snapshot_root, local_path)
+        except ValueError:
+            relative_path = f"{_SNAPSHOT_DATABASE_DIRECTORY_NAME}/{artifact.filename}"
+
+    return _build_snapshot_child_descriptor(
+        kind="database_dump",
+        status=BackupSnapshot.STATUS_READY,
+        relative_path=relative_path,
+        local_path=local_path,
+        remote_key=artifact.remote_key,
+        size_bytes=artifact.size_bytes,
+        checksum_sha256=artifact.checksum_sha256,
+        metadata={"backup_format": artifact.backup_format},
+    )
+
+
+def _write_json_file(path: Path, payload: dict[str, Any]) -> None:
+    """Write a JSON payload with deterministic formatting."""
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(
+        json.dumps(payload, indent=2, sort_keys=True) + "\n",
+        encoding="utf-8",
+    )
+
+
+def _read_setting_value(
+    settings_obj: Any,
+    key: str,
+    default: Any,
+) -> Any:
+    """Read one setting key from a Django settings object or plain mapping."""
+    if isinstance(settings_obj, dict):
+        return settings_obj.get(key, default)
+    return getattr(settings_obj, key, default)
+
+
+def _snapshot_sidecar_path(snapshot: BackupSnapshot, filename: str) -> Path:
+    """Resolve one sidecar file path under a snapshot root."""
+    return Path(snapshot.local_root_path) / filename
+
+
+def _load_snapshot_sidecar_payload(
+    snapshot: BackupSnapshot,
+    filename: str,
+) -> dict[str, Any]:
+    """Read and validate one JSON sidecar payload for a snapshot."""
+    local_path = _snapshot_sidecar_path(snapshot, filename)
+    if not local_path.exists():
+        raise BackupError(f"Snapshot sidecar not found: {filename}")
+
+    try:
+        payload = json.loads(local_path.read_text(encoding="utf-8"))
+    except OSError as exc:
+        raise BackupError(
+            f"Unable to read snapshot sidecar '{filename}': {exc}"
+        ) from exc
+    except json.JSONDecodeError as exc:
+        raise BackupError(f"Snapshot sidecar '{filename}' is not valid JSON") from exc
+
+    if not isinstance(payload, dict):
+        raise BackupError(f"Snapshot sidecar '{filename}' must contain a JSON object")
+    return payload
+
+
+def _persist_snapshot_sidecar_payload(
+    snapshot: BackupSnapshot,
+    *,
+    filename: str,
+    kind: str,
+    payload: dict[str, Any],
+    policy: BackupPolicySnapshot | None = None,
+    remote_uploader: RemoteUploader | None = None,
+) -> dict[str, Any]:
+    """Write one sidecar payload and refresh its snapshot descriptor."""
+    local_path = _snapshot_sidecar_path(snapshot, filename)
+    _write_json_file(local_path, payload)
+
+    child_descriptors_json = deepcopy(
+        snapshot.child_descriptors_json
+        if isinstance(snapshot.child_descriptors_json, dict)
+        else {}
+    )
+    sidecars = child_descriptors_json.setdefault("sidecars", {})
+    if not isinstance(sidecars, dict):
+        sidecars = {}
+        child_descriptors_json["sidecars"] = sidecars
+
+    relative_path = _relative_snapshot_child_path(
+        Path(snapshot.local_root_path), local_path
+    )
+    descriptor = _build_snapshot_child_descriptor(
+        kind=kind,
+        status=BackupSnapshot.STATUS_READY,
+        relative_path=relative_path,
+        local_path=local_path,
+        size_bytes=local_path.stat().st_size,
+        checksum_sha256=_compute_sha256(local_path),
+        metadata={"manifest_status": str(payload.get("status", "")).strip()},
+    )
+
+    existing_descriptor = sidecars.get(filename)
+    if isinstance(existing_descriptor, dict):
+        existing_remote_key = str(existing_descriptor.get("remote_key", "")).strip()
+        if existing_remote_key:
+            descriptor["remote_key"] = existing_remote_key
+
+    resolved_policy = policy or load_policy_snapshot()
+    if (
+        snapshot.remote_root_key
+        and resolved_policy.target_mode == BackupPolicy.TARGET_MODE_PRIVATE_REMOTE
+    ):
+        uploader = remote_uploader or _upload_to_private_remote
+        try:
+            descriptor["remote_key"] = _upload_snapshot_child_to_private_remote(
+                local_path,
+                policy=resolved_policy,
+                snapshot_remote_root=snapshot.remote_root_key,
+                relative_path=relative_path,
+                remote_uploader=uploader,
+            )
+        except BackupError as exc:
+            descriptor["status"] = BackupSnapshot.STATUS_FAILED
+            descriptor["error"] = str(exc)
+            sidecars[filename] = descriptor
+            snapshot.child_descriptors_json = child_descriptors_json
+            snapshot.save(update_fields=["child_descriptors_json", "updated_at"])
+            raise
+        except Exception as exc:
+            error_message = f"Private remote upload failed for {filename}: {exc}"
+            descriptor["status"] = BackupSnapshot.STATUS_FAILED
+            descriptor["error"] = error_message
+            sidecars[filename] = descriptor
+            snapshot.child_descriptors_json = child_descriptors_json
+            snapshot.save(update_fields=["child_descriptors_json", "updated_at"])
+            raise BackupError(error_message) from exc
+
+    sidecars[filename] = descriptor
+    snapshot.child_descriptors_json = child_descriptors_json
+    snapshot.save(update_fields=["child_descriptors_json", "updated_at"])
+    return descriptor
+
+
+def _get_git_revision() -> str | None:
+    """Return the best-effort current git revision for release metadata."""
+    base_dir = Path(getattr(settings, "BASE_DIR", Path.cwd()))
+    try:
+        result = subprocess.run(
+            ["git", "rev-parse", "HEAD"],
+            capture_output=True,
+            check=False,
+            text=True,
+            cwd=base_dir,
+        )
+    except OSError:
+        return None
+
+    if result.returncode != 0:
+        return None
+
+    revision = result.stdout.strip()
+    return revision or None
+
+
+def _build_media_sync_manifest(*, captured_at: datetime) -> dict[str, Any]:
+    """Capture private media inventory or fail closed with explicit provider metadata."""
+    base_payload: dict[str, Any] = {
+        "manifest_version": 1,
+        "captured_at": captured_at.astimezone(timezone.utc).isoformat(),
+        "project_slug": _get_project_slug(),
+        "source_environment": _get_source_environment(),
+    }
+    try:
+        from quickscale_modules_storage.helpers import (
+            list_s3_compatible_media_inventory,
+            select_storage_backend,
+        )
+    except Exception as exc:
+        return {
+            **base_payload,
+            "status": "unsupported",
+            "reason": "storage helper is unavailable in this runtime",
+            "error_type": exc.__class__.__name__,
+            "storage": {
+                "backend": (
+                    str(
+                        getattr(settings, "QUICKSCALE_STORAGE_BACKEND", "local")
+                    ).strip()
+                    or "local"
+                ),
+            },
+            "inventory": [],
+        }
+
+    selection = select_storage_backend(settings)
+    storage_payload: dict[str, Any] = {
+        "backend": selection.backend,
+        "django_backend": selection.django_backend,
+        "use_s3_compatible": selection.use_s3_compatible,
+    }
+    if selection.use_s3_compatible:
+        storage_payload.update(
+            {
+                "bucket_name": str(selection.options.get("bucket_name", "")),
+                "endpoint_url": str(selection.options.get("endpoint_url", "")),
+                "region_name": str(selection.options.get("region_name", "")),
+                "querystring_auth": bool(
+                    selection.options.get("querystring_auth", False)
+                ),
+                "access_key_id_configured": bool(
+                    str(selection.options.get("access_key_id", ""))
+                ),
+                "secret_access_key_configured": bool(
+                    str(selection.options.get("secret_access_key", ""))
+                ),
+            }
+        )
+        try:
+            inventory = list_s3_compatible_media_inventory(settings)
+        except Exception as exc:
+            return {
+                **base_payload,
+                "status": "inventory_failed",
+                "reason": str(exc),
+                "error_type": exc.__class__.__name__,
+                "storage": storage_payload,
+                "inventory": [],
+            }
+        return {
+            **base_payload,
+            "status": "ready",
+            "storage": storage_payload,
+            "inventory": inventory,
+        }
+
+    media_root_text = str(getattr(settings, "MEDIA_ROOT", "")).strip()
+    storage_payload["media_root"] = media_root_text
+    if not media_root_text:
+        return {
+            **base_payload,
+            "status": "missing_media_root",
+            "storage": storage_payload,
+            "inventory": [],
+        }
+
+    media_root = Path(media_root_text)
+    if not media_root.exists():
+        return {
+            **base_payload,
+            "status": "missing_local_root",
+            "storage": storage_payload,
+            "inventory": [],
+        }
+    if not media_root.is_dir():
+        return {
+            **base_payload,
+            "status": "invalid_local_root",
+            "storage": storage_payload,
+            "inventory": [],
+        }
+
+    inventory: list[dict[str, Any]] = []
+    for file_path in sorted(path for path in media_root.rglob("*") if path.is_file()):
+        file_stats = file_path.stat()
+        inventory.append(
+            {
+                "relative_path": file_path.relative_to(media_root).as_posix(),
+                "size_bytes": file_stats.st_size,
+                "checksum_sha256": _compute_sha256(file_path),
+                "modified_at": datetime.fromtimestamp(
+                    file_stats.st_mtime,
+                    tz=timezone.utc,
+                ).isoformat(),
+            }
+        )
+
+    return {
+        **base_payload,
+        "status": "ready",
+        "storage": storage_payload,
+        "inventory": inventory,
+    }
+
+
+def _build_env_var_manifest(*, captured_at: datetime) -> dict[str, Any]:
+    """Capture environment variable names only, never their values."""
+    variable_names = sorted(os.environ.keys())
+    return {
+        "manifest_version": 1,
+        "captured_at": captured_at.astimezone(timezone.utc).isoformat(),
+        "project_slug": _get_project_slug(),
+        "source_environment": _get_source_environment(),
+        "status": "ready",
+        "count": len(variable_names),
+        "names": variable_names,
+    }
+
+
+def _build_release_metadata(*, captured_at: datetime) -> dict[str, Any]:
+    """Capture release metadata reserved for later snapshot-aware CLI phases."""
+    return {
+        "manifest_version": 1,
+        "captured_at": captured_at.astimezone(timezone.utc).isoformat(),
+        "project_slug": _get_project_slug(),
+        "source_environment": _get_source_environment(),
+        "status": "ready",
+        "app_version": str(getattr(settings, "QUICKSCALE_APP_VERSION", "unknown")),
+        "django_version": django.get_version(),
+        "module_versions": _collect_module_versions(),
+        "git_sha": _get_git_revision(),
+    }
+
+
+def _build_promotion_verification_placeholder(
+    *,
+    captured_at: datetime,
+) -> dict[str, Any]:
+    """Initialize the reserved promotion verification sidecar."""
+    return {
+        "manifest_version": 1,
+        "captured_at": captured_at.astimezone(timezone.utc).isoformat(),
+        "project_slug": _get_project_slug(),
+        "source_environment": _get_source_environment(),
+        "status": "reserved",
+        "updated_at": captured_at.astimezone(timezone.utc).isoformat(),
+        "reports": [],
+        "notes": "Reserved for route-specific plan and execute reports.",
+        "rollback_pin": {"expires_at": None, "reason": ""},
+    }
+
+
 @contextmanager
 def _backup_creation_lock(
     local_directory: Path,
@@ -573,6 +1002,254 @@ def _resolve_artifact_remote_policy(
     )
 
 
+def _mark_snapshot_failed(
+    snapshot: BackupSnapshot,
+    *,
+    failure_note: str,
+    child_descriptors_json: dict[str, Any] | None = None,
+) -> None:
+    """Persist a failed snapshot outcome without hiding the stored dump artifact."""
+    snapshot.status = BackupSnapshot.STATUS_FAILED
+    snapshot.failure_note = failure_note
+    update_fields = ["status", "failure_note", "updated_at"]
+    if child_descriptors_json is not None:
+        snapshot.child_descriptors_json = child_descriptors_json
+        update_fields.append("child_descriptors_json")
+    snapshot.save(update_fields=update_fields)
+
+
+def _persist_snapshot_metadata_on_artifact(
+    artifact: BackupArtifact,
+    snapshot: BackupSnapshot,
+    *,
+    note: str | None = None,
+) -> None:
+    """Store internal snapshot references on the dump artifact metadata."""
+    artifact.metadata_json = {
+        **artifact.metadata_json,
+        "snapshot_id": snapshot.snapshot_id,
+        "snapshot_status": snapshot.status,
+    }
+    if snapshot.remote_root_key:
+        artifact.metadata_json["snapshot_remote_root_key"] = snapshot.remote_root_key
+
+    update_fields = ["metadata_json", "updated_at"]
+    if note is not None:
+        existing_notes = artifact.validation_notes.strip()
+        artifact.validation_notes = (
+            f"{existing_notes}; {note}" if existing_notes else note
+        )
+        update_fields.append("validation_notes")
+    artifact.save(update_fields=update_fields)
+
+
+def _upload_snapshot_child_to_private_remote(
+    local_path: Path,
+    *,
+    policy: BackupPolicySnapshot,
+    snapshot_remote_root: str,
+    relative_path: str,
+    remote_uploader: RemoteUploader,
+) -> str:
+    """Upload one snapshot child while preserving the snapshot-relative remote layout."""
+    relative_parent = Path(relative_path).parent.as_posix()
+    remote_prefix = snapshot_remote_root
+    if relative_parent not in {"", "."}:
+        remote_prefix = f"{snapshot_remote_root}/{relative_parent}"
+    return remote_uploader(
+        local_path,
+        _replace_policy_remote_prefix(policy, remote_prefix),
+    )
+
+
+def _capture_snapshot_sidecars(
+    *,
+    snapshot: BackupSnapshot,
+    policy: BackupPolicySnapshot,
+    captured_at: datetime,
+    remote_uploader: RemoteUploader | None,
+) -> tuple[dict[str, Any], list[str]]:
+    """Capture private sidecar manifests without breaking the dump-first contract."""
+    snapshot_root = Path(snapshot.local_root_path)
+    child_descriptors_json = deepcopy(
+        snapshot.child_descriptors_json
+        if isinstance(snapshot.child_descriptors_json, dict)
+        else {}
+    )
+    sidecar_descriptors = child_descriptors_json.setdefault("sidecars", {})
+    if not isinstance(sidecar_descriptors, dict):
+        sidecar_descriptors = {}
+        child_descriptors_json["sidecars"] = sidecar_descriptors
+
+    failures: list[str] = []
+    uploader = remote_uploader or _upload_to_private_remote
+    sidecar_builders: tuple[
+        tuple[str, str, Callable[[], dict[str, Any]]],
+        ...,
+    ] = (
+        (
+            _MEDIA_SYNC_MANIFEST_FILENAME,
+            "media_sync_manifest",
+            lambda: _build_media_sync_manifest(captured_at=captured_at),
+        ),
+        (
+            _ENV_VAR_MANIFEST_FILENAME,
+            "env_var_manifest",
+            lambda: _build_env_var_manifest(captured_at=captured_at),
+        ),
+        (
+            _RELEASE_METADATA_FILENAME,
+            "release_metadata",
+            lambda: _build_release_metadata(captured_at=captured_at),
+        ),
+        (
+            _PROMOTION_VERIFICATION_FILENAME,
+            "promotion_verification",
+            lambda: _build_promotion_verification_placeholder(
+                captured_at=captured_at,
+            ),
+        ),
+    )
+
+    for filename, kind, payload_builder in sidecar_builders:
+        local_path = snapshot_root / filename
+        relative_path = _relative_snapshot_child_path(snapshot_root, local_path)
+        try:
+            payload = payload_builder()
+            manifest_status = str(payload.get("status", "")).strip()
+            metadata = {"manifest_status": manifest_status} if manifest_status else None
+            _write_json_file(local_path, payload)
+            descriptor = _build_snapshot_child_descriptor(
+                kind=kind,
+                status=BackupSnapshot.STATUS_READY,
+                relative_path=relative_path,
+                local_path=local_path,
+                size_bytes=local_path.stat().st_size,
+                checksum_sha256=_compute_sha256(local_path),
+                metadata=metadata,
+            )
+            if policy.target_mode == BackupPolicy.TARGET_MODE_PRIVATE_REMOTE:
+                try:
+                    remote_key = _upload_snapshot_child_to_private_remote(
+                        local_path,
+                        policy=policy,
+                        snapshot_remote_root=snapshot.remote_root_key,
+                        relative_path=relative_path,
+                        remote_uploader=uploader,
+                    )
+                except BackupError as exc:
+                    descriptor["status"] = BackupSnapshot.STATUS_FAILED
+                    descriptor["error"] = str(exc)
+                    failures.append(f"{filename}: {exc}")
+                except Exception as exc:
+                    error_message = (
+                        f"Private remote upload failed for {filename}: {exc}"
+                    )
+                    descriptor["status"] = BackupSnapshot.STATUS_FAILED
+                    descriptor["error"] = error_message
+                    failures.append(f"{filename}: {error_message}")
+                else:
+                    descriptor["remote_key"] = remote_key
+            sidecar_descriptors[filename] = descriptor
+        except Exception as exc:
+            cleanup_error = _cleanup_local_backup_file(local_path)
+            error_message = str(exc)
+            if cleanup_error is not None:
+                error_message += f"; cleanup failed: {cleanup_error}"
+            sidecar_descriptors[filename] = _build_snapshot_child_descriptor(
+                kind=kind,
+                status=BackupSnapshot.STATUS_FAILED,
+                relative_path=relative_path,
+                local_path=local_path,
+                error=error_message,
+            )
+            failures.append(f"{filename}: {error_message}")
+
+    child_descriptors_json["sidecars"] = sidecar_descriptors
+    return child_descriptors_json, failures
+
+
+def _get_authoritative_snapshot_for_artifact(
+    artifact: BackupArtifact,
+) -> BackupSnapshot | None:
+    """Return the linked snapshot for a dump artifact if one exists."""
+    try:
+        return artifact.authoritative_snapshot
+    except BackupSnapshot.DoesNotExist:
+        return None
+
+
+def _mark_snapshot_descriptors_deleted(
+    child_descriptors_json: dict[str, Any],
+) -> dict[str, Any]:
+    """Return a copy of snapshot child metadata with deleted status applied."""
+    updated = deepcopy(child_descriptors_json)
+    database_descriptor = updated.get("database")
+    if isinstance(database_descriptor, dict):
+        database_descriptor["status"] = BackupSnapshot.STATUS_DELETED
+
+    sidecars = updated.get("sidecars")
+    if isinstance(sidecars, dict):
+        for descriptor in sidecars.values():
+            if isinstance(descriptor, dict):
+                descriptor["status"] = BackupSnapshot.STATUS_DELETED
+
+    return updated
+
+
+def _delete_snapshot_storage(
+    snapshot: BackupSnapshot,
+    *,
+    policy: BackupPolicySnapshot,
+    remote_deleter: RemoteDeleter | None = None,
+) -> None:
+    """Delete all private files associated with one stored snapshot."""
+    snapshot_root = Path(snapshot.local_root_path)
+    artifact = snapshot.authoritative_dump
+    remote_keys: set[str] = set()
+    child_descriptors_json = (
+        snapshot.child_descriptors_json
+        if isinstance(snapshot.child_descriptors_json, dict)
+        else {}
+    )
+
+    database_descriptor = child_descriptors_json.get("database")
+    if isinstance(database_descriptor, dict):
+        remote_key = str(database_descriptor.get("remote_key", "")).strip()
+        if remote_key:
+            remote_keys.add(remote_key)
+
+    sidecars = child_descriptors_json.get("sidecars")
+    if isinstance(sidecars, dict):
+        for descriptor in sidecars.values():
+            if not isinstance(descriptor, dict):
+                continue
+            remote_key = str(descriptor.get("remote_key", "")).strip()
+            if remote_key:
+                remote_keys.add(remote_key)
+
+    if artifact is not None and artifact.remote_key:
+        remote_keys.add(artifact.remote_key)
+
+    if remote_keys:
+        deleter = remote_deleter or _delete_private_remote_key
+        remote_policy = (
+            _resolve_artifact_remote_policy(artifact, policy)
+            if artifact is not None
+            else policy
+        )
+        for remote_key in sorted(remote_keys):
+            deleter(remote_key, remote_policy)
+
+    if snapshot_root.exists():
+        shutil.rmtree(snapshot_root)
+
+    if artifact is not None and artifact.local_path:
+        artifact_local_path = Path(artifact.local_path)
+        if artifact_local_path.exists():
+            artifact_local_path.unlink()
+
+
 def create_backup(
     *,
     initiated_by: AbstractBaseUser | None = None,
@@ -602,33 +1279,58 @@ def create_backup(
         database_server_major: int | None = None
         dump_client_version: str | None = None
         dump_client_major: int | None = None
+        snapshot_id = _mint_snapshot_id()
+        snapshot_root = _build_snapshot_local_root(resolved_policy, snapshot_id)
+        snapshot_root.mkdir(parents=True, exist_ok=True)
+        database_directory = snapshot_root / _SNAPSHOT_DATABASE_DIRECTORY_NAME
+        database_directory.mkdir(parents=True, exist_ok=True)
+        snapshot = BackupSnapshot.objects.create(
+            snapshot_id=snapshot_id,
+            status=BackupSnapshot.STATUS_PENDING,
+            source_environment=_get_source_environment(),
+            local_root_path=str(snapshot_root),
+            remote_root_key=(
+                _build_snapshot_remote_root(resolved_policy, snapshot_id)
+                if resolved_policy.target_mode
+                == BackupPolicy.TARGET_MODE_PRIVATE_REMOTE
+                else ""
+            ),
+            child_descriptors_json={"sidecars": {}},
+        )
 
-        if "postgresql" in engine:
-            (
-                database_server_version,
-                database_server_major,
-                dump_client_version,
-                dump_client_major,
-            ) = _require_postgresql_18_contract(
-                database_engine=engine,
-                executable="pg_dump",
-                operation="backup creation",
+        try:
+            if "postgresql" in engine:
+                (
+                    database_server_version,
+                    database_server_major,
+                    dump_client_version,
+                    dump_client_major,
+                ) = _require_postgresql_18_contract(
+                    database_engine=engine,
+                    executable="pg_dump",
+                    operation="backup creation",
+                )
+                backup_format = "pg_dump_custom"
+                filename = build_backup_filename(
+                    resolved_policy,
+                    now=backup_started_at,
+                    suffix="dump",
+                )
+                local_path = database_directory / filename
+            else:
+                backup_format = "json"
+                filename = build_backup_filename(
+                    resolved_policy,
+                    now=backup_started_at,
+                    suffix="json",
+                )
+                local_path = database_directory / filename
+        except Exception as exc:
+            _mark_snapshot_failed(
+                snapshot,
+                failure_note=f"snapshot preparation failed: {exc}",
             )
-            backup_format = "pg_dump_custom"
-            filename = build_backup_filename(
-                resolved_policy,
-                now=backup_started_at,
-                suffix="dump",
-            )
-            local_path = local_directory / filename
-        else:
-            backup_format = "json"
-            filename = build_backup_filename(
-                resolved_policy,
-                now=backup_started_at,
-                suffix="json",
-            )
-            local_path = local_directory / filename
+            raise
         try:
             if backup_format == "pg_dump_custom":
                 _dump_postgresql_database(
@@ -643,6 +1345,10 @@ def create_backup(
             size_bytes = local_path.stat().st_size
         except Exception as exc:
             cleanup_error = _cleanup_local_backup_file(local_path)
+            failure_note = f"snapshot dump creation failed: {exc}"
+            if cleanup_error is not None:
+                failure_note += f"; cleanup failed: {cleanup_error}"
+            _mark_snapshot_failed(snapshot, failure_note=failure_note)
             if cleanup_error is not None:
                 exc.add_note(
                     f"Failed to clean up partial backup file '{local_path}': {cleanup_error}"
@@ -662,6 +1368,9 @@ def create_backup(
         )
         if backup_note:
             metadata["degraded_backup_reason"] = backup_note
+        metadata["snapshot_id"] = snapshot.snapshot_id
+        if snapshot.remote_root_key:
+            metadata["snapshot_remote_root_key"] = snapshot.remote_root_key
 
         artifact = BackupArtifact.objects.create(
             filename=filename,
@@ -687,13 +1396,43 @@ def create_backup(
             initiated_by=initiated_by,
             trigger=trigger,
         )
+        child_descriptors_json: dict[str, Any] = {
+            "database": _build_snapshot_database_descriptor(snapshot, artifact),
+            "sidecars": {},
+        }
+        snapshot.authoritative_dump = artifact
+        snapshot.child_descriptors_json = child_descriptors_json
+        snapshot.save(
+            update_fields=[
+                "authoritative_dump",
+                "child_descriptors_json",
+                "updated_at",
+            ]
+        )
 
         if resolved_policy.target_mode == BackupPolicy.TARGET_MODE_PRIVATE_REMOTE:
             uploader = remote_uploader or _upload_to_private_remote
             try:
-                remote_key = uploader(local_path, resolved_policy)
+                remote_key = _upload_snapshot_child_to_private_remote(
+                    local_path,
+                    policy=resolved_policy,
+                    snapshot_remote_root=snapshot.remote_root_key,
+                    relative_path=str(
+                        child_descriptors_json["database"]["relative_path"]
+                    ),
+                    remote_uploader=uploader,
+                )
             except BackupError as exc:
                 _mark_remote_upload_failure(artifact, local_path=local_path, error=exc)
+                child_descriptors_json["database"]["status"] = (
+                    BackupSnapshot.STATUS_FAILED
+                )
+                child_descriptors_json["database"]["error"] = str(exc)
+                _mark_snapshot_failed(
+                    snapshot,
+                    failure_note=f"database dump remote upload failed: {exc}",
+                    child_descriptors_json=child_descriptors_json,
+                )
                 raise
             except Exception as exc:
                 upload_error = BackupError(
@@ -703,6 +1442,17 @@ def create_backup(
                     artifact,
                     local_path=local_path,
                     error=upload_error,
+                )
+                child_descriptors_json["database"]["status"] = (
+                    BackupSnapshot.STATUS_FAILED
+                )
+                child_descriptors_json["database"]["error"] = str(upload_error)
+                _mark_snapshot_failed(
+                    snapshot,
+                    failure_note=(
+                        f"database dump remote upload failed: {upload_error}"
+                    ),
+                    child_descriptors_json=child_descriptors_json,
                 )
                 raise upload_error from exc
             artifact.remote_key = remote_key
@@ -728,13 +1478,556 @@ def create_backup(
                         f"{cleanup_error}. Manual cleanup may be required for "
                         f"'{remote_key}'."
                     )
+                child_descriptors_json["database"]["status"] = (
+                    BackupSnapshot.STATUS_FAILED
+                )
+                child_descriptors_json["database"]["remote_key"] = remote_key
+                child_descriptors_json["database"]["error"] = message
+                _mark_snapshot_failed(
+                    snapshot,
+                    failure_note=message,
+                    child_descriptors_json=child_descriptors_json,
+                )
                 raise BackupError(message) from exc
+
+            child_descriptors_json["database"]["remote_key"] = remote_key
+            snapshot.child_descriptors_json = child_descriptors_json
+            snapshot.save(update_fields=["child_descriptors_json", "updated_at"])
+
+        child_descriptors_json, sidecar_failures = _capture_snapshot_sidecars(
+            snapshot=snapshot,
+            policy=resolved_policy,
+            captured_at=backup_started_at,
+            remote_uploader=remote_uploader,
+        )
+        snapshot.child_descriptors_json = child_descriptors_json
+        if sidecar_failures:
+            failure_note = "snapshot sidecar capture failed: " + "; ".join(
+                sidecar_failures
+            )
+            snapshot.status = BackupSnapshot.STATUS_FAILED
+            snapshot.failure_note = failure_note
+            snapshot.save(
+                update_fields=[
+                    "child_descriptors_json",
+                    "status",
+                    "failure_note",
+                    "updated_at",
+                ]
+            )
+            _persist_snapshot_metadata_on_artifact(
+                artifact,
+                snapshot,
+                note=failure_note,
+            )
+        else:
+            snapshot.status = BackupSnapshot.STATUS_READY
+            snapshot.failure_note = ""
+            snapshot.save(
+                update_fields=[
+                    "child_descriptors_json",
+                    "status",
+                    "failure_note",
+                    "updated_at",
+                ]
+            )
+            _persist_snapshot_metadata_on_artifact(artifact, snapshot)
 
         try:
             prune_expired_backups(policy=resolved_policy, now=backup_started_at)
         except Exception as exc:
             _record_prune_failure_without_masking_success(artifact, error=exc)
         return artifact
+
+
+def get_backup_snapshot(snapshot_id: str) -> BackupSnapshot:
+    """Return one stored snapshot addressed by the public snapshot locator."""
+    normalized_snapshot_id = snapshot_id.strip()
+    if not normalized_snapshot_id:
+        raise BackupConfigurationError("snapshot_id cannot be blank")
+
+    try:
+        return BackupSnapshot.objects.select_related("authoritative_dump").get(
+            snapshot_id=normalized_snapshot_id
+        )
+    except BackupSnapshot.DoesNotExist as exc:
+        raise BackupError(
+            f"Backup snapshot not found: {normalized_snapshot_id}"
+        ) from exc
+
+
+def build_backup_snapshot_report(
+    snapshot: BackupSnapshot,
+    *,
+    now: datetime | None = None,
+    sidecar_payloads: Sequence[str] | None = None,
+) -> dict[str, Any]:
+    """Build a structured report for one stored snapshot."""
+    report_time = now or django_timezone.now()
+    child_descriptors_json = (
+        snapshot.child_descriptors_json
+        if isinstance(snapshot.child_descriptors_json, dict)
+        else {}
+    )
+    database_descriptor = child_descriptors_json.get("database")
+    if not isinstance(database_descriptor, dict):
+        database_descriptor = {}
+
+    sidecars = child_descriptors_json.get("sidecars")
+    if not isinstance(sidecars, dict):
+        sidecars = {}
+
+    authoritative_dump = snapshot.authoritative_dump
+    authoritative_dump_payload: dict[str, Any] | None = None
+    if authoritative_dump is not None:
+        authoritative_dump_payload = {
+            "artifact_id": authoritative_dump.pk,
+            "filename": authoritative_dump.filename,
+            "status": authoritative_dump.status,
+            "storage_target": authoritative_dump.storage_target,
+            "backup_format": authoritative_dump.backup_format,
+            "restore_scope": authoritative_dump.effective_restore_scope(),
+            "restore_scope_label": authoritative_dump.restore_scope_label(),
+            "local_path": authoritative_dump.local_path,
+            "remote_key": authoritative_dump.remote_key,
+            "checksum_sha256": authoritative_dump.checksum_sha256,
+            "size_bytes": authoritative_dump.size_bytes,
+            "created_at": authoritative_dump.created_at.astimezone(
+                timezone.utc
+            ).isoformat(),
+        }
+
+    sidecar_summary: dict[str, dict[str, str]] = {}
+    for filename, descriptor in sorted(sidecars.items()):
+        if not isinstance(descriptor, dict):
+            continue
+        sidecar_summary[filename] = {
+            "kind": str(descriptor.get("kind", "")).strip(),
+            "status": str(descriptor.get("status", "")).strip(),
+            "manifest_status": str(
+                descriptor.get("metadata", {}).get("manifest_status", "")
+            ).strip(),
+        }
+
+    requested_sidecar_payloads = tuple(
+        dict.fromkeys(
+            filename.strip()
+            for filename in (sidecar_payloads or ())
+            if filename.strip()
+        )
+    )
+    included_sidecar_payloads: dict[str, dict[str, Any]] = {}
+    sidecar_payload_errors: dict[str, str] = {}
+    for filename in requested_sidecar_payloads:
+        try:
+            included_sidecar_payloads[filename] = _load_snapshot_sidecar_payload(
+                snapshot,
+                filename,
+            )
+        except BackupError as exc:
+            sidecar_payload_errors[filename] = str(exc)
+
+    return {
+        "snapshot_id": snapshot.snapshot_id,
+        "status": snapshot.status,
+        "source_environment": snapshot.source_environment,
+        "created_at": snapshot.created_at.astimezone(timezone.utc).isoformat(),
+        "updated_at": snapshot.updated_at.astimezone(timezone.utc).isoformat(),
+        "failure_note": snapshot.failure_note,
+        "confirmation_value": (
+            authoritative_dump.filename if authoritative_dump is not None else ""
+        ),
+        "local_root_path": snapshot.local_root_path,
+        "remote_root_key": snapshot.remote_root_key,
+        "authoritative_dump": authoritative_dump_payload,
+        "rollback_pin": {
+            "active": snapshot.has_active_rollback_pin(now=report_time),
+            "expires_at": (
+                snapshot.rollback_pin_expires_at.astimezone(timezone.utc).isoformat()
+                if snapshot.rollback_pin_expires_at is not None
+                else None
+            ),
+            "reason": snapshot.rollback_pin_reason,
+        },
+        "children": {
+            "database": database_descriptor,
+            "sidecars": sidecars,
+        },
+        "sidecar_summary": sidecar_summary,
+        "sidecar_payloads": included_sidecar_payloads,
+        "sidecar_payload_errors": sidecar_payload_errors,
+    }
+
+
+def report_backup_snapshot(
+    snapshot_id: str,
+    *,
+    now: datetime | None = None,
+    sidecar_payloads: Sequence[str] | None = None,
+) -> dict[str, Any]:
+    """Return a structured report for one stored snapshot id."""
+    snapshot = get_backup_snapshot(snapshot_id)
+    return build_backup_snapshot_report(
+        snapshot,
+        now=now,
+        sidecar_payloads=sidecar_payloads,
+    )
+
+
+def record_backup_snapshot_verification(
+    snapshot_id: str,
+    *,
+    route: str,
+    phase: str,
+    status: str,
+    payload: dict[str, Any],
+    now: datetime | None = None,
+    policy: BackupPolicySnapshot | None = None,
+    remote_uploader: RemoteUploader | None = None,
+) -> dict[str, Any]:
+    """Append one route-specific report to the verification sidecar."""
+    normalized_route = route.strip()
+    normalized_phase = phase.strip()
+    normalized_status = status.strip()
+    if not normalized_route:
+        raise BackupConfigurationError("route cannot be blank")
+    if not normalized_phase:
+        raise BackupConfigurationError("phase cannot be blank")
+    if not normalized_status:
+        raise BackupConfigurationError("status cannot be blank")
+
+    snapshot = get_backup_snapshot(snapshot_id)
+    recorded_at = now or django_timezone.now()
+    try:
+        verification_payload = _load_snapshot_sidecar_payload(
+            snapshot,
+            _PROMOTION_VERIFICATION_FILENAME,
+        )
+    except BackupError:
+        verification_payload = {}
+
+    existing_reports = verification_payload.get("reports")
+    if not isinstance(existing_reports, list):
+        existing_reports = []
+
+    verification_payload = {
+        "manifest_version": 1,
+        "captured_at": verification_payload.get(
+            "captured_at",
+            snapshot.created_at.astimezone(timezone.utc).isoformat(),
+        ),
+        "snapshot_id": snapshot.snapshot_id,
+        "project_slug": _get_project_slug(),
+        "source_environment": snapshot.source_environment,
+        "status": normalized_status,
+        "updated_at": recorded_at.astimezone(timezone.utc).isoformat(),
+        "reports": [
+            *existing_reports,
+            {
+                "route": normalized_route,
+                "phase": normalized_phase,
+                "status": normalized_status,
+                "recorded_at": recorded_at.astimezone(timezone.utc).isoformat(),
+                "payload": payload,
+            },
+        ],
+        "notes": verification_payload.get(
+            "notes",
+            "Reserved for route-specific plan and execute reports.",
+        ),
+        "rollback_pin": {
+            "active": snapshot.has_active_rollback_pin(now=recorded_at),
+            "expires_at": (
+                snapshot.rollback_pin_expires_at.astimezone(timezone.utc).isoformat()
+                if snapshot.rollback_pin_expires_at is not None
+                else None
+            ),
+            "reason": snapshot.rollback_pin_reason,
+        },
+    }
+    _persist_snapshot_sidecar_payload(
+        snapshot,
+        filename=_PROMOTION_VERIFICATION_FILENAME,
+        kind="promotion_verification",
+        payload=verification_payload,
+        policy=policy,
+        remote_uploader=remote_uploader,
+    )
+    return build_backup_snapshot_report(
+        snapshot,
+        now=recorded_at,
+        sidecar_payloads=[_PROMOTION_VERIFICATION_FILENAME],
+    )
+
+
+def _load_target_runtime_settings() -> dict[str, str]:
+    """Load DR target runtime settings passed in through the env prefix."""
+    target_settings = {
+        key.removeprefix(_DR_TARGET_ENV_PREFIX): value
+        for key, value in os.environ.items()
+        if key.startswith(_DR_TARGET_ENV_PREFIX)
+    }
+    if not target_settings:
+        raise BackupConfigurationError(
+            "Target runtime variables were not provided. Supply QUICKSCALE_DR_TARGET_* env vars before syncing media."
+        )
+    return target_settings
+
+
+def _build_s3_storage_from_selection(selection: Any) -> Any:
+    """Construct an s3-compatible storage object from one backend selection."""
+    from storages.backends.s3 import S3Storage  # type: ignore[import-untyped]
+
+    options: dict[str, Any] = {
+        "bucket_name": str(selection.options.get("bucket_name", "")).strip(),
+        "querystring_auth": bool(selection.options.get("querystring_auth", False)),
+        "default_acl": str(selection.options.get("default_acl", "")).strip(),
+    }
+    if endpoint_url := str(selection.options.get("endpoint_url", "")).strip():
+        options["endpoint_url"] = endpoint_url
+    if region_name := str(selection.options.get("region_name", "")).strip():
+        options["region_name"] = region_name
+    if access_key := str(selection.options.get("access_key_id", "")).strip():
+        options["access_key"] = access_key
+    if secret_key := str(selection.options.get("secret_access_key", "")).strip():
+        options["secret_key"] = secret_key
+    return S3Storage(**options)
+
+
+def _resolve_media_runtime(
+    settings_obj: Any,
+    *,
+    require_s3_compatible: bool = False,
+) -> dict[str, Any]:
+    """Resolve local or s3-compatible media runtime settings."""
+    try:
+        from quickscale_modules_storage.helpers import select_storage_backend
+    except Exception as exc:
+        raise BackupConfigurationError(
+            "Media sync requires quickscale_modules_storage.helpers to resolve storage backends."
+        ) from exc
+
+    selection = select_storage_backend(settings_obj)
+    if require_s3_compatible and not selection.use_s3_compatible:
+        raise BackupConfigurationError(
+            "Railway-target media sync requires an s3-compatible target media backend; "
+            "local MEDIA_ROOT is not a supported Railway target."
+        )
+    if selection.use_s3_compatible:
+        bucket_name = str(selection.options.get("bucket_name", "")).strip()
+        if not bucket_name:
+            raise BackupConfigurationError(
+                "S3-compatible media sync requires AWS_STORAGE_BUCKET_NAME"
+            )
+        return {
+            "backend": selection.backend,
+            "use_s3_compatible": True,
+            "storage": _build_s3_storage_from_selection(selection),
+            "bucket_name": bucket_name,
+        }
+
+    media_root_text = str(_read_setting_value(settings_obj, "MEDIA_ROOT", "")).strip()
+    if not media_root_text:
+        raise BackupConfigurationError(
+            "Local media sync requires MEDIA_ROOT to be configured"
+        )
+    return {
+        "backend": "local",
+        "use_s3_compatible": False,
+        "media_root": Path(media_root_text),
+    }
+
+
+def _storage_object_key(storage: Any, relative_path: str) -> str:
+    """Build the provider object key for one media item."""
+    location_prefix = str(getattr(storage, "location", "") or "").strip().strip("/")
+    relative_segment = relative_path.lstrip("/")
+    if location_prefix:
+        return f"{location_prefix}/{relative_segment}"
+    return relative_segment
+
+
+def _copy_media_item(
+    *,
+    relative_path: str,
+    source_runtime: dict[str, Any],
+    target_runtime: dict[str, Any],
+) -> bool:
+    """Copy one media item between local and s3-compatible runtimes."""
+    if not source_runtime["use_s3_compatible"]:
+        source_path = Path(source_runtime["media_root"]) / relative_path
+        if not source_path.exists():
+            return False
+        if not target_runtime["use_s3_compatible"]:
+            target_path = Path(target_runtime["media_root"]) / relative_path
+            target_path.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copy2(source_path, target_path)
+            return True
+
+        target_storage = target_runtime["storage"]
+        target_storage.connection.meta.client.upload_file(
+            str(source_path),
+            target_runtime["bucket_name"],
+            _storage_object_key(target_storage, relative_path),
+        )
+        return True
+
+    source_storage = source_runtime["storage"]
+    if not target_runtime["use_s3_compatible"]:
+        target_path = Path(target_runtime["media_root"]) / relative_path
+        target_path.parent.mkdir(parents=True, exist_ok=True)
+        with source_storage.open(relative_path, mode="rb") as source_handle:
+            target_path.write_bytes(source_handle.read())
+        return True
+
+    target_storage = target_runtime["storage"]
+    with source_storage.open(relative_path, mode="rb") as source_handle:
+        target_storage.connection.meta.client.upload_fileobj(
+            source_handle,
+            target_runtime["bucket_name"],
+            _storage_object_key(target_storage, relative_path),
+        )
+    return True
+
+
+def sync_backup_snapshot_media(
+    snapshot_id: str,
+    *,
+    dry_run: bool = False,
+) -> dict[str, Any]:
+    """Dry-run or execute media sync for one snapshot using target env overrides."""
+    snapshot = get_backup_snapshot(snapshot_id)
+    media_manifest = _load_snapshot_sidecar_payload(
+        snapshot, _MEDIA_SYNC_MANIFEST_FILENAME
+    )
+    manifest_status = str(media_manifest.get("status", "")).strip()
+    if manifest_status != "ready":
+        raise BackupError(
+            "Media sync requires a ready media manifest, found status "
+            f"'{manifest_status or 'unknown'}'."
+        )
+
+    inventory = media_manifest.get("inventory", [])
+    if not isinstance(inventory, list):
+        raise BackupError("Media manifest inventory must be a list")
+
+    source_runtime = _resolve_media_runtime(settings)
+    target_settings = _load_target_runtime_settings()
+    target_runtime = _resolve_media_runtime(
+        target_settings,
+        require_s3_compatible=(
+            str(target_settings.get(_DR_TARGET_ROUTE_KIND_KEY, "")).strip() == "railway"
+        ),
+    )
+    strategy = f"{source_runtime['backend']}_to_{target_runtime['backend']}"
+    planned_count = 0
+    copied_count = 0
+    missing_paths: list[str] = []
+
+    for entry in inventory:
+        if not isinstance(entry, dict):
+            continue
+        relative_path = str(entry.get("relative_path", "")).strip().lstrip("/")
+        if not relative_path:
+            continue
+
+        planned_count += 1
+        if dry_run:
+            if (
+                not source_runtime["use_s3_compatible"]
+                and not (Path(source_runtime["media_root"]) / relative_path).exists()
+            ):
+                missing_paths.append(relative_path)
+            continue
+
+        copied = _copy_media_item(
+            relative_path=relative_path,
+            source_runtime=source_runtime,
+            target_runtime=target_runtime,
+        )
+        if copied:
+            copied_count += 1
+        else:
+            missing_paths.append(relative_path)
+
+    status = "ready" if dry_run else "completed"
+    if missing_paths:
+        status = "partial"
+
+    return {
+        "snapshot_id": snapshot.snapshot_id,
+        "status": status,
+        "dry_run": dry_run,
+        "strategy": strategy,
+        "source_backend": source_runtime["backend"],
+        "target_backend": target_runtime["backend"],
+        "planned_count": planned_count,
+        "copied_count": copied_count,
+        "missing_paths": missing_paths,
+    }
+
+
+def set_backup_snapshot_rollback_pin(
+    snapshot_id: str,
+    *,
+    ttl_hours: int,
+    reason: str,
+    now: datetime | None = None,
+) -> dict[str, Any]:
+    """Set or refresh a time-bounded rollback pin on one stored snapshot."""
+    if ttl_hours < 1:
+        raise BackupConfigurationError("ttl_hours must be at least 1")
+
+    resolved_reason = reason.strip()
+    if not resolved_reason:
+        raise BackupConfigurationError("reason cannot be blank")
+
+    snapshot = get_backup_snapshot(snapshot_id)
+    if snapshot.status == BackupSnapshot.STATUS_DELETED:
+        raise BackupError(
+            f"Backup snapshot '{snapshot.snapshot_id}' has already been deleted"
+        )
+    if snapshot.authoritative_dump is None:
+        raise BackupError(
+            f"Backup snapshot '{snapshot.snapshot_id}' does not have an authoritative dump"
+        )
+
+    pinned_at = now or django_timezone.now()
+    snapshot.rollback_pin_expires_at = pinned_at + timedelta(hours=ttl_hours)
+    snapshot.rollback_pin_reason = resolved_reason
+    snapshot.save(
+        update_fields=[
+            "rollback_pin_expires_at",
+            "rollback_pin_reason",
+            "updated_at",
+        ]
+    )
+    return build_backup_snapshot_report(snapshot, now=pinned_at)
+
+
+def clear_backup_snapshot_rollback_pin(
+    snapshot_id: str,
+    *,
+    now: datetime | None = None,
+) -> dict[str, Any]:
+    """Clear any active rollback pin on one stored snapshot."""
+    snapshot = get_backup_snapshot(snapshot_id)
+    if snapshot.status == BackupSnapshot.STATUS_DELETED:
+        raise BackupError(
+            f"Backup snapshot '{snapshot.snapshot_id}' has already been deleted"
+        )
+
+    cleared_at = now or django_timezone.now()
+    snapshot.rollback_pin_expires_at = None
+    snapshot.rollback_pin_reason = ""
+    snapshot.save(
+        update_fields=[
+            "rollback_pin_expires_at",
+            "rollback_pin_reason",
+            "updated_at",
+        ]
+    )
+    return build_backup_snapshot_report(snapshot, now=cleared_at)
 
 
 def validate_backup_artifact(artifact: BackupArtifact) -> list[str]:
@@ -776,11 +2069,27 @@ def delete_artifact_files(
     remote_deleter: RemoteDeleter | None = None,
 ) -> None:
     """Delete local and remote artifact files without deleting the database row."""
+    resolved_policy = policy or load_policy_snapshot()
+    snapshot = _get_authoritative_snapshot_for_artifact(artifact)
+    if snapshot is not None:
+        _delete_snapshot_storage(
+            snapshot,
+            policy=resolved_policy,
+            remote_deleter=remote_deleter,
+        )
+        snapshot.status = BackupSnapshot.STATUS_DELETED
+        snapshot.child_descriptors_json = _mark_snapshot_descriptors_deleted(
+            snapshot.child_descriptors_json
+            if isinstance(snapshot.child_descriptors_json, dict)
+            else {}
+        )
+        snapshot.save(update_fields=["status", "child_descriptors_json", "updated_at"])
+        return
+
     local_path = Path(artifact.local_path) if artifact.local_path else None
     if local_path and local_path.exists():
         local_path.unlink()
 
-    resolved_policy = policy or load_policy_snapshot()
     if artifact.remote_key:
         deleter = remote_deleter or _delete_private_remote_key
         deleter(
@@ -797,17 +2106,46 @@ def prune_expired_backups(
 ) -> int:
     """Delete expired backup files and mark their metadata records as deleted."""
     resolved_policy = policy or load_policy_snapshot()
-    cutoff = (now or datetime.now(timezone.utc)) - timedelta(
-        days=resolved_policy.retention_days
-    )
+    prune_started_at = now or datetime.now(timezone.utc)
+    cutoff = prune_started_at - timedelta(days=resolved_policy.retention_days)
+
+    deleted_count = 0
+    deleted_at = django_timezone.now()
+
+    expired_snapshots = BackupSnapshot.objects.filter(
+        created_at__lt=cutoff,
+    ).exclude(status=BackupSnapshot.STATUS_DELETED)
+    for snapshot in expired_snapshots:
+        if snapshot.has_active_rollback_pin(now=prune_started_at):
+            continue
+
+        _delete_snapshot_storage(
+            snapshot,
+            policy=resolved_policy,
+            remote_deleter=remote_deleter,
+        )
+        snapshot.status = BackupSnapshot.STATUS_DELETED
+        snapshot.child_descriptors_json = _mark_snapshot_descriptors_deleted(
+            snapshot.child_descriptors_json
+            if isinstance(snapshot.child_descriptors_json, dict)
+            else {}
+        )
+        snapshot.save(update_fields=["status", "child_descriptors_json", "updated_at"])
+
+        artifact = snapshot.authoritative_dump
+        if artifact is not None and artifact.deleted_at is None:
+            artifact.status = BackupArtifact.STATUS_DELETED
+            artifact.deleted_at = deleted_at
+            artifact.save(update_fields=["status", "deleted_at", "updated_at"])
+
+        deleted_count += 1
 
     expired = BackupArtifact.objects.filter(
         deleted_at__isnull=True,
         created_at__lt=cutoff,
+        authoritative_snapshot__isnull=True,
     )
 
-    deleted_count = 0
-    deleted_at = django_timezone.now()
     for artifact in expired:
         delete_artifact_files(
             artifact,
@@ -852,6 +2190,7 @@ def restore_backup_source(
     *,
     artifact: BackupArtifact | None = None,
     file_path: str | Path | None = None,
+    snapshot_id: str | None = None,
     confirmation: str,
     dry_run: bool = False,
     allow_production: bool = False,
@@ -866,6 +2205,7 @@ def restore_backup_source(
     with _resolve_restore_source(
         artifact=artifact,
         file_path=file_path,
+        snapshot_id=snapshot_id,
         resolution_mode=resolution_mode,
         policy=policy,
         remote_materializer=remote_materializer,
@@ -1368,16 +2708,18 @@ def _resolve_restore_source(
     *,
     artifact: BackupArtifact | None,
     file_path: str | Path | None,
+    snapshot_id: str | None,
     resolution_mode: RestoreSourceResolutionMode,
     policy: BackupPolicySnapshot | None,
     remote_materializer: RemoteMaterializer | None,
 ) -> Iterator[ResolvedRestoreSource]:
     """Resolve one restore source into a local file path for the guarded pipeline."""
-    has_artifact = artifact is not None
-    has_file = file_path is not None
-    if has_artifact == has_file:
+    provided_source_count = sum(
+        source is not None for source in (artifact, file_path, snapshot_id)
+    )
+    if provided_source_count != 1:
         raise BackupRestoreBlocked(
-            "Choose exactly one restore source: an artifact id or --file PATH."
+            "Choose exactly one restore source: an artifact id, --snapshot-id, or --file PATH."
         )
 
     if file_path is not None:
@@ -1388,6 +2730,9 @@ def _resolve_restore_source(
             backup_format=_detect_restore_file_format(resolved_path),
         )
         return
+
+    if snapshot_id is not None:
+        artifact = _resolve_authoritative_snapshot_dump(snapshot_id)
 
     assert artifact is not None
     local_path = Path(artifact.local_path) if artifact.local_path else None
@@ -1445,6 +2790,24 @@ def _resolve_restore_source(
             backup_format=artifact.backup_format,
             artifact=artifact,
         )
+
+
+def _resolve_authoritative_snapshot_dump(snapshot_id: str) -> BackupArtifact:
+    """Resolve a snapshot id to its authoritative database dump artifact."""
+    snapshot = get_backup_snapshot(snapshot_id)
+    if snapshot.status == BackupSnapshot.STATUS_DELETED:
+        raise BackupRestoreBlocked(
+            f"Restore blocked because snapshot '{snapshot.snapshot_id}' has been deleted or pruned."
+        )
+
+    artifact = snapshot.authoritative_dump
+    if artifact is None:
+        raise BackupRestoreBlocked(
+            "Restore blocked because the requested snapshot does not have an "
+            "authoritative database dump artifact."
+        )
+
+    return artifact
 
 
 def _ensure_postgresql_18_restore_runtime(current_engine: str) -> None:

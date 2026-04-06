@@ -1,8 +1,11 @@
 """Data models for QuickScale backups."""
 
+from datetime import datetime
+
 from django.conf import settings
 from django.core.validators import MinValueValidator
 from django.db import models
+from django.utils import timezone as django_timezone
 
 
 class BackupPolicy(models.Model):
@@ -196,3 +199,78 @@ class BackupArtifact(models.Model):
     def is_local_available(self) -> bool:
         """Return whether a local artifact path is currently recorded."""
         return bool(self.local_path)
+
+
+class BackupSnapshot(models.Model):
+    """Internal snapshot substrate that tracks dump artifacts plus private sidecars."""
+
+    STATUS_PENDING = "pending"
+    STATUS_READY = "ready"
+    STATUS_FAILED = "failed"
+    STATUS_DELETED = "deleted"
+    STATUS_CHOICES = [
+        (STATUS_PENDING, "Pending"),
+        (STATUS_READY, "Ready"),
+        (STATUS_FAILED, "Failed"),
+        (STATUS_DELETED, "Deleted"),
+    ]
+
+    snapshot_id = models.CharField(max_length=64, unique=True, editable=False)
+    authoritative_dump = models.OneToOneField(
+        BackupArtifact,
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="authoritative_snapshot",
+    )
+    status = models.CharField(
+        max_length=20,
+        choices=STATUS_CHOICES,
+        default=STATUS_PENDING,
+    )
+    source_environment = models.CharField(max_length=64, default="local")
+    local_root_path = models.CharField(max_length=512)
+    remote_root_key = models.CharField(max_length=512, blank=True)
+    child_descriptors_json = models.JSONField(default=dict, blank=True)
+    rollback_pin_expires_at = models.DateTimeField(null=True, blank=True)
+    rollback_pin_reason = models.CharField(max_length=255, blank=True)
+    failure_note = models.TextField(blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        app_label = "quickscale_modules_backups"
+        db_table = "quickscale_modules_backups_snapshot"
+        ordering = ["-created_at"]
+        verbose_name = "Backup snapshot"
+        verbose_name_plural = "Backup snapshots"
+
+    def __str__(self) -> str:
+        return self.snapshot_id
+
+    def save(self, *args: object, **kwargs: object) -> None:
+        """Prevent snapshot identifiers from being reassigned after creation."""
+        if self.pk is not None:
+            original_snapshot_id = (
+                type(self)
+                .objects.filter(pk=self.pk)
+                .values_list(
+                    "snapshot_id",
+                    flat=True,
+                )
+                .first()
+            )
+            if (
+                original_snapshot_id is not None
+                and original_snapshot_id != self.snapshot_id
+            ):
+                raise ValueError("snapshot_id is immutable")
+        super().save(*args, **kwargs)
+
+    def has_active_rollback_pin(self, *, now: datetime | None = None) -> bool:
+        """Return whether this snapshot is protected from pruning right now."""
+        if self.rollback_pin_expires_at is None:
+            return False
+
+        comparison_time = now or django_timezone.now()
+        return self.rollback_pin_expires_at > comparison_time

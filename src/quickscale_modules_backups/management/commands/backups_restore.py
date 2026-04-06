@@ -19,6 +19,11 @@ class Command(BaseCommand):
             help="BackupArtifact primary key",
         )
         parser.add_argument(
+            "--snapshot-id",
+            dest="snapshot_id",
+            help="Stored snapshot locator for the authoritative dump artifact.",
+        )
+        parser.add_argument(
             "--file",
             dest="file_path",
             help=(
@@ -51,12 +56,18 @@ class Command(BaseCommand):
 
     def handle(self, *args, **options) -> None:  # type: ignore[no-untyped-def]
         artifact_id = options["artifact_id"]
+        snapshot_id = options["snapshot_id"]
         file_path = options["file_path"]
-        if artifact_id is None and not file_path:
-            raise CommandError("Provide either an artifact_id or --file PATH.")
-        if artifact_id is not None and file_path:
+        provided_source_count = sum(
+            source is not None for source in (artifact_id, snapshot_id, file_path)
+        )
+        if provided_source_count == 0:
             raise CommandError(
-                "Choose exactly one restore source: an artifact id or --file PATH."
+                "Provide either an artifact_id, --snapshot-id, or --file PATH."
+            )
+        if provided_source_count > 1:
+            raise CommandError(
+                "Choose exactly one restore source: an artifact id, --snapshot-id, or --file PATH."
             )
 
         artifact = None
@@ -70,6 +81,7 @@ class Command(BaseCommand):
             result = restore_backup_source(
                 artifact=artifact,
                 file_path=file_path,
+                snapshot_id=snapshot_id,
                 confirmation=options["confirm"],
                 dry_run=bool(options["dry_run"]),
                 allow_production=bool(options["allow_production"]),

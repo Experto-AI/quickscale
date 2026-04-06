@@ -116,3 +116,70 @@ def test_backfill_restore_scope_and_version_fields_for_legacy_artifacts() -> Non
     assert uncertain_artifact.restore_scope == "local_only"
     assert uncertain_artifact.database_server_major is None
     assert uncertain_artifact.dump_client_major is None
+
+
+def test_0004_adds_snapshot_table_without_backfilling_existing_artifacts() -> None:
+    migrate_from = (
+        "quickscale_modules_backups",
+        "0003_backupartifact_restore_scope_and_versions",
+    )
+    migrate_to = (
+        "quickscale_modules_backups",
+        "0004_backupsnapshot_snapshot_substrate",
+    )
+
+    executor = MigrationExecutor(connection)
+    executor.migrate([migrate_from])
+    old_apps = executor.loader.project_state([migrate_from]).apps
+    backup_artifact_model = old_apps.get_model(
+        "quickscale_modules_backups",
+        "BackupArtifact",
+    )
+
+    backup_artifact_model.objects.create(
+        filename="legacy-dump.dump",
+        checksum_sha256="abc123",
+        size_bytes=42,
+        backup_format="pg_dump_custom",
+        restore_scope="local_only",
+        database_engine="django.db.backends.postgresql",
+        database_name="quickscale_test",
+        database_server_major=18,
+        dump_client_major=18,
+        metadata_json={"created_at": "2026-04-06T00:00:00Z"},
+    )
+    backup_artifact_model.objects.create(
+        filename="legacy-export.json",
+        checksum_sha256="def456",
+        size_bytes=12,
+        backup_format="json",
+        restore_scope="export_only",
+        database_engine="django.db.backends.sqlite3",
+        database_name="quickscale_test",
+        metadata_json={"created_at": "2026-04-06T00:00:00Z"},
+    )
+
+    executor = MigrationExecutor(connection)
+    executor.migrate([migrate_to])
+    new_apps = executor.loader.project_state([migrate_to]).apps
+    migrated_backup_artifact = new_apps.get_model(
+        "quickscale_modules_backups",
+        "BackupArtifact",
+    )
+    migrated_backup_snapshot = new_apps.get_model(
+        "quickscale_modules_backups",
+        "BackupSnapshot",
+    )
+
+    assert migrated_backup_artifact.objects.count() == 2
+    assert migrated_backup_snapshot.objects.count() == 0
+
+    legacy_dump = migrated_backup_artifact.objects.get(filename="legacy-dump.dump")
+    legacy_export = migrated_backup_artifact.objects.get(filename="legacy-export.json")
+
+    assert legacy_dump.restore_scope == "local_only"
+    assert legacy_dump.database_server_major == 18
+    assert legacy_dump.dump_client_major == 18
+    assert legacy_export.restore_scope == "export_only"
+    assert legacy_export.database_server_major is None
+    assert legacy_export.dump_client_major is None

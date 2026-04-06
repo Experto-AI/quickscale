@@ -19,13 +19,18 @@ from django.db import DatabaseError, connections
 from django.test import override_settings
 
 import quickscale_modules_backups.services as backup_services
-from quickscale_modules_backups.models import BackupArtifact, BackupPolicy
+from quickscale_modules_backups.models import (
+    BackupArtifact,
+    BackupPolicy,
+    BackupSnapshot,
+)
 from quickscale_modules_backups.services import (
     BackupError,
     BackupConfigurationError,
     BackupLockError,
     BackupPolicySnapshot,
     BackupRestoreBlocked,
+    clear_backup_snapshot_rollback_pin,
     RemoteDeleter,
     RemoteMaterializer,
     RemoteUploader,
@@ -35,8 +40,10 @@ from quickscale_modules_backups.services import (
     create_backup,
     load_policy_snapshot,
     prune_expired_backups,
+    report_backup_snapshot,
     restore_backup_artifact,
     restore_backup_source,
+    set_backup_snapshot_rollback_pin,
     validate_backup_artifact,
     validate_policy_snapshot,
 )
@@ -223,6 +230,99 @@ class TestBackupLifecycle:
         payload = json.loads(Path(artifact.local_path).read_text(encoding="utf-8"))
         assert isinstance(payload, list)
 
+        snapshot = artifact.authoritative_snapshot
+        snapshot_root = local_backup_settings / "snapshots" / snapshot.snapshot_id
+        assert snapshot is not None
+        assert len(snapshot.snapshot_id) == 32
+        assert Path(snapshot.local_root_path) == snapshot_root
+        assert snapshot.status == BackupSnapshot.STATUS_READY
+        assert snapshot.source_environment == "local"
+        assert (
+            Path(artifact.local_path) == snapshot_root / "database" / artifact.filename
+        )
+        assert snapshot.child_descriptors_json["database"]["relative_path"] == (
+            f"database/{artifact.filename}"
+        )
+        assert sorted(snapshot.child_descriptors_json["sidecars"]) == [
+            "env-var-manifest.json",
+            "media-sync-manifest.json",
+            "promotion-verification.json",
+            "release-metadata.json",
+        ]
+        assert (snapshot_root / "env-var-manifest.json").exists()
+        assert (snapshot_root / "media-sync-manifest.json").exists()
+        assert (snapshot_root / "promotion-verification.json").exists()
+        assert (snapshot_root / "release-metadata.json").exists()
+        media_manifest = json.loads(
+            (snapshot_root / "media-sync-manifest.json").read_text(encoding="utf-8")
+        )
+        release_metadata = json.loads(
+            (snapshot_root / "release-metadata.json").read_text(encoding="utf-8")
+        )
+        env_manifest = json.loads(
+            (snapshot_root / "env-var-manifest.json").read_text(encoding="utf-8")
+        )
+        assert media_manifest["status"] == "missing_media_root"
+        assert release_metadata["app_version"] == "test-app"
+        assert release_metadata["project_slug"] == local_backup_settings.parent.name
+        assert env_manifest["count"] == len(env_manifest["names"])
+
+    @override_settings(
+        QUICKSCALE_STORAGE_BACKEND="s3",
+        AWS_STORAGE_BUCKET_NAME="media-bucket",
+        AWS_S3_ENDPOINT_URL="https://objects.example.invalid",
+        AWS_S3_REGION_NAME="auto",
+        AWS_ACCESS_KEY_ID="media-access-key",
+        AWS_SECRET_ACCESS_KEY="media-secret-key",
+        AWS_QUERYSTRING_AUTH=False,
+    )
+    def test_create_backup_captures_s3_compatible_media_inventory(
+        self,
+        superuser: AbstractBaseUser,
+        backup_policy: BackupPolicy,
+        local_backup_settings: Path,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        import quickscale_modules_storage.helpers as storage_helpers
+
+        backup_policy.local_directory = str(local_backup_settings)
+        backup_policy.save(update_fields=["local_directory", "updated_at"])
+        expected_inventory = [
+            {
+                "relative_path": "blog/uploads/hero.png",
+                "storage_key": "media/blog/uploads/hero.png",
+                "size_bytes": 128,
+                "provider_etag": "etag-123",
+                "modified_at": "2026-04-06T12:30:00+00:00",
+            }
+        ]
+
+        def fake_inventory(_settings_obj: object) -> list[dict[str, Any]]:
+            return expected_inventory
+
+        monkeypatch.setattr(
+            storage_helpers,
+            "list_s3_compatible_media_inventory",
+            fake_inventory,
+        )
+
+        artifact = create_backup(initiated_by=superuser, trigger="manual")
+
+        snapshot = artifact.authoritative_snapshot
+        media_manifest = json.loads(
+            (Path(snapshot.local_root_path) / "media-sync-manifest.json").read_text(
+                encoding="utf-8"
+            )
+        )
+
+        assert snapshot is not None
+        assert media_manifest["status"] == "ready"
+        assert media_manifest["inventory"] == expected_inventory
+        assert media_manifest["storage"]["bucket_name"] == "media-bucket"
+        assert media_manifest["storage"]["access_key_id_configured"] is True
+        assert media_manifest["storage"]["secret_access_key_configured"] is True
+        assert "media-access-key" not in json.dumps(media_manifest)
+
     def test_create_backup_persists_postgresql_18_contract_metadata(
         self,
         superuser: AbstractBaseUser,
@@ -293,7 +393,7 @@ class TestBackupLifecycle:
             automation_enabled=False,
             schedule="0 2 * * *",
         )
-        uploaded: list[tuple[str, str, str, str]] = []
+        uploaded: list[tuple[str, str, str, str, str]] = []
 
         def fake_uploader(
             local_path: Path, resolved_policy: BackupPolicySnapshot
@@ -302,11 +402,12 @@ class TestBackupLifecycle:
                 (
                     local_path.name,
                     resolved_policy.remote_bucket_name,
+                    resolved_policy.remote_prefix,
                     resolved_policy.resolve_remote_access_key_id(),
                     resolved_policy.resolve_remote_secret_access_key(),
                 )
             )
-            return f"ops/backups/{local_path.name}"
+            return f"{resolved_policy.remote_prefix}/{local_path.name}"
 
         artifact = create_backup(
             initiated_by=superuser,
@@ -315,15 +416,59 @@ class TestBackupLifecycle:
             remote_uploader=cast(RemoteUploader, fake_uploader),
         )
 
+        snapshot = artifact.authoritative_snapshot
+        assert snapshot is not None
+        snapshot_prefix = f"ops/backups/snapshots/{snapshot.snapshot_id}"
+
         assert artifact.storage_target == BackupArtifact.STORAGE_TARGET_PRIVATE_REMOTE
-        assert artifact.remote_key.startswith("ops/backups/")
+        assert artifact.remote_key == f"{snapshot_prefix}/database/{artifact.filename}"
         assert uploaded == [
-            (artifact.filename, "private-backups", "key-id", "secret-key")
+            (
+                artifact.filename,
+                "private-backups",
+                f"{snapshot_prefix}/database",
+                "key-id",
+                "secret-key",
+            ),
+            (
+                "media-sync-manifest.json",
+                "private-backups",
+                snapshot_prefix,
+                "key-id",
+                "secret-key",
+            ),
+            (
+                "env-var-manifest.json",
+                "private-backups",
+                snapshot_prefix,
+                "key-id",
+                "secret-key",
+            ),
+            (
+                "release-metadata.json",
+                "private-backups",
+                snapshot_prefix,
+                "key-id",
+                "secret-key",
+            ),
+            (
+                "promotion-verification.json",
+                "private-backups",
+                snapshot_prefix,
+                "key-id",
+                "secret-key",
+            ),
         ]
         assert Path(artifact.local_path).exists()
         assert artifact.remote_bucket_name == "private-backups"
         assert artifact.remote_endpoint_url == "https://example.invalid"
         assert artifact.remote_region_name == "auto"
+        assert snapshot.status == BackupSnapshot.STATUS_READY
+        assert snapshot.child_descriptors_json["database"]["remote_key"] == (
+            artifact.remote_key
+        )
+        for descriptor in snapshot.child_descriptors_json["sidecars"].values():
+            assert descriptor["remote_key"].startswith(snapshot_prefix)
         assert not hasattr(artifact, "remote_access_key_id")
         assert not hasattr(artifact, "remote_secret_access_key")
 
@@ -365,11 +510,14 @@ class TestBackupLifecycle:
             )
 
         artifact = BackupArtifact.objects.get()
+        snapshot = BackupSnapshot.objects.get()
         assert artifact.status == BackupArtifact.STATUS_FAILED
         assert artifact.remote_key == ""
         assert artifact.local_path == ""
         assert "remote upload failed" in artifact.validation_notes
-        assert not any(local_backup_settings.iterdir())
+        assert snapshot.status == BackupSnapshot.STATUS_FAILED
+        assert "database dump remote upload failed" in snapshot.failure_note
+        assert not any(path.is_file() for path in local_backup_settings.rglob("*"))
 
     def test_create_backup_rolls_back_uploaded_remote_object_when_remote_key_save_fails(
         self,
@@ -398,8 +546,7 @@ class TestBackupLifecycle:
         def fake_uploader(
             local_path: Path, resolved_policy: BackupPolicySnapshot
         ) -> str:
-            del resolved_policy
-            return f"ops/backups/{local_path.name}"
+            return f"{resolved_policy.remote_prefix}/{local_path.name}"
 
         def fake_remote_deleter(
             remote_key: str,
@@ -429,15 +576,18 @@ class TestBackupLifecycle:
             )
 
         artifact = BackupArtifact.objects.get()
+        snapshot = BackupSnapshot.objects.get()
+        expected_remote_key = (
+            f"ops/backups/snapshots/{snapshot.snapshot_id}/database/{artifact.filename}"
+        )
 
-        assert deleted_remote_keys == [
-            (f"ops/backups/{artifact.filename}", "private-backups")
-        ]
+        assert deleted_remote_keys == [(expected_remote_key, "private-backups")]
         assert artifact.remote_key == ""
         assert artifact.local_path
         assert Path(artifact.local_path).exists()
+        assert snapshot.status == BackupSnapshot.STATUS_FAILED
         assert f"'{artifact.filename}'" not in str(exc_info.value)
-        assert f"ops/backups/{artifact.filename}" in str(exc_info.value)
+        assert expected_remote_key in str(exc_info.value)
 
     def test_create_backup_keeps_successful_artifact_when_prune_fails(
         self,
@@ -466,6 +616,44 @@ class TestBackupLifecycle:
         assert Path(artifact.local_path).exists()
         assert "prune failed after backup creation" in artifact.validation_notes
         assert artifact.metadata_json["prune_error"] == "prune exploded"
+
+    def test_create_backup_marks_snapshot_failed_when_sidecar_capture_fails_but_keeps_dump_artifact(
+        self,
+        superuser: AbstractBaseUser,
+        backup_policy: BackupPolicy,
+        local_backup_settings: Path,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        backup_policy.local_directory = str(local_backup_settings)
+        backup_policy.save(update_fields=["local_directory", "updated_at"])
+
+        def failing_release_metadata(*, captured_at: datetime) -> dict[str, Any]:
+            del captured_at
+            raise BackupError("release metadata exploded")
+
+        monkeypatch.setattr(
+            backup_services,
+            "_build_release_metadata",
+            failing_release_metadata,
+        )
+
+        artifact = create_backup(initiated_by=superuser, trigger="manual")
+
+        snapshot = artifact.authoritative_snapshot
+        snapshot_root = Path(snapshot.local_root_path)
+        artifact.refresh_from_db()
+        snapshot.refresh_from_db()
+
+        assert snapshot is not None
+        assert artifact.status == BackupArtifact.STATUS_READY
+        assert Path(artifact.local_path).exists()
+        assert snapshot.status == BackupSnapshot.STATUS_FAILED
+        assert "release-metadata.json" in snapshot.failure_note
+        assert "release metadata exploded" in snapshot.failure_note
+        assert artifact.metadata_json["snapshot_status"] == BackupSnapshot.STATUS_FAILED
+        assert "snapshot sidecar capture failed" in artifact.validation_notes
+        assert not (snapshot_root / "release-metadata.json").exists()
+        assert (snapshot_root / "env-var-manifest.json").exists()
 
     def test_create_backup_cleans_partial_file_when_dump_generation_fails(
         self,
@@ -507,7 +695,9 @@ class TestBackupLifecycle:
             )
 
         assert BackupArtifact.objects.count() == 0
-        assert not any(local_backup_settings.iterdir())
+        snapshot = BackupSnapshot.objects.get()
+        assert snapshot.status == BackupSnapshot.STATUS_FAILED
+        assert not any(path.is_file() for path in local_backup_settings.rglob("*"))
 
     @override_settings(DEBUG=True)
     def test_create_backup_reports_missing_pg_dump_as_backup_error_in_debug(
@@ -560,7 +750,9 @@ class TestBackupLifecycle:
         assert "PGDG apt repository" in str(exc_info.value)
         assert "postgresql-client-18" in str(exc_info.value)
         assert BackupArtifact.objects.count() == 0
-        assert not any(local_backup_settings.iterdir())
+        snapshot = BackupSnapshot.objects.get()
+        assert snapshot.status == BackupSnapshot.STATUS_FAILED
+        assert not any(path.is_file() for path in local_backup_settings.rglob("*"))
 
     @override_settings(DEBUG=True)
     def test_create_backup_rejects_non_18_postgresql_server_in_debug(
@@ -600,7 +792,9 @@ class TestBackupLifecycle:
             )
 
         assert BackupArtifact.objects.count() == 0
-        assert not any(local_backup_settings.iterdir())
+        snapshot = BackupSnapshot.objects.get()
+        assert snapshot.status == BackupSnapshot.STATUS_FAILED
+        assert not any(path.is_file() for path in local_backup_settings.rglob("*"))
 
     @override_settings(DEBUG=False)
     def test_create_backup_rejects_non_18_pg_dump_tooling_outside_debug(
@@ -644,7 +838,9 @@ class TestBackupLifecycle:
             exc_info.value
         )
         assert BackupArtifact.objects.count() == 0
-        assert not any(local_backup_settings.iterdir())
+        snapshot = BackupSnapshot.objects.get()
+        assert snapshot.status == BackupSnapshot.STATUS_FAILED
+        assert not any(path.is_file() for path in local_backup_settings.rglob("*"))
 
     @override_settings(DEBUG=False)
     def test_create_backup_reports_missing_pg_dump_as_backup_error_on_railway(
@@ -696,7 +892,9 @@ class TestBackupLifecycle:
             )
 
         assert BackupArtifact.objects.count() == 0
-        assert not any(local_backup_settings.iterdir())
+        snapshot = BackupSnapshot.objects.get()
+        assert snapshot.status == BackupSnapshot.STATUS_FAILED
+        assert not any(path.is_file() for path in local_backup_settings.rglob("*"))
 
     @override_settings(DEBUG=False)
     def test_create_backup_reports_missing_pg_dump_as_backup_error_outside_debug(
@@ -747,7 +945,9 @@ class TestBackupLifecycle:
             )
 
         assert BackupArtifact.objects.count() == 0
-        assert not any(local_backup_settings.iterdir())
+        snapshot = BackupSnapshot.objects.get()
+        assert snapshot.status == BackupSnapshot.STATUS_FAILED
+        assert not any(path.is_file() for path in local_backup_settings.rglob("*"))
 
     def test_create_backup_rejects_existing_filesystem_lock(
         self,
@@ -911,7 +1111,12 @@ class TestBackupLifecycle:
             policy=original_policy,
             remote_uploader=remote_uploader,
         )
+        snapshot = artifact.authoritative_snapshot
+        assert snapshot is not None
         BackupArtifact.objects.filter(pk=artifact.pk).update(
+            created_at=datetime.now(timezone.utc) - timedelta(days=30)
+        )
+        BackupSnapshot.objects.filter(pk=snapshot.pk).update(
             created_at=datetime.now(timezone.utc) - timedelta(days=30)
         )
 
@@ -954,17 +1159,178 @@ class TestBackupLifecycle:
             remote_deleter=cast(RemoteDeleter, fake_remote_deleter),
         )
 
+        expected_remote_keys = {
+            artifact.remote_key,
+            *{
+                str(descriptor["remote_key"])
+                for descriptor in snapshot.child_descriptors_json["sidecars"].values()
+            },
+        }
+
         assert deleted_count == 1
-        assert deletion_calls == [
+        assert {
             (
-                artifact.remote_key,
+                remote_key,
+                bucket_name,
+                endpoint_url,
+                region_name,
+                access_key,
+                secret_key,
+            )
+            for (
+                remote_key,
+                bucket_name,
+                endpoint_url,
+                region_name,
+                access_key,
+                secret_key,
+            ) in deletion_calls
+        } == {
+            (
+                remote_key,
                 "original-bucket",
                 "https://original.example.invalid",
                 "auto",
                 "current-key",
                 "current-secret",
             )
-        ]
+            for remote_key in expected_remote_keys
+        }
+
+    def test_prune_expired_backups_skips_snapshot_with_active_rollback_pin(
+        self,
+        superuser: AbstractBaseUser,
+        backup_policy: BackupPolicy,
+        local_backup_settings: Path,
+    ) -> None:
+        backup_policy.local_directory = str(local_backup_settings)
+        backup_policy.save(update_fields=["local_directory", "updated_at"])
+
+        artifact = create_backup(initiated_by=superuser, trigger="manual")
+        snapshot = artifact.authoritative_snapshot
+        assert snapshot is not None
+
+        expired_created_at = datetime.now(timezone.utc) - timedelta(days=30)
+        BackupSnapshot.objects.filter(pk=snapshot.pk).update(
+            created_at=expired_created_at,
+            rollback_pin_expires_at=datetime.now(timezone.utc) + timedelta(hours=2),
+            rollback_pin_reason="production rollback window",
+        )
+
+        deleted_count = prune_expired_backups(
+            policy=BackupPolicySnapshot.from_settings(),
+            now=datetime.now(timezone.utc),
+        )
+
+        artifact.refresh_from_db()
+        snapshot.refresh_from_db()
+        assert deleted_count == 0
+        assert snapshot.status == BackupSnapshot.STATUS_READY
+        assert Path(artifact.local_path).exists()
+
+        BackupSnapshot.objects.filter(pk=snapshot.pk).update(
+            rollback_pin_expires_at=datetime.now(timezone.utc) - timedelta(minutes=1),
+        )
+
+        deleted_count = prune_expired_backups(
+            policy=BackupPolicySnapshot.from_settings(),
+            now=datetime.now(timezone.utc),
+        )
+
+        artifact.refresh_from_db()
+        snapshot.refresh_from_db()
+        assert deleted_count == 1
+        assert snapshot.status == BackupSnapshot.STATUS_DELETED
+        assert artifact.status == BackupArtifact.STATUS_DELETED
+        assert not Path(snapshot.local_root_path).exists()
+
+    def test_report_backup_snapshot_returns_structured_snapshot_view(
+        self,
+        superuser: AbstractBaseUser,
+        backup_policy: BackupPolicy,
+        local_backup_settings: Path,
+    ) -> None:
+        backup_policy.local_directory = str(local_backup_settings)
+        backup_policy.save(update_fields=["local_directory", "updated_at"])
+
+        artifact = create_backup(initiated_by=superuser, trigger="manual")
+        snapshot = artifact.authoritative_snapshot
+
+        report = report_backup_snapshot(snapshot.snapshot_id)
+
+        assert snapshot is not None
+        assert report["snapshot_id"] == snapshot.snapshot_id
+        assert report["confirmation_value"] == artifact.filename
+        assert report["authoritative_dump"]["artifact_id"] == artifact.pk
+        assert (
+            report["sidecar_summary"]["media-sync-manifest.json"]["manifest_status"]
+            == "missing_media_root"
+        )
+        assert report["rollback_pin"]["active"] is False
+
+    def test_set_and_clear_backup_snapshot_rollback_pin_update_snapshot_report(
+        self,
+        superuser: AbstractBaseUser,
+        backup_policy: BackupPolicy,
+        local_backup_settings: Path,
+    ) -> None:
+        backup_policy.local_directory = str(local_backup_settings)
+        backup_policy.save(update_fields=["local_directory", "updated_at"])
+
+        artifact = create_backup(initiated_by=superuser, trigger="manual")
+        snapshot = artifact.authoritative_snapshot
+        assert snapshot is not None
+
+        pinned_report = set_backup_snapshot_rollback_pin(
+            snapshot.snapshot_id,
+            ttl_hours=6,
+            reason="production rollback window",
+        )
+
+        snapshot.refresh_from_db()
+        assert pinned_report["rollback_pin"]["active"] is True
+        assert pinned_report["rollback_pin"]["reason"] == "production rollback window"
+        assert snapshot.rollback_pin_expires_at is not None
+
+        cleared_report = clear_backup_snapshot_rollback_pin(snapshot.snapshot_id)
+
+        snapshot.refresh_from_db()
+        assert cleared_report["rollback_pin"]["active"] is False
+        assert cleared_report["rollback_pin"]["expires_at"] is None
+        assert snapshot.rollback_pin_expires_at is None
+        assert snapshot.rollback_pin_reason == ""
+
+    def test_restore_snapshot_id_resolves_authoritative_dump(
+        self,
+        postgresql_backup_artifact: BackupArtifact,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        _set_postgresql_default_connection(monkeypatch)
+        _mock_postgresql_18_contract(monkeypatch)
+        snapshot = BackupSnapshot.objects.create(
+            snapshot_id="snap-restore-123",
+            authoritative_dump=postgresql_backup_artifact,
+            status=BackupSnapshot.STATUS_READY,
+            source_environment="local",
+            local_root_path=str(Path(postgresql_backup_artifact.local_path).parent),
+            child_descriptors_json={
+                "database": {
+                    "kind": "database_dump",
+                    "status": BackupSnapshot.STATUS_READY,
+                    "relative_path": postgresql_backup_artifact.filename,
+                },
+                "sidecars": {},
+            },
+        )
+
+        result = restore_backup_source(
+            snapshot_id=snapshot.snapshot_id,
+            confirmation=postgresql_backup_artifact.filename,
+            dry_run=True,
+        )
+
+        assert result.executed is False
+        assert result.dry_run is True
 
     @override_settings(DEBUG=False)
     def test_restore_requires_environment_guard(
