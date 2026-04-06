@@ -2,7 +2,7 @@
 
 This document guides the planning and analysis stage of programming, where you interpret user intent, understand the project and codebase, and plan implementation steps (without making code changes yet).
 
-**📋 Usage Note:** This file contains complete planning guidance with embedded references to shared principles. You only need to attach `docs/contrib/contributing.md` and `plan.md` - all shared guidelines are referenced within this document.
+Shared documents in [shared/](shared/) remain authoritative when guidance overlaps. This guide shows how to apply those project rules during planning work.
 
 ## Understanding the Project and Codebase
 

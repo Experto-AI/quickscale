@@ -2,7 +2,7 @@
 
 This document guides the implementation stage of programming, where you execute planned changes with proper coding practices.
 
-**📋 Usage Note:** This file contains complete implementation guidance with embedded references to shared principles. You only need to attach `docs/contrib/contributing.md` and `code.md` - all shared guidelines are referenced within this document.
+Shared documents in [shared/](shared/) remain authoritative when guidance overlaps. This guide shows how to apply those project rules during implementation work.
 
 ## Implementation Principles
 

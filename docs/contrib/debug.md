@@ -2,7 +2,7 @@
 
 This document guides the debugging and problem resolution stage of programming, where you help debug code that doesn't work, tested by user or tests.
 
-**📋 Usage Note:** This file contains complete debugging guidance with embedded references to shared principles. You only need to attach `docs/contrib/contributing.md` and `debug.md` - all shared guidelines are referenced within this document.
+Shared documents in [shared/](shared/) remain authoritative when guidance overlaps. This guide shows how to apply those project rules during debugging and bug fixing.
 
 ## Systematic Debugging Approach
 
