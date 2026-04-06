@@ -54,6 +54,12 @@ _MEDIA_SYNC_MANIFEST_FILENAME = "media-sync-manifest.json"
 _ENV_VAR_MANIFEST_FILENAME = "env-var-manifest.json"
 _RELEASE_METADATA_FILENAME = "release-metadata.json"
 _PROMOTION_VERIFICATION_FILENAME = "promotion-verification.json"
+_REQUIRED_SNAPSHOT_SIDECAR_FILENAMES = (
+    _MEDIA_SYNC_MANIFEST_FILENAME,
+    _ENV_VAR_MANIFEST_FILENAME,
+    _RELEASE_METADATA_FILENAME,
+    _PROMOTION_VERIFICATION_FILENAME,
+)
 _DR_TARGET_ENV_PREFIX = "QUICKSCALE_DR_TARGET_"
 _DR_TARGET_ROUTE_KIND_KEY = "ROUTE_KIND"
 
@@ -902,14 +908,8 @@ def _mark_remote_upload_failure(
     local_path: Path,
     error: BackupError,
 ) -> None:
-    """Persist a failed remote-offload outcome and clean local leftovers."""
-    cleanup_error = _cleanup_local_backup_file(local_path)
+    """Persist a failed remote-offload outcome without destroying the local dump."""
     notes = f"remote upload failed: {error}"
-    if cleanup_error is None:
-        artifact.local_path = ""
-    else:
-        notes += f"; cleanup failed: {cleanup_error}"
-
     artifact.remote_key = ""
     artifact.status = BackupArtifact.STATUS_FAILED
     artifact.validation_notes = notes
@@ -1250,6 +1250,478 @@ def _delete_snapshot_storage(
             artifact_local_path.unlink()
 
 
+def _snapshot_uses_private_remote(snapshot: BackupSnapshot) -> bool:
+    """Return whether the stored snapshot topology expects private remote upload."""
+    if snapshot.remote_root_key.strip():
+        return True
+
+    artifact = snapshot.authoritative_dump
+    return artifact is not None and (
+        artifact.storage_target == BackupArtifact.STORAGE_TARGET_PRIVATE_REMOTE
+    )
+
+
+def _build_snapshot_capture_resume_policy(
+    snapshot: BackupSnapshot,
+    policy: BackupPolicySnapshot,
+) -> BackupPolicySnapshot:
+    """Align the active policy with the stored snapshot topology for resume."""
+    resolved_policy = replace(
+        policy,
+        target_mode=(
+            BackupPolicy.TARGET_MODE_PRIVATE_REMOTE
+            if _snapshot_uses_private_remote(snapshot)
+            else BackupPolicy.TARGET_MODE_LOCAL
+        ),
+    )
+
+    if resolved_policy.target_mode != BackupPolicy.TARGET_MODE_PRIVATE_REMOTE:
+        return resolved_policy
+
+    artifact = snapshot.authoritative_dump
+    if artifact is None:
+        return resolved_policy
+
+    return _resolve_artifact_remote_policy(artifact, resolved_policy)
+
+
+def _build_snapshot_lock_directory(snapshot: BackupSnapshot) -> Path:
+    """Resolve the filesystem directory used for snapshot-scoped capture locking."""
+    snapshot_root = Path(snapshot.local_root_path)
+    if snapshot_root.parent.name == _SNAPSHOTS_DIRECTORY_NAME:
+        return snapshot_root.parent.parent
+    return snapshot_root.parent
+
+
+def _snapshot_capture_is_complete(snapshot: BackupSnapshot) -> bool:
+    """Return whether a stored snapshot already has a complete capture payload."""
+    if snapshot.status != BackupSnapshot.STATUS_READY:
+        return False
+
+    artifact = snapshot.authoritative_dump
+    if artifact is None or artifact.status == BackupArtifact.STATUS_DELETED:
+        return False
+
+    child_descriptors_json = (
+        snapshot.child_descriptors_json
+        if isinstance(snapshot.child_descriptors_json, dict)
+        else {}
+    )
+    database_descriptor = child_descriptors_json.get("database")
+    if not isinstance(database_descriptor, dict):
+        return False
+    if (
+        str(database_descriptor.get("status", "")).strip()
+        != BackupSnapshot.STATUS_READY
+    ):
+        return False
+
+    local_dump_available = bool(
+        artifact.local_path and Path(artifact.local_path).exists()
+    )
+    if not local_dump_available and not artifact.remote_key:
+        return False
+
+    sidecars = child_descriptors_json.get("sidecars")
+    if not isinstance(sidecars, dict):
+        return False
+
+    for filename in _REQUIRED_SNAPSHOT_SIDECAR_FILENAMES:
+        descriptor = sidecars.get(filename)
+        if not isinstance(descriptor, dict):
+            return False
+        if str(descriptor.get("status", "")).strip() != BackupSnapshot.STATUS_READY:
+            return False
+
+        local_path_text = str(descriptor.get("local_path", "")).strip()
+        local_path = (
+            Path(local_path_text)
+            if local_path_text
+            else _snapshot_sidecar_path(snapshot, filename)
+        )
+        if (
+            not local_path.exists()
+            and not str(descriptor.get("remote_key", "")).strip()
+        ):
+            return False
+
+    return True
+
+
+def _clear_appended_artifact_note(artifact: BackupArtifact, note: str) -> bool:
+    """Remove one trailing snapshot-failure note appended during a prior attempt."""
+    normalized_note = note.strip()
+    existing_notes = artifact.validation_notes.strip()
+    if not normalized_note or not existing_notes:
+        return False
+
+    if existing_notes == normalized_note:
+        artifact.validation_notes = ""
+        return True
+
+    suffix = f"; {normalized_note}"
+    if existing_notes.endswith(suffix):
+        artifact.validation_notes = existing_notes.removesuffix(suffix)
+        return True
+
+    return False
+
+
+def _resolve_snapshot_database_local_path(
+    snapshot: BackupSnapshot,
+    artifact: BackupArtifact,
+) -> Path:
+    """Resolve the authoritative local dump path for a stored snapshot."""
+    if artifact.local_path:
+        return Path(artifact.local_path)
+    return (
+        Path(snapshot.local_root_path)
+        / _SNAPSHOT_DATABASE_DIRECTORY_NAME
+        / artifact.filename
+    )
+
+
+def _resume_backup_capture(
+    snapshot_id: str,
+    *,
+    initiated_by: AbstractBaseUser | None = None,
+    trigger: str,
+    policy: BackupPolicySnapshot,
+    shell_runner: ShellCommandRunner | None,
+    remote_uploader: RemoteUploader | None,
+    now: datetime,
+) -> BackupArtifact:
+    """Resume an incomplete snapshot capture using the existing snapshot id."""
+    snapshot = get_backup_snapshot(snapshot_id)
+    resolved_policy = _build_snapshot_capture_resume_policy(snapshot, policy)
+    issues = validate_policy_snapshot(resolved_policy)
+    if issues:
+        raise BackupConfigurationError("; ".join(issues))
+
+    if snapshot.status == BackupSnapshot.STATUS_DELETED:
+        raise BackupError(
+            f"Cannot resume snapshot '{snapshot.snapshot_id}' because it has already been deleted."
+        )
+
+    source_environment = _get_source_environment()
+    if snapshot.source_environment != source_environment:
+        raise BackupError(
+            f"Cannot resume snapshot '{snapshot.snapshot_id}' from environment "
+            f"'{source_environment}' because it was captured from "
+            f"'{snapshot.source_environment}'."
+        )
+
+    if _snapshot_uses_private_remote(snapshot) and not snapshot.remote_root_key.strip():
+        raise BackupError(
+            f"Cannot resume snapshot '{snapshot.snapshot_id}' because its private remote root is missing."
+        )
+
+    if _snapshot_capture_is_complete(snapshot):
+        raise BackupError(
+            f"Backup snapshot '{snapshot.snapshot_id}' is already complete; resume is not needed."
+        )
+
+    snapshot_lock_directory = _build_snapshot_lock_directory(snapshot)
+    snapshot_lock_directory.mkdir(parents=True, exist_ok=True)
+
+    with _backup_creation_lock(snapshot_lock_directory, now=now):
+        snapshot.refresh_from_db()
+        previous_failure_note = snapshot.failure_note.strip()
+        snapshot_root = Path(snapshot.local_root_path)
+        snapshot_root.mkdir(parents=True, exist_ok=True)
+        database_directory = snapshot_root / _SNAPSHOT_DATABASE_DIRECTORY_NAME
+        database_directory.mkdir(parents=True, exist_ok=True)
+
+        connection_settings = django.db.connections["default"].settings_dict
+        engine = str(connection_settings.get("ENGINE", ""))
+        database_name = str(connection_settings.get("NAME", ""))
+        artifact = snapshot.authoritative_dump
+
+        if artifact is None:
+            candidate_dump_files = sorted(
+                path for path in database_directory.iterdir() if path.is_file()
+            )
+            if len(candidate_dump_files) > 1:
+                raise BackupError(
+                    f"Cannot resume snapshot '{snapshot.snapshot_id}' because multiple database dump candidates were found."
+                )
+
+            database_server_version: str | None = None
+            database_server_major: int | None = None
+            dump_client_version: str | None = None
+            dump_client_major: int | None = None
+
+            if candidate_dump_files:
+                local_path = candidate_dump_files[0]
+                backup_format = _detect_restore_file_format(local_path)
+                if backup_format == "pg_dump_custom":
+                    (
+                        database_server_version,
+                        database_server_major,
+                        dump_client_version,
+                        dump_client_major,
+                    ) = _require_postgresql_18_contract(
+                        database_engine=engine,
+                        executable="pg_dump",
+                        operation="backup capture resume",
+                    )
+            else:
+                if "postgresql" in engine:
+                    (
+                        database_server_version,
+                        database_server_major,
+                        dump_client_version,
+                        dump_client_major,
+                    ) = _require_postgresql_18_contract(
+                        database_engine=engine,
+                        executable="pg_dump",
+                        operation="backup capture resume",
+                    )
+                    backup_format = "pg_dump_custom"
+                    filename = build_backup_filename(
+                        resolved_policy,
+                        now=now,
+                        suffix="dump",
+                    )
+                else:
+                    backup_format = "json"
+                    filename = build_backup_filename(
+                        resolved_policy,
+                        now=now,
+                        suffix="json",
+                    )
+                local_path = database_directory / filename
+                if backup_format == "pg_dump_custom":
+                    _dump_postgresql_database(
+                        local_path,
+                        connection_settings,
+                        shell_runner=shell_runner,
+                    )
+                else:
+                    _dump_database_as_json(local_path)
+
+            checksum = _compute_sha256(local_path)
+            size_bytes = local_path.stat().st_size
+            metadata = _build_backup_metadata(
+                created_at=now,
+                backup_format=backup_format,
+                database_engine=engine,
+                database_name=database_name,
+                target_mode=resolved_policy.target_mode,
+                database_server_version=database_server_version,
+                database_server_major=database_server_major,
+                dump_client_version=dump_client_version,
+                dump_client_major=dump_client_major,
+            )
+            metadata["snapshot_id"] = snapshot.snapshot_id
+            if snapshot.remote_root_key:
+                metadata["snapshot_remote_root_key"] = snapshot.remote_root_key
+
+            artifact = BackupArtifact.objects.create(
+                filename=local_path.name,
+                storage_target=(
+                    BackupArtifact.STORAGE_TARGET_PRIVATE_REMOTE
+                    if resolved_policy.target_mode
+                    == BackupPolicy.TARGET_MODE_PRIVATE_REMOTE
+                    else BackupArtifact.STORAGE_TARGET_LOCAL
+                ),
+                local_path=str(local_path),
+                remote_bucket_name=resolved_policy.remote_bucket_name,
+                remote_endpoint_url=resolved_policy.remote_endpoint_url,
+                remote_region_name=resolved_policy.remote_region_name,
+                checksum_sha256=checksum,
+                size_bytes=size_bytes,
+                backup_format=backup_format,
+                database_engine=engine,
+                database_name=database_name,
+                database_server_major=database_server_major,
+                dump_client_major=dump_client_major,
+                metadata_json=metadata,
+                initiated_by=initiated_by,
+                trigger=trigger,
+            )
+            snapshot.authoritative_dump = artifact
+        else:
+            if artifact.status == BackupArtifact.STATUS_DELETED:
+                raise BackupError(
+                    f"Cannot resume snapshot '{snapshot.snapshot_id}' because its authoritative dump artifact has been deleted."
+                )
+
+            local_path = _resolve_snapshot_database_local_path(snapshot, artifact)
+            if not local_path.exists():
+                raise BackupError(
+                    f"Cannot resume snapshot '{snapshot.snapshot_id}' because the original authoritative dump file is missing."
+                )
+
+            validation_issues = _collect_local_backup_validation_issues(
+                local_path,
+                backup_format=artifact.backup_format,
+                expected_checksum=artifact.checksum_sha256,
+                expected_size=artifact.size_bytes,
+            )
+            if validation_issues:
+                raise BackupError(
+                    f"Cannot resume snapshot '{snapshot.snapshot_id}' because the original authoritative dump file is not valid: "
+                    + "; ".join(validation_issues)
+                )
+
+            update_fields: list[str] = []
+            if artifact.local_path != str(local_path):
+                artifact.local_path = str(local_path)
+                update_fields.append("local_path")
+            if (
+                not (
+                    resolved_policy.target_mode
+                    == BackupPolicy.TARGET_MODE_PRIVATE_REMOTE
+                    and not artifact.remote_key
+                )
+                and artifact.status != BackupArtifact.STATUS_READY
+            ):
+                artifact.status = BackupArtifact.STATUS_READY
+                update_fields.append("status")
+            if update_fields:
+                artifact.save(update_fields=[*update_fields, "updated_at"])
+
+        child_descriptors_json = deepcopy(
+            snapshot.child_descriptors_json
+            if isinstance(snapshot.child_descriptors_json, dict)
+            else {}
+        )
+        child_descriptors_json["database"] = _build_snapshot_database_descriptor(
+            snapshot,
+            artifact,
+        )
+        sidecars = child_descriptors_json.get("sidecars")
+        if not isinstance(sidecars, dict):
+            child_descriptors_json["sidecars"] = {}
+        snapshot.child_descriptors_json = child_descriptors_json
+        snapshot.save(
+            update_fields=[
+                "authoritative_dump",
+                "child_descriptors_json",
+                "updated_at",
+            ]
+        )
+
+        if (
+            resolved_policy.target_mode == BackupPolicy.TARGET_MODE_PRIVATE_REMOTE
+            and not artifact.remote_key
+        ):
+            uploader = remote_uploader or _upload_to_private_remote
+            local_path = _resolve_snapshot_database_local_path(snapshot, artifact)
+            try:
+                remote_key = _upload_snapshot_child_to_private_remote(
+                    local_path,
+                    policy=resolved_policy,
+                    snapshot_remote_root=snapshot.remote_root_key,
+                    relative_path=str(
+                        child_descriptors_json["database"]["relative_path"]
+                    ),
+                    remote_uploader=uploader,
+                )
+            except BackupError as exc:
+                _mark_remote_upload_failure(artifact, local_path=local_path, error=exc)
+                child_descriptors_json["database"]["status"] = (
+                    BackupSnapshot.STATUS_FAILED
+                )
+                child_descriptors_json["database"]["error"] = str(exc)
+                _mark_snapshot_failed(
+                    snapshot,
+                    failure_note=f"database dump remote upload failed: {exc}",
+                    child_descriptors_json=child_descriptors_json,
+                )
+                raise
+            except Exception as exc:
+                upload_error = BackupError(
+                    f"Private remote upload failed for {artifact.filename}: {exc}"
+                )
+                _mark_remote_upload_failure(
+                    artifact,
+                    local_path=local_path,
+                    error=upload_error,
+                )
+                child_descriptors_json["database"]["status"] = (
+                    BackupSnapshot.STATUS_FAILED
+                )
+                child_descriptors_json["database"]["error"] = str(upload_error)
+                _mark_snapshot_failed(
+                    snapshot,
+                    failure_note=(
+                        f"database dump remote upload failed: {upload_error}"
+                    ),
+                    child_descriptors_json=child_descriptors_json,
+                )
+                raise upload_error from exc
+
+            artifact.remote_key = remote_key
+            artifact.status = BackupArtifact.STATUS_READY
+            metadata_json = dict(artifact.metadata_json)
+            metadata_json.pop("remote_upload_error", None)
+            metadata_json.pop("remote_upload_failed_at", None)
+            artifact.metadata_json = metadata_json
+            update_fields = ["remote_key", "status", "metadata_json", "updated_at"]
+            if artifact.validation_notes.startswith("remote upload failed: "):
+                artifact.validation_notes = ""
+                update_fields.insert(3, "validation_notes")
+            artifact.save(update_fields=update_fields)
+
+            child_descriptors_json["database"]["remote_key"] = remote_key
+            child_descriptors_json["database"].pop("error", None)
+            snapshot.child_descriptors_json = child_descriptors_json
+            snapshot.save(update_fields=["child_descriptors_json", "updated_at"])
+
+        child_descriptors_json, sidecar_failures = _capture_snapshot_sidecars(
+            snapshot=snapshot,
+            policy=resolved_policy,
+            captured_at=now,
+            remote_uploader=remote_uploader,
+        )
+        snapshot.child_descriptors_json = child_descriptors_json
+        if sidecar_failures:
+            failure_note = "snapshot sidecar capture failed: " + "; ".join(
+                sidecar_failures
+            )
+            snapshot.status = BackupSnapshot.STATUS_FAILED
+            snapshot.failure_note = failure_note
+            snapshot.save(
+                update_fields=[
+                    "child_descriptors_json",
+                    "status",
+                    "failure_note",
+                    "updated_at",
+                ]
+            )
+            _persist_snapshot_metadata_on_artifact(
+                artifact,
+                snapshot,
+                note=failure_note,
+            )
+        else:
+            snapshot.status = BackupSnapshot.STATUS_READY
+            snapshot.failure_note = ""
+            snapshot.save(
+                update_fields=[
+                    "child_descriptors_json",
+                    "status",
+                    "failure_note",
+                    "updated_at",
+                ]
+            )
+            cleared_previous_note = _clear_appended_artifact_note(
+                artifact,
+                previous_failure_note,
+            )
+            _persist_snapshot_metadata_on_artifact(artifact, snapshot)
+            if cleared_previous_note:
+                artifact.save(update_fields=["validation_notes", "updated_at"])
+
+        try:
+            prune_expired_backups(policy=resolved_policy, now=now)
+        except Exception as exc:
+            _record_prune_failure_without_masking_success(artifact, error=exc)
+        return artifact
+
+
 def create_backup(
     *,
     initiated_by: AbstractBaseUser | None = None,
@@ -1259,14 +1731,27 @@ def create_backup(
     remote_uploader: RemoteUploader | None = None,
     remote_deleter: RemoteDeleter | None = None,
     now: datetime | None = None,
+    resume_snapshot_id: str | None = None,
 ) -> BackupArtifact:
     """Create a backup artifact, optionally offloading it to private remote storage."""
     resolved_policy = policy or load_policy_snapshot()
+    backup_started_at = now or datetime.now(timezone.utc)
+
+    if resume_snapshot_id is not None:
+        return _resume_backup_capture(
+            resume_snapshot_id,
+            initiated_by=initiated_by,
+            trigger=trigger,
+            policy=resolved_policy,
+            shell_runner=shell_runner,
+            remote_uploader=remote_uploader,
+            now=backup_started_at,
+        )
+
     issues = validate_policy_snapshot(resolved_policy)
     if issues:
         raise BackupConfigurationError("; ".join(issues))
 
-    backup_started_at = now or datetime.now(timezone.utc)
     local_directory = get_local_backup_directory(resolved_policy)
     local_directory.mkdir(parents=True, exist_ok=True)
 
@@ -1330,7 +1815,9 @@ def create_backup(
                 snapshot,
                 failure_note=f"snapshot preparation failed: {exc}",
             )
-            raise
+            raise BackupError(
+                f"Snapshot capture failed for snapshot '{snapshot.snapshot_id}': {exc}"
+            ) from exc
         try:
             if backup_format == "pg_dump_custom":
                 _dump_postgresql_database(
@@ -1353,7 +1840,9 @@ def create_backup(
                 exc.add_note(
                     f"Failed to clean up partial backup file '{local_path}': {cleanup_error}"
                 )
-            raise
+            raise BackupError(
+                f"Snapshot capture failed for snapshot '{snapshot.snapshot_id}': {exc}"
+            ) from exc
 
         metadata = _build_backup_metadata(
             created_at=backup_started_at,
@@ -1433,10 +1922,14 @@ def create_backup(
                     failure_note=f"database dump remote upload failed: {exc}",
                     child_descriptors_json=child_descriptors_json,
                 )
-                raise
+                raise BackupError(
+                    f"Snapshot capture failed for snapshot '{snapshot.snapshot_id}': {exc}"
+                ) from exc
             except Exception as exc:
                 upload_error = BackupError(
-                    f"Private remote upload failed for {artifact.filename}: {exc}"
+                    "Snapshot capture failed for snapshot "
+                    f"'{snapshot.snapshot_id}': Private remote upload failed for "
+                    f"{artifact.filename}: {exc}"
                 )
                 _mark_remote_upload_failure(
                     artifact,
@@ -1466,8 +1959,9 @@ def create_backup(
                     remote_deleter=remote_deleter,
                 )
                 message = (
-                    "Private remote metadata persistence failed for "
-                    f"{artifact.filename} after uploading remote key "
+                    "Snapshot capture failed for snapshot "
+                    f"'{snapshot.snapshot_id}': Private remote metadata "
+                    f"persistence failed for {artifact.filename} after uploading remote key "
                     f"'{remote_key}'."
                 )
                 if cleanup_error is None:

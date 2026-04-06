@@ -349,7 +349,7 @@ quickscale plan myapp --overwrite
 
 The wizard guides you through:
 1. **Theme selection**: Choose from available themes (showcase_html, showcase_react)
-2. **Module selection**: Select optional modules to include. On the main branch and in the current v0.81.0 release, implemented first-party modules include analytics, auth, backups, blog, crm, forms, listings, notifications, social, and storage.
+2. **Module selection**: Select optional modules to include. In the current v0.82.0 release, implemented first-party modules include analytics, auth, backups, blog, crm, forms, listings, notifications, social, and storage.
 3. **Docker configuration**: Configure Docker build/start options and optional first-start superuser creation
 
 **Generated `quickscale.yml` example**:
@@ -368,7 +368,7 @@ docker:
   create_superuser: false
 ```
 
-On the main branch, `backups` is the admin/ops-first safety option in that set: private local artifacts are the default, optional private remote offload is supported, and generated local Docker and Railway PostgreSQL projects use PostgreSQL 18 custom dumps as the real backup/restore path. JSON artifacts are export-only rather than restore inputs, admin download and validate stay local-file-only in v1, and the BackupPolicy admin page exposes a guarded restore action only for row-backed local artifacts already present on disk. Exact filename confirmation and the existing environment gate remain required, admin restore never materializes remote-only artifacts, and CLI restore keeps its existing syntax.
+In the current release line, `backups` is the admin/ops-first safety option in that set: private local artifacts are the default, optional private remote offload is supported, and generated local Docker and Railway PostgreSQL projects use PostgreSQL 18 custom dumps as the real backup/restore path. JSON artifacts are export-only rather than restore inputs, admin download and validate stay local-file-only in v1, and the BackupPolicy admin page exposes a guarded restore action only for row-backed local artifacts already present on disk. Exact filename confirmation and the existing environment gate remain required, admin restore never materializes remote-only artifacts, and CLI restore keeps its existing syntax.
 
 If you enable `backups` in a generated PostgreSQL project, you can restore a row-backed local artifact from the BackupPolicy admin page under those same confirmation and environment guards, or use the CLI when you need artifact-id or operator-supplied file-path restore:
 
@@ -384,11 +384,15 @@ poetry run python manage.py backups_restore --file /path/to/BACKUP_FILENAME.dump
 
 JSON artifacts remain export-only, not restore inputs. Existing generated projects must manually adopt later Docker/CI/E2E PostgreSQL 18 tooling updates because `quickscale apply` does not rewrite those user-owned files.
 
-### 4.4) Disaster-Recovery Commands
+### 4.4) Disaster Recovery and Environment Promotion Commands
 
-> **Status**: ✅ Available on main for the v0.82 DR workflow surface
+> **Status**: ✅ Released in v0.82.0
 >
-> These commands provide route-aware capture, plan, execute, and report flows for environment migration and disaster recovery while keeping Django work inside the backend container.
+> QuickScale uses one `quickscale dr` command group for two related but separate operator jobs:
+> - **Environment promotion** moves a validated source environment forward, such as local → Railway develop or Railway develop → Railway production.
+> - **Disaster recovery / rehearsal** restores a stored snapshot into a recovery target, such as Railway production → Railway develop.
+>
+> In both cases, QuickScale keeps `database`, `media`, and `env_vars` as separate operational surfaces instead of one opaque full-environment action.
 
 QuickScale exposes one top-level DR group:
 
@@ -415,6 +419,12 @@ quickscale dr capture \
 quickscale dr capture \
   --route railway-develop-to-railway-production \
   --source-service myapp-develop
+
+# Resume an interrupted capture on the same stored snapshot
+quickscale dr capture \
+  --route railway-develop-to-railway-production \
+  --source-service myapp-develop \
+  --resume <snapshot_id>
 ```
 
 Build and persist a dry-run plan for a stored snapshot:
@@ -450,12 +460,26 @@ quickscale dr execute \
   --rollback-pin-reason "pre-production cutover"
 ```
 
+Resume the latest partial execute record for the same route and snapshot:
+
+```bash
+quickscale dr execute \
+  --route railway-develop-to-railway-production \
+  --snapshot-id <snapshot_id> \
+  --source-service myapp-develop \
+  --target-service myapp-production \
+  --resume
+```
+
 Execution rules to remember:
 
-- Choose at least one surface: `--database`, `--media`, or `--env-vars`
-- Routes that involve Railway production require both `--rollback-pin-hours` and `--rollback-pin-reason`
+- Choose at least one surface: `--database`, `--media`, or `--env-vars`, unless you use `--resume`, which retries only the surfaces from the latest execute record that still need follow-up
+- Routes that involve Railway production require both `--rollback-pin-hours` and `--rollback-pin-reason` before first execution
 - `snapshot_id` is the public stored-snapshot locator for DR workflows
 - Database restore and media sync remain separate operational surfaces
+- Media sync is source-side rather than a second restore path
+- `quickscale dr execute --resume` uses stored verification records to skip completed work and retry only incomplete, failed, partial, or manual-required surfaces
+- Railway-target `--media` requires the `storage` module backed by external object storage; Railway container disk is not a durable media target
 - Raw secret values are never persisted into snapshot sidecars
 
 Review the latest stored plan and execute records for one route:
@@ -629,10 +653,10 @@ Run these scripts from the repository root.
 - Remove module: `quickscale remove <module>`
 - Project status: `quickscale status`
 
-**CLI Commands (Disaster Recovery)**:
-- Capture a route source snapshot: `quickscale dr capture --route <label>`
+**CLI Commands (Disaster Recovery & Promotion)**:
+- Capture a route source snapshot: `quickscale dr capture --route <label> [--resume <snapshot_id>]`
 - Build a DR plan: `quickscale dr plan --route <label> --snapshot-id <snapshot_id>`
-- Execute selected DR surfaces: `quickscale dr execute --route <label> --snapshot-id <snapshot_id> [--database] [--media] [--env-vars]`
+- Execute selected or retryable DR surfaces: `quickscale dr execute --route <label> --snapshot-id <snapshot_id> [--database] [--media] [--env-vars] [--resume]`
 - Review stored route reports: `quickscale dr report --route <label> --snapshot-id <snapshot_id>`
 
 ## Poetry — quick commands

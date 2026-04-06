@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from copy import deepcopy
 import json
 import subprocess
 from dataclasses import dataclass
@@ -175,6 +176,13 @@ _DR_ROUTES: dict[str, DrRouteSpec] = {
     ),
 }
 _ROUTE_CHOICE = click.Choice(tuple(_DR_ROUTES), case_sensitive=True)
+_DR_EXECUTE_SURFACES = ("env_vars", "database", "media")
+_DR_EXECUTE_RETRYABLE_STATUSES = {
+    "failed",
+    "incomplete",
+    "manual_required",
+    "partial",
+}
 
 
 @click.group()
@@ -392,9 +400,16 @@ def _fetch_snapshot_report(
     )
 
 
-def _capture_snapshot_report(context: DisasterRecoveryContext) -> dict[str, Any]:
+def _capture_snapshot_report(
+    context: DisasterRecoveryContext,
+    *,
+    resume_snapshot_id: str | None = None,
+) -> dict[str, Any]:
+    manage_args = ["backups_create", "--json"]
+    if resume_snapshot_id:
+        manage_args.extend(["--resume", resume_snapshot_id])
     return _run_manage_json(
-        ["backups_create", "--json"],
+        manage_args,
         env_overrides=_source_manage_overrides(context),
     )
 
@@ -773,6 +788,115 @@ def _execute_database_restore(
     }
 
 
+def _latest_route_phase_record(
+    snapshot_report: dict[str, Any],
+    *,
+    route: str,
+    phase: str,
+) -> dict[str, Any] | None:
+    """Return the latest stored route record for one verification phase."""
+    route_report = _build_route_report(snapshot_report, route=route)
+    latest_records = route_report.get("latest_records", {})
+    if not isinstance(latest_records, dict):
+        return None
+
+    record = latest_records.get(phase)
+    return record if isinstance(record, dict) else None
+
+
+def _latest_execute_surface_statuses(
+    latest_execute_record: dict[str, Any] | None,
+) -> dict[str, str]:
+    """Extract the last recorded execute status for each operational surface."""
+    if latest_execute_record is None:
+        return {}
+
+    payload = latest_execute_record.get("payload")
+    if not isinstance(payload, dict):
+        return {}
+
+    statuses: dict[str, str] = {}
+    for surface_name in _DR_EXECUTE_SURFACES:
+        surface_payload = payload.get(surface_name)
+        if not isinstance(surface_payload, dict):
+            continue
+        statuses[surface_name] = str(surface_payload.get("status") or "").strip()
+    return statuses
+
+
+def _latest_execute_surface_payloads(
+    latest_execute_record: dict[str, Any] | None,
+) -> dict[str, dict[str, Any]]:
+    """Return deep-copied surface payloads from the latest execute record."""
+    if latest_execute_record is None:
+        return {}
+
+    payload = latest_execute_record.get("payload")
+    if not isinstance(payload, dict):
+        return {}
+
+    carried_payloads: dict[str, dict[str, Any]] = {}
+    for surface_name in _DR_EXECUTE_SURFACES:
+        surface_payload = payload.get(surface_name)
+        if isinstance(surface_payload, dict):
+            carried_payloads[surface_name] = deepcopy(surface_payload)
+    return carried_payloads
+
+
+def _resolve_execute_surface_selection(
+    *,
+    latest_execute_record: dict[str, Any] | None,
+    database: bool,
+    media: bool,
+    env_vars: bool,
+    resume: bool,
+) -> tuple[str, ...]:
+    """Resolve which DR surfaces should run for this execute invocation."""
+    explicit_selection = tuple(
+        surface_name
+        for selected, surface_name in (
+            (env_vars, "env_vars"),
+            (database, "database"),
+            (media, "media"),
+        )
+        if selected
+    )
+    if explicit_selection:
+        return explicit_selection
+
+    if not resume:
+        raise click.ClickException(
+            "Choose at least one operational surface: --database, --media, or --env-vars."
+        )
+
+    if latest_execute_record is None:
+        raise click.ClickException(
+            "Cannot resume execute because no prior execute record is stored for this route and snapshot."
+        )
+
+    payload = latest_execute_record.get("payload")
+    if not isinstance(payload, dict):
+        raise click.ClickException(
+            "Cannot resume execute because the latest execute record does not contain a structured payload."
+        )
+
+    return tuple(
+        surface_name
+        for surface_name in _DR_EXECUTE_SURFACES
+        if isinstance(payload.get(surface_name), dict)
+        and str(payload[surface_name].get("status") or "").strip()
+        in _DR_EXECUTE_RETRYABLE_STATUSES
+    )
+
+
+def _surface_result_requires_follow_up(surface_payload: dict[str, Any]) -> bool:
+    """Return whether one execute surface still needs additional work."""
+    return (
+        str(surface_payload.get("status") or "").strip()
+        in _DR_EXECUTE_RETRYABLE_STATUSES
+    )
+
+
 def _build_route_report(
     snapshot_report: dict[str, Any],
     *,
@@ -871,11 +995,13 @@ def _echo_report_summary(route_report: dict[str, Any]) -> None:
 @click.option("--route", type=_ROUTE_CHOICE, required=True)
 @click.option("--source-service")
 @click.option("--source-railway-environment")
+@click.option("--resume", "resume_snapshot_id")
 @click.option("--json", "as_json", is_flag=True)
 def capture(
     route: str,
     source_service: str | None,
     source_railway_environment: str | None,
+    resume_snapshot_id: str | None,
     as_json: bool,
 ) -> None:
     """Capture a stored snapshot for one DR route source."""
@@ -887,7 +1013,10 @@ def capture(
         target_railway_environment=None,
         include_target=False,
     )
-    snapshot_report = _capture_snapshot_report(context)
+    snapshot_report = _capture_snapshot_report(
+        context,
+        resume_snapshot_id=str(resume_snapshot_id or "").strip() or None,
+    )
     if as_json:
         _echo_json({"route": context.route.label, "snapshot": snapshot_report})
         return
@@ -964,6 +1093,7 @@ def plan(
 @click.option("--env-vars", is_flag=True)
 @click.option("--rollback-pin-hours", type=int)
 @click.option("--rollback-pin-reason")
+@click.option("--resume", is_flag=True)
 @click.option("--json", "as_json", is_flag=True)
 def execute(
     route: str,
@@ -977,10 +1107,11 @@ def execute(
     env_vars: bool,
     rollback_pin_hours: int | None,
     rollback_pin_reason: str | None,
+    resume: bool,
     as_json: bool,
 ) -> None:
     """Execute selected DR surfaces for one stored snapshot."""
-    if not any((database, media, env_vars)):
+    if not any((database, media, env_vars)) and not resume:
         raise click.ClickException(
             "Choose at least one operational surface: --database, --media, or --env-vars."
         )
@@ -993,7 +1124,7 @@ def execute(
         target_railway_environment=target_railway_environment,
         include_target=True,
     )
-    if context.route.involves_production():
+    if context.route.involves_production() and not resume:
         if rollback_pin_hours is None or not str(rollback_pin_reason or "").strip():
             raise click.ClickException(
                 "Routes involving Railway production require --rollback-pin-hours and --rollback-pin-reason before execution."
@@ -1008,9 +1139,46 @@ def execute(
             _RELEASE_METADATA_FILENAME,
         ),
     )
+    latest_execute_record = (
+        _latest_route_phase_record(
+            snapshot_report,
+            route=context.route.label,
+            phase="execute",
+        )
+        if resume
+        else None
+    )
+    if resume and latest_execute_record is None:
+        raise click.ClickException(
+            "Cannot resume execute because no prior execute record is stored for this route and snapshot."
+        )
+    selected_surfaces = _resolve_execute_surface_selection(
+        latest_execute_record=latest_execute_record,
+        database=database,
+        media=media,
+        env_vars=env_vars,
+        resume=resume,
+    )
+
+    rollback_pin_payload = snapshot_report.get("rollback_pin")
+    existing_rollback_pin = (
+        rollback_pin_payload if isinstance(rollback_pin_payload, dict) else None
+    )
+    if context.route.involves_production():
+        rollback_pin_active = bool(
+            existing_rollback_pin is not None and existing_rollback_pin.get("active")
+        )
+        if resume and (
+            rollback_pin_hours is None or not str(rollback_pin_reason or "").strip()
+        ):
+            if not rollback_pin_active:
+                raise click.ClickException(
+                    "Routes involving Railway production require --rollback-pin-hours and --rollback-pin-reason before execution."
+                )
+
     env_sync_plan = _build_env_sync_plan(context, snapshot_report)
 
-    rollback_pin: dict[str, Any] | None = None
+    rollback_pin: dict[str, Any] | None = existing_rollback_pin
     if rollback_pin_hours is not None and str(rollback_pin_reason or "").strip():
         rollback_report = _set_rollback_pin(
             context,
@@ -1039,22 +1207,62 @@ def execute(
         "database": {"status": "skipped"},
         "media": {"status": "skipped"},
     }
+    execute_payload.update(_latest_execute_surface_payloads(latest_execute_record))
 
-    if env_vars:
-        execute_payload["env_vars"] = _execute_portable_env_sync(context, env_sync_plan)
-    if database:
-        execute_payload["database"] = _execute_database_restore(
-            context, snapshot_report
-        )
-    if media:
-        execute_payload["media"] = _run_media_sync(
-            context,
-            snapshot_id=snapshot_id,
-            dry_run=False,
-        )
+    latest_surface_statuses = _latest_execute_surface_statuses(latest_execute_record)
+    surface_failure = False
+    for surface_name in _DR_EXECUTE_SURFACES:
+        if surface_name not in selected_surfaces:
+            continue
+
+        if surface_failure:
+            execute_payload[surface_name] = {
+                "status": "incomplete",
+                "reason": "not attempted because an earlier selected surface failed",
+            }
+            continue
+
+        if resume and latest_surface_statuses.get(surface_name) == "completed":
+            execute_payload[surface_name] = {
+                "status": "skipped",
+                "reason": "already completed in the latest execute record",
+            }
+            continue
+
+        try:
+            if surface_name == "env_vars":
+                execute_payload[surface_name] = _execute_portable_env_sync(
+                    context,
+                    env_sync_plan,
+                )
+            elif surface_name == "database":
+                execute_payload[surface_name] = _execute_database_restore(
+                    context,
+                    snapshot_report,
+                )
+            else:
+                execute_payload[surface_name] = _run_media_sync(
+                    context,
+                    snapshot_id=snapshot_id,
+                    dry_run=False,
+                )
+        except click.ClickException as exc:
+            execute_payload[surface_name] = {
+                "status": "failed",
+                "error": str(exc),
+                "error_type": exc.__class__.__name__,
+            }
+            surface_failure = True
+        except Exception as exc:
+            execute_payload[surface_name] = {
+                "status": "failed",
+                "error": str(exc),
+                "error_type": exc.__class__.__name__,
+            }
+            surface_failure = True
 
     if any(
-        surface.get("status") in {"partial", "manual_required"}
+        _surface_result_requires_follow_up(surface)
         for surface in (
             execute_payload["env_vars"],
             execute_payload["database"],

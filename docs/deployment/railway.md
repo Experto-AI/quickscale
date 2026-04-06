@@ -187,11 +187,11 @@ Railway automatically provisions PostgreSQL and provides the `DATABASE_URL` envi
 - Admin download and validate stay local-file-only in v1.
 - The BackupPolicy admin page exposes a guarded restore action only for row-backed local artifacts already present on disk; exact filename confirmation and the existing environment gate remain required, admin restore never materializes remote-only artifacts, and CLI restore keeps its existing syntax.
 - `quickscale apply` does not rewrite user-owned Docker, CI, or E2E files in already-generated projects. If your project predates the PostgreSQL 18 backups follow-up, manually adopt the PostgreSQL 18 tooling updates reflected in the current Docker, CI, and E2E templates.
-- This guide reflects the implemented contract on main: runtime enforcement and generated templates now match it.
+- This guide reflects the released v0.82.0 contract: runtime enforcement and generated templates now match it.
 
-## Disaster Recovery Workflows
+## Disaster Recovery and Environment Promotion Workflows
 
-QuickScale exposes a route-aware DR surface on top of the backups module:
+Released in v0.82.0, QuickScale exposes a route-aware DR surface on top of the backups module:
 
 ```bash
 quickscale dr capture
@@ -208,12 +208,27 @@ railway-develop-to-railway-production
 railway-production-to-railway-develop
 ```
 
+### Promotion vs recovery
+
+- `local-to-railway-develop` and `railway-develop-to-railway-production` are environment-promotion routes.
+- `railway-production-to-railway-develop` is the disaster-recovery / rehearsal route.
+- QuickScale uses the same stored-snapshot contract for both, but operators should keep rollback approval, smoke validation, and live cutover decisions specific to the route they are running.
+
 ### Service targeting rules
 
 - Railway-backed source routes require `--source-service`
 - Railway-backed target routes require `--target-service`
 - Use `--source-railway-environment` and `--target-railway-environment` only when you need to override Railway's default environment selection for a service
 - QuickScale does not guess develop or production service names for DR operations
+
+Resume an interrupted capture on the same stored snapshot:
+
+```bash
+quickscale dr capture \
+  --route railway-develop-to-railway-production \
+  --source-service myapp-develop \
+  --resume <snapshot_id>
+```
 
 Example plan from Railway develop into Railway production:
 
@@ -240,17 +255,31 @@ quickscale dr execute \
   --rollback-pin-reason "pre-production cutover"
 ```
 
+Resume a partial execute from the latest stored verification record for the same route and snapshot:
+
+```bash
+quickscale dr execute \
+  --route railway-develop-to-railway-production \
+  --snapshot-id <snapshot_id> \
+  --source-service myapp-develop \
+  --target-service myapp-production \
+  --resume
+```
+
 ### Operational model
 
 - DR commands drive Django work through `manage.py` inside the local backend container
 - Railway variables are fetched per service and injected as route-specific runtime overrides
-- Database restore and media sync are separate surfaces; choose them explicitly during `execute`
+- Database restore, media sync, and env-var sync are separate surfaces; choose them explicitly during `execute`
+- Media sync is source-side and follows the stored media manifest rather than turning media into a second restore path
 - Environment-variable sync is conservative: only portable variables are copied automatically, while provider-owned, target-owned, and sensitive keys are reported as manual actions
+- `quickscale dr execute --resume` uses the latest stored execute record for the same route and `snapshot_id` to skip completed work and retry only incomplete, failed, partial, or manual-required surfaces
 - Verification reports for `plan` and `execute` are stored per snapshot and can be reviewed with `quickscale dr report`
 
 ### Media and env-var expectations
 
 - Do not rely on Railway container disk as durable media storage
+- Railway-target `--media` requires the `storage` module with external object storage on the source and target sides; do not treat Railway container disk as a durable source or target
 - For production media migrations, use the `storage` module with external object storage and let `quickscale dr execute --media` copy through the runtime seam
 - Raw secret values are never written into snapshot sidecars; env-var manifests store names only
 

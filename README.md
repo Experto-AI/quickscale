@@ -44,14 +44,16 @@ QuickScale is a **Django project generator** that creates production-ready SaaS 
 - **One-command deployment**: Deploy to Railway with `quickscale deploy railway`
 - **Full ownership**: Generated projects are 100% yours to customize—no vendor lock-in
 - **Standardized stack**: Build multiple client projects faster with consistent best practices
-- **Implemented first-party modules on the main branch today**: analytics, auth, backups, blog, crm, forms, listings, notifications, social, and storage
+- **Implemented first-party modules in the current release line**: analytics, auth, backups, blog, crm, forms, listings, notifications, social, and storage
 - **Creator-led evolution**: New capabilities land because they solve real project needs first, then get generalized into the shared stack
 
-The current published release is v0.81.0, which adds maintainer-only beta-site migration tooling with deterministic fresh-first execution and checkpoint-first in-place continuation.
+The current published release is v0.82.0, which ships the public `quickscale dr capture/plan/execute/report` workflow for disaster recovery and environment promotion. Stored snapshots are addressed by `snapshot_id`, `quickscale dr capture --resume <snapshot_id>` resumes an interrupted capture on the same stored snapshot, `quickscale dr execute --resume` resumes partial execution from stored verification records, and production routes keep rollback pins and conservative env-var sync in the operator loop.
 
 QuickScale evolves through tagged releases and real owner usage rather than a separate phase model. For the current implementation surface, use [decisions.md](./docs/technical/decisions.md), [roadmap.md](./docs/technical/roadmap.md), and [CHANGELOG.md](./CHANGELOG.md).
 
-On the main branch, backups is the admin/ops-first safety module: private local artifacts are the default, optional private remote offload is supported, and generated local Docker and Railway PostgreSQL projects use PostgreSQL 18 custom dumps as the real backup/restore path. JSON artifacts are export-only rather than restore inputs, admin download and validate stay local-file-only in v1, and the BackupPolicy admin page exposes a guarded restore action only for row-backed local artifacts already present on disk. Exact filename confirmation and the existing environment gate remain required, admin restore never materializes remote-only artifacts, CLI restore keeps its existing syntax, and already-generated projects that predate this follow-up must manually adopt the current Docker/CI/E2E PostgreSQL 18 tooling updates.
+In the current release line, backups remains the admin/ops-first safety module: private local artifacts are the default, optional private remote offload is supported, and generated local Docker and Railway PostgreSQL projects use PostgreSQL 18 custom dumps as the real backup/restore path. JSON artifacts are export-only rather than restore inputs, admin download and validate stay local-file-only in v1, and the BackupPolicy admin page exposes a guarded restore action only for row-backed local artifacts already present on disk. Exact filename confirmation and the existing environment gate remain required, admin restore never materializes remote-only artifacts, CLI restore keeps its existing syntax, and already-generated projects that predate this follow-up must manually adopt the current Docker/CI/E2E PostgreSQL 18 tooling updates.
+
+When a Railway promotion or recovery route includes media, treat media sync as a separate operator surface and back it with the `storage` module plus external object storage; Railway container disk is not part of the durable media contract.
 
 ## Documentation Guide
 

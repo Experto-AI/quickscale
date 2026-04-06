@@ -160,6 +160,43 @@ def test_capture_outputs_json_snapshot_payload() -> None:
     }
 
 
+def test_capture_resume_forwards_snapshot_id() -> None:
+    runner = CliRunner()
+    context = _context()
+
+    with (
+        patch(
+            "quickscale_cli.commands.dr_commands._build_context",
+            return_value=context,
+        ),
+        patch(
+            "quickscale_cli.commands.dr_commands._capture_snapshot_report",
+            return_value={
+                "snapshot_id": "snap-123",
+                "source_environment": "local",
+                "status": "ready",
+                "authoritative_dump": {"filename": "db.dump"},
+            },
+        ) as mocked_capture,
+    ):
+        result = runner.invoke(
+            dr,
+            [
+                "capture",
+                "--route",
+                "local-to-railway-develop",
+                "--resume",
+                "snap-123",
+            ],
+        )
+
+    assert result.exit_code == 0
+    mocked_capture.assert_called_once_with(
+        context,
+        resume_snapshot_id="snap-123",
+    )
+
+
 def test_plan_records_verification_and_shows_manual_actions() -> None:
     runner = CliRunner()
     context = _context()
@@ -366,6 +403,390 @@ def test_execute_runs_selected_surfaces_and_records_report() -> None:
     )
     mocked_record.assert_called_once()
     assert mocked_record.call_args.kwargs["phase"] == "execute"
+
+
+def test_execute_records_partial_result_when_surface_fails() -> None:
+    runner = CliRunner()
+    context = _context()
+    snapshot_report = {"snapshot_id": "snap-123", "sidecar_payloads": {}}
+
+    with (
+        patch(
+            "quickscale_cli.commands.dr_commands._build_context",
+            return_value=context,
+        ),
+        patch(
+            "quickscale_cli.commands.dr_commands._fetch_snapshot_report",
+            return_value=snapshot_report,
+        ),
+        patch(
+            "quickscale_cli.commands.dr_commands._build_env_sync_plan",
+            return_value={
+                "portable_candidates": ["DEBUG"],
+                "manual_requirements": [],
+                "portable_conflicts": [],
+            },
+        ),
+        patch(
+            "quickscale_cli.commands.dr_commands._execute_portable_env_sync",
+            return_value={"status": "completed", "copied": ["DEBUG"], "failed": []},
+        ) as mocked_env,
+        patch(
+            "quickscale_cli.commands.dr_commands._execute_database_restore",
+            side_effect=click.ClickException("restore exploded"),
+        ) as mocked_db,
+        patch("quickscale_cli.commands.dr_commands._run_media_sync") as mocked_media,
+        patch(
+            "quickscale_cli.commands.dr_commands._record_verification"
+        ) as mocked_record,
+    ):
+        result = runner.invoke(
+            dr,
+            [
+                "execute",
+                "--route",
+                "local-to-railway-develop",
+                "--snapshot-id",
+                "snap-123",
+                "--target-service",
+                "myapp-develop",
+                "--env-vars",
+                "--database",
+                "--media",
+            ],
+        )
+
+    assert result.exit_code == 0
+    assert "Execution status: partial" in result.output
+    mocked_env.assert_called_once()
+    mocked_db.assert_called_once()
+    mocked_media.assert_not_called()
+    mocked_record.assert_called_once()
+    payload = mocked_record.call_args.kwargs["payload"]
+    assert payload["status"] == "partial"
+    assert payload["env_vars"]["status"] == "completed"
+    assert payload["database"] == {
+        "status": "failed",
+        "error": "restore exploded",
+        "error_type": "ClickException",
+    }
+    assert payload["media"] == {
+        "status": "incomplete",
+        "reason": "not attempted because an earlier selected surface failed",
+    }
+
+
+def test_execute_resume_skips_completed_surfaces_and_retries_remaining() -> None:
+    runner = CliRunner()
+    context = _context()
+    snapshot_report = {
+        "snapshot_id": "snap-123",
+        "sidecar_payloads": {
+            "promotion-verification.json": {
+                "reports": [
+                    {
+                        "route": "local-to-railway-develop",
+                        "phase": "execute",
+                        "status": "partial",
+                        "recorded_at": "2026-04-06T12:30:00+00:00",
+                        "payload": {
+                            "env_vars": {"status": "completed", "copied": ["DEBUG"]},
+                            "database": {
+                                "status": "failed",
+                                "error": "restore exploded",
+                            },
+                            "media": {
+                                "status": "incomplete",
+                                "reason": "not attempted because an earlier selected surface failed",
+                            },
+                        },
+                    }
+                ]
+            }
+        },
+    }
+
+    with (
+        patch(
+            "quickscale_cli.commands.dr_commands._build_context",
+            return_value=context,
+        ),
+        patch(
+            "quickscale_cli.commands.dr_commands._fetch_snapshot_report",
+            return_value=snapshot_report,
+        ),
+        patch(
+            "quickscale_cli.commands.dr_commands._build_env_sync_plan",
+            return_value={
+                "portable_candidates": ["DEBUG"],
+                "manual_requirements": [],
+                "portable_conflicts": [],
+            },
+        ),
+        patch(
+            "quickscale_cli.commands.dr_commands._execute_portable_env_sync"
+        ) as mocked_env,
+        patch(
+            "quickscale_cli.commands.dr_commands._execute_database_restore",
+            return_value={
+                "status": "completed",
+                "restore_message": "Restore executed.",
+            },
+        ) as mocked_db,
+        patch(
+            "quickscale_cli.commands.dr_commands._run_media_sync",
+            return_value={"status": "completed", "copied_count": 3},
+        ) as mocked_media,
+        patch(
+            "quickscale_cli.commands.dr_commands._record_verification"
+        ) as mocked_record,
+    ):
+        result = runner.invoke(
+            dr,
+            [
+                "execute",
+                "--route",
+                "local-to-railway-develop",
+                "--snapshot-id",
+                "snap-123",
+                "--target-service",
+                "myapp-develop",
+                "--resume",
+                "--env-vars",
+                "--database",
+                "--media",
+            ],
+        )
+
+    assert result.exit_code == 0
+    assert "Execution status: completed" in result.output
+    mocked_env.assert_not_called()
+    mocked_db.assert_called_once()
+    mocked_media.assert_called_once_with(
+        context,
+        snapshot_id="snap-123",
+        dry_run=False,
+    )
+    mocked_record.assert_called_once()
+    payload = mocked_record.call_args.kwargs["payload"]
+    assert payload["status"] == "completed"
+    assert payload["env_vars"] == {
+        "status": "skipped",
+        "reason": "already completed in the latest execute record",
+    }
+    assert payload["database"]["status"] == "completed"
+    assert payload["media"]["status"] == "completed"
+
+
+def test_execute_bare_resume_preserves_completed_surfaces_from_prior_partial_execute() -> (
+    None
+):
+    runner = CliRunner()
+    context = _context()
+    snapshot_report = {
+        "snapshot_id": "snap-123",
+        "sidecar_payloads": {
+            "promotion-verification.json": {
+                "reports": [
+                    {
+                        "route": "local-to-railway-develop",
+                        "phase": "execute",
+                        "status": "partial",
+                        "recorded_at": "2026-04-06T12:30:00+00:00",
+                        "payload": {
+                            "env_vars": {
+                                "status": "completed",
+                                "copied": ["DEBUG"],
+                                "failed": [],
+                            },
+                            "database": {
+                                "status": "failed",
+                                "error": "restore exploded",
+                            },
+                            "media": {
+                                "status": "incomplete",
+                                "reason": "not attempted because an earlier selected surface failed",
+                            },
+                        },
+                    }
+                ]
+            }
+        },
+    }
+
+    with (
+        patch(
+            "quickscale_cli.commands.dr_commands._build_context",
+            return_value=context,
+        ),
+        patch(
+            "quickscale_cli.commands.dr_commands._fetch_snapshot_report",
+            return_value=snapshot_report,
+        ),
+        patch(
+            "quickscale_cli.commands.dr_commands._build_env_sync_plan",
+            return_value={
+                "portable_candidates": ["DEBUG"],
+                "manual_requirements": [],
+                "portable_conflicts": [],
+            },
+        ),
+        patch(
+            "quickscale_cli.commands.dr_commands._execute_portable_env_sync"
+        ) as mocked_env,
+        patch(
+            "quickscale_cli.commands.dr_commands._execute_database_restore",
+            return_value={
+                "status": "completed",
+                "restore_message": "Restore executed.",
+            },
+        ) as mocked_db,
+        patch(
+            "quickscale_cli.commands.dr_commands._run_media_sync",
+            return_value={"status": "completed", "copied_count": 3},
+        ) as mocked_media,
+        patch(
+            "quickscale_cli.commands.dr_commands._record_verification"
+        ) as mocked_record,
+    ):
+        result = runner.invoke(
+            dr,
+            [
+                "execute",
+                "--route",
+                "local-to-railway-develop",
+                "--snapshot-id",
+                "snap-123",
+                "--target-service",
+                "myapp-develop",
+                "--resume",
+            ],
+        )
+
+    assert result.exit_code == 0
+    assert "Execution status: completed" in result.output
+    mocked_env.assert_not_called()
+    mocked_db.assert_called_once()
+    mocked_media.assert_called_once_with(
+        context,
+        snapshot_id="snap-123",
+        dry_run=False,
+    )
+    mocked_record.assert_called_once()
+    payload = mocked_record.call_args.kwargs["payload"]
+    assert payload["status"] == "completed"
+    assert payload["env_vars"] == {
+        "status": "completed",
+        "copied": ["DEBUG"],
+        "failed": [],
+    }
+    assert payload["database"]["status"] == "completed"
+    assert payload["media"]["status"] == "completed"
+
+
+def test_execute_resume_subset_retry_preserves_omitted_open_surfaces() -> None:
+    runner = CliRunner()
+    context = _context()
+    snapshot_report = {
+        "snapshot_id": "snap-123",
+        "sidecar_payloads": {
+            "promotion-verification.json": {
+                "reports": [
+                    {
+                        "route": "local-to-railway-develop",
+                        "phase": "execute",
+                        "status": "partial",
+                        "recorded_at": "2026-04-06T12:30:00+00:00",
+                        "payload": {
+                            "env_vars": {
+                                "status": "manual_required",
+                                "copied": [],
+                                "failed": [],
+                                "manual_requirements": [{"name": "DATABASE_URL"}],
+                                "portable_conflicts": [],
+                            },
+                            "database": {
+                                "status": "failed",
+                                "error": "restore exploded",
+                            },
+                            "media": {
+                                "status": "incomplete",
+                                "reason": "not attempted because an earlier selected surface failed",
+                            },
+                        },
+                    }
+                ]
+            }
+        },
+    }
+
+    with (
+        patch(
+            "quickscale_cli.commands.dr_commands._build_context",
+            return_value=context,
+        ),
+        patch(
+            "quickscale_cli.commands.dr_commands._fetch_snapshot_report",
+            return_value=snapshot_report,
+        ),
+        patch(
+            "quickscale_cli.commands.dr_commands._build_env_sync_plan",
+            return_value={
+                "portable_candidates": [],
+                "manual_requirements": [{"name": "DATABASE_URL"}],
+                "portable_conflicts": [],
+            },
+        ),
+        patch(
+            "quickscale_cli.commands.dr_commands._execute_portable_env_sync"
+        ) as mocked_env,
+        patch(
+            "quickscale_cli.commands.dr_commands._execute_database_restore",
+            return_value={
+                "status": "completed",
+                "restore_message": "Restore executed.",
+            },
+        ) as mocked_db,
+        patch("quickscale_cli.commands.dr_commands._run_media_sync") as mocked_media,
+        patch(
+            "quickscale_cli.commands.dr_commands._record_verification"
+        ) as mocked_record,
+    ):
+        result = runner.invoke(
+            dr,
+            [
+                "execute",
+                "--route",
+                "local-to-railway-develop",
+                "--snapshot-id",
+                "snap-123",
+                "--target-service",
+                "myapp-develop",
+                "--resume",
+                "--database",
+            ],
+        )
+
+    assert result.exit_code == 0
+    assert "Execution status: partial" in result.output
+    mocked_env.assert_not_called()
+    mocked_db.assert_called_once()
+    mocked_media.assert_not_called()
+    mocked_record.assert_called_once()
+    payload = mocked_record.call_args.kwargs["payload"]
+    assert payload["status"] == "partial"
+    assert payload["env_vars"] == {
+        "status": "manual_required",
+        "copied": [],
+        "failed": [],
+        "manual_requirements": [{"name": "DATABASE_URL"}],
+        "portable_conflicts": [],
+    }
+    assert payload["database"]["status"] == "completed"
+    assert payload["media"] == {
+        "status": "incomplete",
+        "reason": "not attempted because an earlier selected surface failed",
+    }
 
 
 def test_execute_requires_at_least_one_selected_surface() -> None:
