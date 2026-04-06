@@ -1,8 +1,11 @@
 # REVIEW - Quality Control Guide
 
-This is a review application guide. It applies the shared rule sources during self-review and peer review without becoming a second source of engineering policy.
+This is a review application guide. It applies the shared rule sources during
+self-review and peer review without becoming a second source of engineering
+policy.
 
-Shared documents in [shared/](shared/) remain authoritative when guidance overlaps.
+Shared documents in [shared/](shared/) remain authoritative when guidance
+overlaps. This guide owns review checklists and review-stage evidence prompts.
 
 ## Use This Guide When
 
@@ -30,10 +33,17 @@ Review the change against these questions:
 - does it stay inside the requested scope and preserve approved boundaries?
 - does it fit the documented architecture and approved stack?
 - does it apply the project code principles without unnecessary complexity or silent fallbacks?
-- does it follow the shared style conventions and match local code patterns?
-- do tests cover the changed behavior at the right level without contamination or implementation-detail coupling?
-- does documentation match the code and explain rationale where needed?
+- are naming, imports, type hints, logging, and public interfaces consistent with local standards?
+- do tests cover the changed behavior at the right level without contamination or brittle implementation-detail coupling?
+- does documentation match the code and explain non-obvious rationale or operator impact where needed?
 - for bug fixes, is the verified root cause addressed and is regression protection in place?
+
+## Evidence to Require
+
+- validation commands or checks are explicit
+- changed behavior is covered by tests or an explicit gap is recorded
+- documentation impact is handled or intentionally not needed
+- any remaining follow-up work is clearly separated from close blockers
 
 ## Review Outcome Guidance
 

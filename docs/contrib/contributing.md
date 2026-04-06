@@ -11,10 +11,11 @@ The files in `docs/contrib/` define project-specific contribution guidance witho
 
 `docs/contrib/shared/` is the authoritative source for project-specific implementation rules.
 
-- Shared documents define normative rules
+- Shared documents define normative rules only
 - Stage guides in this folder apply those rules in a specific situation
+- Stage guides own applied checklists, examples, repo commands, and AI-assistant guidance
 - Stage guides do not define a competing source of truth for engineering rules
-- If a stage guide conflicts with a shared document, the shared document wins
+- If a stage guide conflicts with a shared document on a rule, the shared document wins
 
 ## Shared Rule Sources
 
@@ -68,7 +69,7 @@ Before contributing, familiarize yourself with these key project documents:
 
 1. Read [README.md](../../README.md) and [Technical Decisions](../technical/decisions.md) to understand the project and scope
 2. Open the relevant shared rule sources for the change you are making
-3. Use the stage guide that matches your current task as an application checklist
+3. Use the stage guide that matches your current task for applied checklists, examples, and repo-specific execution help
 4. Let your execution workflow decide ordering; these docs do not prescribe a required sequence
 
 ---

@@ -1,7 +1,7 @@
 # Code Style Standards
 
-This file contains code style and local consistency standards that apply across
-all programming stages.
+This file contains the authoritative code style and local consistency standards
+for QuickScale.
 
 ## Naming and Clarity
 
@@ -37,13 +37,3 @@ all programming stages.
 - Preserve existing public interfaces unless the requested change explicitly includes an interface change
 - When shared standards do not define a convention, match the surrounding codebase exactly rather than inventing a new local style
 - Keep style-only changes out of unrelated files while implementing a scoped task
-
-## Review Application
-
-When reviewing changes, verify:
-
-- names are descriptive and consistent with the codebase
-- type hints improve clarity where they matter
-- imports are organized and explicit
-- logging and operator-facing output are appropriate to the context
-- public interfaces changed only when the task required it

@@ -1,8 +1,12 @@
 # DEBUG - Debugging and Bug-Fix Guide
 
-This is a debugging application guide. It applies the shared debugging, testing, scope, and architecture rules while you diagnose failures and fix verified root causes.
+This is a debugging application guide. It applies the shared debugging,
+testing, scope, and architecture rules while you diagnose failures and fix
+verified root causes.
 
-Shared documents in [shared/](shared/) remain authoritative when guidance overlaps.
+Shared documents in [shared/](shared/) remain authoritative when guidance
+overlaps. This guide owns repo-specific debugging commands and AI-assisted
+failure-analysis workflow.
 
 ## Use This Guide When
 
@@ -33,7 +37,8 @@ Apply the shared rules with this practical loop:
 
 ## Repo-Specific Debugging Commands
 
-For focused failure analysis, these commands are usually the best starting points:
+For focused failure analysis, these commands are usually the best starting
+points:
 
 ```bash
 # Stop immediately at first failure
@@ -49,6 +54,41 @@ poetry run pytest quickscale_core/tests/test_integration.py --tb=short
 ```
 
 See [testing.md](testing.md) for the full repo-specific testing map.
+
+## AI-Assisted Failure Analysis
+
+When using an AI assistant or LLM to analyze failures:
+
+- capture the smallest useful failing command output first
+- include recent changes, expected behavior, and the test context
+- prefer one failing test or `--exitfirst` output before pasting broader suite logs
+- treat suggestions as hypotheses until they are verified against the code and reruns
+
+**Prompt template**:
+
+```text
+Here are the failing tests from my QuickScale project:
+
+[paste targeted failure output here]
+
+Recent changes:
+[describe what changed]
+
+Expected behavior:
+[describe what should happen]
+
+Testing context:
+[unit/integration/e2e, command used]
+
+Please identify the most likely root cause, whether the code or the test is
+wrong, and the smallest safe next check or fix.
+```
+
+## Scope Guardrails While Debugging
+
+- fix the verified root cause, not the symptom
+- do not weaken tests or add silent fallbacks just to make failures disappear
+- keep the change inside the approved scope and note adjacent issues separately
 
 ## Debugging Exit Criteria
 
