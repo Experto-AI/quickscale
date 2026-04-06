@@ -108,35 +108,15 @@
 
     {% if request_path and 'accounts/' in request_path %}
     <div class="module-hint">
-        <strong>⚠️ Looking for authentication?</strong>
+        <strong>Looking for authentication?</strong>
         <p>It looks like you're trying to access authentication URLs, but the auth module isn't installed yet.</p>
     </div>
 
     <div class="error-help">
-        <h3>�� Install the QuickScale Auth Module</h3>
-        <p>To enable user authentication, install the auth module:</p>
-        <pre><code>quickscale embed --module auth</code></pre>
+        <h3>Add the QuickScale auth module</h3>
+        <p>Add <code>auth</code> to <code>quickscale.yml</code>, then apply the change:</p>
+        <pre><code>quickscale apply</code></pre>
         <p>This will add login, signup, password reset, and profile management to your project.</p>
-    </div>
-    {% elif request_path and 'billing/' in request_path %}
-    <div class="module-hint">
-        <strong>⚠️ Looking for billing features?</strong>
-        <p>The billing module isn't installed in this project yet.</p>
-    </div>
-
-    <div class="error-help">
-        <h3>📦 Install the QuickScale Billing Module</h3>
-        <pre><code>quickscale embed --module billing</code></pre>
-    </div>
-    {% elif request_path and 'teams/' in request_path %}
-    <div class="module-hint">
-        <strong>⚠️ Looking for team management?</strong>
-        <p>The teams module isn't installed in this project yet.</p>
-    </div>
-
-    <div class="error-help">
-        <h3>📦 Install the QuickScale Teams Module</h3>
-        <pre><code>quickscale embed --module teams</code></pre>
     </div>
     {% else %}
     <div class="error-help">
@@ -144,7 +124,7 @@
         <ul>
             <li>Check the URL for typos</li>
             <li>Return to the <a href="/">homepage</a></li>
-            <li>Check if you need to install a QuickScale module</li>
+            <li>If you expected a QuickScale route, confirm it is configured in <code>quickscale.yml</code> and rerun <code>quickscale apply</code></li>
             <li>Review your URL configuration in <code>urls.py</code></li>
         </ul>
     </div>

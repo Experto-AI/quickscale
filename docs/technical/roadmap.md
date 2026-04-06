@@ -143,15 +143,15 @@ After release closeout, keep only a concise pointer in the roadmap. Put canonica
 
 **Primary code grouping**: generated theme output, placeholder route/nav/dashboard surface, React Router dependency alignment, HTML social route ownership, starter-theme tests, and theme-related SSOT updates.
 
-- [ ] Remove billing and teams placeholder routes, flags, dashboard cards, and navigation from generated starter output until those modules actually ship as valid public plan/apply selections.
-- [ ] Remove the matching placeholder expectations from starter-theme tests so the test suite enforces the shipped module surface rather than preserving dead placeholder output.
-- [ ] Decide whether `showcase_html` public `/social` and `/social/embeds` routes are part of the supported shipped contract or residual placeholder output.
-- [ ] If `showcase_html` public social routes are supported, wire them end to end to the managed social surface and cover enabled, empty, disabled, error, and published-record behavior.
-- [ ] If `showcase_html` public social routes are not supported, remove the static placeholder templates and route wiring from shipped HTML output and align the SSOT/docs accordingly.
-- [ ] Confirm whether `showcase_html` public social pages were intentionally shipped or accidentally preserved from partial theme work, and record the decision in SSOT docs.
+- [x] Remove billing and teams placeholder routes, flags, dashboard cards, and navigation from generated starter output until those modules actually ship as valid public plan/apply selections.
+- [x] Remove the matching placeholder expectations from starter-theme tests so the test suite enforces the shipped module surface rather than preserving dead placeholder output.
+- [x] Confirm that `showcase_html` public `/social` and `/social/embeds` routes were residual placeholder output rather than part of the shipped contract.
+- [x] Keep the supported public-page contract on fresh `showcase_react` generations, where Django-owned `/social` and `/social/embeds` pages are auto-generated while the backend-managed social transport remains theme-agnostic.
+- [x] Remove the static placeholder templates and route wiring from shipped `showcase_html` output and align the SSOT/docs accordingly.
+- [x] Record that existing projects and non-React themes must manually adopt any equivalent public social pages instead of receiving automatic route/template rewrites.
 - [x] Approve the React Router v7 line as the `showcase_react` routing baseline and keep the SSOT aligned with the generated dependency surface.
-- [ ] Add regression coverage that asserts billing and teams do not appear in generated starter output until those modules ship.
-- [ ] Add generated-theme regression coverage for HTML social route behavior once the supported contract is confirmed.
+- [x] Add regression coverage that asserts billing and teams do not appear in generated starter output until those modules ship.
+- [x] Add regression coverage that asserts only fresh `showcase_react` auto-generates public social pages while `showcase_html` and other non-React themes rely on manual adoption.
 
 #### Phase 3: Shared Dependency and Install Contract Infrastructure
 

@@ -7,7 +7,7 @@ class TestHtmlThemeIntegration:
     def test_html_theme_surfaces_operational_modules_without_admin_nav(
         self, tmp_path: Path
     ) -> None:
-        """showcase_html should surface admin-backed modules on the dashboard, not in main nav."""
+        """showcase_html should keep starter output focused on shipped dashboard surfaces."""
         generator = ProjectGenerator(theme="showcase_html")
         output_path = tmp_path / "html_operational_modules"
         generator.generate("html_operational_modules", output_path)
@@ -17,8 +17,8 @@ class TestHtmlThemeIntegration:
             output_path / "templates" / "components" / "navigation.html"
         ).read_text()
 
-        assert "Open social" in index_html
-        assert "/social/embeds" in navigation
+        assert "Open social" not in index_html
+        assert "/social/embeds" not in navigation
         assert "Open notifications" in index_html
         assert "/admin/quickscale_modules_notifications/" in index_html
         assert "Open backup ops" in index_html
@@ -27,39 +27,31 @@ class TestHtmlThemeIntegration:
             "There is no Django Admin configuration surface for storage secrets."
             in index_html
         )
+        assert "Billing" not in index_html
+        assert "Teams" not in index_html
 
-        assert '<span class="nav-section-title">Social</span>' in navigation
+        assert '<span class="nav-section-title">Social</span>' not in navigation
+        assert '<span class="nav-section-title">Billing</span>' not in navigation
+        assert '<span class="nav-section-title">Teams</span>' not in navigation
         assert "Notifications" not in navigation
         assert "Backups" not in navigation
 
-    def test_html_theme_generates_public_social_templates(self, tmp_path: Path) -> None:
-        """showcase_html should generate stable public social templates."""
+    def test_html_theme_does_not_generate_public_social_templates(
+        self, tmp_path: Path
+    ) -> None:
+        """showcase_html should not scaffold the public social pages or routes."""
         generator = ProjectGenerator(theme="showcase_html")
         output_path = tmp_path / "html_social_templates"
         generator.generate("html_social_templates", output_path)
 
         urls_py = (output_path / "html_social_templates" / "urls.py").read_text()
-        link_tree_template = (
-            output_path / "templates" / "social" / "link_tree.html"
-        ).read_text()
-        embeds_template = (
-            output_path / "templates" / "social" / "embeds.html"
-        ).read_text()
+        link_tree_template = output_path / "templates" / "social" / "link_tree.html"
+        embeds_template = output_path / "templates" / "social" / "embeds.html"
 
-        assert 'r"^social/?$"' in urls_py
-        assert 'r"^social/embeds/?$"' in urls_py
-        assert urls_py.index('r"^social/?$"') < urls_py.index(
-            're_path(r".*", custom_404_view)'
-        )
-        assert urls_py.index('r"^social/embeds/?$"') < urls_py.index(
-            're_path(r".*", custom_404_view)'
-        )
-        assert 'class="qs-social-shell"' in link_tree_template
-        assert 'class="qs-social-rail"' in link_tree_template
-        assert "Link tree" in link_tree_template
-        assert 'class="qs-social-shell"' in embeds_template
-        assert 'class="qs-social-rail"' in embeds_template
-        assert "Social Embeds" in embeds_template
+        assert 'r"^social/?$"' not in urls_py
+        assert 'r"^social/embeds/?$"' not in urls_py
+        assert not link_tree_template.exists()
+        assert not embeds_template.exists()
 
     def test_html_theme_dockerfile_keeps_postgresql_client_for_backup_ops(
         self, tmp_path: Path

@@ -323,20 +323,6 @@ class ProjectGenerator:
                         False,
                     ),
                     (
-                        self._get_theme_template_path(
-                            "templates/social/link_tree.html.j2"
-                        ),
-                        "templates/social/link_tree.html",
-                        False,
-                    ),
-                    (
-                        self._get_theme_template_path(
-                            "templates/social/embeds.html.j2"
-                        ),
-                        "templates/social/embeds.html",
-                        False,
-                    ),
-                    (
                         self._get_theme_template_path("static/css/style.css.j2"),
                         "static/css/style.css",
                         False,

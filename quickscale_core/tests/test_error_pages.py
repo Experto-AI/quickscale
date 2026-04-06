@@ -4,7 +4,7 @@ This module ensures:
 1. Error templates (404.html, 500.html) are generated
 2. Custom error handler views (views.py) are generated
 3. Error handlers are configured in urls.py
-4. Error pages provide helpful module installation hints
+4. Error pages avoid placeholder-module leakage while keeping current guidance
 """
 
 from pathlib import Path
@@ -34,11 +34,15 @@ class TestErrorPageGeneration:
 
         # Verify module hints are present
         assert "accounts/" in content, "Should detect auth module URLs"
-        assert "billing/" in content, "Should detect billing module URLs"
-        assert "teams/" in content, "Should detect teams module URLs"
+        assert "billing/" not in content, "Should not surface billing placeholders"
+        assert "teams/" not in content, "Should not surface teams placeholders"
 
         # Verify installation instructions
-        assert "quickscale embed --module" in content, "Should provide embed command"
+        assert "quickscale.yml" in content, "Should reference the plan/apply config"
+        assert "quickscale apply" in content, "Should provide apply guidance"
+        assert "quickscale embed --module" not in content, (
+            "Should not provide legacy embed commands"
+        )
 
     def test_500_template_content(self, generated_project_path: Path) -> None:
         """Test that 500.html contains expected content"""
@@ -118,6 +122,23 @@ class TestErrorHandlerConfiguration:
             "Should point to custom_500_view"
         )
 
+    def test_debug_404_routes_exclude_placeholder_modules(
+        self, generated_project_path: Path, project_name: str
+    ) -> None:
+        """Test that HTML starter debug routes only keep shipped auth guidance."""
+        urls_file = generated_project_path / project_name / "urls.py"
+        content = urls_file.read_text()
+
+        assert 're_path(r"^accounts/.*", custom_404_view)' in content, (
+            "Should keep auth-specific debug guidance"
+        )
+        assert 're_path(r"^billing/.*", custom_404_view)' not in content, (
+            "Should not add billing placeholder debug routes"
+        )
+        assert 're_path(r"^teams/.*", custom_404_view)' not in content, (
+            "Should not add teams placeholder debug routes"
+        )
+
 
 class TestModuleInstallationHints:
     """Test that 404 page provides helpful module installation hints"""
@@ -132,36 +153,30 @@ class TestModuleInstallationHints:
         assert "Looking for authentication" in content, (
             "Should provide auth-specific hint"
         )
-        assert "quickscale embed --module auth" in content, (
-            "Should provide auth module installation command"
+        assert "quickscale.yml" in content, (
+            "Should point auth guidance at the config file"
+        )
+        assert "quickscale apply" in content, (
+            "Should keep auth guidance on the apply workflow"
         )
 
-    def test_billing_module_hint(self, generated_project_path: Path) -> None:
-        """Test that 404 page detects billing module URLs and provides hints"""
+    def test_placeholder_module_hints_removed(
+        self, generated_project_path: Path
+    ) -> None:
+        """Test that billing and teams placeholders do not leak into 404 output."""
         template_404 = generated_project_path / "templates" / "404.html"
         content = template_404.read_text()
 
-        # Should detect /billing/ URLs
-        assert "billing/" in content, "Should check for billing/ in request path"
-        assert "billing features" in content.lower(), (
-            "Should provide billing-specific hint"
+        assert "billing/" not in content, "Should not check for billing/ routes"
+        assert "teams/" not in content, "Should not check for teams/ routes"
+        assert "Billing Module" not in content, (
+            "Should not mention placeholder billing guidance"
         )
-        assert "quickscale embed --module billing" in content, (
-            "Should provide billing module installation command"
+        assert "Teams Module" not in content, (
+            "Should not mention placeholder teams guidance"
         )
-
-    def test_teams_module_hint(self, generated_project_path: Path) -> None:
-        """Test that 404 page detects teams module URLs and provides hints"""
-        template_404 = generated_project_path / "templates" / "404.html"
-        content = template_404.read_text()
-
-        # Should detect /teams/ URLs
-        assert "teams/" in content, "Should check for teams/ in request path"
-        assert "team management" in content.lower(), (
-            "Should provide teams-specific hint"
-        )
-        assert "quickscale embed --module teams" in content, (
-            "Should provide teams module installation command"
+        assert "quickscale embed --module" not in content, (
+            "Should remove legacy embed guidance entirely"
         )
 
     def test_generic_404_guidance(self, generated_project_path: Path) -> None:
@@ -172,6 +187,8 @@ class TestModuleInstallationHints:
         # Should provide generic help for non-module URLs
         assert "Check the URL for typos" in content, "Should suggest checking for typos"
         assert "homepage" in content.lower(), "Should suggest returning to homepage"
+        assert "quickscale.yml" in content, "Should reference the config workflow"
+        assert "quickscale apply" in content, "Should reference apply"
         assert "urls.py" in content, "Should mention URL configuration"
 
 

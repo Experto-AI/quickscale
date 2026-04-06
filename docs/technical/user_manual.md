@@ -212,10 +212,10 @@ quickscale plan myapp
 ```
 
 **Available themes**:
-- `showcase_html` - Pure HTML + CSS
-- `showcase_react` - React + TypeScript SPA (default)
+- `showcase_html` - Pure HTML + CSS; fresh v0.83.0 starter output does not scaffold public `/social` or `/social/embeds` pages
+- `showcase_react` - React + TypeScript SPA (default); fresh generations auto-generate Django-owned public `/social` and `/social/embeds` pages
 
-**Important**: Theme selection is one-time during project generation. Generated code is yours to own and customize - no updates or tracking after initialization.
+**Important**: Theme selection is one-time during project generation. Generated code is yours to own and customize - no updates or tracking after initialization. The backend-managed social transport remains theme-agnostic, but only fresh `showcase_react` auto-generates the public page files; existing projects and non-React themes must adopt those public pages manually if they want them.
 
 **Typical flow** to create and run a generated project:
 
@@ -348,8 +348,8 @@ quickscale plan myapp --overwrite
 ```
 
 The wizard guides you through:
-1. **Theme selection**: Choose from available themes (showcase_html, showcase_react)
-2. **Module selection**: Select optional modules to include. In the current v0.82.0 release, implemented first-party modules include analytics, auth, backups, blog, crm, forms, listings, notifications, social, and storage. The `billing` and `teams` directories remain placeholder inventory only; `quickscale plan`, `quickscale.yml` validation, and `quickscale apply` reject them until those modules ship.
+1. **Theme selection**: Choose from available themes (showcase_html, showcase_react). Fresh `showcase_react` generations scaffold Django-owned public `/social` and `/social/embeds` pages; `showcase_html` does not scaffold those public pages in v0.83.0.
+2. **Module selection**: Select optional modules to include. In the current implementation line, implemented first-party modules include analytics, auth, backups, blog, crm, forms, listings, notifications, social, and storage. The `billing` and `teams` directories remain placeholder inventory only; `quickscale plan`, `quickscale.yml` validation, `quickscale apply`, and generated starter output exclude them until those modules ship.
 3. **Docker configuration**: Configure Docker build/start options and optional first-start superuser creation
 
 **Generated `quickscale.yml` example**:

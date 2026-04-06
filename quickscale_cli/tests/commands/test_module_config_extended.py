@@ -1574,6 +1574,7 @@ class TestSocialModuleConfig:
     def test_apply_social_configuration_creates_managed_transport_files(
         self,
         tmp_path,
+        capsys,
     ):
         project = _make_project(tmp_path)
 
@@ -1601,6 +1602,7 @@ class TestSocialModuleConfig:
         managed_social_views = (
             project / "myproject" / "quickscale_managed" / "social_views.py"
         ).read_text()
+        output = capsys.readouterr().out
 
         assert "quickscale_modules_social" not in managed_settings
         assert "QUICKSCALE_SOCIAL_LINK_TREE_PATH" in managed_settings
@@ -1615,6 +1617,11 @@ class TestSocialModuleConfig:
         assert "PAYLOAD_STATUS_HTTP" in managed_social_views
         assert "_error_payload" in managed_social_views
         assert "JsonResponse" in managed_social_views
+        assert "fresh showcase_react keeps /social and /social/embeds" in output
+        assert (
+            "showcase_html and existing generated projects require manual theme adoption"
+            in output
+        )
 
 
 # ============================================================================
