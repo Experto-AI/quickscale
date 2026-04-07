@@ -2,6 +2,7 @@
 
 import os
 
+import pytest
 from click.testing import CliRunner
 
 from quickscale_cli.commands.plan_command import plan
@@ -242,21 +243,22 @@ class TestPlanModuleSelection:
                 in result.output
             )
 
-    def test_placeholder_modules_cannot_be_selected_with_flag(self):
+    @pytest.mark.parametrize("placeholder_name", ["billing", "teams"])
+    def test_placeholder_modules_cannot_be_selected_with_flag(self, placeholder_name):
         """Billing/teams remain visible only and cannot be written into config."""
         runner = CliRunner()
         with runner.isolated_filesystem():
             result = runner.invoke(
                 plan,
                 ["myapp", "--include-experimental"],
-                input="\n1\nbilling\n\ny\ny\nn\ny\n",
+                input=f"\n1\n{placeholder_name}\n\ny\ny\nn\ny\n",
             )
 
             assert result.exit_code == 0
             assert "placeholder" in result.output
             with open("myapp/quickscale.yml") as f:
                 content = f.read()
-            assert "billing:" not in content
+            assert f"{placeholder_name}:" not in content
 
 
 class TestPlanDockerConfiguration:

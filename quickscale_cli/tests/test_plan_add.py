@@ -228,6 +228,50 @@ docker:
                     content = f.read()
                 assert "blog" in content
 
+    def test_plan_add_rejects_placeholder_modules_with_experimental_picker(
+        self,
+    ) -> None:
+        """Billing and teams stay visible-only in add mode even with experimental picker."""
+        runner = CliRunner()
+        with runner.isolated_filesystem():
+            with open("quickscale.yml", "w") as f:
+                f.write(
+                    """
+version: "1"
+project:
+  slug: testapp
+  package: testapp
+  theme: showcase_html
+docker:
+  start: false
+"""
+                )
+
+            result = runner.invoke(
+                plan,
+                ["--add", "--include-experimental"],
+                input="billing\nteams\n\n",
+            )
+
+            assert result.exit_code == 0
+            assert (
+                "billing - Stripe integration (placeholder, not ready)" in result.output
+            )
+            assert (
+                "teams - Multi-tenancy and team management (placeholder, not ready)"
+                in result.output
+            )
+            assert "Module 'billing' is a placeholder" in result.output
+            assert "Module 'teams' is a placeholder" in result.output
+            assert "No new modules selected" in result.output
+
+            with open("quickscale.yml") as f:
+                config = yaml.safe_load(f)
+
+            modules = (config or {}).get("modules") or {}
+            assert "billing" not in modules
+            assert "teams" not in modules
+
     def test_plan_add_preserves_existing_module_options(self) -> None:
         """Adding modules should keep previously configured module option dictionaries."""
         runner = CliRunner()

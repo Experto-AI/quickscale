@@ -603,7 +603,10 @@ class TestLoadAndValidateConfig:
 
         assert result.modules["backups"].options == {}
 
-    def test_placeholder_modules_are_rejected_on_load(self, tmp_path):
+    @pytest.mark.parametrize("placeholder_module", ["billing", "teams"])
+    def test_placeholder_modules_are_rejected_on_load(
+        self, tmp_path, placeholder_module
+    ):
         """Apply should reject placeholder modules even if they are hand-edited in."""
         config = tmp_path / "quickscale.yml"
         config.write_text(
@@ -613,7 +616,7 @@ class TestLoadAndValidateConfig:
             "  package: myapp\n"
             "  theme: showcase_html\n"
             "modules:\n"
-            "  billing:\n"
+            f"  {placeholder_module}:\n"
             "docker:\n"
             "  start: false\n"
         )
@@ -872,7 +875,10 @@ class TestLoadAndValidateConfig:
 class TestPrepareApplyContext:
     """Tests for apply preflight context loading."""
 
-    def test_rejects_placeholder_modules_in_existing_state(self, tmp_path):
+    @pytest.mark.parametrize("placeholder_module", ["billing", "teams"])
+    def test_rejects_placeholder_modules_in_existing_state(
+        self, tmp_path, placeholder_module
+    ):
         """Apply should abort when legacy state still references placeholders."""
         project_path = tmp_path / "myapp"
         project_path.mkdir()
@@ -894,7 +900,7 @@ class TestPrepareApplyContext:
             "  package: myapp\n"
             "  theme: showcase_html\n"
             "modules:\n"
-            "  billing:\n"
+            f"  {placeholder_module}:\n"
             '    version: "0.1.0"\n'
         )
 

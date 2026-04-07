@@ -1,6 +1,6 @@
 """Tests for QuickScale core context processors"""
 
-from unittest.mock import patch, MagicMock
+from unittest.mock import MagicMock, patch
 
 from quickscale_core.context_processors import installed_modules
 
@@ -8,10 +8,14 @@ from quickscale_core.context_processors import installed_modules
 class TestInstalledModulesContextProcessor:
     """Test the installed_modules context processor"""
 
-    def test_installed_modules_with_config(self):
-        """Test context processor returns correct module info when config exists"""
+    def test_installed_modules_only_surfaces_shipped_helper_modules(self):
+        """Placeholder modules should never leak into the shipped helper output."""
         mock_config = MagicMock()
-        mock_config.modules = {"auth": MagicMock(), "billing": MagicMock()}
+        mock_config.modules = {
+            "auth": MagicMock(),
+            "billing": MagicMock(),
+            "teams": MagicMock(),
+        }
 
         with patch(
             "quickscale_core.context_processors.load_config", return_value=mock_config
@@ -21,25 +25,16 @@ class TestInstalledModulesContextProcessor:
             assert "modules" in result
             modules = result["modules"]
 
-            # Check auth module (installed)
-            assert "auth" in modules
+            assert set(modules) == {"auth"}
             assert modules["auth"]["installed"] is True
             assert modules["auth"]["name"] == "Authentication"
             assert modules["auth"]["icon"] == "👤"
             assert modules["auth"]["css_class"] == "nav-link"
 
-            # Check billing module (installed)
-            assert "billing" in modules
-            assert modules["billing"]["installed"] is True
-            assert modules["billing"]["css_class"] == "nav-link"
-
-            # Check teams module (not installed)
-            assert "teams" in modules
-            assert modules["teams"]["installed"] is False
-            assert modules["teams"]["css_class"] == "nav-link disabled"
-
-    def test_installed_modules_empty_config(self):
-        """Test context processor handles empty config"""
+    def test_installed_modules_marks_shipped_helper_modules_missing_when_not_installed(
+        self,
+    ):
+        """Only shipped helper modules should appear when config is empty."""
         mock_config = MagicMock()
         mock_config.modules = {}
 
@@ -51,11 +46,9 @@ class TestInstalledModulesContextProcessor:
             assert "modules" in result
             modules = result["modules"]
 
-            # All modules should be marked as not installed
-            for module_name in ["auth", "billing", "teams"]:
-                assert module_name in modules
-                assert modules[module_name]["installed"] is False
-                assert modules[module_name]["css_class"] == "nav-link disabled"
+            assert set(modules) == {"auth"}
+            assert modules["auth"]["installed"] is False
+            assert modules["auth"]["css_class"] == "nav-link disabled"
 
     def test_installed_modules_config_error(self):
         """Test context processor handles config loading errors gracefully"""

@@ -13,22 +13,12 @@ def installed_modules(request: HttpRequest) -> dict[str, Any]:
         # Load module configuration
         config = load_config()
 
-        # Define available modules and their navigation info
+        # Define shipped modules and their navigation info
         available_modules = {
             "auth": {
                 "name": "Authentication",
                 "url": "quickscale_auth:profile",
                 "icon": "👤",
-            },
-            "billing": {
-                "name": "Billing",
-                "url": "billing:dashboard",  # This would need to be defined in billing module
-                "icon": "💳",
-            },
-            "teams": {
-                "name": "Teams",
-                "url": "teams:dashboard",  # This would need to be defined in teams module
-                "icon": "👥",
             },
         }
 

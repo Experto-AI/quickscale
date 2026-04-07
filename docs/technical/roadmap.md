@@ -196,10 +196,18 @@ After release closeout, keep only a concise pointer in the roadmap. Put canonica
 
 **Primary code grouping**: packaged module metadata, manifest/version export alignment, generated starter metadata/app-label/nav leakage, and public release-surface gates.
 
-- [ ] Align auth package metadata with the canonical manifest version and any exported version metadata.
-- [ ] Audit every packaged module for `module.yml`, `pyproject.toml`, and exported version parity and fix any drift found during the pass.
-- [ ] Confirm that placeholder-only modules do not leak into generated starter metadata, app-label flags, or user-facing navigation before billing and teams actually ship.
-- [ ] Add a release gate proving billing and teams stay rejected by `quickscale plan`, `quickscale.yml` validation, `quickscale apply`, and starter-theme output until their own release milestones ship.
+**Current status (2026-04-07)**: Phase 6 implementation is complete. The last shipped billing/teams helper leak is removed from `quickscale_core`, plan/schema/apply regressions now make both placeholder modules explicit release-gate failures, starter-output regressions continue to prove those placeholders stay absent from generated surfaces, and the packaged-module parity audit found no `module.yml` / `pyproject.toml` / exported `__version__` drift, so no module-local metadata updates were needed in this pass.
+
+- [x] Align auth package metadata with the canonical manifest version and any exported version metadata.
+- [x] Audit every packaged module for `module.yml`, `pyproject.toml`, and exported version parity and fix any drift found during the pass.
+- [x] Confirm that placeholder-only modules do not leak into generated starter metadata, app-label flags, or user-facing navigation before billing and teams actually ship.
+- [x] Add a release gate proving billing and teams stay rejected by `quickscale plan`, `quickscale.yml` validation, `quickscale apply`, and starter-theme output until their own release milestones ship.
+
+**Phase 6 closeout notes**
+
+- `module.yml` remains the canonical packaged-module version source; the ready shipped-module audit continues to keep `pyproject.toml` and exported `__version__` aligned to it.
+- No packaged-module metadata drift was found in this pass, so no module-local version files needed updates.
+- The remaining billing/teams placeholder leakage was limited to the core context-processor helper and is now closed.
 
 #### Phase 7: Cross-Cutting Release Gates and Docs Closeout
 

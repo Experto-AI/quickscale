@@ -368,20 +368,21 @@ modules:
 
         assert "Unknown module 'unknown_module'" in str(exc.value)
 
-    def test_placeholder_module_is_rejected(self):
+    @pytest.mark.parametrize("placeholder_name", ["billing", "teams"])
+    def test_placeholder_module_is_rejected(self, placeholder_name):
         """Placeholder modules should not validate into quickscale.yml."""
-        yaml_content = """
+        yaml_content = f"""
 version: "1"
 project:
   slug: myapp
   package: myapp
 modules:
-  billing:
+  {placeholder_name}:
 """
         with pytest.raises(ConfigValidationError) as exc:
             validate_config(yaml_content)
 
-        assert "billing" in str(exc.value)
+        assert placeholder_name in str(exc.value)
         assert "placeholder" in str(exc.value)
 
     def test_unknown_top_level_key(self):

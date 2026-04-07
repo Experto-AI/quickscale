@@ -262,6 +262,49 @@ class TestPlanReconfigureAddModules:
                     content = f.read()
                 assert "auth" in content
 
+    def test_plan_reconfigure_rejects_placeholder_modules_with_experimental_picker(
+        self,
+    ):
+        """Billing and teams stay visible-only in reconfigure add-module flow."""
+        runner = CliRunner()
+        with runner.isolated_filesystem():
+            with open("quickscale.yml", "w") as f:
+                f.write(
+                    """
+version: "1"
+project:
+  slug: testapp
+  package: testapp
+  theme: showcase_html
+docker:
+  start: false
+"""
+                )
+
+            result = runner.invoke(
+                plan,
+                ["--reconfigure", "--include-experimental"],
+                input="y\nbilling\nteams\n\nn\ny\n",
+            )
+
+            assert result.exit_code == 0
+            assert (
+                "billing - Stripe integration (placeholder, not ready)" in result.output
+            )
+            assert (
+                "teams - Multi-tenancy and team management (placeholder, not ready)"
+                in result.output
+            )
+            assert "Module 'billing' is a placeholder" in result.output
+            assert "Module 'teams' is a placeholder" in result.output
+
+            with open("quickscale.yml") as f:
+                config = yaml.safe_load(f)
+
+            modules = (config or {}).get("modules") or {}
+            assert "billing" not in modules
+            assert "teams" not in modules
+
 
 class TestPlanReconfigureSavesConfig:
     """Tests for config saving"""
