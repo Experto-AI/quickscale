@@ -21,6 +21,7 @@ config:
 
 dependencies:
   - django-markdownx>=4.0
+  - Pillow>=12.1.1,<13.0.0
 
 django_apps:
   - markdownx
