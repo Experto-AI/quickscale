@@ -5,6 +5,7 @@ import logging
 from decimal import Decimal, InvalidOperation
 from typing import Any
 
+from django.conf import settings
 from django.db import IntegrityError
 from django.db.models import QuerySet
 from django.http import HttpRequest, JsonResponse
@@ -18,6 +19,21 @@ from .models import Listing
 
 
 logger = logging.getLogger(__name__)
+DEFAULT_LISTINGS_PER_PAGE = 12
+
+
+def _get_positive_int_setting(setting_name: str, default: int) -> int:
+    """Return a positive integer setting value or the provided default."""
+    value = getattr(settings, setting_name, default)
+    if isinstance(value, bool):
+        return default
+
+    try:
+        parsed_value = int(value)
+    except TypeError, ValueError:
+        return default
+
+    return parsed_value if parsed_value > 0 else default
 
 
 class ListingPublishValidationError(Exception):
@@ -144,8 +160,16 @@ class ListingListView(ListView):
     model = Listing
     template_name = "quickscale_modules_listings/listings/listing_list.html"
     context_object_name = "listings"
-    paginate_by = 12
+    paginate_by = DEFAULT_LISTINGS_PER_PAGE
     filterset_class: type[Any] | None = None
+
+    def get_paginate_by(self, queryset):  # type: ignore[no-untyped-def]
+        """Return the runtime-configured listings-per-page value."""
+        del queryset
+        return _get_positive_int_setting(
+            "LISTINGS_PER_PAGE",
+            DEFAULT_LISTINGS_PER_PAGE,
+        )
 
     def get_filterset_class(self) -> type[Any]:
         """Resolve the filterset class, defaulting to the shared factory."""
